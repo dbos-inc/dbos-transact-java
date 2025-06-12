@@ -3,12 +3,16 @@ package dev.dbos.transact.interceptor;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Transaction;
 import dev.dbos.transact.workflow.Workflow;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
 public class TransactInvocationHandler implements InvocationHandler {
+
+    private static final Logger logger = LoggerFactory.getLogger(TransactInvocationHandler.class);
 
     private final Object target;
 
@@ -33,7 +37,7 @@ public class TransactInvocationHandler implements InvocationHandler {
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        System.out.println("Interceptor called for method: " + method.getName());
+        logger.info("Interceptor called for method: " + method.getName());
 
         Method targetMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
         System.out.println("Has @Workflow: " +
@@ -53,30 +57,34 @@ public class TransactInvocationHandler implements InvocationHandler {
 
     protected Object handleWorkflow(Method method, Object[] args, Workflow workflow) throws Throwable {
 
-        System.out.printf("Before: Starting workflow '%s' (timeout: %ds)%n",
+        String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
                 workflow.name().isEmpty() ? method.getName() : workflow.name(),
                 workflow.timeout());
 
+        logger.info(msg);
+
         try {
             Object result = method.invoke(target, args);
-            System.out.println("After: Workflow completed successfully");
+            logger.info("After: Workflow completed successfully");
             return result;
         } catch (Exception e) {
-            System.out.println("After: Workflow failed: " + e.getCause().getMessage());
+            logger.info("After: Workflow failed: " + e.getCause().getMessage());
             throw e.getCause();
         }
     }
 
     protected Object handleTransaction(Method method, Object[] args, Transaction transaction) throws Throwable {
 
-        System.out.printf("Before starting transaction %s %s", method.getName(), transaction.name());
+        String msg = String.format("Before starting transaction %s %s", method.getName(), transaction.name());
+        logger.info(msg) ;
+
         try {
             Object result = method.invoke(target, args);
-            System.out.println("After : Transaction committed successfully");
+            logger.info("After : Transaction committed successfully");
             return result;
         } catch (Exception e) {
 
-            System.out.printf("Transaction attempt: %s%n",
+            logger.info("Transaction attempt: %s%n",
                     e.getCause().getMessage());
             throw e.getCause();
 
@@ -85,15 +93,15 @@ public class TransactInvocationHandler implements InvocationHandler {
     }
 
     protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
-        System.out.printf("Before : Executing step %s %s",
+        String msg = String.format("Before : Executing step %s %s",
                 method.getName(), step.name());
-
+        logger.info(msg);
         try {
             Object result = method.invoke(target, args);
-            System.out.println("After: Step completed successfully");
+            logger.info("After: Step completed successfully");
             return result;
         } catch (Exception e) {
-            System.out.println("Step failed: " + e.getCause().getMessage());
+            logger.info("Step failed: " + e.getCause().getMessage());
             throw e.getCause();
         }
     }
