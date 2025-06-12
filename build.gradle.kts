@@ -46,7 +46,6 @@ tasks.jar {
 
 publishing {
 
-
     publications {
         create<MavenPublication>("mavenJava") {
 
