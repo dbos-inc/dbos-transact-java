@@ -25,7 +25,6 @@ public class DBOS {
         }
 
 
-
         public T build() {
             if (interfaceClass == null || implementation == null) {
                 throw new IllegalStateException("Interface and implementation must be set");

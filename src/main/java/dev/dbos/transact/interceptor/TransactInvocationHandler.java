@@ -24,19 +24,10 @@ public class TransactInvocationHandler implements InvocationHandler {
                 new TransactInvocationHandler(implementation)
         );
 
-        try {
-            Method setProxy = implementation.getClass().getMethod("setProxy", interfaceClass);
-            setProxy.invoke(implementation, proxy);
-        } catch (NoSuchMethodException e) {
-            System.out.println("Implementation doesn't support proxy injection");
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to inject proxy", e);
-        }
-
         return proxy;
     }
 
-    private TransactInvocationHandler(Object target) {
+    protected TransactInvocationHandler(Object target) {
         this.target = target;
     }
 
@@ -60,7 +51,7 @@ public class TransactInvocationHandler implements InvocationHandler {
         return method.invoke(target, args);
     }
 
-    private Object handleWorkflow(Method method, Object[] args, Workflow workflow) throws Throwable {
+    protected Object handleWorkflow(Method method, Object[] args, Workflow workflow) throws Throwable {
 
         System.out.printf("Before: Starting workflow '%s' (timeout: %ds)%n",
                 workflow.name().isEmpty() ? method.getName() : workflow.name(),
@@ -76,7 +67,7 @@ public class TransactInvocationHandler implements InvocationHandler {
         }
     }
 
-    private Object handleTransaction(Method method, Object[] args, Transaction transaction) throws Throwable {
+    protected Object handleTransaction(Method method, Object[] args, Transaction transaction) throws Throwable {
 
         System.out.printf("Before starting transaction %s %s", method.getName(), transaction.name());
         try {
@@ -93,7 +84,7 @@ public class TransactInvocationHandler implements InvocationHandler {
 
     }
 
-    private Object handleStep(Method method, Object[] args, Step step) throws Throwable {
+    protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
         System.out.printf("Before : Executing step %s %s",
                 method.getName(), step.name());
 
