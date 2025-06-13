@@ -1,8 +1,13 @@
 package dev.dbos.transact;
 
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
+import dev.dbos.transact.migration.DatabaseMigrator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DBOS {
+
+    static Logger logger = LoggerFactory.getLogger(DBOS.class) ;
 
     public static <T> WorkflowBuilder<T> Workflow() {
         return new WorkflowBuilder<>();
@@ -35,6 +40,13 @@ public class DBOS {
                     implementation
             );
         }
+    }
+
+    public static void launch() {
+
+        logger.info("Starting DBOS ...") ;
+        DatabaseMigrator.runMigrations();
+
     }
 }
 

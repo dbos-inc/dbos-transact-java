@@ -13,7 +13,12 @@ repositories {
 }
 
 dependencies {
-    api("org.slf4j:slf4j-api:2.0.13")
+    api("org.slf4j:slf4j-api:2.0.13") // logging api
+
+    implementation("org.flywaydb:flyway-core:9.22.0") // migration
+    implementation("org.postgresql:postgresql:42.6.0")
+    implementation("com.zaxxer:HikariCP:5.0.1") // Connection pool
+    implementation("com.typesafe:config:1.4.2") // config
 
     testImplementation("ch.qos.logback:logback-classic:1.5.6")
     testImplementation("org.mockito:mockito-core:5.12.0")
