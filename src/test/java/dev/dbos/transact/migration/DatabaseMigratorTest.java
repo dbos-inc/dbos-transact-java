@@ -1,5 +1,6 @@
 package dev.dbos.transact.migration;
 
+import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.config.DatabaseConfig;
 import org.junit.jupiter.api.*;
 import javax.sql.DataSource;
@@ -15,28 +16,39 @@ import static org.junit.jupiter.api.Assertions.*;
 class DatabaseMigratorTest {
 
     private static DataSource testDataSource;
+    private static DBOSConfig dbosConfig;
 
     @BeforeAll
     static void setup() throws Exception {
-        // Create admin connection to recreate test database
-        String adminUrl = "jdbc:postgresql://localhost:5432/postgres";
-        try (Connection conn = DriverManager.getConnection(adminUrl, "postgres", "postgres");
+
+        DatabaseMigratorTest.dbosConfig = new DBOSConfig
+                .Builder()
+                .name("migrationtest")
+                //.url("jdbc:postgresql://postgres:progres@localhost:5432/postgres")
+                //.url("postgresql://postgres:postgres@localhost:5432")
+                .dbHost("localhost")
+                .dbPort(5432)
+                .dbUser("postgres")
+                .dbPassword("postgres")
+                .sysDbName("dbos_java_sys")
+                .maximumPoolSize(3)
+                .build();
+
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",dbosConfig.getDbHost(),dbosConfig.getDbPort(),"postgres") ;
+
+        String sysDb = dbosConfig.getSysDbName();
+        try (Connection conn = DriverManager.getConnection(dbUrl,dbosConfig.getDbUser(), dbosConfig.getDbPassword());
              Statement stmt = conn.createStatement()) {
 
-            // Terminate existing connections to our test DB
-            stmt.execute("SELECT pg_terminate_backend(pg_stat_activity.pid) " +
-                    "FROM pg_stat_activity " +
-                    "WHERE pg_stat_activity.datname = 'dbos_java_sys'");
 
-            // Drop and recreate test database
-            stmt.execute("DROP DATABASE IF EXISTS dbos_java_sys");
-            stmt.execute("CREATE DATABASE dbos_java_sys");
+            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s",sysDb) ;
+            String createDbSql = String.format("CREATE DATABASE %s",sysDb) ;
+            stmt.execute(dropDbSql);
+            stmt.execute(createDbSql);
         }
 
-        // Initialize test data source
         testDataSource = DatabaseConfig.createDataSource();
 
-        // Create schema (since it's a fresh DB)
         try (Connection conn = testDataSource.getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE SCHEMA IF NOT EXISTS dbos");
@@ -47,7 +59,7 @@ class DatabaseMigratorTest {
     @Order(1)
     void testRunMigrations_CreatesTables() throws Exception {
         // Act
-        DatabaseMigrator.runMigrations();
+        DatabaseMigrator.runMigrations(dbosConfig);
 
         // Assert
         try (Connection conn = testDataSource.getConnection()) {
@@ -72,7 +84,7 @@ class DatabaseMigratorTest {
     @Order(2)
     void testRunMigrations_IsIdempotent() {
         // Act - Run migrations again
-        assertDoesNotThrow(() -> DatabaseMigrator.runMigrations(),
+        assertDoesNotThrow(() -> DatabaseMigrator.runMigrations(dbosConfig),
                 "Migrations should run successfully multiple times");
     }
 

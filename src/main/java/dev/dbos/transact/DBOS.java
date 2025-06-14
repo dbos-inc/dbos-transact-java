@@ -1,5 +1,6 @@
 package dev.dbos.transact;
 
+import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
 import dev.dbos.transact.migration.DatabaseMigrator;
 import org.slf4j.Logger;
@@ -42,10 +43,12 @@ public class DBOS {
         }
     }
 
-    public static void launch() {
+    public static void launch(DBOSConfig config) {
 
         logger.info("Starting DBOS ...") ;
-        DatabaseMigrator.runMigrations();
+
+
+        DatabaseMigrator.runMigrations(config);
 
     }
 }

@@ -1,0 +1,175 @@
+package dev.dbos.transact.config ;
+
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
+import javax.sql.DataSource;
+
+public class DBOSConfig {
+    private final String name;
+    private final String url;
+    private final String dbHost;
+    private final int dbPort;
+    private final String dbUser ;
+    private final String dbPassword ;
+    private final int maximumPoolSize;
+    private final int connectionTimeout;
+    private final String appDbName;
+    private final String sysDbName;
+
+    private DBOSConfig(Builder builder) {
+        this.name = builder.name;
+        this.url = builder.url;
+        this.maximumPoolSize = builder.maximumPoolSize;
+        this.connectionTimeout = builder.connectionTimeout;
+        this.appDbName = builder.appDbName;
+        this.sysDbName = builder.sysDbName;
+        this.dbUser = builder.dbUser;
+        this.dbPassword = builder.dbPassword;
+        this.dbHost = builder.dbHost;
+        this.dbPort = builder.dbPort;
+
+    }
+
+    public static class Builder {
+        private String name;
+        private String url;
+        private String dbHost;
+        private int dbPort;
+        private String dbUser ;
+        private String dbPassword ;
+        private int maximumPoolSize = 3;
+        private int connectionTimeout = 30000;
+        private String appDbName;
+        private String sysDbName;
+
+        public Builder name(String name) {
+            this.name = name;
+            return this;
+        }
+
+        public Builder url(String url) {
+            this.url = url;
+            return this;
+        }
+
+        public Builder dbUser(String dbUser) {
+            this.dbUser = dbUser;
+            return this;
+        }
+
+        public Builder dbPassword(String dbPassword) {
+            this.dbPassword = dbPassword;
+            return this;
+        }
+
+        public Builder maximumPoolSize(int maximumPoolSize) {
+            this.maximumPoolSize = maximumPoolSize;
+            return this;
+        }
+
+        public Builder connectionTimeout(int connectionTimeout) {
+            this.connectionTimeout = connectionTimeout;
+            return this;
+        }
+
+        public Builder appDbName(String appDbName) {
+            this.appDbName = appDbName;
+            return this;
+        }
+
+        public Builder dbHost(String dbHost) {
+            this.dbHost = dbHost;
+            return this;
+        }
+
+        public Builder dbPort(int dbPort) {
+            this.dbPort = dbPort;
+            return this ;
+        }
+
+        public Builder sysDbName(String sysDbName) {
+            this.sysDbName = sysDbName;
+            return this;
+        }
+
+        public DBOSConfig build() {
+            if (name == null) throw new IllegalArgumentException("Name is required");
+            return new DBOSConfig(this);
+        }
+    }
+
+    // Getters
+    public String getName() {
+        return name;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public int getMaximumPoolSize() {
+        return maximumPoolSize;
+    }
+
+    public int getConnectionTimeout() {
+        return connectionTimeout;
+    }
+
+    public String getAppDbName() {
+        return appDbName;
+    }
+
+    public String getSysDbName() {
+        return sysDbName;
+    }
+
+    public String getDbUser() {
+        return dbUser;
+    }
+
+    public String getDbPassword() {
+        return dbPassword;
+    }
+
+    public String getDbHost() {
+        return dbHost;
+    }
+
+    public int getDbPort() {
+        return dbPort;
+    }
+
+    @Override
+    public String toString() {
+        return "DBOSConfig{" +
+                "name='" + name + '\'' +
+                ", url='" + url + '\'' +
+                ", maximumPoolSize=" + maximumPoolSize +
+                ", connectionTimeout=" + connectionTimeout +
+                ", appDbName='" + appDbName + '\'' +
+                ", sysDbName='" + sysDbName + '\'' +
+                '}';
+    }
+
+
+    public DataSource createDataSource() {
+        HikariConfig hikariConfig = new HikariConfig();
+
+        String dburl = String.format("jdbc:postgresql://%s:%d/%s",dbHost,dbPort,sysDbName);
+
+        hikariConfig.setJdbcUrl(dburl);
+        hikariConfig.setUsername(dbUser);
+        hikariConfig.setPassword(dbPassword);
+
+        if (maximumPoolSize > 0) {
+            hikariConfig.setMaximumPoolSize(maximumPoolSize);
+        }
+
+        if (connectionTimeout > 0) {
+            hikariConfig.setConnectionTimeout(connectionTimeout);
+        }
+
+        return new HikariDataSource(hikariConfig);
+    }
+}
