@@ -1,7 +1,6 @@
 package dev.dbos.transact.migration;
 
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.config.DatabaseConfig;
 import org.junit.jupiter.api.*;
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -47,12 +46,12 @@ class DatabaseMigratorTest {
             stmt.execute(createDbSql);
         }
 
-        testDataSource = DatabaseConfig.createDataSource();
+        testDataSource = dbosConfig.createDataSource(dbosConfig.getSysDbName());
 
-        try (Connection conn = testDataSource.getConnection();
+        /* try (Connection conn = testDataSource.getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE SCHEMA IF NOT EXISTS dbos");
-        }
+        } */
     }
 
     @Test

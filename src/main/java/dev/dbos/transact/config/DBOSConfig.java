@@ -153,10 +153,10 @@ public class DBOSConfig {
     }
 
 
-    public DataSource createDataSource() {
+    public DataSource createDataSource(String dbName) {
         HikariConfig hikariConfig = new HikariConfig();
 
-        String dburl = String.format("jdbc:postgresql://%s:%d/%s",dbHost,dbPort,sysDbName);
+        String dburl = String.format("jdbc:postgresql://%s:%d/%s",dbHost,dbPort,dbName);
 
         hikariConfig.setJdbcUrl(dburl);
         hikariConfig.setUsername(dbUser);
