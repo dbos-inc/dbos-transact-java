@@ -1,6 +1,7 @@
 package dev.dbos.transact.interceptor;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.workflow.Workflow;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -19,15 +20,16 @@ class TransactInvocationHandlerTest {
     @Test
     void createProxy() {
 
-        OrderService proxy = DBOS.<OrderService>Workflow()
+        DBOSConfig config = new DBOSConfig.Builder().name("orderservice").build();
+        DBOS.initialize(config);
+        DBOS dbos = DBOS.getInstance();
+
+        OrderService proxy = dbos.<OrderService>Workflow()
                 .interfaceClass(OrderService.class)
                 .implementation(new OrderServiceImpl())
                 .build();
 
-        // Act
         String result = proxy.processOrder("test-item");
-
-        // Assert
         assertEquals("Processed: test-item", result);
     }
 

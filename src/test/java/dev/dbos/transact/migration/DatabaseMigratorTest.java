@@ -23,8 +23,6 @@ class DatabaseMigratorTest {
         DatabaseMigratorTest.dbosConfig = new DBOSConfig
                 .Builder()
                 .name("migrationtest")
-                //.url("jdbc:postgresql://postgres:progres@localhost:5432/postgres")
-                //.url("postgresql://postgres:postgres@localhost:5432")
                 .dbHost("localhost")
                 .dbPort(5432)
                 .dbUser("postgres")
@@ -47,11 +45,7 @@ class DatabaseMigratorTest {
         }
 
         testDataSource = dbosConfig.createDataSource(dbosConfig.getSysDbName());
-
-        /* try (Connection conn = testDataSource.getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE SCHEMA IF NOT EXISTS dbos");
-        } */
+        
     }
 
     @Test

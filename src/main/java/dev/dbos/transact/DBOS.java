@@ -12,11 +12,43 @@ public class DBOS {
 
     static Logger logger = LoggerFactory.getLogger(DBOS.class) ;
 
-    public static <T> WorkflowBuilder<T> Workflow() {
+    private static DBOS instance;
+
+    private final DBOSConfig config;
+
+    private DBOS(DBOSConfig config) {
+        this.config = config;
+    }
+
+    /**
+     * Initializes the singleton instance of DBOS with config.
+     * Should be called once during app startup.
+     *
+     * @DBOSConfig config dbos configuration
+     */
+    public static synchronized void initialize(DBOSConfig config) {
+        if (instance != null) {
+            throw new IllegalStateException("DBOS has already been initialized.");
+        }
+        instance = new DBOS(config);
+    }
+
+    /**
+     * Gets the singleton instance of DBOS.
+     * Throws if accessed before initialization.
+     */
+    public static DBOS getInstance() {
+        if (instance == null) {
+            throw new IllegalStateException("DBOS has not been initialized. Call DBOS.initialize() first.");
+        }
+        return instance;
+    }
+
+    public <T> WorkflowBuilder<T> Workflow() {
         return new WorkflowBuilder<>();
     }
 
-    // Optional static inner builder class for workflows
+    // inner builder class for workflows
     public static class WorkflowBuilder<T> {
         private Class<T> interfaceClass;
         private T implementation;
@@ -45,20 +77,20 @@ public class DBOS {
         }
     }
 
-    public static void launch(DBOSConfig config) {
+    public void launch() {
         logger.info("Starting DBOS ...") ;
         DatabaseMigrator.runMigrations(config);
     }
 
-    public static void launchAndWait(DBOSConfig config) {
-        launch(config);
+    public void launchAndWait() {
+        launch();
         logger.info("DBOS is now running. Press Ctrl+C to exit.");
-        waitUntilShutdown(); // Block
+        waitUntilShutdown();
     }
 
-    private static final CountDownLatch shutdownLatch = new CountDownLatch(1);
+    private final CountDownLatch shutdownLatch = new CountDownLatch(1);
 
-    private static void waitUntilShutdown() {
+    private void waitUntilShutdown() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Shutdown signal received. Cleaning up...");
             shutdownLatch.countDown(); // Allow the main thread to exit

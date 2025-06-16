@@ -1,28 +1,36 @@
 CREATE SCHEMA IF NOT EXISTS dbos;
 
 CREATE TABLE dbos.workflow_status (
-    workflow_uuid TEXT NOT NULL,
-    status TEXT,
-    name TEXT,
-    authenticated_user TEXT,
-    assumed_role TEXT,
-    authenticated_roles TEXT,
-    request TEXT,
-    output TEXT,
-    error TEXT,
-    executor_id TEXT,
-    created_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
-    updated_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
-    application_version TEXT,
-    application_id TEXT,
-    class_name CHARACTER VARYING(255) DEFAULT NULL::character varying,
-    config_name CHARACTER VARYING(255) DEFAULT NULL::character varying,
-    recovery_attempts BIGINT DEFAULT '0'::bigint,
-    queue_name TEXT,
-
-    -- Primary key constraint
-    CONSTRAINT workflow_status_pkey PRIMARY KEY (workflow_uuid)
+    workflow_uuid text NOT NULL PRIMARY KEY,
+    status text,
+    name text,
+    authenticated_user text,
+    assumed_role text,
+    authenticated_roles text,
+    request text,
+    output text,
+    error text,
+    executor_id text,
+    created_at bigint NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
+    updated_at bigint NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
+    application_version text,
+    application_id text,
+    class_name character varying(255) DEFAULT NULL::character varying,
+    config_name character varying(255) DEFAULT NULL::character varying,
+    recovery_attempts bigint DEFAULT '0'::bigint,
+    queue_name text,
+    workflow_timeout_ms bigint,
+    workflow_deadline_epoch_ms bigint,
+    inputs text,
+    started_at_epoch_ms bigint,
+    deduplication_id text,
+    priority integer NOT NULL DEFAULT 0,
+    UNIQUE (queue_name, deduplication_id)
 );
+
+CREATE INDEX workflow_status_created_at_index ON dbos.workflow_status USING btree (created_at);
+CREATE INDEX workflow_status_executor_id_index ON dbos.workflow_status USING btree (executor_id);
+CREATE INDEX workflow_status_status_index ON dbos.workflow_status USING btree (status);
 
 
 CREATE TABLE dbos.operation_outputs (
