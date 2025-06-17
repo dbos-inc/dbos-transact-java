@@ -8,6 +8,12 @@ plugins {
 group = "dev.dbos"
 version = "1.0-SNAPSHOT"
 
+
+tasks.withType<JavaCompile> {
+    sourceCompatibility = "11"
+    targetCompatibility = "11"
+}
+
 repositories {
     mavenCentral()
 }

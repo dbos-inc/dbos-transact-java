@@ -45,7 +45,7 @@ class DatabaseMigratorTest {
         }
 
         testDataSource = dbosConfig.createDataSource(dbosConfig.getSysDbName());
-        
+
     }
 
     @Test
@@ -76,7 +76,7 @@ class DatabaseMigratorTest {
     @Test
     @Order(2)
     void testRunMigrations_IsIdempotent() {
-        // Act - Run migrations again
+        // Running migrations again
         assertDoesNotThrow(() -> DatabaseMigrator.runMigrations(dbosConfig),
                 "Migrations should run successfully multiple times");
     }

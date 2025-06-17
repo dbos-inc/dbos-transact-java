@@ -34,14 +34,21 @@ public class DatabaseMigrator {
         DataSource dataSource = dbconfig.createDataSource(dbName);
 
 
-        Flyway flyway = Flyway.configure()
-                .dataSource(dataSource)
-                .schemas(Constants.DB_SCHEMA)
-                .defaultSchema(Constants.DB_SCHEMA)
-                .locations("classpath:db/migration")
-                .load();
 
-        flyway.migrate();
+        try {
+            Flyway flyway = Flyway.configure()
+                    .dataSource(dataSource)
+                    .schemas(Constants.DB_SCHEMA)
+                    .defaultSchema(Constants.DB_SCHEMA)
+                    .locations("classpath:db/migration")
+                    .load();
+
+            flyway.migrate();
+        } finally {
+            ((HikariDataSource)dataSource).close();
+        }
+
+
         logger.info("Database migrations completed successfully");
     }
 
@@ -56,7 +63,7 @@ public class DatabaseMigrator {
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         logger.info("Database '{}' already exists", dbName);
-                        DatabaseMigrator.createSchemaIfNotExists(config, dbName, Constants.DB_SCHEMA);
+                        // DatabaseMigrator.createSchemaIfNotExists(config, dbName, Constants.DB_SCHEMA);
                         return;
                     }
                 }
