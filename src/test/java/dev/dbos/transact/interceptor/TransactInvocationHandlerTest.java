@@ -40,8 +40,8 @@ class TransactInvocationHandlerTest {
 
         DBOSExecutor executor = mock(DBOSExecutor.class) ;
 
-        doReturn("id").when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
-        doNothing().when(executor).postInvokeWorkflow(anyString(), any());
+        doReturn("Processed: test-item").when(executor).runWorkflow(anyString(), anyString(), anyString(), any(Object[].class), any());
+        // doNothing().when(executor).postInvokeWorkflow(anyString(), any());
 
         TransactInvocationHandler realHandler =
                 new TransactInvocationHandler(impl, executor);

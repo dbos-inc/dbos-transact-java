@@ -9,6 +9,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.InvocationTargetException;
 import java.sql.SQLException;
 import java.util.UUID;
 
@@ -93,6 +94,27 @@ public class DBOSExecutor {
 
         logger.info("In post Invoke workflow with error") ;
     }
+
+    public <T> T runWorkflow(String workflowName,
+                             String targetClassName,
+                             String methodName,
+                             Object[] args,
+                             DBOSFunction<T> function) throws Throwable {
+        String id = preInvokeWorkflow(workflowName, null, targetClassName, methodName, args);
+        try {
+            T result = function.execute();  // invoke the lambda
+            logger.info("After: Workflow completed successfully");
+            postInvokeWorkflow(id, result);
+            return result;
+        } catch (Throwable e) {
+            Throwable actual = (e instanceof InvocationTargetException)
+                    ? ((InvocationTargetException) e).getTargetException()
+                    : e;
+            postInvokeWorkflow(id, actual);
+            throw actual;
+        }
+    }
+
 
 
 }

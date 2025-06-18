@@ -71,7 +71,15 @@ public class TransactInvocationHandler implements InvocationHandler {
 
         logger.info(msg);
 
-        String id = "";
+        return dbosExecutor.runWorkflow(
+                workflowName,
+                targetClassName,
+                method.getName(),
+                args,
+                () -> (Object) method.invoke(target, args)
+        );
+
+        /* String id = "";
         try {
 
             id = dbosExecutor.preInvokeWorkflow(workflowName, null, targetClassName, method.getName(), args);
@@ -84,7 +92,7 @@ public class TransactInvocationHandler implements InvocationHandler {
             return result;
         } catch (Exception e) {
 
-            Throwable actualException = e; 
+            Throwable actualException = e;
 
             // If it's an InvocationTargetException, get the real cause
             if (e instanceof InvocationTargetException) {
@@ -95,7 +103,7 @@ public class TransactInvocationHandler implements InvocationHandler {
 
             logger.info("No target exception. Throwing invocation handler exception");
             throw e;
-        }
+        } */
     }
 
     protected Object handleTransaction(Method method, Object[] args, Transaction transaction) throws Throwable {
