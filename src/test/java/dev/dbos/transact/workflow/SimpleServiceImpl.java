@@ -12,4 +12,10 @@ public class SimpleServiceImpl implements SimpleService {
         logger.info("Executed workflow workWithString");
         return "Processed: " + input ;
     }
+
+    @Workflow(name = "workError")
+    public void workWithError() throws Exception {
+       throw new Exception("DBOS Test error") ;
+    }
+
 }

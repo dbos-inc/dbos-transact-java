@@ -73,4 +73,20 @@ public class BasicWorkflowTest {
         assertEquals("Processed: test-item", result);
 
     }
+
+    @Test
+    public void workflowWithError() {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+
+        try {
+            simpleService.workWithError();
+        } catch (Exception e) {
+            assertEquals("DBOS Test error", e.getMessage());
+        }
+
+    }
 }

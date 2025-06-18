@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
@@ -70,21 +71,30 @@ public class TransactInvocationHandler implements InvocationHandler {
 
         logger.info(msg);
 
-
-
+        String id = "";
         try {
 
-            dbosExecutor.preInvokeWorkflow(workflowName, null, targetClassName, method.getName(), args);
+            id = dbosExecutor.preInvokeWorkflow(workflowName, null, targetClassName, method.getName(), args);
 
             Object result = method.invoke(target, args);
             logger.info("After: Workflow completed successfully");
 
-            dbosExecutor.postInvokeWorkflow();
+            dbosExecutor.postInvokeWorkflow(id, result);
 
             return result;
         } catch (Exception e) {
-            logger.info("After: Workflow failed: " + e.getCause().getMessage());
-            throw e.getCause();
+
+            Throwable actualException = e; 
+
+            // If it's an InvocationTargetException, get the real cause
+            if (e instanceof InvocationTargetException) {
+                actualException = ((InvocationTargetException) e).getTargetException();
+                dbosExecutor.postInvokeWorkflow(id, actualException);
+                throw actualException ;
+            }
+
+            logger.info("No target exception. Throwing invocation handler exception");
+            throw e;
         }
     }
 

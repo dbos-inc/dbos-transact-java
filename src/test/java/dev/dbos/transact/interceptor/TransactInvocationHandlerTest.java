@@ -40,7 +40,8 @@ class TransactInvocationHandlerTest {
 
         DBOSExecutor executor = mock(DBOSExecutor.class) ;
 
-        doNothing().when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
+        doReturn("id").when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
+        doNothing().when(executor).postInvokeWorkflow(anyString(), any());
 
         TransactInvocationHandler realHandler =
                 new TransactInvocationHandler(impl, executor);
@@ -68,7 +69,8 @@ class TransactInvocationHandlerTest {
         OrderServiceImpl impl = new OrderServiceImpl();
 
         DBOSExecutor executor = mock(DBOSExecutor.class) ;
-        doNothing().when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
+        doReturn("id").when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
+        doNothing().when(executor).postInvokeWorkflow(anyString(), any());
 
         TransactInvocationHandler realHandler =
                 new TransactInvocationHandler(impl, executor);
@@ -96,8 +98,8 @@ class TransactInvocationHandlerTest {
         OrderServiceImpl impl = new OrderServiceImpl();
 
         DBOSExecutor executor = mock(DBOSExecutor.class) ;
-        doNothing().when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
-
+        doReturn("id").when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
+        doNothing().when(executor).postInvokeWorkflow(anyString(), any());
 
         TransactInvocationHandler realHandler =
                 new TransactInvocationHandler(impl , executor);

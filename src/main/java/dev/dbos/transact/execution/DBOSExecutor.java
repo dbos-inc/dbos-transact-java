@@ -30,7 +30,7 @@ public class DBOSExecutor {
         systemDatabase.destroy() ;
     }
 
-    public void preInvokeWorkflow(String workflowName,
+    public String preInvokeWorkflow(String workflowName,
                                   String interfaceName,
                                   String className,
                                   String methodName,
@@ -72,11 +72,26 @@ public class DBOSExecutor {
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(),e) ;
         }
 
+        return workflowId ;
     }
 
-    public void postInvokeWorkflow() {
+    public void postInvokeWorkflow(String workflowId, Object result) {
 
-        logger.info("In post Invoke workflow") ;
+        String resultString = JSONUtil.toJson(result);
+
+
+        systemDatabase.recordWorkflowOutput(workflowId, resultString);
+
+        logger.info("In post Invoke workflow with result") ;
+    }
+
+    public void postInvokeWorkflow(String workflowId, Throwable error) {
+
+        String errorString = error.toString() ;
+
+        systemDatabase.recordWorkflowError(workflowId, errorString);
+
+        logger.info("In post Invoke workflow with error") ;
     }
 
 

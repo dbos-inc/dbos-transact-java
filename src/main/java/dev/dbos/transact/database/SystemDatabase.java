@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSDeadLetterQueueException;
+import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -20,6 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+
+import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
 public class SystemDatabase {
 
@@ -197,6 +200,52 @@ public class SystemDatabase {
 
 
         } // end try with resources connection closed
+    }
+
+    /**
+     * Store the result to workflow_status
+     *
+     * @param workflowId id of the workflow
+     * @param result output serialized as json
+     */
+    public void recordWorkflowOutput(String workflowId, String result) {
+
+        try {
+            try (Connection connection = dataSource.getConnection()) {
+
+                UpdateWorkflowOptions options = new UpdateWorkflowOptions();
+                options.setOutput(result);
+
+
+                updateWorkflowStatus(connection, workflowId, WorkflowStatus.SUCCESS.toString(), options);
+
+            }
+        } catch(SQLException e) {
+            throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
+        }
+    }
+
+    /**
+     * Store the error to workflow_status
+     *
+     * @param workflowId id of the workflow
+     * @param error output serialized as json
+     */
+    public void recordWorkflowError(String workflowId, String error) {
+
+        try {
+            try (Connection connection = dataSource.getConnection()) {
+
+                UpdateWorkflowOptions options = new UpdateWorkflowOptions();
+                options.setError(error);
+
+
+                updateWorkflowStatus(connection, workflowId, WorkflowStatus.ERROR.toString(), options);
+
+            }
+        } catch(SQLException e) {
+            throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
+        }
     }
 
     /**
@@ -431,14 +480,14 @@ private void createDataSource(String dbName) {
 
         private String output;
         private String error;
-        private Boolean resetRecoveryAttempts;
+        private boolean resetRecoveryAttempts;
         private String queueName;
         private Boolean resetDeadline;
         private Boolean resetDeduplicationID;
         private Boolean resetStartedAtEpochMs;
 
         private String whereStatus;
-        private Boolean throwOnFailure;
+        private boolean throwOnFailure;
 
         public UpdateWorkflowOptions() {
         }
