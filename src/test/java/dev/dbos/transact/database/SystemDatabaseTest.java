@@ -6,13 +6,9 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import org.junit.jupiter.api.*;
-
-import javax.sql.DataSource;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
-import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class SystemDatabaseTest {
 
     private static SystemDatabase systemDatabase ;
-    // private static DataSource testDataSource;
     private static DBOSConfig dbosConfig;
 
     @BeforeAll
@@ -58,7 +53,6 @@ class SystemDatabaseTest {
 
     @AfterAll
     static void onetimeTearDown() {
-        System.out.println("Destroying systemdb");
         SystemDatabase.destroy();
     }
 

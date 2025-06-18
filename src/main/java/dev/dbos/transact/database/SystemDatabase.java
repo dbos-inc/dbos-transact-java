@@ -215,7 +215,7 @@ public class SystemDatabase {
 
                 UpdateWorkflowOptions options = new UpdateWorkflowOptions();
                 options.setOutput(result);
-
+                options.setResetDeduplicationID(true);
 
                 updateWorkflowStatus(connection, workflowId, WorkflowStatus.SUCCESS.toString(), options);
 
@@ -238,6 +238,7 @@ public class SystemDatabase {
 
                 UpdateWorkflowOptions options = new UpdateWorkflowOptions();
                 options.setError(error);
+                options.setResetDeduplicationID(true);
 
 
                 updateWorkflowStatus(connection, workflowId, WorkflowStatus.ERROR.toString(), options);
@@ -341,19 +342,16 @@ public class SystemDatabase {
             String workflowID,
             String status,
             UpdateWorkflowOptions options
-    ) throws SQLException { // Declare checked exception
+    ) throws SQLException {
 
         StringBuilder setClauseBuilder = new StringBuilder("SET status = ?, updated_at = ?");
         StringBuilder whereClauseBuilder = new StringBuilder("WHERE workflow_uuid = ?");
 
-        // List to hold parameters in the order they appear in the final SQL string's '?' placeholders
         List<Object> finalOrderedArgs = new ArrayList<>();
 
-        // Add initial parameters for SET clause (status, updated_at)
         finalOrderedArgs.add(status);
         finalOrderedArgs.add(Instant.now().toEpochMilli());
 
-        // Handle update options directly from the flattened 'options' object
         if (options.getOutput() != null) {
             setClauseBuilder.append(", output = ?");
             finalOrderedArgs.add(options.getOutput());
@@ -385,11 +383,10 @@ public class SystemDatabase {
             setClauseBuilder.append(", started_at_epoch_ms = NULL");
         }
 
-        // Add parameters for WHERE clause (workflow_uuid and then optional status)
+
         finalOrderedArgs.add(workflowID); // This must be the first parameter in the WHERE clause part (for WHERE workflow_uuid = ?)
 
-        // Handle where options directly from the flattened 'options' object
-        if (options.getWhereStatus() != null) { // Check if where status is provided
+        if (options.getWhereStatus() != null) {
             whereClauseBuilder.append(" AND status = ?");
             finalOrderedArgs.add(options.getWhereStatus());
         }
@@ -408,9 +405,6 @@ public class SystemDatabase {
             for (int i = 0; i < finalOrderedArgs.size(); i++) {
                 Object arg = finalOrderedArgs.get(i);
                 if (arg == null) {
-                    // This is a simplification; a more robust solution would infer type
-                    // or require type info for each nullable parameter.
-                    // For now, assume common types for null.
                     pstmt.setNull(i + 1, Types.VARCHAR); // Default to VARCHAR for null strings
                 } else if (arg instanceof String) {
                     pstmt.setString(i + 1, (String) arg);

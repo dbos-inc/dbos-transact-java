@@ -17,21 +17,7 @@ import static org.mockito.Mockito.*;
 
 class TransactInvocationHandlerTest {
 
-    /* @Test
-    void createProxy() {
-
-        DBOSConfig config = new DBOSConfig.Builder().name("orderservice").build();
-        DBOS.initialize(config);
-        DBOS dbos = DBOS.getInstance();
-
-        OrderService proxy = dbos.<OrderService>Workflow()
-                .interfaceClass(OrderService.class)
-                .implementation(new OrderServiceImpl())
-                .build();
-
-        String result = proxy.processOrder("test-item");
-        assertEquals("Processed: test-item", result);
-    } */
+    // Once we write more workflow tests, this test can be removed
 
     @Test
     void invokeWorkflow() throws Throwable {
@@ -41,7 +27,6 @@ class TransactInvocationHandlerTest {
         DBOSExecutor executor = mock(DBOSExecutor.class) ;
 
         doReturn("Processed: test-item").when(executor).runWorkflow(anyString(), anyString(), anyString(), any(Object[].class), any());
-        // doNothing().when(executor).postInvokeWorkflow(anyString(), any());
 
         TransactInvocationHandler realHandler =
                 new TransactInvocationHandler(impl, executor);

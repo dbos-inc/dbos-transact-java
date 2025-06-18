@@ -79,31 +79,6 @@ public class TransactInvocationHandler implements InvocationHandler {
                 () -> (Object) method.invoke(target, args)
         );
 
-        /* String id = "";
-        try {
-
-            id = dbosExecutor.preInvokeWorkflow(workflowName, null, targetClassName, method.getName(), args);
-
-            Object result = method.invoke(target, args);
-            logger.info("After: Workflow completed successfully");
-
-            dbosExecutor.postInvokeWorkflow(id, result);
-
-            return result;
-        } catch (Exception e) {
-
-            Throwable actualException = e;
-
-            // If it's an InvocationTargetException, get the real cause
-            if (e instanceof InvocationTargetException) {
-                actualException = ((InvocationTargetException) e).getTargetException();
-                dbosExecutor.postInvokeWorkflow(id, actualException);
-                throw actualException ;
-            }
-
-            logger.info("No target exception. Throwing invocation handler exception");
-            throw e;
-        } */
     }
 
     protected Object handleTransaction(Method method, Object[] args, Transaction transaction) throws Throwable {

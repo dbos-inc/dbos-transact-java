@@ -34,8 +34,6 @@ public class BasicWorkflowTest {
                 .maximumPoolSize(2)
                 .build();
 
-        System.out.println("mjjjj password is " + dbosConfig.getDbPassword()) ;
-
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
 
         String sysDb = dbosConfig.getSysDbName();
@@ -57,7 +55,6 @@ public class BasicWorkflowTest {
 
     @AfterAll
     static void onetimeTearDown() {
-        System.out.println("shutting down dbos");
         dbos.shutdown();
     }
 
