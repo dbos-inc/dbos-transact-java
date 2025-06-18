@@ -1,6 +1,14 @@
 # dbos-transact-java
 DBOS Transact Java SDK 
 
+## setup
+
+For tests to run setup a postgres docker container running on   
+localhost   
+port 5432   
+user postgres   
+export PGPASSWORD=<password>
+
 ## build
 
 ./gradlew clean build

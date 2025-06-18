@@ -30,10 +30,11 @@ public class BasicWorkflowTest {
                 .dbHost("localhost")
                 .dbPort(5432)
                 .dbUser("postgres")
-                .dbPassword("postgres")
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
                 .build();
+
+        System.out.println("mjjjj password is " + dbosConfig.getDbPassword()) ;
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
 

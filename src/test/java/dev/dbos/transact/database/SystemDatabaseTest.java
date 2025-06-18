@@ -32,7 +32,6 @@ class SystemDatabaseTest {
                 .dbHost("localhost")
                 .dbPort(5432)
                 .dbUser("postgres")
-                .dbPassword("postgres")
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(3)
                 .build();
