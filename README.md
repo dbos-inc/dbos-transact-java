@@ -1,25 +1,20 @@
 # dbos-transact-java
 DBOS Transact Java SDK 
 
-## setup
-
-For tests to run setup a postgres docker container running on   
-localhost   
-port 5432   
-user postgres   
-export PGPASSWORD=<password>
-
 ## Setting up dev environment
 
 Install a recent OpenJDK. I use OpenJDK 21.    
 https://adoptium.net/en-GB/temurin/releases/?os=any&arch=any&version=21
 
-Recommended IDE IntelliJ (Community edition is fine)   
+Recommended IDE IntelliJ (Community edition is fine).
+But feel free to use vi, if you are more comfortable with it.  
 
-Postgres docker container   
+Postgres docker container with
+localhost   
+port 5432   
+user postgres
 
-export PGPASSWORD = <password for postgres user>
-
+export PGPASSWORD = password for postgres user  
 
 ## build
 
