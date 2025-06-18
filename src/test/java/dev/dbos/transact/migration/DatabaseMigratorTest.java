@@ -1,5 +1,6 @@
 package dev.dbos.transact.migration;
 
+import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.config.DBOSConfig;
 import org.junit.jupiter.api.*;
 import javax.sql.DataSource;
@@ -83,6 +84,6 @@ class DatabaseMigratorTest {
 
     @AfterAll
     static void cleanup() throws Exception {
-        
+        ((HikariDataSource)testDataSource).close();
     }
 }

@@ -88,15 +88,14 @@ public class DBOS {
         dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance()) ;
     }
 
-    public void launchAndWait() {
-        launch();
-        logger.info("DBOS is now running. Press Ctrl+C to exit.");
-        waitUntilShutdown();
+    public void shutdown() {
+        dbosExecutor.shutdown();
     }
+
 
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
 
-    private void waitUntilShutdown() {
+    public void waitUntilShutdown() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Shutdown signal received. Cleaning up...");
             shutdownLatch.countDown(); // Allow the main thread to exit

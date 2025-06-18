@@ -2,9 +2,10 @@ package dev.dbos.transact.exceptions;
 
 public enum ErrorCode {
 
-    WORKFLOW_CONFLICT(1),
-    QUEUE_DUPLICATED(2) ,
-    DEAD_LETTER_QUEUE(3) ;
+    UNEXPECTED(1),
+    WORKFLOW_CONFLICT(2),
+    QUEUE_DUPLICATED(3) ,
+    DEAD_LETTER_QUEUE(4) ;
 
     private int code ;
 

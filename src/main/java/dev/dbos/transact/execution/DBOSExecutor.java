@@ -26,6 +26,10 @@ public class DBOSExecutor {
 
     }
 
+    public void shutdown() {
+        systemDatabase.destroy() ;
+    }
+
     public void preInvokeWorkflow(String workflowName,
                                   String interfaceName,
                                   String className,
