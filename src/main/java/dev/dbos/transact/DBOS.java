@@ -1,6 +1,8 @@
 package dev.dbos.transact;
 
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
 import dev.dbos.transact.migration.DatabaseMigrator;
 import org.slf4j.Logger;
@@ -15,6 +17,7 @@ public class DBOS {
     private static DBOS instance;
 
     private final DBOSConfig config;
+    private DBOSExecutor dbosExecutor  ;
 
     private DBOS(DBOSConfig config) {
         this.config = config;
@@ -72,7 +75,8 @@ public class DBOS {
 
             return TransactInvocationHandler.createProxy(
                     interfaceClass,
-                    implementation
+                    implementation,
+                    DBOS.getInstance().dbosExecutor
             );
         }
     }
@@ -80,6 +84,8 @@ public class DBOS {
     public void launch() {
         logger.info("Starting DBOS ...") ;
         DatabaseMigrator.runMigrations(config);
+        SystemDatabase.initialize(config);
+        dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance()) ;
     }
 
     public void launchAndWait() {

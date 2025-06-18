@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 public class SystemDatabase {
 
@@ -59,6 +60,52 @@ public class SystemDatabase {
             ((HikariDataSource)instance.dataSource).close();
         }
         instance = null ;
+    }
+
+
+    /**
+     * Get workflow result by workflow ID
+     * @param workflowId The workflow UUID
+     * @return Optional containing the raw output string if workflow completed successfully, empty otherwise
+     * @throws SQLException if database operation fails
+     */
+    public Optional<String> getWorkflowResult(String workflowId) throws SQLException {
+        final String sql =
+            "SELECT status, output, error " +
+            "FROM dbos.workflow_status "  +
+            "WHERE workflow_uuid = ?;";
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+
+            stmt.setString(1, workflowId);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String status = rs.getString("status");
+
+                    if (WorkflowStatus.SUCCESS.toString().equals(status)) {
+                        String output = rs.getString("output");
+                        return Optional.ofNullable(output);
+
+                    } else if (WorkflowStatus.ERROR.toString().equals(status)) {
+                        String error = rs.getString("error");
+                        return Optional.ofNullable(error);
+                    }
+
+                    // For other statuses (PENDING, RUNNING, etc.), return empty
+                    return Optional.empty();
+                }
+
+                // No row found - return empty
+                return Optional.empty();
+            }
+
+        } catch (SQLException e) {
+            logger.error("Error getting workflow result",e);
+            throw e;
+
+        }
     }
 
     /**

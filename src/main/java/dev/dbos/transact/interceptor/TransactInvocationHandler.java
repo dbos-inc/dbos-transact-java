@@ -1,5 +1,6 @@
 package dev.dbos.transact.interceptor;
 
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Transaction;
 import dev.dbos.transact.workflow.Workflow;
@@ -15,9 +16,11 @@ public class TransactInvocationHandler implements InvocationHandler {
     private static final Logger logger = LoggerFactory.getLogger(TransactInvocationHandler.class);
 
     private final Object target;
+    private final String targetClassName ;
+    private final DBOSExecutor dbosExecutor ;
 
     @SuppressWarnings("unchecked")
-    public static <T> T createProxy(Class<T> interfaceClass, T implementation) {
+    public static <T> T createProxy(Class<T> interfaceClass, T implementation, DBOSExecutor executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
@@ -25,14 +28,16 @@ public class TransactInvocationHandler implements InvocationHandler {
         T proxy =  (T) Proxy.newProxyInstance(
                 interfaceClass.getClassLoader(),
                 new Class<?>[] { interfaceClass },
-                new TransactInvocationHandler(implementation)
+                new TransactInvocationHandler(implementation, executor)
         );
 
         return proxy;
     }
 
-    protected TransactInvocationHandler(Object target) {
+    protected TransactInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
         this.target = target;
+        this.targetClassName = target.getClass().getName();
+        this.dbosExecutor = dbosExecutor ;
     }
 
     @Override
@@ -57,15 +62,25 @@ public class TransactInvocationHandler implements InvocationHandler {
 
     protected Object handleWorkflow(Method method, Object[] args, Workflow workflow) throws Throwable {
 
+        String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
+
         String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
-                workflow.name().isEmpty() ? method.getName() : workflow.name(),
+                workflowName,
                 workflow.timeout());
 
         logger.info(msg);
 
+
+
         try {
+
+            dbosExecutor.preInvokeWorkflow(workflowName, null, targetClassName, method.getName(), args);
+
             Object result = method.invoke(target, args);
             logger.info("After: Workflow completed successfully");
+
+            dbosExecutor.postInvokeWorkflow();
+
             return result;
         } catch (Exception e) {
             logger.info("After: Workflow failed: " + e.getCause().getMessage());
