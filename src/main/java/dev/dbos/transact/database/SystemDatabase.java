@@ -1,5 +1,7 @@
 package dev.dbos.transact.database;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
@@ -8,7 +10,10 @@ import dev.dbos.transact.exceptions.DBOSDeadLetterQueueException;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
+import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.GetWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
+import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import org.slf4j.Logger;
@@ -17,10 +22,7 @@ import org.slf4j.LoggerFactory;
 import javax.sql.DataSource;
 import java.sql.*;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
@@ -262,8 +264,6 @@ public class SystemDatabase {
             WorkflowStatusInternal status
     ) throws SQLException {
 
-
-
             String insertSQL =
                     "INSERT INTO dbos.workflow_status (" +
                             "workflow_uuid, status, name, class_name, config_name, " +
@@ -426,6 +426,181 @@ public class SystemDatabase {
                             workflowID, affectedRows)
             );
         }
+    }
+
+public List<WorkflowStatus> getWorkflows(GetWorkflowsInput input) throws SQLException {
+
+    List<WorkflowStatus> workflows = new ArrayList<>();
+
+    StringBuilder sqlBuilder = new StringBuilder();
+    List<Object> parameters = new ArrayList<>();
+
+    // Start building the SELECT clause. The order of columns here is critical
+    // for mapping to the WorkflowStatus fields by index later in the ResultSet.
+    sqlBuilder.append("SELECT workflow_uuid, status, name, recovery_attempts, " +
+                    "config_name, class_name, authenticated_user, authenticated_roles, " +
+                    "assumed_role, queue_name, executor_id, created_at, updated_at, " +
+                    "application_version, application_id, inputs, output, error, " +
+                    "workflow_deadline_epoch_ms, workflow_timeout_ms ");
+
+    sqlBuilder.append(String.format("FROM %s.workflow_status ", Constants.DB_SCHEMA));
+
+    // --- WHERE Clauses ---
+    StringJoiner whereConditions = new StringJoiner(" AND ");
+
+    if (input.getWorkflowName() != null) {
+        whereConditions.add("name = ?");
+        parameters.add(input.getWorkflowName());
+    }
+    if (input.getAuthenticatedUser() != null) {
+        whereConditions.add("authenticated_user = ?");
+        parameters.add(input.getAuthenticatedUser());
+    }
+    if (input.getStartTime() != null) {
+        whereConditions.add("created_at >= ?");
+        // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
+        parameters.add(input.getStartTime().toInstant().toEpochMilli());
+    }
+    if (input.getEndTime() != null) {
+        whereConditions.add("created_at <= ?");
+        // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
+        parameters.add(input.getEndTime().toInstant().toEpochMilli());
+    }
+    if (input.getStatus() != null) {
+        whereConditions.add("status = ?");
+        parameters.add(input.getStatus());
+    }
+    if (input.getApplicationVersion() != null) {
+        whereConditions.add("application_version = ?");
+        parameters.add(input.getApplicationVersion());
+    }
+    if (input.getWorkflowIDs() != null && !input.getWorkflowIDs().isEmpty()) {
+        // Handle IN clause: dynamically generate ? for each ID
+        StringJoiner inClausePlaceholders = new StringJoiner(", ", "(", ")");
+        for (String id : input.getWorkflowIDs()) {
+            inClausePlaceholders.add("?");
+            parameters.add(id);
+        }
+        whereConditions.add("workflow_uuid IN " + inClausePlaceholders.toString());
+    }
+    if (input.getWorkflowIdPrefix() != null) {
+        whereConditions.add("workflow_uuid LIKE ?");
+        // Append wildcard directly to the parameter value
+        parameters.add(input.getWorkflowIdPrefix() + "%");
+    }
+
+    // Only append WHERE keyword if there are actual conditions
+    if (whereConditions.length() > 0) {
+        sqlBuilder.append(" WHERE ").append(whereConditions.toString());
+    }
+
+    // --- ORDER BY Clause ---
+    sqlBuilder.append(" ORDER BY created_at ");
+    if (input.getSortDesc() != null && input.getSortDesc()) {
+        sqlBuilder.append("DESC");
+    } else {
+        sqlBuilder.append("ASC");
+    }
+
+    // --- LIMIT and OFFSET Clauses ---
+    if (input.getLimit() != null) {
+        sqlBuilder.append(" LIMIT ?");
+        parameters.add(input.getLimit());
+    }
+    if (input.getOffset() != null) {
+        sqlBuilder.append(" OFFSET ?");
+        parameters.add(input.getOffset());
+    }
+
+    try (Connection connection = dataSource.getConnection();
+         PreparedStatement pstmt = connection.prepareStatement(sqlBuilder.toString())) {
+
+        for (int i = 0; i < parameters.size(); i++) {
+
+            Object param = parameters.get(i);
+            if (param instanceof String) {
+                pstmt.setString(i + 1, (String) param);
+            } else if (param instanceof Long) {
+                pstmt.setLong(i + 1, (Long) param);
+            } else if (param instanceof Integer) {
+                pstmt.setInt(i + 1, (Integer) param);
+            } else {
+                // Fallback for other types, or if OffsetDateTime was directly added to parameters list
+                pstmt.setObject(i + 1, param);
+            }
+        }
+
+        try (ResultSet rs = pstmt.executeQuery()) {
+            while (rs.next()) {
+                WorkflowStatus info = new WorkflowStatus();
+                // The column names or their order in the SELECT statement must match.
+                info.setWorkflowId(rs.getString("workflow_uuid"));
+                info.setStatus(rs.getString("status"));
+                info.setName(rs.getString("name"));
+                info.setRecoveryAttempts(rs.getInt("recovery_attempts")); // getObject for nullable
+                info.setConfigName(rs.getString("config_name"));
+                info.setClassName(rs.getString("class_name"));
+                info.setAuthenticatedUser(rs.getString("authenticated_user"));
+
+                String authenticatedRolesJson = rs.getString("authenticated_roles");
+                if (authenticatedRolesJson != null) {
+                    info.setAuthenticatedRoles(JSONUtil.fromJson(authenticatedRolesJson, new TypeReference<List<String>>() {}));
+                }
+
+                info.setAssumedRole(rs.getString("assumed_role"));
+                info.setQueueName(rs.getString("queue_name"));
+                info.setExecutorId(rs.getString("executor_id"));
+                info.setCreatedAt(rs.getObject("created_at", Long.class)); // getObject for nullable
+                info.setUpdatedAt(rs.getObject("updated_at", Long.class)); // getObject for nullable
+                info.setAppVersion(rs.getString("application_version"));
+                info.setAppId(rs.getString("application_id"));
+
+                String serializedInput = rs.getString("inputs");
+                String serializedOutput = rs.getString("output");
+                String serializedError = rs.getString("error");
+
+                if (serializedInput != null) {
+                    info.setInput(JSONUtil.fromJson(serializedInput, Object[].class));
+                }
+
+                if (serializedOutput != null) {
+                    info.setOutput(JSONUtil.fromJson(serializedOutput, Object.class));
+                }
+                info.setError(serializedError);
+
+                info.setWorkflowDeadlineEpochMs(rs.getObject("workflow_deadline_epoch_ms", Long.class));
+                info.setWorkflowTimeoutMs(rs.getObject("workflow_timeout_ms", Long.class));
+
+                workflows.add(info);
+            }
+        }
+    }
+
+
+    return workflows ;
+}
+
+    /**
+     *  Helper method for tests
+     *  Should be moved to TestUtils
+     */
+    public void deleteWorkflowsTestHelper() throws SQLException{
+
+        String sql = "delete from dbos.workflow_status";
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+            int rowsAffected = pstmt.executeUpdate();
+            logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.workflow_status");
+
+        } catch (SQLException e) {
+            logger.error("Error deleting workflows in test helper: " + e.getMessage());
+            throw e;
+        }
+
+
+
     }
 
 private void createDataSource(String dbName) {

@@ -32,8 +32,6 @@ public class DatabaseMigrator {
 
         DataSource dataSource = dbconfig.createDataSource(dbName);
 
-
-
         try {
             Flyway flyway = Flyway.configure()
                     .dataSource(dataSource)

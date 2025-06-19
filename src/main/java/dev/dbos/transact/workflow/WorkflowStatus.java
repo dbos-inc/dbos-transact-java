@@ -13,9 +13,10 @@ public class WorkflowStatus {
     private String authenticatedUser;
     private String assumedRole;
     private List<String> authenticatedRoles;
-    private Map<String, Object> input;
+    private Object[] input;
     private Object output;
-    private Throwable error;
+    //TODO fix private Throwable error;
+    private String error;
     private Long createdAt;
     private Long updatedAt;
     private String queueName;
@@ -39,9 +40,9 @@ public class WorkflowStatus {
             String authenticatedUser,
             String assumedRole,
             List<String> authenticatedRoles,
-            Map<String, Object> input,
+            Object[] input,
             Object output,
-            Throwable error,
+            String error,
             Long createdAt,
             Long updatedAt,
             String queueName,
@@ -97,14 +98,14 @@ public class WorkflowStatus {
     public List<String> getAuthenticatedRoles() { return authenticatedRoles; }
     public void setAuthenticatedRoles(List<String> authenticatedRoles) { this.authenticatedRoles = authenticatedRoles; }
 
-    public Map<String, Object> getInput() { return input; }
-    public void setInput(Map<String, Object> input) { this.input = input; }
+    public Object[] getInput() { return input; }
+    public void setInput(Object[] input) { this.input = input; }
 
     public Object getOutput() { return output; }
     public void setOutput(Object output) { this.output = output; }
 
-    public Throwable getError() { return error; }
-    public void setError(Throwable error) { this.error = error; }
+    public String getError() { return error; }
+    public void setError(String error) { this.error = error; }
 
     public Long getCreatedAt() { return createdAt; }
     public void setCreatedAt(Long createdAt) { this.createdAt = createdAt; }

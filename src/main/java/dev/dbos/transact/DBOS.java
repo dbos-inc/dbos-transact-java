@@ -47,6 +47,10 @@ public class DBOS {
         return instance;
     }
 
+    public void setDbosExecutor(DBOSExecutor executor) {
+        this.dbosExecutor = executor;
+    }
+
     public <T> WorkflowBuilder<T> Workflow() {
         return new WorkflowBuilder<>();
     }
@@ -84,8 +88,10 @@ public class DBOS {
     public void launch() {
         logger.info("Starting DBOS ...") ;
         DatabaseMigrator.runMigrations(config);
-        SystemDatabase.initialize(config);
-        dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance()) ;
+        if (dbosExecutor == null) {
+            SystemDatabase.initialize(config);
+            dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance());
+        }
     }
 
     public void shutdown() {
