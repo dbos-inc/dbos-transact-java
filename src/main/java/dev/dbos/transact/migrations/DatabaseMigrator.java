@@ -1,6 +1,5 @@
-package dev.dbos.transact.migration;
+package dev.dbos.transact.migrations;
 
-import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;

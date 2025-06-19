@@ -7,7 +7,7 @@ Install a recent OpenJDK. I use OpenJDK 21.
 https://adoptium.net/en-GB/temurin/releases/?os=any&arch=any&version=21
 
 Recommended IDE IntelliJ (Community edition is fine).
-But feel free to use vi, if you are more comfortable with it.  
+But feel free to use vi or VSCode, if you are more comfortable with it.  
 
 Postgres docker container with
 localhost   

@@ -4,7 +4,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
-import dev.dbos.transact.migration.DatabaseMigrator;
+import dev.dbos.transact.migrations.DatabaseMigrator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

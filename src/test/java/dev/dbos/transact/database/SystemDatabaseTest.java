@@ -1,7 +1,7 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.migration.DatabaseMigrator;
+import dev.dbos.transact.migrations.DatabaseMigrator;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;

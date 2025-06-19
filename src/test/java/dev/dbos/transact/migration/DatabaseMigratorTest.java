@@ -2,6 +2,7 @@ package dev.dbos.transact.migration;
 
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.migrations.DatabaseMigrator;
 import org.junit.jupiter.api.*;
 import javax.sql.DataSource;
 import java.sql.Connection;
