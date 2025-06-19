@@ -4,7 +4,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.json.JSONUtil;
-import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +45,7 @@ public class DBOSExecutor {
 
         WorkflowStatusInternal workflowStatusInternal =
                 new WorkflowStatusInternal(workflowId,
-                        WorkflowStatus.PENDING,
+                        WorkflowState.PENDING,
                         workflowName,
                         className,
                         null,

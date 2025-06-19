@@ -1,12 +1,12 @@
 package dev.dbos.transact.workflow.internal;
 
 
-import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.WorkflowState;
 
 public class WorkflowStatusInternal {
 
     private String workflowUUID;
-    private WorkflowStatus status;
+    private WorkflowState status;
     private String name;
     private String className;
     private String configName;
@@ -28,7 +28,7 @@ public class WorkflowStatusInternal {
     private int priority; // default 0 = highest priority
     private String inputs; // serialized workflow inputs
 
-    public WorkflowStatusInternal(String workflowUUID, WorkflowStatus status, String name, String className,
+    public WorkflowStatusInternal(String workflowUUID, WorkflowState status, String name, String className,
                                   String configName, String authenticatedUser, String assumedRole,
                                   String authenticatedRoles, String output, String error, Long createdAt,
                                   Long updatedAt, String queueName, String executorId, String appVersion,
@@ -63,7 +63,7 @@ public class WorkflowStatusInternal {
         return workflowUUID;
     }
 
-    public WorkflowStatus getStatus() {
+    public WorkflowState getStatus() {
         return status;
     }
 

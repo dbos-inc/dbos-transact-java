@@ -2,7 +2,7 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migration.DatabaseMigrator;
-import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import org.junit.jupiter.api.*;
@@ -71,7 +71,7 @@ class SystemDatabaseTest {
 
         WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal(
                 workflowId,
-                WorkflowStatus.SUCCESS,
+                WorkflowState.SUCCESS,
                 "OrderProcessingWorkflow",
                 "com.example.workflows.OrderWorkflow",
                 "prod-config",

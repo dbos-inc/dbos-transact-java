@@ -8,7 +8,7 @@ import dev.dbos.transact.exceptions.DBOSDeadLetterQueueException;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
-import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import org.slf4j.Logger;
@@ -87,11 +87,11 @@ public class SystemDatabase {
                 if (rs.next()) {
                     String status = rs.getString("status");
 
-                    if (WorkflowStatus.SUCCESS.toString().equals(status)) {
+                    if (WorkflowState.SUCCESS.toString().equals(status)) {
                         String output = rs.getString("output");
                         return Optional.ofNullable(output);
 
-                    } else if (WorkflowStatus.ERROR.toString().equals(status)) {
+                    } else if (WorkflowState.ERROR.toString().equals(status)) {
                         String error = rs.getString("error");
                         return Optional.ofNullable(error);
                     }
@@ -166,11 +166,11 @@ public class SystemDatabase {
                 if (maxRetries != null && attempts > maxRetries + 1) {
 
                         UpdateWorkflowOptions options = new UpdateWorkflowOptions();
-                        options.setWhereStatus(WorkflowStatus.PENDING.toString());
+                        options.setWhereStatus(WorkflowState.PENDING.toString());
                         options.setThrowOnFailure(false);
 
                         updateWorkflowStatus(connection, initStatus.getWorkflowUUID(),
-                                WorkflowStatus.RETRIES_EXCEEDED.toString(),
+                                WorkflowState.RETRIES_EXCEEDED.toString(),
                                 options);
                         throw new DBOSDeadLetterQueueException(initStatus.getWorkflowUUID(), maxRetries);
                 }
@@ -217,7 +217,7 @@ public class SystemDatabase {
                 options.setOutput(result);
                 options.setResetDeduplicationID(true);
 
-                updateWorkflowStatus(connection, workflowId, WorkflowStatus.SUCCESS.toString(), options);
+                updateWorkflowStatus(connection, workflowId, WorkflowState.SUCCESS.toString(), options);
 
             }
         } catch(SQLException e) {
@@ -241,7 +241,7 @@ public class SystemDatabase {
                 options.setResetDeduplicationID(true);
 
 
-                updateWorkflowStatus(connection, workflowId, WorkflowStatus.ERROR.toString(), options);
+                updateWorkflowStatus(connection, workflowId, WorkflowState.ERROR.toString(), options);
 
             }
         } catch(SQLException e) {
