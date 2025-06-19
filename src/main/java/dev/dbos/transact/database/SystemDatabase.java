@@ -180,7 +180,7 @@ public class SystemDatabase {
                 logger.debug(String.format("Workflow %s attempt number: %d.", initStatus.getWorkflowUUID(), attempts));
 
                 connection.commit(); // Commit transaction on success
-                return new WorkflowInitResult(resRow.getStatus(), resRow.getWorkflowDeadlineEpochMs());
+                return new WorkflowInitResult(initStatus.getWorkflowUUID(), resRow.getStatus(), resRow.getWorkflowDeadlineEpochMs());
 
             } catch(SQLException e){
 
@@ -628,10 +628,12 @@ private void createDataSource(String dbName) {
     }
 
     public static class WorkflowInitResult {
+        private String workflowId;
         private String status;
         private Long deadlineEpochMS; // Use Long for nullable number
 
-        public WorkflowInitResult(String status, Long deadlineEpochMS) {
+        public WorkflowInitResult(String id, String status, Long deadlineEpochMS) {
+            this.workflowId = id;
             this.status = status;
             this.deadlineEpochMS = deadlineEpochMS;
         }
@@ -642,6 +644,10 @@ private void createDataSource(String dbName) {
 
         public Long getDeadlineEpochMS() {
             return deadlineEpochMS;
+        }
+
+        public String getWorkflowId() {
+            return workflowId;
         }
     }
 

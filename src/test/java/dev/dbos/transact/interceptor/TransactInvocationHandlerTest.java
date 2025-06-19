@@ -2,6 +2,7 @@ package dev.dbos.transact.interceptor;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.Workflow;
 import org.junit.jupiter.api.Test;
@@ -54,7 +55,7 @@ class TransactInvocationHandlerTest {
         OrderServiceImpl impl = new OrderServiceImpl();
 
         DBOSExecutor executor = mock(DBOSExecutor.class) ;
-        doReturn("id").when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
+        doReturn(new SystemDatabase.WorkflowInitResult("121","PENDING",123L)).when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
         doNothing().when(executor).postInvokeWorkflow(anyString(), any());
 
         TransactInvocationHandler realHandler =
@@ -83,7 +84,7 @@ class TransactInvocationHandlerTest {
         OrderServiceImpl impl = new OrderServiceImpl();
 
         DBOSExecutor executor = mock(DBOSExecutor.class) ;
-        doReturn("id").when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
+        doReturn(new SystemDatabase.WorkflowInitResult("121","PENDING",123L)).when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
         doNothing().when(executor).postInvokeWorkflow(anyString(), any());
 
         TransactInvocationHandler realHandler =

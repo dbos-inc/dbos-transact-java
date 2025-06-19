@@ -7,6 +7,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.WorkflowState;
+import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,11 +34,11 @@ public class DBOSExecutor {
         systemDatabase.destroy() ;
     }
 
-    public String preInvokeWorkflow(String workflowName,
-                                  String interfaceName,
-                                  String className,
-                                  String methodName,
-                                  Object[] inputs) {
+    public SystemDatabase.WorkflowInitResult preInvokeWorkflow(String workflowName,
+                                                               String interfaceName,
+                                                               String className,
+                                                               String methodName,
+                                                               Object[] inputs) {
 
         logger.info("In preInvokeWorkflow") ;
 
@@ -74,13 +75,14 @@ public class DBOSExecutor {
                         1,
                         inputString) ;
 
+        SystemDatabase.WorkflowInitResult initResult = null;
         try {
-            SystemDatabase.WorkflowInitResult initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
+             initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
         } catch (SQLException e) {
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(),e) ;
         }
 
-        return workflowId ;
+        return initResult;
     }
 
     public void postInvokeWorkflow(String workflowId, Object result) {
@@ -107,17 +109,28 @@ public class DBOSExecutor {
                              String methodName,
                              Object[] args,
                              DBOSFunction<T> function) throws Throwable {
-        String id = preInvokeWorkflow(workflowName, null, targetClassName, methodName, args);
+
+
+        SystemDatabase.WorkflowInitResult initResult = preInvokeWorkflow(workflowName, null, targetClassName, methodName, args);
+        if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+            return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
+        } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+            logger.warn("Idempotency check not impl for error");
+        } else if  (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+            logger.warn("Idempotency check not impl for cancelled");
+        }
+
+
         try {
             T result = function.execute();  // invoke the lambda
             logger.info("After: Workflow completed successfully");
-            postInvokeWorkflow(id, result);
+            postInvokeWorkflow(initResult.getWorkflowId(), result);
             return result;
         } catch (Throwable e) {
             Throwable actual = (e instanceof InvocationTargetException)
                     ? ((InvocationTargetException) e).getTargetException()
                     : e;
-            postInvokeWorkflow(id, actual);
+            postInvokeWorkflow(initResult.getWorkflowId(), actual);
             throw actual;
         }
     }
