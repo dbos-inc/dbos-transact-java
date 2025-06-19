@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import org.junit.jupiter.api.AfterAll;
@@ -111,6 +112,29 @@ public class BasicWorkflowTest {
         assertEquals(1, wfs.size());
         assertEquals(wfs.get(0).getName(),"workError");
         assertNotNull(wfs.get(0).getWorkflowId());
+
+    }
+
+    @Test
+    public void setWorkflowId() throws SQLException  {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+
+        String result = null ;
+
+        try (SetWorkflowID id = new SetWorkflowID("wf-123")){
+            result = simpleService.workWithString("test-item");
+        }
+
+        assertEquals("Processed: test-item", result);
+
+        List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        assertEquals(1, wfs.size());
+        assertEquals(wfs.get(0).getName(),"workWithString");
+        assertEquals("wf-123",wfs.get(0).getWorkflowId());
 
     }
 }

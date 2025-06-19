@@ -98,7 +98,6 @@ public class DBOSConfig {
             if (name == null) throw new IllegalArgumentException("Name is required");
             if (dbPassword == null) {
                 dbPassword = System.getenv("PGPASSWORD");
-                System.out.println("mjjj building dbosconfig" + dbPassword);
             }
             return new DBOSConfig(this);
         }

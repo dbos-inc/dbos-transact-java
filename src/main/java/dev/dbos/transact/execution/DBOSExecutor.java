@@ -1,6 +1,8 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.json.JSONUtil;
@@ -39,7 +41,12 @@ public class DBOSExecutor {
 
         logger.info("In preInvokeWorkflow") ;
 
-        String workflowId = UUID.randomUUID().toString();
+        DBOSContext ctx = DBOSContextHolder.get();
+        String workflowId = ctx.getWorkflowId() ;
+
+        if (workflowId == null) {
+            workflowId = UUID.randomUUID().toString();
+        }
 
         String inputString = JSONUtil.toJson(inputs);
 
