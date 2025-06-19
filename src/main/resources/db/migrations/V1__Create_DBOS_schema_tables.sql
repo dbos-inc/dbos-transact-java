@@ -52,22 +52,6 @@ CREATE TABLE dbos.operation_outputs (
 );
 
 
-CREATE TABLE dbos.workflow_inputs (
-    workflow_uuid TEXT NOT NULL,
-    inputs TEXT NOT NULL,
-
-    -- Primary key constraint
-    CONSTRAINT workflow_inputs_pkey PRIMARY KEY (workflow_uuid),
-
-    -- Foreign key constraint
-    CONSTRAINT workflow_inputs_workflow_uuid_foreign
-        FOREIGN KEY (workflow_uuid)
-        REFERENCES dbos.workflow_status(workflow_uuid)
-        ON UPDATE CASCADE ON DELETE CASCADE
-);
-
-
-
 CREATE TABLE dbos.notifications (
     destination_uuid text NOT NULL,
     topic text,

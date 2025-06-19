@@ -111,6 +111,6 @@ public class BasicWorkflowTest {
         assertEquals(1, wfs.size());
         assertEquals(wfs.get(0).getName(),"workError");
         assertNotNull(wfs.get(0).getWorkflowId());
-        
+
     }
 }
