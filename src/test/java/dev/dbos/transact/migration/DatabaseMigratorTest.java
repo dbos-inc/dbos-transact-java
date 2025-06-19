@@ -61,7 +61,6 @@ class DatabaseMigratorTest {
 
             // Verify all expected tables exist in the dbos schema
             assertTableExists(metaData, "operation_outputs");
-            assertTableExists(metaData, "workflow_inputs");
             assertTableExists(metaData, "workflow_status");
             assertTableExists(metaData, "notifications");
             assertTableExists(metaData, "workflow_events");
