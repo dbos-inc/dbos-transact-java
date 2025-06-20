@@ -46,8 +46,6 @@ public class TransactInvocationHandler implements InvocationHandler {
         logger.info("Interceptor called for method: " + method.getName());
 
         Method targetMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
-        System.out.println("Has @Workflow: " +
-                targetMethod.isAnnotationPresent(Workflow.class));
 
         if (targetMethod.isAnnotationPresent(Workflow.class)) {
             return handleWorkflow(method, args, targetMethod.getAnnotation(Workflow.class));
