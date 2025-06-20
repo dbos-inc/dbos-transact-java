@@ -3,6 +3,7 @@ package dev.dbos.transact;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
 import dev.dbos.transact.migrations.DatabaseMigrator;
 import org.slf4j.Logger;
@@ -58,7 +59,8 @@ public class DBOS {
     // inner builder class for workflows
     public static class WorkflowBuilder<T> {
         private Class<T> interfaceClass;
-        private T implementation;
+        private Object implementation;
+        private boolean async = false ;
 
 
         public WorkflowBuilder<T> interfaceClass(Class<T> iface) {
@@ -66,8 +68,13 @@ public class DBOS {
             return this;
         }
 
-        public WorkflowBuilder<T> implementation(T impl) {
+        public WorkflowBuilder<T> implementation(Object impl) {
             this.implementation = impl;
+            return this;
+        }
+
+        public WorkflowBuilder<T> async() {
+            this.async = true ;
             return this;
         }
 
@@ -75,6 +82,15 @@ public class DBOS {
         public T build() {
             if (interfaceClass == null || implementation == null) {
                 throw new IllegalStateException("Interface and implementation must be set");
+            }
+
+            if (async) {
+
+                return AsyncInvocationHandler.createProxy(
+                        interfaceClass,
+                        implementation,
+                        DBOS.getInstance().dbosExecutor
+                );
             }
 
             return TransactInvocationHandler.createProxy(
@@ -96,6 +112,7 @@ public class DBOS {
 
     public void shutdown() {
         dbosExecutor.shutdown();
+        instance = null ;
     }
 
 

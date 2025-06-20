@@ -21,7 +21,7 @@ public class AsyncInvocationHandler implements InvocationHandler {
     private final String targetClassName ;
     private final DBOSExecutor dbosExecutor ;
 
-    public static <T> T createProxy(Class<T> interfaceClass, T implementation, DBOSExecutor executor) {
+    public static <T> T createProxy(Class<T> interfaceClass, Object implementation, DBOSExecutor executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
@@ -64,7 +64,7 @@ public class AsyncInvocationHandler implements InvocationHandler {
                     targetClassName,
                     method.getName(),
                     args,
-                    () -> (Object) method.invoke(target, args)
+                    () -> (Object) targetMethod.invoke(target, args)
             );
 
 
