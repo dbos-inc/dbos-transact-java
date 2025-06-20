@@ -2,6 +2,7 @@ package dev.dbos.transact.config ;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import dev.dbos.transact.Constants;
 
 import javax.sql.DataSource;
 
@@ -95,6 +96,9 @@ public class DBOSConfig {
 
         public DBOSConfig build() {
             if (name == null) throw new IllegalArgumentException("Name is required");
+            if (dbPassword == null) {
+                dbPassword = System.getenv("PGPASSWORD");
+            }
             return new DBOSConfig(this);
         }
     }

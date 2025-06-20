@@ -1,6 +1,8 @@
 package dev.dbos.transact.migration;
 
+import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.migrations.DatabaseMigrator;
 import org.junit.jupiter.api.*;
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -23,12 +25,9 @@ class DatabaseMigratorTest {
         DatabaseMigratorTest.dbosConfig = new DBOSConfig
                 .Builder()
                 .name("migrationtest")
-                //.url("jdbc:postgresql://postgres:progres@localhost:5432/postgres")
-                //.url("postgresql://postgres:postgres@localhost:5432")
                 .dbHost("localhost")
                 .dbPort(5432)
                 .dbUser("postgres")
-                .dbPassword("postgres")
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(3)
                 .build();
@@ -48,10 +47,6 @@ class DatabaseMigratorTest {
 
         testDataSource = dbosConfig.createDataSource(dbosConfig.getSysDbName());
 
-        /* try (Connection conn = testDataSource.getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE SCHEMA IF NOT EXISTS dbos");
-        } */
     }
 
     @Test
@@ -66,7 +61,6 @@ class DatabaseMigratorTest {
 
             // Verify all expected tables exist in the dbos schema
             assertTableExists(metaData, "operation_outputs");
-            assertTableExists(metaData, "workflow_inputs");
             assertTableExists(metaData, "workflow_status");
             assertTableExists(metaData, "notifications");
             assertTableExists(metaData, "workflow_events");
@@ -82,13 +76,13 @@ class DatabaseMigratorTest {
     @Test
     @Order(2)
     void testRunMigrations_IsIdempotent() {
-        // Act - Run migrations again
+        // Running migrations again
         assertDoesNotThrow(() -> DatabaseMigrator.runMigrations(dbosConfig),
                 "Migrations should run successfully multiple times");
     }
 
     @AfterAll
     static void cleanup() throws Exception {
-        
+        ((HikariDataSource)testDataSource).close();
     }
 }

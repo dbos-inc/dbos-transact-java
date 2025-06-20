@@ -1,5 +1,6 @@
 package dev.dbos.transact.interceptor;
 
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Transaction;
 import dev.dbos.transact.workflow.Workflow;
@@ -7,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
@@ -15,9 +17,11 @@ public class TransactInvocationHandler implements InvocationHandler {
     private static final Logger logger = LoggerFactory.getLogger(TransactInvocationHandler.class);
 
     private final Object target;
+    private final String targetClassName ;
+    private final DBOSExecutor dbosExecutor ;
 
     @SuppressWarnings("unchecked")
-    public static <T> T createProxy(Class<T> interfaceClass, T implementation) {
+    public static <T> T createProxy(Class<T> interfaceClass, T implementation, DBOSExecutor executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
@@ -25,14 +29,16 @@ public class TransactInvocationHandler implements InvocationHandler {
         T proxy =  (T) Proxy.newProxyInstance(
                 interfaceClass.getClassLoader(),
                 new Class<?>[] { interfaceClass },
-                new TransactInvocationHandler(implementation)
+                new TransactInvocationHandler(implementation, executor)
         );
 
         return proxy;
     }
 
-    protected TransactInvocationHandler(Object target) {
+    protected TransactInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
         this.target = target;
+        this.targetClassName = target.getClass().getName();
+        this.dbosExecutor = dbosExecutor ;
     }
 
     @Override
@@ -40,8 +46,6 @@ public class TransactInvocationHandler implements InvocationHandler {
         logger.info("Interceptor called for method: " + method.getName());
 
         Method targetMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
-        System.out.println("Has @Workflow: " +
-                targetMethod.isAnnotationPresent(Workflow.class));
 
         if (targetMethod.isAnnotationPresent(Workflow.class)) {
             return handleWorkflow(method, args, targetMethod.getAnnotation(Workflow.class));
@@ -57,20 +61,22 @@ public class TransactInvocationHandler implements InvocationHandler {
 
     protected Object handleWorkflow(Method method, Object[] args, Workflow workflow) throws Throwable {
 
+        String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
+
         String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
-                workflow.name().isEmpty() ? method.getName() : workflow.name(),
+                workflowName,
                 workflow.timeout());
 
         logger.info(msg);
 
-        try {
-            Object result = method.invoke(target, args);
-            logger.info("After: Workflow completed successfully");
-            return result;
-        } catch (Exception e) {
-            logger.info("After: Workflow failed: " + e.getCause().getMessage());
-            throw e.getCause();
-        }
+        return dbosExecutor.runWorkflow(
+                workflowName,
+                targetClassName,
+                method.getName(),
+                args,
+                () -> (Object) method.invoke(target, args)
+        );
+
     }
 
     protected Object handleTransaction(Method method, Object[] args, Transaction transaction) throws Throwable {
