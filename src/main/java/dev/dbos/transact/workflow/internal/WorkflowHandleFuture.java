@@ -13,11 +13,12 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
 
     private String workflowId;
     private Future<T> futureResult;
-    // private SystemDatabase systemDatabase;
+    private SystemDatabase systemDatabase;
 
-    public WorkflowHandleFuture(String workflowId, Future<T> future) {
+    public WorkflowHandleFuture(String workflowId, Future<T> future, SystemDatabase sysdb) {
         this.workflowId = workflowId;
         this.futureResult = future ;
+        this.systemDatabase = sysdb;
     }
 
     @Override
@@ -27,7 +28,6 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
 
     @Override
     public T getResult()  {
-
         try {
             return futureResult.get();
         } catch (Exception e) {
@@ -37,7 +37,6 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
 
     @Override
     public WorkflowStatus getStatus() {
-        // systemDatabase.getWorkflowStatus
-        throw new UnsupportedOperationException("to be implemented");
+        return systemDatabase.getWorkflow(workflowId) ;
     }
 }

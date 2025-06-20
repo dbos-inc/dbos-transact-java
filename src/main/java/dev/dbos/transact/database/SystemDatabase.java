@@ -6,10 +6,7 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.exceptions.DBOSDeadLetterQueueException;
-import dev.dbos.transact.exceptions.DBOSException;
-import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
-import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
+import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.GetWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -427,6 +424,22 @@ public class SystemDatabase {
             );
         }
     }
+
+public WorkflowStatus getWorkflow(String workflowId) {
+
+        try {
+            GetWorkflowsInput input = new GetWorkflowsInput();
+            input.setWorkflowIDs(Arrays.asList(workflowId));
+            List<WorkflowStatus> output = getWorkflows(input) ;
+            if (output.size() > 0) {
+                return output.get(0);
+            }
+        } catch (SQLException e) {
+            logger.error("Error retrieving workflow for "+workflowId, e);
+        }
+
+        throw new NonExistentWorkflowException(workflowId) ;
+}
 
 public List<WorkflowStatus> getWorkflows(GetWorkflowsInput input) throws SQLException {
 

@@ -146,9 +146,7 @@ public class DBOSExecutor {
 
 
         try {
-            System.out.println("before executing function");
             T result = function.execute();  // invoke the lambda
-            System.out.println("after executing function");
             logger.info("After: Workflow completed successfully");
             postInvokeWorkflow(initResult.getWorkflowId(), result);
             return result;
@@ -156,7 +154,6 @@ public class DBOSExecutor {
             Throwable actual = (e instanceof InvocationTargetException)
                     ? ((InvocationTargetException) e).getTargetException()
                     : e;
-            System.out.println(actual.getMessage());
             postInvokeWorkflow(initResult.getWorkflowId(), actual);
             throw actual;
         }
@@ -180,9 +177,6 @@ public class DBOSExecutor {
         Callable<T> task = () -> {
             T result = null ;
             try {
-                // result = function.execute();
-                System.out.println("In the callable executing method with id " + wfId);
-                System.out.println("Running in thread: " + Thread.currentThread().getName() + " id " + Thread.currentThread().getId());
 
                 result = runWorkflow(workflowName,
                         targetClassName,
@@ -190,7 +184,7 @@ public class DBOSExecutor {
                         args,
                         function,
                         wfId);
-                System.out.println("mjjjjj result is" + result);
+
 
             } catch (Throwable e) {
                 Throwable actual = (e instanceof InvocationTargetException)
@@ -207,7 +201,7 @@ public class DBOSExecutor {
 
         Future<T> future = executorService.submit(task);
 
-        return new WorkflowHandleFuture<T>(workflowId, future);
+        return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
 
     }
 

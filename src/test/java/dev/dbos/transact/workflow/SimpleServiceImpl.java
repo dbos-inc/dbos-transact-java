@@ -12,9 +12,7 @@ public class SimpleServiceImpl implements SimpleService {
     @Workflow(name = "workWithString")
     public String workWithString(String input) {
         logger.info("Executed workflow workWithString");
-        System.out.println("Before " + executionCount);
         SimpleServiceImpl.executionCount++;
-        System.out.println("After " + executionCount);
         return "Processed: " + input ;
     }
 

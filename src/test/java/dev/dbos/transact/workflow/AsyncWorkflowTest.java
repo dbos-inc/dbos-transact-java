@@ -85,6 +85,7 @@ public class AsyncWorkflowTest {
         String result = handle.getResult();
         assertEquals("Processed: test-item", result);
         assertNotNull(handle.getWorkflowId());
+        assertEquals("SUCCESS",handle.getStatus().getStatus()) ;
 
         List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
         assertEquals(1, wfs.size());
@@ -113,6 +114,7 @@ public class AsyncWorkflowTest {
         String result = handle.getResult();
         assertEquals("Processed: test-item", result);
         assertEquals("wf-123", handle.getWorkflowId());
+        assertEquals("SUCCESS", handle.getStatus().getStatus()) ;
 
         List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
         assertEquals(1, wfs.size());
