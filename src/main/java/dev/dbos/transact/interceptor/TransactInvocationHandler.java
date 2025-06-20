@@ -71,12 +71,14 @@ public class TransactInvocationHandler implements InvocationHandler {
 
         logger.info(msg);
 
+
         return dbosExecutor.runWorkflow(
                 workflowName,
                 targetClassName,
                 method.getName(),
                 args,
-                () -> (Object) method.invoke(target, args)
+                () -> (Object) method.invoke(target, args),
+                null
         );
 
     }

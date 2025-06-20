@@ -47,15 +47,31 @@ public class AsyncInvocationHandler implements InvocationHandler {
 
         Method targetMethod = findMethodWithSameSignature(target.getClass(), method);
 
-        if (targetMethod.isAnnotationPresent(Workflow.class)) {
+        Workflow wfAnnotation = targetMethod.getAnnotation(Workflow.class) ;
+
+        if (wfAnnotation != null) {
+
+            String workflowName = wfAnnotation.name().isEmpty() ? targetMethod.getName() : wfAnnotation.name();
+
+            String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
+                    workflowName,
+                    wfAnnotation.timeout());
+
+            logger.info(msg);
+
+            return dbosExecutor.submitWorkflow(
+                    workflowName,
+                    targetClassName,
+                    method.getName(),
+                    args,
+                    () -> (Object) method.invoke(target, args)
+            );
 
 
-
-
+        } else {
+            throw new RuntimeException("workflow annotation expected on target method");
         }
 
-
-        return null;
     }
 
     private Method findMethodWithSameSignature(Class<?> clazz, Method interfaceMethod) throws NoSuchMethodException {

@@ -6,14 +6,17 @@ import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.sql.SQLException;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -44,16 +47,18 @@ public class DBOSExecutor {
                                                                String interfaceName,
                                                                String className,
                                                                String methodName,
-                                                               Object[] inputs) {
+                                                               Object[] inputs,
+                                                               String workflowId) {
 
         logger.info("In preInvokeWorkflow") ;
 
-        DBOSContext ctx = DBOSContextHolder.get();
+        /* DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId() ;
 
         if (workflowId == null) {
             workflowId = UUID.randomUUID().toString();
-        }
+        } */
+
 
         String inputString = JSONUtil.toJson(inputs);
 
@@ -114,10 +119,23 @@ public class DBOSExecutor {
                              String targetClassName,
                              String methodName,
                              Object[] args,
-                             DBOSFunction<T> function) throws Throwable {
+                             DBOSFunction<T> function,
+                             String workflowId) throws Throwable {
+
+        String wfid = workflowId ;
+
+        if (wfid == null) {
+            DBOSContext ctx = DBOSContextHolder.get();
+            wfid = ctx.getWorkflowId() ;
+
+            if (wfid == null) {
+                wfid = UUID.randomUUID().toString();
+            }
+        }
 
 
-        SystemDatabase.WorkflowInitResult initResult = preInvokeWorkflow(workflowName, null, targetClassName, methodName, args);
+        SystemDatabase.WorkflowInitResult initResult = preInvokeWorkflow(workflowName, null,
+                                                            targetClassName, methodName, args, wfid);
         if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
             return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
         } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
@@ -141,21 +159,32 @@ public class DBOSExecutor {
         }
     }
 
-    public <T> Future<T> submitWorkflow(String workflowName,
-                                        String targetClassName,
-                                        String methodName,
-                                        Object[] args,
-                                        DBOSFunction<T> function) throws Throwable {
+    public <T> WorkflowHandle<T> submitWorkflow(String workflowName,
+                                                String targetClassName,
+                                                String methodName,
+                                                Object[] args,
+                                                DBOSFunction<T> function) throws Throwable {
+
+        DBOSContext ctx = DBOSContextHolder.get();
+        String workflowId = ctx.getWorkflowId() ;
+
+        if (workflowId == null) {
+            workflowId = UUID.randomUUID().toString();
+        }
+
+        final String wfId = workflowId ;
 
         Callable<T> task = () -> {
             T result = null ;
             try {
                 // result = function.execute();
-                runWorkflow(workflowName,
+                result = runWorkflow(workflowName,
                         targetClassName,
                         methodName,
                         args,
-                        function);
+                        function,
+                        wfId);
+
             } catch (Throwable e) {
                 Throwable actual = (e instanceof InvocationTargetException)
                         ? ((InvocationTargetException) e).getTargetException()
@@ -171,7 +200,7 @@ public class DBOSExecutor {
 
         Future<T> future = executorService.submit(task);
 
-        return future ;
+        return new WorkflowHandleFuture<T>(workflowId, future);
 
     }
 
