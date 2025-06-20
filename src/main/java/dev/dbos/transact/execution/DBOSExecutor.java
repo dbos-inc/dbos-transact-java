@@ -15,6 +15,10 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.sql.SQLException;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
@@ -22,11 +26,13 @@ public class DBOSExecutor {
 
     private DBOSConfig config;
     private SystemDatabase systemDatabase;
+    private ExecutorService executorService ;
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
     public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
         this.config = config;
         this.systemDatabase = sysdb ;
+        this.executorService = Executors.newCachedThreadPool();
 
     }
 
@@ -135,6 +141,38 @@ public class DBOSExecutor {
         }
     }
 
+    public <T> Future<T> submitWorkflow(String workflowName,
+                                        String targetClassName,
+                                        String methodName,
+                                        Object[] args,
+                                        DBOSFunction<T> function) throws Throwable {
 
+        Callable<T> task = () -> {
+            T result = null ;
+            try {
+                // result = function.execute();
+                runWorkflow(workflowName,
+                        targetClassName,
+                        methodName,
+                        args,
+                        function);
+            } catch (Throwable e) {
+                Throwable actual = (e instanceof InvocationTargetException)
+                        ? ((InvocationTargetException) e).getTargetException()
+                        : e;
+
+                logger.error("Error executing workflow", actual);
+                // postInvokeWorkflow(initResult.getWorkflowId(), actual);
+                // throw actual;
+            }
+
+            return result ;
+        };
+
+        Future<T> future = executorService.submit(task);
+
+        return future ;
+
+    }
 
 }
