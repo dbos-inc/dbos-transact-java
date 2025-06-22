@@ -9,16 +9,16 @@ public class ContextAwareRunnable implements Runnable {
 
     public ContextAwareRunnable(Runnable task) {
         this.task = task;
-        this.capturedContext = DBOSContextHolder.get(); // Capture context
+        this.capturedContext = DBOSContextHolder.get();
     }
 
     @Override
     public void run() {
-        DBOSContextHolder.set(capturedContext); // Set in new thread
+        DBOSContextHolder.set(capturedContext);
         try {
             task.run();
         } finally {
-            DBOSContextHolder.clear(); // Always clean up
+            DBOSContextHolder.clear();
         }
     }
 }

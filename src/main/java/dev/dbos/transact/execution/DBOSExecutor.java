@@ -52,14 +52,6 @@ public class DBOSExecutor {
 
         logger.info("In preInvokeWorkflow") ;
 
-        /* DBOSContext ctx = DBOSContextHolder.get();
-        String workflowId = ctx.getWorkflowId() ;
-
-        if (workflowId == null) {
-            workflowId = UUID.randomUUID().toString();
-        } */
-
-
         String inputString = JSONUtil.toJson(inputs);
 
         WorkflowStatusInternal workflowStatusInternal =
@@ -192,8 +184,7 @@ public class DBOSExecutor {
                         : e;
 
                 logger.error("Error executing workflow", actual);
-                // postInvokeWorkflow(initResult.getWorkflowId(), actual);
-                // throw actual;
+
             }
 
             return result ;

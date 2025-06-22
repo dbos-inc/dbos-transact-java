@@ -18,7 +18,6 @@ public interface WorkflowHandle<T> {
 
     /**
      * Return the current workflow function invocation status as `WorkflowStatus`.
-     * This method blocks until the status is available.
      * @return The current status of the workflow.
      */
     WorkflowStatus getStatus();
