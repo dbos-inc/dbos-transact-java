@@ -1,6 +1,5 @@
 package dev.dbos.transact.database;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -8,7 +7,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
-import dev.dbos.transact.workflow.GetWorkflowsInput;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
@@ -428,9 +427,9 @@ public class SystemDatabase {
 public WorkflowStatus getWorkflow(String workflowId) {
 
         try {
-            GetWorkflowsInput input = new GetWorkflowsInput();
+            ListWorkflowsInput input = new ListWorkflowsInput();
             input.setWorkflowIDs(Arrays.asList(workflowId));
-            List<WorkflowStatus> output = getWorkflows(input) ;
+            List<WorkflowStatus> output = listWorkflows(input) ;
             if (output.size() > 0) {
                 return output.get(0);
             }
@@ -441,7 +440,7 @@ public WorkflowStatus getWorkflow(String workflowId) {
         throw new NonExistentWorkflowException(workflowId) ;
 }
 
-public List<WorkflowStatus> getWorkflows(GetWorkflowsInput input) throws SQLException {
+public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
 
     List<WorkflowStatus> workflows = new ArrayList<>();
 

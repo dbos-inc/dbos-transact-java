@@ -86,7 +86,7 @@ public class AsyncWorkflowTest {
         assertNotNull(handle.getWorkflowId());
         assertEquals("SUCCESS",handle.getStatus().getStatus()) ;
 
-        List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(1, wfs.size());
         assertEquals(wfs.get(0).getName(),"workWithString");
         assertNotNull(wfs.get(0).getWorkflowId());
@@ -114,7 +114,7 @@ public class AsyncWorkflowTest {
         assertEquals("wf-123", handle.getWorkflowId());
         assertEquals("SUCCESS", handle.getStatus().getStatus()) ;
 
-        List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(1, wfs.size());
         assertEquals(wfs.get(0).getName(),"workWithString");
         assertEquals("wf-123",wfs.get(0).getWorkflowId());
@@ -140,7 +140,7 @@ public class AsyncWorkflowTest {
         assertEquals("Processed: test-item", result);
         assertEquals("wf-123",handle.getWorkflowId());
 
-        List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(1, wfs.size());
         assertEquals(wfs.get(0).getName(),"workWithString");
         assertEquals("wf-123",wfs.get(0).getWorkflowId());
@@ -153,7 +153,7 @@ public class AsyncWorkflowTest {
         // TODO fix deser has quotes assertEquals("Processed: test-item", result);
         assertEquals("wf-123",handle.getWorkflowId());
 
-        wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(1, wfs.size());
         assertEquals("wf-123",wfs.get(0).getWorkflowId());
 
@@ -164,7 +164,7 @@ public class AsyncWorkflowTest {
         assertEquals("wf-124",handle.getWorkflowId());
 
         assertEquals(2, WorkflowImpl.executionCount);
-        wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(2, wfs.size());
         assertEquals("wf-124",wfs.get(1).getWorkflowId());
 
@@ -186,7 +186,7 @@ public class AsyncWorkflowTest {
         }
 
         handle.getResult() ;
-        List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(1, wfs.size());
         assertEquals(wfs.get(0).getName(),"workError");
         assertNotNull(wfs.get(0).getWorkflowId());
