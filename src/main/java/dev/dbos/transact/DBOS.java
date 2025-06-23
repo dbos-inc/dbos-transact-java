@@ -60,8 +60,6 @@ public class DBOS {
     public static class WorkflowBuilder<T> {
         private Class<T> interfaceClass;
         private Object implementation;
-        private boolean async = false ;
-
 
         public WorkflowBuilder<T> interfaceClass(Class<T> iface) {
             this.interfaceClass = iface;
@@ -73,31 +71,17 @@ public class DBOS {
             return this;
         }
 
-        public WorkflowBuilder<T> async() {
-            this.async = true ;
-            return this;
-        }
-
-
         public T build() {
             if (interfaceClass == null || implementation == null) {
                 throw new IllegalStateException("Interface and implementation must be set");
             }
 
-            if (async) {
-
-                return AsyncInvocationHandler.createProxy(
-                        interfaceClass,
-                        implementation,
-                        DBOS.getInstance().dbosExecutor
-                );
-            }
-
-            return TransactInvocationHandler.createProxy(
-                    interfaceClass,
-                    implementation,
-                    DBOS.getInstance().dbosExecutor
+            return AsyncInvocationHandler.createProxy(
+                interfaceClass,
+                implementation,
+                DBOS.getInstance().dbosExecutor
             );
+
         }
     }
 

@@ -9,9 +9,6 @@ import java.lang.reflect.Type;
 
 public class JSONUtil {
 
-
-
-
     private static final ObjectMapper mapper = new ObjectMapper();
 
     static {

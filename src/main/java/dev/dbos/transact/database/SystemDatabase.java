@@ -573,12 +573,16 @@ public List<WorkflowStatus> getWorkflows(GetWorkflowsInput input) throws SQLExce
                 String serializedError = rs.getString("error");
 
                 if (serializedInput != null) {
-                    info.setInput(JSONUtil.fromJson(serializedInput, Object[].class));
+                    // info.setInput(JSONUtil.fromJson(serializedInput, Object[].class));
+                    info.setInput((Object[])JSONUtil.deserialize((serializedInput)) );
                 }
 
+                logger.info("mjjjj" + serializedOutput + " " + serializedInput.length());
                 if (serializedOutput != null) {
-                    info.setOutput(JSONUtil.fromJson(serializedOutput, Object.class));
+                    // info.setOutput(JSONUtil.fromJson(serializedOutput, Object.class));
+                    info.setOutput(JSONUtil.deserialize(serializedOutput));
                 }
+
                 info.setError(serializedError);
 
                 info.setWorkflowDeadlineEpochMs(rs.getObject("workflow_deadline_epoch_ms", Long.class));

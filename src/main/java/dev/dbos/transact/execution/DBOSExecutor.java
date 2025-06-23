@@ -52,7 +52,7 @@ public class DBOSExecutor {
 
         logger.info("In preInvokeWorkflow") ;
 
-        String inputString = JSONUtil.toJson(inputs);
+        String inputString = JSONUtil.serialize(inputs) ;
 
         WorkflowStatusInternal workflowStatusInternal =
                 new WorkflowStatusInternal(workflowId,
@@ -82,15 +82,20 @@ public class DBOSExecutor {
         try {
              initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
         } catch (SQLException e) {
+            logger.error("Error inserting into workflow_status", e);
+            System.out.println(e.getMessage()) ;
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(),e) ;
         }
 
+        logger.info("leaving preinvoke") ;
         return initResult;
     }
 
     public void postInvokeWorkflow(String workflowId, Object result) {
 
-        String resultString = JSONUtil.toJson(result);
+
+        String resultString = JSONUtil.serialize(result);
+
 
 
         systemDatabase.recordWorkflowOutput(workflowId, resultString);
@@ -128,6 +133,7 @@ public class DBOSExecutor {
 
         SystemDatabase.WorkflowInitResult initResult = preInvokeWorkflow(workflowName, null,
                                                             targetClassName, methodName, args, wfid);
+        logger.info("returned from preInvoke") ;
         if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
             return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
         } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
@@ -138,6 +144,7 @@ public class DBOSExecutor {
 
 
         try {
+            logger.info("Before executing workflow") ;
             T result = function.execute();  // invoke the lambda
             logger.info("After: Workflow completed successfully");
             postInvokeWorkflow(initResult.getWorkflowId(), result);
@@ -168,6 +175,7 @@ public class DBOSExecutor {
 
         Callable<T> task = () -> {
             T result = null ;
+            logger.info("Callable executing the workflow.. " + wfId);
             try {
 
                 result = runWorkflow(workflowName,

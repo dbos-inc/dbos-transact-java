@@ -12,6 +12,11 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
+/**
+ *
+ * To be removed: See AsyncInvocationHandler
+ *
+ */
 public class TransactInvocationHandler implements InvocationHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(TransactInvocationHandler.class);
@@ -46,7 +51,6 @@ public class TransactInvocationHandler implements InvocationHandler {
         logger.info("Interceptor called for method: " + method.getName());
 
         Method targetMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
-
 
         if (targetMethod.isAnnotationPresent(Workflow.class)) {
             return handleWorkflow(method, args, targetMethod.getAnnotation(Workflow.class));

@@ -3,16 +3,19 @@ package dev.dbos.transact.workflow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SimpleServiceImpl implements SimpleService {
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-    Logger logger = LoggerFactory.getLogger(SimpleServiceImpl.class);
+public class WorkflowImpl {
+
+    Logger logger = LoggerFactory.getLogger(WorkflowImpl.class);
 
     public static int executionCount = 0 ;
 
     @Workflow(name = "workWithString")
     public String workWithString(String input) {
         logger.info("Executed workflow workWithString");
-        SimpleServiceImpl.executionCount++;
+        WorkflowImpl.executionCount++;
         return "Processed: " + input ;
     }
 
@@ -20,6 +23,7 @@ public class SimpleServiceImpl implements SimpleService {
     public void workWithError() throws Exception {
        throw new Exception("DBOS Test error") ;
     }
+
 
 
 
