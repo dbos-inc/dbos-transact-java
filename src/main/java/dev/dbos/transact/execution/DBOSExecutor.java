@@ -83,24 +83,17 @@ public class DBOSExecutor {
              initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
         } catch (SQLException e) {
             logger.error("Error inserting into workflow_status", e);
-            System.out.println(e.getMessage()) ;
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(),e) ;
         }
 
-        logger.info("leaving preinvoke") ;
         return initResult;
     }
 
     public void postInvokeWorkflow(String workflowId, Object result) {
 
-
         String resultString = JSONUtil.serialize(result);
-
-
-
         systemDatabase.recordWorkflowOutput(workflowId, resultString);
 
-        logger.info("In post Invoke workflow with result") ;
     }
 
     public void postInvokeWorkflow(String workflowId, Throwable error) {
@@ -109,7 +102,6 @@ public class DBOSExecutor {
 
         systemDatabase.recordWorkflowError(workflowId, errorString);
 
-        logger.info("In post Invoke workflow with error") ;
     }
 
     public <T> T runWorkflow(String workflowName,
@@ -130,20 +122,20 @@ public class DBOSExecutor {
             }
         }
 
-
-        SystemDatabase.WorkflowInitResult initResult = preInvokeWorkflow(workflowName, null,
-                                                            targetClassName, methodName, args, wfid);
-        logger.info("returned from preInvoke") ;
-        if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
-            return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
-        } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
-            logger.warn("Idempotency check not impl for error");
-        } else if  (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
-            logger.warn("Idempotency check not impl for cancelled");
-        }
-
-
+        SystemDatabase.WorkflowInitResult initResult = null;
         try {
+
+            initResult = preInvokeWorkflow(workflowName, null,
+                                                            targetClassName, methodName, args, wfid);
+
+            if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+                return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
+            } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+                logger.warn("Idempotency check not impl for error");
+            } else if  (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+                logger.warn("Idempotency check not impl for cancelled");
+            }
+
             logger.info("Before executing workflow") ;
             T result = function.execute();  // invoke the lambda
             logger.info("After: Workflow completed successfully");
