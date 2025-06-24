@@ -105,7 +105,13 @@ public class TransactInvocationHandler implements InvocationHandler {
                 method.getName(), step.name());
         logger.info(msg);
         try {
-            Object result = method.invoke(target, args);
+            // Object result = method.invoke(target, args);
+            Object result = dbosExecutor.runStep(step.name(),
+                    step.retriesAllowed(),
+                    step.maxAttempts(),
+                    step.backOffRate(),
+                    args,
+                    ()-> method.invoke(target, args)) ;
             logger.info("After: Step completed successfully");
             return result;
         } catch (Exception e) {
