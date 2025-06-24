@@ -9,6 +9,7 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
@@ -197,6 +198,65 @@ public class DBOSExecutor {
 
     }
 
+    public <T> T runStep(String stepName,
+                             boolean retriedAllowed,
+                             int maxAttempts,
+                             float backOffRate,
+                             Object[] args,
+                             DBOSFunction<T> function
+                         ) throws Throwable {
+
+
+        DBOSContext ctx = DBOSContextHolder.get();
+        String workflowId = ctx.getWorkflowId();
+        int stepFunctionId = ctx.getAndIncrementFunctionId() ;
+
+        StepResult recordedResult = systemDatabase.checkStepExecutionTxn(workflowId, stepFunctionId, stepName) ;
+
+        if (recordedResult != null) {
+
+            String output = recordedResult.getOutput() ;
+            if (output != null) {
+                return (T) JSONUtil.deserialize(output) ;
+            }
+
+            String error = recordedResult.getError();
+            if (error != null) {
+                // TODO: fix deserialization of errors
+                throw new Exception(error);
+            }
+        }
+
+        int currAttempts = 1 ;
+        String serializedOutput = null ;
+
+        while (retriedAllowed && currAttempts <= maxAttempts) {
+
+            try {
+                logger.info("Before executing step");
+                T result = function.execute();  // invoke the lambda
+                serializedOutput = JSONUtil.serialize(result);
+                logger.info("After: step completed successfully");
+            } catch(Exception e) {
+                // TODO: serialize
+                String errorMsg = e.getMessage();
+                StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, serializedOutput, errorMsg) ;
+                systemDatabase.recordStepResultTxn(stepResult);
+            }
+
+            ++currAttempts;
+        }
+
+        StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, serializedOutput, null) ;
+        systemDatabase.recordStepResultTxn(stepResult);
+        return null ;
+    }
+
+
+    /**
+     * Retrieve the workflowHandle for the workflowId
+     *
+     */
     public WorkflowHandle retrieveWorkflow(String workflowId) {
         return new WorkflowHandleDBPoll(workflowId, systemDatabase) ;
     }

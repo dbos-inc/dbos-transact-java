@@ -7,7 +7,9 @@ public enum ErrorCode {
     QUEUE_DUPLICATED(3) ,
     DEAD_LETTER_QUEUE(4) ,
     NONEXISTENT_WORKFLOW(5) ,
-    AWAITED_WORKFLOW_CANCEL(6);
+    AWAITED_WORKFLOW_CANCEL(6),
+    WORKFLOW_CANCELLED(7),
+    UNEXPECTED_STEP(8);
 
     private int code ;
 

@@ -3,7 +3,7 @@ package dev.dbos.transact.context;
 public class DBOSContext {
     private String workflowId;
     private String user;
-    private String functionId;
+    private int functionId;
     private String stepId;
 
     public String getWorkflowId() {
@@ -22,12 +22,12 @@ public class DBOSContext {
         this.user = user;
     }
 
-    public String getFunctionId() {
+    public int getFunctionId() {
         return functionId;
     }
 
-    public void setFunctionId(String functionId) {
-        this.functionId = functionId;
+    public int getAndIncrementFunctionId() {
+        return functionId++;
     }
 
     public String getStepId() {
