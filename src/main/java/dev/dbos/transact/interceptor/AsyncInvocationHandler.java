@@ -44,8 +44,7 @@ public class AsyncInvocationHandler implements InvocationHandler {
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-
-        // Method targetMethod = findMethodWithSameSignature(target.getClass(), method);
+        
         Method implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
 
         Workflow wfAnnotation = implMethod.getAnnotation(Workflow.class) ;
@@ -68,8 +67,7 @@ public class AsyncInvocationHandler implements InvocationHandler {
                     () -> (Object) method.invoke(target, args)
             );
 
-            return null ; // always return null or default
-
+            return getDefaultValue(method.getReturnType()) ; // always return null or default
 
         } else {
             throw new RuntimeException("workflow annotation expected on target method");
@@ -77,13 +75,16 @@ public class AsyncInvocationHandler implements InvocationHandler {
 
     }
 
-    private Method findMethodWithSameSignature(Class<?> clazz, Method interfaceMethod) throws NoSuchMethodException {
-        for (Method m : clazz.getMethods()) {
-            if (m.getName().equals(interfaceMethod.getName()) &&
-                    Arrays.equals(m.getParameterTypes(), interfaceMethod.getParameterTypes())) {
-                return m;
-            }
-        }
-        throw new NoSuchMethodException("Matching method not found");
+    private Object getDefaultValue(Class<?> returnType) {
+        if (!returnType.isPrimitive()) return null;
+        if (returnType == boolean.class) return false;
+        if (returnType == char.class) return '\0';
+        if (returnType == byte.class || returnType == short.class || returnType == int.class) return 0;
+        if (returnType == long.class) return 0L;
+        if (returnType == float.class) return 0f;
+        if (returnType == double.class) return 0d;
+        return null;
     }
+
+
 }

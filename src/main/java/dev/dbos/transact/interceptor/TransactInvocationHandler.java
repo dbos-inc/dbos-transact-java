@@ -12,11 +12,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
-/**
- *
- * To be removed: See AsyncInvocationHandler
- *
- */
 public class TransactInvocationHandler implements InvocationHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(TransactInvocationHandler.class);
