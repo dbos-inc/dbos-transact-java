@@ -9,6 +9,7 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import org.slf4j.Logger;
@@ -194,6 +195,10 @@ public class DBOSExecutor {
 
         return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
 
+    }
+
+    public WorkflowHandle retrieveWorkflow(String workflowId) {
+        return new WorkflowHandleDBPoll(workflowId, systemDatabase) ;
     }
 
 }

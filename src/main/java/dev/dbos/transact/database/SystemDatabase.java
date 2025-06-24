@@ -593,27 +593,76 @@ public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLEx
     return workflows ;
 }
 
-    /**
-     *  Helper method for tests
-     *  Should be moved to TestUtils
-     */
-    public void deleteWorkflowsTestHelper() throws SQLException{
+/**
+*  Helper method for tests
+ *  Should be moved to TestUtils
+ */
+public void deleteWorkflowsTestHelper() throws SQLException{
 
-        String sql = "delete from dbos.workflow_status";
+    String sql = "delete from dbos.workflow_status";
+
+    try (Connection connection = dataSource.getConnection();
+         PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+        int rowsAffected = pstmt.executeUpdate();
+        logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.workflow_status");
+
+    } catch (SQLException e) {
+        logger.error("Error deleting workflows in test helper: " + e.getMessage());
+        throw e;
+    }
+
+}
+
+public Object awaitWorkflowResult(String workflowId) throws Exception {
+
+    final String sql = "SELECT status, output, error "+
+            "FROM dbos.workflow_status " +
+            "WHERE workflow_uuid = ?" ;
+
+    while (true) {
 
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+                 PreparedStatement stmt = connection.prepareStatement(sql)) {
 
-            int rowsAffected = pstmt.executeUpdate();
-            logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.workflow_status");
+            stmt.setString(1, workflowId);
 
-        } catch (SQLException e) {
-            logger.error("Error deleting workflows in test helper: " + e.getMessage());
-            throw e;
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String status = rs.getString("status");
+
+                    switch (WorkflowState.valueOf(status.toUpperCase())) {
+                        case SUCCESS:
+                            String output = rs.getString("output");
+                            return output != null ? JSONUtil.deserialize(output) : null;
+                        case ERROR:
+                            String error = rs.getString("error");
+                            // TODO fixException exception = serialization.deserializeException(error);
+                            throw new Exception(error);
+
+                        case CANCELLED:
+                            throw new AwaitedWorkflowCancelledException(workflowId);
+
+                        default:
+                            // Status is PENDING or other - continue polling
+                            break;
+                        }
+                    }
+                    // Row not found - workflow hasn't appeared yet, continue polling
+                }
+            } catch (SQLException e) {
+                logger.error("Database error while polling workflow " + workflowId + ": " + e.getMessage());
+            }
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Workflow polling interrupted for " + workflowId, e);
+            }
+
+
         }
-
-
-
     }
 
 private void createDataSource(String dbName) {

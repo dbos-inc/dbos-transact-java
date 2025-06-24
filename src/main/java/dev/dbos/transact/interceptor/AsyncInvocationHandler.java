@@ -45,13 +45,14 @@ public class AsyncInvocationHandler implements InvocationHandler {
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
 
-        Method targetMethod = findMethodWithSameSignature(target.getClass(), method);
+        // Method targetMethod = findMethodWithSameSignature(target.getClass(), method);
+        Method implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
 
-        Workflow wfAnnotation = targetMethod.getAnnotation(Workflow.class) ;
+        Workflow wfAnnotation = implMethod.getAnnotation(Workflow.class) ;
 
         if (wfAnnotation != null) {
 
-            String workflowName = wfAnnotation.name().isEmpty() ? targetMethod.getName() : wfAnnotation.name();
+            String workflowName = wfAnnotation.name().isEmpty() ? implMethod.getName() : wfAnnotation.name();
 
             String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
                     workflowName,
@@ -59,13 +60,15 @@ public class AsyncInvocationHandler implements InvocationHandler {
 
             logger.info(msg);
 
-            return dbosExecutor.submitWorkflow(
+            dbosExecutor.submitWorkflow(
                     workflowName,
                     targetClassName,
                     method.getName(),
                     args,
-                    () -> (Object) targetMethod.invoke(target, args)
+                    () -> (Object) method.invoke(target, args)
             );
+
+            return null ; // always return null or default
 
 
         } else {
