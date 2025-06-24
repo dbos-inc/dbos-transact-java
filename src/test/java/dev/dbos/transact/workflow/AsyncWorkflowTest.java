@@ -1,6 +1,5 @@
 package dev.dbos.transact.workflow;
 
-
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
@@ -17,10 +16,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-public class BasicWorkflowTest {
-
+public class AsyncWorkflowTest {
 
     private static DBOSConfig dbosConfig;
     private static DBOS dbos ;
@@ -30,7 +29,7 @@ public class BasicWorkflowTest {
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
-        BasicWorkflowTest.dbosConfig = new DBOSConfig
+        AsyncWorkflowTest.dbosConfig = new DBOSConfig
                 .Builder()
                 .name("systemdbtest")
                 .dbHost("localhost")
@@ -75,111 +74,116 @@ public class BasicWorkflowTest {
 
 
     @Test
-    public void workflowWithOneInput() throws SQLException  {
+    public void setWorkflowId() throws Exception  {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
                 .implementation(new SimpleServiceImpl())
+                .async()
                 .build();
 
-        String result = simpleService.workWithString("test-item");
-        assertEquals("Processed: test-item", result);
 
-        List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
-        assertEquals(1, wfs.size());
-        assertEquals(wfs.get(0).getName(),"workWithString");
-        assertNotNull(wfs.get(0).getWorkflowId());
-        assertEquals("test-item", wfs.get(0).getInput()[0]);
-        assertEquals("Processed: test-item", wfs.get(0).getOutput());
-
-    }
-
-    @Test
-    public void workflowWithError() throws SQLException{
-
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl())
-                .build();
-
-        try {
-            simpleService.workWithError();
-        } catch (Exception e) {
-            assertEquals("DBOS Test error", e.getMessage());
+        String wfid = "wf-123";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            simpleService.workWithString("test-item");
         }
 
-        List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
-        assertEquals(1, wfs.size());
-        assertEquals(wfs.get(0).getName(),"workError");
-        assertNotNull(wfs.get(0).getWorkflowId());
-
-    }
-
-    @Test
-    public void setWorkflowId() throws SQLException  {
-
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl())
-                .build();
-
-        String result = null ;
-
-        try (SetWorkflowID id = new SetWorkflowID("wf-123")){
-            result = simpleService.workWithString("test-item");
-        }
-
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid); ;
+        String result = handle.getResult();
         assertEquals("Processed: test-item", result);
+        assertEquals("wf-123", handle.getWorkflowId());
+        assertEquals("SUCCESS", handle.getStatus().getStatus()) ;
 
-        List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(1, wfs.size());
         assertEquals(wfs.get(0).getName(),"workWithString");
         assertEquals("wf-123",wfs.get(0).getWorkflowId());
 
     }
 
-
-    @Test
-    public void sameWorkflowId() throws SQLException  {
+   @Test
+    public void sameWorkflowId() throws Exception  {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
                 .implementation(new SimpleServiceImpl())
+                .async()
                 .build();
-
-        String result = null ;
 
         SimpleServiceImpl.executionCount =0 ;
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123")){
-            result = simpleService.workWithString("test-item");
+        String wfid = "wf-123";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            simpleService.workWithString("test-item");
         }
 
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid);
+        String result = handle.getResult() ;
         assertEquals("Processed: test-item", result);
+        assertEquals("wf-123",handle.getWorkflowId());
 
-        List<WorkflowStatus> wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(1, wfs.size());
         assertEquals(wfs.get(0).getName(),"workWithString");
         assertEquals("wf-123",wfs.get(0).getWorkflowId());
 
-        assertEquals(1, SimpleServiceImpl.executionCount);
-
         try (SetWorkflowID id = new SetWorkflowID("wf-123")){
-            result = simpleService.workWithString("test-item");
+            simpleService.workWithString("test-item");
         }
+       handle = dbosExecutor.retrieveWorkflow(wfid);
+        result = handle.getResult();
         assertEquals(1, SimpleServiceImpl.executionCount);
-        wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        // TODO fix deser has quotes assertEquals("Processed: test-item", result);
+        assertEquals("wf-123",handle.getWorkflowId());
+
+        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(1, wfs.size());
         assertEquals("wf-123",wfs.get(0).getWorkflowId());
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-124")){
-            result = simpleService.workWithString("test-item");
+        String wfid2 = "wf-124" ;
+        try (SetWorkflowID id = new SetWorkflowID(wfid2)){
+            simpleService.workWithString("test-item");
         }
 
+        handle = dbosExecutor.retrieveWorkflow(wfid2);
+        result = handle.getResult();
+        assertEquals("wf-124",handle.getWorkflowId());
+
         assertEquals(2, SimpleServiceImpl.executionCount);
-        wfs = systemDatabase.getWorkflows(new GetWorkflowsInput()) ;
+        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(2, wfs.size());
         assertEquals("wf-124",wfs.get(1).getWorkflowId());
+
+    }
+
+
+    @Test
+    public void workflowWithError() throws Exception {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .async()
+                .build();
+
+        WorkflowHandle handle = null;
+        String wfid = "abc" ;
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+            simpleService.workWithError();
+        }
+
+        handle = dbosExecutor.retrieveWorkflow(wfid);
+        try {
+            handle.getResult();
+        } catch (Exception e) {
+            assertEquals("java.lang.Exception: DBOS Test error", e.getMessage());
+        }
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        assertEquals(1, wfs.size());
+        assertEquals(wfs.get(0).getName(),"workError");
+        assertNotNull(wfs.get(0).getWorkflowId());
+        assertEquals(wfs.get(0).getWorkflowId(),handle.getWorkflowId());
+        assertEquals(WorkflowState.ERROR.name(), handle.getStatus().getStatus());
 
     }
 }

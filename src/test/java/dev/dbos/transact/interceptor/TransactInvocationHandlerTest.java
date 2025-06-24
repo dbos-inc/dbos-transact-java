@@ -27,7 +27,7 @@ class TransactInvocationHandlerTest {
 
         DBOSExecutor executor = mock(DBOSExecutor.class) ;
 
-        doReturn("Processed: test-item").when(executor).runWorkflow(anyString(), anyString(), anyString(), any(Object[].class), any());
+        doReturn("Processed: test-item").when(executor).runWorkflow(anyString(), anyString(), anyString(), any(Object[].class), any(),any());
 
         TransactInvocationHandler realHandler =
                 new TransactInvocationHandler(impl, executor);
@@ -55,7 +55,8 @@ class TransactInvocationHandlerTest {
         OrderServiceImpl impl = new OrderServiceImpl();
 
         DBOSExecutor executor = mock(DBOSExecutor.class) ;
-        doReturn(new SystemDatabase.WorkflowInitResult("121","PENDING",123L)).when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
+        doReturn(new SystemDatabase.WorkflowInitResult("121","PENDING",123L)).when(executor).preInvokeWorkflow(anyString(),
+                anyString(), anyString(), anyString(), any(Object[].class), any());
         doNothing().when(executor).postInvokeWorkflow(anyString(), any());
 
         TransactInvocationHandler realHandler =
@@ -84,7 +85,8 @@ class TransactInvocationHandlerTest {
         OrderServiceImpl impl = new OrderServiceImpl();
 
         DBOSExecutor executor = mock(DBOSExecutor.class) ;
-        doReturn(new SystemDatabase.WorkflowInitResult("121","PENDING",123L)).when(executor).preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class));
+        doReturn(new SystemDatabase.WorkflowInitResult("121","PENDING",123L)).when(executor)
+                .preInvokeWorkflow(anyString(), anyString(), anyString(), anyString(), any(Object[].class),any());
         doNothing().when(executor).postInvokeWorkflow(anyString(), any());
 
         TransactInvocationHandler realHandler =

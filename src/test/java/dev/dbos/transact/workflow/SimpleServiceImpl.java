@@ -3,6 +3,9 @@ package dev.dbos.transact.workflow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 public class SimpleServiceImpl implements SimpleService {
 
     Logger logger = LoggerFactory.getLogger(SimpleServiceImpl.class);
@@ -20,5 +23,6 @@ public class SimpleServiceImpl implements SimpleService {
     public void workWithError() throws Exception {
        throw new Exception("DBOS Test error") ;
     }
+
 
 }

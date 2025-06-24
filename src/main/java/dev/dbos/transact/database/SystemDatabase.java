@@ -1,17 +1,13 @@
 package dev.dbos.transact.database;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.exceptions.DBOSDeadLetterQueueException;
-import dev.dbos.transact.exceptions.DBOSException;
-import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
-import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
+import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
-import dev.dbos.transact.workflow.GetWorkflowsInput;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
@@ -428,7 +424,23 @@ public class SystemDatabase {
         }
     }
 
-public List<WorkflowStatus> getWorkflows(GetWorkflowsInput input) throws SQLException {
+public WorkflowStatus getWorkflow(String workflowId) {
+
+        try {
+            ListWorkflowsInput input = new ListWorkflowsInput();
+            input.setWorkflowIDs(Arrays.asList(workflowId));
+            List<WorkflowStatus> output = listWorkflows(input) ;
+            if (output.size() > 0) {
+                return output.get(0);
+            }
+        } catch (SQLException e) {
+            logger.error("Error retrieving workflow for "+workflowId, e);
+        }
+
+        throw new NonExistentWorkflowException(workflowId) ;
+}
+
+public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
 
     List<WorkflowStatus> workflows = new ArrayList<>();
 
@@ -560,12 +572,13 @@ public List<WorkflowStatus> getWorkflows(GetWorkflowsInput input) throws SQLExce
                 String serializedError = rs.getString("error");
 
                 if (serializedInput != null) {
-                    info.setInput(JSONUtil.fromJson(serializedInput, Object[].class));
+                    info.setInput((Object[])JSONUtil.deserialize((serializedInput)) );
                 }
 
                 if (serializedOutput != null) {
-                    info.setOutput(JSONUtil.fromJson(serializedOutput, Object.class));
+                    info.setOutput(JSONUtil.deserialize(serializedOutput));
                 }
+
                 info.setError(serializedError);
 
                 info.setWorkflowDeadlineEpochMs(rs.getObject("workflow_deadline_epoch_ms", Long.class));
@@ -580,27 +593,76 @@ public List<WorkflowStatus> getWorkflows(GetWorkflowsInput input) throws SQLExce
     return workflows ;
 }
 
-    /**
-     *  Helper method for tests
-     *  Should be moved to TestUtils
-     */
-    public void deleteWorkflowsTestHelper() throws SQLException{
+/**
+*  Helper method for tests
+ *  Should be moved to TestUtils
+ */
+public void deleteWorkflowsTestHelper() throws SQLException{
 
-        String sql = "delete from dbos.workflow_status";
+    String sql = "delete from dbos.workflow_status";
+
+    try (Connection connection = dataSource.getConnection();
+         PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+        int rowsAffected = pstmt.executeUpdate();
+        logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.workflow_status");
+
+    } catch (SQLException e) {
+        logger.error("Error deleting workflows in test helper: " + e.getMessage());
+        throw e;
+    }
+
+}
+
+public Object awaitWorkflowResult(String workflowId) throws Exception {
+
+    final String sql = "SELECT status, output, error "+
+            "FROM dbos.workflow_status " +
+            "WHERE workflow_uuid = ?" ;
+
+    while (true) {
 
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+                 PreparedStatement stmt = connection.prepareStatement(sql)) {
 
-            int rowsAffected = pstmt.executeUpdate();
-            logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.workflow_status");
+            stmt.setString(1, workflowId);
 
-        } catch (SQLException e) {
-            logger.error("Error deleting workflows in test helper: " + e.getMessage());
-            throw e;
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String status = rs.getString("status");
+
+                    switch (WorkflowState.valueOf(status.toUpperCase())) {
+                        case SUCCESS:
+                            String output = rs.getString("output");
+                            return output != null ? JSONUtil.deserialize(output) : null;
+                        case ERROR:
+                            String error = rs.getString("error");
+                            // TODO fixException exception = serialization.deserializeException(error);
+                            throw new Exception(error);
+
+                        case CANCELLED:
+                            throw new AwaitedWorkflowCancelledException(workflowId);
+
+                        default:
+                            // Status is PENDING or other - continue polling
+                            break;
+                        }
+                    }
+                    // Row not found - workflow hasn't appeared yet, continue polling
+                }
+            } catch (SQLException e) {
+                logger.error("Database error while polling workflow " + workflowId + ": " + e.getMessage());
+            }
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Workflow polling interrupted for " + workflowId, e);
+            }
+
+
         }
-
-
-
     }
 
 private void createDataSource(String dbName) {

@@ -11,5 +11,9 @@ public class DBOSContextHolder {
         contextHolder.remove();
     }
 
+    public static void set(DBOSContext context) {
+        contextHolder.set(context);
+    }
+
 }
 

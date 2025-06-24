@@ -3,7 +3,7 @@ package dev.dbos.transact.workflow;
 import java.util.List;
 import java.time.OffsetDateTime;
 
-public class GetWorkflowsInput {
+public class ListWorkflowsInput {
     private List<String> workflowIDs;
     private String workflowName;
     private String authenticatedUser;
@@ -16,10 +16,10 @@ public class GetWorkflowsInput {
     private Boolean sortDesc;
     private String workflowIdPrefix;
 
-    public GetWorkflowsInput() {
+    public ListWorkflowsInput() {
     }
 
-    public GetWorkflowsInput(
+    public ListWorkflowsInput(
             List<String> workflowIDs, String workflowName, String authenticatedUser,
             OffsetDateTime startTime, OffsetDateTime endTime, String status,
             String applicationVersion, Integer limit, Integer offset, Boolean sortDesc,

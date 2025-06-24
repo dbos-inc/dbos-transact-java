@@ -21,7 +21,7 @@ public class TransactInvocationHandler implements InvocationHandler {
     private final DBOSExecutor dbosExecutor ;
 
     @SuppressWarnings("unchecked")
-    public static <T> T createProxy(Class<T> interfaceClass, T implementation, DBOSExecutor executor) {
+    public static <T> T createProxy(Class<T> interfaceClass, Object implementation, DBOSExecutor executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
@@ -69,12 +69,14 @@ public class TransactInvocationHandler implements InvocationHandler {
 
         logger.info(msg);
 
+
         return dbosExecutor.runWorkflow(
                 workflowName,
                 targetClassName,
                 method.getName(),
                 args,
-                () -> (Object) method.invoke(target, args)
+                () -> (Object) method.invoke(target, args),
+                null
         );
 
     }
