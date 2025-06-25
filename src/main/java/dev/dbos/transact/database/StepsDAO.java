@@ -85,7 +85,7 @@ public class StepsDAO {
 
         // --- First query: Retrieve the workflow status ---
         String workflowStatusSql = String.format(
-                "SELECT status FROM %s.workflow_status WHERE %workflow_uuid = ?",
+                "SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?",
                 Constants.DB_SCHEMA
         );
 

@@ -1,7 +1,7 @@
 package dev.dbos.transact.context;
 
 public class DBOSContext {
-    private String workflowId;
+    private volatile String workflowId;
     private String user;
     private int functionId;
     private String stepId;

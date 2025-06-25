@@ -120,7 +120,11 @@ public class DBOSExecutor {
             wfid = ctx.getWorkflowId() ;
 
             if (wfid == null) {
+                logger.info("mjjjj wfid is nulllllll") ;
                 wfid = UUID.randomUUID().toString();
+                ctx.setWorkflowId(wfid);
+            } else {
+                logger.info("workflowId from context ", wfid);
             }
         }
 
@@ -138,7 +142,7 @@ public class DBOSExecutor {
                 logger.warn("Idempotency check not impl for cancelled");
             }
 
-            logger.info("Before executing workflow") ;
+            logger.info("Before executing workflow " + DBOSContextHolder.get().getWorkflowId()) ;
             T result = function.execute();  // invoke the lambda
             logger.info("After: Workflow completed successfully");
             postInvokeWorkflow(initResult.getWorkflowId(), result);
@@ -163,13 +167,18 @@ public class DBOSExecutor {
 
         if (workflowId == null) {
             workflowId = UUID.randomUUID().toString();
+            ctx.setWorkflowId(workflowId);
         }
 
         final String wfId = workflowId ;
 
         Callable<T> task = () -> {
             T result = null ;
+            System.out.println("Thread ID in task.call(): " + Thread.currentThread().getId());
+            System.out.println("workflowId just before log = " + DBOSContextHolder.get().getWorkflowId());
             logger.info("Callable executing the workflow.. " + wfId);
+            logger.info("From the contextCallable executing the workflow.. " + DBOSContextHolder.get().getWorkflowId());
+
             try {
 
                 result = runWorkflow(workflowName,
@@ -192,7 +201,52 @@ public class DBOSExecutor {
             return result ;
         };
 
-        Future<T> future = executorService.submit(task);
+        ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(task);
+
+        System.out.println("mjjjj in main thread: " + DBOSContextHolder.get());
+        System.out.println("mjjjj in main thread wfId: " + DBOSContextHolder.get().getWorkflowId());
+
+        /*ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(() -> {
+
+            System.out.println("Thread ID in task.call(): " + Thread.currentThread().getId());
+            System.out.println("DBOSContextHolder.get(): " + DBOSContextHolder.get());
+            System.out.println("workflowId: " + DBOSContextHolder.get().getWorkflowId());
+            System.out.println("Context object hash: " + System.identityHashCode(DBOSContextHolder.get()));
+
+
+            System.out.println("mjjjjj WFID in task: " + DBOSContextHolder.get().getWorkflowId());
+            T result = null ;
+            System.out.println("Thread ID in task.call(): " + Thread.currentThread().getId());
+            System.out.println("workflowId just before log = " + DBOSContextHolder.get().getWorkflowId());
+            logger.info("Callable executing the workflow.. " + wfId);
+            logger.info("From the contextCallable executing the workflow.. " + DBOSContextHolder.get().getWorkflowId());
+
+            try {
+
+                result = runWorkflow(workflowName,
+                        targetClassName,
+                        methodName,
+                        args,
+                        function,
+                        wfId);
+
+
+            } catch (Throwable e) {
+                Throwable actual = (e instanceof InvocationTargetException)
+                        ? ((InvocationTargetException) e).getTargetException()
+                        : e;
+
+                logger.error("Error executing workflow", actual);
+
+            }
+
+            return result ;
+        }); */
+
+
+        // contextAwareTask.setDBOSContext(DBOSContextHolder.get());
+        contextAwareTask.setWorkflowId(DBOSContextHolder.get().getWorkflowId());
+        Future<T> future = executorService.submit(contextAwareTask);
 
         return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
 
@@ -209,6 +263,12 @@ public class DBOSExecutor {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId();
+
+        if (workflowId == null) {
+            throw new DBOSException(UNEXPECTED.getCode(), "No workflow id. Step must be called from workflow");
+        }
+        logger.info(String.format("Running step %s for workflow %s", stepName, workflowId)) ;
+
         int stepFunctionId = ctx.getAndIncrementFunctionId() ;
 
         StepResult recordedResult = systemDatabase.checkStepExecutionTxn(workflowId, stepFunctionId, stepName) ;
@@ -229,27 +289,41 @@ public class DBOSExecutor {
 
         int currAttempts = 1 ;
         String serializedOutput = null ;
+        Throwable eThrown  = null ;
+        T result = null ;
 
         while (retriedAllowed && currAttempts <= maxAttempts) {
 
             try {
                 logger.info("Before executing step");
-                T result = function.execute();  // invoke the lambda
+                result = function.execute();
+                logger.info("After: step completed successfully " + result);// invoke the lambda
                 serializedOutput = JSONUtil.serialize(result);
-                logger.info("After: step completed successfully");
+                logger.info("Json serialized output is " + serializedOutput);
+                eThrown = null ;
             } catch(Exception e) {
                 // TODO: serialize
-                String errorMsg = e.getMessage();
-                StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, serializedOutput, errorMsg) ;
-                systemDatabase.recordStepResultTxn(stepResult);
+                Throwable actual = (e instanceof InvocationTargetException)
+                        ? ((InvocationTargetException) e).getTargetException()
+                        : e;
+                logger.info("After: step threw exception " + actual.getMessage() + "-----" + actual.toString()) ;
+                eThrown = actual;
             }
 
             ++currAttempts;
         }
 
-        StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, serializedOutput, null) ;
-        systemDatabase.recordStepResultTxn(stepResult);
-        return null ;
+        if (eThrown == null) {
+            StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, serializedOutput, null);
+            systemDatabase.recordStepResultTxn(stepResult);
+            return result;
+        } else {
+            // TODO: serialize
+            logger.info("After: step threw exception saving error " + eThrown.getMessage()) ;
+            StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, null, eThrown.getMessage());
+            systemDatabase.recordStepResultTxn(stepResult);
+            throw eThrown;
+        }
     }
 
 

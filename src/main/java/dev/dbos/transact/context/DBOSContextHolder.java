@@ -8,6 +8,7 @@ public class DBOSContextHolder {
     }
 
     public static void clear() {
+        System.out.println("mjjjj context being cleared");
         contextHolder.remove();
     }
 
