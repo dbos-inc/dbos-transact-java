@@ -120,7 +120,6 @@ public class DBOSExecutor {
             wfid = ctx.getWorkflowId() ;
 
             if (wfid == null) {
-                logger.info("mjjjj wfid is nulllllll") ;
                 wfid = UUID.randomUUID().toString();
                 ctx.setWorkflowId(wfid);
             } else {
@@ -174,10 +173,11 @@ public class DBOSExecutor {
 
         Callable<T> task = () -> {
             T result = null ;
-            System.out.println("Thread ID in task.call(): " + Thread.currentThread().getId());
-            System.out.println("workflowId just before log = " + DBOSContextHolder.get().getWorkflowId());
-            logger.info("Callable executing the workflow.. " + wfId);
-            logger.info("From the contextCallable executing the workflow.. " + DBOSContextHolder.get().getWorkflowId());
+
+            // Doing this on purpose to ensure that we have the correct context
+            String id = DBOSContextHolder.get().getWorkflowId();
+
+            logger.info("Callable executing the workflow.. " + id);
 
             try {
 
@@ -186,7 +186,8 @@ public class DBOSExecutor {
                         methodName,
                         args,
                         function,
-                        wfId);
+                        // wfId); doing it the hard way
+                        id);
 
 
             } catch (Throwable e) {
@@ -202,49 +203,6 @@ public class DBOSExecutor {
         };
 
         ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(task);
-
-        System.out.println("mjjjj in main thread: " + DBOSContextHolder.get());
-        System.out.println("mjjjj in main thread wfId: " + DBOSContextHolder.get().getWorkflowId());
-
-        /*ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(() -> {
-
-            System.out.println("Thread ID in task.call(): " + Thread.currentThread().getId());
-            System.out.println("DBOSContextHolder.get(): " + DBOSContextHolder.get());
-            System.out.println("workflowId: " + DBOSContextHolder.get().getWorkflowId());
-            System.out.println("Context object hash: " + System.identityHashCode(DBOSContextHolder.get()));
-
-
-            System.out.println("mjjjjj WFID in task: " + DBOSContextHolder.get().getWorkflowId());
-            T result = null ;
-            System.out.println("Thread ID in task.call(): " + Thread.currentThread().getId());
-            System.out.println("workflowId just before log = " + DBOSContextHolder.get().getWorkflowId());
-            logger.info("Callable executing the workflow.. " + wfId);
-            logger.info("From the contextCallable executing the workflow.. " + DBOSContextHolder.get().getWorkflowId());
-
-            try {
-
-                result = runWorkflow(workflowName,
-                        targetClassName,
-                        methodName,
-                        args,
-                        function,
-                        wfId);
-
-
-            } catch (Throwable e) {
-                Throwable actual = (e instanceof InvocationTargetException)
-                        ? ((InvocationTargetException) e).getTargetException()
-                        : e;
-
-                logger.error("Error executing workflow", actual);
-
-            }
-
-            return result ;
-        }); */
-
-
-        // contextAwareTask.setDBOSContext(DBOSContextHolder.get());
         contextAwareTask.setWorkflowId(DBOSContextHolder.get().getWorkflowId());
         Future<T> future = executorService.submit(contextAwareTask);
 
