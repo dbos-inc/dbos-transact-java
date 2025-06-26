@@ -202,8 +202,9 @@ public class DBOSExecutor {
             return result ;
         };
 
-        ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(task);
-        contextAwareTask.setWorkflowId(DBOSContextHolder.get().getWorkflowId());
+        /*ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(task);
+        contextAwareTask.setWorkflowId(DBOSContextHolder.get().getWorkflowId()); */
+        ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(DBOSContextHolder.get().copy(),task);
         Future<T> future = executorService.submit(contextAwareTask);
 
         return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);

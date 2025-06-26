@@ -3,8 +3,16 @@ package dev.dbos.transact.context;
 public class DBOSContext {
     private volatile String workflowId;
     private String user;
-    private int functionId;
+    private volatile int functionId;
     private String stepId;
+
+    public DBOSContext() {
+
+    }
+    public DBOSContext(String workflowId, int functionId) {
+        this.workflowId = workflowId;
+        this.functionId = functionId ;
+    }
 
     public String getWorkflowId() {
         return workflowId;
@@ -36,6 +44,10 @@ public class DBOSContext {
 
     public void setStepId(String stepId) {
         this.stepId = stepId;
+    }
+
+    public DBOSContext copy() {
+        return new DBOSContext(workflowId, functionId);
     }
 }
 
