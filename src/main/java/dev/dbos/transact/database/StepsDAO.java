@@ -4,6 +4,8 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.UnExpectedStepException;
 import dev.dbos.transact.exceptions.WorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
+import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.StepResult;
 import org.slf4j.Logger;
@@ -11,6 +13,8 @@ import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 public class StepsDAO {
@@ -151,6 +155,63 @@ public class StepsDAO {
         }
 
         return recordedResult;
+    }
+
+    public List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
+        String sqlTemplate = "SELECT function_id, function_name, output, error, child_workflow_id " +
+            "FROM %s.operation_outputs " +
+            "WHERE workflow_uuid = ? " +
+            "ORDER BY function_id;";
+        final String sql = String.format(sqlTemplate, Constants.DB_SCHEMA);
+        System.out.println(sql);
+
+
+        List<StepInfo> steps = new ArrayList<>();
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+
+            stmt.setString(1, workflowId);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+
+                while (rs.next()) {
+                    int functionId = rs.getInt("function_id");
+                    String functionName = rs.getString("function_name");
+                    String outputData = rs.getString("output");
+                    String errorData = rs.getString("error");
+                    String childWorkflowId = rs.getString("child_workflow_id");
+                    System.out.println(functionId);
+
+                    // Deserialize output if present
+                    Object output = null;
+                    if (outputData != null) {
+                        try {
+                            output = JSONUtil.deserialize(outputData);
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to deserialize output for function " + functionId, e);
+                        }
+                    }
+
+                    // Deserialize error if present
+                    Exception error = null;
+                    if (errorData != null) {
+                        try {
+                            // TODO error = JSONUtil.deserialize(errorData);
+                            error = new Exception(errorData) ;
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to deserialize error for function " + functionId, e);
+                        }
+                    }
+
+                    steps.add(new StepInfo(functionId, functionName, output, error, childWorkflowId));
+                }
+            }
+        } catch (SQLException e) {
+            throw new SQLException("Failed to retrieve workflow steps for workflow: " + workflowId, e);
+        }
+
+        return steps;
     }
 }
 

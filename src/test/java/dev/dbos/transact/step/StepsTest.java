@@ -17,8 +17,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class StepsTest {
 
@@ -70,6 +69,7 @@ public class StepsTest {
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
+        systemDatabase.deleteOperations();
         systemDatabase.deleteWorkflowsTestHelper();
     }
 
@@ -88,9 +88,32 @@ public class StepsTest {
                 .implementation(new ServiceAImpl(serviceB))
                 .build();
 
-        String result = serviceA.workflowWithSteps("hello");
-        assertEquals("hellohello", result);
+        String wid = "sync123";
 
+        try (SetWorkflowID id = new SetWorkflowID(wid)) {
+            String result = serviceA.workflowWithSteps("hello");
+            assertEquals("hellohello", result);
+        }
+
+        List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(wid);
+        assertEquals(5, stepInfos.size());
+
+        assertEquals("step1",stepInfos.get(0).getFunctionName());
+        assertEquals(0,stepInfos.get(0).getFunctionId());
+        assertEquals("one",stepInfos.get(0).getOutput());
+        assertNull(stepInfos.get(0).getError());
+        assertEquals("step2",stepInfos.get(1).getFunctionName());
+        assertEquals(1,stepInfos.get(1).getFunctionId());
+        assertEquals("two",stepInfos.get(1).getOutput());
+        assertEquals("step3",stepInfos.get(2).getFunctionName());
+        assertEquals(2,stepInfos.get(2).getFunctionId());
+        assertEquals("three",stepInfos.get(2).getOutput());
+        assertEquals("step4",stepInfos.get(3).getFunctionName());
+        assertEquals(3,stepInfos.get(3).getFunctionId());
+        assertEquals("four",stepInfos.get(3).getOutput());
+        assertEquals("step5",stepInfos.get(4).getFunctionName());
+        assertEquals(4,stepInfos.get(4).getFunctionId());
+        assertEquals("five",stepInfos.get(4).getOutput());
 
     }
 
@@ -107,9 +130,20 @@ public class StepsTest {
                 .implementation(new ServiceAImpl(serviceB))
                 .build();
 
-        String result = serviceA.workflowWithStepError("hello");
-        assertEquals("hellohello", result);
+        String wid = "sync123er";
+        try (SetWorkflowID id = new SetWorkflowID(wid)) {
+            String result = serviceA.workflowWithStepError("hello");
+            assertEquals("hellohello", result);
+        }
 
+        List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(wid);
+        assertEquals(5, stepInfos.size());
+        assertEquals("step3",stepInfos.get(2).getFunctionName());
+        assertEquals(2,stepInfos.get(2).getFunctionId());
+        Throwable error = stepInfos.get(2).getError();
+        assertInstanceOf(Exception.class, error, "The error should be an Exception");
+        assertEquals("step3 error", error.getMessage(), "Error message should match");
+        assertNull(stepInfos.get(2).getOutput()) ;
     }
 
     @Test
@@ -136,6 +170,25 @@ public class StepsTest {
         WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(workflowId);
         assertEquals("hellohello", handle.getResult());
 
+        List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(workflowId);
+        assertEquals(5, stepInfos.size());
+
+        assertEquals("step1",stepInfos.get(0).getFunctionName());
+        assertEquals(0,stepInfos.get(0).getFunctionId());
+        assertEquals("one",stepInfos.get(0).getOutput());
+        assertEquals("step2",stepInfos.get(1).getFunctionName());
+        assertEquals(1,stepInfos.get(1).getFunctionId());
+        assertEquals("two",stepInfos.get(1).getOutput());
+        assertEquals("step3",stepInfos.get(2).getFunctionName());
+        assertEquals(2,stepInfos.get(2).getFunctionId());
+        assertEquals("three",stepInfos.get(2).getOutput());
+        assertEquals("step4",stepInfos.get(3).getFunctionName());
+        assertEquals(3,stepInfos.get(3).getFunctionId());
+        assertEquals("four",stepInfos.get(3).getOutput());
+        assertEquals("step5",stepInfos.get(4).getFunctionName());
+        assertEquals(4,stepInfos.get(4).getFunctionId());
+        assertEquals("five",stepInfos.get(4).getOutput());
+        assertNull(stepInfos.get(4).getError());
 
     }
 

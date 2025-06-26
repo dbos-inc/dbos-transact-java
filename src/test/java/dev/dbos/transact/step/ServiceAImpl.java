@@ -21,7 +21,7 @@ public class ServiceAImpl implements ServiceA {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String wfid = ctx.getWorkflowId() ;
-        System.out.println("mjjjjjj "+ wfid);
+
 
         serviceBproxy.step1("one");
         serviceBproxy.step2("two");

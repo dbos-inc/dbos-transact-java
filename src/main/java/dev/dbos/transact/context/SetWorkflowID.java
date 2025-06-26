@@ -11,8 +11,7 @@ public class SetWorkflowID implements AutoCloseable {
 
     @Override
     public void close() {
-        DBOSContext context = DBOSContextHolder.get();
-        context.setWorkflowId(previousWorkflowId);
+        DBOSContextHolder.clear();
     }
 }
 

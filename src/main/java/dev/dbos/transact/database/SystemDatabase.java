@@ -8,6 +8,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
@@ -593,8 +594,8 @@ public class SystemDatabase {
         }
 
 
-    return workflows ;
-}
+        return workflows ;
+    }
 
     /**
     *  Helper method for tests
@@ -609,6 +610,23 @@ public class SystemDatabase {
 
             int rowsAffected = pstmt.executeUpdate();
             logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.workflow_status");
+
+        } catch (SQLException e) {
+            logger.error("Error deleting workflows in test helper: " + e.getMessage());
+            throw e;
+        }
+
+    }
+
+    public void deleteOperations() throws SQLException{
+
+        String sql = "delete from dbos.operation_outputs;";
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+            int rowsAffected = pstmt.executeUpdate();
+            logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.operation_outputs");
 
         } catch (SQLException e) {
             logger.error("Error deleting workflows in test helper: " + e.getMessage());
@@ -633,12 +651,10 @@ public class SystemDatabase {
         }
     }
 
-    public void recordStepResultTxn(StepResult result) throws SQLException {
+    public void recordStepResultTxn(StepResult result)  {
 
         try {
-            try (Connection connection = dataSource.getConnection()) {
-                stepsDAO.recordStepResultTxn(result);
-            }
+            stepsDAO.recordStepResultTxn(result);
         } catch(SQLException sq) {
             logger.error("Unexpected SQL exception", sq) ;
             throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage()) ;
@@ -646,59 +662,69 @@ public class SystemDatabase {
 
     }
 
-public Object awaitWorkflowResult(String workflowId) throws Exception {
-
-    final String sql = "SELECT status, output, error " +
-            "FROM dbos.workflow_status " +
-            "WHERE workflow_uuid = ?";
-
-    while (true) {
-
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement stmt = connection.prepareStatement(sql)) {
-
-            stmt.setString(1, workflowId);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    String status = rs.getString("status");
-
-                    switch (WorkflowState.valueOf(status.toUpperCase())) {
-                        case SUCCESS:
-                            String output = rs.getString("output");
-                            return output != null ? JSONUtil.deserialize(output) : null;
-                        case ERROR:
-                            String error = rs.getString("error");
-                            // TODO fixException exception = serialization.deserializeException(error);
-                            throw new Exception(error);
-
-                        case CANCELLED:
-                            throw new AwaitedWorkflowCancelledException(workflowId);
-
-                        default:
-                            // Status is PENDING or other - continue polling
-                            break;
-                    }
-                }
-                // Row not found - workflow hasn't appeared yet, continue polling
-            }
-        } catch (SQLException e) {
-            logger.error("Database error while polling workflow " + workflowId + ": " + e.getMessage());
-        }
-
+    public List<StepInfo> listWorkflowSteps(String workflowId) {
         try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Workflow polling interrupted for " + workflowId, e);
+            return stepsDAO.listWorkflowSteps(workflowId);
+        } catch(SQLException sq) {
+            logger.error("Unexpected SQL exception", sq) ;
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage()) ;
         }
-
 
     }
 
-}
+    public Object awaitWorkflowResult(String workflowId) throws Exception {
 
-private void createDataSource(String dbName) {
+        final String sql = "SELECT status, output, error " +
+                "FROM dbos.workflow_status " +
+                "WHERE workflow_uuid = ?";
+
+        while (true) {
+
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement stmt = connection.prepareStatement(sql)) {
+
+                stmt.setString(1, workflowId);
+
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        String status = rs.getString("status");
+
+                        switch (WorkflowState.valueOf(status.toUpperCase())) {
+                            case SUCCESS:
+                                String output = rs.getString("output");
+                                return output != null ? JSONUtil.deserialize(output) : null;
+                            case ERROR:
+                                String error = rs.getString("error");
+                                // TODO fixException exception = serialization.deserializeException(error);
+                                throw new Exception(error);
+
+                            case CANCELLED:
+                                throw new AwaitedWorkflowCancelledException(workflowId);
+
+                            default:
+                                // Status is PENDING or other - continue polling
+                                break;
+                        }
+                    }
+                    // Row not found - workflow hasn't appeared yet, continue polling
+                }
+            } catch (SQLException e) {
+                logger.error("Database error while polling workflow " + workflowId + ": " + e.getMessage());
+            }
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Workflow polling interrupted for " + workflowId, e);
+            }
+
+
+        }
+
+    }
+
+    private void createDataSource(String dbName) {
         HikariConfig hikariConfig = new HikariConfig();
 
         String dburl = String.format("jdbc:postgresql://%s:%d/%s",config.getDbHost(),config.getDbPort(),dbName);
