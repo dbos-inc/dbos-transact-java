@@ -11,16 +11,7 @@ public class ContextAwareCallable<T> implements Callable<T> {
     private final Callable<T> task;
     private DBOSContext capturedContext;
 
-    // having to pass in workflowId due memory visibility
-    // issue TODO: make copy of dboscontext thread safe
-    // private volatile String workflowId ;
-
     Logger logger = LoggerFactory.getLogger(ContextAwareCallable.class) ;
-
-    /* public ContextAwareCallable(Callable<T> task) {
-        this.task = task;
-
-    } */
 
     public ContextAwareCallable(DBOSContext ctx, Callable<T> task) {
         this.task = task;
@@ -28,18 +19,9 @@ public class ContextAwareCallable<T> implements Callable<T> {
     }
 
 
-    /* public void setWorkflowId(java.lang.String workflowId) {
-        this.workflowId = workflowId;
-    } */
-
     @Override
     public T call() throws Exception {
-        /* DBOSContext ctx = new DBOSContext();
-        ctx.setWorkflowId(workflowId);
-
-        DBOSContextHolder.set(ctx) ; */
         DBOSContextHolder.set(capturedContext);
-
         try {
             return task.call();
         } finally {
