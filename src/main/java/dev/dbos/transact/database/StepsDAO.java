@@ -87,7 +87,6 @@ public class StepsDAO {
             Connection connection
     ) throws SQLException, IllegalStateException, WorkflowCancelledException, UnExpectedStepException {
 
-        // --- First query: Retrieve the workflow status ---
         String workflowStatusSql = String.format(
                 "SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?",
                 Constants.DB_SCHEMA
@@ -103,19 +102,16 @@ public class StepsDAO {
             }
         }
 
-        // Check if the workflow exists (mimics Python's assert)
         if (workflowStatus == null) {
             throw new IllegalStateException(String.format("Error: Workflow %s does not exist", workflowId));
         }
 
-        // If the workflow is cancelled, raise the exception
         if (Objects.equals(workflowStatus, WorkflowState.CANCELLED.name())) {
             throw new WorkflowCancelledException(
                     String.format("Workflow %s is cancelled. Aborting function.", workflowId)
             );
         }
 
-        // --- Second query: Retrieve operation outputs ---
         String operationOutputSql = String.format(
                 "SELECT output, error, function_name " +
                         "FROM %s.operation_outputs " +
@@ -139,12 +135,10 @@ public class StepsDAO {
             }
         }
 
-        // If there are no operation outputs, return None (mimics Python's 'if not operation_output_rows')
         if (recordedResult == null) {
             return null;
         }
-
-        // If the provided and recorded function name are different, throw an exception
+        
         if (!Objects.equals(functionName, recordedFunctionName)) {
             throw new UnExpectedStepException(
                     workflowId,
