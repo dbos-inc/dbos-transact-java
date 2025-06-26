@@ -428,7 +428,7 @@ public class SystemDatabase {
         }
     }
 
-    public WorkflowStatus getWorkflow(String workflowId) {
+    public WorkflowStatus getWorkflowStatus(String workflowId) {
 
         try {
             ListWorkflowsInput input = new ListWorkflowsInput();

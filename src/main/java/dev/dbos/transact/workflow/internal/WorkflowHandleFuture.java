@@ -37,6 +37,6 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
 
     @Override
     public WorkflowStatus getStatus() {
-        return systemDatabase.getWorkflow(workflowId) ;
+        return systemDatabase.getWorkflowStatus(workflowId) ;
     }
 }

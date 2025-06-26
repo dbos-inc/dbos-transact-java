@@ -94,7 +94,6 @@ public class AsyncInvocationHandler implements InvocationHandler {
         dbosExecutor.submitWorkflow(
                 workflowName,
                 targetClassName,
-                method.getName(),
                 wrapper.target,
                 args,
                 // () -> (Object) method.invoke(target, args)

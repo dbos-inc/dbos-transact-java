@@ -9,7 +9,8 @@ public enum ErrorCode {
     NONEXISTENT_WORKFLOW(5) ,
     AWAITED_WORKFLOW_CANCEL(6),
     WORKFLOW_CANCELLED(7),
-    UNEXPECTED_STEP(8);
+    UNEXPECTED_STEP(8),
+    WORKFLOW_FUNCTION_NOT_FOUND(9);
 
     private int code ;
 

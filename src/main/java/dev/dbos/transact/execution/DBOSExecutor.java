@@ -3,8 +3,10 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSException;
+import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -62,9 +64,7 @@ public class DBOSExecutor {
 
 
     public SystemDatabase.WorkflowInitResult preInvokeWorkflow(String workflowName,
-                                                               String interfaceName,
                                                                String className,
-                                                               String methodName,
                                                                Object[] inputs,
                                                                String workflowId) {
 
@@ -86,8 +86,8 @@ public class DBOSExecutor {
                         null,
                         null,
                         null,
-                        null,
-                        null,
+                        "executor_id_todo",
+                        "app_version_todo",
                         null,
                         0,
                         300000,
@@ -124,7 +124,6 @@ public class DBOSExecutor {
 
     public <T> T runWorkflow(String workflowName,
                              String targetClassName,
-                             String methodName,
                              Object target,
                              Object[] args,
                              // DBOSFunction<T> function,
@@ -148,8 +147,7 @@ public class DBOSExecutor {
         SystemDatabase.WorkflowInitResult initResult = null;
         try {
 
-            initResult = preInvokeWorkflow(workflowName, null,
-                                                            targetClassName, methodName, args, wfid);
+            initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid);
 
             if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
                 return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
@@ -178,7 +176,6 @@ public class DBOSExecutor {
 
     public <T> WorkflowHandle<T> submitWorkflow(String workflowName,
                                                 String targetClassName,
-                                                String methodName,
                                                 Object target,
                                                 Object[] args,
                                                 // DBOSFunction<T> function) throws Throwable {
@@ -206,7 +203,6 @@ public class DBOSExecutor {
 
                 result = runWorkflow(workflowName,
                         targetClassName,
-                        methodName,
                         target,
                         args,
                         function,
@@ -318,6 +314,37 @@ public class DBOSExecutor {
      */
     public WorkflowHandle retrieveWorkflow(String workflowId) {
         return new WorkflowHandleDBPoll(workflowId, systemDatabase) ;
+    }
+
+    public void executeWorkflowById(String workflowId) {
+
+        WorkflowStatus status = systemDatabase.getWorkflowStatus(workflowId) ;
+
+        if (status == null) {
+            logger.error("Workflow not found ", workflowId);
+            throw new NonExistentWorkflowException(workflowId) ;
+        }
+
+        Object[] inputs = status.getInput() ;
+        WorkflowFunctionWrapper functionWrapper = workflowRegistry.get(status.getName()) ;
+        String className = "todo_store_get_wrapper";
+
+
+        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+            try {
+                submitWorkflow(status.getName(), className, functionWrapper.target, inputs, functionWrapper.function);
+            } catch (Throwable t) {
+                logger.error(String.format("Error executing workflow by id : %s", workflowId) , t);
+            }
+        }
+
+    }
+
+    public void submit(Runnable task) {
+
+        ContextAwareRunnable contextAwareTask = new ContextAwareRunnable(DBOSContextHolder.get().copy(),task);
+        executorService.submit(contextAwareTask);
+
     }
 
 }

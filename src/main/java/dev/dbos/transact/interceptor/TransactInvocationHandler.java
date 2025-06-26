@@ -92,7 +92,6 @@ public class TransactInvocationHandler implements InvocationHandler {
         return dbosExecutor.runWorkflow(
                 workflowName,
                 targetClassName,
-                method.getName(),
                 wrapper.target,
                 args,
                 // () -> (Object) method.invoke(target, args),
