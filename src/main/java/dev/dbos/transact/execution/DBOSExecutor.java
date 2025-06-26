@@ -202,8 +202,7 @@ public class DBOSExecutor {
             return result ;
         };
 
-        /*ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(task);
-        contextAwareTask.setWorkflowId(DBOSContextHolder.get().getWorkflowId()); */
+        // Copy the context - dont just pass a reference - memory visibility
         ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(DBOSContextHolder.get().copy(),task);
         Future<T> future = executorService.submit(contextAwareTask);
 
