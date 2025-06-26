@@ -1,6 +1,8 @@
 package dev.dbos.transact.interceptor;
 
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.workflow.Step;
+import dev.dbos.transact.workflow.Transaction;
 import dev.dbos.transact.workflow.Workflow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,32 +49,58 @@ public class AsyncInvocationHandler implements InvocationHandler {
         
         Method implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
 
-        Workflow wfAnnotation = implMethod.getAnnotation(Workflow.class) ;
+        if (implMethod.isAnnotationPresent(Workflow.class)) {
+            return handleWorkflow(method, args, implMethod.getAnnotation(Workflow.class));
 
-        if (wfAnnotation != null) {
-
-            String workflowName = wfAnnotation.name().isEmpty() ? implMethod.getName() : wfAnnotation.name();
-
-            String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
-                    workflowName,
-                    wfAnnotation.timeout());
-
-            logger.info(msg);
-
-            dbosExecutor.submitWorkflow(
-                    workflowName,
-                    targetClassName,
-                    method.getName(),
-                    args,
-                    () -> (Object) method.invoke(target, args)
-            );
-
-            return getDefaultValue(method.getReturnType()) ; // always return null or default
-
-        } else {
-            throw new RuntimeException("workflow annotation expected on target method");
+        } else if (implMethod.isAnnotationPresent(Step.class)) {
+            return handleStep(method, args, implMethod.getAnnotation(Step.class));
         }
 
+        // No special annotation, proceed normally
+        return method.invoke(target, args);
+
+
+    }
+
+    protected Object handleWorkflow(Method method, Object[] args, Workflow workflow) throws Throwable {
+
+        String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
+
+        String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
+                workflowName,
+                workflow.timeout());
+
+        logger.info(msg);
+
+        dbosExecutor.submitWorkflow(
+                workflowName,
+                targetClassName,
+                method.getName(),
+                args,
+                () -> (Object) method.invoke(target, args)
+        );
+
+        return getDefaultValue(method.getReturnType()) ; // always return null or default
+
+    }
+
+    protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
+        String msg = String.format("Before : Executing step %s %s",
+                method.getName(), step.name());
+        logger.info(msg);
+        try {
+            Object result = dbosExecutor.runStep(step.name(),
+                    step.retriesAllowed(),
+                    step.maxAttempts(),
+                    step.backOffRate(),
+                    args,
+                    ()-> method.invoke(target, args)) ;
+            logger.info("After: Step completed successfully");
+            return result;
+        } catch (Exception e) {
+            logger.info("Step failed: " + e.getCause().getMessage());
+            throw e.getCause();
+        }
     }
 
     private Object getDefaultValue(Class<?> returnType) {
