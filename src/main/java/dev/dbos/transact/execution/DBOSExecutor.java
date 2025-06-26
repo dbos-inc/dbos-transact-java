@@ -42,14 +42,17 @@ public class DBOSExecutor {
         this.config = config;
         this.systemDatabase = sysdb ;
         this.executorService = Executors.newCachedThreadPool();
+        System.out.println("Creating new registry");
         this.workflowRegistry = new WorkflowRegistry() ;
     }
 
     public void shutdown() {
+        workflowRegistry = null ;
         systemDatabase.destroy() ;
     }
 
     public void registerWorkflow(String workflowName, Object target, Method method) {
+        System.out.println("Registering " + workflowName) ;
         workflowRegistry.register(workflowName, target, method);
     }
 

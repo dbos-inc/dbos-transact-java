@@ -6,10 +6,7 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.*;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -52,6 +49,16 @@ public class StepsTest {
             stmt.execute(createDbSql);
         }
 
+
+    }
+
+    //@AfterAll
+    /* static void onetimeTearDown() {
+        dbos.shutdown();
+    } */
+
+    @BeforeEach
+    void beforeEachTest() throws SQLException {
         DBOS.initialize(dbosConfig);
         dbos = DBOS.getInstance();
         SystemDatabase.initialize(dbosConfig);
@@ -60,17 +67,13 @@ public class StepsTest {
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
 
-    }
-
-    @AfterAll
-    static void onetimeTearDown() {
-        dbos.shutdown();
-    }
-
-    @BeforeEach
-    void beforeEachTest() throws SQLException {
         systemDatabase.deleteOperations();
         systemDatabase.deleteWorkflowsTestHelper();
+    }
+
+    @AfterEach
+    void afterEachTest() throws SQLException {
+        dbos.shutdown();
     }
 
 
