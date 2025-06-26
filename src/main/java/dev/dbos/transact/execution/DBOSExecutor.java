@@ -17,13 +17,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
@@ -32,18 +35,28 @@ public class DBOSExecutor {
     private DBOSConfig config;
     private SystemDatabase systemDatabase;
     private ExecutorService executorService ;
+    private WorkflowRegistry workflowRegistry ;
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
     public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
         this.config = config;
         this.systemDatabase = sysdb ;
         this.executorService = Executors.newCachedThreadPool();
-
+        this.workflowRegistry = new WorkflowRegistry() ;
     }
 
     public void shutdown() {
         systemDatabase.destroy() ;
     }
+
+    public void registerWorkflow(String workflowName, Object target, Method method) {
+        workflowRegistry.register(workflowName, target, method);
+    }
+
+    public WorkflowFunctionWrapper getWorkflow(String workflowName) {
+        return workflowRegistry.get(workflowName);
+    }
+
 
     public SystemDatabase.WorkflowInitResult preInvokeWorkflow(String workflowName,
                                                                String interfaceName,
@@ -109,8 +122,10 @@ public class DBOSExecutor {
     public <T> T runWorkflow(String workflowName,
                              String targetClassName,
                              String methodName,
+                             Object target,
                              Object[] args,
-                             DBOSFunction<T> function,
+                             // DBOSFunction<T> function,
+                             WorkflowFunction function,
                              String workflowId) throws Throwable {
 
         String wfid = workflowId ;
@@ -141,8 +156,11 @@ public class DBOSExecutor {
                 logger.warn("Idempotency check not impl for cancelled");
             }
 
+
             logger.info("Before executing workflow " + DBOSContextHolder.get().getWorkflowId()) ;
-            T result = function.execute();  // invoke the lambda
+            //T result = function.execute();  // invoke the lambda
+            @SuppressWarnings("unchecked")
+            T result = (T) function.invoke(target, args);
             logger.info("After: Workflow completed successfully");
             postInvokeWorkflow(initResult.getWorkflowId(), result);
             return result;
@@ -158,8 +176,10 @@ public class DBOSExecutor {
     public <T> WorkflowHandle<T> submitWorkflow(String workflowName,
                                                 String targetClassName,
                                                 String methodName,
+                                                Object target,
                                                 Object[] args,
-                                                DBOSFunction<T> function) throws Throwable {
+                                                // DBOSFunction<T> function) throws Throwable {
+                                                WorkflowFunction function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId() ;
@@ -184,6 +204,7 @@ public class DBOSExecutor {
                 result = runWorkflow(workflowName,
                         targetClassName,
                         methodName,
+                        target,
                         args,
                         function,
                         // wfId); doing it the hard way
@@ -217,6 +238,9 @@ public class DBOSExecutor {
                              Object[] args,
                              DBOSFunction<T> function
                          ) throws Throwable {
+
+        System.out.println("runStep Args at invoke start: " + Arrays.toString(args));
+        System.out.println("Arg types: " + Arrays.stream(args).map(a -> a != null ? a.getClass().getSimpleName() : "null").collect(Collectors.toList()));
 
 
         DBOSContext ctx = DBOSContextHolder.get();

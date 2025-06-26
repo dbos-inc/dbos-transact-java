@@ -37,7 +37,7 @@ public class ServiceAImpl implements ServiceA {
         return input+input;
     }
 
-    @Workflow(name = "workflowWithSteps")
+    @Workflow(name = "workflowWithStepsError")
     public String workflowWithStepError(String input) {
 
         serviceBproxy.step1("one");
