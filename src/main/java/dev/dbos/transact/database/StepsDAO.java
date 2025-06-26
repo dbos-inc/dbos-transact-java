@@ -138,7 +138,7 @@ public class StepsDAO {
         if (recordedResult == null) {
             return null;
         }
-        
+
         if (!Objects.equals(functionName, recordedFunctionName)) {
             throw new UnExpectedStepException(
                     workflowId,

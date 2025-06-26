@@ -192,4 +192,37 @@ public class StepsTest {
 
     }
 
+    @Test
+    public void SameInterfaceWorkflowWithSteps() throws Exception  {
+
+        ServiceWFAndStep service = dbos.<ServiceWFAndStep>Workflow()
+                .interfaceClass(ServiceWFAndStep.class)
+                .implementation(new ServiceWFAndStepImpl())
+                .async()
+                .build();
+
+        service.setSelf(service);
+
+        String workflowId = "wf-same-1234";
+
+        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+            service.aWorkflow("hello");
+        }
+
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(workflowId);
+        assertEquals("helloonetwo", handle.getResult());
+
+        List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(workflowId);
+        assertEquals(2, stepInfos.size());
+
+        assertEquals("step1",stepInfos.get(0).getFunctionName());
+        assertEquals(0,stepInfos.get(0).getFunctionId());
+        assertEquals("one",stepInfos.get(0).getOutput());
+        assertEquals("step2",stepInfos.get(1).getFunctionName());
+        assertEquals(1,stepInfos.get(1).getFunctionId());
+        assertEquals("two",stepInfos.get(1).getOutput());
+        assertNull(stepInfos.get(1).getError());
+
+    }
+
 }
