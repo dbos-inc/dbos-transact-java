@@ -37,7 +37,7 @@ public class TransactInvocationHandler implements InvocationHandler {
                 String workflowName = wfAnnotation.name().isEmpty() ? method.getName() : wfAnnotation.name();
                 method.setAccessible(true); // In case it's not public
 
-                executor.registerWorkflow(workflowName, implementation, method);
+                executor.registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
             }
         }
 

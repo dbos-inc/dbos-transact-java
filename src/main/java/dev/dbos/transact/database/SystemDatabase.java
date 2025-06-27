@@ -11,6 +11,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
@@ -46,11 +47,24 @@ public class SystemDatabase {
         stepsDAO = new StepsDAO(dataSource) ;
     }
 
+    private SystemDatabase(DataSource ds) {
+
+        this.dataSource = ds ;
+        stepsDAO = new StepsDAO(dataSource) ;
+    }
+
     public static synchronized void initialize(DBOSConfig cfg) {
         if (instance != null) {
             throw new IllegalStateException("SystemDatabase has already been initialized.");
         }
         instance = new SystemDatabase(cfg);
+    }
+
+    public static synchronized void initialize(DataSource ds) {
+        if (instance != null) {
+            throw new IllegalStateException("SystemDatabase has already been initialized.");
+        }
+        instance = new SystemDatabase(ds);
     }
 
     public static SystemDatabase getInstance() {
@@ -595,6 +609,39 @@ public class SystemDatabase {
 
 
         return workflows ;
+    }
+
+    public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
+            throws SQLException {
+
+        String sqlTemplate = "SELECT workflow_uuid, queue_name " +
+        "FROM %s.workflow_status " +
+        "WHERE status = ? " +
+        "AND executor_id = ? " +
+        "AND application_version = ?" ;
+
+        final String sql = String.format(sqlTemplate, Constants.DB_SCHEMA);
+
+        List<GetPendingWorkflowsOutput> results = new ArrayList<>();
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+
+            stmt.setString(1, WorkflowState.PENDING.name());
+            stmt.setString(2, executorId);
+            stmt.setString(3, appVersion);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    results.add(new GetPendingWorkflowsOutput(
+                            rs.getString("workflow_uuid"),
+                            rs.getString("queue_name")
+                    ));
+                }
+            }
+        }
+
+        return results;
     }
 
     /**

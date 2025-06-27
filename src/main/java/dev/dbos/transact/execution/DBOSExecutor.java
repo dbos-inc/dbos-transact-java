@@ -53,9 +53,8 @@ public class DBOSExecutor {
         systemDatabase.destroy() ;
     }
 
-    public void registerWorkflow(String workflowName, Object target, Method method) {
-        System.out.println("Registering " + workflowName) ;
-        workflowRegistry.register(workflowName, target, method);
+    public void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
+        workflowRegistry.register(workflowName, target, targetClassName, method);
     }
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
@@ -68,7 +67,7 @@ public class DBOSExecutor {
                                                                Object[] inputs,
                                                                String workflowId) {
 
-        logger.info("In preInvokeWorkflow") ;
+        logger.info("In preInvokeWorkflow with " + workflowId) ;
 
         String inputString = JSONUtil.serialize(inputs) ;
 
@@ -99,11 +98,17 @@ public class DBOSExecutor {
         SystemDatabase.WorkflowInitResult initResult = null;
         try {
              initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
-        } catch (SQLException e) {
+        } catch (Exception e) {
             logger.error("Error inserting into workflow_status", e);
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(),e) ;
         }
 
+        logger.info("Successfully completed preInvokeWorkflow") ;
+        if (initResult == null) {
+            logger.info("initResult is null .....") ;
+        } else {
+            logger.info("initResult is not null ....." + initResult.getWorkflowId()) ;
+        }
         return initResult;
     }
 
@@ -156,7 +161,6 @@ public class DBOSExecutor {
             } else if  (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
                 logger.warn("Idempotency check not impl for cancelled");
             }
-
 
             logger.info("Before executing workflow " + DBOSContextHolder.get().getWorkflowId()) ;
             //T result = function.execute();  // invoke the lambda
@@ -316,7 +320,7 @@ public class DBOSExecutor {
         return new WorkflowHandleDBPoll(workflowId, systemDatabase) ;
     }
 
-    public void executeWorkflowById(String workflowId) {
+    public WorkflowHandle executeWorkflowById(String workflowId) {
 
         WorkflowStatus status = systemDatabase.getWorkflowStatus(workflowId) ;
 
@@ -327,16 +331,17 @@ public class DBOSExecutor {
 
         Object[] inputs = status.getInput() ;
         WorkflowFunctionWrapper functionWrapper = workflowRegistry.get(status.getName()) ;
-        String className = "todo_store_get_wrapper";
 
-
+        WorkflowHandle handle = null ;
         try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
             try {
-                submitWorkflow(status.getName(), className, functionWrapper.target, inputs, functionWrapper.function);
+                handle = submitWorkflow(status.getName(), functionWrapper.targetClassName, functionWrapper.target, inputs, functionWrapper.function);
             } catch (Throwable t) {
                 logger.error(String.format("Error executing workflow by id : %s", workflowId) , t);
             }
         }
+
+        return handle ;
 
     }
 

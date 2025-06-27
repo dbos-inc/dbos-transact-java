@@ -7,4 +7,7 @@ public class Constants {
     public static final String POSTGRES_DEFAULT_DB = "postgres";
 
     public static final String POSTGRES_PASSWORD_ENV_VAR = "PGPASSWORD";
+
+    public static final String TEMP_HARDCODED_APP_VERSION = "appversion1";
+    public static final String TEMP_HARDCODED_EXECUTORID = "executorid1";
 }
