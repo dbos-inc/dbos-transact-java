@@ -5,8 +5,10 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.utlils.DBUtils;
 import org.junit.jupiter.api.*;
 
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -18,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class SyncWorkflowTest {
 
     private static DBOSConfig dbosConfig;
+    private static DataSource dataSource ;
     private DBOS dbos ;
     private static SystemDatabase systemDatabase ;
     private DBOSExecutor dbosExecutor;
@@ -55,12 +58,13 @@ public class SyncWorkflowTest {
 
         DBOS.initialize(dbosConfig);
         dbos = DBOS.getInstance();
-        SystemDatabase.initialize(dbosConfig);
+        SyncWorkflowTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        SystemDatabase.initialize(dataSource );
         systemDatabase = SystemDatabase.getInstance();
         this.dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
-        systemDatabase.deleteWorkflowsTestHelper();
+        DBUtils.clearTables(dataSource);
     }
 
     @AfterEach

@@ -68,8 +68,7 @@ class RecoveryServiceTest {
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
-        systemDatabase.deleteOperations();
-        systemDatabase.deleteWorkflowsTestHelper();
+        DBUtils.clearTables(dataSource);
     }
 
     @AfterEach

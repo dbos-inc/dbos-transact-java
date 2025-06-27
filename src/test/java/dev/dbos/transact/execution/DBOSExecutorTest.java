@@ -70,8 +70,7 @@ class DBOSExecutorTest {
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
-        systemDatabase.deleteOperations();
-        systemDatabase.deleteWorkflowsTestHelper();
+        DBUtils.clearTables(dataSource);
     }
 
     @AfterEach

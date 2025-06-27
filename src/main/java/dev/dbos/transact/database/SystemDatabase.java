@@ -643,45 +643,7 @@ public class SystemDatabase {
 
         return results;
     }
-
-    /**
-    *  Helper method for tests
-     *  Should be moved to TestUtils
-     */
-    public void deleteWorkflowsTestHelper() throws SQLException{
-
-        String sql = "delete from dbos.workflow_status";
-
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-            int rowsAffected = pstmt.executeUpdate();
-            logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.workflow_status");
-
-        } catch (SQLException e) {
-            logger.error("Error deleting workflows in test helper: " + e.getMessage());
-            throw e;
-        }
-
-    }
-
-    public void deleteOperations() throws SQLException{
-
-        String sql = "delete from dbos.operation_outputs;";
-
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-            int rowsAffected = pstmt.executeUpdate();
-            logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.operation_outputs");
-
-        } catch (SQLException e) {
-            logger.error("Error deleting workflows in test helper: " + e.getMessage());
-            throw e;
-        }
-
-    }
-
+    
     public StepResult checkStepExecutionTxn(
             String workflowId,
             int functionId,
