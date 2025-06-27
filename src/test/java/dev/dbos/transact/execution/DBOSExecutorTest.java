@@ -4,6 +4,8 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.NonExistentWorkflowException;
+import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
 import dev.dbos.transact.utlils.DBUtils;
 import dev.dbos.transact.workflow.*;
 import org.junit.jupiter.api.AfterEach;
@@ -113,6 +115,76 @@ class DBOSExecutorTest {
 
     }
 
+    @Test
+    void executeWorkflowByIdNonExistent() throws Exception {
+
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
+
+        String result = null ;
+
+        String wfid = "wf-123";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            result = executingService.workflowMethod("test-item");
+        }
+
+        assertEquals("test-itemtest-item", result);
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
+
+
+
+        boolean error = false;
+        try {
+            WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById("wf-124");
+        } catch (Exception e) {
+            error = true;
+            assert e instanceof NonExistentWorkflowException : "Expected NonExistentWorkflowException but got " + e.getClass().getName();
+        }
+
+        assertTrue(error);
+
+    }
+
+    @Test
+    void workflowFunctionNotfound() throws Exception {
+
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
+
+        String result = null ;
+
+        String wfid = "wf-123";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            result = executingService.workflowMethod("test-item");
+        }
+
+        assertEquals("test-itemtest-item", result);
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
+
+        dbos.shutdown(); // clear out the registry
+        startDBOS(); // restart dbos
+
+        boolean error = false;
+        try {
+            WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
+        } catch (Exception e) {
+            error = true;
+            assert e instanceof WorkflowFunctionNotFoundException : "Expected WorkflowFunctionNotfoundException but got " + e.getClass().getName();
+        }
+
+        assertTrue(error);
+
+    }
+
+
     private void setWorkflowState(DataSource ds, String workflowId, String newState) throws SQLException {
 
         String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? WHERE workflow_uuid = ?";
@@ -130,5 +202,16 @@ class DBOSExecutorTest {
             assertEquals(1, rowsAffected);
 
         }
+    }
+
+    void startDBOS() throws SQLException{
+        DBOS.initialize(dbosConfig);
+        dbos = DBOS.getInstance();
+        DBOSExecutorTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        SystemDatabase.initialize(dataSource);
+        systemDatabase = SystemDatabase.getInstance();
+        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
+        dbos.setDbosExecutor(dbosExecutor);
+        dbos.launch();
     }
 }

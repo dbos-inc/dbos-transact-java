@@ -7,6 +7,7 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
+import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -331,6 +332,10 @@ public class DBOSExecutor {
 
         Object[] inputs = status.getInput() ;
         WorkflowFunctionWrapper functionWrapper = workflowRegistry.get(status.getName()) ;
+
+        if (functionWrapper == null) {
+            throw new WorkflowFunctionNotFoundException(workflowId) ;
+        }
 
         WorkflowHandle handle = null ;
         try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
