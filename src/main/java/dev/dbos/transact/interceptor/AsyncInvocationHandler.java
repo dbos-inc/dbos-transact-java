@@ -96,7 +96,6 @@ public class AsyncInvocationHandler implements InvocationHandler {
                 targetClassName,
                 wrapper.target,
                 args,
-                // () -> (Object) method.invoke(target, args)
                 wrapper.function
         );
 

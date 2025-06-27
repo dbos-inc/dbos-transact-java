@@ -12,6 +12,11 @@ public class SetWorkflowID implements AutoCloseable {
     @Override
     public void close() {
         DBOSContextHolder.clear();
+        //TODO : needs some work restore the previous context
+        // Need a SetContext
+        // save the old context
+        // set a new context with new values
+        // on close restore the old context
     }
 }
 

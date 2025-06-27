@@ -94,7 +94,6 @@ public class TransactInvocationHandler implements InvocationHandler {
                 targetClassName,
                 wrapper.target,
                 args,
-                // () -> (Object) method.invoke(target, args),
                 wrapper.function,
                 null
         );
@@ -124,10 +123,6 @@ public class TransactInvocationHandler implements InvocationHandler {
         String msg = String.format("Before : Executing step %s %s",
                 method.getName(), step.name());
         logger.info(msg);
-
-        System.out.println("handle step Args at invoke start: " + Arrays.toString(args));
-        System.out.println("Arg types: " + Arrays.stream(args).map(a -> a != null ? a.getClass().getSimpleName() : "null").collect(Collectors.toList()));
-
 
         Object result = dbosExecutor.runStep(step.name(),
             step.retriesAllowed(),

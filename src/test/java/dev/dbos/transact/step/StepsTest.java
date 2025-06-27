@@ -52,11 +52,6 @@ public class StepsTest {
 
     }
 
-    //@AfterAll
-    /* static void onetimeTearDown() {
-        dbos.shutdown();
-    } */
-
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBOS.initialize(dbosConfig);
@@ -75,7 +70,6 @@ public class StepsTest {
     void afterEachTest() throws SQLException {
         dbos.shutdown();
     }
-
 
     @Test
     public void workflowWithStepsSync() throws SQLException  {

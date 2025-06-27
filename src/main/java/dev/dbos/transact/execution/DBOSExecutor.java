@@ -106,11 +106,6 @@ public class DBOSExecutor {
         }
 
         logger.info("Successfully completed preInvokeWorkflow") ;
-        if (initResult == null) {
-            logger.info("initResult is null .....") ;
-        } else {
-            logger.info("initResult is not null ....." + initResult.getWorkflowId()) ;
-        }
         return initResult;
     }
 
@@ -133,7 +128,6 @@ public class DBOSExecutor {
                              String targetClassName,
                              Object target,
                              Object[] args,
-                             // DBOSFunction<T> function,
                              WorkflowFunction function,
                              String workflowId) throws Throwable {
 
@@ -184,7 +178,6 @@ public class DBOSExecutor {
                                                 String targetClassName,
                                                 Object target,
                                                 Object[] args,
-                                                // DBOSFunction<T> function) throws Throwable {
                                                 WorkflowFunction function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
@@ -243,9 +236,6 @@ public class DBOSExecutor {
                              Object[] args,
                              DBOSFunction<T> function
                          ) throws Throwable {
-
-        System.out.println("runStep Args at invoke start: " + Arrays.toString(args));
-        System.out.println("Arg types: " + Arrays.stream(args).map(a -> a != null ? a.getClass().getSimpleName() : "null").collect(Collectors.toList()));
 
 
         DBOSContext ctx = DBOSContextHolder.get();

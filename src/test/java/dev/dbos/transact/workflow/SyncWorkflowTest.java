@@ -48,21 +48,7 @@ public class SyncWorkflowTest {
             stmt.execute(createDbSql);
         }
 
-        /*
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
-        SystemDatabase.initialize(dbosConfig);
-        systemDatabase = SystemDatabase.getInstance();
-        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
-         dbos.launch(); */
-
     }
-
-    // @AfterAll
-    /* static void onetimeTearDown() {
-        dbos.shutdown();
-    } */
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
