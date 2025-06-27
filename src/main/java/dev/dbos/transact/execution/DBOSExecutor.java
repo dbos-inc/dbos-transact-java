@@ -6,6 +6,7 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
@@ -22,15 +23,11 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.stream.Collectors;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
@@ -64,10 +61,10 @@ public class DBOSExecutor {
     }
 
 
-    public SystemDatabase.WorkflowInitResult preInvokeWorkflow(String workflowName,
-                                                               String className,
-                                                               Object[] inputs,
-                                                               String workflowId) {
+    public WorkflowInitResult preInvokeWorkflow(String workflowName,
+                                                String className,
+                                                Object[] inputs,
+                                                String workflowId) {
 
         logger.info("In preInvokeWorkflow with " + workflowId) ;
 
@@ -97,7 +94,7 @@ public class DBOSExecutor {
                         1,
                         inputString) ;
 
-        SystemDatabase.WorkflowInitResult initResult = null;
+        WorkflowInitResult initResult = null;
         try {
              initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
         } catch (Exception e) {
@@ -145,7 +142,7 @@ public class DBOSExecutor {
             }
         }
 
-        SystemDatabase.WorkflowInitResult initResult = null;
+        WorkflowInitResult initResult = null;
         try {
 
             initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid);
