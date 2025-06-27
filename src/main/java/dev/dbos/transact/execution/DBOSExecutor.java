@@ -1,5 +1,6 @@
 package dev.dbos.transact.execution;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -86,8 +87,8 @@ public class DBOSExecutor {
                         null,
                         null,
                         null,
-                        "executor_id_todo",
-                        "app_version_todo",
+                        Constants.TEMP_HARDCODED_EXECUTORID,
+                        Constants.TEMP_HARDCODED_APP_VERSION,
                         null,
                         0,
                         300000,

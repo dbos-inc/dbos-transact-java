@@ -2,11 +2,13 @@ package dev.dbos.transact.execution;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class RecoveryService {
@@ -20,23 +22,33 @@ public class RecoveryService {
         this.dbosExecutor = dbosExecutor ;
     }
 
-    public void recover_workflows() {
+    public void recoverWorkflows() {
 
         try {
-            List<GetPendingWorkflowsOutput> pendingWorkflowsOutputs = systemDatabase
-                    .getPendingWorkflows(Constants.TEMP_HARDCODED_EXECUTORID,
-                            Constants.TEMP_HARDCODED_APP_VERSION);
-
-
-            for (GetPendingWorkflowsOutput pendingW : pendingWorkflowsOutputs) {
-                logger.info("Recovery executing workflow " + pendingW.getWorkflowUuid());
-                dbosExecutor.executeWorkflowById(pendingW.getWorkflowUuid());
-            }
-
-
+            List<GetPendingWorkflowsOutput> pendingWorkflowsOutputs = getPendingWorkflows();
+            recoverWorkflows(pendingWorkflowsOutputs);
         } catch(SQLException e) {
             logger.error("Recovery could not complete due to SQL error",e);
         }
 
+    }
+
+    public List<WorkflowHandle> recoverWorkflows(List<GetPendingWorkflowsOutput> pendingWorkflowsOutputs )  {
+
+        List<WorkflowHandle> handles = new ArrayList<>();
+
+        for (GetPendingWorkflowsOutput pendingW : pendingWorkflowsOutputs) {
+            logger.info("Recovery executing workflow " + pendingW.getWorkflowUuid());
+            handles.add(dbosExecutor.executeWorkflowById(pendingW.getWorkflowUuid()));
+        }
+
+        return handles ;
+
+    }
+
+    public List<GetPendingWorkflowsOutput> getPendingWorkflows() throws SQLException {
+        return systemDatabase
+                .getPendingWorkflows(Constants.TEMP_HARDCODED_EXECUTORID,
+                        Constants.TEMP_HARDCODED_APP_VERSION);
     }
 }
