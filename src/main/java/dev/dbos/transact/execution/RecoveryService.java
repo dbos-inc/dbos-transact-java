@@ -48,7 +48,7 @@ public class RecoveryService {
 
     public List<GetPendingWorkflowsOutput> getPendingWorkflows() throws SQLException {
         return systemDatabase
-                .getPendingWorkflows(Constants.TEMP_HARDCODED_EXECUTORID,
-                        Constants.TEMP_HARDCODED_APP_VERSION);
+                .getPendingWorkflows(Constants.DEFAULT_EXECUTORID,
+                        Constants.DEFAULT_APP_VERSION);
     }
 }
