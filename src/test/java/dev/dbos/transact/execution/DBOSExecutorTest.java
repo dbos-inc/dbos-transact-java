@@ -110,8 +110,6 @@ class DBOSExecutorTest {
         wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
-
-
     }
 
     @Test
@@ -183,6 +181,50 @@ class DBOSExecutorTest {
 
     }
 
+    @Test
+    public void executeWithStep() throws Exception {
+
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
+
+        // Needed to call the step
+        executingService.setExecutingService(executingService);
+
+        String result = null ;
+
+        String wfid = "wf-123";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            result = executingService.workflowMethodWithStep("test-item");
+        }
+
+        assertEquals("test-itemstepOne", result);
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid) ;
+        assertEquals(1, steps.size());
+
+        setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+        deleteSteps(dataSource, wfid);
+        steps = systemDatabase.listWorkflowSteps(wfid) ;
+        assertEquals(0, steps.size());
+
+        WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
+
+        result = handle.getResult();
+        assertEquals("test-itemstepOne", result);
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus()) ;
+
+        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
+        steps = systemDatabase.listWorkflowSteps(wfid) ;
+        assertEquals(1, steps.size());
+
+    }
+
 
     private void setWorkflowState(DataSource ds, String workflowId, String newState) throws SQLException {
 
@@ -194,6 +236,23 @@ class DBOSExecutorTest {
             pstmt.setString(1, newState);
             pstmt.setLong(2, Instant.now().toEpochMilli());
             pstmt.setString(3, workflowId);
+
+            // Execute the update and get the number of rows affected
+            int rowsAffected = pstmt.executeUpdate();
+
+            assertEquals(1, rowsAffected);
+
+        }
+    }
+
+    private void deleteSteps(DataSource ds, String workflowId) throws SQLException {
+
+        String sql = "DELETE from dbos.operation_outputs WHERE workflow_uuid = ?";
+
+        try (Connection connection = ds.getConnection();
+             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+            pstmt.setString(1, workflowId);
 
             // Execute the update and get the number of rows affected
             int rowsAffected = pstmt.executeUpdate();
