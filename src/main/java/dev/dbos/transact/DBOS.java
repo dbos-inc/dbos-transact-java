@@ -6,6 +6,7 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
 import dev.dbos.transact.migrations.DatabaseMigrator;
+import dev.dbos.transact.queue.Queue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,6 +97,63 @@ public class DBOS {
                     DBOS.getInstance().dbosExecutor
             ) ;
 
+        }
+    }
+
+    public static class QueueBuilder {
+
+        private final String name;
+
+        private Integer concurrency = null;
+        private Integer workerConcurrency = null;
+        private Integer limit = null;
+        private Double period = null;
+        private boolean priorityEnabled = false;
+
+        /**
+         * Constructor for the Builder, taking the required 'name' field.
+         * @param name The name of the queue.
+         */
+        public QueueBuilder(String name) {
+            this.name = name;
+        }
+
+        public QueueBuilder concurrency(Integer concurrency) {
+            this.concurrency = concurrency;
+            return this;
+        }
+
+        public QueueBuilder workerConcurrency(Integer workerConcurrency) {
+            this.workerConcurrency = workerConcurrency;
+            return this;
+        }
+
+        public QueueBuilder limit(Integer limit) {
+            this.limit = limit;
+            return this;
+        }
+
+        public QueueBuilder period(Double period) {
+            this.period = period;
+            return this;
+        }
+
+        public QueueBuilder priorityEnabled(boolean priorityEnabled) {
+            this.priorityEnabled = priorityEnabled;
+            return this;
+        }
+
+        /**
+         * Builds and returns a new WorkflowQueue instance.
+         * The constructor's validation logic is executed here.
+         * @return A new WorkflowQueue instance.
+         * @throws IllegalArgumentException if validation rules are violated.
+         */
+        public Queue build() {
+
+            // check queue is not registered
+
+            return Queue.createQueue(name, concurrency, workerConcurrency,limit, period, priorityEnabled);
         }
     }
 

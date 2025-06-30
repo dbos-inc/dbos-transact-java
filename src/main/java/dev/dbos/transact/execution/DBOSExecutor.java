@@ -11,6 +11,8 @@ import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.queue.QueueRegistry;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -37,6 +39,7 @@ public class DBOSExecutor {
     private SystemDatabase systemDatabase;
     private ExecutorService executorService ;
     private WorkflowRegistry workflowRegistry ;
+    private QueueRegistry queueRegistry ;
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
     public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
@@ -45,6 +48,7 @@ public class DBOSExecutor {
         this.executorService = Executors.newCachedThreadPool();
         System.out.println("Creating new registry");
         this.workflowRegistry = new WorkflowRegistry() ;
+        this.queueRegistry = new QueueRegistry();
     }
 
     public void shutdown() {
@@ -54,6 +58,10 @@ public class DBOSExecutor {
 
     public void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
         workflowRegistry.register(workflowName, target, targetClassName, method);
+    }
+
+    public void registerQueue(String queueName, Queue queue) {
+        queueRegistry.register(queueName, queue);
     }
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
