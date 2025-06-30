@@ -6,6 +6,8 @@ import dev.dbos.transact.workflow.Workflow;
 public class ExecutingServiceImpl implements ExecutingService {
 
     private ExecutingService executingService;
+    public static int step1Count = 0 ;
+    public static int step2Count = 0 ;
 
     public void setExecutingService(ExecutingService service) {
         this.executingService = service ;
@@ -18,12 +20,20 @@ public class ExecutingServiceImpl implements ExecutingService {
 
     @Workflow(name = "workflowMethodWithStep")
     public String workflowMethodWithStep(String input) {
-        String stepResponse = executingService.simpleStep("stepOne");
-        return input+stepResponse;
+        String step1Response = executingService.stepOne("stepOne");
+        String step2Response = executingService.stepTwo("stepTwo");
+        return input+step1Response+step2Response;
     }
 
-    @Step(name = "simpleStep")
-    public String simpleStep(String input)  {
+    @Step(name = "stepOne")
+    public String stepOne(String input)  {
+        ++step1Count;
+        return input ;
+    }
+
+    @Step(name = "stepTwo")
+    public String stepTwo(String input)  {
+        ++step2Count;
         return input ;
     }
 

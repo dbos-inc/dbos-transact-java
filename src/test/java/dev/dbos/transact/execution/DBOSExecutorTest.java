@@ -199,13 +199,13 @@ class DBOSExecutorTest {
             result = executingService.workflowMethodWithStep("test-item");
         }
 
-        assertEquals("test-itemstepOne", result);
+        assertEquals("test-itemstepOnestepTwo", result);
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
         List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid) ;
-        assertEquals(1, steps.size());
+        assertEquals(2, steps.size());
 
         setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
         deleteSteps(dataSource, wfid);
@@ -215,15 +215,66 @@ class DBOSExecutorTest {
         WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
 
         result = handle.getResult();
-        assertEquals("test-itemstepOne", result);
+        assertEquals("test-itemstepOnestepTwo", result);
         assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus()) ;
 
         wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
         steps = systemDatabase.listWorkflowSteps(wfid) ;
-        assertEquals(1, steps.size());
+        assertEquals(2, steps.size());
 
     }
+
+    @Test
+    public void ReExecuteWithStepTwoOnly() throws Exception {
+
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
+
+        // Needed to call the step
+        executingService.setExecutingService(executingService);
+
+        String result = null ;
+
+        String wfid = "wf-123";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            result = executingService.workflowMethodWithStep("test-item");
+        }
+
+        assertEquals("test-itemstepOnestepTwo", result);
+        assertEquals(1, ExecutingServiceImpl.step1Count) ;
+        assertEquals(1, ExecutingServiceImpl.step2Count) ;
+
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid) ;
+        assertEquals(2, steps.size());
+
+        setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+        deleteStepTwo(dataSource, wfid,1);
+        steps = systemDatabase.listWorkflowSteps(wfid) ;
+        assertEquals(1, steps.size());
+
+        WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
+
+        result = handle.getResult();
+        assertEquals("test-itemstepOnestepTwo", result);
+        assertEquals(1, ExecutingServiceImpl.step1Count) ;
+        assertEquals(2, ExecutingServiceImpl.step2Count) ;
+
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus()) ;
+
+        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
+        steps = systemDatabase.listWorkflowSteps(wfid) ;
+        assertEquals(2, steps.size());
+
+    }
+
 
 
     private void setWorkflowState(DataSource ds, String workflowId, String newState) throws SQLException {
@@ -253,6 +304,25 @@ class DBOSExecutorTest {
              PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
             pstmt.setString(1, workflowId);
+
+            // Execute the update and get the number of rows affected
+            int rowsAffected = pstmt.executeUpdate();
+
+            assertEquals(2, rowsAffected);
+
+        }
+    }
+
+    private void deleteStepTwo(DataSource ds, String workflowId, int function_id) throws SQLException {
+
+        String sql = "DELETE from dbos.operation_outputs WHERE workflow_uuid = ? and function_id = ?;";
+
+        try (Connection connection = ds.getConnection();
+             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+            pstmt.setString(1, workflowId);
+            pstmt.setInt(2, function_id);
+
 
             // Execute the update and get the number of rows affected
             int rowsAffected = pstmt.executeUpdate();
