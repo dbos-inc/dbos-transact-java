@@ -5,7 +5,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.utlils.DBUtils;
+import dev.dbos.transact.utils.DBUtils;
 import org.junit.jupiter.api.*;
 
 import javax.sql.DataSource;

@@ -6,7 +6,7 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
-import dev.dbos.transact.utlils.DBUtils;
+import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;

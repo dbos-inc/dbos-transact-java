@@ -1,4 +1,4 @@
-package dev.dbos.transact.utlils;
+package dev.dbos.transact.utils;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
