@@ -1,6 +1,7 @@
 package dev.dbos.transact.interceptor;
 
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Transaction;
 import dev.dbos.transact.workflow.Workflow;
@@ -27,6 +28,19 @@ public class AsyncInvocationHandler implements InvocationHandler {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
+
+        // Register all @Workflow methods
+        Method[] methods = implementation.getClass().getDeclaredMethods();
+        for (Method method : methods) {
+            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
+            if (wfAnnotation != null) {
+                String workflowName = wfAnnotation.name().isEmpty() ? method.getName() : wfAnnotation.name();
+                method.setAccessible(true); // In case it's not public
+
+                executor.registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
+            }
+        }
+
 
         T proxy =  (T) Proxy.newProxyInstance(
                 interfaceClass.getClassLoader(),
@@ -72,12 +86,17 @@ public class AsyncInvocationHandler implements InvocationHandler {
 
         logger.info(msg);
 
+        WorkflowFunctionWrapper wrapper = dbosExecutor.getWorkflow(workflowName);
+        if (wrapper == null) {
+            throw new IllegalStateException("Workflow not registered: " + workflowName);
+        }
+
         dbosExecutor.submitWorkflow(
                 workflowName,
                 targetClassName,
-                method.getName(),
+                wrapper.target,
                 args,
-                () -> (Object) method.invoke(target, args)
+                wrapper.function
         );
 
         return getDefaultValue(method.getReturnType()) ; // always return null or default

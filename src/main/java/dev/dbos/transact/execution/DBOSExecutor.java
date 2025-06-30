@@ -1,10 +1,15 @@
 package dev.dbos.transact.execution;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSException;
+import dev.dbos.transact.exceptions.NonExistentWorkflowException;
+import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -17,8 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
-import java.sql.SQLException;
-import java.util.Optional;
+import java.lang.reflect.Method;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -32,27 +36,37 @@ public class DBOSExecutor {
     private DBOSConfig config;
     private SystemDatabase systemDatabase;
     private ExecutorService executorService ;
+    private WorkflowRegistry workflowRegistry ;
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
     public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
         this.config = config;
         this.systemDatabase = sysdb ;
         this.executorService = Executors.newCachedThreadPool();
-
+        System.out.println("Creating new registry");
+        this.workflowRegistry = new WorkflowRegistry() ;
     }
 
     public void shutdown() {
+        workflowRegistry = null ;
         systemDatabase.destroy() ;
     }
 
-    public SystemDatabase.WorkflowInitResult preInvokeWorkflow(String workflowName,
-                                                               String interfaceName,
-                                                               String className,
-                                                               String methodName,
-                                                               Object[] inputs,
-                                                               String workflowId) {
+    public void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
+        workflowRegistry.register(workflowName, target, targetClassName, method);
+    }
 
-        logger.info("In preInvokeWorkflow") ;
+    public WorkflowFunctionWrapper getWorkflow(String workflowName) {
+        return workflowRegistry.get(workflowName);
+    }
+
+
+    public WorkflowInitResult preInvokeWorkflow(String workflowName,
+                                                String className,
+                                                Object[] inputs,
+                                                String workflowId) {
+
+        logger.info("In preInvokeWorkflow with " + workflowId) ;
 
         String inputString = JSONUtil.serialize(inputs) ;
 
@@ -70,8 +84,8 @@ public class DBOSExecutor {
                         null,
                         null,
                         null,
-                        null,
-                        null,
+                        Constants.DEFAULT_EXECUTORID,
+                        Constants.DEFAULT_APP_VERSION,
                         null,
                         0,
                         300000,
@@ -80,14 +94,15 @@ public class DBOSExecutor {
                         1,
                         inputString) ;
 
-        SystemDatabase.WorkflowInitResult initResult = null;
+        WorkflowInitResult initResult = null;
         try {
              initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
-        } catch (SQLException e) {
+        } catch (Exception e) {
             logger.error("Error inserting into workflow_status", e);
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(),e) ;
         }
 
+        logger.info("Successfully completed preInvokeWorkflow") ;
         return initResult;
     }
 
@@ -108,9 +123,9 @@ public class DBOSExecutor {
 
     public <T> T runWorkflow(String workflowName,
                              String targetClassName,
-                             String methodName,
+                             Object target,
                              Object[] args,
-                             DBOSFunction<T> function,
+                             WorkflowFunction function,
                              String workflowId) throws Throwable {
 
         String wfid = workflowId ;
@@ -127,11 +142,10 @@ public class DBOSExecutor {
             }
         }
 
-        SystemDatabase.WorkflowInitResult initResult = null;
+        WorkflowInitResult initResult = null;
         try {
 
-            initResult = preInvokeWorkflow(workflowName, null,
-                                                            targetClassName, methodName, args, wfid);
+            initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid);
 
             if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
                 return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
@@ -142,7 +156,9 @@ public class DBOSExecutor {
             }
 
             logger.info("Before executing workflow " + DBOSContextHolder.get().getWorkflowId()) ;
-            T result = function.execute();  // invoke the lambda
+            //T result = function.execute();  // invoke the lambda
+            @SuppressWarnings("unchecked")
+            T result = (T) function.invoke(target, args);
             logger.info("After: Workflow completed successfully");
             postInvokeWorkflow(initResult.getWorkflowId(), result);
             return result;
@@ -157,9 +173,9 @@ public class DBOSExecutor {
 
     public <T> WorkflowHandle<T> submitWorkflow(String workflowName,
                                                 String targetClassName,
-                                                String methodName,
+                                                Object target,
                                                 Object[] args,
-                                                DBOSFunction<T> function) throws Throwable {
+                                                WorkflowFunction function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId() ;
@@ -183,7 +199,7 @@ public class DBOSExecutor {
 
                 result = runWorkflow(workflowName,
                         targetClassName,
-                        methodName,
+                        target,
                         args,
                         function,
                         // wfId); doing it the hard way
@@ -291,6 +307,42 @@ public class DBOSExecutor {
      */
     public WorkflowHandle retrieveWorkflow(String workflowId) {
         return new WorkflowHandleDBPoll(workflowId, systemDatabase) ;
+    }
+
+    public WorkflowHandle executeWorkflowById(String workflowId) {
+
+        WorkflowStatus status = systemDatabase.getWorkflowStatus(workflowId) ;
+
+        if (status == null) {
+            logger.error("Workflow not found ", workflowId);
+            throw new NonExistentWorkflowException(workflowId) ;
+        }
+
+        Object[] inputs = status.getInput() ;
+        WorkflowFunctionWrapper functionWrapper = workflowRegistry.get(status.getName()) ;
+
+        if (functionWrapper == null) {
+            throw new WorkflowFunctionNotFoundException(workflowId) ;
+        }
+
+        WorkflowHandle handle = null ;
+        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+            try {
+                handle = submitWorkflow(status.getName(), functionWrapper.targetClassName, functionWrapper.target, inputs, functionWrapper.function);
+            } catch (Throwable t) {
+                logger.error(String.format("Error executing workflow by id : %s", workflowId) , t);
+            }
+        }
+
+        return handle ;
+
+    }
+
+    public void submit(Runnable task) {
+
+        ContextAwareRunnable contextAwareTask = new ContextAwareRunnable(DBOSContextHolder.get().copy(),task);
+        executorService.submit(contextAwareTask);
+
     }
 
 }

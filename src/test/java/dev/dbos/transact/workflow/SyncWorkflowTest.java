@@ -5,11 +5,10 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import dev.dbos.transact.utils.DBUtils;
+import org.junit.jupiter.api.*;
 
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -21,9 +20,10 @@ import static org.junit.jupiter.api.Assertions.*;
 public class SyncWorkflowTest {
 
     private static DBOSConfig dbosConfig;
-    private static DBOS dbos ;
+    private static DataSource dataSource ;
+    private DBOS dbos ;
     private static SystemDatabase systemDatabase ;
-    private static DBOSExecutor dbosExecutor;
+    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -51,24 +51,25 @@ public class SyncWorkflowTest {
             stmt.execute(createDbSql);
         }
 
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
-        SystemDatabase.initialize(dbosConfig);
-        systemDatabase = SystemDatabase.getInstance();
-        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
-        dbos.launch();
-
-    }
-
-    @AfterAll
-    static void onetimeTearDown() {
-        dbos.shutdown();
     }
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
-        systemDatabase.deleteWorkflowsTestHelper();
+
+        DBOS.initialize(dbosConfig);
+        dbos = DBOS.getInstance();
+        SyncWorkflowTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        SystemDatabase.initialize(dataSource );
+        systemDatabase = SystemDatabase.getInstance();
+        this.dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
+        dbos.setDbosExecutor(dbosExecutor);
+        dbos.launch();
+        DBUtils.clearTables(dataSource);
+    }
+
+    @AfterEach
+    void afterEachTest() throws SQLException {
+        dbos.shutdown();
     }
 
 

@@ -1,6 +1,7 @@
 package dev.dbos.transact.interceptor;
 
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Transaction;
 import dev.dbos.transact.workflow.Workflow;
@@ -11,6 +12,8 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 public class TransactInvocationHandler implements InvocationHandler {
 
@@ -24,6 +27,18 @@ public class TransactInvocationHandler implements InvocationHandler {
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation, DBOSExecutor executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
+        }
+
+        // Register all @Workflow methods
+        Method[] methods = implementation.getClass().getDeclaredMethods();
+        for (Method method : methods) {
+            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
+            if (wfAnnotation != null) {
+                String workflowName = wfAnnotation.name().isEmpty() ? method.getName() : wfAnnotation.name();
+                method.setAccessible(true); // In case it's not public
+
+                executor.registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
+            }
         }
 
         T proxy =  (T) Proxy.newProxyInstance(
@@ -69,13 +84,17 @@ public class TransactInvocationHandler implements InvocationHandler {
 
         logger.info(msg);
 
+        WorkflowFunctionWrapper wrapper = dbosExecutor.getWorkflow(workflowName);
+        if (wrapper == null) {
+            throw new IllegalStateException("Workflow not registered: " + workflowName);
+        }
 
         return dbosExecutor.runWorkflow(
                 workflowName,
                 targetClassName,
-                method.getName(),
+                wrapper.target,
                 args,
-                () -> (Object) method.invoke(target, args),
+                wrapper.function,
                 null
         );
 
