@@ -48,6 +48,7 @@ public class DBOSExecutor {
         this.config = config;
         this.systemDatabase = sysdb ;
         this.executorService = Executors.newCachedThreadPool();
+        // this.executorService = Executors.newFixedThreadPool(20);
         System.out.println("Creating new registry");
         this.workflowRegistry = new WorkflowRegistry() ;
         // this.queueRegistry = new QueueRegistry();
@@ -77,7 +78,7 @@ public class DBOSExecutor {
                                                 String workflowId,
                                                 String queueName) {
 
-        logger.info("In preInvokeWorkflow with " + workflowId) ;
+        // logger.info("In preInvokeWorkflow with " + workflowId) ;
 
         // TODO: queue deduplication and priority
 
@@ -117,7 +118,7 @@ public class DBOSExecutor {
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(),e) ;
         }
 
-        logger.info("Successfully completed preInvokeWorkflow") ;
+        // logger.info("Successfully completed preInvokeWorkflow") ;
         return initResult;
     }
 
@@ -168,11 +169,11 @@ public class DBOSExecutor {
                 logger.warn("Idempotency check not impl for cancelled");
             }
 
-            logger.info("Before executing workflow " + DBOSContextHolder.get().getWorkflowId()) ;
+            // logger.info("Before executing workflow " + DBOSContextHolder.get().getWorkflowId()) ;
             //T result = function.execute();  // invoke the lambda
             @SuppressWarnings("unchecked")
             T result = (T) function.invoke(target, args);
-            logger.info("After: Workflow completed successfully");
+            // logger.info("After: Workflow completed successfully");
             postInvokeWorkflow(initResult.getWorkflowId(), result);
             return result;
         } catch (Throwable e) {
@@ -206,7 +207,7 @@ public class DBOSExecutor {
             // Doing this on purpose to ensure that we have the correct context
             String id = DBOSContextHolder.get().getWorkflowId();
 
-            logger.info("Callable executing the workflow.. " + id);
+            // logger.info("Callable executing the workflow.. " + id);
 
             try {
 

@@ -65,18 +65,14 @@ public class QueueService {
 
                 List<Queue> queuesList = queueRegistry.getAllQueuesSnapshot();
 
-                logger.info("Got queues " + queuesList.size()) ;
-
                 for (Queue queue : queuesList) {
 
                     try {
 
                         List<String> workflowIds = systemDatabase.getAndStartQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION);
 
-                        logger.info("Got workflows " + workflowIds.size());
-
                         for (String id : workflowIds) {
-                            logger.debug("Submitting queued workflow for execution " + id);
+                            // logger.debug("Submitting queued workflow for execution " + id);
                             dbosExecutor.executeWorkflowById(id);
                         }
 

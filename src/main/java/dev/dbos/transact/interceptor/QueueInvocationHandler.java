@@ -79,12 +79,6 @@ public class QueueInvocationHandler implements InvocationHandler {
 
         String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
 
-        String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
-                workflowName,
-                workflow.timeout());
-
-        logger.info(msg);
-
         WorkflowFunctionWrapper wrapper = dbosExecutor.getWorkflow(workflowName);
         if (wrapper == null) {
             throw new IllegalStateException("Workflow not registered: " + workflowName);

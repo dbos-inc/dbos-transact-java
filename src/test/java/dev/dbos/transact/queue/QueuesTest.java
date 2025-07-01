@@ -20,9 +20,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class QueuesTest {
 
@@ -221,6 +223,72 @@ public class QueuesTest {
         Integer result2 = handle2.getResult();
         assertEquals(50,result2) ;
         assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
+    }
+
+    @Test
+    public void testLimiter() throws Exception {
+
+        int limit = 5;
+        double period = 7;
+
+        Queue limitQ = new DBOS.QueueBuilder("limitQueue")
+                .limit(limit, period)
+                .concurrency(1)
+                .workerConcurrency(1)
+                .build();
+
+        ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>()
+                .interfaceClass(ServiceQ.class)
+                .implementation(new ServiceQImpl())
+                .queue(limitQ)
+                .build() ;
+
+        int numWaves = 3;
+        int numTasks = numWaves * limit ;
+        List<WorkflowHandle<Double>> handles = new ArrayList<>() ;
+        List<Double> times = new ArrayList<>();
+
+        for (int i = 0 ; i < numTasks ; i++) {
+            String id = "id"+i ;
+            try (SetWorkflowID ctx = new SetWorkflowID(id)) {
+                serviceQ.limitWorkflow("abc","123");
+            }
+            handles.add(dbosExecutor.retrieveWorkflow(id));
+        }
+
+        for (WorkflowHandle<Double> h : handles) {
+            double result = h.getResult() ;
+            logger.info(String.valueOf(result));
+            times.add(result);
+        }
+
+        double waveTolerance = 1.5;
+        for (int wave = 0; wave < numWaves; wave++) {
+            for (int i = wave * limit; i < (wave + 1) * limit - 1; i++) {
+                double diff = times.get(i + 1) - times.get(i);
+                logger.info(String.format("Wave %d, Task %d-%d: Time diff %.3f", wave, i, i+1, diff));
+                assertTrue(diff < waveTolerance,
+                        String.format("Wave %d: Tasks %d and %d should start close together. Diff: %.3f", wave, i, i + 1, diff));
+            }
+        }
+        logger.info("Verified intra-wave timing.");
+
+        double periodTolerance = 0.5;
+        for (int wave = 0; wave < numWaves - 1; wave++) {
+            double startOfNextWave = times.get(limit * (wave + 1));
+            double startOfCurrentWave = times.get(limit * wave);
+            double gap = startOfNextWave - startOfCurrentWave;
+            logger.info(String.format("Gap between Wave %d and %d: %.3f", wave, wave+1, gap));
+            assertTrue(gap > period - periodTolerance,
+                    String.format("Gap between wave %d and %d should be at least %.3f. Actual: %.3f", wave, wave + 1, period - periodTolerance, gap));
+            assertTrue(gap < period + periodTolerance,
+                    String.format("Gap between wave %d and %d should be at most %.3f. Actual: %.3f", wave, wave + 1, period + periodTolerance, gap));
+        }
+
+        for (WorkflowHandle<Double> h : handles) {
+            assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
+        }
+
     }
 
 }
