@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -29,6 +30,7 @@ public class SystemDatabase {
     private DataSource dataSource ;
     private WorkflowDAO workflowDAO;
     private StepsDAO stepsDAO ;
+    private QueuesDAO queuesDAO;
 
     private SystemDatabase(DBOSConfig cfg) {
         config = cfg ;
@@ -43,6 +45,7 @@ public class SystemDatabase {
         createDataSource(dbName);
         stepsDAO = new StepsDAO(dataSource) ;
         workflowDAO = new WorkflowDAO(dataSource) ;
+        queuesDAO = new QueuesDAO(dataSource) ;
     }
 
     private SystemDatabase(DataSource ds) {
@@ -201,6 +204,10 @@ public class SystemDatabase {
 
         return workflowDAO.awaitWorkflowResult(workflowId) ;
 
+    }
+
+    public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId, String appVersion) throws SQLException {
+        return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
     }
 
     private void createDataSource(String dbName) {

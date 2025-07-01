@@ -5,23 +5,23 @@ import java.util.Objects;
 public class Queue {
     private final String name;
     private final int concurrency;
-    private final Integer workerConcurrency;
-    private final Integer limit;
-    private final Double period;
+    private final int workerConcurrency;
+    // private final int limit;
+    // private final double period;
+    private RateLimit rateLimit;
     private final boolean priorityEnabled;
 
-    private Queue(String name, int concurrency, int workerConcurrency, int limit, Double period, boolean priorityEnabled) {
+    private Queue(String name, int concurrency, int workerConcurrency, RateLimit limit, boolean priorityEnabled) {
         this.name = name;
         this.concurrency = concurrency;
         this.workerConcurrency = workerConcurrency;
-        this.limit = limit;
-        this.period = period;
+        this.rateLimit = limit;
         this.priorityEnabled = priorityEnabled;
 
 
     }
 
-    public static Queue createQueue(String name, int concurrency, int workerConcurrency, int limit, Double period, boolean priorityEnabled) {
+    public static Queue createQueue(String name, int concurrency, int workerConcurrency, RateLimit limit, boolean priorityEnabled) {
 
         if (workerConcurrency > concurrency) {
             throw new IllegalArgumentException(
@@ -29,16 +29,19 @@ public class Queue {
             );
         }
 
-        return new Queue(name, concurrency, workerConcurrency, limit, period, priorityEnabled) ;
+        return new Queue(name, concurrency, workerConcurrency, limit, priorityEnabled) ;
 
     }
 
     public String getName() { return name; }
     public Integer getConcurrency() { return concurrency; }
     public Integer getWorkerConcurrency() { return workerConcurrency; }
-    public Integer getLimit() { return limit; }
-    public Double getPeriod() { return period; }
+    public RateLimit getRateLimit() { return rateLimit; }
     public boolean isPriorityEnabled() { return priorityEnabled; }
+
+    public boolean hasLimiter() {
+        return rateLimit != null;
+    }
 
     @Override
     public boolean equals(Object o) {
@@ -49,13 +52,12 @@ public class Queue {
                 Objects.equals(name, that.name) &&
                 Objects.equals(concurrency, that.concurrency) &&
                 Objects.equals(workerConcurrency, that.workerConcurrency) &&
-                Objects.equals(limit, that.limit) &&
-                Objects.equals(period, that.period);
+                Objects.equals(rateLimit, that.rateLimit) ;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, concurrency, workerConcurrency, limit, period, priorityEnabled);
+        return Objects.hash(name, concurrency, workerConcurrency, rateLimit.getLimit(), rateLimit.getPeriod(), priorityEnabled);
     }
 
     @Override
@@ -64,8 +66,8 @@ public class Queue {
                 "name='" + name + '\'' +
                 ", concurrency=" + concurrency +
                 ", workerConcurrency=" + workerConcurrency +
-                ", limit=" + limit +
-                ", period=" + period +
+                ", limit=" + rateLimit.getLimit() +
+                ", period=" + rateLimit.getPeriod() +
                 ", priorityEnabled=" + priorityEnabled +
                 '}';
     }

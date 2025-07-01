@@ -4,9 +4,12 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
+import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
 import dev.dbos.transact.migrations.DatabaseMigrator;
 import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.queue.QueueService;
+import dev.dbos.transact.queue.RateLimit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +23,7 @@ public class DBOS {
 
     private final DBOSConfig config;
     private DBOSExecutor dbosExecutor  ;
+    private QueueService queueService ;
 
     private DBOS(DBOSConfig config) {
         this.config = config;
@@ -62,6 +66,7 @@ public class DBOS {
         private Class<T> interfaceClass;
         private Object implementation;
         private boolean async ;
+        private Queue queue;
 
         public WorkflowBuilder<T> interfaceClass(Class<T> iface) {
             this.interfaceClass = iface;
@@ -78,6 +83,11 @@ public class DBOS {
             return this;
         }
 
+        public WorkflowBuilder<T> queue(Queue queue) {
+            this.queue = queue;
+            return this;
+        }
+
         public T build() {
             if (interfaceClass == null || implementation == null) {
                 throw new IllegalStateException("Interface and implementation must be set");
@@ -89,13 +99,20 @@ public class DBOS {
                         implementation,
                         DBOS.getInstance().dbosExecutor
                 );
+            } else if(queue != null) {
+                return QueueInvocationHandler.createProxy(
+                        interfaceClass,
+                        implementation,
+                        queue,
+                        DBOS.getInstance().dbosExecutor
+                ) ;
+            } else {
+                return TransactInvocationHandler.createProxy(
+                        interfaceClass,
+                        implementation,
+                        DBOS.getInstance().dbosExecutor
+                );
             }
-
-            return TransactInvocationHandler.createProxy(
-                    interfaceClass,
-                    implementation,
-                    DBOS.getInstance().dbosExecutor
-            ) ;
 
         }
     }
@@ -104,10 +121,9 @@ public class DBOS {
 
         private final String name;
 
-        private Integer concurrency = null;
-        private Integer workerConcurrency = null;
-        private Integer limit = null;
-        private Double period = null;
+        private int concurrency ;
+        private int workerConcurrency ;
+        private RateLimit limit ;
         private boolean priorityEnabled = false;
 
         /**
@@ -128,15 +144,11 @@ public class DBOS {
             return this;
         }
 
-        public QueueBuilder limit(Integer limit) {
-            this.limit = limit;
+        public QueueBuilder limit(int limit, double period) {
+            this.limit = new RateLimit(limit, period);
             return this;
         }
 
-        public QueueBuilder period(Double period) {
-            this.period = period;
-            return this;
-        }
 
         public QueueBuilder priorityEnabled(boolean priorityEnabled) {
             this.priorityEnabled = priorityEnabled;
@@ -153,7 +165,9 @@ public class DBOS {
 
             // check queue is not registered
 
-            return Queue.createQueue(name, concurrency, workerConcurrency,limit, period, priorityEnabled);
+            Queue q = Queue.createQueue(name, concurrency, workerConcurrency, limit, priorityEnabled);
+            DBOS.getInstance().queueService.register(q);
+            return q;
         }
     }
 
@@ -164,9 +178,15 @@ public class DBOS {
             SystemDatabase.initialize(config);
             dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance());
         }
+        if (queueService == null) {
+            queueService = new QueueService(SystemDatabase.getInstance());
+            queueService.setDbosExecutor(dbosExecutor);
+        }
+        queueService.start();
     }
 
     public void shutdown() {
+        queueService.stop();
         dbosExecutor.shutdown();
         instance = null ;
     }

@@ -3,6 +3,8 @@ package dev.dbos.transact.queue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class QueueRegistry {
@@ -20,5 +22,10 @@ public class QueueRegistry {
 
     public Queue get(String queueName) {
         return registry.get(queueName);
+    }
+
+    public List<Queue> getAllQueuesSnapshot() {
+        return new ArrayList<>(registry.values());
+
     }
 }

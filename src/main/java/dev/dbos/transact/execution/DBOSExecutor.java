@@ -13,6 +13,7 @@ import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueRegistry;
+import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -39,7 +40,8 @@ public class DBOSExecutor {
     private SystemDatabase systemDatabase;
     private ExecutorService executorService ;
     private WorkflowRegistry workflowRegistry ;
-    private QueueRegistry queueRegistry ;
+    // private QueueRegistry queueRegistry ;
+    private QueueService queueService;
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
     public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
@@ -48,7 +50,11 @@ public class DBOSExecutor {
         this.executorService = Executors.newCachedThreadPool();
         System.out.println("Creating new registry");
         this.workflowRegistry = new WorkflowRegistry() ;
-        this.queueRegistry = new QueueRegistry();
+        // this.queueRegistry = new QueueRegistry();
+    }
+
+    public void setQueueService(QueueService queueService) {
+        this.queueService = queueService;
     }
 
     public void shutdown() {
@@ -60,10 +66,6 @@ public class DBOSExecutor {
         workflowRegistry.register(workflowName, target, targetClassName, method);
     }
 
-    public void registerQueue(String queueName, Queue queue) {
-        queueRegistry.register(queueName, queue);
-    }
-
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
         return workflowRegistry.get(workflowName);
     }
@@ -72,15 +74,20 @@ public class DBOSExecutor {
     public WorkflowInitResult preInvokeWorkflow(String workflowName,
                                                 String className,
                                                 Object[] inputs,
-                                                String workflowId) {
+                                                String workflowId,
+                                                String queueName) {
 
         logger.info("In preInvokeWorkflow with " + workflowId) ;
 
+        // TODO: queue deduplication and priority
+
         String inputString = JSONUtil.serialize(inputs) ;
+
+        WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
         WorkflowStatusInternal workflowStatusInternal =
                 new WorkflowStatusInternal(workflowId,
-                        WorkflowState.PENDING,
+                        status,
                         workflowName,
                         className,
                         null,
@@ -91,7 +98,7 @@ public class DBOSExecutor {
                         null,
                         null,
                         null,
-                        null,
+                        queueName,
                         Constants.DEFAULT_EXECUTORID,
                         Constants.DEFAULT_APP_VERSION,
                         null,
@@ -145,15 +152,13 @@ public class DBOSExecutor {
             if (wfid == null) {
                 wfid = UUID.randomUUID().toString();
                 ctx.setWorkflowId(wfid);
-            } else {
-                logger.info("workflowId from context ", wfid);
             }
         }
 
         WorkflowInitResult initResult = null;
         try {
 
-            initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid);
+            initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, null);
 
             if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
                 return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
@@ -233,6 +238,37 @@ public class DBOSExecutor {
         return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
 
     }
+
+    public void enqueueWorkflow(String workflowName,
+                                                String targetClassName,
+                                                WorkflowFunctionWrapper wrapper,
+                                                Object[] args,
+                                                 Queue queue
+                                                ) throws Throwable {
+
+
+
+        DBOSContext ctx = DBOSContextHolder.get();
+        String wfid = ctx.getWorkflowId() ;
+
+        if (wfid == null) {
+            wfid = UUID.randomUUID().toString();
+            ctx.setWorkflowId(wfid);
+        }
+        WorkflowInitResult initResult = null;
+        try {
+            initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, queue.getName());
+
+        } catch (Throwable e) {
+            Throwable actual = (e instanceof InvocationTargetException)
+                    ? ((InvocationTargetException) e).getTargetException()
+                    : e;
+            postInvokeWorkflow(initResult.getWorkflowId(), actual);
+            throw actual;
+        }
+
+    }
+
 
     public <T> T runStep(String stepName,
                              boolean retriedAllowed,
