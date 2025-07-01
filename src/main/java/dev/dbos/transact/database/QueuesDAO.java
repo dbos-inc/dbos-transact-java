@@ -1,5 +1,6 @@
 package dev.dbos.transact.database;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.queue.Queue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,10 +50,12 @@ public class QueuesDAO {
             // Check rate limiter if configured
             if (queue.hasLimiter()) {
                 String limiterQuery = "SELECT COUNT(*) " +
-                    " FROM workflow_status " +
+                    " FROM %s.workflow_status " +
                     " WHERE queue_name = ? " +
                     " AND status != 'ENQUEUED' " +
                     " AND started_at_epoch_ms > ? ;" ;
+
+                limiterQuery = String.format(limiterQuery, Constants.DB_SCHEMA);
 
                 try (PreparedStatement ps = connection.prepareStatement(limiterQuery)) {
                     ps.setString(1, queue.getName());
@@ -76,11 +79,12 @@ public class QueuesDAO {
             if (queue.getWorkerConcurrency() > 0 || queue.getConcurrency() > 0) {
                 // Count pending workflows by executor
                 String pendingQuery = "SELECT executor_id, COUNT(*) as task_count " +
-                    " FROM workflow_status " +
+                    " FROM %s.workflow_status " +
                     " WHERE queue_name = ? " +
                     " AND status = 'PENDING' " +
                     " GROUP BY executor_id; ";
 
+                pendingQuery = String.format(pendingQuery, Constants.DB_SCHEMA);
 
                 Map<String, Integer> pendingWorkflowsDict = new HashMap<>();
                 try (PreparedStatement ps = connection.prepareStatement(pendingQuery)) {
@@ -125,7 +129,7 @@ public class QueuesDAO {
             // Build the main query to select workflows
             StringBuilder queryBuilder = new StringBuilder();
             queryBuilder.append(" SELECT workflow_uuid " +
-                " FROM workflow_status " +
+                " FROM %s.workflow_status " +
                 " WHERE queue_name = ? " +
                 " AND status = 'ENQUEUED' " +
                 " AND (application_version = ? OR application_version IS NULL) "
@@ -146,8 +150,10 @@ public class QueuesDAO {
             // Add FOR UPDATE NOWAIT
             queryBuilder.append(" FOR UPDATE NOWAIT");
 
+            String workflowsQuery = String.format(queryBuilder.toString(), Constants.DB_SCHEMA);
+
             List<String> dequeuedIds = new ArrayList<>();
-            try (PreparedStatement ps = connection.prepareStatement(queryBuilder.toString())) {
+            try (PreparedStatement ps = connection.prepareStatement(workflowsQuery)) {
                 int paramIndex = 1;
                 ps.setString(paramIndex++, queue.getName());
                 ps.setString(paramIndex++, appVersion);
@@ -171,7 +177,7 @@ public class QueuesDAO {
             List<String> retIds = new ArrayList<>();
 
             // Update workflow status for each dequeued workflow
-            String updateQuery = "UPDATE workflow_status " +
+            String updateQuery = "UPDATE %s.workflow_status " +
                 " SET status = 'PENDING', " +
                     " application_version = ?, " +
                     " executor_id = ?, " +
@@ -182,6 +188,8 @@ public class QueuesDAO {
                     "     ELSE workflow_deadline_epoch_ms " +
                     "      END " +
                 " WHERE workflow_uuid = ?;";
+
+            updateQuery = String.format(updateQuery, Constants.DB_SCHEMA);
 
             try (PreparedStatement updatePs = connection.prepareStatement(updateQuery)) {
                 for (String id : dequeuedIds) {

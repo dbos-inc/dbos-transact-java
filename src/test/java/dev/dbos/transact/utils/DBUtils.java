@@ -29,7 +29,7 @@ public class DBUtils {
         if (maximumPoolSize > 0) {
             hikariConfig.setMaximumPoolSize(maximumPoolSize);
         } else {
-            hikariConfig.setMaximumPoolSize(2);
+            hikariConfig.setMaximumPoolSize(5);
         }
 
         int connectionTimeout = config.getConnectionTimeout();

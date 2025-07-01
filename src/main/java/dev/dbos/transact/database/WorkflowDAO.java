@@ -102,11 +102,6 @@ public class WorkflowDAO {
                             resRow.getConfigName(), initStatus.getConfigName()
                     );
                     throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(), msg);
-                } else if (!Objects.equals(resRow.getQueueName(), initStatus.getQueueName())) {
-                    logger.warn(String.format(
-                            "Workflow (%s) already exists in queue: %s, but the provided queue name is: %s. The queue is not updated. %s",
-                            initStatus.getWorkflowUUID(), resRow.getQueueName(), initStatus.getQueueName(), new Throwable().getStackTrace()[0]
-                    ));
                 }
 
                 final int attempts = resRow.getRecoveryAttempts();

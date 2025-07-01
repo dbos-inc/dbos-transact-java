@@ -53,6 +53,7 @@ public class SystemDatabase {
         this.dataSource = ds ;
         workflowDAO = new WorkflowDAO(dataSource) ;
         stepsDAO = new StepsDAO(dataSource) ;
+        queuesDAO = new QueuesDAO(dataSource) ;
     }
 
     public static synchronized void initialize(DBOSConfig cfg) {

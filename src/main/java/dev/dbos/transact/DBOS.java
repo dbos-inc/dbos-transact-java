@@ -57,6 +57,10 @@ public class DBOS {
         this.dbosExecutor = executor;
     }
 
+    public void setQueueService(QueueService queueService) {
+        this.queueService = queueService;
+    }
+
     public <T> WorkflowBuilder<T> Workflow() {
         return new WorkflowBuilder<>();
     }
@@ -181,8 +185,9 @@ public class DBOS {
         if (queueService == null) {
             queueService = new QueueService(SystemDatabase.getInstance());
             queueService.setDbosExecutor(dbosExecutor);
+            // queueService.start();
         }
-        queueService.start();
+
     }
 
     public void shutdown() {

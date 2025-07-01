@@ -14,7 +14,7 @@ import java.lang.reflect.Proxy;
 
 public class QueueInvocationHandler implements InvocationHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(AsyncInvocationHandler.class);
+    private static final Logger logger = LoggerFactory.getLogger(QueueInvocationHandler.class);
 
     private final Object target;
     private final String targetClassName ;
