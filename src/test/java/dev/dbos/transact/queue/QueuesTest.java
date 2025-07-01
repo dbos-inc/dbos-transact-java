@@ -97,7 +97,6 @@ public class QueuesTest {
                 .workerConcurrency(1)
                 .build();
 
-        // queueService.start();
 
         ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>()
                 .interfaceClass(ServiceQ.class)
@@ -171,6 +170,57 @@ public class QueuesTest {
 
         }
 
+    }
+
+    @Test
+    public void multipleQueues() throws Exception{
+
+        Queue firstQ = new DBOS.QueueBuilder("firstQueue")
+                .concurrency(1)
+                .workerConcurrency(1)
+                .build();
+
+
+        ServiceQ serviceQ1 = new DBOS.WorkflowBuilder<ServiceQ>()
+                .interfaceClass(ServiceQ.class)
+                .implementation(new ServiceQImpl())
+                .queue(firstQ)
+                .build() ;
+
+        Queue secondQ = new DBOS.QueueBuilder("secondQueue")
+                .concurrency(1)
+                .workerConcurrency(1)
+                .build();
+
+        ServiceI serviceI = new DBOS.WorkflowBuilder<ServiceI>()
+                .interfaceClass(ServiceI.class)
+                .implementation(new ServiceIImpl())
+                .queue(secondQ)
+                .build() ;
+
+
+        String id1 = "firstQ1234" ;
+        String id2 = "second1234" ;
+
+        try (SetWorkflowID ctx = new SetWorkflowID(id1)) {
+            serviceQ1.simpleQWorkflow("firstinput");
+        }
+
+        try (SetWorkflowID ctx = new SetWorkflowID(id2)) {
+            serviceI.workflowI(25);
+        }
+
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(id1);
+        assertEquals(id1, handle.getWorkflowId());
+        String result = handle.getResult();
+        assertEquals("firstinputfirstinput",result) ;
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+
+        WorkflowHandle<Integer> handle2 = dbosExecutor.retrieveWorkflow(id2);
+        assertEquals(id2, handle2.getWorkflowId());
+        Integer result2 = handle2.getResult();
+        assertEquals(50,result2) ;
+        assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
     }
 
 }
