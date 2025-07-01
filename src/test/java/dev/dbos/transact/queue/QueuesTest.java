@@ -77,7 +77,7 @@ public class QueuesTest {
         queueService = new QueueService(systemDatabase);
         queueService.setDbosExecutor(dbosExecutor);
         dbos.setQueueService(queueService);
-        // queueService.start();
+        queueService.start();
 
 
         DBUtils.clearTables(dataSource);
@@ -91,13 +91,13 @@ public class QueuesTest {
 
     @Test
     public void testQueuedWorkflow() throws Exception {
-        
+
         Queue firstQ = new DBOS.QueueBuilder("firstQueue")
                 .concurrency(1)
                 .workerConcurrency(1)
                 .build();
 
-        queueService.start();
+        // queueService.start();
 
         ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>()
                 .interfaceClass(ServiceQ.class)
@@ -121,6 +121,7 @@ public class QueuesTest {
     @Test
     public void testQueuedMultipleWorkflows() throws Exception {
 
+        queueService.stop();
         while(!queueService.isStopped()) {
             Thread.sleep(2000);
             logger.info("Waiting for queueService to step") ;
@@ -169,11 +170,6 @@ public class QueuesTest {
             assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
         }
-
-        /* WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(id);
-        assertEquals(id, handle.getWorkflowId());
-        String result = handle.getResult();
-        assertEquals("inputqinputq",result) ; */
 
     }
 
