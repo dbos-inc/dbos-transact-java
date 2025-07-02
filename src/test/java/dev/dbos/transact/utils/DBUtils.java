@@ -3,6 +3,7 @@ package dev.dbos.transact.utils;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.workflow.WorkflowState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,6 +11,9 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.Instant;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class DBUtils {
 
@@ -79,6 +83,24 @@ public class DBUtils {
             throw e;
         }
 
+    }
+
+    public static void updateWorkflowState(DataSource ds, String oldState, String newState) throws SQLException {
+
+        String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? where status = ? ;";
+
+        try (Connection connection = ds.getConnection();
+             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+            pstmt.setString(1, newState);
+            pstmt.setLong(2, Instant.now().toEpochMilli());
+            pstmt.setString(3, oldState) ;
+
+            // Execute the update and get the number of rows affected
+            int rowsAffected = pstmt.executeUpdate();
+
+
+        }
     }
 
     public void closeDS(HikariDataSource ds) {

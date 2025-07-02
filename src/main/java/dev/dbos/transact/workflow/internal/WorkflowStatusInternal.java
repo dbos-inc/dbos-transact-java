@@ -63,8 +63,15 @@ public class WorkflowStatusInternal {
         return workflowUUID;
     }
 
+    public void setWorkflowUUID(String id) {
+        workflowUUID = id;
+    }
+
     public WorkflowState getStatus() {
         return status;
+    }
+    public void setStatus( WorkflowState state) {
+        this.status = state ;
     }
 
     public String getName() {
@@ -145,6 +152,10 @@ public class WorkflowStatusInternal {
 
     public String getDeduplicationId() {
         return deduplicationId;
+    }
+
+    public void setDeduplicationId(String dedupId) {
+        this.deduplicationId = dedupId;
     }
 
 

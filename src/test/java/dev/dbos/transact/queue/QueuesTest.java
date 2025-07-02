@@ -1,5 +1,6 @@
 package dev.dbos.transact.queue;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
@@ -11,6 +12,8 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
+import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +25,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -125,7 +130,7 @@ public class QueuesTest {
         queueService.stop();
         while(!queueService.isStopped()) {
             Thread.sleep(2000);
-            logger.info("Waiting for queueService to step") ;
+            logger.info("Waiting for queueService to stop") ;
         }
 
         Queue firstQ = new DBOS.QueueBuilder("firstQueue")
@@ -288,6 +293,83 @@ public class QueuesTest {
         for (WorkflowHandle<Double> h : handles) {
             assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
         }
+
+    }
+
+    @Test
+    public void testWorkerConcurrency() throws Exception {
+
+        queueService.stop();
+        while(!queueService.isStopped()) {
+            Thread.sleep(2000);
+            logger.info("Waiting for queueService to stop") ;
+        }
+
+        Queue qwithWCLimit = new DBOS.QueueBuilder("QwithWCLimit")
+                .concurrency(1)
+                .workerConcurrency(2)
+                .concurrency(3)
+                .build();
+
+
+        WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal(
+                "xxx",
+                WorkflowState.SUCCESS,
+                "OrderProcessingWorkflow",
+                "com.example.workflows.OrderWorkflow",
+                "prod-config",
+                "user123@example.com",
+                "admin",
+                "admin,operator",
+                "{\"result\":\"success\"}",
+                null,
+                System.currentTimeMillis() - 3600000,
+                System.currentTimeMillis(),
+                "QwithWCLimit",
+                Constants.DEFAULT_EXECUTORID,
+                Constants.DEFAULT_APP_VERSION,
+                "order-app-123",
+                0,
+                300000,
+                System.currentTimeMillis() + 2400000,
+                "dedup-112233",
+                1,
+                "{\"orderId\":\"ORD-12345\"}"
+        );
+
+
+
+        for (int i = 0 ;  i < 4 ; i++) {
+
+            try (Connection conn = dataSource.getConnection()) {
+
+                String wfid = "id" + i;
+                wfStatusInternal.setWorkflowUUID(wfid);
+                wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
+                wfStatusInternal.setDeduplicationId("dedup"+i);
+                InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
+
+            }
+        }
+
+        List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION) ;
+        assertEquals(2, idsToRun.size()) ;
+
+        // run the same above 2 are in Pending.
+        // So no de queueing
+        idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION) ;
+        assertEquals(0, idsToRun.size()) ;
+
+        // mark the first 2 as success
+        DBUtils.updateWorkflowState(dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
+
+        // next 2 get dequeued
+        idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION) ;
+        assertEquals(2, idsToRun.size()) ;
+
+        DBUtils.updateWorkflowState(dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
+        idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION) ;
+        assertEquals(0, idsToRun.size()) ;
 
     }
 
