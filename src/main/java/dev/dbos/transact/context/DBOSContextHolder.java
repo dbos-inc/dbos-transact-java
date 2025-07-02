@@ -13,13 +13,10 @@ public class DBOSContextHolder {
 
     public static void clear() {
         contextHolder.remove();
-        logger.debug("context cleared for thread " + Thread.currentThread().getId());
     }
 
     public static void set(DBOSContext context) {
         contextHolder.set(context);
-        logger.debug("context set for thread " + Thread.currentThread().getId());
     }
-
 }
 
