@@ -11,6 +11,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 public class QueueService {
 
@@ -78,6 +79,7 @@ public class QueueService {
 
                     } catch (Exception e) {
 
+                        pollingInterval = min(maxPollingInterval, pollingInterval*2);
                         logger.error("Error executing queued workflow", e);
                     }
 

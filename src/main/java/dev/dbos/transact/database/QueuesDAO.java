@@ -74,7 +74,7 @@ public class QueuesDAO {
             }
 
             // Calculate max tasks based on concurrency limits
-            int maxTasks = Integer.MAX_VALUE;
+            int maxTasks = 100;
 
             if (queue.getWorkerConcurrency() > 0 || queue.getConcurrency() > 0) {
                 // Count pending workflows by executor
@@ -147,8 +147,12 @@ public class QueuesDAO {
                 queryBuilder.append(" LIMIT ?");
             }
 
-            // Add FOR UPDATE NOWAIT
-            queryBuilder.append(" FOR UPDATE NOWAIT");
+            // Add FOR UPDATE NOWAIT or SKIP Locked
+            if (queue.getConcurrency() > 0 ) {
+                queryBuilder.append(" FOR UPDATE NOWAIT");
+            } else {
+                queryBuilder.append(" FOR UPDATE SKIP LOCKED");
+            }
 
             String workflowsQuery = String.format(queryBuilder.toString(), Constants.DB_SCHEMA);
 
