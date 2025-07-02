@@ -6,8 +6,6 @@ public class Queue {
     private final String name;
     private final int concurrency;
     private final int workerConcurrency;
-    // private final int limit;
-    // private final double period;
     private RateLimit rateLimit;
     private final boolean priorityEnabled;
 
@@ -72,49 +70,4 @@ public class Queue {
                 '}';
     }
 
-    /* public static class Builder {
-
-        private final String name;
-
-        private Integer concurrency = null;
-        private Integer workerConcurrency = null;
-        private Integer limit = null;
-        private Double period = null;
-        private boolean priorityEnabled = false;
-
-
-        public Builder(String name) {
-            this.name = name;
-        }
-
-        public Builder concurrency(Integer concurrency) {
-            this.concurrency = concurrency;
-            return this;
-        }
-
-        public Builder workerConcurrency(Integer workerConcurrency) {
-            this.workerConcurrency = workerConcurrency;
-            return this;
-        }
-
-        public Builder limit(Integer limit) {
-            this.limit = limit;
-            return this;
-        }
-
-        public Builder period(Double period) {
-            this.period = period;
-            return this;
-        }
-
-        public Builder priorityEnabled(boolean priorityEnabled) {
-            this.priorityEnabled = priorityEnabled;
-            return this;
-        }
-
-
-        public WorkflowQueue build() {
-            return new WorkflowQueue(this);
-        }
-    } */
 }

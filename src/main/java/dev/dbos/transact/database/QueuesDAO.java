@@ -206,7 +206,6 @@ public class QueuesDAO {
                     updatePs.setLong(4, startTimeMs);
                     updatePs.setString(5, id);
 
-                    // updatePs.executeUpdate();
                     updatePs.addBatch();
                     retIds.add(id);
                 }

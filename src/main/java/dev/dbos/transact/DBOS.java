@@ -159,15 +159,7 @@ public class DBOS {
             return this;
         }
 
-        /**
-         * Builds and returns a new WorkflowQueue instance.
-         * The constructor's validation logic is executed here.
-         * @return A new WorkflowQueue instance.
-         * @throws IllegalArgumentException if validation rules are violated.
-         */
         public Queue build() {
-
-            // check queue is not registered
 
             Queue q = Queue.createQueue(name, concurrency, workerConcurrency, limit, priorityEnabled);
             DBOS.getInstance().queueService.register(q);
@@ -185,7 +177,7 @@ public class DBOS {
         if (queueService == null) {
             queueService = new QueueService(SystemDatabase.getInstance());
             queueService.setDbosExecutor(dbosExecutor);
-            // queueService.start();
+            queueService.start();
         }
 
     }

@@ -117,8 +117,6 @@ public class WorkflowDAO {
                     throw new DBOSDeadLetterQueueException(initStatus.getWorkflowUUID(), maxRetries);
                 }
 
-                // logger.debug(String.format("Workflow %s attempt number: %d.", initStatus.getWorkflowUUID(), attempts));
-
                 connection.commit(); // Commit transaction on success
                 return new WorkflowInitResult(initStatus.getWorkflowUUID(), resRow.getStatus(), resRow.getWorkflowDeadlineEpochMs());
 
