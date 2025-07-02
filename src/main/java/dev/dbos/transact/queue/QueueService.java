@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static java.lang.Math.max;
 
@@ -48,10 +49,10 @@ public class QueueService {
 
             while (running) {
 
-                /* randomSleep = (int) (pollingInterval * (0.95 + 0.1 * Math.random())); */
+                randomSleep = (int) (0.95 + ThreadLocalRandom.current().nextDouble(0.1));
 
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(randomSleep);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     logger.error("QueuesPollThread interrupted while sleeping");
@@ -72,16 +73,13 @@ public class QueueService {
                         List<String> workflowIds = systemDatabase.getAndStartQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION);
 
                         for (String id : workflowIds) {
-                            // logger.debug("Submitting queued workflow for execution " + id);
                             dbosExecutor.executeWorkflowById(id);
                         }
-
 
                     } catch (Exception e) {
 
                         logger.error("Error executing queued workflow", e);
                     }
-
 
                 }
 
