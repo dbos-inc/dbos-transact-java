@@ -206,9 +206,11 @@ public class QueuesDAO {
                     updatePs.setLong(4, startTimeMs);
                     updatePs.setString(5, id);
 
-                    updatePs.executeUpdate();
+                    // updatePs.executeUpdate();
+                    updatePs.addBatch();
                     retIds.add(id);
                 }
+                int[] updateCounts = updatePs.executeBatch();
             }
 
             connection.commit();

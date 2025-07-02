@@ -229,7 +229,7 @@ public class QueuesTest {
     public void testLimiter() throws Exception {
 
         int limit = 5;
-        double period = 7;
+        double period = 1.8; //
 
         Queue limitQ = new DBOS.QueueBuilder("limitQueue")
                 .limit(limit, period)
@@ -262,7 +262,7 @@ public class QueuesTest {
             times.add(result);
         }
 
-        double waveTolerance = 1.5;
+        double waveTolerance = 0.5;
         for (int wave = 0; wave < numWaves; wave++) {
             for (int i = wave * limit; i < (wave + 1) * limit - 1; i++) {
                 double diff = times.get(i + 1) - times.get(i);
