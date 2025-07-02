@@ -125,6 +125,10 @@ public class WorkflowStatusInternal {
         return executorId;
     }
 
+    public void setExecutorId(String eid) {
+        this.executorId = eid ;
+    }
+
 
     public String getAppVersion() {
         return appVersion;

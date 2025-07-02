@@ -373,5 +373,87 @@ public class QueuesTest {
 
     }
 
+    @Test
+    public void testGlobalConcurrency() throws Exception {
+
+        queueService.stop();
+        while (!queueService.isStopped()) {
+            Thread.sleep(2000);
+            logger.info("Waiting for queueService to stop");
+        }
+
+
+        Queue qwithWCLimit = new DBOS.QueueBuilder("QwithWCLimit")
+                .concurrency(1)
+                .workerConcurrency(2)
+                .concurrency(3)
+                .build();
+
+
+        WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal(
+                "xxx",
+                WorkflowState.SUCCESS,
+                "OrderProcessingWorkflow",
+                "com.example.workflows.OrderWorkflow",
+                "prod-config",
+                "user123@example.com",
+                "admin",
+                "admin,operator",
+                "{\"result\":\"success\"}",
+                null,
+                System.currentTimeMillis() - 3600000,
+                System.currentTimeMillis(),
+                "QwithWCLimit",
+                Constants.DEFAULT_EXECUTORID,
+                Constants.DEFAULT_APP_VERSION,
+                "order-app-123",
+                0,
+                300000,
+                System.currentTimeMillis() + 2400000,
+                "dedup-112233",
+                1,
+                "{\"orderId\":\"ORD-12345\"}"
+        );
+
+
+        // executor1
+        for (int i = 0; i < 2; i++) {
+
+            try (Connection conn = dataSource.getConnection()) {
+
+                String wfid = "id" + i;
+                wfStatusInternal.setWorkflowUUID(wfid);
+                wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
+                wfStatusInternal.setDeduplicationId("dedup" + i);
+                InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
+            }
+        }
+
+        // executor2
+
+        String executor2 = "remote";
+        for (int i = 2; i < 5; i++) {
+
+            try (Connection conn = dataSource.getConnection()) {
+
+                String wfid = "id" + i;
+                wfStatusInternal.setWorkflowUUID(wfid);
+                wfStatusInternal.setStatus(WorkflowState.PENDING);
+                wfStatusInternal.setDeduplicationId("dedup" + i);
+                wfStatusInternal.setExecutorId(executor2);
+                InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
+            }
+        }
+
+
+        List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION) ;
+        // 0 because global concurrency limit is reached
+        assertEquals(0, idsToRun.size()) ;
+
+        DBUtils.updateWorkflowState(dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
+        idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION) ;
+        assertEquals(2, idsToRun.size()) ;
+
+    }
 }
 
