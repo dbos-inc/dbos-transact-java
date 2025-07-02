@@ -1,6 +1,11 @@
 package dev.dbos.transact.context;
 
+import dev.dbos.transact.Constants;
+
 public class DBOSContext {
+
+    private String executorId = Constants.DEFAULT_EXECUTORID ;
+
     private volatile String workflowId;
     private String user;
     private volatile int functionId;

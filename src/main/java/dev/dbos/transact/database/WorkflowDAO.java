@@ -621,10 +621,39 @@ public class WorkflowDAO {
 
     }
 
+    public void recordChildWorkflow(String parentId,
+                                    String childId, // workflowId of the child
+                                    int functionId, // func id in the parent
+                                    String functionName)  {
 
 
+        String sql = String.format(
+                "INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, child_workflow_id) " +
+                        "VALUES (?, ?, ?, ?)",
+                Constants.DB_SCHEMA
+        );
 
+        try {
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement pStmt = connection.prepareStatement(sql)) {
 
+                pStmt.setString(1, parentId);
+                pStmt.setInt(2, functionId);
+                pStmt.setString(3, functionName);
+                pStmt.setString(4, childId);
 
+                pStmt.executeUpdate();
+
+            }
+        } catch(SQLException sqe) {
+            if ("23505".equals(sqe.getSQLState())) {
+                throw new DBOSWorkflowConflictException(parentId,
+                        String.format("Record exists for parent %s and functionId %d", parentId, functionId));
+            } else {
+                throw new DBOSException(UNEXPECTED.getCode(), sqe.getMessage());
+            }
+        }
+
+    }
 
 }
