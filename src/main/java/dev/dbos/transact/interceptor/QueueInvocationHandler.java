@@ -94,7 +94,6 @@ public class QueueInvocationHandler implements InvocationHandler {
             // child workflow
             if (ctx.hasParent()) {
                 // child called with SetWorkflowId
-                logger.info("child with set") ;
 
                 dbosExecutor.enqueueWorkflow(
                         workflowName,
@@ -108,7 +107,6 @@ public class QueueInvocationHandler implements InvocationHandler {
                 // create child context from the parent
 
                 String childId = ctx.getWorkflowId() + "_" + ctx.getParentFunctionId();
-                logger.info("child call ......" + childId);
                 try(SetWorkflowID id = new SetWorkflowID(childId)) {
                     dbosExecutor.enqueueWorkflow(
                             workflowName,
@@ -125,7 +123,6 @@ public class QueueInvocationHandler implements InvocationHandler {
 
             // parent
             if (ctx.getWorkflowId() == null ) {
-                logger.info("parent without set .....");
                 // parent called without SetWorkflowId
                 String workflowfId = UUID.randomUUID().toString();
                 try(SetWorkflowID id = new SetWorkflowID(workflowfId)) {
@@ -140,7 +137,6 @@ public class QueueInvocationHandler implements InvocationHandler {
                 }
             } else {
                 // not child called with Set just run
-                logger.info("Parent call ..." + DBOSContextHolder.get().getWorkflowId());
                 DBOSContextHolder.get().setInWorkflow(true);
                 dbosExecutor.enqueueWorkflow(
                         workflowName,
