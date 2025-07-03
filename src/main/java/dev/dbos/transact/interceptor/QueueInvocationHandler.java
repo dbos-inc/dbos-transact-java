@@ -1,5 +1,8 @@
 package dev.dbos.transact.interceptor;
 
+import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.queue.Queue;
@@ -11,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.UUID;
 
 public class QueueInvocationHandler implements InvocationHandler {
 
@@ -84,13 +88,69 @@ public class QueueInvocationHandler implements InvocationHandler {
             throw new IllegalStateException("Workflow not registered: " + workflowName);
         }
 
-        dbosExecutor.enqueueWorkflow(
-                workflowName,
-                targetClassName,
-                wrapper,
-                args,
-                queue
-        );
+        DBOSContext ctx = DBOSContextHolder.get() ;
+        if (ctx.isInWorkflow()) {
+
+            // child workflow
+            if (ctx.hasParent()) {
+                // child called with SetWorkflowId
+                logger.info("child with set") ;
+
+                dbosExecutor.enqueueWorkflow(
+                        workflowName,
+                        targetClassName,
+                        wrapper,
+                        args,
+                        queue
+                );
+            } else {
+                // child called without Set
+                // create child context from the parent
+
+                String childId = ctx.getWorkflowId() + "_" + ctx.getParentFunctionId();
+                logger.info("child call ......" + childId);
+                try(SetWorkflowID id = new SetWorkflowID(childId)) {
+                    dbosExecutor.enqueueWorkflow(
+                            workflowName,
+                            targetClassName,
+                            wrapper,
+                            args,
+                            queue
+                    );
+                }
+
+            }
+        } else {
+
+
+            // parent
+            if (ctx.getWorkflowId() == null ) {
+                logger.info("parent without set .....");
+                // parent called without SetWorkflowId
+                String workflowfId = UUID.randomUUID().toString();
+                try(SetWorkflowID id = new SetWorkflowID(workflowfId)) {
+                    DBOSContextHolder.get().setInWorkflow(true);
+                    dbosExecutor.enqueueWorkflow(
+                            workflowName,
+                            targetClassName,
+                            wrapper,
+                            args,
+                            queue
+                    );
+                }
+            } else {
+                // not child called with Set just run
+                logger.info("Parent call ..." + DBOSContextHolder.get().getWorkflowId());
+                DBOSContextHolder.get().setInWorkflow(true);
+                dbosExecutor.enqueueWorkflow(
+                        workflowName,
+                        targetClassName,
+                        wrapper,
+                        args,
+                        queue
+                );
+            }
+        }
 
         return getDefaultValue(method.getReturnType()) ; // always return null or default
 

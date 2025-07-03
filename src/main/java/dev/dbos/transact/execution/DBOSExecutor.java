@@ -107,20 +107,26 @@ public class DBOSExecutor {
 
         WorkflowInitResult initResult = null;
         try {
+             logger.info("before init status .... " + workflowId) ;
              initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
         } catch (Exception e) {
             logger.error("Error inserting into workflow_status", e);
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(),e) ;
         }
 
+        logger.info("after init status .... " + workflowId) ;
+
         DBOSContext ctx = DBOSContextHolder.get();
         if (ctx.hasParent()) {
+            logger.info("context parent yes ..." + ctx.getParentWorkflowId()) ;
+            logger.info(ctx.toString());
             systemDatabase.recordChildWorkflow(ctx.getParentWorkflowId(),
                                                 ctx.getWorkflowId(),
                                                 ctx.getParentFunctionId(),
                                                 workflowName);
         }
 
+        logger.info("exiting init status") ;
         return initResult;
     }
 
@@ -161,6 +167,7 @@ public class DBOSExecutor {
         WorkflowInitResult initResult = null;
         try {
 
+            logger.info("Before preinvoke");
             initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, null);
 
             if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
@@ -173,6 +180,8 @@ public class DBOSExecutor {
 
             @SuppressWarnings("unchecked")
             T result = (T) function.invoke(target, args);
+
+            logger.info("after invoke before post invoke");
             postInvokeWorkflow(initResult.getWorkflowId(), result);
             return result;
         } catch (Throwable e) {
@@ -195,6 +204,8 @@ public class DBOSExecutor {
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId() ;
 
+        logger.info("submit workflow got ... " + workflowId);
+
         /* if (workflowId == null) {
             workflowId = UUID.randomUUID().toString();
             ctx.setWorkflowId(workflowId);
@@ -207,6 +218,8 @@ public class DBOSExecutor {
 
             // Doing this on purpose to ensure that we have the correct context
             String id = DBOSContextHolder.get().getWorkflowId();
+
+            logger.info(" Callable Starting execute of " + id);
 
             try {
 
@@ -353,6 +366,8 @@ public class DBOSExecutor {
     }
 
     public WorkflowHandle executeWorkflowById(String workflowId) {
+
+        logger.info("executeById .. got " + workflowId) ;
 
         WorkflowStatus status = systemDatabase.getWorkflowStatus(workflowId) ;
 
