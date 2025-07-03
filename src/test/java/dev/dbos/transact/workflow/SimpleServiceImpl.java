@@ -78,4 +78,29 @@ public class SimpleServiceImpl implements SimpleService {
         return input ;
     }
 
+    @Workflow(name = "childWorkflow4")
+    public String childWorkflow4(String input) throws Exception{
+        String result = input ;
+        try (SetWorkflowID id = new SetWorkflowID("child5")) {
+            simpleService.grandchildWorkflow(input);
+        }
+        result = "c-" + DBOS.retrieveWorkflow("child5").getResult() ;
+        return result ;
+    }
+
+    @Workflow(name = "grandchildWorkflow")
+    public String grandchildWorkflow(String input) {
+        return "gc-"+input ;
+    }
+
+    @Workflow(name = "grandParent")
+    public String grandParent(String input) throws Exception{
+        String result = input ;
+        try (SetWorkflowID id = new SetWorkflowID("child4")) {
+            simpleService.childWorkflow4(input);
+        }
+        result = "p-" + DBOS.retrieveWorkflow("child4").getResult() ;
+        return result ;
+    }
+
 }

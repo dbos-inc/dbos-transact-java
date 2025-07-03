@@ -16,4 +16,8 @@ public interface SimpleService {
     public String childWorkflow2(String input) ;
     public String childWorkflow3(String input) ;
 
+    public String childWorkflow4(String input) throws Exception ;
+    public String grandchildWorkflow(String input) ;
+    public String grandParent(String input) throws Exception ;
+
 }
