@@ -5,7 +5,15 @@ public class SetWorkflowID implements AutoCloseable {
 
     public SetWorkflowID(String workflowId) {
         previousCtx = DBOSContextHolder.get();
-        DBOSContext newCtx = new DBOSContext(workflowId,0) ;
+
+        DBOSContext newCtx;
+
+        if (previousCtx.getWorkflowId() != null ) {
+            // we must be a child workflow
+            newCtx = previousCtx.createChild(workflowId) ;
+        } else {
+            newCtx = new DBOSContext(workflowId, 0);
+        }
         DBOSContextHolder.set(newCtx);
     }
 

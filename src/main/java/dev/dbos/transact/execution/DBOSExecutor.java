@@ -113,6 +113,14 @@ public class DBOSExecutor {
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(),e) ;
         }
 
+        DBOSContext ctx = DBOSContextHolder.get();
+        if (ctx.hasParent()) {
+            systemDatabase.recordChildWorkflow(ctx.getParentWorkflowId(),
+                                                ctx.getWorkflowId(),
+                                                ctx.getParentFunctionId(),
+                                                workflowName);
+        }
+
         return initResult;
     }
 
@@ -140,7 +148,7 @@ public class DBOSExecutor {
 
         String wfid = workflowId ;
 
-        if (wfid == null) {
+        /* if (wfid == null) {
             DBOSContext ctx = DBOSContextHolder.get();
             wfid = ctx.getWorkflowId() ;
 
@@ -148,7 +156,7 @@ public class DBOSExecutor {
                 wfid = UUID.randomUUID().toString();
                 ctx.setWorkflowId(wfid);
             }
-        }
+        } */
 
         WorkflowInitResult initResult = null;
         try {
@@ -171,6 +179,8 @@ public class DBOSExecutor {
             Throwable actual = (e instanceof InvocationTargetException)
                     ? ((InvocationTargetException) e).getTargetException()
                     : e;
+
+            logger.error("Error in preinvoke", actual);
             postInvokeWorkflow(initResult.getWorkflowId(), actual);
             throw actual;
         }
