@@ -112,7 +112,7 @@ public class TransactInvocationHandler implements InvocationHandler {
             } else {
                 // child called without Set
                 // create child context from the parent
-                String childId = UUID.randomUUID().toString();
+                String childId = ctx.getWorkflowId() + "_" + ctx.getParentFunctionId();
                 try(SetWorkflowID id = new SetWorkflowID(childId)) {
                     return dbosExecutor.runWorkflow(
                             workflowName,
@@ -133,6 +133,7 @@ public class TransactInvocationHandler implements InvocationHandler {
                 // parent called without SetWorkflowId
                 String workflowfId = UUID.randomUUID().toString();
                 try(SetWorkflowID id = new SetWorkflowID(workflowfId)) {
+                    DBOSContextHolder.get().setInWorkflow(true);
                     return dbosExecutor.runWorkflow(
                             workflowName,
                             targetClassName,
@@ -144,6 +145,7 @@ public class TransactInvocationHandler implements InvocationHandler {
                 }
             } else {
                 // not child called with Set just run
+                DBOSContextHolder.get().setInWorkflow(true);
                 return dbosExecutor.runWorkflow(
                         workflowName,
                         targetClassName,

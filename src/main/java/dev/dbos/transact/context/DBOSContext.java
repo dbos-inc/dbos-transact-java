@@ -41,6 +41,15 @@ public class DBOSContext {
         this.inWorkflow = false;
     }
 
+    public DBOSContext(String workflowId, int functionId, String parentWorkflowId, int parentFunctionId,boolean inWorkflow) {
+        this.workflowId = workflowId;
+        this.functionId = functionId ;
+        this.inWorkflow = inWorkflow;
+        this.parentWorkflowId = parentWorkflowId;
+        this.parentFunctionId = parentFunctionId;
+
+    }
+
     private DBOSContext(String childWorkflowId, String parentWorkflowId, int parentFunctionId) {
         this.workflowId = childWorkflowId;
         this.parentWorkflowId = parentWorkflowId;
@@ -85,11 +94,11 @@ public class DBOSContext {
     }
 
     public DBOSContext copy() {
-        return new DBOSContext(workflowId, functionId);
+        return new DBOSContext(workflowId, functionId, parentWorkflowId, parentFunctionId, inWorkflow);
     }
 
     public DBOSContext createChild(String childWorkflowId) {
-        return new DBOSContext(childWorkflowId, workflowId, ++functionId);
+        return new DBOSContext(childWorkflowId, workflowId, this.getAndIncrementFunctionId());
     }
 
     public boolean hasParent() {
@@ -98,6 +107,10 @@ public class DBOSContext {
 
     public boolean isInWorkflow() {
         return inWorkflow;
+    }
+
+    public void setInWorkflow(boolean in) {
+        this.inWorkflow = true;
     }
 }
 

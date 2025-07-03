@@ -102,6 +102,7 @@ public class AsyncInvocationHandler implements InvocationHandler {
             // child workflow
             if (ctx.hasParent()) {
                 // child called with SetWorkflowId
+                logger.info("child with set") ;
 
                 dbosExecutor.submitWorkflow(
                     workflowName,
@@ -113,7 +114,9 @@ public class AsyncInvocationHandler implements InvocationHandler {
             } else {
                 // child called without Set
                 // create child context from the parent
-                String childId = UUID.randomUUID().toString();
+
+                String childId = ctx.getWorkflowId() + "_" + ctx.getParentFunctionId();
+                logger.info("child call ......" + childId);
                 try(SetWorkflowID id = new SetWorkflowID(childId)) {
                     dbosExecutor.submitWorkflow(
                             workflowName,
@@ -127,11 +130,14 @@ public class AsyncInvocationHandler implements InvocationHandler {
             }
         } else {
 
+
             // parent
             if (ctx.getWorkflowId() == null ) {
+                logger.info("parent without set .....");
                 // parent called without SetWorkflowId
                 String workflowfId = UUID.randomUUID().toString();
                 try(SetWorkflowID id = new SetWorkflowID(workflowfId)) {
+                    DBOSContextHolder.get().setInWorkflow(true);
                     dbosExecutor.submitWorkflow(
                             workflowName,
                             targetClassName,
@@ -142,6 +148,8 @@ public class AsyncInvocationHandler implements InvocationHandler {
                 }
             } else {
                 // not child called with Set just run
+                logger.info("Parent call ..." + DBOSContextHolder.get().getWorkflowId());
+                DBOSContextHolder.get().setInWorkflow(true);
                 dbosExecutor.submitWorkflow(
                         workflowName,
                         targetClassName,

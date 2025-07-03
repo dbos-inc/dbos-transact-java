@@ -10,6 +10,8 @@ public class SimpleServiceImpl implements SimpleService {
 
     Logger logger = LoggerFactory.getLogger(SimpleServiceImpl.class);
 
+    private SimpleService simpleService;
+
     public static int executionCount = 0 ;
 
     @Workflow(name = "workWithString")
@@ -24,5 +26,22 @@ public class SimpleServiceImpl implements SimpleService {
        throw new Exception("DBOS Test error") ;
     }
 
+    @Workflow(name = "parentWorkflowWithoutSet")
+    public String parentWorkflowWithoutSet(String input) {
+        String result = input;
+
+        result = result + simpleService.childWorkflow("abc");
+
+        return result;
+    }
+
+    @Workflow(name = "childWorkflow")
+    public String childWorkflow(String input) {
+        return input ;
+    }
+
+    public void setSimpleService(SimpleService service) {
+        this.simpleService = service ;
+    }
 
 }

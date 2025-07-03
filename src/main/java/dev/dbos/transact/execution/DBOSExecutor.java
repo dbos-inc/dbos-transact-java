@@ -195,10 +195,10 @@ public class DBOSExecutor {
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId() ;
 
-        if (workflowId == null) {
+        /* if (workflowId == null) {
             workflowId = UUID.randomUUID().toString();
             ctx.setWorkflowId(workflowId);
-        }
+        } */
 
         final String wfId = workflowId ;
 

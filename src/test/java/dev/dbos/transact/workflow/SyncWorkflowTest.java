@@ -180,4 +180,40 @@ public class SyncWorkflowTest {
         assertEquals("wf-124",wfs.get(1).getWorkflowId());
 
     }
+
+    @Test
+    public void childWorkflowWithoutSet() throws Exception{
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+
+        simpleService.setSimpleService(simpleService);
+
+        String result = null ;
+
+        SimpleServiceImpl.executionCount =0 ;
+
+        try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
+            result = simpleService.parentWorkflowWithoutSet("123");
+        }
+
+        assertEquals("123abc", result);
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+
+        assertEquals(2, wfs.size());
+        assertEquals("wf-123456", wfs.get(0).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).getStatus());
+
+        assertEquals("wf-123456_0", wfs.get(1).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+        assertEquals(1, steps.size());
+        assertEquals("wf-123456_0", steps.get(0).getChildWorkflowId());
+        assertEquals(0, steps.get(0).getFunctionId());
+        assertEquals("childWorkflow", steps.get(0).getFunctionName());
+    }
 }
