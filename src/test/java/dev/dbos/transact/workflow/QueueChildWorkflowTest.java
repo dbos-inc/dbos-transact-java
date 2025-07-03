@@ -146,5 +146,58 @@ public class QueueChildWorkflowTest {
         assertEquals(2, steps.get(2).getFunctionId());
         assertEquals("childWorkflow3", steps.get(2).getFunctionName());
     }
-    
+
+    @Test
+    public void nestedChildren() throws Exception {
+
+        Queue childQ = new DBOS.QueueBuilder("childQ")
+                .concurrency(5)
+                .workerConcurrency(5)
+                .build();
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .queue(childQ)
+                .build();
+
+        simpleService.setSimpleService(simpleService);
+
+        String result = null;
+
+        SimpleServiceImpl.executionCount = 0;
+
+        try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
+            simpleService.grandParent("123");
+        }
+
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        assertEquals("p-c-gc-123",handle.getResult());
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+
+        assertEquals(3, wfs.size());
+        assertEquals("wf-123456", wfs.get(0).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).getStatus());
+
+        assertEquals("child4", wfs.get(1).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
+
+        assertEquals("child5", wfs.get(2).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).getStatus());
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+        assertEquals(1, steps.size());
+        assertEquals("child4", steps.get(0).getChildWorkflowId());
+        assertEquals(0, steps.get(0).getFunctionId());
+        assertEquals("childWorkflow4", steps.get(0).getFunctionName());
+
+        steps = systemDatabase.listWorkflowSteps("child4");
+        assertEquals(1, steps.size());
+        assertEquals("child5", steps.get(0).getChildWorkflowId());
+        assertEquals(0, steps.get(0).getFunctionId());
+        assertEquals("grandchildWorkflow", steps.get(0).getFunctionName());
+
+
+    }
 }
