@@ -10,7 +10,10 @@ public interface SimpleService {
     public void workWithError() throws Exception ;
 
     public String parentWorkflowWithoutSet(String input) ;
+    public String WorkflowWithMultipleChildren(String input) throws Exception ;
 
     public String childWorkflow(String input) ;
+    public String childWorkflow2(String input) ;
+    public String childWorkflow3(String input) ;
 
 }

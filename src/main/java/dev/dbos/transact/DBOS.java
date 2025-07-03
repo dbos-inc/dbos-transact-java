@@ -10,6 +10,7 @@ import dev.dbos.transact.migrations.DatabaseMigrator;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
+import dev.dbos.transact.workflow.WorkflowHandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -202,6 +203,10 @@ public class DBOS {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    public static WorkflowHandle retrieveWorkflow(String workflowId) {
+        return DBOS.getInstance().dbosExecutor.retrieveWorkflow(workflowId);
     }
 
 }

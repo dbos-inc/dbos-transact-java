@@ -1,5 +1,7 @@
 package dev.dbos.transact.workflow;
 
+import dev.dbos.transact.DBOS;
+import dev.dbos.transact.context.SetWorkflowID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +44,38 @@ public class SimpleServiceImpl implements SimpleService {
 
     public void setSimpleService(SimpleService service) {
         this.simpleService = service ;
+    }
+
+    @Workflow(name = "WorkflowWithMultipleChildren")
+    public String WorkflowWithMultipleChildren(String input) throws Exception {
+        String result = input;
+
+        try (SetWorkflowID id = new SetWorkflowID("child1")) {
+            simpleService.childWorkflow("abc");
+        }
+        result = result + DBOS.retrieveWorkflow("child1").getResult() ;
+
+        try (SetWorkflowID id = new SetWorkflowID("child2")) {
+            simpleService.childWorkflow2("def");
+        }
+        result = result + DBOS.retrieveWorkflow("child2").getResult() ;
+
+        try (SetWorkflowID id = new SetWorkflowID("child3")) {
+            simpleService.childWorkflow3("ghi");
+        }
+        result = result + DBOS.retrieveWorkflow("child3").getResult() ;
+
+        return result ;
+    }
+
+    @Workflow(name = "childWorkflow2")
+    public String childWorkflow2(String input) {
+        return input ;
+    }
+
+    @Workflow(name = "childWorkflow3")
+    public String childWorkflow3(String input) {
+        return input ;
     }
 
 }
