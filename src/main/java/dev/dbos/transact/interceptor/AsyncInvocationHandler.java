@@ -1,5 +1,8 @@
 package dev.dbos.transact.interceptor;
 
+import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.workflow.Step;
@@ -13,6 +16,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 
@@ -91,16 +95,64 @@ public class AsyncInvocationHandler implements InvocationHandler {
             throw new IllegalStateException("Workflow not registered: " + workflowName);
         }
 
-        dbosExecutor.submitWorkflow(
-                workflowName,
-                targetClassName,
-                wrapper.target,
-                args,
-                wrapper.function
-        );
+        DBOSContext ctx = DBOSContextHolder.get() ;
+
+        if (ctx.isInWorkflow()) {
+
+            // child workflow
+            if (ctx.hasParent()) {
+                // child called with SetWorkflowId
+
+                dbosExecutor.submitWorkflow(
+                    workflowName,
+                    targetClassName,
+                    wrapper.target,
+                    args,
+                    wrapper.function
+                );
+            } else {
+                // child called without Set
+                // create child context from the parent
+                String childId = UUID.randomUUID().toString();
+                try(SetWorkflowID id = new SetWorkflowID(childId)) {
+                    dbosExecutor.submitWorkflow(
+                            workflowName,
+                            targetClassName,
+                            wrapper.target,
+                            args,
+                            wrapper.function
+                    );
+                }
+
+            }
+        } else {
+
+            // parent
+            if (ctx.getWorkflowId() == null ) {
+                // parent called without SetWorkflowId
+                String workflowfId = UUID.randomUUID().toString();
+                try(SetWorkflowID id = new SetWorkflowID(workflowfId)) {
+                    dbosExecutor.submitWorkflow(
+                            workflowName,
+                            targetClassName,
+                            wrapper.target,
+                            args,
+                            wrapper.function
+                    );
+                }
+            } else {
+                // not child called with Set just run
+                dbosExecutor.submitWorkflow(
+                        workflowName,
+                        targetClassName,
+                        wrapper.target,
+                        args,
+                        wrapper.function
+                );
+            }
+        }
 
         return getDefaultValue(method.getReturnType()) ; // always return null or default
-
     }
 
     protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
