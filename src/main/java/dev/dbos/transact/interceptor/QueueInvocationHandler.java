@@ -16,13 +16,14 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.UUID;
 
-public class QueueInvocationHandler implements InvocationHandler {
+// public class QueueInvocationHandler implements InvocationHandler {
+public class QueueInvocationHandler extends BaseInvocationHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(QueueInvocationHandler.class);
 
-    private final Object target;
+    /* private final Object target;
     private final String targetClassName ;
-    private final DBOSExecutor dbosExecutor ;
+    private final DBOSExecutor dbosExecutor ; */
     private final Queue queue ;
 
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation, Queue queue, DBOSExecutor executor) {
@@ -55,13 +56,14 @@ public class QueueInvocationHandler implements InvocationHandler {
 
 
     public QueueInvocationHandler(Object target, Queue queue, DBOSExecutor dbosExecutor) {
-        this.target = target;
+        /* this.target = target;
         this.targetClassName = target.getClass().getName();
-        this.dbosExecutor = dbosExecutor ;
+        this.dbosExecutor = dbosExecutor ; */
+        super(target, dbosExecutor) ;
         this.queue = queue;
     }
 
-    @Override
+    /* @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
 
         Method implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
@@ -180,5 +182,23 @@ public class QueueInvocationHandler implements InvocationHandler {
         if (returnType == float.class) return 0f;
         if (returnType == double.class) return 0d;
         return null;
+    } */
+
+    protected  Object submitWorkflow(String workflowName,
+                                     String targetClassName,
+                                     WorkflowFunctionWrapper wrapper,
+                                     Object[] args
+    ) throws Throwable {
+
+        dbosExecutor.enqueueWorkflow(
+                workflowName,
+                targetClassName,
+                wrapper,
+                args,
+                queue
+        );
+
+        return null ;
+
     }
 }

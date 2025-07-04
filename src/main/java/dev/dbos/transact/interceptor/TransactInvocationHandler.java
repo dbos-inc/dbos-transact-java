@@ -19,13 +19,13 @@ import java.util.Arrays;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-public class TransactInvocationHandler implements InvocationHandler {
-
+// public class TransactInvocationHandler implements InvocationHandler {
+public class TransactInvocationHandler extends  BaseInvocationHandler {
     private static final Logger logger = LoggerFactory.getLogger(TransactInvocationHandler.class);
 
-    private final Object target;
+    /* private final Object target;
     private final String targetClassName ;
-    private final DBOSExecutor dbosExecutor ;
+    private final DBOSExecutor dbosExecutor ; */
 
     @SuppressWarnings("unchecked")
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation, DBOSExecutor executor) {
@@ -55,12 +55,13 @@ public class TransactInvocationHandler implements InvocationHandler {
     }
 
     protected TransactInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
-        this.target = target;
+        /* this.target = target;
         this.targetClassName = target.getClass().getName();
-        this.dbosExecutor = dbosExecutor ;
+        this.dbosExecutor = dbosExecutor ; */
+        super(target, dbosExecutor) ;
     }
 
-    @Override
+    /*@Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
         logger.info("Interceptor called for method: " + method.getName());
 
@@ -190,6 +191,24 @@ public class TransactInvocationHandler implements InvocationHandler {
                 ()-> method.invoke(target, args)) ;
             logger.info("After: Step completed successfully");
             return result;
+
+    } */
+
+    protected  Object submitWorkflow(String workflowName,
+                                     String targetClassName,
+                                     WorkflowFunctionWrapper wrapper,
+                                     Object[] args
+    ) throws Throwable {
+
+        return dbosExecutor.runWorkflow(
+                workflowName,
+                targetClassName,
+                wrapper.target,
+                args,
+                wrapper.function,
+                DBOSContextHolder.get().getWorkflowId()
+        );
+
 
     }
 }

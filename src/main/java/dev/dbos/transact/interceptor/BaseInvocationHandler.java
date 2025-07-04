@@ -5,64 +5,32 @@ import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.Step;
-import dev.dbos.transact.workflow.Transaction;
 import dev.dbos.transact.workflow.Workflow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
-import java.util.Arrays;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Future;
 
-// public class AsyncInvocationHandler implements InvocationHandler {
-public class AsyncInvocationHandler extends BaseInvocationHandler {
+public abstract class BaseInvocationHandler implements InvocationHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(AsyncInvocationHandler.class);
 
-    public static <T> T createProxy(Class<T> interfaceClass, Object implementation, DBOSExecutor executor) {
-        if (!interfaceClass.isInterface()) {
-            throw new IllegalArgumentException("interfaceClass must be an interface");
-        }
+    private final Object target;
+    private final String targetClassName ;
+    protected final DBOSExecutor dbosExecutor ;
 
-        // Register all @Workflow methods
-        Method[] methods = implementation.getClass().getDeclaredMethods();
-        for (Method method : methods) {
-            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-            if (wfAnnotation != null) {
-                String workflowName = wfAnnotation.name().isEmpty() ? method.getName() : wfAnnotation.name();
-                method.setAccessible(true); // In case it's not public
-
-                executor.registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
-            }
-        }
-
-
-        T proxy =  (T) Proxy.newProxyInstance(
-                interfaceClass.getClassLoader(),
-                new Class<?>[] { interfaceClass },
-                new AsyncInvocationHandler(implementation, executor)) ;
-
-
-        return proxy;
-    }
-
-
-    public AsyncInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
-        /* this.target = target;
+    public BaseInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
+        this.target = target;
         this.targetClassName = target.getClass().getName();
-        this.dbosExecutor = dbosExecutor ; */
-        super(target, dbosExecutor);
+        this.dbosExecutor = dbosExecutor ;
     }
 
-   /* @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        
+
         Method implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
 
         if (implMethod.isAnnotationPresent(Workflow.class)) {
@@ -74,7 +42,6 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
 
         // No special annotation, proceed normally
         return method.invoke(target, args);
-
 
     }
 
@@ -95,6 +62,8 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
 
         DBOSContext ctx = DBOSContextHolder.get() ;
 
+        Object result ;
+
         if (ctx.isInWorkflow()) {
 
             // child workflow
@@ -102,13 +71,14 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
                 // child called with SetWorkflowId
                 logger.info("child with set") ;
 
-                dbosExecutor.submitWorkflow(
-                    workflowName,
-                    targetClassName,
-                    wrapper.target,
-                    args,
-                    wrapper.function
-                );
+                /* dbosExecutor.submitWorkflow(
+                        workflowName,
+                        targetClassName,
+                        wrapper.target,
+                        args,
+                        wrapper.function
+                ); */
+                result = submitWorkflow(workflowName, targetClassName, wrapper, args);
             } else {
                 // child called without Set
                 // create child context from the parent
@@ -116,13 +86,14 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
                 String childId = ctx.getWorkflowId() + "_" + ctx.getParentFunctionId();
                 logger.info("child call ......" + childId);
                 try(SetWorkflowID id = new SetWorkflowID(childId)) {
-                    dbosExecutor.submitWorkflow(
+                    /* dbosExecutor.submitWorkflow(
                             workflowName,
                             targetClassName,
                             wrapper.target,
                             args,
                             wrapper.function
-                    );
+                    ); */
+                    result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
 
             }
@@ -136,29 +107,36 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
                 String workflowfId = UUID.randomUUID().toString();
                 try(SetWorkflowID id = new SetWorkflowID(workflowfId)) {
                     DBOSContextHolder.get().setInWorkflow(true);
-                    dbosExecutor.submitWorkflow(
+                    /* dbosExecutor.submitWorkflow(
                             workflowName,
                             targetClassName,
                             wrapper.target,
                             args,
                             wrapper.function
-                    );
+                    ); */
+                    result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
             } else {
                 // not child called with Set just run
                 logger.info("Parent call ..." + DBOSContextHolder.get().getWorkflowId());
                 DBOSContextHolder.get().setInWorkflow(true);
-                dbosExecutor.submitWorkflow(
+                /* dbosExecutor.submitWorkflow(
                         workflowName,
                         targetClassName,
                         wrapper.target,
                         args,
                         wrapper.function
-                );
+                ); */
+                result = submitWorkflow(workflowName, targetClassName, wrapper, args);
             }
         }
 
-        return getDefaultValue(method.getReturnType()) ; // always return null or default
+        if (result != null) {
+            return result ;
+        } else {
+            return getDefaultValue(method.getReturnType()) ;
+            // always return null or default
+        }
     }
 
     protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
@@ -180,7 +158,7 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
         }
     }
 
-    private Object getDefaultValue(Class<?> returnType) {
+    protected Object getDefaultValue(Class<?> returnType) {
         if (!returnType.isPrimitive()) return null;
         if (returnType == boolean.class) return false;
         if (returnType == char.class) return '\0';
@@ -189,26 +167,12 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
         if (returnType == float.class) return 0f;
         if (returnType == double.class) return 0d;
         return null;
-    } */
-
-    protected  Object submitWorkflow(String workflowName,
-                                             String targetClassName,
-                                             WorkflowFunctionWrapper wrapper,
-                                             Object[] args
-    ) throws Throwable {
-
-        dbosExecutor.submitWorkflow(
-                workflowName,
-                targetClassName,
-                wrapper.target,
-                args,
-                wrapper.function
-        );
-
-
-        return null ;
-
     }
 
+    protected abstract Object submitWorkflow(String workflowName,
+                                       String targetClassName,
+                                       WorkflowFunctionWrapper wrapper,
+                                       Object[] args
+    ) throws Throwable ;
 
 }
