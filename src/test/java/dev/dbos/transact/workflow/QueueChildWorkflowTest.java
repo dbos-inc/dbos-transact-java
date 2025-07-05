@@ -106,10 +106,6 @@ public class QueueChildWorkflowTest {
 
         simpleService.setSimpleService(simpleService);
 
-        String result = null ;
-
-        SimpleServiceImpl.executionCount =0 ;
-
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
             simpleService.WorkflowWithMultipleChildren("123");
         }
@@ -163,10 +159,6 @@ public class QueueChildWorkflowTest {
 
         simpleService.setSimpleService(simpleService);
 
-        String result = null;
-
-        SimpleServiceImpl.executionCount = 0;
-
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
             simpleService.grandParent("123");
         }
@@ -197,7 +189,6 @@ public class QueueChildWorkflowTest {
         assertEquals("child5", steps.get(0).getChildWorkflowId());
         assertEquals(0, steps.get(0).getFunctionId());
         assertEquals("grandchildWorkflow", steps.get(0).getFunctionName());
-
 
     }
 }

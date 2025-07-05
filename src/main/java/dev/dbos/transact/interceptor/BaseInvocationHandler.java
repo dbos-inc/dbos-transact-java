@@ -70,14 +70,6 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
             if (ctx.hasParent()) {
                 // child called with SetWorkflowId
                 logger.info("child with set") ;
-
-                /* dbosExecutor.submitWorkflow(
-                        workflowName,
-                        targetClassName,
-                        wrapper.target,
-                        args,
-                        wrapper.function
-                ); */
                 result = submitWorkflow(workflowName, targetClassName, wrapper, args);
             } else {
                 // child called without Set
@@ -86,13 +78,6 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                 String childId = ctx.getWorkflowId() + "_" + ctx.getParentFunctionId();
                 logger.info("child call ......" + childId);
                 try(SetWorkflowID id = new SetWorkflowID(childId)) {
-                    /* dbosExecutor.submitWorkflow(
-                            workflowName,
-                            targetClassName,
-                            wrapper.target,
-                            args,
-                            wrapper.function
-                    ); */
                     result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
 
@@ -107,26 +92,11 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                 String workflowfId = UUID.randomUUID().toString();
                 try(SetWorkflowID id = new SetWorkflowID(workflowfId)) {
                     DBOSContextHolder.get().setInWorkflow(true);
-                    /* dbosExecutor.submitWorkflow(
-                            workflowName,
-                            targetClassName,
-                            wrapper.target,
-                            args,
-                            wrapper.function
-                    ); */
                     result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
             } else {
                 // not child called with Set just run
-                logger.info("Parent call ..." + DBOSContextHolder.get().getWorkflowId());
                 DBOSContextHolder.get().setInWorkflow(true);
-                /* dbosExecutor.submitWorkflow(
-                        workflowName,
-                        targetClassName,
-                        wrapper.target,
-                        args,
-                        wrapper.function
-                ); */
                 result = submitWorkflow(workflowName, targetClassName, wrapper, args);
             }
         }

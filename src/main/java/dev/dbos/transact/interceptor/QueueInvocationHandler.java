@@ -47,7 +47,7 @@ public class QueueInvocationHandler extends BaseInvocationHandler {
         super(target, dbosExecutor) ;
         this.queue = queue;
     }
-    
+
     protected  Object submitWorkflow(String workflowName,
                                      String targetClassName,
                                      WorkflowFunctionWrapper wrapper,

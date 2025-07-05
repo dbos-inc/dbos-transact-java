@@ -146,7 +146,6 @@ public class SyncWorkflowTest {
                 .build();
 
         String result = null ;
-
         SimpleServiceImpl.executionCount =0 ;
 
         try (SetWorkflowID id = new SetWorkflowID("wf-123")){
@@ -193,8 +192,6 @@ public class SyncWorkflowTest {
 
         String result = null ;
 
-        SimpleServiceImpl.executionCount =0 ;
-
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
             result = simpleService.parentWorkflowWithoutSet("123");
         }
@@ -228,8 +225,6 @@ public class SyncWorkflowTest {
         simpleService.setSimpleService(simpleService);
 
         String result = null ;
-
-        SimpleServiceImpl.executionCount =0 ;
 
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
             simpleService.WorkflowWithMultipleChildren("123");
@@ -280,8 +275,6 @@ public class SyncWorkflowTest {
 
         String result = null;
 
-        SimpleServiceImpl.executionCount = 0;
-
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
             simpleService.grandParent("123");
         }
@@ -312,7 +305,5 @@ public class SyncWorkflowTest {
         assertEquals("child5", steps.get(0).getChildWorkflowId());
         assertEquals(0, steps.get(0).getFunctionId());
         assertEquals("grandchildWorkflow", steps.get(0).getFunctionName());
-
-
     }
 }

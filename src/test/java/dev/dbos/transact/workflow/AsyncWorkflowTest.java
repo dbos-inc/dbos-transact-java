@@ -198,15 +198,10 @@ public class AsyncWorkflowTest {
 
         simpleService.setSimpleService(simpleService);
 
-        String result = null ;
-
-        SimpleServiceImpl.executionCount =0 ;
-
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
             simpleService.parentWorkflowWithoutSet("123");
         }
 
-        // assertEquals("123abc", result);
         WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         System.out.println(handle.getResult());
 
@@ -236,10 +231,6 @@ public class AsyncWorkflowTest {
                 .build();
 
         simpleService.setSimpleService(simpleService);
-
-        String result = null ;
-
-        SimpleServiceImpl.executionCount =0 ;
 
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
             simpleService.WorkflowWithMultipleChildren("123");
@@ -288,10 +279,6 @@ public class AsyncWorkflowTest {
                 .build();
 
         simpleService.setSimpleService(simpleService);
-
-        String result = null;
-
-        SimpleServiceImpl.executionCount = 0;
 
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
             simpleService.grandParent("123");
