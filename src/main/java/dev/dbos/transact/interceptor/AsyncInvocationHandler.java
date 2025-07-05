@@ -1,26 +1,13 @@
 package dev.dbos.transact.interceptor;
 
-import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
-import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
-import dev.dbos.transact.workflow.Step;
-import dev.dbos.transact.workflow.Transaction;
 import dev.dbos.transact.workflow.Workflow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.util.Arrays;
-import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Future;
 
-// public class AsyncInvocationHandler implements InvocationHandler {
 public class AsyncInvocationHandler extends BaseInvocationHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(AsyncInvocationHandler.class);
@@ -52,144 +39,9 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
         return proxy;
     }
 
-
     public AsyncInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
-        /* this.target = target;
-        this.targetClassName = target.getClass().getName();
-        this.dbosExecutor = dbosExecutor ; */
         super(target, dbosExecutor);
     }
-
-   /* @Override
-    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        
-        Method implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
-
-        if (implMethod.isAnnotationPresent(Workflow.class)) {
-            return handleWorkflow(method, args, implMethod.getAnnotation(Workflow.class));
-
-        } else if (implMethod.isAnnotationPresent(Step.class)) {
-            return handleStep(method, args, implMethod.getAnnotation(Step.class));
-        }
-
-        // No special annotation, proceed normally
-        return method.invoke(target, args);
-
-
-    }
-
-    protected Object handleWorkflow(Method method, Object[] args, Workflow workflow) throws Throwable {
-
-        String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
-
-        String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
-                workflowName,
-                workflow.timeout());
-
-        logger.info(msg);
-
-        WorkflowFunctionWrapper wrapper = dbosExecutor.getWorkflow(workflowName);
-        if (wrapper == null) {
-            throw new IllegalStateException("Workflow not registered: " + workflowName);
-        }
-
-        DBOSContext ctx = DBOSContextHolder.get() ;
-
-        if (ctx.isInWorkflow()) {
-
-            // child workflow
-            if (ctx.hasParent()) {
-                // child called with SetWorkflowId
-                logger.info("child with set") ;
-
-                dbosExecutor.submitWorkflow(
-                    workflowName,
-                    targetClassName,
-                    wrapper.target,
-                    args,
-                    wrapper.function
-                );
-            } else {
-                // child called without Set
-                // create child context from the parent
-
-                String childId = ctx.getWorkflowId() + "_" + ctx.getParentFunctionId();
-                logger.info("child call ......" + childId);
-                try(SetWorkflowID id = new SetWorkflowID(childId)) {
-                    dbosExecutor.submitWorkflow(
-                            workflowName,
-                            targetClassName,
-                            wrapper.target,
-                            args,
-                            wrapper.function
-                    );
-                }
-
-            }
-        } else {
-
-
-            // parent
-            if (ctx.getWorkflowId() == null ) {
-                logger.info("parent without set .....");
-                // parent called without SetWorkflowId
-                String workflowfId = UUID.randomUUID().toString();
-                try(SetWorkflowID id = new SetWorkflowID(workflowfId)) {
-                    DBOSContextHolder.get().setInWorkflow(true);
-                    dbosExecutor.submitWorkflow(
-                            workflowName,
-                            targetClassName,
-                            wrapper.target,
-                            args,
-                            wrapper.function
-                    );
-                }
-            } else {
-                // not child called with Set just run
-                logger.info("Parent call ..." + DBOSContextHolder.get().getWorkflowId());
-                DBOSContextHolder.get().setInWorkflow(true);
-                dbosExecutor.submitWorkflow(
-                        workflowName,
-                        targetClassName,
-                        wrapper.target,
-                        args,
-                        wrapper.function
-                );
-            }
-        }
-
-        return getDefaultValue(method.getReturnType()) ; // always return null or default
-    }
-
-    protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
-        String msg = String.format("Before : Executing step %s %s",
-                method.getName(), step.name());
-        logger.info(msg);
-        try {
-            Object result = dbosExecutor.runStep(step.name(),
-                    step.retriesAllowed(),
-                    step.maxAttempts(),
-                    step.backOffRate(),
-                    args,
-                    ()-> method.invoke(target, args)) ;
-            logger.info("After: Step completed successfully");
-            return result;
-        } catch (Exception e) {
-            logger.info("Step failed: " + e.getCause().getMessage());
-            throw e.getCause();
-        }
-    }
-
-    private Object getDefaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) return null;
-        if (returnType == boolean.class) return false;
-        if (returnType == char.class) return '\0';
-        if (returnType == byte.class || returnType == short.class || returnType == int.class) return 0;
-        if (returnType == long.class) return 0L;
-        if (returnType == float.class) return 0f;
-        if (returnType == double.class) return 0d;
-        return null;
-    } */
 
     protected  Object submitWorkflow(String workflowName,
                                              String targetClassName,
@@ -205,10 +57,6 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
                 wrapper.function
         );
 
-
         return null ;
-
     }
-
-
 }
