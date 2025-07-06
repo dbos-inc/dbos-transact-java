@@ -4,6 +4,8 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.DBOSAppException;
+import dev.dbos.transact.exceptions.SerializableException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
 import org.junit.jupiter.api.*;
@@ -175,8 +177,10 @@ public class AsyncWorkflowTest {
         handle = dbosExecutor.retrieveWorkflow(wfid);
         try {
             handle.getResult();
-        } catch (Exception e) {
-            assertEquals("java.lang.Exception: DBOS Test error", e.getMessage());
+        } catch (DBOSAppException e) {
+            assertEquals("Exception of type java.lang.Exception", e.getMessage());
+            SerializableException se = e.original;
+            assertEquals("DBOS Test error", se.message);
         }
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(1, wfs.size());

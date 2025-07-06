@@ -14,7 +14,7 @@ public interface WorkflowHandle<T> {
      * This method blocks until the result is available.
      * @return The result of the workflow invocation.
      */
-    T getResult() throws Exception ;
+    T getResult()  ;
 
     /**
      * Return the current workflow function invocation status as `WorkflowStatus`.

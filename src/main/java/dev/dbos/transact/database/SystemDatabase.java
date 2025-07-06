@@ -201,7 +201,7 @@ public class SystemDatabase {
 
     }
 
-    public Object awaitWorkflowResult(String workflowId) throws Exception {
+    public Object awaitWorkflowResult(String workflowId) {
 
         return workflowDAO.awaitWorkflowResult(workflowId) ;
 

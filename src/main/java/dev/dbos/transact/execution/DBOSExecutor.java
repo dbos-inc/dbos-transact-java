@@ -9,6 +9,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
+import dev.dbos.transact.exceptions.SerializableException;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
@@ -133,7 +134,9 @@ public class DBOSExecutor {
 
     public void postInvokeWorkflow(String workflowId, Throwable error) {
 
-        String errorString = error.toString() ;
+        // String errorString = error.toString() ;
+        SerializableException se = new SerializableException(error);
+        String errorString = JSONUtil.serialize(se) ;
 
         systemDatabase.recordWorkflowError(workflowId, errorString);
 

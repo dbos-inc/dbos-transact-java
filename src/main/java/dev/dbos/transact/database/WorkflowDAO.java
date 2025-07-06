@@ -569,7 +569,7 @@ public class WorkflowDAO {
     }
 
 
-    public Object awaitWorkflowResult(String workflowId) throws Exception {
+    public Object awaitWorkflowResult(String workflowId)  {
 
         final String sql = "SELECT status, output, error " +
                 "FROM dbos.workflow_status " +
@@ -593,7 +593,10 @@ public class WorkflowDAO {
                             case ERROR:
                                 String error = rs.getString("error");
                                 // TODO fixException exception = serialization.deserializeException(error);
-                                throw new Exception(error);
+                                // throw new Exception(error);
+                                SerializableException se = (SerializableException) JSONUtil.deserialize(error);
+
+                                throw new DBOSAppException(String.format("Exception of type %s", se.className), se) ;
 
                             case CANCELLED:
                                 throw new AwaitedWorkflowCancelledException(workflowId);
