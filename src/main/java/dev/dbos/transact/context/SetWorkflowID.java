@@ -20,7 +20,6 @@ public class SetWorkflowID implements AutoCloseable {
     @Override
     public void close() {
         DBOSContextHolder.set(previousCtx) ;
-        //TODO : for child workflows we need like a SetInheritedContext that keeps function id from parent
     }
 }
 

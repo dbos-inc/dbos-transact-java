@@ -499,7 +499,7 @@ public class WorkflowDAO {
 
                     String authenticatedRolesJson = rs.getString("authenticated_roles");
                     if (authenticatedRolesJson != null) {
-                        info.setAuthenticatedRoles(JSONUtil.fromJson(authenticatedRolesJson, new TypeReference<List<String>>() {}));
+                        info.setAuthenticatedRoles((List<String>) JSONUtil.deserialize(authenticatedRolesJson));
                     }
 
                     info.setAssumedRole(rs.getString("assumed_role"));
@@ -592,12 +592,8 @@ public class WorkflowDAO {
                                 return output != null ? JSONUtil.deserialize(output) : null;
                             case ERROR:
                                 String error = rs.getString("error");
-                                // TODO fixException exception = serialization.deserializeException(error);
-                                // throw new Exception(error);
                                 SerializableException se = (SerializableException) JSONUtil.deserialize(error);
-
                                 throw new DBOSAppException(String.format("Exception of type %s", se.className), se) ;
-
                             case CANCELLED:
                                 throw new AwaitedWorkflowCancelledException(workflowId);
 
