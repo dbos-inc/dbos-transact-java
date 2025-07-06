@@ -30,5 +30,21 @@ public class JSONUtil {
             throw new RuntimeException("Deserialization failed", e);
         }
     }
+
+    public static <T> T deserialize(String json, Class<T> clazz) {
+        try {
+            return mapper.readValue(json, clazz);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Deserialization failed", e);
+        }
+    }
+
+    public static <T> T deserialize(String json, TypeReference<T> typeRef) {
+        try {
+            return mapper.readValue(json, typeRef);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Deserialization failed", e);
+        }
+    }
 }
 
