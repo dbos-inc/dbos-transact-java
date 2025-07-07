@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DBOS {
 
@@ -25,6 +26,9 @@ public class DBOS {
     private final DBOSConfig config;
     private DBOSExecutor dbosExecutor  ;
     private QueueService queueService ;
+
+    private final CountDownLatch shutdownLatch = new CountDownLatch(1);
+    private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     private DBOS(DBOSConfig config) {
         this.config = config;
@@ -169,7 +173,7 @@ public class DBOS {
     }
 
     public void launch() {
-        logger.info("Starting DBOS ...") ;
+        logger.info("Starting DBOS ...mjjjjjjjj") ;
         DatabaseMigrator.runMigrations(config);
         if (dbosExecutor == null) {
             SystemDatabase.initialize(config);
@@ -181,27 +185,40 @@ public class DBOS {
             queueService.start();
         }
 
+        // Block the main thread until shutdown is called
+        Thread blocker = new Thread(() -> {
+            try {
+                shutdownLatch.await(); // Blocks until latch is counted down
+            } catch (InterruptedException ignored) {
+            }
+        }, "DBOS-MainBlocker");
+
+        blocker.setDaemon(false); // Prevents JVM from exiting
+        blocker.start();
+
+        // Hook for Ctrl+C
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            logger.info("Ctrl+C received. Shutting down DBOS...");
+            shutdown(); // Triggers latch and cleanup
+        }));
+
+
     }
 
     public void shutdown() {
-        queueService.stop();
-        dbosExecutor.shutdown();
-        instance = null ;
-    }
 
+        if (isShutdown.compareAndSet(false, true)) {
 
-    private final CountDownLatch shutdownLatch = new CountDownLatch(1);
-
-    public void waitUntilShutdown() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Shutdown signal received. Cleaning up...");
-            shutdownLatch.countDown(); // Allow the main thread to exit
-        }));
-
-        try {
-            shutdownLatch.await(); // Block main thread
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            if (queueService != null) {
+                queueService.stop();
+                queueService = null;
+            }
+            if (dbosExecutor != null) {
+                dbosExecutor.shutdown();
+                dbosExecutor = null;
+            }
+            shutdownLatch.countDown();
+            instance = null;
         }
     }
 

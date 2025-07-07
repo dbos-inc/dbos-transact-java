@@ -112,7 +112,7 @@ class JSONUtilTest {
         original.put("numbers", Arrays.asList(1, 2, 3, 4, 5));
 
         String json = JSONUtil.serialize(original);
-        
+
         Map<String, List<Integer>> deserialized = JSONUtil.deserialize(
                 json,
                 new TypeReference<Map<String, List<Integer>>>() {}
