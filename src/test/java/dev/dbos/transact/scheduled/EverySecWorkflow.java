@@ -5,11 +5,12 @@ import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Instant;
 
-public class ScheduledWorkflows {
+public class EverySecWorkflow {
 
     public volatile int wfCounter = 0 ;
 
-    public ScheduledWorkflows() {
+
+    public EverySecWorkflow() {
 
 
     }
@@ -20,4 +21,5 @@ public class ScheduledWorkflows {
         ++wfCounter;
         System.out.println("Execute count "+wfCounter + "  " + schedule.toString() + "   " + actual.toString()) ;
     }
+
 }

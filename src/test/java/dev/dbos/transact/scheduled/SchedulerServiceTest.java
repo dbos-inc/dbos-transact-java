@@ -5,7 +5,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
-import dev.dbos.transact.workflow.AsyncWorkflowTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,7 +82,7 @@ class SchedulerServiceTest {
     @Test
     public void simpleScheduledWorkflow() throws Exception {
 
-        ScheduledWorkflows swf = new ScheduledWorkflows() ;
+        EverySecWorkflow swf = new EverySecWorkflow() ;
         dbos.scheduleWorkflow(swf);
         Thread.sleep(5000);
         schedulerService.stop();
@@ -92,6 +91,21 @@ class SchedulerServiceTest {
         int count = swf.wfCounter;
         System.out.println("Final count: " + count);
         assertTrue(count >= 2 && count <= 5);
+
+    }
+
+    @Test
+    public void ThirdSecWorkflow() throws Exception {
+
+        EveryThirdSec swf = new EveryThirdSec() ;
+        dbos.scheduleWorkflow(swf);
+        Thread.sleep(5000);
+        schedulerService.stop();
+        Thread.sleep(1000);
+
+        int count = swf.wfCounter;
+        System.out.println("Final count: " + count);
+        assertTrue(count <= 2);
 
     }
 

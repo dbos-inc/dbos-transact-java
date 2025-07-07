@@ -25,6 +25,7 @@ dependencies {
     implementation("org.postgresql:postgresql:42.6.0")
     implementation("com.zaxxer:HikariCP:5.0.1") // Connection pool
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.0") // json
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.0")
     implementation("com.cronutils:cron-utils:9.2.1") // cron for scheduled wf
 
     testImplementation("ch.qos.logback:logback-classic:1.5.6")
