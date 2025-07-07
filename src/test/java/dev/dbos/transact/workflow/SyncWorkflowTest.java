@@ -146,7 +146,6 @@ public class SyncWorkflowTest {
                 .build();
 
         String result = null ;
-
         SimpleServiceImpl.executionCount =0 ;
 
         try (SetWorkflowID id = new SetWorkflowID("wf-123")){
@@ -179,5 +178,132 @@ public class SyncWorkflowTest {
         assertEquals(2, wfs.size());
         assertEquals("wf-124",wfs.get(1).getWorkflowId());
 
+    }
+
+    @Test
+    public void childWorkflowWithoutSet() throws Exception{
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+
+        simpleService.setSimpleService(simpleService);
+
+        String result = null ;
+
+        try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
+            result = simpleService.parentWorkflowWithoutSet("123");
+        }
+
+        assertEquals("123abc", result);
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+
+        assertEquals(2, wfs.size());
+        assertEquals("wf-123456", wfs.get(0).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).getStatus());
+
+        assertEquals("wf-123456-0", wfs.get(1).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+        assertEquals(1, steps.size());
+        assertEquals("wf-123456-0", steps.get(0).getChildWorkflowId());
+        assertEquals(0, steps.get(0).getFunctionId());
+        assertEquals("childWorkflow", steps.get(0).getFunctionName());
+    }
+
+    @Test
+    public void multipleChildren() throws Exception{
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+
+        simpleService.setSimpleService(simpleService);
+
+        String result = null ;
+
+        try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
+            simpleService.WorkflowWithMultipleChildren("123");
+        }
+
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        assertEquals("123abcdefghi", handle.getResult());
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+
+        assertEquals(4, wfs.size());
+        assertEquals("wf-123456", wfs.get(0).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).getStatus());
+
+        assertEquals("child1", wfs.get(1).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
+
+        assertEquals("child2", wfs.get(2).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).getStatus());
+
+        assertEquals("child3", wfs.get(3).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).getStatus());
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+        assertEquals(3, steps.size());
+        assertEquals("child1", steps.get(0).getChildWorkflowId());
+        assertEquals(0, steps.get(0).getFunctionId());
+        assertEquals("childWorkflow", steps.get(0).getFunctionName());
+
+        assertEquals("child2", steps.get(1).getChildWorkflowId());
+        assertEquals(1, steps.get(1).getFunctionId());
+        assertEquals("childWorkflow2", steps.get(1).getFunctionName());
+
+        assertEquals("child3", steps.get(2).getChildWorkflowId());
+        assertEquals(2, steps.get(2).getFunctionId());
+        assertEquals("childWorkflow3", steps.get(2).getFunctionName());
+    }
+
+    @Test
+    public void nestedChildren() throws Exception {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+
+        simpleService.setSimpleService(simpleService);
+
+        String result = null;
+
+        try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
+            simpleService.grandParent("123");
+        }
+
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        assertEquals("p-c-gc-123",handle.getResult());
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+
+        assertEquals(3, wfs.size());
+        assertEquals("wf-123456", wfs.get(0).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).getStatus());
+
+        assertEquals("child4", wfs.get(1).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
+
+        assertEquals("child5", wfs.get(2).getWorkflowId());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).getStatus());
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+        assertEquals(1, steps.size());
+        assertEquals("child4", steps.get(0).getChildWorkflowId());
+        assertEquals(0, steps.get(0).getFunctionId());
+        assertEquals("childWorkflow4", steps.get(0).getFunctionName());
+
+        steps = systemDatabase.listWorkflowSteps("child4");
+        assertEquals(1, steps.size());
+        assertEquals("child5", steps.get(0).getChildWorkflowId());
+        assertEquals(0, steps.get(0).getFunctionId());
+        assertEquals("grandchildWorkflow", steps.get(0).getFunctionName());
     }
 }

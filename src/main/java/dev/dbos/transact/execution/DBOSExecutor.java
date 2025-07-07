@@ -9,6 +9,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
+import dev.dbos.transact.exceptions.SerializableException;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
@@ -113,6 +114,14 @@ public class DBOSExecutor {
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(),e) ;
         }
 
+        DBOSContext ctx = DBOSContextHolder.get();
+        if (ctx.hasParent()) {
+            systemDatabase.recordChildWorkflow(ctx.getParentWorkflowId(),
+                                                ctx.getWorkflowId(),
+                                                ctx.getParentFunctionId(),
+                                                workflowName);
+        }
+
         return initResult;
     }
 
@@ -125,7 +134,9 @@ public class DBOSExecutor {
 
     public void postInvokeWorkflow(String workflowId, Throwable error) {
 
-        String errorString = error.toString() ;
+        // String errorString = error.toString() ;
+        SerializableException se = new SerializableException(error);
+        String errorString = JSONUtil.serialize(se) ;
 
         systemDatabase.recordWorkflowError(workflowId, errorString);
 
@@ -139,16 +150,6 @@ public class DBOSExecutor {
                              String workflowId) throws Throwable {
 
         String wfid = workflowId ;
-
-        if (wfid == null) {
-            DBOSContext ctx = DBOSContextHolder.get();
-            wfid = ctx.getWorkflowId() ;
-
-            if (wfid == null) {
-                wfid = UUID.randomUUID().toString();
-                ctx.setWorkflowId(wfid);
-            }
-        }
 
         WorkflowInitResult initResult = null;
         try {
@@ -165,12 +166,15 @@ public class DBOSExecutor {
 
             @SuppressWarnings("unchecked")
             T result = (T) function.invoke(target, args);
+
             postInvokeWorkflow(initResult.getWorkflowId(), result);
             return result;
         } catch (Throwable e) {
             Throwable actual = (e instanceof InvocationTargetException)
                     ? ((InvocationTargetException) e).getTargetException()
                     : e;
+
+            logger.error("Error in preinvoke", actual);
             postInvokeWorkflow(initResult.getWorkflowId(), actual);
             throw actual;
         }
@@ -184,11 +188,6 @@ public class DBOSExecutor {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId() ;
-
-        if (workflowId == null) {
-            workflowId = UUID.randomUUID().toString();
-            ctx.setWorkflowId(workflowId);
-        }
 
         final String wfId = workflowId ;
 
@@ -302,11 +301,8 @@ public class DBOSExecutor {
         while (retriedAllowed && currAttempts <= maxAttempts) {
 
             try {
-                logger.info("Before executing step");
                 result = function.execute();
-                logger.info("After: step completed successfully " + result);// invoke the lambda
                 serializedOutput = JSONUtil.serialize(result);
-                logger.info("Json serialized output is " + serializedOutput);
                 eThrown = null ;
             } catch(Exception e) {
                 // TODO: serialize

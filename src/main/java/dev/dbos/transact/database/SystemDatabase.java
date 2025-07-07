@@ -201,7 +201,7 @@ public class SystemDatabase {
 
     }
 
-    public Object awaitWorkflowResult(String workflowId) throws Exception {
+    public Object awaitWorkflowResult(String workflowId) {
 
         return workflowDAO.awaitWorkflowResult(workflowId) ;
 
@@ -209,6 +209,13 @@ public class SystemDatabase {
 
     public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId, String appVersion) throws SQLException {
         return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
+    }
+
+    public void recordChildWorkflow(String parentId,
+                                    String childId, // workflowId of the child
+                                    int functionId, // func id in the parent
+                                    String functionName) {
+        workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);
     }
 
     private void createDataSource(String dbName) {

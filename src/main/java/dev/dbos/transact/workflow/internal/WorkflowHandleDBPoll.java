@@ -19,13 +19,11 @@ public class WorkflowHandleDBPoll<T> implements WorkflowHandle<T> {
     }
 
     @Override
-    public T getResult() throws Exception {
-        try {
-            T result = (T)systemDatabase.awaitWorkflowResult(workflowId);
-            return result ;
-        } catch (Exception e) {
-            throw e;
-        }
+    public T getResult()  {
+
+        T result = (T)systemDatabase.awaitWorkflowResult(workflowId);
+        return result ;
+
     }
 
     @Override

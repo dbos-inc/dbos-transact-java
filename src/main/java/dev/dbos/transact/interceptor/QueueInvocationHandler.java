@@ -3,22 +3,17 @@ package dev.dbos.transact.interceptor;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.UUID;
 
-public class QueueInvocationHandler implements InvocationHandler {
+public class QueueInvocationHandler extends BaseInvocationHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(QueueInvocationHandler.class);
-
-    private final Object target;
-    private final String targetClassName ;
-    private final DBOSExecutor dbosExecutor ;
     private final Queue queue ;
 
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation, Queue queue, DBOSExecutor executor) {
@@ -48,41 +43,16 @@ public class QueueInvocationHandler implements InvocationHandler {
         return proxy;
     }
 
-
-
     public QueueInvocationHandler(Object target, Queue queue, DBOSExecutor dbosExecutor) {
-        this.target = target;
-        this.targetClassName = target.getClass().getName();
-        this.dbosExecutor = dbosExecutor ;
+        super(target, dbosExecutor) ;
         this.queue = queue;
     }
 
-    @Override
-    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-
-        Method implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
-
-        if (implMethod.isAnnotationPresent(Workflow.class)) {
-            return handleWorkflow(method, args, implMethod.getAnnotation(Workflow.class));
-
-        } else if (implMethod.isAnnotationPresent(Step.class)) {
-            return handleStep(method, args, implMethod.getAnnotation(Step.class));
-        }
-
-        // No special annotation, proceed normally
-        return method.invoke(target, args);
-
-
-    }
-
-    protected Object handleWorkflow(Method method, Object[] args, Workflow workflow) throws Throwable {
-
-        String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
-
-        WorkflowFunctionWrapper wrapper = dbosExecutor.getWorkflow(workflowName);
-        if (wrapper == null) {
-            throw new IllegalStateException("Workflow not registered: " + workflowName);
-        }
+    protected  Object submitWorkflow(String workflowName,
+                                     String targetClassName,
+                                     WorkflowFunctionWrapper wrapper,
+                                     Object[] args
+    ) throws Throwable {
 
         dbosExecutor.enqueueWorkflow(
                 workflowName,
@@ -92,37 +62,7 @@ public class QueueInvocationHandler implements InvocationHandler {
                 queue
         );
 
-        return getDefaultValue(method.getReturnType()) ; // always return null or default
+        return null ;
 
-    }
-
-    protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
-        String msg = String.format("Before : Executing step %s %s",
-                method.getName(), step.name());
-        logger.info(msg);
-        try {
-            Object result = dbosExecutor.runStep(step.name(),
-                    step.retriesAllowed(),
-                    step.maxAttempts(),
-                    step.backOffRate(),
-                    args,
-                    ()-> method.invoke(target, args)) ;
-            logger.info("After: Step completed successfully");
-            return result;
-        } catch (Exception e) {
-            logger.info("Step failed: " + e.getCause().getMessage());
-            throw e.getCause();
-        }
-    }
-
-    private Object getDefaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) return null;
-        if (returnType == boolean.class) return false;
-        if (returnType == char.class) return '\0';
-        if (returnType == byte.class || returnType == short.class || returnType == int.class) return 0;
-        if (returnType == long.class) return 0L;
-        if (returnType == float.class) return 0f;
-        if (returnType == double.class) return 0d;
-        return null;
     }
 }
