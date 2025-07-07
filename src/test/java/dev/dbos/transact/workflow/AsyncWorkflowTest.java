@@ -215,12 +215,12 @@ public class AsyncWorkflowTest {
         assertEquals("wf-123456", wfs.get(0).getWorkflowId());
         assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).getStatus());
 
-        assertEquals("wf-123456_0", wfs.get(1).getWorkflowId());
+        assertEquals("wf-123456-0", wfs.get(1).getWorkflowId());
         assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
 
         List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
         assertEquals(1, steps.size());
-        assertEquals("wf-123456_0", steps.get(0).getChildWorkflowId());
+        assertEquals("wf-123456-0", steps.get(0).getChildWorkflowId());
         assertEquals(0, steps.get(0).getFunctionId());
         assertEquals("childWorkflow", steps.get(0).getFunctionName());
     }

@@ -69,14 +69,12 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
             // child workflow
             if (ctx.hasParent()) {
                 // child called with SetWorkflowId
-                logger.info("child with set") ;
                 result = submitWorkflow(workflowName, targetClassName, wrapper, args);
             } else {
                 // child called without Set
                 // create child context from the parent
 
-                String childId = ctx.getWorkflowId() + "_" + ctx.getParentFunctionId();
-                logger.info("child call ......" + childId);
+                String childId = ctx.getWorkflowId() + "-" + ctx.getParentFunctionId();
                 try(SetWorkflowID id = new SetWorkflowID(childId)) {
                     result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
@@ -87,7 +85,6 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
             // parent
             if (ctx.getWorkflowId() == null ) {
-                logger.info("parent without set .....");
                 // parent called without SetWorkflowId
                 String workflowfId = UUID.randomUUID().toString();
                 try(SetWorkflowID id = new SetWorkflowID(workflowfId)) {
