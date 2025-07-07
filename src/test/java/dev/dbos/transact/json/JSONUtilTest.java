@@ -62,6 +62,7 @@ class JSONUtilTest {
     public void testNestedClassSerialization() {
         Person p = new Person("Alice", 30, new Person.Address("Seattle", "98101"));
         String json = JSONUtil.serialize(p);
+        System.out.println(json);
         Object deserialized = JSONUtil.deserialize(json);
 
         assertTrue(deserialized instanceof Person);
@@ -72,7 +73,9 @@ class JSONUtilTest {
     public void testArraySerialization() {
         int[] nums = {1, 2, 3, 4};
         String json = JSONUtil.serialize(nums);
-        int[] deserialized = JSONUtil.deserialize(json, int[].class); // <-- change here
+        System.out.println(json);
+        int[] deserialized = (int[])JSONUtil.deserialize(json) ;
+        // int[] deserialized = JSONUtil.deserialize(json, int[].class); // <-- change here
         assertArrayEquals(nums, deserialized);
     }
 
@@ -80,6 +83,7 @@ class JSONUtilTest {
     public void testListSerialization() {
         List<String> list = Arrays.asList("apple", "banana", "cherry");
         String json = JSONUtil.serialize(list);
+        System.out.println(json);
         Object deserialized = JSONUtil.deserialize(json);
 
         assertTrue(deserialized instanceof List);
@@ -107,20 +111,28 @@ class JSONUtilTest {
     }
 
     @Test
-    public void testDeserializeWithTypeReference() {
-        Map<String, List<Integer>> original = new HashMap<>();
-        original.put("numbers", Arrays.asList(1, 2, 3, 4, 5));
+    public void testNestedListOfMaps() {
+        List<Map<String, Object>> list = new ArrayList<>();
+        Map<String, Object> m1 = new HashMap<>();
+        m1.put("name", "Alice");
+        m1.put("age", 30);
+        list.add(m1);
 
-        String json = JSONUtil.serialize(original);
+        String json = JSONUtil.serialize(list);
+        Object deserialized = JSONUtil.deserialize(json);
 
-        Map<String, List<Integer>> deserialized = JSONUtil.deserialize(
-                json,
-                new TypeReference<Map<String, List<Integer>>>() {}
-        );
-
-        // Assertions
-        assertNotNull(deserialized);
-        assertEquals(original.size(), deserialized.size());
-        assertEquals(original.get("numbers"), deserialized.get("numbers"));
+        assertTrue(deserialized instanceof List);
+        assertEquals(list, deserialized);
     }
+
+    @Test
+    public void testMixedArrayTypes() {
+        Object[] mixed = { "abc", 123, true, Arrays.asList("x", "y") };
+        String json = JSONUtil.serialize(mixed);
+        Object deserialized = JSONUtil.deserialize(json);
+
+        assertTrue(deserialized instanceof Object[]);
+        assertArrayEquals(mixed, (Object[]) deserialized);
+    }
+
 }
