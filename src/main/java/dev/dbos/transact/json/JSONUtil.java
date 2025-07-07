@@ -43,7 +43,7 @@ public class JSONUtil {
             throw new RuntimeException("Deserialization failed", e);
         }
     }
-    
+
 
     public static <T> T deserialize(String json, Class<T> clazz) {
         try {
