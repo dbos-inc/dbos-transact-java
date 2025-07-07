@@ -10,6 +10,7 @@ import dev.dbos.transact.migrations.DatabaseMigrator;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
+import dev.dbos.transact.scheduled.SchedulerService;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +27,7 @@ public class DBOS {
     private final DBOSConfig config;
     private DBOSExecutor dbosExecutor  ;
     private QueueService queueService ;
+    private SchedulerService schedulerService ;
 
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
@@ -64,6 +66,10 @@ public class DBOS {
 
     public void setQueueService(QueueService queueService) {
         this.queueService = queueService;
+    }
+
+    public void setSchedulerService(SchedulerService schedulerService) {
+        this.schedulerService = schedulerService ;
     }
 
     public <T> WorkflowBuilder<T> Workflow() {
@@ -173,7 +179,6 @@ public class DBOS {
     }
 
     public void launch() {
-        logger.info("Starting DBOS ...mjjjjjjjj") ;
         DatabaseMigrator.runMigrations(config);
         if (dbosExecutor == null) {
             SystemDatabase.initialize(config);
@@ -183,6 +188,10 @@ public class DBOS {
             queueService = new QueueService(SystemDatabase.getInstance());
             queueService.setDbosExecutor(dbosExecutor);
             queueService.start();
+        }
+
+        if (schedulerService == null) {
+            schedulerService = new SchedulerService(dbosExecutor);
         }
 
         // Block the main thread until shutdown is called
@@ -217,6 +226,8 @@ public class DBOS {
                 dbosExecutor.shutdown();
                 dbosExecutor = null;
             }
+
+            schedulerService.stop();
             shutdownLatch.countDown();
             instance = null;
         }
@@ -224,6 +235,16 @@ public class DBOS {
 
     public static WorkflowHandle retrieveWorkflow(String workflowId) {
         return DBOS.getInstance().dbosExecutor.retrieveWorkflow(workflowId);
+    }
+
+    /**
+     * Scans the class for all methods that have Workflow and Scheduled annotations
+     * and schedules them for execution
+     *
+     * @param implementation instance of a class
+     */
+    public void scheduleWorkflow(Object implementation) {
+        schedulerService.scanAndSchedule(implementation);
     }
 
 }
