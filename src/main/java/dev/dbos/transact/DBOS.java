@@ -173,7 +173,6 @@ public class DBOS {
     }
 
     public void launch() {
-        logger.info("Starting DBOS ...mjjjjjjjj") ;
         DatabaseMigrator.runMigrations(config);
         if (dbosExecutor == null) {
             SystemDatabase.initialize(config);
