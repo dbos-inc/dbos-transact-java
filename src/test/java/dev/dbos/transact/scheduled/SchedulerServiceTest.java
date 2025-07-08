@@ -109,5 +109,24 @@ class SchedulerServiceTest {
 
     }
 
+    @Test
+    public void MultipleWorkflowsTest() throws Exception {
+
+        MultipleWorkflows swf = new MultipleWorkflows() ;
+        dbos.scheduleWorkflow(swf);
+        Thread.sleep(5000);
+        schedulerService.stop();
+        Thread.sleep(1000);
+
+        int count = swf.wfCounter;
+        System.out.println("Final count: " + count);
+        assertTrue(count >= 2 && count <= 5);
+        int count3 = swf.wfCounter3 ;
+        System.out.println("Final count3: " + count3);
+        assertTrue(count3 <= 2);
+
+    }
+
+
 
 }
