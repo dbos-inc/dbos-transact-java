@@ -5,6 +5,8 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.Scheduled;
+import dev.dbos.transact.workflow.Workflow;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +18,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -144,6 +147,53 @@ class SchedulerServiceTest {
 
     }
 
+    @Test
+    public void invalidMethod() {
 
+        InvalidMethodWorkflow imv = new InvalidMethodWorkflow() ;
+
+        try {
+            dbos.scheduleWorkflow(imv);
+            assertTrue(false); // fail if we get here
+        } catch(IllegalArgumentException e) {
+            assertEquals("Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)", e.getMessage());
+        }
+    }
+
+    @Test
+    public void invalidCron() {
+
+        InvalidCronWorkflow icw = new InvalidCronWorkflow() ;
+
+        try {
+            dbos.scheduleWorkflow(icw);
+            assertTrue(false); // fail if we get here
+        } catch(IllegalArgumentException e) {
+
+           System.out.println(e.getMessage()) ;
+           assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]", e.getMessage());
+        }
+    }
+
+
+    public static class InvalidMethodWorkflow {
+
+        @Workflow
+        @Scheduled(cron = "0/1 * * * * ?")
+        public void scheduledWF(Instant scheduled, String actual) {
+
+        }
+
+    }
+
+    public static class InvalidCronWorkflow {
+
+        @Workflow
+        @Scheduled(cron = "* * * * *")
+        public void scheduledWF(Instant scheduled, Instant actual) {
+
+        }
+
+    }
 
 }
