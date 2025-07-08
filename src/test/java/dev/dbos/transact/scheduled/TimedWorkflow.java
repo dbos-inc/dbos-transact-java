@@ -11,7 +11,6 @@ public class TimedWorkflow {
 
     public TimedWorkflow() {
 
-
     }
 
     @Workflow(name = "everyfourth")

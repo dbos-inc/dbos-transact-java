@@ -17,7 +17,6 @@ public class WorkflowWithSteps {
         stepService = s;
     }
 
-
     @Workflow(name = "everySecond")
     @Scheduled(cron = "0/4 * * * * ?")
     public void every4Second(Instant schedule , Instant actual) {
@@ -25,8 +24,4 @@ public class WorkflowWithSteps {
         stepService.stepOne();
         stepService.stepTwo();
     }
-
-
-
-
 }
