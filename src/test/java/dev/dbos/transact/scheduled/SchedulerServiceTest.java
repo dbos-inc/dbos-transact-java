@@ -15,6 +15,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -124,6 +125,22 @@ class SchedulerServiceTest {
         int count3 = swf.wfCounter3 ;
         System.out.println("Final count3: " + count3);
         assertTrue(count3 <= 2);
+
+    }
+
+    @Test
+    public void TimedWorkflowsTest() throws Exception {
+
+        TimedWorkflow swf = new TimedWorkflow() ;
+        dbos.scheduleWorkflow(swf);
+        Thread.sleep(5000);
+        schedulerService.stop();
+        Thread.sleep(1000);
+
+        assertNotNull(swf.scheduled);
+        assertNotNull(swf.actual);
+        Duration delta = Duration.between(swf.scheduled, swf.actual).abs();
+        assertTrue(delta.toMillis() < 1000);
 
     }
 
