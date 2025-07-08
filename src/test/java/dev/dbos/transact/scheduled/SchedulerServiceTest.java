@@ -5,8 +5,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
-import dev.dbos.transact.workflow.Scheduled;
-import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +18,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -173,6 +173,37 @@ class SchedulerServiceTest {
            System.out.println(e.getMessage()) ;
            assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]", e.getMessage());
         }
+    }
+
+    @Test
+    public void stepsTest() throws Exception {
+
+        Steps steps = dbos.<Steps>Workflow()
+                .interfaceClass(Steps.class)
+                .implementation(new StepsImpl())
+                .build();
+
+        WorkflowWithSteps swf = new WorkflowWithSteps(steps) ;
+        dbos.scheduleWorkflow(swf);
+        Thread.sleep(5000);
+        schedulerService.stop();
+        Thread.sleep(1000);
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        assertTrue(wfs.size() <= 2) ;
+
+        List<StepInfo> wsteps =systemDatabase.listWorkflowSteps(wfs.get(0).getWorkflowId());
+        assertEquals(2, wsteps.size()) ;
+
+
+    }
+
+    // Manual test only do not enable and commit
+    // @Test
+    public void everyMinute() throws Exception{
+        EveryMinute em = new EveryMinute() ;
+        dbos.scheduleWorkflow(em);
+        Thread.sleep(600000);
     }
 
 

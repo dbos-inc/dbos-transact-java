@@ -107,4 +107,9 @@ public class SchedulerService {
     public void stop () {
         stop = true ;
     }
+
+    public void start () {
+        stop = false ;
+    }
+
 }
