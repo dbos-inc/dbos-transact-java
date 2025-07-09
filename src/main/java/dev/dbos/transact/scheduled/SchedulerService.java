@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.concurrent.Executors;
@@ -71,7 +72,7 @@ public class SchedulerService {
             @Override
             public void run() {
                 try {
-                    ZonedDateTime scheduledTime = ZonedDateTime.now();
+                    ZonedDateTime scheduledTime = ZonedDateTime.now(ZoneOffset.UTC);
                     Object[] args = new Object[2];
                     args[0] = scheduledTime.toInstant();
                     args[1] = ZonedDateTime.now().toInstant();
@@ -86,7 +87,7 @@ public class SchedulerService {
 
                 if (!stop) {
                     logger.info("Scheduling the next execution") ;
-                    ZonedDateTime now = ZonedDateTime.now();
+                    ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
                     executionTime.nextExecution(now).ifPresent(nextTime -> {
                         logger.info("Next execution time " + nextTime.toString());
                         long delayMs = Duration.between(now, nextTime).toMillis();
@@ -97,7 +98,7 @@ public class SchedulerService {
         };
 
         // Kick off the first run (but only scheduled at the next proper time)
-        ZonedDateTime now = ZonedDateTime.now();
+        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
         executionTime.nextExecution(now).ifPresent(nextTime -> {
             long initialDelayMs = Duration.between(now, nextTime).toMillis();
             scheduler.schedule(scheduleTask, initialDelayMs, TimeUnit.MILLISECONDS);
