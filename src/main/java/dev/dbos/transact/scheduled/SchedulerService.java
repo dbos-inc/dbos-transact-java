@@ -116,10 +116,7 @@ public class SchedulerService {
 
     public void start () {
         schedulerQueue = new DBOS.QueueBuilder("schedulerQueue")
-                .workerConcurrency(4) // are there reasonable defaults ?
-                .concurrency(8)
                 .build();
         stop = false ;
     }
-
 }
