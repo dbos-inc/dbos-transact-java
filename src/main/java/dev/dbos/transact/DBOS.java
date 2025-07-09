@@ -185,7 +185,8 @@ public class DBOS {
             dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance());
         }
 
-        /* if (queueService == null) {
+        /* TODO: revisit in the next PR
+          if (queueService == null) {
             logger.info("launch starting queue service") ;
             queueService = new QueueService(SystemDatabase.getInstance());
             queueService.setDbosExecutor(dbosExecutor);

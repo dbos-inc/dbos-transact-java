@@ -84,7 +84,6 @@ public class SchedulerService {
                     logger.info("submitting to dbos Executor " + workflowName);
                     String workflowId = String.format("sched-%s-%s",workflowName, scheduledTime.toString()) ;
                     try(SetWorkflowID id = new SetWorkflowID(workflowId)) {
-                        // dbosExecutor.submitWorkflow(workflowName, instance.getClass().getName(), wrapper.target, args, wrapper.function);
                         dbosExecutor.enqueueWorkflow(workflowName, instance.getClass().getName(), wrapper, args, schedulerQueue);
                     }
                 } catch (Throwable e) {

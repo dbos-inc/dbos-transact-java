@@ -39,9 +39,7 @@ public class QueueService {
     }
 
     private void pollForWorkflows() {
-        logger.info("PollQueuesThread started ....") ;
-        logger.info("mjjj debug ..." + Thread.currentThread().getName() + " id " + Thread.currentThread().getId()) ;
-
+        logger.info("PollQueuesThread started ...." + Thread.currentThread().getId()) ;
 
         double pollingInterval = 1.0 ;
         double minPollingInterval = 1.0 ;
@@ -94,8 +92,7 @@ public class QueueService {
 
         } finally {
             shutdownLatch.countDown();
-            logger.info("mjjj debug ..." + Thread.currentThread().getName() + " id " + Thread.currentThread().getId()) ;
-            logger.info("QueuesPolThread has ended. Exiting");
+            logger.info("QueuesPolThread has ended. Exiting " + Thread.currentThread().getId());
         }
 
     }

@@ -285,7 +285,6 @@ public class DBOSExecutor {
             String output = recordedResult.getOutput() ;
             if (output != null) {
                 Object[] stepO = JSONUtil.deserializeToArray(output);
-                // return (T) JSONUtil.deserialize(output) ;
                 return(T) stepO[0];
             }
 

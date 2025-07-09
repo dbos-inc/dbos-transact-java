@@ -520,7 +520,6 @@ public class WorkflowDAO {
 
                     if (serializedOutput != null) {
                         Object[] oArray = JSONUtil.deserializeToArray(serializedOutput);
-                        // info.setOutput(JSONUtil.deserialize(serializedOutput));
                         info.setOutput(oArray[0]);
                     }
 
@@ -592,13 +591,11 @@ public class WorkflowDAO {
                             case SUCCESS:
                                 String output = rs.getString("output");
                                 Object[] oArray = JSONUtil.deserializeToArray(output);
-                                // return output != null ? JSONUtil.deserialize(output) : null;
                                 return oArray[0];
 
                             case ERROR:
                                 String error = rs.getString("error");
                                 Object[] eArray = JSONUtil.deserializeToArray(error);
-                                // SerializableException[] se = (SerializableException[]) JSONUtil.deserialize(error);
                                 SerializableException se = (SerializableException) eArray[0];
                                 throw new DBOSAppException(String.format("Exception of type %s", se.className), se) ;
                             case CANCELLED:
