@@ -184,7 +184,9 @@ public class DBOS {
             SystemDatabase.initialize(config);
             dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance());
         }
-        if (queueService == null) {
+
+        /* if (queueService == null) {
+            logger.info("launch starting queue service") ;
             queueService = new QueueService(SystemDatabase.getInstance());
             queueService.setDbosExecutor(dbosExecutor);
             queueService.start();
@@ -193,6 +195,7 @@ public class DBOS {
         if (schedulerService == null) {
             schedulerService = new SchedulerService(dbosExecutor);
         }
+        schedulerService.start(); */
 
         // Block the main thread until shutdown is called
         Thread blocker = new Thread(() -> {
@@ -227,7 +230,7 @@ public class DBOS {
                 dbosExecutor = null;
             }
 
-            schedulerService.stop();
+            // schedulerService.stop();
             shutdownLatch.countDown();
             instance = null;
         }

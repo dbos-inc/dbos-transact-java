@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import dev.dbos.transact.exceptions.DBOSAppException;
 import dev.dbos.transact.exceptions.SerializableException;
 import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -16,7 +18,8 @@ class JSONUtilTest {
         DiffPrimitiveTypes d = new DiffPrimitiveTypes(23, 2467L, 73.63f, 39.31234, true) ;
         String dString = JSONUtil.serialize(d);
         System.out.println(dString);
-        DiffPrimitiveTypes dFromString = (DiffPrimitiveTypes) JSONUtil.deserialize(dString);
+        Object[] dser = JSONUtil.deserializeToArray(dString) ;
+        DiffPrimitiveTypes dFromString = (DiffPrimitiveTypes) dser[0];
         assertEquals(23, dFromString.intValue);
         assertEquals(2467L, dFromString.longValue);
         assertEquals(73.63f, dFromString.floatValue);
@@ -31,7 +34,8 @@ class JSONUtilTest {
         PrimitiveObjects d = new PrimitiveObjects(23, 2467L, 73.63f, 39.31234, true) ;
         String dString = JSONUtil.serialize(d);
         System.out.println(dString);
-        PrimitiveObjects dFromString = (PrimitiveObjects) JSONUtil.deserialize(dString);
+        Object[] dser = JSONUtil.deserializeToArray(dString) ;
+        PrimitiveObjects dFromString = (PrimitiveObjects) dser[0];
         assertEquals(23, dFromString.intValue);
         assertEquals(2467L, dFromString.longValue);
         assertEquals(73.63f, dFromString.floatValue);
@@ -45,7 +49,8 @@ class JSONUtilTest {
         TestException e = new TestException("A significant error");
         SerializableException dto = new SerializableException(e);
         String errStr = JSONUtil.serialize(dto);
-        SerializableException fromStr = (SerializableException) JSONUtil.deserialize(errStr) ;
+        Object[] dser = JSONUtil.deserializeToArray(errStr) ;
+        SerializableException fromStr = (SerializableException) dser[0] ;
         assertEquals("A significant error", fromStr.message) ;
 
         try {
@@ -63,18 +68,21 @@ class JSONUtilTest {
         Person p = new Person("Alice", 30, new Person.Address("Seattle", "98101"));
         String json = JSONUtil.serialize(p);
         System.out.println(json);
-        Object deserialized = JSONUtil.deserialize(json);
+        Object[] deserialized = JSONUtil.deserializeToArray(json);
 
-        assertTrue(deserialized instanceof Person);
-        assertEquals(p, deserialized);
+        assertTrue(deserialized[0] instanceof Person);
+        assertEquals(p, deserialized[0]);
     }
+
+
 
     @Test
     public void testArraySerialization() {
         int[] nums = {1, 2, 3, 4};
         String json = JSONUtil.serialize(nums);
         System.out.println(json);
-        int[] deserialized = (int[])JSONUtil.deserialize(json) ;
+        Object[] dser = JSONUtil.deserializeToArray(json) ;
+        int[] deserialized = (int[])dser[0] ;
         // int[] deserialized = JSONUtil.deserialize(json, int[].class); // <-- change here
         assertArrayEquals(nums, deserialized);
     }
@@ -84,10 +92,10 @@ class JSONUtilTest {
         List<String> list = Arrays.asList("apple", "banana", "cherry");
         String json = JSONUtil.serialize(list);
         System.out.println(json);
-        Object deserialized = JSONUtil.deserialize(json);
+        Object[] deserialized = JSONUtil.deserializeToArray(json);
 
-        assertTrue(deserialized instanceof List);
-        assertEquals(list, deserialized);
+        assertTrue(deserialized[0] instanceof List);
+        assertEquals(list, deserialized[0]);
     }
 
     @Test
@@ -97,17 +105,17 @@ class JSONUtilTest {
         map.put("two", 2);
 
         String json = JSONUtil.serialize(map);
-        Object deserialized = JSONUtil.deserialize(json);
+        Object[] deserialized = JSONUtil.deserializeToArray(json);
 
-        assertTrue(deserialized instanceof Map);
-        assertEquals(map, deserialized);
+        assertTrue(deserialized[0] instanceof Map);
+        assertEquals(map, deserialized[0]);
     }
 
     @Test
     public void testNullSerialization() {
         String json = JSONUtil.serialize(null);
-        Object deserialized = JSONUtil.deserialize(json);
-        assertNull(deserialized);
+        Object[] deserialized = JSONUtil.deserializeToArray(json);
+        assertNull(deserialized[0]);
     }
 
     @Test
@@ -119,20 +127,32 @@ class JSONUtilTest {
         list.add(m1);
 
         String json = JSONUtil.serialize(list);
-        Object deserialized = JSONUtil.deserialize(json);
+        Object[] deserialized = JSONUtil.deserializeToArray(json);
 
-        assertTrue(deserialized instanceof List);
-        assertEquals(list, deserialized);
+        assertTrue(deserialized[0] instanceof List);
+        assertEquals(list, deserialized[0]);
     }
 
     @Test
     public void testMixedArrayTypes() {
         Object[] mixed = { "abc", 123, true, Arrays.asList("x", "y") };
-        String json = JSONUtil.serialize(mixed);
-        Object deserialized = JSONUtil.deserialize(json);
+        String json = JSONUtil.serializeArray(mixed);
+        Object[] deserialized = JSONUtil.deserializeToArray(json);
 
         assertTrue(deserialized instanceof Object[]);
-        assertArrayEquals(mixed, (Object[]) deserialized);
+        assertArrayEquals(mixed,  deserialized);
     }
 
+    @Test
+    public void testInstantArraySerialization() {
+        Object[] args = new Object[] { Instant.parse("2024-01-01T00:00:00Z"), Instant.parse("2024-01-02T00:00:00Z") };
+        String json = JSONUtil.serializeArray(args);
+        Object[] restored = JSONUtil.deserializeToArray(json);
+
+        assertEquals(2, restored.length);
+        assertTrue(restored[0] instanceof Instant);
+        assertTrue(restored[1] instanceof Instant);
+        assertEquals(args[0], restored[0]);
+        assertEquals(args[1], restored[1]);
+    }
 }

@@ -499,7 +499,7 @@ public class WorkflowDAO {
 
                     String authenticatedRolesJson = rs.getString("authenticated_roles");
                     if (authenticatedRolesJson != null) {
-                        info.setAuthenticatedRoles((List<String>) JSONUtil.deserialize(authenticatedRolesJson));
+                        info.setAuthenticatedRoles((String[]) JSONUtil.deserializeToArray(authenticatedRolesJson));
                     }
 
                     info.setAssumedRole(rs.getString("assumed_role"));
@@ -515,11 +515,13 @@ public class WorkflowDAO {
                     String serializedError = rs.getString("error");
 
                     if (serializedInput != null) {
-                        info.setInput((Object[])JSONUtil.deserialize((serializedInput)) );
+                        info.setInput(JSONUtil.deserializeToArray(serializedInput) );
                     }
 
                     if (serializedOutput != null) {
-                        info.setOutput(JSONUtil.deserialize(serializedOutput));
+                        Object[] oArray = JSONUtil.deserializeToArray(serializedOutput);
+                        // info.setOutput(JSONUtil.deserialize(serializedOutput));
+                        info.setOutput(oArray[0]);
                     }
 
                     info.setError(serializedError);
@@ -589,10 +591,15 @@ public class WorkflowDAO {
                         switch (WorkflowState.valueOf(status.toUpperCase())) {
                             case SUCCESS:
                                 String output = rs.getString("output");
-                                return output != null ? JSONUtil.deserialize(output) : null;
+                                Object[] oArray = JSONUtil.deserializeToArray(output);
+                                // return output != null ? JSONUtil.deserialize(output) : null;
+                                return oArray[0];
+
                             case ERROR:
                                 String error = rs.getString("error");
-                                SerializableException se = (SerializableException) JSONUtil.deserialize(error);
+                                Object[] eArray = JSONUtil.deserializeToArray(error);
+                                // SerializableException[] se = (SerializableException[]) JSONUtil.deserialize(error);
+                                SerializableException se = (SerializableException) eArray[0];
                                 throw new DBOSAppException(String.format("Exception of type %s", se.className), se) ;
                             case CANCELLED:
                                 throw new AwaitedWorkflowCancelledException(workflowId);

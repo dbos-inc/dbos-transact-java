@@ -4,6 +4,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 import org.junit.jupiter.api.AfterEach;
@@ -30,6 +31,7 @@ class SchedulerServiceTest {
     private static SystemDatabase systemDatabase ;
     private DBOSExecutor dbosExecutor;
     private SchedulerService schedulerService ;
+    private static QueueService queueService ;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -70,15 +72,22 @@ class SchedulerServiceTest {
         schedulerService = new SchedulerService(dbosExecutor);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.setSchedulerService(schedulerService);
-
         dbos.launch();
         DBUtils.clearTables(dataSource);
+
+        queueService = new QueueService(systemDatabase);
+        queueService.setDbosExecutor(dbosExecutor);
+        dbos.setQueueService(queueService);
+        queueService.start();
+        schedulerService.start() ;
     }
 
     @AfterEach
     void afterEachTest() throws Exception {
         // let scheduled workflows drain
         Thread.sleep(1000);
+        queueService.stop();
+        schedulerService.stop();
         dbos.shutdown();
 
     }

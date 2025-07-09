@@ -84,6 +84,7 @@ public class QueuesTest {
         queueService = new QueueService(systemDatabase);
         queueService.setDbosExecutor(dbosExecutor);
         dbos.setQueueService(queueService);
+        logger.info("test starting queue service") ;
         queueService.start();
 
 
@@ -91,8 +92,13 @@ public class QueuesTest {
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
+        System.out.println("Done with test trying to stop") ;
         queueService.stop();
+        /* while(!queueService.isStopped()) {
+            Thread.sleep(2000);
+            logger.info("Waiting for queueService to stop") ;
+        } */
         dbos.shutdown();
     }
 

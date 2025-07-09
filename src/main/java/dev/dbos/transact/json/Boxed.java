@@ -4,11 +4,11 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
 public class Boxed {
     @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
-    public Object value;
+    public Object[] args;
 
     public Boxed() {}
 
-    public Boxed(Object value) {
-        this.value = value;
+    public Boxed(Object[] args) {
+        this.args = args;
     }
 }

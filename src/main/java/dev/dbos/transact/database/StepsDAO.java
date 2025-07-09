@@ -178,10 +178,10 @@ public class StepsDAO {
                     System.out.println(functionId);
 
                     // Deserialize output if present
-                    Object output = null;
+                    Object[] output = null;
                     if (outputData != null) {
                         try {
-                            output = JSONUtil.deserialize(outputData);
+                            output = JSONUtil.deserializeToArray(outputData);
                         } catch (Exception e) {
                             throw new RuntimeException("Failed to deserialize output for function " + functionId, e);
                         }
@@ -198,7 +198,8 @@ public class StepsDAO {
                         }
                     }
 
-                    steps.add(new StepInfo(functionId, functionName, output, error, childWorkflowId));
+                    Object outputVal = output != null ? output[0] : null ;
+                    steps.add(new StepInfo(functionId, functionName, outputVal, error, childWorkflowId));
                 }
             }
         } catch (SQLException e) {

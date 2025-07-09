@@ -12,7 +12,7 @@ public class WorkflowStatus {
     private String configName;
     private String authenticatedUser;
     private String assumedRole;
-    private List<String> authenticatedRoles;
+    private String[] authenticatedRoles;
     private Object[] input;
     private Object output;
     //TODO fix private Throwable error;
@@ -39,7 +39,7 @@ public class WorkflowStatus {
             String configName,
             String authenticatedUser,
             String assumedRole,
-            List<String> authenticatedRoles,
+            String[] authenticatedRoles,
             Object[] input,
             Object output,
             String error,
@@ -95,8 +95,8 @@ public class WorkflowStatus {
     public String getAssumedRole() { return assumedRole; }
     public void setAssumedRole(String assumedRole) { this.assumedRole = assumedRole; }
 
-    public List<String> getAuthenticatedRoles() { return authenticatedRoles; }
-    public void setAuthenticatedRoles(List<String> authenticatedRoles) { this.authenticatedRoles = authenticatedRoles; }
+    public String[] getAuthenticatedRoles() { return authenticatedRoles; }
+    public void setAuthenticatedRoles(String[] authenticatedRoles) { this.authenticatedRoles = authenticatedRoles; }
 
     public Object[] getInput() { return input; }
     public void setInput(Object[] input) { this.input = input; }

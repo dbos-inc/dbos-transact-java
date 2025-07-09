@@ -5,9 +5,11 @@ import com.cronutils.model.CronType;
 import com.cronutils.model.definition.CronDefinitionBuilder;
 import com.cronutils.model.time.ExecutionTime;
 import com.cronutils.parser.CronParser;
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.Scheduled;
 import dev.dbos.transact.workflow.Workflow;
 import org.slf4j.Logger;
@@ -30,10 +32,13 @@ public class SchedulerService {
     private final CronParser cronParser;
     Logger logger = LoggerFactory.getLogger(SchedulerService.class);
     private volatile boolean stop = false ;
+    private Queue schedulerQueue ;
+
 
     public SchedulerService(DBOSExecutor dbosExecutor) {
         this.dbosExecutor = dbosExecutor;
         this.cronParser = new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
+
     }
 
     public void scanAndSchedule(Object implementation) {
@@ -75,11 +80,12 @@ public class SchedulerService {
                     ZonedDateTime scheduledTime = ZonedDateTime.now(ZoneOffset.UTC);
                     Object[] args = new Object[2];
                     args[0] = scheduledTime.toInstant();
-                    args[1] = ZonedDateTime.now().toInstant();
+                    args[1] = ZonedDateTime.now(ZoneOffset.UTC).toInstant();
                     logger.info("submitting to dbos Executor " + workflowName);
                     String workflowId = String.format("sched-%s-%s",workflowName, scheduledTime.toString()) ;
                     try(SetWorkflowID id = new SetWorkflowID(workflowId)) {
-                        dbosExecutor.submitWorkflow(workflowName, instance.getClass().getName(), wrapper.target, args, wrapper.function);
+                        // dbosExecutor.submitWorkflow(workflowName, instance.getClass().getName(), wrapper.target, args, wrapper.function);
+                        dbosExecutor.enqueueWorkflow(workflowName, instance.getClass().getName(), wrapper, args, schedulerQueue);
                     }
                 } catch (Throwable e) {
                     e.printStackTrace();
@@ -110,6 +116,10 @@ public class SchedulerService {
     }
 
     public void start () {
+        schedulerQueue = new DBOS.QueueBuilder("schedulerQueue")
+                .workerConcurrency(4) // are there reasonable defaults ?
+                .concurrency(8)
+                .build();
         stop = false ;
     }
 
