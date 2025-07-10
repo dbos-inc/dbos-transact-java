@@ -91,7 +91,7 @@ public class QueuesTest {
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
         queueService.stop();
         dbos.shutdown();
     }

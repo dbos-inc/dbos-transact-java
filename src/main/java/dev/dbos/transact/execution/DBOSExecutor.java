@@ -78,7 +78,7 @@ public class DBOSExecutor {
 
         // TODO: queue deduplication and priority
 
-        String inputString = JSONUtil.serialize(inputs) ;
+        String inputString = JSONUtil.serializeArray(inputs) ;
 
         WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
@@ -174,7 +174,7 @@ public class DBOSExecutor {
                     ? ((InvocationTargetException) e).getTargetException()
                     : e;
 
-            logger.error("Error in preinvoke", actual);
+            logger.error("Error in runWorkflow", actual);
             postInvokeWorkflow(initResult.getWorkflowId(), actual);
             throw actual;
         }
@@ -251,6 +251,7 @@ public class DBOSExecutor {
             Throwable actual = (e instanceof InvocationTargetException)
                     ? ((InvocationTargetException) e).getTargetException()
                     : e;
+            logger.error("Error enqueing workflow", actual) ;
             postInvokeWorkflow(initResult.getWorkflowId(), actual);
             throw actual;
         }
@@ -283,7 +284,8 @@ public class DBOSExecutor {
 
             String output = recordedResult.getOutput() ;
             if (output != null) {
-                return (T) JSONUtil.deserialize(output) ;
+                Object[] stepO = JSONUtil.deserializeToArray(output);
+                return(T) stepO[0];
             }
 
             String error = recordedResult.getError();
