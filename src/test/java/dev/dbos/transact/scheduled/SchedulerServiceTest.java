@@ -85,8 +85,8 @@ class SchedulerServiceTest {
     void afterEachTest() throws Exception {
         // let scheduled workflows drain
         Thread.sleep(1000);
-        schedulerService.stop();
-        queueService.stop();
+        // schedulerService.stop();
+        // queueService.stop();
         dbos.shutdown();
     }
 

@@ -235,7 +235,10 @@ public class DBOS {
                 dbosExecutor = null;
             }
 
-            // schedulerService.stop();
+            if (schedulerService != null) {
+                schedulerService.stop();
+            }
+
             shutdownLatch.countDown();
             instance = null;
         }
