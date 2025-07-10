@@ -75,8 +75,6 @@ class SchedulerServiceTest {
         queueService = new QueueService(systemDatabase);
         queueService.setDbosExecutor(dbosExecutor);
         dbos.setQueueService(queueService);
-        // queueService.start();
-        // schedulerService.start() ;
         dbos.launch();
         DBUtils.clearTables(dataSource);
     }
@@ -85,8 +83,6 @@ class SchedulerServiceTest {
     void afterEachTest() throws Exception {
         // let scheduled workflows drain
         Thread.sleep(1000);
-        // schedulerService.stop();
-        // queueService.stop();
         dbos.shutdown();
     }
 

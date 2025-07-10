@@ -83,7 +83,6 @@ public class QueueChildWorkflowTest {
 
     @AfterEach
     void afterEachTest() throws SQLException {
-        // queueService.stop();
         dbos.shutdown();
     }
 

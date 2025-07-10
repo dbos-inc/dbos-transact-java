@@ -29,7 +29,6 @@ public class DBOS {
     private QueueService queueService ;
     private SchedulerService schedulerService ;
 
-    private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     private DBOS(DBOSConfig config) {
@@ -202,24 +201,6 @@ public class DBOS {
             schedulerService.start();
         }
 
-        // Block the main thread until shutdown is called
-        /* Thread blocker = new Thread(() -> {
-            try {
-                shutdownLatch.await(); // Blocks until latch is counted down
-            } catch (InterruptedException ignored) {
-            }
-        }, "DBOS-MainBlocker");
-
-        blocker.setDaemon(false); // Prevents JVM from exiting
-        blocker.start();
-
-        // Hook for Ctrl+C
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Ctrl+C received. Shutting down DBOS...");
-            shutdown(); // Triggers latch and cleanup
-        })); */
-
-
     }
 
     public void shutdown() {
@@ -239,7 +220,6 @@ public class DBOS {
                 schedulerService.stop();
             }
 
-            shutdownLatch.countDown();
             instance = null;
         }
     }
