@@ -203,7 +203,7 @@ public class DBOS {
         }
 
         // Block the main thread until shutdown is called
-        Thread blocker = new Thread(() -> {
+        /* Thread blocker = new Thread(() -> {
             try {
                 shutdownLatch.await(); // Blocks until latch is counted down
             } catch (InterruptedException ignored) {
@@ -217,7 +217,7 @@ public class DBOS {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Ctrl+C received. Shutting down DBOS...");
             shutdown(); // Triggers latch and cleanup
-        }));
+        })); */
 
 
     }
