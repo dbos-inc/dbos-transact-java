@@ -29,7 +29,6 @@ public class DBOS {
     private QueueService queueService ;
     private SchedulerService schedulerService ;
 
-    private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     private DBOS(DBOSConfig config) {
@@ -185,36 +184,22 @@ public class DBOS {
             dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance());
         }
 
-        /* TODO: revisit in the next PR
-          if (queueService == null) {
-            logger.info("launch starting queue service") ;
-            queueService = new QueueService(SystemDatabase.getInstance());
-            queueService.setDbosExecutor(dbosExecutor);
-            queueService.start();
-        }
+      if (queueService == null) {
+          logger.info("launch starting queue service");
+          queueService = new QueueService(SystemDatabase.getInstance());
+          queueService.setDbosExecutor(dbosExecutor);
+          queueService.start();
+      } else {
+          queueService.start();
+      }
+
 
         if (schedulerService == null) {
             schedulerService = new SchedulerService(dbosExecutor);
+            schedulerService.start();
+        } else {
+            schedulerService.start();
         }
-        schedulerService.start(); */
-
-        // Block the main thread until shutdown is called
-        Thread blocker = new Thread(() -> {
-            try {
-                shutdownLatch.await(); // Blocks until latch is counted down
-            } catch (InterruptedException ignored) {
-            }
-        }, "DBOS-MainBlocker");
-
-        blocker.setDaemon(false); // Prevents JVM from exiting
-        blocker.start();
-
-        // Hook for Ctrl+C
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Ctrl+C received. Shutting down DBOS...");
-            shutdown(); // Triggers latch and cleanup
-        }));
-
 
     }
 
@@ -231,8 +216,10 @@ public class DBOS {
                 dbosExecutor = null;
             }
 
-            // schedulerService.stop();
-            shutdownLatch.countDown();
+            if (schedulerService != null) {
+                schedulerService.stop();
+            }
+
             instance = null;
         }
     }

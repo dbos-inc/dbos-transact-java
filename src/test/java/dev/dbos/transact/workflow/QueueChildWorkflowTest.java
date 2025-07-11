@@ -73,20 +73,16 @@ public class QueueChildWorkflowTest {
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
-        dbos.launch();
-        // TODO: move before launch after launch has a wait
         queueService = new QueueService(systemDatabase);
         queueService.setDbosExecutor(dbosExecutor);
         dbos.setQueueService(queueService);
-        queueService.start();
 
-
+        dbos.launch();
         DBUtils.clearTables(dataSource);
     }
 
     @AfterEach
     void afterEachTest() throws SQLException {
-        queueService.stop();
         dbos.shutdown();
     }
 
