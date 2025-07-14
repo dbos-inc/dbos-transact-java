@@ -1,5 +1,9 @@
 package dev.dbos.transact.notifications;
 
+import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.database.NotificationsDAO;
+import dev.dbos.transact.database.SystemDatabase;
 import org.postgresql.PGConnection;
 import org.postgresql.PGNotification;
 import org.slf4j.Logger;
@@ -27,9 +31,11 @@ public class NotificationService {
     private volatile boolean running = false;
     private Thread notificationListenerThread;
     private final DataSource dataSource ;
+    private final SystemDatabase systemDatabase ;
 
-    public NotificationService(DataSource dataSource) {
+    public NotificationService(DataSource dataSource, SystemDatabase sdb) {
         this.dataSource = dataSource;
+        this.systemDatabase = sdb ;
     }
 
 
@@ -63,6 +69,32 @@ public class NotificationService {
         }
 
         logger.info("Notification listener stopped");
+    }
+
+    public void send(String destinationId, Object message, String topic) {
+
+        DBOSContext ctx = DBOSContextHolder.get() ;
+        if (!ctx.isInWorkflow()) {
+            // TODO : temp workflow
+            throw new IllegalArgumentException("send must be called from a workflow.") ;
+        }
+        int stepFunctionId =  ctx.getAndIncrementFunctionId() ;
+
+        systemDatabase.send(ctx.getWorkflowId(), stepFunctionId, destinationId, message, topic);
+
+    }
+
+    public Object recv(String topic, float timeoutSeconds) {
+
+        DBOSContext ctx = DBOSContextHolder.get() ;
+        if (!ctx.isInWorkflow()) {
+            // TODO : temp workflow
+            throw new IllegalArgumentException("recv must be called from a workflow.") ;
+        }
+        int stepFunctionId =  ctx.getAndIncrementFunctionId() ;
+        int timeoutFunctionId = ctx.getAndIncrementFunctionId() ;
+
+        return systemDatabase.recv(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeoutSeconds);
     }
 
     private void notificationListener() {

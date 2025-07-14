@@ -7,6 +7,7 @@ import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
 import dev.dbos.transact.migrations.DatabaseMigrator;
+import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
@@ -25,9 +26,11 @@ public class DBOS {
     private static DBOS instance;
 
     private final DBOSConfig config;
+    // private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor  ;
     private QueueService queueService ;
     private SchedulerService schedulerService ;
+    private NotificationService notificationService ;
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
@@ -69,6 +72,10 @@ public class DBOS {
 
     public void setSchedulerService(SchedulerService schedulerService) {
         this.schedulerService = schedulerService ;
+    }
+
+    public void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
     }
 
     public <T> WorkflowBuilder<T> Workflow() {
@@ -181,24 +188,29 @@ public class DBOS {
         DatabaseMigrator.runMigrations(config);
         if (dbosExecutor == null) {
             SystemDatabase.initialize(config);
+            // systemDatabase = SystemDatabase.getInstance();
             dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance());
         }
 
-      if (queueService == null) {
+        if (queueService == null) {
           logger.info("launch starting queue service");
           queueService = new QueueService(SystemDatabase.getInstance());
           queueService.setDbosExecutor(dbosExecutor);
           queueService.start();
-      } else {
+        } else {
           queueService.start();
-      }
-
+        }
 
         if (schedulerService == null) {
             schedulerService = new SchedulerService(dbosExecutor);
             schedulerService.start();
         } else {
             schedulerService.start();
+        }
+
+        notificationService = SystemDatabase.getInstance().getNotificationService();
+        if (notificationService != null) {
+            notificationService.start();
         }
 
     }
@@ -220,6 +232,10 @@ public class DBOS {
                 schedulerService.stop();
             }
 
+            if (notificationService != null) {
+                notificationService.stop();
+            }
+
             instance = null;
         }
     }
@@ -238,5 +254,13 @@ public class DBOS {
         schedulerService.scanAndSchedule(implementation);
     }
 
+
+    public void send(String destinationId, Object message, String topic) {
+        notificationService.send(destinationId, message, topic);
+    }
+
+    public Object recv(String topic, float timeoutSeconds) {
+        return notificationService.recv(topic, timeoutSeconds);
+    }
 }
 
