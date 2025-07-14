@@ -1,0 +1,154 @@
+package dev.dbos.transact.notifications;
+
+import org.postgresql.PGConnection;
+import org.postgresql.PGNotification;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class NotificationService {
+
+    public static class LockConditionPair {
+        final ReentrantLock lock = new ReentrantLock();
+        final Condition condition = lock.newCondition();
+    }
+
+    Logger logger = LoggerFactory.getLogger(NotificationService.class) ;
+
+    private final Map<String, LockConditionPair> notificationsMap = new ConcurrentHashMap<>();
+    private volatile boolean running = false;
+    private Thread notificationListenerThread;
+    private final DataSource dataSource ;
+
+    public NotificationService(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+
+    public boolean registerNotificationCondition(String key, LockConditionPair pair) {
+        return notificationsMap.putIfAbsent(key, pair) == null;
+    }
+
+    public void unregisterNotificationCondition(String key) {
+        notificationsMap.remove(key);
+    }
+
+    public void start() {
+        if (!running) {
+            running = true;
+            notificationListenerThread = new Thread(this::notificationListener, "NotificationListener");
+            notificationListenerThread.setDaemon(true);
+            notificationListenerThread.start();
+            logger.info("Notification listener started");
+        }
+    }
+
+    public void stop() {
+        running = false;
+        if (notificationListenerThread != null) {
+            notificationListenerThread.interrupt();
+            try {
+                notificationListenerThread.join(5000); // Wait up to 5 seconds
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        logger.info("Notification listener stopped");
+    }
+
+    private void notificationListener() {
+        while (running) {
+            Connection notificationConnection = null ;
+
+            try {
+                // Create PostgreSQL connection for notifications using DataSource
+                notificationConnection = dataSource.getConnection();
+                notificationConnection.setAutoCommit(true);
+
+                // Cast to PostgreSQL connection for notification support
+                PGConnection pgConnection = notificationConnection.unwrap(PGConnection.class);
+
+                // Listen to notification channels
+                try (Statement stmt = notificationConnection.createStatement()) {
+                    stmt.execute("LISTEN dbos_notifications_channel");
+                    stmt.execute("LISTEN dbos_workflow_events_channel");
+                }
+
+                logger.debug("Listening for PostgreSQL notifications");
+
+                while (running) {
+                    // Check for notifications with a timeout
+                    PGNotification[] notifications = pgConnection.getNotifications(1000); // 1 second timeout
+
+                    if (notifications != null) {
+                        for (PGNotification notification : notifications) {
+                            String channel = notification.getName();
+                            String payload = notification.getParameter();
+
+                            logger.debug("Received notification on channel: {}, payload: {}", channel, payload);
+
+                            if ("dbos_notifications_channel".equals(channel)) {
+                                handleNotification(payload, notificationsMap, "notifications");
+                            } else if ("dbos_workflow_events_channel".equals(channel)) {
+                                // handleNotification(payload, workflowEventsMap, "workflow_events");
+                                logger.warn("Events not yet implemented.") ;
+                            } else {
+                                logger.error("Unknown channel: {}", channel);
+                            }
+                        }
+                    }
+                }
+
+            } catch (Exception e) {
+                if (running) {
+                    logger.warn("Notification listener error: {}", e.getMessage());
+                    try {
+                        Thread.sleep(1000); // Wait before retrying
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                    // Loop will try to reconnect and restart the listener
+                }
+            } finally {
+
+                try {
+                    if (notificationConnection != null) {
+                        notificationConnection.close();
+                    }
+                } catch(SQLException e) {
+                    logger.error("Error closing notification connection", e);
+                }
+            }
+        }
+        logger.debug("Notification listener thread exiting");
+    }
+
+    private void handleNotification(String payload, Map<String, LockConditionPair> conditionMap, String mapType) {
+        if (payload != null && !payload.isEmpty()) {
+            LockConditionPair pair = conditionMap.get(payload);
+            if (pair != null) {
+                pair.lock.lock();
+                try {
+                    pair.condition.signalAll();
+                } finally {
+                    pair.lock.unlock();
+                }
+                logger.debug("Signaled {} condition for {}", mapType, payload);
+            }
+            // If no condition found, we simply ignore the notification
+        }
+    }
+
+
+
+}
