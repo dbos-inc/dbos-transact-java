@@ -7,4 +7,6 @@ public interface NotService {
     String recvWorkflow(String topic, float timeoutSeconds) ;
 
     String recvMultiple(String topic) ;
+
+    String concWorkflow(String topic) ;
 }

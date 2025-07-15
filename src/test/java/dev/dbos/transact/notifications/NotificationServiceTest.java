@@ -18,6 +18,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -259,5 +264,51 @@ class NotificationServiceTest {
         long elapsed = System.currentTimeMillis() - start;
         assertTrue(elapsed < 4000, "Call should return in under 4 seconds");
 
+    }
+
+    @Test
+    public void concurrencyTest() throws Exception {
+
+        String wfuuid = UUID.randomUUID().toString();
+        String topic = "test_topic";
+
+        NotService notService = dbos.<NotService>Workflow()
+                .interfaceClass(NotService.class)
+                .implementation(new NotServiceImpl(dbos))
+                .build();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<String> future1 = executor.submit(() -> testThread(notService, wfuuid, topic));
+            Future<String> future2 = executor.submit(() -> testThread(notService, wfuuid, topic));
+
+            String expectedMessage = "test message";
+            // dbos.send(wfuuid, expectedMessage, topic);
+            try(SetWorkflowID id = new SetWorkflowID("send1")) {
+                notService.sendWorkflow(wfuuid, topic, expectedMessage) ;
+            }
+
+
+            // Both should return the same message
+            String result1 = future1.get();
+            String result2 = future2.get();
+
+            assertEquals(result1, result2);
+            assertEquals(expectedMessage, result1);
+
+            // Make sure the notification map is empty
+            // assertTrue(dbos.getSysDb().getNotificationsMap().isEmpty());
+
+        } finally {
+            executor.shutdown();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
+
+    }
+
+    private String testThread(NotService service, String id, String topic) {
+        try (SetWorkflowID context = new SetWorkflowID(id)) {
+            return service.concWorkflow(topic);
+        }
     }
 }

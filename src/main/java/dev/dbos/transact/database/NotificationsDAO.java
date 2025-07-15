@@ -110,13 +110,20 @@ public class NotificationsDAO {
         StepResult recordedOutput = null ;
 
         try (Connection c = dataSource.getConnection()) {
+            logger.info("mjjjj checking recorded output for recv" + workflowUuid + " " + functionId) ;
             recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c);
         }
 
         if (recordedOutput != null) {
             logger.debug(String.format("Replaying recv, id: %d, topic: %s", functionId, finalTopic));
             if (recordedOutput.getOutput() != null) {
-                return JSONUtil.deserializeToArray(recordedOutput.getOutput());
+                // return JSONUtil.deserializeToArray(recordedOutput.getOutput());
+                Object[] dSerOut = JSONUtil.deserializeToArray(recordedOutput.getOutput());
+                if (dSerOut !=  null) {
+                    logger.info("mjjjjj returning output" + dSerOut.toString()) ;
+                }
+                return dSerOut == null ? null : dSerOut[0];
+
             } else {
                 throw new RuntimeException("No output recorded in the last recv");
             }
@@ -188,7 +195,7 @@ public class NotificationsDAO {
 
                 deleteAndReturnSql = String.format(deleteAndReturnSql, Constants.DB_SCHEMA, Constants.DB_SCHEMA);
 
-                Object[] dSermessage = null;
+                Object[] recvdSermessage = null;
                 try (PreparedStatement stmt = conn.prepareStatement(deleteAndReturnSql)) {
                     stmt.setString(1, workflowUuid);
                     stmt.setString(2, finalTopic);
@@ -196,7 +203,7 @@ public class NotificationsDAO {
                     try (ResultSet rs = stmt.executeQuery()) {
                         if (rs.next()) {
                             String serializedMessage = rs.getString("message");
-                            dSermessage = JSONUtil.deserializeToArray(serializedMessage);
+                            recvdSermessage = JSONUtil.deserializeToArray(serializedMessage);
                         }
                     }
                 }
@@ -206,14 +213,16 @@ public class NotificationsDAO {
                 output.setWorkflowId(workflowUuid);
                 output.setFunctionId(functionId);
                 output.setFunctionName(functionName);
-                output.setOutput(JSONUtil.serialize(dSermessage));
+                Object toSave =  recvdSermessage == null ? null : recvdSermessage[0] ;
+                output.setOutput(JSONUtil.serialize(toSave));
                 output.setError(null);
 
                 stepsDAO.recordStepResultTxn(output, conn);
 
                 conn.commit();
 
-                return dSermessage != null ? dSermessage[0] : null;
+                // return dSermessage != null ? dSermessage[0] : null;
+                return toSave;
 
             } catch (Exception e) {
                 conn.rollback();

@@ -3,9 +3,17 @@ package dev.dbos.transact.notifications;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.workflow.Workflow;
 
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
 public class NotServiceImpl {
 
     private final DBOS dbos;
+
+    private final ReentrantLock lock = new ReentrantLock();
+    private final Condition condition = lock.newCondition();
+    private final AtomicInteger counter = new AtomicInteger(0);
 
     public NotServiceImpl(DBOS dbos) {
         this.dbos = dbos;
@@ -28,6 +36,34 @@ public class NotServiceImpl {
         String msg3 = (String)dbos.recv(topic, 5) ;
         return msg1+msg2+msg3 ;
 
+    }
+
+    @Workflow( name = "concWorkflow")
+    public String concWorkflow(String topic) {
+       lock.lock();
+        try {
+            int currentCount = counter.incrementAndGet();
+            if (currentCount % 2 == 1) {
+                // Wait for the other one to notify
+                try {
+                    condition.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted while waiting", e);
+                }
+            } else {
+                // Notify the other one
+                String message = (String) dbos.recv(topic, 5);
+                condition.signalAll();
+                return message;
+
+            }
+        } finally {
+            lock.unlock();
+        }
+
+        String message = (String) dbos.recv(topic, 5);
+        return message;
     }
 
 
