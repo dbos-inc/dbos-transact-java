@@ -6,6 +6,7 @@ import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.notifications.GetWorkflowEventContext;
 import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.workflow.internal.StepResult;
 import org.slf4j.Logger;
@@ -163,12 +164,12 @@ public class NotificationsDAO {
                 logger.info("No notification sleep") ;
                 double actualTimeout = sleep(workflowUuid, timeoutFunctionId, timeoutSeconds, true);
                 long timeoutMs = (long) (actualTimeout * 1000);
-                condition.await(timeoutMs, TimeUnit.MILLISECONDS);
+                lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
             } else {
                 logger.info("We have notification. no need to sleep") ;
             }
         } finally {
-            lock.unlock();
+            lockPair.lock.unlock();
             notificationService.unregisterNotificationCondition(payload);
         }
 
@@ -341,13 +342,11 @@ public class NotificationsDAO {
         }
     }
 
-    public Object getEvent(String targetUuid, String key, double timeoutSeconds) throws SQLException{
+    public Object getEvent(String targetUuid, String key, double timeoutSeconds, GetWorkflowEventContext callerCtx) throws SQLException{
         String functionName = "DBOS.getEvent";
 
-        DBOSContext callerCtx = DBOSContextHolder.get() ;
-
         // Check for previous executions only if it's in a workflow
-        if (callerCtx.isInWorkflow()) {
+        if (callerCtx != null) {
 
             StepResult recordedOutput = null ;
 
@@ -373,7 +372,7 @@ public class NotificationsDAO {
         }
 
         String payload = targetUuid + "::" + key;
-        NotificationService.LockConditionPair lockConditionPair = notificationsMap.computeIfAbsent(payload, k -> new LockConditionPair());
+        NotificationService.LockConditionPair lockConditionPair = notificationService.getOrCreateNotificationCondition(payload);
 
         lockConditionPair.lock.lock();
         try {
@@ -391,7 +390,8 @@ public class NotificationsDAO {
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
                         String serializedValue = rs.getString("value");
-                        value = deserialize(serializedValue);
+                        Object[] valueArray = JSONUtil.deserializeToArray(serializedValue);
+                        value = valueArray == null ? null : valueArray[0] ;
                     }
                 }
             } catch (SQLException e) {
@@ -405,7 +405,7 @@ public class NotificationsDAO {
                 if (callerCtx != null) {
                     // Support OAOO sleep for workflows
                     actualTimeout = sleep(
-                            callerCtx.getWorkflowUuid(),
+                            callerCtx.getWorkflowId(),
                             callerCtx.getTimeoutFunctionId(),
                             timeoutSeconds,
                             true // skip_sleep
@@ -431,7 +431,8 @@ public class NotificationsDAO {
                     try (ResultSet rs = stmt.executeQuery()) {
                         if (rs.next()) {
                             String serializedValue = rs.getString("value");
-                            value = deserialize(serializedValue);
+                            Object[] valueArray = JSONUtil.deserializeToArray(serializedValue);
+                            value = valueArray == null ? null : valueArray[0] ;
                         }
                     }
                 } catch (SQLException e) {
@@ -442,7 +443,7 @@ public class NotificationsDAO {
 
             // Record the output if it's in a workflow
             if (callerCtx != null) {
-                OperationResultInternal output = new OperationResultInternal();
+                StepResult output = new StepResult();
                 output.setWorkflowUuid(callerCtx.getWorkflowUuid());
                 output.setFunctionId(callerCtx.getFunctionId());
                 output.setFunctionName(functionName);

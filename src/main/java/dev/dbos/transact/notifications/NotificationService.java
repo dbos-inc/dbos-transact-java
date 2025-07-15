@@ -43,6 +43,10 @@ public class NotificationService {
         return notificationsMap.putIfAbsent(key, pair) == null;
     }
 
+    public LockConditionPair getOrCreateNotificationCondition(String key) {
+        return notificationsMap.computeIfAbsent(key, k -> new LockConditionPair());
+    }
+
     public void unregisterNotificationCondition(String key) {
         notificationsMap.remove(key);
     }
