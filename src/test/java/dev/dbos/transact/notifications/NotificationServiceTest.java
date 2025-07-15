@@ -4,6 +4,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
@@ -139,7 +140,7 @@ class NotificationServiceTest {
             notService.sendWorkflow(wfid1, "topic1", "Hello3") ;
         }
         DBOS.retrieveWorkflow("send3").getResult();
-        
+
         WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
 
         String result = handle1.getResult();
@@ -188,5 +189,55 @@ class NotificationServiceTest {
         } catch (IllegalArgumentException e) {
             assertEquals("recv() must be called from a workflow.", e.getMessage());
         }
+    }
+
+    @Test
+    public void sendNotexistingID() throws Exception  {
+
+        NotService notService = dbos.<NotService>Workflow()
+                .interfaceClass(NotService.class)
+                .implementation(new NotServiceImpl(dbos))
+                .build();
+
+        try {
+            try (SetWorkflowID id = new SetWorkflowID("send1")) {
+                notService.sendWorkflow("fakeid", "topic1", "HelloDBOS");
+            }
+            assertTrue(false);
+        } catch (NonExistentWorkflowException e) {
+            assertEquals("fakeid", e.getWorkflowId()) ;
+        }
+
+    }
+
+    @Test
+    public void sendNull() throws Exception  {
+
+        NotService notService = dbos.<NotService>Workflow()
+                .interfaceClass(NotService.class)
+                .implementation(new NotServiceImpl(dbos))
+                .async()
+                .build();
+
+        String wfid1 = "recvwf1";
+
+        try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
+            notService.recvWorkflow("topic1") ;
+        }
+
+        String wfid2 = "sendf1";
+
+        try(SetWorkflowID id = new SetWorkflowID(wfid2)) {
+            notService.sendWorkflow(wfid1, "topic1", null) ;
+        }
+
+        WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
+        WorkflowHandle<String> handle2 = DBOS.retrieveWorkflow(wfid2);
+
+        String result = handle1.getResult();
+        assertNull(result) ;
+
+        assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
     }
 }
