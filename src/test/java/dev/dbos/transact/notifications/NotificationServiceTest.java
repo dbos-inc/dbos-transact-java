@@ -18,6 +18,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -72,8 +73,6 @@ class NotificationServiceTest {
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
-        // notificationService = new NotificationService(dataSource, systemDatabase);
-        // dbos.setNotificationService(notificationService);
         dbos.launch();
         DBUtils.clearTables(dataSource);
     }
@@ -113,6 +112,16 @@ class NotificationServiceTest {
 
         assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
         assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
+
+        List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(wfid1);
+        // Will be 2 when we implement DBOS.sleep
+        assertEquals(1, stepInfos.size()) ;
+        assertEquals("DBOS.recv", stepInfos.get(0).getFunctionName()) ;
+
+        stepInfos = systemDatabase.listWorkflowSteps(wfid2);
+        assertEquals(1, stepInfos.size()) ;
+        assertEquals("DBOS.send", stepInfos.get(0).getFunctionName()) ;
+
     }
 
     @Test
@@ -129,7 +138,6 @@ class NotificationServiceTest {
         try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
             notService.recvMultiple("topic1") ;
         }
-
 
         try(SetWorkflowID id = new SetWorkflowID("send1")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello1") ;
