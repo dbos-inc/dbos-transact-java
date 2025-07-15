@@ -319,4 +319,49 @@ class NotificationServiceTest {
             return service.concWorkflow(topic);
         }
     }
+
+    @Test
+    public void recv_sleep() throws Exception  {
+
+        NotService notService = dbos.<NotService>Workflow()
+                .interfaceClass(NotService.class)
+                .implementation(new NotServiceImpl(dbos))
+                .async()
+                .build();
+
+        String wfid1 = "recvwf1";
+
+        try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
+            notService.recvWorkflow("topic1", 5) ;
+        }
+
+        String wfid2 = "sendf1";
+
+        // forcing the recv to wait on condition
+        Thread.sleep(2000);
+
+        try(SetWorkflowID id = new SetWorkflowID(wfid2)) {
+            notService.sendWorkflow(wfid1, "topic1", "HelloDBOS") ;
+        }
+
+        WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
+        WorkflowHandle<String> handle2 = DBOS.retrieveWorkflow(wfid2);
+
+        String result = handle1.getResult();
+        assertEquals("HelloDBOS", result) ;
+
+        assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
+
+        List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(wfid1);
+        // Will be 2 when we implement DBOS.sleep
+        assertEquals(2, stepInfos.size()) ;
+        assertEquals("DBOS.recv", stepInfos.get(0).getFunctionName()) ;
+        assertEquals("DBOS.sleep", stepInfos.get(1).getFunctionName()) ;
+
+        stepInfos = systemDatabase.listWorkflowSteps(wfid2);
+        assertEquals(1, stepInfos.size()) ;
+        assertEquals("DBOS.send", stepInfos.get(0).getFunctionName()) ;
+    }
+
 }
