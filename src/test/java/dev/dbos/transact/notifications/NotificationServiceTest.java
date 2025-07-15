@@ -95,7 +95,7 @@ class NotificationServiceTest {
         String wfid1 = "recvwf1";
 
         try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
-            notService.recvWorkflow("topic1", 5) ;
+            notService.recvWorkflow("topic1", 10) ;
         }
 
         String wfid2 = "sendf1";

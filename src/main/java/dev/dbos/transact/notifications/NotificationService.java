@@ -40,10 +40,13 @@ public class NotificationService {
 
 
     public boolean registerNotificationCondition(String key, LockConditionPair pair) {
+        logger.info("adding entry for" + key) ;
+        logger.info("NotificationsMap instance: {}", System.identityHashCode(notificationsMap));
         return notificationsMap.putIfAbsent(key, pair) == null;
     }
 
     public void unregisterNotificationCondition(String key) {
+        logger.info("Removing from conditionMap " + key);
         notificationsMap.remove(key);
     }
 
@@ -68,6 +71,7 @@ public class NotificationService {
             }
         }
 
+        notificationsMap.clear();
         logger.info("Notification listener stopped");
     }
 
@@ -166,16 +170,34 @@ public class NotificationService {
     }
 
     private void handleNotification(String payload, Map<String, LockConditionPair> conditionMap, String mapType) {
+        logger.info("handling notification for " + payload) ;
+        logger.info("ConditionMap instance: {}", System.identityHashCode(conditionMap));
+        logger.info("map size is " + conditionMap.size()) ;
+
+        logger.info("Map keys");
+        conditionMap.forEach((k,v)->{
+            logger.info(k);
+        });
+
         if (payload != null && !payload.isEmpty()) {
             LockConditionPair pair = conditionMap.get(payload);
             if (pair != null) {
+                logger.info("Trying to lock");
                 pair.lock.lock();
+                logger.info("Done  lock");
                 try {
+                    logger.info("Before signal all");
                     pair.condition.signalAll();
+                    logger.info("After signal all");
+
                 } finally {
+                    logger.info("Before unlock") ;
                     pair.lock.unlock();
+                    logger.info("after unlock") ;
                 }
                 logger.debug("Signaled {} condition for {}", mapType, payload);
+            } else {
+                logger.info("ConditionMap has no entry for " + payload) ;
             }
             // If no condition found, we simply ignore the notification
         }
