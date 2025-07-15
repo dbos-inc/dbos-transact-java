@@ -21,8 +21,8 @@ import java.util.concurrent.locks.ReentrantLock;
 public class NotificationService {
 
     public static class LockConditionPair {
-        final ReentrantLock lock = new ReentrantLock();
-        final Condition condition = lock.newCondition();
+        public final ReentrantLock lock = new ReentrantLock();
+        public final Condition condition = lock.newCondition();
     }
 
     Logger logger = LoggerFactory.getLogger(NotificationService.class) ;

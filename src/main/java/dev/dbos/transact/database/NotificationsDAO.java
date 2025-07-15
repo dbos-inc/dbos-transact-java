@@ -128,12 +128,11 @@ public class NotificationsDAO {
 
         // Insert a condition to the notifications map
         String payload = workflowUuid + "::" + finalTopic;
-        ReentrantLock lock = new ReentrantLock();
-        Condition condition = lock.newCondition();
+        NotificationService.LockConditionPair lockPair = new NotificationService.LockConditionPair();
 
         try {
-            lock.lock();
-            boolean success = notificationService.registerNotificationCondition(payload, new NotificationService.LockConditionPair());
+            lockPair.lock.lock();
+            boolean success = notificationService.registerNotificationCondition(payload, lockPair);
             if (!success) {
                 // This should not happen, but if it does, it means the workflow is executed concurrently
                 throw new DBOSWorkflowConflictException(workflowUuid, "Workflow might be executing concurrently. ");
@@ -162,12 +161,12 @@ public class NotificationsDAO {
                 logger.info("No notification sleep") ;
                 double actualTimeout = sleep(workflowUuid, timeoutFunctionId, timeoutSeconds, true);
                 long timeoutMs = (long) (actualTimeout * 1000);
-                condition.await(timeoutMs, TimeUnit.MILLISECONDS);
+                lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
             } else {
                 logger.info("We have notification. no need to sleep") ;
             }
         } finally {
-            lock.unlock();
+            lockPair.lock.unlock();
             notificationService.unregisterNotificationCondition(payload);
         }
 
