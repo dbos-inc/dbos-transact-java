@@ -98,6 +98,8 @@ class NotificationServiceTest {
             notService.recvWorkflow("topic1", 10) ;
         }
 
+        Thread.sleep(2000) ;
+
         String wfid2 = "sendf1";
 
         try(SetWorkflowID id = new SetWorkflowID(wfid2)) {
