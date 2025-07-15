@@ -1,10 +1,13 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.notifications.NotificationService;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.internal.StepResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -128,8 +131,9 @@ public class NotificationsDAO {
 
         // Insert a condition to the notifications map
         String payload = workflowUuid + "::" + finalTopic;
-        ReentrantLock lock = new ReentrantLock();
-        Condition condition = lock.newCondition();
+        // ReentrantLock lock = new ReentrantLock();
+        // Condition condition = lock.newCondition();
+        NotificationService.LockConditionPair lockPair = new NotificationService.LockConditionPair() ;
 
         try {
             lock.lock();
@@ -278,6 +282,186 @@ public class NotificationsDAO {
         }
 
         return duration;
+    }
+
+    public void setEvent(String workflowId, int functionId, String key, Object message) {
+        String functionName = "DBOS.setEvent";
+
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+
+            try {
+                // Check if operation was already executed
+                StepResult recordedOutput = stepsDAO.checkStepExecutionTxn(
+                        workflowId, functionId, functionName, conn
+                );
+
+
+                if (recordedOutput != null) {
+                    logger.debug("Replaying setEvent, id: {}, key: {}", functionId, key);
+                    conn.commit();
+                    return; // Already sent before
+                } else {
+                    logger.debug("Running setEvent, id: {}, key: {}", functionId, key);
+                }
+
+                // Serialize the message
+                String serializedMessage = JSONUtil.serialize(message);
+
+                // Insert or update the workflow event using UPSERT
+                String upsertSql = " INSERT INTO workflow_events (workflow_uuid, key, value) " +
+                                    " VALUES (?, ?, ?) " +
+                                    " ON CONFLICT (workflow_uuid, key) " +
+                                    " DO UPDATE SET value = EXCLUDED.value" ;
+
+                try (PreparedStatement stmt = conn.prepareStatement(upsertSql)) {
+                    stmt.setString(1, workflowId);
+                    stmt.setString(2, key);
+                    stmt.setString(3, serializedMessage);
+                    stmt.executeUpdate();
+                }
+
+                // Create operation result
+                StepResult output = new StepResult();
+                output.setWorkflowId(workflowId);
+                output.setFunctionId(functionId);
+                output.setFunctionName(functionName);
+                output.setOutput(null);
+                output.setError(null);
+
+                // Record the operation result
+                stepsDAO.recordStepResultTxn(output, conn);
+
+                conn.commit();
+
+            } catch (Exception e) {
+                conn.rollback();
+                throw e;
+            }
+        } catch (SQLException e) {
+            logger.error("Database error in setEvent", e);
+            throw new RuntimeException("Failed to set event", e);
+        }
+    }
+
+    public Object getEvent(String targetUuid, String key, double timeoutSeconds) throws SQLException{
+        String functionName = "DBOS.getEvent";
+
+        DBOSContext callerCtx = DBOSContextHolder.get() ;
+
+        // Check for previous executions only if it's in a workflow
+        if (callerCtx.isInWorkflow()) {
+
+            StepResult recordedOutput = null ;
+
+            try (Connection conn = dataSource.getConnection()) {
+                recordedOutput = stepsDAO.checkStepExecutionTxn((
+                    callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName
+                );
+            }
+
+
+            if (recordedOutput != null) {
+                logger.debug("Replaying getEvent, id: {}, key: {}", callerCtx.getFunctionId(), key);
+                if (recordedOutput.getOutput() != null) {
+                    // return deserialize(recordedOutput.getOutput());
+                    Object[] outputArray = JSONUtil.deserializeToArray(recordedOutput.getOutput());
+                    return outputArray == null ? null : outputArray[0];
+                } else {
+                    throw new RuntimeException("No output recorded in the last getEvent");
+                }
+            } else {
+                logger.debug("Running getEvent, id: {}, key: {}", callerCtx.getFunctionId(), key);
+            }
+        }
+
+        String payload = targetUuid + "::" + key;
+        NotificationService.LockConditionPair lockConditionPair = notificationsMap.computeIfAbsent(payload, k -> new LockConditionPair());
+
+        lockConditionPair.lock.lock();
+        try {
+            // Check if the key is already in the database. If not, wait for the notification.
+            Object value = null;
+
+            // Initial database check
+            String getSql = "SELECT value FROM workflow_events WHERE workflow_uuid = ? AND key = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(getSql)) {
+
+                stmt.setString(1, targetUuid);
+                stmt.setString(2, key);
+
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        String serializedValue = rs.getString("value");
+                        value = deserialize(serializedValue);
+                    }
+                }
+            } catch (SQLException e) {
+                logger.error("Database error in getEvent initial check", e);
+                throw new RuntimeException("Failed to check event", e);
+            }
+
+            if (value == null) {
+                // Wait for the notification
+                double actualTimeout = timeoutSeconds;
+                if (callerCtx != null) {
+                    // Support OAOO sleep for workflows
+                    actualTimeout = sleep(
+                            callerCtx.getWorkflowUuid(),
+                            callerCtx.getTimeoutFunctionId(),
+                            timeoutSeconds,
+                            true // skip_sleep
+                    );
+                }
+
+                try {
+                    // Convert timeout to nanoseconds for await
+                    long timeoutNanos = (long) (actualTimeout * 1_000_000_000L);
+                    lockConditionPair.condition.await(timeoutNanos, TimeUnit.NANOSECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted while waiting for event", e);
+                }
+
+                // Read the value from the database after notification
+                try (Connection conn = dataSource.getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(getSql)) {
+
+                    stmt.setString(1, targetUuid);
+                    stmt.setString(2, key);
+
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        if (rs.next()) {
+                            String serializedValue = rs.getString("value");
+                            value = deserialize(serializedValue);
+                        }
+                    }
+                } catch (SQLException e) {
+                    logger.error("Database error in getEvent final check", e);
+                    throw new RuntimeException("Failed to read event after notification", e);
+                }
+            }
+
+            // Record the output if it's in a workflow
+            if (callerCtx != null) {
+                OperationResultInternal output = new OperationResultInternal();
+                output.setWorkflowUuid(callerCtx.getWorkflowUuid());
+                output.setFunctionId(callerCtx.getFunctionId());
+                output.setFunctionName(functionName);
+                output.setOutput(serialize(value)); // null will be serialized to 'null'
+                output.setError(null);
+
+                recordOperationResult(output);
+            }
+
+            return value;
+
+        } finally {
+            lockConditionPair.lock.unlock();
+            // Remove the condition from the map after use
+            notificationsMap.remove(payload);
+        }
     }
 
 }
