@@ -17,8 +17,8 @@ public class NotServiceImpl {
     }
 
     @Workflow(name = "recvWorkflow")
-    public String recvWorkflow(String topic) {
-        return (String)dbos.recv(topic, 5) ;
+    public String recvWorkflow(String topic, float timeoutSecond) {
+        return (String)dbos.recv(topic, timeoutSecond) ;
     }
 
     @Workflow(name = "recvMultiple")

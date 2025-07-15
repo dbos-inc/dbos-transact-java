@@ -213,7 +213,7 @@ public class NotificationsDAO {
 
                 conn.commit();
 
-                return dSermessage[0];
+                return dSermessage != null ? dSermessage[0] : null;
 
             } catch (Exception e) {
                 conn.rollback();

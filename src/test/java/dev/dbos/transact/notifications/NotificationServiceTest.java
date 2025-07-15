@@ -91,7 +91,7 @@ class NotificationServiceTest {
         String wfid1 = "recvwf1";
 
         try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
-            notService.recvWorkflow("topic1") ;
+            notService.recvWorkflow("topic1", 5) ;
         }
 
         String wfid2 = "sendf1";
@@ -162,7 +162,7 @@ class NotificationServiceTest {
         String wfid1 = "recvwf1";
 
         try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
-            notService.recvWorkflow(null) ;
+            notService.recvWorkflow(null, 5) ;
         }
 
         String wfid2 = "sendf1";
@@ -222,7 +222,7 @@ class NotificationServiceTest {
         String wfid1 = "recvwf1";
 
         try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
-            notService.recvWorkflow("topic1") ;
+            notService.recvWorkflow("topic1", 5) ;
         }
 
         String wfid2 = "sendf1";
@@ -239,5 +239,25 @@ class NotificationServiceTest {
 
         assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
         assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
+    }
+
+    @Test
+    public void timeout() {
+
+        NotService notService = dbos.<NotService>Workflow()
+                .interfaceClass(NotService.class)
+                .implementation(new NotServiceImpl(dbos))
+                .build();
+
+        String wfid1 = "recvwf1";
+
+        long start = System.currentTimeMillis() ;
+        try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
+            notService.recvWorkflow("topic1", 3) ;
+        }
+
+        long elapsed = System.currentTimeMillis() - start;
+        assertTrue(elapsed < 4000, "Call should return in under 4 seconds");
+
     }
 }
