@@ -89,7 +89,7 @@ public class NotificationService {
         DBOSContext ctx = DBOSContextHolder.get() ;
         if (!ctx.isInWorkflow()) {
             // TODO : temp workflow
-            throw new IllegalArgumentException("recv must be called from a workflow.") ;
+            throw new IllegalArgumentException("recv() must be called from a workflow.") ;
         }
         int stepFunctionId =  ctx.getAndIncrementFunctionId() ;
         int timeoutFunctionId = ctx.getAndIncrementFunctionId() ;

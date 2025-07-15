@@ -128,14 +128,18 @@ class NotificationServiceTest {
         try(SetWorkflowID id = new SetWorkflowID("send1")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello1") ;
         }
+        DBOS.retrieveWorkflow("send1").getResult();
+
         try(SetWorkflowID id = new SetWorkflowID("send2")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello2") ;
         }
+        DBOS.retrieveWorkflow("send2").getResult();
+
         try(SetWorkflowID id = new SetWorkflowID("send3")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello3") ;
         }
-
-
+        DBOS.retrieveWorkflow("send3").getResult();
+        
         WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
 
         String result = handle1.getResult();
@@ -145,4 +149,44 @@ class NotificationServiceTest {
 
     }
 
+    @Test
+    public void notopic() throws Exception  {
+
+        NotService notService = dbos.<NotService>Workflow()
+                .interfaceClass(NotService.class)
+                .implementation(new NotServiceImpl(dbos))
+                .async()
+                .build();
+
+        String wfid1 = "recvwf1";
+
+        try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
+            notService.recvWorkflow(null) ;
+        }
+
+        String wfid2 = "sendf1";
+
+        try(SetWorkflowID id = new SetWorkflowID(wfid2)) {
+            notService.sendWorkflow(wfid1, null, "HelloDBOS") ;
+        }
+
+        WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
+        WorkflowHandle<String> handle2 = DBOS.retrieveWorkflow(wfid2);
+
+        String result = handle1.getResult();
+        assertEquals("HelloDBOS", result) ;
+
+        assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
+    }
+
+    @Test
+    public void noWorkflowRecv() {
+        try {
+            dbos.recv("someTopic", 5);
+            assertTrue(false);
+        } catch (IllegalArgumentException e) {
+            assertEquals("recv() must be called from a workflow.", e.getMessage());
+        }
+    }
 }
