@@ -40,8 +40,6 @@ public class NotificationService {
 
 
     public boolean registerNotificationCondition(String key, LockConditionPair pair) {
-        logger.info("adding entry for" + key) ;
-        logger.info("NotificationsMap instance: {}", System.identityHashCode(notificationsMap));
         return notificationsMap.putIfAbsent(key, pair) == null;
     }
 
