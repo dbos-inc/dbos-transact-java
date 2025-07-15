@@ -18,10 +18,17 @@ public class NotServiceImpl {
 
     @Workflow(name = "recvWorkflow")
     public String recvWorkflow(String topic) {
-
         return (String)dbos.recv(topic, 5) ;
-        /* Object[] received = (Object[])dbos.recv(topic, 5);
-        System.out.println(received[0]);
-        return (String)received[0] ; */
     }
+
+    @Workflow(name = "recvMultiple")
+    public String recvMultiple(String topic) {
+        String msg1 = (String)dbos.recv(topic, 5) ;
+        String msg2 = (String)dbos.recv(topic, 5) ;
+        String msg3 = (String)dbos.recv(topic, 5) ;
+        return msg1+msg2+msg3 ;
+
+    }
+
+
 }

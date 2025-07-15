@@ -107,7 +107,41 @@ class NotificationServiceTest {
 
         assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
         assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
+    }
 
+    @Test
+    public void multiple_send_recv() throws Exception  {
+
+        NotService notService = dbos.<NotService>Workflow()
+                .interfaceClass(NotService.class)
+                .implementation(new NotServiceImpl(dbos))
+                .async()
+                .build();
+
+        String wfid1 = "recvwf1";
+
+        try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
+            notService.recvMultiple("topic1") ;
+        }
+
+
+        try(SetWorkflowID id = new SetWorkflowID("send1")) {
+            notService.sendWorkflow(wfid1, "topic1", "Hello1") ;
+        }
+        try(SetWorkflowID id = new SetWorkflowID("send2")) {
+            notService.sendWorkflow(wfid1, "topic1", "Hello2") ;
+        }
+        try(SetWorkflowID id = new SetWorkflowID("send3")) {
+            notService.sendWorkflow(wfid1, "topic1", "Hello3") ;
+        }
+
+
+        WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
+
+        String result = handle1.getResult();
+        assertEquals("Hello1Hello2Hello3", result) ;
+
+        assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
 
     }
 
