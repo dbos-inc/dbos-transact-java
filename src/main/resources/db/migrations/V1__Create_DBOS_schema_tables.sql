@@ -57,7 +57,7 @@ CREATE TABLE dbos.notifications (
     topic text,
     message text NOT NULL,
     created_at_epoch_ms bigint NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
-    message_uuid text,
+    message_uuid text NOT NULL DEFAULT gen_random_uuid(),
 
     -- Primary key constraint
     CONSTRAINT notifications_pkey PRIMARY KEY (message_uuid),

@@ -59,6 +59,8 @@ public class SystemDatabase {
         workflowDAO = new WorkflowDAO(dataSource) ;
         stepsDAO = new StepsDAO(dataSource) ;
         queuesDAO = new QueuesDAO(dataSource) ;
+        notificationService = new NotificationService(dataSource, this) ;
+        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService) ;
     }
 
     public static synchronized void initialize(DBOSConfig cfg) {
@@ -97,7 +99,6 @@ public class SystemDatabase {
     public NotificationService getNotificationService() {
         return notificationService ;
     }
-
 
 
     /**

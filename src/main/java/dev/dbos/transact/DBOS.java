@@ -208,8 +208,11 @@ public class DBOS {
             schedulerService.start();
         }
 
-        notificationService = SystemDatabase.getInstance().getNotificationService();
-        if (notificationService != null) {
+
+        if (notificationService == null) {
+            notificationService = SystemDatabase.getInstance().getNotificationService();
+            notificationService.start();
+        } else {
             notificationService.start();
         }
 

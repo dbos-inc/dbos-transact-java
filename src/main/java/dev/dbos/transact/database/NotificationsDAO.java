@@ -56,10 +56,13 @@ public class NotificationsDAO {
                 }
 
                 // Insert notification
-                String insertSql = "INSERT INTO %.notifications (destination_uuid, topic, message) " +
+                String insertSql = "INSERT INTO %s.notifications (destination_uuid, topic, message) " +
                                 " VALUES (?, ?, ?) " ;
 
+
                 insertSql = String.format(insertSql, Constants.DB_SCHEMA) ;
+
+                logger.info(insertSql) ;
 
                 try (PreparedStatement stmt = conn.prepareStatement(insertSql)) {
                     stmt.setString(1, destinationUuid);
@@ -137,8 +140,10 @@ public class NotificationsDAO {
             // Check if the key is already in the database. If not, wait for the notification
             boolean hasExistingNotification = false;
             try (Connection conn = dataSource.getConnection()) {
-                String checkSql = " SELECT topic FROM system_schema.notifications " +
+                String checkSql = " SELECT topic FROM %s.notifications " +
                                     " WHERE destination_uuid = ? AND topic = ? " ;
+
+                checkSql = String.format(checkSql, Constants.DB_SCHEMA);
 
                 try (PreparedStatement stmt = conn.prepareStatement(checkSql)) {
                     stmt.setString(1, workflowUuid);
@@ -181,7 +186,9 @@ public class NotificationsDAO {
                 " AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry) " +
                 " RETURNING message " ;
 
-                Object message = null;
+                deleteAndReturnSql = String.format(deleteAndReturnSql, Constants.DB_SCHEMA, Constants.DB_SCHEMA);
+
+                Object[] dSermessage = null;
                 try (PreparedStatement stmt = conn.prepareStatement(deleteAndReturnSql)) {
                     stmt.setString(1, workflowUuid);
                     stmt.setString(2, finalTopic);
@@ -189,7 +196,7 @@ public class NotificationsDAO {
                     try (ResultSet rs = stmt.executeQuery()) {
                         if (rs.next()) {
                             String serializedMessage = rs.getString("message");
-                            message = JSONUtil.deserializeToArray(serializedMessage);
+                            dSermessage = JSONUtil.deserializeToArray(serializedMessage);
                         }
                     }
                 }
@@ -199,14 +206,14 @@ public class NotificationsDAO {
                 output.setWorkflowId(workflowUuid);
                 output.setFunctionId(functionId);
                 output.setFunctionName(functionName);
-                output.setOutput(JSONUtil.serialize(message));
+                output.setOutput(JSONUtil.serialize(dSermessage));
                 output.setError(null);
 
                 stepsDAO.recordStepResultTxn(output, conn);
 
                 conn.commit();
 
-                return message;
+                return dSermessage[0];
 
             } catch (Exception e) {
                 conn.rollback();
