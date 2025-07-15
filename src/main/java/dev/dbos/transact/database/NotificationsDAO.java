@@ -7,7 +7,6 @@ import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.notifications.NotificationService;
-import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.internal.StepResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -131,13 +130,11 @@ public class NotificationsDAO {
 
         // Insert a condition to the notifications map
         String payload = workflowUuid + "::" + finalTopic;
-        // ReentrantLock lock = new ReentrantLock();
-        // Condition condition = lock.newCondition();
-        NotificationService.LockConditionPair lockPair = new NotificationService.LockConditionPair() ;
+        NotificationService.LockConditionPair lockPair = new NotificationService.LockConditionPair();
 
         try {
-            lock.lock();
-            boolean success = notificationService.registerNotificationCondition(payload, new NotificationService.LockConditionPair());
+            lockPair.lock.lock();
+            boolean success = notificationService.registerNotificationCondition(payload, lockPair);
             if (!success) {
                 // This should not happen, but if it does, it means the workflow is executed concurrently
                 throw new DBOSWorkflowConflictException(workflowUuid, "Workflow might be executing concurrently. ");
