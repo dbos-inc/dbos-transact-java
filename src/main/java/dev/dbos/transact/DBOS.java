@@ -26,7 +26,6 @@ public class DBOS {
     private static DBOS instance;
 
     private final DBOSConfig config;
-    // private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor  ;
     private QueueService queueService ;
     private SchedulerService schedulerService ;

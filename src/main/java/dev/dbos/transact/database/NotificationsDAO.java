@@ -117,13 +117,8 @@ public class NotificationsDAO {
         if (recordedOutput != null) {
             logger.debug(String.format("Replaying recv, id: %d, topic: %s", functionId, finalTopic));
             if (recordedOutput.getOutput() != null) {
-                // return JSONUtil.deserializeToArray(recordedOutput.getOutput());
                 Object[] dSerOut = JSONUtil.deserializeToArray(recordedOutput.getOutput());
-                if (dSerOut !=  null) {
-                    logger.info("mjjjjj returning output" + dSerOut.toString()) ;
-                }
                 return dSerOut == null ? null : dSerOut[0];
-
             } else {
                 throw new RuntimeException("No output recorded in the last recv");
             }
@@ -165,7 +160,6 @@ public class NotificationsDAO {
                 // Wait for the notification
                 // Support OAOO sleep
                 double actualTimeout = sleep(workflowUuid, timeoutFunctionId, timeoutSeconds, true);
-                // double actualTimeout = 5 ;
                 long timeoutMs = (long) (actualTimeout * 1000);
                 condition.await(timeoutMs, TimeUnit.MILLISECONDS);
             }
@@ -220,8 +214,6 @@ public class NotificationsDAO {
                 stepsDAO.recordStepResultTxn(output, conn);
 
                 conn.commit();
-
-                // return dSermessage != null ? dSermessage[0] : null;
                 return toSave;
 
             } catch (Exception e) {
