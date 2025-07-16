@@ -110,7 +110,6 @@ public class NotificationsDAO {
         StepResult recordedOutput = null ;
 
         try (Connection c = dataSource.getConnection()) {
-            logger.info("mjjjj checking recorded output for recv" + workflowUuid + " " + functionId) ;
             recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c);
         }
 
