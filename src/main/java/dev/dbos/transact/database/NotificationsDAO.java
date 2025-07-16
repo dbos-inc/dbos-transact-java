@@ -113,7 +113,6 @@ public class NotificationsDAO {
         StepResult recordedOutput = null ;
 
         try (Connection c = dataSource.getConnection()) {
-            logger.info("mjjjj checking recorded output for recv" + workflowUuid + " " + functionId) ;
             recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c);
         }
 
@@ -161,10 +160,10 @@ public class NotificationsDAO {
             if (!hasExistingNotification) {
                 // Wait for the notification
                 // Support OAOO sleep
-                logger.info("No notification sleep") ;
                 double actualTimeout = sleep(workflowUuid, timeoutFunctionId, timeoutSeconds, true);
                 long timeoutMs = (long) (actualTimeout * 1000);
                 lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
+
             } else {
                 logger.info("We have notification. no need to sleep") ;
             }
