@@ -141,6 +141,8 @@ class NotificationServiceTest {
             notService.recvMultiple("topic1") ;
         }
 
+        Thread.sleep(2000);
+
         try(SetWorkflowID id = new SetWorkflowID("send1")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello1") ;
         }
