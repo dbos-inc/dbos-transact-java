@@ -264,5 +264,13 @@ public class DBOS {
     public Object recv(String topic, float timeoutSeconds) {
         return notificationService.recv(topic, timeoutSeconds);
     }
+
+    public void setEvent(String key, Object value) {
+        notificationService.setEvent(key, value);
+    }
+
+    public Object getEvent(String workflowId, String key, float timeOut) {
+        return notificationService.getEvent(workflowId, key, timeOut) ;
+    }
 }
 

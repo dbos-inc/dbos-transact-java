@@ -281,7 +281,7 @@ public class NotificationsDAO {
         return duration;
     }
 
-    public void setEvent(String workflowId, int functionId, String key, Object message) {
+    public void setEvent(String workflowId, int functionId, String key, Object message) throws SQLException {
         String functionName = "DBOS.setEvent";
 
         try (Connection conn = dataSource.getConnection()) {
@@ -335,9 +335,6 @@ public class NotificationsDAO {
                 conn.rollback();
                 throw e;
             }
-        } catch (SQLException e) {
-            logger.error("Database error in setEvent", e);
-            throw new RuntimeException("Failed to set event", e);
         }
     }
 
@@ -350,8 +347,8 @@ public class NotificationsDAO {
             StepResult recordedOutput = null ;
 
             try (Connection conn = dataSource.getConnection()) {
-                recordedOutput = stepsDAO.checkStepExecutionTxn((
-                    callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName
+                recordedOutput = stepsDAO.checkStepExecutionTxn(
+                    callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName, conn
                 );
             }
 
@@ -443,13 +440,13 @@ public class NotificationsDAO {
             // Record the output if it's in a workflow
             if (callerCtx != null) {
                 StepResult output = new StepResult();
-                output.setWorkflowUuid(callerCtx.getWorkflowUuid());
+                output.setWorkflowId(callerCtx.getWorkflowId());
                 output.setFunctionId(callerCtx.getFunctionId());
                 output.setFunctionName(functionName);
-                output.setOutput(serialize(value)); // null will be serialized to 'null'
+                output.setOutput(JSONUtil.serialize(value)); // null will be serialized to 'null'
                 output.setError(null);
 
-                recordOperationResult(output);
+                stepsDAO.recordStepResultTxn(output);
             }
 
             return value;
@@ -457,7 +454,7 @@ public class NotificationsDAO {
         } finally {
             lockConditionPair.lock.unlock();
             // Remove the condition from the map after use
-            notificationsMap.remove(payload);
+            notificationService.unregisterNotificationCondition(payload);
         }
     }
 

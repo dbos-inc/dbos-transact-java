@@ -102,6 +102,32 @@ public class NotificationService {
         return systemDatabase.recv(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeoutSeconds);
     }
 
+    public void setEvent(String key, Object value) {
+
+        DBOSContext ctx = DBOSContextHolder.get() ;
+        if (!ctx.isInWorkflow()) {
+            throw new IllegalArgumentException("send must be called from a workflow.") ;
+        }
+        int stepFunctionId =  ctx.getAndIncrementFunctionId() ;
+
+        systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+
+    }
+
+    public Object getEvent(String workflowId, String key, float timeOut) {
+
+        DBOSContext ctx = DBOSContextHolder.get() ;
+
+        if (ctx.isInWorkflow()) {
+            int stepFunctionId =  ctx.getAndIncrementFunctionId() ;
+            int timeoutFunctionId = ctx.getAndIncrementFunctionId() ;
+            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId);
+            return systemDatabase.getEvent(workflowId,key, timeOut, callerCtx);
+        }
+
+        return systemDatabase.getEvent(workflowId,key, timeOut, null);
+    }
+
     private void notificationListener() {
         while (running) {
             Connection notificationConnection = null ;
@@ -135,7 +161,7 @@ public class NotificationService {
                             if ("dbos_notifications_channel".equals(channel)) {
                                 handleNotification(payload,  "notifications");
                             } else if ("dbos_workflow_events_channel".equals(channel)) {
-                                // handleNotification(payload, workflowEventsMap, "workflow_events");
+                                handleNotification(payload,  "workflow_events");
                                 logger.warn("Events not yet implemented.") ;
                             } else {
                                 logger.error("Unknown channel: {}", channel);
