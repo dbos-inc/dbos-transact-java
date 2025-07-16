@@ -158,12 +158,9 @@ public class NotificationsDAO {
             if (!hasExistingNotification) {
                 // Wait for the notification
                 // Support OAOO sleep
-                logger.info("No notification sleep") ;
                 double actualTimeout = sleep(workflowUuid, timeoutFunctionId, timeoutSeconds, true);
                 long timeoutMs = (long) (actualTimeout * 1000);
-                logger.info("sleep for " + timeoutMs) ;
                 lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
-                logger.info("returned from await") ;
 
             } else {
                 logger.info("We have notification. no need to sleep") ;
