@@ -18,6 +18,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class EventsTest {
 
@@ -168,6 +169,15 @@ public class EventsTest {
 
         String event = (String) DBOS.retrieveWorkflow("id2").getResult();
         assertEquals("value1", event);
+    }
+
+    @Test
+    public void timeout() {
+
+        long start = System.currentTimeMillis() ;
+        dbos.getEvent("nonexistingid", "fake_key",2);
+        long elapsed = System.currentTimeMillis() - start ;
+        assertTrue(elapsed < 3000);
     }
 
 }
