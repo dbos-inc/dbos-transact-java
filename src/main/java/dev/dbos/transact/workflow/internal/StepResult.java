@@ -23,8 +23,8 @@ public class StepResult {
     public String getOutput() { return output; }
     public String getError() { return error; }
 
-    public void setWorkflowUUID(String workflowUUID) { this.workflowId = workflowUUID; }
-    public void setFunctionID(int functionID) { this.functionId = functionID; }
+    public void setWorkflowId(String workflowUUID) { this.workflowId = workflowUUID; }
+    public void setFunctionId(int functionID) { this.functionId = functionID; }
     public void setFunctionName(String functionName) { this.functionName = functionName; }
     public void setOutput(String output) { this.output = output; }
     public void setError(String error) { this.error = error; }

@@ -57,7 +57,7 @@ CREATE TABLE dbos.notifications (
     topic text,
     message text NOT NULL,
     created_at_epoch_ms bigint NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
-    message_uuid text,
+    message_uuid text NOT NULL DEFAULT gen_random_uuid(),
 
     -- Primary key constraint
     CONSTRAINT notifications_pkey PRIMARY KEY (message_uuid),
@@ -87,3 +87,33 @@ CREATE TABLE dbos.workflow_events (
         ON UPDATE CASCADE
         ON DELETE CASCADE
 );
+
+-- Create function for notifications trigger
+CREATE OR REPLACE FUNCTION dbos.notifications_function() RETURNS TRIGGER AS $$
+DECLARE
+    payload text := NEW.destination_uuid || '::' || NEW.topic;
+BEGIN
+    PERFORM pg_notify('dbos_notifications_channel', payload);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for notifications
+CREATE TRIGGER dbos_notifications_trigger
+AFTER INSERT ON dbos.notifications
+FOR EACH ROW EXECUTE FUNCTION dbos.notifications_function();
+
+-- Create function for workflow events trigger
+CREATE OR REPLACE FUNCTION dbos.workflow_events_function() RETURNS TRIGGER AS $$
+DECLARE
+    payload text := NEW.workflow_uuid || '::' || NEW.key;
+BEGIN
+    PERFORM pg_notify('dbos_workflow_events_channel', payload);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for workflow events
+CREATE TRIGGER dbos_workflow_events_trigger
+AFTER INSERT ON dbos.workflow_events
+FOR EACH ROW EXECUTE FUNCTION dbos.workflow_events_function();

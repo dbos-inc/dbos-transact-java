@@ -29,14 +29,20 @@ public class StepsDAO {
     public void recordStepResultTxn(StepResult result) throws SQLException
     {
 
+        try (Connection connection = dataSource.getConnection() ;) {
+             recordStepResultTxn(result, connection);
+        }
+    }
+
+    public void recordStepResultTxn(StepResult result, Connection connection) throws SQLException
+    {
         String sql = String.format(
                 "INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, output, error) " +
                         "VALUES (?, ?, ?, ?, ?)",
                 Constants.DB_SCHEMA
         );
 
-        try (Connection connection = dataSource.getConnection() ;
-             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             int paramIdx = 1;
             pstmt.setString(paramIdx++, result.getWorkflowId());
             pstmt.setInt(paramIdx++, result.getFunctionId());
@@ -64,7 +70,10 @@ public class StepsDAO {
                 throw e;
             }
         }
+
+
     }
+
 
     /**
      * Checks the execution status and output of a specific operation within a workflow.

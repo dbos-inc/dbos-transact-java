@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -31,6 +32,8 @@ public class SystemDatabase {
     private WorkflowDAO workflowDAO;
     private StepsDAO stepsDAO ;
     private QueuesDAO queuesDAO;
+    private NotificationService notificationService;
+    private NotificationsDAO notificationsDAO ;
 
     private SystemDatabase(DBOSConfig cfg) {
         config = cfg ;
@@ -46,6 +49,8 @@ public class SystemDatabase {
         stepsDAO = new StepsDAO(dataSource) ;
         workflowDAO = new WorkflowDAO(dataSource) ;
         queuesDAO = new QueuesDAO(dataSource) ;
+        notificationService = new NotificationService(dataSource, this) ;
+        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService) ;
     }
 
     private SystemDatabase(DataSource ds) {
@@ -54,6 +59,8 @@ public class SystemDatabase {
         workflowDAO = new WorkflowDAO(dataSource) ;
         stepsDAO = new StepsDAO(dataSource) ;
         queuesDAO = new QueuesDAO(dataSource) ;
+        notificationService = new NotificationService(dataSource, this) ;
+        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService) ;
     }
 
     public static synchronized void initialize(DBOSConfig cfg) {
@@ -82,6 +89,15 @@ public class SystemDatabase {
             ((HikariDataSource)instance.dataSource).close();
         }
         instance = null ;
+    }
+
+    public void setNotificationService(NotificationService service) {
+        notificationService = service;
+        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, service) ;
+    }
+
+    public NotificationService getNotificationService() {
+        return notificationService ;
     }
 
 
@@ -216,6 +232,32 @@ public class SystemDatabase {
                                     int functionId, // func id in the parent
                                     String functionName) {
         workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);
+    }
+
+    public void send(String workflowId, int functionId, String destinationId,
+                     Object message, String topic)  {
+
+        try {
+            notificationsDAO.send(workflowId, functionId, destinationId, message, topic);
+        } catch(SQLException sq) {
+            logger.error("Sql Exception", sq);
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+        }
+    }
+
+    public Object recv(String workflowId, int functionId, int timeoutFunctionId,
+                       String topic, double timeoutSeconds)  {
+
+        try {
+            return notificationsDAO.recv(workflowId, functionId, timeoutFunctionId, topic, timeoutSeconds) ;
+        } catch (SQLException sq) {
+            logger.error("Sql Exception", sq);
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+        } catch (InterruptedException ie) {
+            logger.error("recv() was interrupted", ie);
+            throw new DBOSException(UNEXPECTED.getCode(), ie.getMessage());
+        }
+
     }
 
     private void createDataSource(String dbName) {
