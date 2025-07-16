@@ -292,6 +292,7 @@ class NotificationServiceTest {
             Future<String> future1 = executor.submit(() -> testThread(notService, wfuuid, topic));
             Future<String> future2 = executor.submit(() -> testThread(notService, wfuuid, topic));
 
+            Thread.sleep(2000); // otherwise wfid is not found
             String expectedMessage = "test message";
             // dbos.send(wfuuid, expectedMessage, topic);
             try(SetWorkflowID id = new SetWorkflowID("send1")) {
