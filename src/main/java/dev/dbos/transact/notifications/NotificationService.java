@@ -103,7 +103,6 @@ public class NotificationService {
             Connection notificationConnection = null ;
 
             try {
-                // Create PostgreSQL connection for notifications using DataSource
                 notificationConnection = dataSource.getConnection();
                 notificationConnection.setAutoCommit(true);
 
