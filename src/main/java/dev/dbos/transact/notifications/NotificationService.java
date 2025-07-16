@@ -44,7 +44,6 @@ public class NotificationService {
     }
 
     public void unregisterNotificationCondition(String key) {
-        logger.info("Removing from conditionMap " + key);
         notificationsMap.remove(key);
     }
 
