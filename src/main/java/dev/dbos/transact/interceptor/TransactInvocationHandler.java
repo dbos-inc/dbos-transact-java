@@ -40,9 +40,6 @@ public class TransactInvocationHandler extends  BaseInvocationHandler {
     }
 
     protected TransactInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
-        /* this.target = target;
-        this.targetClassName = target.getClass().getName();
-        this.dbosExecutor = dbosExecutor ; */
         super(target, dbosExecutor) ;
     }
 

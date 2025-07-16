@@ -28,7 +28,7 @@ public class DBOSContext {
     private int priority ;
 
     //
-    private boolean inWorkflow = false;
+    private volatile boolean inWorkflow = false;
 
     private String stepId;
 

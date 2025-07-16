@@ -104,6 +104,8 @@ public class NotificationService {
 
     public void setEvent(String key, Object value) {
 
+        logger.info("Received setEvent for key " + key) ;
+
         DBOSContext ctx = DBOSContextHolder.get() ;
         if (!ctx.isInWorkflow()) {
             throw new IllegalArgumentException("send must be called from a workflow.") ;
@@ -115,6 +117,8 @@ public class NotificationService {
     }
 
     public Object getEvent(String workflowId, String key, float timeOut) {
+
+        logger.info("Received getEvent for " + workflowId + " " + key);
 
         DBOSContext ctx = DBOSContextHolder.get() ;
 
@@ -162,7 +166,6 @@ public class NotificationService {
                                 handleNotification(payload,  "notifications");
                             } else if ("dbos_workflow_events_channel".equals(channel)) {
                                 handleNotification(payload,  "workflow_events");
-                                logger.warn("Events not yet implemented.") ;
                             } else {
                                 logger.error("Unknown channel: {}", channel);
                             }
@@ -196,6 +199,8 @@ public class NotificationService {
     }
 
     private void handleNotification(String payload, String mapType) {
+
+        logger.info("Received notification for " + payload) ;
 
         if (payload != null && !payload.isEmpty()) {
             LockConditionPair pair = notificationsMap.get(payload);

@@ -414,13 +414,15 @@ public class NotificationsDAO {
 
                 try {
                     // Convert timeout to nanoseconds for await
-                    long timeoutNanos = (long) (actualTimeout * 1_000_000_000L);
-                    lockConditionPair.condition.await(timeoutNanos, TimeUnit.NANOSECONDS);
+                    long timeout = (long) (actualTimeout * 1000);
+                    logger.info("value not found going to await ..." + timeout);
+                    lockConditionPair.condition.await(timeout, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException("Interrupted while waiting for event", e);
                 }
 
+                logger.info("Awoken from await");
                 // Read the value from the database after notification
                 try (Connection conn = dataSource.getConnection();
                      PreparedStatement stmt = conn.prepareStatement(getSql)) {

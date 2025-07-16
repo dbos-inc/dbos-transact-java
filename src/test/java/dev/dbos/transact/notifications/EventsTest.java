@@ -134,7 +134,7 @@ public class EventsTest {
             eventService.setEventWorkflow("key1", "value1");
         }
 
-        DBOS.retrieveWorkflow("id1").getResult();
+        // DBOS.retrieveWorkflow("id1").getResult();
 
         try (SetWorkflowID id = new SetWorkflowID("id2")) {
             eventService.getEventWorkflow("id1", "key1", 3);
@@ -144,5 +144,30 @@ public class EventsTest {
         assertEquals("value1", event);
     }
 
+
+    @Test
+    public void notification() throws Exception {
+
+        EventsService eventService = dbos.<EventsService>Workflow()
+                .interfaceClass(EventsService.class)
+                .implementation(new EventsServiceImpl(dbos))
+                .async()
+                .build();
+
+        System.out.println(eventService.getClass().getName()) ;
+
+        try (SetWorkflowID id = new SetWorkflowID("id2")) {
+            eventService.getWithlatch("id1", "key1", 5);
+        }
+
+        try (SetWorkflowID id = new SetWorkflowID("id1")) {
+            eventService.setWithLatch("key1", "value1");
+        }
+
+        // DBOS.retrieveWorkflow("id1").getResult();
+
+        String event = (String) DBOS.retrieveWorkflow("id2").getResult();
+        assertEquals("value1", event);
+    }
 
 }
