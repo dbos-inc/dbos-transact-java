@@ -91,10 +91,58 @@ public class EventsTest {
             Object event = eventService.getEventWorkflow("id1", "key1", 3);
             assertEquals("value1", (String)event);
         }
-        
+
         // outside workflow
         String val = (String)dbos.getEvent("id1", "key1", 3);
         assertEquals("value1", val);
 
     }
+
+    @Test
+    public void multipleEvents() throws Exception {
+
+        EventsService eventService = dbos.<EventsService>Workflow()
+                .interfaceClass(EventsService.class)
+                .implementation(new EventsServiceImpl(dbos))
+                .build();
+
+        try (SetWorkflowID id = new SetWorkflowID("id1")) {
+            eventService.setMultipleEvents();
+        }
+
+        try (SetWorkflowID id = new SetWorkflowID("id2")) {
+            Object event = eventService.getEventWorkflow("id1", "key1", 3);
+            assertEquals("value1", (String)event);
+        }
+
+        // outside workflow
+        Double val = (Double)dbos.getEvent("id1", "key2", 3);
+        assertEquals(241.5, val);
+
+    }
+
+    @Test
+    public void async_set_get() throws Exception {
+
+        EventsService eventService = dbos.<EventsService>Workflow()
+                .interfaceClass(EventsService.class)
+                .implementation(new EventsServiceImpl(dbos))
+                .async()
+                .build();
+
+        try (SetWorkflowID id = new SetWorkflowID("id1")) {
+            eventService.setEventWorkflow("key1", "value1");
+        }
+
+        DBOS.retrieveWorkflow("id1").getResult();
+
+        try (SetWorkflowID id = new SetWorkflowID("id2")) {
+            eventService.getEventWorkflow("id1", "key1", 3);
+        }
+
+        String event = (String) DBOS.retrieveWorkflow("id2").getResult();
+    }
+
+
+
 }
