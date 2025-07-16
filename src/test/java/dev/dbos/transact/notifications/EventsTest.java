@@ -91,6 +91,10 @@ public class EventsTest {
             Object event = eventService.getEventWorkflow("id1", "key1", 3);
             assertEquals("value1", (String)event);
         }
+        
+        // outside workflow
+        String val = (String)dbos.getEvent("id1", "key1", 3);
+        assertEquals("value1", val);
 
     }
 }
