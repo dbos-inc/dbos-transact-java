@@ -306,10 +306,12 @@ public class NotificationsDAO {
                 String serializedMessage = JSONUtil.serialize(message);
 
                 // Insert or update the workflow event using UPSERT
-                String upsertSql = " INSERT INTO workflow_events (workflow_uuid, key, value) " +
+                String upsertSql = " INSERT INTO %s.workflow_events (workflow_uuid, key, value) " +
                                     " VALUES (?, ?, ?) " +
                                     " ON CONFLICT (workflow_uuid, key) " +
                                     " DO UPDATE SET value = EXCLUDED.value" ;
+
+                upsertSql = String.format(upsertSql, Constants.DB_SCHEMA);
 
                 try (PreparedStatement stmt = conn.prepareStatement(upsertSql)) {
                     stmt.setString(1, workflowId);
@@ -376,7 +378,9 @@ public class NotificationsDAO {
             Object value = null;
 
             // Initial database check
-            String getSql = "SELECT value FROM workflow_events WHERE workflow_uuid = ? AND key = ?";
+            String getSql = "SELECT value FROM %s.workflow_events WHERE workflow_uuid = ? AND key = ?";
+            getSql = String.format(getSql, Constants.DB_SCHEMA);
+
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(getSql)) {
 
