@@ -141,8 +141,8 @@ public class EventsTest {
         }
 
         String event = (String) DBOS.retrieveWorkflow("id2").getResult();
+        assertEquals("value1", event);
     }
-
 
 
 }
