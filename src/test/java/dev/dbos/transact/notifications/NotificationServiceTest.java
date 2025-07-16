@@ -98,7 +98,7 @@ class NotificationServiceTest {
             notService.recvWorkflow("topic1", 10) ;
         }
 
-        Thread.sleep(2000) ;
+        // Thread.sleep(2000) ;
 
         String wfid2 = "sendf1";
 
@@ -141,7 +141,7 @@ class NotificationServiceTest {
             notService.recvMultiple("topic1") ;
         }
 
-        Thread.sleep(2000);
+        // Thread.sleep(2000);
 
         try(SetWorkflowID id = new SetWorkflowID("send1")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello1") ;
@@ -216,6 +216,11 @@ class NotificationServiceTest {
                 .implementation(new NotServiceImpl(dbos))
                 .build();
 
+        // just to open the latch
+        try(SetWorkflowID id = new SetWorkflowID("abc")) {
+            notService.recvWorkflow(null, 1) ;
+        }
+
         try {
             try (SetWorkflowID id = new SetWorkflowID("send1")) {
                 notService.sendWorkflow("fakeid", "topic1", "HelloDBOS");
@@ -241,6 +246,7 @@ class NotificationServiceTest {
         try(SetWorkflowID id = new SetWorkflowID(wfid1)) {
             notService.recvWorkflow("topic1", 5) ;
         }
+
 
         String wfid2 = "sendf1";
 
