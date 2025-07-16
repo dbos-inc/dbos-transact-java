@@ -98,8 +98,6 @@ class NotificationServiceTest {
             notService.recvWorkflow("topic1", 10) ;
         }
 
-        // Thread.sleep(2000) ;
-
         String wfid2 = "sendf1";
 
         try(SetWorkflowID id = new SetWorkflowID(wfid2)) {
@@ -141,7 +139,6 @@ class NotificationServiceTest {
             notService.recvMultiple("topic1") ;
         }
 
-        // Thread.sleep(2000);
 
         try(SetWorkflowID id = new SetWorkflowID("send1")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello1") ;
@@ -300,7 +297,6 @@ class NotificationServiceTest {
             Future<String> future1 = executor.submit(() -> testThread(notService, wfuuid, topic));
             Future<String> future2 = executor.submit(() -> testThread(notService, wfuuid, topic));
 
-            Thread.sleep(2000); // otherwise wfid is not found
             String expectedMessage = "test message";
             // dbos.send(wfuuid, expectedMessage, topic);
             try(SetWorkflowID id = new SetWorkflowID("send1")) {
