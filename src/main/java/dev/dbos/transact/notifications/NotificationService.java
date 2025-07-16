@@ -130,7 +130,7 @@ public class NotificationService {
                             logger.debug("Received notification on channel: {}, payload: {}", channel, payload);
 
                             if ("dbos_notifications_channel".equals(channel)) {
-                                handleNotification(payload, notificationsMap, "notifications");
+                                handleNotification(payload,  "notifications");
                             } else if ("dbos_workflow_events_channel".equals(channel)) {
                                 // handleNotification(payload, workflowEventsMap, "workflow_events");
                                 logger.warn("Events not yet implemented.") ;
@@ -166,10 +166,10 @@ public class NotificationService {
         logger.debug("Notification listener thread exiting");
     }
 
-    private void handleNotification(String payload, Map<String, LockConditionPair> conditionMap, String mapType) {
+    private void handleNotification(String payload, String mapType) {
 
         if (payload != null && !payload.isEmpty()) {
-            LockConditionPair pair = conditionMap.get(payload);
+            LockConditionPair pair = notificationsMap.get(payload);
             if (pair != null) {
                 pair.lock.lock();
                 try {
