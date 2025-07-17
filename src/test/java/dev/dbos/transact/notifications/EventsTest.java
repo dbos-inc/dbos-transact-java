@@ -16,6 +16,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -155,7 +159,6 @@ public class EventsTest {
                 .async()
                 .build();
 
-        System.out.println(eventService.getClass().getName()) ;
 
         try (SetWorkflowID id = new SetWorkflowID("id2")) {
             eventService.getWithlatch("id1", "key1", 5);
@@ -179,5 +182,41 @@ public class EventsTest {
         long elapsed = System.currentTimeMillis() - start ;
         assertTrue(elapsed < 3000);
     }
+
+    @Test
+    public void concurrency() throws Exception {
+
+        EventsService eventService = dbos.<EventsService>Workflow()
+                .interfaceClass(EventsService.class)
+                .implementation(new EventsServiceImpl(dbos))
+                .build();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Object> future1 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
+            Future<Object> future2 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
+
+            String expectedMessage = "test message";
+            // dbos.send(wfuuid, expectedMessage, topic);
+            try(SetWorkflowID id = new SetWorkflowID("id1")) {
+                eventService.setEventWorkflow("key1", expectedMessage); ;
+            }
+
+            // Both should return the same message
+            String result1 = (String)future1.get();
+            String result2 = (String)future2.get();
+
+            assertEquals(result1, result2);
+            assertEquals(expectedMessage, result1);
+
+
+        } finally {
+            executor.shutdown();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
+
+
+    }
+
 
 }
