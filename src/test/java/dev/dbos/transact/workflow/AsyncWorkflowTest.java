@@ -2,6 +2,8 @@ package dev.dbos.transact.workflow;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSOptions;
+import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAppException;
@@ -231,12 +233,15 @@ public class AsyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
                 .implementation(new SimpleServiceImpl())
-                .async()
+        //        .async() unified instead
                 .build();
 
         simpleService.setSimpleService(simpleService);
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
+        DBOSOptions options = new DBOSOptions.Builder("wf-123456").async().build();
+
+        // try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
+        try(SetDBOSOptions o = new SetDBOSOptions(options)) {
             simpleService.WorkflowWithMultipleChildren("123");
         }
 

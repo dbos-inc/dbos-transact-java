@@ -17,7 +17,7 @@ import java.util.UUID;
 
 public abstract class BaseInvocationHandler implements InvocationHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(AsyncInvocationHandler.class);
+    private static final Logger logger = LoggerFactory.getLogger(BaseInvocationHandler.class);
 
     private final Object target;
     private final String targetClassName ;

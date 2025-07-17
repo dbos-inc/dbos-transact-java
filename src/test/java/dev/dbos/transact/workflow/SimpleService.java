@@ -20,4 +20,6 @@ public interface SimpleService {
     public String grandchildWorkflow(String input) ;
     public String grandParent(String input) throws Exception ;
 
+    String syncWithQueued();
+
 }

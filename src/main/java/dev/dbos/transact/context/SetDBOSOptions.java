@@ -1,19 +1,26 @@
 package dev.dbos.transact.context;
 
+import java.io.Closeable;
 
-public class SetWorkflowID implements AutoCloseable {
+public class SetDBOSOptions implements Closeable {
+
     private final DBOSContext previousCtx ;
 
-    public SetWorkflowID(String workflowId) {
+    public SetDBOSOptions(DBOSOptions options) {
+
+        if (options.getWorkflowId() == null) {
+            throw new IllegalArgumentException("Workflow Id cannot be null with SetDBOSOptions. ");
+        }
+
         previousCtx = DBOSContextHolder.get();
 
         DBOSContext newCtx;
 
         if (previousCtx.getWorkflowId() != null ) {
             // we must be a child workflow
-            newCtx = previousCtx.createChild(workflowId) ;
+            newCtx = previousCtx.createChild(options) ;
         } else {
-            newCtx = new DBOSContext(workflowId, 0);
+            newCtx = new DBOSContext(options, 0);
         }
         DBOSContextHolder.set(newCtx);
     }
@@ -23,4 +30,3 @@ public class SetWorkflowID implements AutoCloseable {
         DBOSContextHolder.set(previousCtx) ;
     }
 }
-
