@@ -1,5 +1,9 @@
 package dev.dbos.transact.context;
 
+/**
+ * If we like SetDBOSOptions we should remove it and keep just API
+ *
+ */
 public class SetWorkflowID implements AutoCloseable {
     private final DBOSContext previousCtx ;
 

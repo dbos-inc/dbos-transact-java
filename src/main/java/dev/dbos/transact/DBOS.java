@@ -128,11 +128,6 @@ public class DBOS {
                         DBOS.getInstance().dbosExecutor
                 ) ;
             } else {
-                /* return TransactInvocationHandler.createProxy(
-                        interfaceClass,
-                        implementation,
-                        DBOS.getInstance().dbosExecutor
-                ); */
                 return UnifiedInvocationHandler.createProxy(
                         interfaceClass,
                         implementation,

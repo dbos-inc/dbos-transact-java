@@ -21,8 +21,8 @@ public class DBOSContext {
     private String appVersion;
 
     // workflow timeouts
-    private Queue queue; // not copied over to child
-    private int workflowTimeoutMs ; // not copied over to child
+    private Queue queue;
+    private int workflowTimeoutMs ;
     private int workflowDeadlineEpochMs ;
 
     // Queues
@@ -34,7 +34,7 @@ public class DBOSContext {
 
     private String stepId;
 
-    private boolean async ; // not copied over to child
+    private boolean async ;
 
     public DBOSContext() {
 
