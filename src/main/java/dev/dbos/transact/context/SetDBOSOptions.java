@@ -7,6 +7,11 @@ public class SetDBOSOptions implements Closeable {
     private final DBOSContext previousCtx ;
 
     public SetDBOSOptions(DBOSOptions options) {
+
+        if (options.getWorkflowId() == null) {
+            throw new IllegalArgumentException("Workflow Id cannot be null with SetDBOSOptions. ");
+        }
+
         previousCtx = DBOSContextHolder.get();
 
         DBOSContext newCtx;

@@ -69,6 +69,8 @@ public class DBOSContext {
         this.parentWorkflowId = parentWorkflowId;
         this.parentFunctionId = parentFunctionId;
         this.inWorkflow = true;
+        this.async = async ;
+        this.queue = queue;
     }
 
     private DBOSContext(DBOSOptions options, String parentWorkflowId, int parentFunctionId) {
