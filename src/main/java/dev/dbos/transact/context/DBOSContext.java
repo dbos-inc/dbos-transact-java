@@ -1,6 +1,7 @@
 package dev.dbos.transact.context;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.queue.Queue;
 
 public class DBOSContext {
 
@@ -20,7 +21,8 @@ public class DBOSContext {
     private String appVersion;
 
     // workflow timeouts
-    private int workflowTimeoutMs ;
+    private Queue queue; // not copied over to child
+    private int workflowTimeoutMs ; // not copied over to child
     private int workflowDeadlineEpochMs ;
 
     // Queues
@@ -31,6 +33,8 @@ public class DBOSContext {
     private volatile boolean inWorkflow = false;
 
     private String stepId;
+
+    private boolean async ; // not copied over to child
 
     public DBOSContext() {
 
@@ -50,11 +54,28 @@ public class DBOSContext {
 
     }
 
+    public DBOSContext(DBOSOptions options, int functionId) {
+        this.workflowId = options.getWorkflowId();
+        this.functionId = functionId ;
+        this.inWorkflow = false;
+        this.async = options.isAsync() ;
+        this.queue = options.getQueue();
+    }
+
     private DBOSContext(String childWorkflowId, String parentWorkflowId, int parentFunctionId) {
         this.workflowId = childWorkflowId;
         this.parentWorkflowId = parentWorkflowId;
         this.parentFunctionId = parentFunctionId;
         this.inWorkflow = true;
+    }
+
+    private DBOSContext(DBOSOptions options, String parentWorkflowId, int parentFunctionId) {
+        this.workflowId = options.getWorkflowId();
+        this.parentWorkflowId = parentWorkflowId;
+        this.parentFunctionId = parentFunctionId;
+        this.inWorkflow = true;
+        this.async = options.isAsync();
+        this.queue = options.getQueue();
     }
 
     public String getWorkflowId() {
@@ -101,6 +122,10 @@ public class DBOSContext {
         return new DBOSContext(childWorkflowId, workflowId, this.getAndIncrementFunctionId());
     }
 
+    public DBOSContext createChild(DBOSOptions options) {
+        return new DBOSContext(options, workflowId, this.getAndIncrementFunctionId());
+    }
+
     public boolean hasParent() {
         return this.parentWorkflowId != null;
     }
@@ -111,6 +136,14 @@ public class DBOSContext {
 
     public void setInWorkflow(boolean in) {
         this.inWorkflow = true;
+    }
+
+    public boolean isAsync() {
+        return async;
+    }
+
+    public Queue getQueue() {
+        return queue;
     }
 }
 
