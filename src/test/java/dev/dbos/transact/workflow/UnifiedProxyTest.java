@@ -135,4 +135,46 @@ public class UnifiedProxyTest {
 
     }
 
+    @Test
+    public void syncParentWithQueuedChildren() throws Exception {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+
+        simpleService.setSimpleService(simpleService);
+
+        String wfid1 = "wf-123";
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).build();
+        String result;
+        try (SetDBOSOptions id = new SetDBOSOptions(options)){
+            result = simpleService.syncWithQueued();
+        }
+        assertEquals("QueuedChildren", result);
+
+        for (int i = 0 ; i < 3 ; i++) {
+            String wid = "child"+i;
+            WorkflowHandle h = DBOS.retrieveWorkflow(wid);
+            assertEquals(wid, h.getResult());
+        }
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        assertEquals(wfs.size(), 4);
+
+        assertEquals(wfid1, wfs.get(0).getWorkflowId());
+        assertEquals("child0", wfs.get(1).getWorkflowId());
+        assertEquals("childQ", wfs.get(1).getQueueName());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
+
+        assertEquals("child1", wfs.get(2).getWorkflowId());
+        assertEquals("childQ", wfs.get(2).getQueueName());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).getStatus());
+
+        assertEquals("child2", wfs.get(3).getWorkflowId());
+        assertEquals("childQ", wfs.get(3).getQueueName());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).getStatus());
+
+    }
+
 }

@@ -1,7 +1,11 @@
 package dev.dbos.transact.workflow;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.context.DBOSOptions;
+import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.queue.Queue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,6 +105,28 @@ public class SimpleServiceImpl implements SimpleService {
         }
         result = "p-" + DBOS.retrieveWorkflow("child4").getResult() ;
         return result ;
+    }
+
+    @Workflow(name = "syncWithQueued")
+    public String syncWithQueued() {
+
+        System.out.println("In syncWithQueued " + DBOSContextHolder.get().getWorkflowId()) ;
+
+        Queue q= new DBOS.QueueBuilder("childQ").build();
+        DBOSOptions options = new DBOSOptions.Builder().queue(q).build();
+
+            for (int i = 0 ; i < 3 ; i++) {
+
+                String wid = "child"+i;
+                options.setWorkflowId(wid);
+                try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+                    System.out.println("In syncWithQueued after setworkflowId " + DBOSContextHolder.get().getWorkflowId()) ;
+                    simpleService.childWorkflow(wid);
+                }
+            }
+
+
+        return "QueuedChildren" ;
     }
 
 }

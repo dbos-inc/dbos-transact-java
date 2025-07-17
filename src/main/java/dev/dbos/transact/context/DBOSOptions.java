@@ -2,11 +2,13 @@ package dev.dbos.transact.context;
 
 import dev.dbos.transact.queue.Queue;
 
+import java.util.UUID;
+
 public class DBOSOptions {
 
     private final boolean async;
     private final Queue queue;
-    private final String workflowId;
+    private String workflowId;
     private final float timeoutSeconds ;
 
     private DBOSOptions(Builder builder) {
@@ -28,6 +30,10 @@ public class DBOSOptions {
         return workflowId;
     }
 
+    public void setWorkflowId(String id) {
+        this.workflowId = id;
+    }
+
     public float getTimeout() {
         return timeoutSeconds;
     }
@@ -39,10 +45,10 @@ public class DBOSOptions {
         private float timeoutSeconds = 0f;
 
         public Builder(String workflowId) {
-            if (workflowId == null || workflowId.isBlank()) {
-                throw new IllegalArgumentException("workflowId is required and cannot be null or blank");
-            }
             this.workflowId = workflowId;
+        }
+
+        public Builder() {
         }
 
         public Builder async() {
