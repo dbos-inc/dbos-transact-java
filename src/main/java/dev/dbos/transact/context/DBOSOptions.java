@@ -8,7 +8,7 @@ public class DBOSOptions {
 
     private final boolean async;
     private final Queue queue;
-    private String workflowId;
+    private final String workflowId;
     private final float timeoutSeconds ;
 
     private DBOSOptions(Builder builder) {
@@ -31,9 +31,6 @@ public class DBOSOptions {
         return workflowId;
     }
 
-    public void setWorkflowId(String id) {
-        this.workflowId = id;
-    }
 
     public float getTimeout() {
         return timeoutSeconds;
@@ -47,9 +44,6 @@ public class DBOSOptions {
 
         public Builder(String workflowId) {
             this.workflowId = workflowId;
-        }
-
-        public Builder() {
         }
 
         public Builder async() {

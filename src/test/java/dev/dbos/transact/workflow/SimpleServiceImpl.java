@@ -113,12 +113,10 @@ public class SimpleServiceImpl implements SimpleService {
         System.out.println("In syncWithQueued " + DBOSContextHolder.get().getWorkflowId()) ;
 
         Queue q= new DBOS.QueueBuilder("childQ").build();
-        DBOSOptions options = new DBOSOptions.Builder().queue(q).build();
-
         for (int i = 0 ; i < 3 ; i++) {
 
             String wid = "child"+i;
-            options.setWorkflowId(wid);
+            DBOSOptions options = new DBOSOptions.Builder(wid).queue(q).build();
             try (SetDBOSOptions o = new SetDBOSOptions(options)) {
                 simpleService.childWorkflow(wid);
             }
