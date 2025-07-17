@@ -38,8 +38,15 @@ public class DBOSOptions {
         private String workflowId = null;
         private float timeoutSeconds = 0f;
 
-        public Builder async(boolean async) {
-            this.async = async;
+        public Builder(String workflowId) {
+            if (workflowId == null || workflowId.isBlank()) {
+                throw new IllegalArgumentException("workflowId is required and cannot be null or blank");
+            }
+            this.workflowId = workflowId;
+        }
+
+        public Builder async() {
+            this.async = true;
             return this;
         }
 
@@ -48,10 +55,6 @@ public class DBOSOptions {
             return this;
         }
 
-        public Builder workflowId(String workflowId) {
-            this.workflowId = workflowId;
-            return this;
-        }
 
         public Builder timeout(float timeout) {
             this.timeoutSeconds = timeout;
