@@ -43,6 +43,10 @@ public class NotificationService {
         return notificationsMap.putIfAbsent(key, pair) == null;
     }
 
+    public LockConditionPair getOrCreateNotificationCondition(String key) {
+        return notificationsMap.computeIfAbsent(key, k -> new LockConditionPair());
+    }
+
     public void unregisterNotificationCondition(String key) {
         notificationsMap.remove(key);
     }
@@ -98,6 +102,36 @@ public class NotificationService {
         return systemDatabase.recv(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeoutSeconds);
     }
 
+    public void setEvent(String key, Object value) {
+
+        logger.info("Received setEvent for key " + key) ;
+
+        DBOSContext ctx = DBOSContextHolder.get() ;
+        if (!ctx.isInWorkflow()) {
+            throw new IllegalArgumentException("send must be called from a workflow.") ;
+        }
+        int stepFunctionId =  ctx.getAndIncrementFunctionId() ;
+
+        systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+
+    }
+
+    public Object getEvent(String workflowId, String key, float timeOut) {
+
+        logger.info("Received getEvent for " + workflowId + " " + key);
+
+        DBOSContext ctx = DBOSContextHolder.get() ;
+
+        if (ctx.isInWorkflow()) {
+            int stepFunctionId =  ctx.getAndIncrementFunctionId() ;
+            int timeoutFunctionId = ctx.getAndIncrementFunctionId() ;
+            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId);
+            return systemDatabase.getEvent(workflowId,key, timeOut, callerCtx);
+        }
+
+        return systemDatabase.getEvent(workflowId,key, timeOut, null);
+    }
+
     private void notificationListener() {
         while (running) {
             Connection notificationConnection = null ;
@@ -131,8 +165,7 @@ public class NotificationService {
                             if ("dbos_notifications_channel".equals(channel)) {
                                 handleNotification(payload,  "notifications");
                             } else if ("dbos_workflow_events_channel".equals(channel)) {
-                                // handleNotification(payload, workflowEventsMap, "workflow_events");
-                                logger.warn("Events not yet implemented.") ;
+                                handleNotification(payload,  "workflow_events");
                             } else {
                                 logger.error("Unknown channel: {}", channel);
                             }
@@ -166,6 +199,8 @@ public class NotificationService {
     }
 
     private void handleNotification(String payload, String mapType) {
+
+        logger.debug("Received notification for " + payload) ;
 
         if (payload != null && !payload.isEmpty()) {
             LockConditionPair pair = notificationsMap.get(payload);

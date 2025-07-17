@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.notifications.GetWorkflowEventContext;
 import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -258,6 +259,26 @@ public class SystemDatabase {
             throw new DBOSException(UNEXPECTED.getCode(), ie.getMessage());
         }
 
+    }
+
+    public void setEvent(String workflowId, int functionId, String key, Object message) {
+
+        try {
+            notificationsDAO.setEvent(workflowId, functionId, key, message);
+        } catch (SQLException sq) {
+            logger.error("Sql Exception", sq);
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+        }
+    }
+
+    public Object getEvent(String targetId, String key, double timeoutSeconds, GetWorkflowEventContext callerCtx) {
+
+        try {
+            return notificationsDAO.getEvent(targetId, key, timeoutSeconds, callerCtx);
+        } catch (SQLException sq) {
+            logger.error("Sql Exception", sq);
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+        }
     }
 
     private void createDataSource(String dbName) {

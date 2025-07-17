@@ -256,13 +256,51 @@ public class DBOS {
         schedulerService.scanAndSchedule(implementation);
     }
 
+    /**
+     * Send a message to a workflow
+     *
+     * @param destinationId recipient of the message
+     * @param message message to be sent
+     * @param topic topic to which the message is send
+     */
 
     public void send(String destinationId, Object message, String topic) {
         notificationService.send(destinationId, message, topic);
     }
 
+    /**
+     * Get a message sent to a particular topic
+     *
+     * @param topic the topic whose message to get
+     * @param timeoutSeconds time in seconds after which the call times out
+     * @return the message if there is one or else null
+     */
+
     public Object recv(String topic, float timeoutSeconds) {
         return notificationService.recv(topic, timeoutSeconds);
+    }
+
+    /**
+     * Call within a workflow to publish a key value pair
+     *
+     * @param key identifier for published data
+     * @param value data that is published
+     */
+    public void setEvent(String key, Object value) {
+        notificationService.setEvent(key, value);
+    }
+
+    /**
+     * Get the data published by a workflow
+     *
+     * @param workflowId id of the workflow who data is to be retrieved
+     * @param key identifies the data
+     * @param timeOut time in seconds to wait for data
+     * @return the published value or null
+     */
+
+    public Object getEvent(String workflowId, String key, float timeOut) {
+        return notificationService.getEvent(workflowId, key, timeOut) ;
     }
 }
 
