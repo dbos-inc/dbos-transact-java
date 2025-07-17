@@ -6,6 +6,7 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.StepInfo;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +17,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -172,6 +174,17 @@ public class EventsTest {
 
         String event = (String) DBOS.retrieveWorkflow("id2").getResult();
         assertEquals("value1", event);
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps("id1");
+        assertEquals(1, steps.size());
+        assertEquals("DBOS.setEvent", steps.get(0).getFunctionName()) ;
+
+        steps = systemDatabase.listWorkflowSteps("id2");
+        assertEquals(2, steps.size());
+        assertEquals("DBOS.getEvent", steps.get(0).getFunctionName()) ;
+        assertEquals("DBOS.sleep", steps.get(1).getFunctionName()) ;
+
+
     }
 
     @Test
