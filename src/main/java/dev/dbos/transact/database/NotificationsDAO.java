@@ -358,7 +358,6 @@ public class NotificationsDAO {
             if (recordedOutput != null) {
                 logger.debug("Replaying getEvent, id: {}, key: {}", callerCtx.getFunctionId(), key);
                 if (recordedOutput.getOutput() != null) {
-                    // return deserialize(recordedOutput.getOutput());
                     Object[] outputArray = JSONUtil.deserializeToArray(recordedOutput.getOutput());
                     return outputArray == null ? null : outputArray[0];
                 } else {
@@ -413,16 +412,15 @@ public class NotificationsDAO {
                 }
 
                 try {
-                    // Convert timeout to nanoseconds for await
                     long timeout = (long) (actualTimeout * 1000);
-                    logger.info("value not found going to await ..." + timeout);
+                    logger.debug("Waiting for notification ..." + timeout);
                     lockConditionPair.condition.await(timeout, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException("Interrupted while waiting for event", e);
                 }
 
-                logger.info("Awoken from await");
+                logger.debug("Awoken from await");
                 // Read the value from the database after notification
                 try (Connection conn = dataSource.getConnection();
                      PreparedStatement stmt = conn.prepareStatement(getSql)) {

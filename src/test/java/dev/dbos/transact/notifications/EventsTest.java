@@ -170,8 +170,6 @@ public class EventsTest {
             eventService.setWithLatch("key1", "value1");
         }
 
-        // DBOS.retrieveWorkflow("id1").getResult();
-
         String event = (String) DBOS.retrieveWorkflow("id2").getResult();
         assertEquals("value1", event);
 
@@ -210,7 +208,6 @@ public class EventsTest {
             Future<Object> future2 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
 
             String expectedMessage = "test message";
-            // dbos.send(wfuuid, expectedMessage, topic);
             try(SetWorkflowID id = new SetWorkflowID("id1")) {
                 eventService.setEventWorkflow("key1", expectedMessage); ;
             }
@@ -228,8 +225,6 @@ public class EventsTest {
             executor.awaitTermination(5, TimeUnit.SECONDS);
         }
 
-
     }
-
-
+    
 }
