@@ -36,6 +36,7 @@ dependencies {
     implementation("jakarta.servlet:jakarta.servlet-api:6.0.0")
     implementation("org.glassfish.jersey.containers:jersey-container-servlet-core:3.1.0")
     implementation("org.glassfish.jersey.inject:jersey-hk2:3.1.1")
+    implementation("org.glassfish.jersey.core:jersey-server:3.1.0")
 
     testImplementation("ch.qos.logback:logback-classic:1.5.6")
     testImplementation("org.mockito:mockito-core:5.12.0")

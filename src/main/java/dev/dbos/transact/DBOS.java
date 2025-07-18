@@ -220,7 +220,7 @@ public class DBOS {
         }
 
         if (config.isHttp()) {
-            httpServer = HttpServer.getInstance(config.getHttpPort(), config.getHttpPackages());
+            httpServer = HttpServer.getInstance(config.getHttpPort(), config.getHttpPackages(), config.getHttpControllerInstances());
              if (config.isHttpAwaitOnStart()) {
                  // httpServer.startAndBlock();
                  logger.info("Start http in background thread") ;

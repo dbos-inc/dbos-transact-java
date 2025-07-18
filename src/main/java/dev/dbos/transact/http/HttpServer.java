@@ -18,14 +18,18 @@ public class HttpServer {
     private ResourceConfig resourceConfig;
     private int port;
     private List<String> httpPackages = new ArrayList<>();
+    private List <Object> controllers = new ArrayList<>() ;
 
     Logger logger = LoggerFactory.getLogger(HttpServer.class);
 
-    private HttpServer(int port, List<String> pkgs) {
+    private HttpServer(int port, List<String> pkgs,List<Object> ctrls) {
         this.port = port == 0 ? 8080 : port;
-        this.httpPackages.add("dev.dbos.transact.http.controller");
-
+        // this.httpPackages.add("dev.dbos.transact.http.controller");
         this.httpPackages.addAll(pkgs);
+
+        this.controllers.add(new AdminController());
+       this.controllers.addAll(ctrls) ;
+
         this.resourceConfig = new ResourceConfig();
     }
 
@@ -49,6 +53,10 @@ public class HttpServer {
             resourceConfig.packages(pkg);
         }
 
+        for (Object controller : controllers) {
+            resourceConfig.registerInstances(controller);
+        }
+
         // Add the REST API servlet
         var jerseyservlet = tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
         // context.addServletMappingDecoded("/jersey/*", "jersey-servlet");
@@ -56,8 +64,8 @@ public class HttpServer {
 
     }
 
-    public static HttpServer getInstance(int port, List<String> httpPackages) {
-        HttpServer s = new HttpServer(port, httpPackages);
+    public static HttpServer getInstance(int port, List<String> httpPackages, List<Object> controllers) {
+        HttpServer s = new HttpServer(port, httpPackages, controllers);
         s.init();
         return s;
 

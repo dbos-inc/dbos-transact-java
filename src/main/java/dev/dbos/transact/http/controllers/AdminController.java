@@ -6,12 +6,13 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
-@Path("/hello")
+@Path("/")
 public class AdminController {
     @GET
+    @Path("/healthz")
     @Produces(MediaType.TEXT_PLAIN)
-    public String hello() {
-        return "Hello from dbos";
+    public String health() {
+        return "Healthy";
     }
 
 }

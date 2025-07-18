@@ -88,14 +88,14 @@ class AdminControllerTest {
         HttpClient client = HttpClient.newHttpClient();
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:3001/hello"))
+                .uri(URI.create("http://localhost:3001/healthz"))
                 .GET()
                 .build();
 
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
         assertEquals(200, response.statusCode());
-        assertEquals("Hello from dbos", response.body());
+        assertEquals("Healthy", response.body());
 
     }
 
