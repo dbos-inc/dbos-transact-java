@@ -17,6 +17,7 @@ public class DBOSConfig {
     private final int connectionTimeout;
     private final String appDbName;
     private final String sysDbName;
+    private final boolean http ;
 
     private DBOSConfig(Builder builder) {
         this.name = builder.name;
@@ -29,6 +30,7 @@ public class DBOSConfig {
         this.dbPassword = builder.dbPassword;
         this.dbHost = builder.dbHost;
         this.dbPort = builder.dbPort;
+        this.http = builder.http ;
 
     }
 
@@ -43,6 +45,7 @@ public class DBOSConfig {
         private int connectionTimeout = 30000;
         private String appDbName;
         private String sysDbName;
+        private boolean http = false ;
 
         public Builder name(String name) {
             this.name = name;
@@ -94,6 +97,11 @@ public class DBOSConfig {
             return this;
         }
 
+        public Builder http() {
+            this.http = true ;
+            return this;
+        }
+
         public DBOSConfig build() {
             if (name == null) throw new IllegalArgumentException("Name is required");
             if (dbPassword == null) {
@@ -142,6 +150,10 @@ public class DBOSConfig {
 
     public int getDbPort() {
         return dbPort;
+    }
+
+    public boolean isHttp() {
+        return http;
     }
 
     @Override

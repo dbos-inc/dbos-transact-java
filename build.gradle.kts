@@ -29,6 +29,14 @@ dependencies {
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.0")
     implementation("com.cronutils:cron-utils:9.2.1") // cron for scheduled wf
 
+    // http + jersey
+    implementation("org.apache.tomcat.embed:tomcat-embed-core:10.1.12")
+    implementation("org.apache.tomcat.embed:tomcat-embed-jasper:10.1.12")
+    implementation("jakarta.ws.rs:jakarta.ws.rs-api:3.1.0")
+    implementation("jakarta.servlet:jakarta.servlet-api:6.0.0")
+    implementation("org.glassfish.jersey.containers:jersey-container-servlet-core:3.1.0")
+    implementation("org.glassfish.jersey.inject:jersey-hk2:3.1.1")
+
     testImplementation("ch.qos.logback:logback-classic:1.5.6")
     testImplementation("org.mockito:mockito-core:5.12.0")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
