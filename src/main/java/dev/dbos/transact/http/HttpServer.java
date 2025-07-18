@@ -24,21 +24,17 @@ public class HttpServer {
 
     private HttpServer(int port, List<String> pkgs,List<Object> ctrls) {
         this.port = port == 0 ? 8080 : port;
-        // this.httpPackages.add("dev.dbos.transact.http.controller");
         this.httpPackages.addAll(pkgs);
 
         this.controllers.add(new AdminController());
-       this.controllers.addAll(ctrls) ;
-
+        this.controllers.addAll(ctrls) ;
         this.resourceConfig = new ResourceConfig();
     }
 
     private void init() {
 
         tomcat = new Tomcat();
-        // tomcat.setPort(8080);
         tomcat.setPort(port);
-
         tomcat.getConnector();
 
         String contextPath = "";
@@ -46,20 +42,21 @@ public class HttpServer {
 
         Context context = tomcat.addContext(contextPath, docBase);
 
-        //resourceConfig = new ResourceConfig(AdminController.class);
         resourceConfig.packages("dev.dbos.transact.http.controllers");
-        // resourceConfig = new ResourceConfig();
+
+        // scan packages and make controller automatically available
         for (String pkg : httpPackages) {
             resourceConfig.packages(pkg);
         }
 
+        // when you need more controller like injecting workflows
+        // into the controller
         for (Object controller : controllers) {
             resourceConfig.registerInstances(controller);
         }
 
         // Add the REST API servlet
         var jerseyservlet = tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
-        // context.addServletMappingDecoded("/jersey/*", "jersey-servlet");
         context.addServletMappingDecoded("/*", "jersey-servlet");
 
     }
@@ -75,7 +72,6 @@ public class HttpServer {
 
         try {
             tomcat.start();
-            // tomcat.getServer().await(); blocks the main thread which we do not want
         } catch(Exception e) {
             logger.error("Error starting http server", e) ;
         }
@@ -99,11 +95,4 @@ public class HttpServer {
         resourceConfig.packages(packages);
     }
 
-    /* public static void main(String[] args) throws Exception{
-        System.out.println("Hello Dbos");
-
-        HttpServer s = HttpServer.getInstance();
-        s.start();
-
-    } */
 }
