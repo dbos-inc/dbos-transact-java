@@ -73,6 +73,11 @@ public class HttpServer {
         }
     }
 
+    public void startAndBlock() {
+        start();
+        tomcat.getServer().await();
+    }
+
     public void stop() {
         try {
             tomcat.stop();

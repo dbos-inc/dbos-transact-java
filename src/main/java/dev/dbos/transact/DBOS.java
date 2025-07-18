@@ -221,7 +221,11 @@ public class DBOS {
 
         if (config.isHttp()) {
             httpServer = HttpServer.getInstance(config.getHttpPort(), config.getHttpPackages());
-            httpServer.start();
+            if (config.isHttpAwaitOnStart()) {
+                httpServer.startAndBlock();
+            } else {
+                httpServer.start();
+            }
         }
 
     }

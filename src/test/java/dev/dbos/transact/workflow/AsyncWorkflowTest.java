@@ -42,6 +42,7 @@ public class AsyncWorkflowTest {
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
                 .http()
+                .httpAwaitOnStart(false)
                 .build();
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");

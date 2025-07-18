@@ -44,6 +44,7 @@ class AdminControllerTest {
                 .maximumPoolSize(2)
                 .http()
                 .httpPort(3001)
+                .httpAwaitOnStart(false)
                 .build();
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
