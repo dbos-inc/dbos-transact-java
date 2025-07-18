@@ -1,6 +1,6 @@
 package dev.dbos.transact.http;
 
-import dev.dbos.transact.http.controllers.MyRestController;
+import dev.dbos.transact.http.controllers.AdminController;
 import org.apache.catalina.Context;
 import org.apache.catalina.startup.Tomcat;
 import org.glassfish.jersey.server.ResourceConfig;
@@ -9,22 +9,31 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 public class HttpServer {
 
     private Tomcat tomcat;
     private ResourceConfig resourceConfig;
+    private int port;
+    private List<String> httpPackages = new ArrayList<>();
 
     Logger logger = LoggerFactory.getLogger(HttpServer.class);
 
-    private HttpServer() {
+    private HttpServer(int port, List<String> pkgs) {
+        this.port = port == 0 ? 8080 : port;
+        this.httpPackages.add("dev.dbos.transact.http.controller");
 
+        this.httpPackages.addAll(pkgs);
+        this.resourceConfig = new ResourceConfig();
     }
 
     private void init() {
 
         tomcat = new Tomcat();
-        tomcat.setPort(8080);
+        // tomcat.setPort(8080);
+        tomcat.setPort(port);
 
         tomcat.getConnector();
 
@@ -33,8 +42,12 @@ public class HttpServer {
 
         Context context = tomcat.addContext(contextPath, docBase);
 
-        resourceConfig = new ResourceConfig(MyRestController.class);
-        resourceConfig.packages("com.dbos.transact.http.controllers");
+        //resourceConfig = new ResourceConfig(AdminController.class);
+        resourceConfig.packages("dev.dbos.transact.http.controllers");
+        // resourceConfig = new ResourceConfig();
+        for (String pkg : httpPackages) {
+            resourceConfig.packages(pkg);
+        }
 
         // Add the REST API servlet
         var jerseyservlet = tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
@@ -43,8 +56,8 @@ public class HttpServer {
 
     }
 
-    public static HttpServer getInstance() {
-        HttpServer s = new HttpServer();
+    public static HttpServer getInstance(int port, List<String> httpPackages) {
+        HttpServer s = new HttpServer(port, httpPackages);
         s.init();
         return s;
 
@@ -73,11 +86,11 @@ public class HttpServer {
         resourceConfig.packages(packages);
     }
 
-    public static void main(String[] args) throws Exception{
+    /* public static void main(String[] args) throws Exception{
         System.out.println("Hello Dbos");
 
         HttpServer s = HttpServer.getInstance();
         s.start();
 
-    }
+    } */
 }

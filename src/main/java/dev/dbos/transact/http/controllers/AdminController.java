@@ -7,11 +7,11 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
 @Path("/hello")
-public class MyRestController {
+public class AdminController {
     @GET
     @Produces(MediaType.TEXT_PLAIN)
     public String hello() {
-        return "Hello from Jakarta REST API!";
+        return "Hello from dbos";
     }
 
 }

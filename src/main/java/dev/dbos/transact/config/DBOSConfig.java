@@ -5,6 +5,9 @@ import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 
 import javax.sql.DataSource;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class DBOSConfig {
     private final String name;
@@ -18,6 +21,9 @@ public class DBOSConfig {
     private final String appDbName;
     private final String sysDbName;
     private final boolean http ;
+    private final int httpPort ;
+    private List<String> httpPackages = new ArrayList<>();
+
 
     private DBOSConfig(Builder builder) {
         this.name = builder.name;
@@ -31,6 +37,8 @@ public class DBOSConfig {
         this.dbHost = builder.dbHost;
         this.dbPort = builder.dbPort;
         this.http = builder.http ;
+        this.httpPort = builder.httpPort ;
+        this.httpPackages = builder.httpPackages;
 
     }
 
@@ -46,6 +54,8 @@ public class DBOSConfig {
         private String appDbName;
         private String sysDbName;
         private boolean http = false ;
+        private int httpPort ;
+        private List<String> httpPackages = new ArrayList<>();
 
         public Builder name(String name) {
             this.name = name;
@@ -102,6 +112,16 @@ public class DBOSConfig {
             return this;
         }
 
+        public Builder httpPort(int port) {
+            this.httpPort = port;
+            return this;
+        }
+
+        public Builder httpPackages(String... packages) {
+            this.httpPackages.addAll(Arrays.asList(packages));
+            return this;
+        }
+
         public DBOSConfig build() {
             if (name == null) throw new IllegalArgumentException("Name is required");
             if (dbPassword == null) {
@@ -154,6 +174,14 @@ public class DBOSConfig {
 
     public boolean isHttp() {
         return http;
+    }
+
+    public int getHttpPort() {
+        return httpPort;
+    }
+
+    public List<String> getHttpPackages() {
+        return httpPackages;
     }
 
     @Override

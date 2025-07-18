@@ -220,7 +220,7 @@ public class DBOS {
         }
 
         if (config.isHttp()) {
-            httpServer = HttpServer.getInstance();
+            httpServer = HttpServer.getInstance(config.getHttpPort(), config.getHttpPackages());
             httpServer.start();
         }
 
