@@ -221,14 +221,20 @@ public class DBOS {
 
         if (config.isHttp()) {
             httpServer = HttpServer.getInstance(config.getHttpPort(), config.getHttpPackages());
-            if (config.isHttpAwaitOnStart()) {
-                httpServer.startAndBlock();
+             if (config.isHttpAwaitOnStart()) {
+                 // httpServer.startAndBlock();
+                 logger.info("Start http in background thread") ;
+                 Thread httpThread = new Thread(() -> httpServer.startAndBlock(), "http-server-thread");
+                 httpThread.setDaemon(false); // Keep process alive
+                 httpThread.start();
             } else {
                 httpServer.start();
             }
         }
 
     }
+
+
 
     public void shutdown() {
 
