@@ -44,6 +44,7 @@ class AdminControllerTest {
                 .maximumPoolSize(2)
                 .http()
                 .httpPort(8080)
+                .httpControllers(new MyRestController())
                 .httpAwaitOnStart(false)
                 .build();
 
@@ -83,7 +84,7 @@ class AdminControllerTest {
 
 
     @Test
-    public void hello() throws Exception {
+    public void health() throws Exception {
 
         HttpClient client = HttpClient.newHttpClient();
 
@@ -96,6 +97,23 @@ class AdminControllerTest {
 
         assertEquals(200, response.statusCode());
         assertEquals("Healthy", response.body());
+
+    }
+
+    @Test
+    public void hello() throws Exception {
+
+        HttpClient client = HttpClient.newHttpClient();
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8080/test/hello"))
+                .GET()
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(200, response.statusCode());
+        assertEquals("Hello DBOS", response.body());
 
     }
 
