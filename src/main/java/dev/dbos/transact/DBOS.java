@@ -222,9 +222,10 @@ public class DBOS {
         if (config.isHttp()) {
             httpServer = HttpServer.getInstance(config.getHttpPort(), config.getHttpPackages(), config.getHttpControllerInstances());
              if (config.isHttpAwaitOnStart()) {
-                 // httpServer.startAndBlock();
-                 logger.info("Start http in background thread") ;
-                 Thread httpThread = new Thread(() -> httpServer.startAndBlock(), "http-server-thread");
+                 Thread httpThread = new Thread(() ->
+                    {  logger.info("Start http in background thread") ;
+                        httpServer.startAndBlock() ;
+                    }, "http-server-thread");
                  httpThread.setDaemon(false); // Keep process alive
                  httpThread.start();
             } else {
