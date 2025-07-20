@@ -78,8 +78,6 @@ public class SyncWorkflowTest {
     @Test
     public void workflowWithOneInput() throws SQLException  {
 
-        System.out.println("Hello");
-
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
                 .implementation(new SimpleServiceImpl())

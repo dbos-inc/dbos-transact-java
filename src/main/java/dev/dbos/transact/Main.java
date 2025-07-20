@@ -5,8 +5,6 @@ import dev.dbos.transact.config.DBOSConfig;
 public class Main {
     public static void main(String[] args) {
 
-        System.out.println("Hello DBOS Transact!");
-
         try {
             DBOSConfig dbosConfig = new DBOSConfig
                     .Builder()
