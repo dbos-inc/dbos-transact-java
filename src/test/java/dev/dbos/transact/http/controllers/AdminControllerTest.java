@@ -43,7 +43,7 @@ class AdminControllerTest {
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
                 .http()
-                .httpPort(3001)
+                .httpPort(8080)
                 .httpAwaitOnStart(false)
                 .build();
 

@@ -1,7 +1,12 @@
 package dev.dbos.transact.http;
 
 import dev.dbos.transact.http.controllers.AdminController;
+import jakarta.servlet.Servlet;
 import org.apache.catalina.Context;
+import org.apache.catalina.Wrapper;
+import org.apache.catalina.connector.Connector;
+import org.apache.catalina.core.StandardContext;
+import org.apache.catalina.core.StandardWrapper;
 import org.apache.catalina.startup.Tomcat;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.servlet.ServletContainer;
@@ -15,7 +20,6 @@ import java.util.List;
 public class HttpServer {
 
     private Tomcat tomcat;
-    private ResourceConfig resourceConfig;
     private int port;
     private List<String> httpPackages = new ArrayList<>();
     private List <Object> controllers = new ArrayList<>() ;
@@ -28,37 +32,14 @@ public class HttpServer {
 
         this.controllers.add(new AdminController());
         this.controllers.addAll(ctrls) ;
-        this.resourceConfig = new ResourceConfig();
     }
 
     private void init() {
 
         tomcat = new Tomcat();
-        tomcat.setPort(port);
-        tomcat.getConnector();
 
-        String contextPath = "";
-        String docBase = new File(".").getAbsolutePath();
-
-        Context context = tomcat.addContext(contextPath, docBase);
-
-        resourceConfig.packages("dev.dbos.transact.http.controllers");
-
-        // scan packages and make controller automatically available
-        for (String pkg : httpPackages) {
-            resourceConfig.packages(pkg);
-        }
-
-        // when you need more controller like injecting workflows
-        // into the controller
-        for (Object controller : controllers) {
-            resourceConfig.registerInstances(controller);
-        }
-
-        // Add the REST API servlet
-        var jerseyservlet = tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
-        context.addServletMappingDecoded("/*", "jersey-servlet");
-
+        setUpUserContext();
+        setUpAdminContext();
     }
 
     public static HttpServer getInstance(int port, List<String> httpPackages, List<Object> controllers) {
@@ -90,9 +71,74 @@ public class HttpServer {
             logger.error("Error stopping httpserver", e) ;
         }
     }
+    
 
-    public void register(String... packages) {
-        resourceConfig.packages(packages);
+    private void setUpUserContext() {
+
+        tomcat.setPort(port);
+        tomcat.getConnector(); // default connector
+
+        String contextPath = "";
+        String docBase = new File(".").getAbsolutePath();
+
+        Context context = tomcat.addContext(contextPath, docBase);
+
+        ResourceConfig resourceConfig = new ResourceConfig() ;
+        resourceConfig.packages("dev.dbos.transact.http.controllers");
+
+        // scan packages and make controller automatically available
+        for (String pkg : httpPackages) {
+            resourceConfig.packages(pkg);
+        }
+
+        // when you need more controller like injecting workflows
+        // into the controller
+        for (Object controller : controllers) {
+            resourceConfig.registerInstances(controller);
+        }
+
+        // Add the REST API servlet
+        var jerseyservlet = tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
+        context.addServletMappingDecoded("/*", "jersey-servlet");
+
+    }
+
+    private void setUpAdminContext() {
+
+        Connector adminConnector = new Connector();
+        adminConnector.setPort(3001);
+        tomcat.getService().addConnector(adminConnector);
+
+        // Admin context (must manually attach to admin connector)
+        String docBase = new File(".").getAbsolutePath();
+        StandardContext adminContext = new StandardContext();
+        adminContext.setPath("/admin");
+        adminContext.setDocBase(docBase);
+        adminContext.setName("admin-context");
+        adminContext.setCrossContext(true);
+        adminContext.setParent(tomcat.getHost()); // Set parent host
+        adminContext.setAllowCasualMultipartParsing(true); // optional
+
+        ResourceConfig adminConfig = new ResourceConfig();
+        // adminConfig.packages("dev.dbos.admin.controllers");
+        adminConfig.registerInstances(new AdminController()) ;
+        ServletContainer adminServlet = new ServletContainer(adminConfig);
+
+        // Register servlet wrapper BEFORE mapping
+        Wrapper adminWrapper = createWrapper("admin-servlet", adminServlet);
+        adminContext.addChild(adminWrapper);
+        adminContext.addServletMappingDecoded("/*", "admin-servlet");
+
+        // Register context
+        tomcat.getHost().addChild(adminContext);
+    }
+
+    private static Wrapper createWrapper(String name, Servlet servlet) {
+        Wrapper wrapper = new StandardWrapper();
+        wrapper.setName(name);
+        wrapper.setServlet(servlet);
+        wrapper.setLoadOnStartup(1);
+        return wrapper;
     }
 
 }
