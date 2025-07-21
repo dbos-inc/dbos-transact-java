@@ -5,6 +5,9 @@ import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 
 import javax.sql.DataSource;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class DBOSConfig {
     private final String name;
@@ -17,6 +20,10 @@ public class DBOSConfig {
     private final int connectionTimeout;
     private final String appDbName;
     private final String sysDbName;
+    private final boolean http ;
+    private final int httpPort ;
+    private final boolean httpAwaitOnStart ;
+
 
     private DBOSConfig(Builder builder) {
         this.name = builder.name;
@@ -29,6 +36,9 @@ public class DBOSConfig {
         this.dbPassword = builder.dbPassword;
         this.dbHost = builder.dbHost;
         this.dbPort = builder.dbPort;
+        this.http = builder.http ;
+        this.httpPort = builder.httpPort ;
+        this.httpAwaitOnStart = builder.httpAwaitOnStart;
 
     }
 
@@ -43,6 +53,9 @@ public class DBOSConfig {
         private int connectionTimeout = 30000;
         private String appDbName;
         private String sysDbName;
+        private boolean http = false ;
+        private int httpPort ;
+        private boolean httpAwaitOnStart = true ;
 
         public Builder name(String name) {
             this.name = name;
@@ -94,6 +107,21 @@ public class DBOSConfig {
             return this;
         }
 
+        public Builder runAdminServer() {
+            this.http = true ;
+            return this;
+        }
+
+        public Builder adminServerPort(int port) {
+            this.httpPort = port;
+            return this;
+        }
+
+        public Builder adminAwaitOnStart(boolean wait) {
+            this.httpAwaitOnStart = wait;
+            return this;
+        }
+
         public DBOSConfig build() {
             if (name == null) throw new IllegalArgumentException("Name is required");
             if (dbPassword == null) {
@@ -142,6 +170,18 @@ public class DBOSConfig {
 
     public int getDbPort() {
         return dbPort;
+    }
+
+    public boolean isHttp() {
+        return http;
+    }
+
+    public int getHttpPort() {
+        return httpPort;
+    }
+
+    public boolean isHttpAwaitOnStart() {
+        return httpAwaitOnStart;
     }
 
     @Override

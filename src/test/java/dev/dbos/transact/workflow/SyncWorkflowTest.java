@@ -36,6 +36,8 @@ public class SyncWorkflowTest {
                 .dbUser("postgres")
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
+                .runAdminServer()
+                .adminAwaitOnStart(false)
                 .build();
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");

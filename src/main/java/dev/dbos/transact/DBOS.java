@@ -3,6 +3,7 @@ package dev.dbos.transact;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.http.HttpServer;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
@@ -31,6 +32,7 @@ public class DBOS {
     private QueueService queueService ;
     private SchedulerService schedulerService ;
     private NotificationService notificationService ;
+    private HttpServer httpServer ;
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
@@ -217,7 +219,23 @@ public class DBOS {
             notificationService.start();
         }
 
+        if (config.isHttp()) {
+            httpServer = HttpServer.getInstance(config.getHttpPort());
+             if (config.isHttpAwaitOnStart()) {
+                 Thread httpThread = new Thread(() ->
+                    {  logger.info("Start http in background thread") ;
+                        httpServer.startAndBlock() ;
+                    }, "http-server-thread");
+                 httpThread.setDaemon(false); // Keep process alive
+                 httpThread.start();
+            } else {
+                httpServer.start();
+            }
+        }
+
     }
+
+
 
     public void shutdown() {
 
@@ -238,6 +256,10 @@ public class DBOS {
 
             if (notificationService != null) {
                 notificationService.stop();
+            }
+
+            if (config.isHttp()) {
+                httpServer.stop();
             }
 
             instance = null;
