@@ -15,7 +15,7 @@ public class Main {
                     .sysDbName("dbos_java_sys")
                     .maximumPoolSize(2)
                     .http()
-                    .httpPort(8080)
+                    .httpAdminPort(8080)
                     .build();
 
             DBOS.initialize(dbosConfig);

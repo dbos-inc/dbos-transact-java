@@ -118,7 +118,7 @@ public class DBOSConfig {
             return this;
         }
 
-        public Builder httpPort(int port) {
+        public Builder httpAdminPort(int port) {
             this.httpPort = port;
             return this;
         }
