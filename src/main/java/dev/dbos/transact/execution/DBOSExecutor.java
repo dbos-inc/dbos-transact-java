@@ -7,10 +7,7 @@ import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
-import dev.dbos.transact.exceptions.DBOSException;
-import dev.dbos.transact.exceptions.NonExistentWorkflowException;
-import dev.dbos.transact.exceptions.SerializableException;
-import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
+import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueRegistry;
@@ -374,6 +371,18 @@ public class DBOSExecutor {
 
         ContextAwareRunnable contextAwareTask = new ContextAwareRunnable(DBOSContextHolder.get().copy(),task);
         executorService.submit(contextAwareTask);
+
+    }
+
+    public void sleep(float seconds) {
+
+        DBOSContext context = DBOSContextHolder.get();
+
+        if (!context.isInWorkflow()) {
+            throw new DBOSException(ErrorCode.SLEEP_NOT_IN_WORKFLOW.getCode(), "sleep() must be called from within a workflow");
+        }
+
+        systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), seconds, false);
 
     }
 

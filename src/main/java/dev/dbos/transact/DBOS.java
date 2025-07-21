@@ -326,5 +326,19 @@ public class DBOS {
     public Object getEvent(String workflowId, String key, float timeOut) {
         return notificationService.getEvent(workflowId, key, timeOut) ;
     }
+
+    /**
+     *
+     * Durable sleep. When you are in a workflow, use this instead of Thread.sleep.
+     * On restart or during recovery the original expected wakeup time is honoured as
+     * opposed to sleeping all over again.
+     *
+     * @param seconds in seconds
+     */
+
+    public void sleep(float seconds) {
+
+        this.dbosExecutor.sleep(seconds) ;
+    }
 }
 

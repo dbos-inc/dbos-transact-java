@@ -275,6 +275,35 @@ class DBOSExecutorTest {
 
     }
 
+    @Test
+    public void sleep() {
+
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl(dbos))
+                .build();
+
+        // Needed to call the step
+        executingService.setExecutingService(executingService);
+
+        String result = null ;
+
+        String wfid = "wf-123";
+        long start = System.currentTimeMillis() ;
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            executingService.sleepingWorkflow(2);
+        }
+
+        long duration = System.currentTimeMillis() - start ;
+        System.out.println("Duration " + duration) ;
+        assertTrue(duration >= 2000);
+        assertTrue(duration < 2200) ;
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid);
+
+        assertEquals("DBOS.sleep", steps.get(0).getFunctionName());
+    }
+
 
 
     private void setWorkflowState(DataSource ds, String workflowId, String newState) throws SQLException {
