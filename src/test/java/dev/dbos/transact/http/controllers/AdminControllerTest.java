@@ -42,10 +42,9 @@ class AdminControllerTest {
                 .dbUser("postgres")
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
-                .http()
-                .httpPort(8080)
-                .httpControllers(new MyRestController())
-                .httpAwaitOnStart(false)
+                .runAdminServer()
+                .adminServerPort(3010)
+                .adminAwaitOnStart(false)
                 .build();
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
@@ -89,7 +88,7 @@ class AdminControllerTest {
         HttpClient client = HttpClient.newHttpClient();
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:3001/healthz"))
+                .uri(URI.create("http://localhost:3010/healthz"))
                 .GET()
                 .build();
 
@@ -97,23 +96,6 @@ class AdminControllerTest {
 
         assertEquals(200, response.statusCode());
         assertEquals("Healthy", response.body());
-
-    }
-
-    @Test
-    public void hello() throws Exception {
-
-        HttpClient client = HttpClient.newHttpClient();
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8080/test/hello"))
-                .GET()
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        assertEquals(200, response.statusCode());
-        assertEquals("Hello DBOS", response.body());
 
     }
 
