@@ -160,7 +160,7 @@ public class NotificationsDAO {
             if (!hasExistingNotification) {
                 // Wait for the notification
                 // Support OAOO sleep
-                double actualTimeout = sleep(workflowUuid, timeoutFunctionId, timeoutSeconds, true);
+                double actualTimeout = stepsDAO.sleep(workflowUuid, timeoutFunctionId, timeoutSeconds, true);
                 long timeoutMs = (long) (actualTimeout * 1000);
                 lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
 
@@ -228,7 +228,7 @@ public class NotificationsDAO {
     }
 
     // TODO : can be moved elsewhere when we implement DBOS.sleep
-    public double sleep(String workflowUuid, int functionId, double seconds, boolean skipSleep) throws SQLException {
+   /* public double sleep(String workflowUuid, int functionId, double seconds, boolean skipSleep) throws SQLException {
         String functionName = "DBOS.sleep";
 
         StepResult recordedOutput = null ;
@@ -280,6 +280,8 @@ public class NotificationsDAO {
 
         return duration;
     }
+
+    */
 
     public void setEvent(String workflowId, int functionId, String key, Object message) throws SQLException {
         String functionName = "DBOS.setEvent";
@@ -403,7 +405,7 @@ public class NotificationsDAO {
                 double actualTimeout = timeoutSeconds;
                 if (callerCtx != null) {
                     // Support OAOO sleep for workflows
-                    actualTimeout = sleep(
+                    actualTimeout = stepsDAO.sleep(
                             callerCtx.getWorkflowId(),
                             callerCtx.getTimeoutFunctionId(),
                             timeoutSeconds,
