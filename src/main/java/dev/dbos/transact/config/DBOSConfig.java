@@ -107,18 +107,17 @@ public class DBOSConfig {
             return this;
         }
 
-        public Builder http() {
+        public Builder runAdminServer() {
             this.http = true ;
             return this;
         }
 
-        public Builder httpAdminPort(int port) {
+        public Builder adminServerPort(int port) {
             this.httpPort = port;
             return this;
         }
 
-
-        public Builder httpAwaitOnStart(boolean wait) {
+        public Builder adminAwaitOnStart(boolean wait) {
             this.httpAwaitOnStart = wait;
             return this;
         }

@@ -14,8 +14,8 @@ public class Main {
                     .dbUser("postgres")
                     .sysDbName("dbos_java_sys")
                     .maximumPoolSize(2)
-                    .http()
-                    .httpAdminPort(8080)
+                    .runAdminServer()
+                    .adminServerPort(8080)
                     .build();
 
             DBOS.initialize(dbosConfig);
