@@ -21,17 +21,11 @@ public class HttpServer {
 
     private Tomcat tomcat;
     private int port;
-    private List<String> httpPackages = new ArrayList<>();
-    private List <Object> controllers = new ArrayList<>() ;
 
     Logger logger = LoggerFactory.getLogger(HttpServer.class);
 
-    private HttpServer(int port, List<String> pkgs,List<Object> ctrls) {
+    private HttpServer(int port) {
         this.port = port == 0 ? 3001 : port;
-        this.httpPackages.addAll(pkgs);
-
-        this.controllers.add(new AdminController());
-        this.controllers.addAll(ctrls) ;
     }
 
     private void init() {
@@ -39,8 +33,8 @@ public class HttpServer {
         setUpContext();
     }
 
-    public static HttpServer getInstance(int port, List<String> httpPackages, List<Object> controllers) {
-        HttpServer s = new HttpServer(port, httpPackages, controllers);
+    public static HttpServer getInstance(int port) {
+        HttpServer s = new HttpServer(port);
         s.init();
         return s;
 
@@ -82,16 +76,9 @@ public class HttpServer {
 
         ResourceConfig resourceConfig = new ResourceConfig() ;
         resourceConfig.registerInstances(new AdminController()) ;
-        // scan packages and make controller automatically available
-        for (String pkg : httpPackages) {
-            resourceConfig.packages(pkg);
-        }
 
-        // when you need more controller like injecting workflows
-        // into the controller
-        for (Object controller : controllers) {
-            resourceConfig.registerInstances(controller);
-        }
+        // In future if we need to scan from a package
+        //    resourceConfig.packages(pkg);
 
         // Add the REST API servlet
         var jerseyservlet = tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));

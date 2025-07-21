@@ -22,8 +22,6 @@ public class DBOSConfig {
     private final String sysDbName;
     private final boolean http ;
     private final int httpPort ;
-    private List<String> httpPackages = new ArrayList<>(); // auto scanning
-    private final List<Object> httpControllerInstances; // if u want to control dependencies
     private final boolean httpAwaitOnStart ;
 
 
@@ -40,9 +38,7 @@ public class DBOSConfig {
         this.dbPort = builder.dbPort;
         this.http = builder.http ;
         this.httpPort = builder.httpPort ;
-        this.httpPackages = builder.httpPackages;
         this.httpAwaitOnStart = builder.httpAwaitOnStart;
-        this.httpControllerInstances = builder.httpControllerInstances;
 
     }
 
@@ -59,9 +55,7 @@ public class DBOSConfig {
         private String sysDbName;
         private boolean http = false ;
         private int httpPort ;
-        private List<String> httpPackages = new ArrayList<>();
         private boolean httpAwaitOnStart = true ;
-        private final List<Object> httpControllerInstances = new ArrayList<>();
 
         public Builder name(String name) {
             this.name = name;
@@ -123,18 +117,9 @@ public class DBOSConfig {
             return this;
         }
 
-        public Builder httpPackages(String... packages) {
-            this.httpPackages.addAll(Arrays.asList(packages));
-            return this;
-        }
 
         public Builder httpAwaitOnStart(boolean wait) {
             this.httpAwaitOnStart = wait;
-            return this;
-        }
-
-        public Builder httpControllers(Object... controllers) {
-            this.httpControllerInstances.addAll(Arrays.asList(controllers));
             return this;
         }
 
@@ -196,16 +181,8 @@ public class DBOSConfig {
         return httpPort;
     }
 
-    public List<String> getHttpPackages() {
-        return httpPackages;
-    }
-
     public boolean isHttpAwaitOnStart() {
         return httpAwaitOnStart;
-    }
-
-    public List<Object> getHttpControllerInstances() {
-        return httpControllerInstances;
     }
 
     @Override
