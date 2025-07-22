@@ -1,9 +1,7 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.exceptions.UnExpectedStepException;
-import dev.dbos.transact.exceptions.WorkflowCancelledException;
-import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
+import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -216,6 +214,58 @@ public class StepsDAO {
         }
 
         return steps;
+    }
+
+    public double sleep(String workflowUuid, int functionId, double seconds, boolean skipSleep) throws SQLException {
+        String functionName = "DBOS.sleep";
+
+        StepResult recordedOutput;
+
+        try (Connection connection = dataSource.getConnection()) {
+            recordedOutput = checkStepExecutionTxn(workflowUuid, functionId, functionName, connection);
+        }
+
+        double endTime;
+
+        if (recordedOutput != null) {
+            logger.debug("Replaying sleep, id: {}, seconds: {}", functionId, seconds);
+            if (recordedOutput.getOutput() == null) {
+                throw new DBOSException(ErrorCode.UNEXPECTED.getCode(), "No recorded timeout for sleep");
+            }
+            Object[] dser = JSONUtil.deserializeToArray(recordedOutput.getOutput());
+            endTime = (Double) dser[0] ;
+        } else {
+            logger.debug("Running sleep, id: {}, seconds: {}", functionId, seconds);
+            endTime = System.currentTimeMillis() / 1000.0 + seconds;
+
+            try {
+                StepResult output = new StepResult();
+                output.setWorkflowId(workflowUuid);
+                output.setFunctionId(functionId);
+                output.setFunctionName(functionName);
+                output.setOutput(JSONUtil.serialize(endTime));
+                output.setError(null);
+
+                recordStepResultTxn(output);
+            } catch (DBOSWorkflowConflictException e) {
+                logger.error("Error recording sleep", e.getMessage()) ;
+            }
+        }
+
+        double currentTime = System.currentTimeMillis() / 1000.0;
+        double duration = Math.max(0, endTime - currentTime);
+
+        if (!skipSleep) {
+            try {
+                logger.debug("Sleeping for duration " + String.valueOf(duration));
+                Thread.sleep((long) (duration * 1000));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Sleep interrupted", e);
+            }
+        }
+
+        return duration;
     }
 }
 

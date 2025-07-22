@@ -6,6 +6,7 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
+import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 import org.junit.jupiter.api.AfterEach;
@@ -275,6 +276,78 @@ class DBOSExecutorTest {
 
     }
 
+    @Test
+    public void sleep() {
+
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl(dbos))
+                .build();
+
+        // Needed to call the step
+        executingService.setExecutingService(executingService);
+
+        String result = null ;
+
+        String wfid = "wf-123";
+        long start = System.currentTimeMillis() ;
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            executingService.sleepingWorkflow(2);
+        }
+
+        long duration = System.currentTimeMillis() - start ;
+        System.out.println("Duration " + duration) ;
+        assertTrue(duration >= 2000);
+        assertTrue(duration < 2200) ;
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid);
+
+        assertEquals("DBOS.sleep", steps.get(0).getFunctionName());
+    }
+
+
+    @Test
+    public void sleepRecovery() throws Exception {
+
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl(dbos))
+                .build();
+
+        // Needed to call the step
+        executingService.setExecutingService(executingService);
+
+        String result = null ;
+
+        String wfid = "wf-123";
+        long start = System.currentTimeMillis() ;
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            executingService.sleepingWorkflow(.002f);
+        }
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid);
+
+        assertEquals("DBOS.sleep", steps.get(0).getFunctionName());
+
+        // let us set the state to PENDING and increase the sleep time
+        setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+        long currenttime = System.currentTimeMillis() ;
+        double newEndtime = (currenttime + 2000)/1000 ;
+
+        String endTimeAsJson = JSONUtil.serialize(newEndtime) ;
+
+        updateStepEndTime(dataSource, wfid, steps.get(0).getFunctionId(), endTimeAsJson);
+
+        long starttime = System.currentTimeMillis();
+        WorkflowHandle h = dbosExecutor.executeWorkflowById(wfid) ;
+        h.getResult();
+
+        long duration = System.currentTimeMillis() - starttime ;
+        assertTrue(duration >= 1000);
+
+    }
+
+
 
 
     private void setWorkflowState(DataSource ds, String workflowId, String newState) throws SQLException {
@@ -309,6 +382,25 @@ class DBOSExecutorTest {
             int rowsAffected = pstmt.executeUpdate();
 
             assertEquals(2, rowsAffected);
+
+        }
+    }
+
+    private void updateStepEndTime(DataSource ds, String workflowId, int functionId, String endtime) throws SQLException {
+
+        String sql = "update dbos.operation_outputs SET output = ? WHERE workflow_uuid = ? AND function_id = ? ";
+
+        try (Connection connection = ds.getConnection();
+             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+            pstmt.setString(1, endtime);
+            pstmt.setString(2, workflowId);
+            pstmt.setInt(3, functionId) ;
+
+            // Execute the update and get the number of rows affected
+            int rowsAffected = pstmt.executeUpdate();
+
+            assertEquals(1, rowsAffected);
 
         }
     }

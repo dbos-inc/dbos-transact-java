@@ -281,6 +281,17 @@ public class SystemDatabase {
         }
     }
 
+    public double sleep(String workflowId, int functionId, double seconds, boolean skipSleep) {
+
+        try {
+            return stepsDAO.sleep(workflowId, functionId, seconds, skipSleep);
+        } catch (SQLException sq) {
+            logger.error("Sql Exception", sq);
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+        }
+
+    }
+
     private void createDataSource(String dbName) {
         HikariConfig hikariConfig = new HikariConfig();
 
