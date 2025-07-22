@@ -226,63 +226,7 @@ public class NotificationsDAO {
             }
         }
     }
-
-    // TODO : can be moved elsewhere when we implement DBOS.sleep
-   /* public double sleep(String workflowUuid, int functionId, double seconds, boolean skipSleep) throws SQLException {
-        String functionName = "DBOS.sleep";
-
-        StepResult recordedOutput = null ;
-
-        try (Connection c = dataSource.getConnection()) {
-            recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c) ;
-        }
-
-        Double endTime;
-        if (recordedOutput != null) {
-            logger.debug("Replaying sleep, id: {}, seconds: {}", functionId, seconds);
-            String output = recordedOutput.getOutput();
-            if (output == null) {
-                throw new AssertionError("no recorded end time");
-            }
-            endTime = (Double)JSONUtil.deserializeToArray(output)[0] ;
-        } else {
-            logger.debug("Running sleep, id: {}, seconds: {}", functionId, seconds);
-            endTime = System.currentTimeMillis() / 1000.0 + seconds;
-
-            try {
-
-                StepResult output = new StepResult();
-                output.setWorkflowId(workflowUuid);
-                output.setFunctionId(functionId);
-                output.setFunctionName(functionName);
-                output.setOutput(JSONUtil.serialize(endTime));
-                output.setError(null);
-
-                try(Connection conn = dataSource.getConnection()) {
-                    stepsDAO.recordStepResultTxn(output, conn);
-                }
-            } catch (DBOSWorkflowConflictException e) {
-                // Ignore conflict - operation already recorded
-                logger.error("Error recording sleep error ",e);
-            }
-        }
-
-        double duration = Math.max(0, endTime - (System.currentTimeMillis() / 1000.0));
-
-        if (!skipSleep) {
-            try {
-                Thread.sleep((long) (duration * 1000));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException("Sleep interrupted", e);
-            }
-        }
-
-        return duration;
-    }
-
-    */
-
+    
     public void setEvent(String workflowId, int functionId, String key, Object message) throws SQLException {
         String functionName = "DBOS.setEvent";
 
