@@ -343,9 +343,8 @@ class DBOSExecutorTest {
         h.getResult();
 
         long duration = System.currentTimeMillis() - starttime ;
-
-        System.out.println("duration is " + duration);
-        assertTrue(duration >= 1000);
+        
+        assertTrue(duration >= 1500);
 
     }
 

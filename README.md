@@ -1,41 +1,95 @@
-# dbos-transact-java
-DBOS Transact Java SDK 
+<div align="center">
 
-## Setting up dev environment
+# DBOS Transact: Lightweight Durable Workflows
 
-Install a recent OpenJDK. I use OpenJDK 21.    
-https://adoptium.net/en-GB/temurin/releases/?os=any&arch=any&version=21
+#### [Documentation](https://docs.dbos.dev/) &nbsp;&nbsp;•&nbsp;&nbsp;  [Examples](https://docs.dbos.dev/examples) &nbsp;&nbsp;•&nbsp;&nbsp; [Github](https://github.com/dbos-inc) &nbsp;&nbsp;•&nbsp;&nbsp; [Discord](https://discord.com/invite/jsmC6pXGgX)
+</div>
 
-Recommended IDE IntelliJ (Community edition is fine).
-But feel free to use vi or VSCode, if you are more comfortable with it.  
+---
 
-Postgres docker container with
-localhost   
-port 5432   
-user postgres
+## What is DBOS?
 
-export PGPASSWORD = password for postgres user  
+DBOS provides lightweight durable workflows built on top of Postgres.
+Instead of managing your own workflow orchestrator or task queue system, you can use DBOS to add durable workflows and queues to your program in just a few lines of code.
 
-## build
+To get started, follow the [quickstart](https://docs.dbos.dev/quickstart) to install this open-source library and connect it to a Postgres database.
+Then, annotate workflows and steps in your program to make it durable!
+That's all you need to do&mdash;DBOS is entirely contained in this open-source library, there's no additional infrastructure for you to configure or manage.
 
-./gradlew clean build
+## When Should I Use DBOS?
 
-## run tests
+You should consider using DBOS if your application needs to **reliably handle failures**.
+For example, you might be building a payments service that must reliably process transactions even if servers crash mid-operation, or a long-running data pipeline that needs to resume seamlessly from checkpoints rather than restart from the beginning when interrupted.
 
-./gradlew clean test
+Handling failures is costly and complicated, requiring complex state management and recovery logic as well as heavyweight tools like external orchestration services.
+DBOS makes it simpler: annotate your code to checkpoint it in Postgres and automatically recover from any failure.
+DBOS also provides powerful Postgres-backed primitives that makes it easier to write and operate reliable code, including durable queues, notifications, scheduling, event processing, and programmatic workflow management.
 
-## publish to local maven repository
+## Features
 
-./gradlew publishToMavenLocal
+<details open><summary><strong>💾 Durable Workflows</strong></summary>
 
-## import transact into your application
+####
 
-Add to your build.gradle.kts
+DBOS workflows make your program **durable** by checkpointing its state in Postgres.
+If your program ever fails, when it restarts all your workflows will automatically resume from the last completed step.
 
-implementation("dev.dbos:transact:1.0-SNAPSHOT")      
-implementation("ch.qos.logback:logback-classic:1.5.6")   
+You add durable workflows to your existing Java program by annotating ordinary functions as workflows and steps:
 
-Annotations @Workflow, @Transaction, @Step need to be on implementation class methods. 
+```java
+
+public interface SimpleWorkflowService {
+    String exampleWorkflow(String input) ;
+}
+
+public class SimpleWorkflowServiceImpl implements SimpleWorkflowService {
+    
+    @Workflow(name = "exampleWorkflow")
+    public String exampleWorkflow(String input) {
+        return input + input;
+    }
+}
+
+public class SyncDemo {
+    
+    public static void main(String[] args) {
+        
+        DBOSConfig dbosConfig = new DBOSConfig.Builder()
+                .name("demo")
+                .dbHost("localhost")
+                .dbPort(5432)
+                .dbUser("postgres")
+                .sysDbName("demo_dbos_sys")
+                .build() ;
+
+        DBOS.initialize(dbosConfig);
+        DBOS dbos = DBOS.getInstance();
+        dbos.launch();
+        
+        SimpleWorkflowService syncExample = dbos.<SimpleWorkflowService>Workflow()
+                .interfaceClass(SimpleWorkflowService.class)
+                .implementation(new SimpleWorkflowServiceImpl())
+                .build();
+
+        String output = syncExample.exampleWorkflow("HelloDBOS") ;
+        System.out.println("Sync result: " + output);
+    }
+}
+
+
+```
+
+Workflows are particularly useful for
+
+- Orchestrating business processes so they seamlessly recover from any failure.
+- Building observable and fault-tolerant data pipelines.
+- Operating an AI agent, or any application that relies on unreliable or non-deterministic APIs.
+
+[Read more ↗️]()
+
+</details>
+
+
 
 
 
