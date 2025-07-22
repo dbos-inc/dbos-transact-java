@@ -356,6 +356,7 @@ public class DBOSExecutor {
 
         WorkflowHandle handle = null ;
         try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+            DBOSContextHolder.get().setInWorkflow(true);
             try {
                 handle = submitWorkflow(status.getName(), functionWrapper.targetClassName, functionWrapper.target, inputs, functionWrapper.function);
             } catch (Throwable t) {
@@ -378,7 +379,7 @@ public class DBOSExecutor {
 
         DBOSContext context = DBOSContextHolder.get();
 
-        if (!context.isInWorkflow()) {
+        if (context.getWorkflowId() == null) {
             throw new DBOSException(ErrorCode.SLEEP_NOT_IN_WORKFLOW.getCode(), "sleep() must be called from within a workflow");
         }
 
