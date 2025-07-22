@@ -257,6 +257,7 @@ public class StepsDAO {
 
         if (!skipSleep) {
             try {
+                logger.debug("Sleeping for duration " + String.valueOf(duration));
                 Thread.sleep((long) (duration * 1000));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
