@@ -22,7 +22,7 @@ public class WorkflowStatusInternal {
     private String appVersion;
     private String appId;
     private Integer recoveryAttempts;
-    private Integer workflowTimeoutMs;
+    private Long workflowTimeoutMs;
     private Long workflowDeadlineEpochMs;
     private String deduplicationId;
     private int priority; // default 0 = highest priority
@@ -32,7 +32,7 @@ public class WorkflowStatusInternal {
                                   String configName, String authenticatedUser, String assumedRole,
                                   String authenticatedRoles, String output, String error, Long createdAt,
                                   Long updatedAt, String queueName, String executorId, String appVersion,
-                                  String appId, Integer recoveryAttempts, Integer workflowTimeoutMs,
+                                  String appId, Integer recoveryAttempts, Long workflowTimeoutMs,
                                   Long workflowDeadlineEpochMs, String deduplicationId, int priority,
                                   String inputs) {
         this.workflowUUID = workflowUUID;
@@ -144,7 +144,7 @@ public class WorkflowStatusInternal {
     }
 
 
-    public Integer getWorkflowTimeoutMs() {
+    public Long getWorkflowTimeoutMs() {
         return workflowTimeoutMs;
     }
 

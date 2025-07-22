@@ -9,7 +9,7 @@ public class DBOSOptions {
     private final boolean async;
     private final Queue queue;
     private final String workflowId;
-    private final float timeoutSeconds ;
+    private final long timeoutSeconds ;
 
     private DBOSOptions(Builder builder) {
         this.async = builder.async;
@@ -32,7 +32,7 @@ public class DBOSOptions {
     }
 
 
-    public float getTimeout() {
+    public long getTimeout() {
         return timeoutSeconds;
     }
 
@@ -40,7 +40,7 @@ public class DBOSOptions {
         private boolean async = false;
         private Queue queue = null;
         private String workflowId = null;
-        private float timeoutSeconds = 0f;
+        private long timeoutSeconds = 0;
 
         public Builder(String workflowId) {
             this.workflowId = workflowId;
@@ -57,7 +57,7 @@ public class DBOSOptions {
         }
 
 
-        public Builder timeout(float timeout) {
+        public Builder timeout(long timeout) {
             this.timeoutSeconds = timeout;
             return this;
         }

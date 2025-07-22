@@ -80,6 +80,9 @@ public class DBOSExecutor {
 
         WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
+        long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs() ;
+        long workflowDeadlineEpoch = System.currentTimeMillis() + workflowTimeoutMs ;
+
         WorkflowStatusInternal workflowStatusInternal =
                 new WorkflowStatusInternal(workflowId,
                         status,
@@ -98,8 +101,8 @@ public class DBOSExecutor {
                         Constants.DEFAULT_APP_VERSION,
                         null,
                         0,
-                        300000,
-                        System.currentTimeMillis() + 2400000,
+                        workflowTimeoutMs,
+                        workflowDeadlineEpoch,
                         null,
                         1,
                         inputString) ;
@@ -150,7 +153,7 @@ public class DBOSExecutor {
         String wfid = workflowId ;
 
         WorkflowInitResult initResult = null;
-        try {
+       // try {
 
             initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, null);
 
@@ -162,7 +165,9 @@ public class DBOSExecutor {
                 logger.warn("Idempotency check not impl for cancelled");
             }
 
-            @SuppressWarnings("unchecked")
+            return runAndSaveResult(target, args, function, workflowId) ;
+
+            /* @SuppressWarnings("unchecked")
             T result = (T) function.invoke(target, args);
 
             postInvokeWorkflow(initResult.getWorkflowId(), result);
@@ -175,7 +180,45 @@ public class DBOSExecutor {
             logger.error("Error in runWorkflow", actual);
             postInvokeWorkflow(initResult.getWorkflowId(), actual);
             throw actual;
+        } */
+    }
+
+    /**
+     * Run and postInvoke reused separately
+     * preInvoke in reused separately
+     *
+     * @param target
+     * @param args
+     * @param function
+     * @param workflowId
+     * @return
+     * @param <T>
+     * @throws Throwable
+     */
+
+    <T> T runAndSaveResult(
+          Object target,
+          Object[] args,
+          WorkflowFunction function,
+          String workflowId) throws Throwable {
+
+        try {
+
+            @SuppressWarnings("unchecked")
+            T result = (T) function.invoke(target, args);
+
+            postInvokeWorkflow(workflowId, result);
+            return result;
+        } catch (Throwable e) {
+            Throwable actual = (e instanceof InvocationTargetException)
+                    ? ((InvocationTargetException) e).getTargetException()
+                    : e;
+
+            logger.error("Error in runWorkflow", actual);
+            postInvokeWorkflow(workflowId, actual);
+            throw actual;
         }
+
     }
 
     public <T> WorkflowHandle<T> submitWorkflow(String workflowName,
@@ -189,6 +232,17 @@ public class DBOSExecutor {
 
         final String wfId = workflowId ;
 
+        WorkflowInitResult initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfId, null);
+
+        if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+            // return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
+            return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
+        } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+            logger.warn("Idempotency check not impl for error");
+        } else if  (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+            logger.warn("Idempotency check not impl for cancelled");
+        }
+
         Callable<T> task = () -> {
             T result = null ;
 
@@ -197,12 +251,14 @@ public class DBOSExecutor {
 
             try {
 
-                result = runWorkflow(workflowName,
+                /* result = runWorkflow(workflowName,
                         targetClassName,
                         target,
                         args,
                         function,
-                        id);
+                        id); */
+
+                result = runAndSaveResult(target, args, function, id) ;
 
 
             } catch (Throwable e) {
@@ -220,6 +276,7 @@ public class DBOSExecutor {
         // Copy the context - dont just pass a reference - memory visibility
         ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(DBOSContextHolder.get().copy(),task);
         Future<T> future = executorService.submit(contextAwareTask);
+
 
         return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
 
@@ -241,6 +298,7 @@ public class DBOSExecutor {
             wfid = UUID.randomUUID().toString();
             ctx.setWorkflowId(wfid);
         }
+
         WorkflowInitResult initResult = null;
         try {
             initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, queue.getName());

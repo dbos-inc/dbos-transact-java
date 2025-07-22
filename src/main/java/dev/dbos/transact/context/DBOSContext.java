@@ -22,8 +22,8 @@ public class DBOSContext {
 
     // workflow timeouts
     private Queue queue;
-    private int workflowTimeoutMs ;
-    private int workflowDeadlineEpochMs ;
+    private long workflowTimeoutMs ;
+    private long workflowDeadlineEpochMs ;
 
     // Queues
     private String deduplicationId ;
@@ -62,15 +62,17 @@ public class DBOSContext {
         this.inWorkflow = false;
         this.async = options.isAsync() ;
         this.queue = options.getQueue();
+        this.workflowTimeoutMs = options.getTimeout()*1000;
     }
 
-    private DBOSContext(String childWorkflowId, String parentWorkflowId, int parentFunctionId, boolean async, Queue queue) {
+    private DBOSContext(String childWorkflowId, String parentWorkflowId, int parentFunctionId, boolean async, Queue queue, long workflowTimeout) {
         this.workflowId = childWorkflowId;
         this.parentWorkflowId = parentWorkflowId;
         this.parentFunctionId = parentFunctionId;
         this.inWorkflow = true;
         this.async = async ;
         this.queue = queue;
+        this.workflowTimeoutMs = workflowTimeout;
     }
 
     private DBOSContext(DBOSOptions options, String parentWorkflowId, int parentFunctionId) {
@@ -80,6 +82,7 @@ public class DBOSContext {
         this.inWorkflow = true;
         this.async = options.isAsync();
         this.queue = options.getQueue();
+        this.workflowTimeoutMs = options.getTimeout();
     }
 
     public String getWorkflowId() {
@@ -123,7 +126,7 @@ public class DBOSContext {
     }
 
     public DBOSContext createChild(String childWorkflowId) {
-        return new DBOSContext(childWorkflowId, workflowId, this.getAndIncrementFunctionId(), this.async, this.getQueue());
+        return new DBOSContext(childWorkflowId, workflowId, this.getAndIncrementFunctionId(), this.async, this.getQueue(), this.workflowTimeoutMs);
     }
 
     public DBOSContext createChild(DBOSOptions options) {
@@ -148,6 +151,10 @@ public class DBOSContext {
 
     public Queue getQueue() {
         return queue;
+    }
+
+    public long getWorkflowTimeoutMs() {
+        return workflowTimeoutMs ;
     }
 }
 

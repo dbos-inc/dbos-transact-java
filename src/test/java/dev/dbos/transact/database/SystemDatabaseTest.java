@@ -87,7 +87,7 @@ class SystemDatabaseTest {
                 "1.2.3",
                 "order-app-123",
                 0,
-                300000,
+                300000l,
                 System.currentTimeMillis() + 2400000,
                 "dedup-112233",
                 1,
