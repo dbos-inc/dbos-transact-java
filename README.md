@@ -107,6 +107,115 @@ Workflows are particularly useful for
 
 </details>
 
+<details><summary><strong>📒 Durable Queues</strong></summary>
+
+####
+
+DBOS queues help you **durably** run tasks in the background.
+You can enqueue a task (which can be a single step or an entire workflow) from a durable workflow and one of your processes will pick it up for execution.
+DBOS manages the execution of your tasks: it guarantees that tasks complete, and that their callers get their results without needing to resubmit them, even if your application is interrupted.
+
+Queues also provide flow control, so you can limit the concurrency of your tasks on a per-queue or per-process basis.
+You can also set timeouts for tasks, rate limit how often queued tasks are executed, deduplicate tasks, or prioritize tasks.
+
+You can add queues to your workflows in just a couple lines of code.
+They don't require a separate queueing service or message broker&mdash;just Postgres.
+
+```java
+
+
+ public void queuedTasks() {
+     Queue q = new DBOS.QueueBuilder("childQ").build();
+
+     for (int i = 0; i < 3; i++) {
+
+         String wid = "child" + i;
+         DBOSOptions options = new DBOSOptions.Builder(wid).queue(q).build();
+         try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+             simpleService.childWorkflow(wid);
+         }
+     }
+
+     for (int i = 0 ; i < 3 ; i++) {
+         String wid = "child"+i;
+         WorkflowHandle h = DBOS.retrieveWorkflow(wid);
+         System.out.println(h.getResult());
+     }
+ }
+```
+
+[Read more ↗️](https://docs.dbos.dev/python/tutorials/queue-tutorial)
+
+</details>
+
+
+## Getting Started
+
+To get started, follow the [quickstart](https://docs.dbos.dev/quickstart) to install this open-source library and connect it to a Postgres database.
+Then, check out the [programming guide](https://docs.dbos.dev/python/programming-guide) to learn how to build with durable workflows and queues.
+
+## Documentation
+
+[https://docs.dbos.dev](https://docs.dbos.dev)
+
+## Examples
+
+[https://docs.dbos.dev/examples](https://docs.dbos.dev/examples)
+
+## DBOS vs. Other Systems
+
+<details><summary><strong>DBOS vs. Temporal</strong></summary>
+
+####
+
+Both DBOS and Temporal provide durable execution, but DBOS is implemented in a lightweight Postgres-backed library whereas Temporal is implemented in an externally orchestrated server.
+
+You can add DBOS to your program by installing this open-source library, connecting it to Postgres, and annotating workflows and steps.
+By contrast, to add Temporal to your program, you must rearchitect your program to move your workflows and steps (activities) to a Temporal worker, configure a Temporal server to orchestrate those workflows, and access your workflows only through a Temporal client.
+[This blog post](https://www.dbos.dev/blog/durable-execution-coding-comparison) makes the comparison in more detail.
+
+**When to use DBOS:** You need to add durable workflows to your applications with minimal rearchitecting, or you are using Postgres.
+
+**When to use Temporal:** You don't want to add Postgres to your stack, or you need a language DBOS doesn't support yet.
+
+</details>
+
+<details><summary><strong>DBOS vs. Airflow</strong></summary>
+
+####
+
+DBOS and Airflow both provide workflow abstractions.
+Airflow is targeted at data science use cases, providing many out-of-the-box connectors but requiring workflows be written as explicit DAGs and externally orchestrating them from an Airflow cluster.
+Airflow is designed for batch operations and does not provide good performance for streaming or real-time use cases.
+DBOS is general-purpose, but is often used for data pipelines, allowing developers to write workflows as code and requiring no infrastructure except Postgres.
+
+**When to use DBOS:** You need the flexibility of writing workflows as code, or you need higher performance than Airflow is capable of (particularly for streaming or real-time use cases).
+
+**When to use Airflow:** You need Airflow's ecosystem of connectors.
+
+</details>
+
+<details><summary><strong>DBOS vs. Celery/BullMQ</strong></summary>
+
+####
+
+DBOS provides a similar queue abstraction to dedicated queueing systems like Celery or BullMQ: you can declare queues, submit tasks to them, and control their flow with concurrency limits, rate limits, timeouts, prioritization, etc.
+However, DBOS queues are **durable and Postgres-backed** and integrate with durable workflows.
+For example, in DBOS you can write a durable workflow that enqueues a thousand tasks and waits for their results.
+DBOS checkpoints the workflow and each of its tasks in Postgres, guaranteeing that even if failures or interruptions occur, the tasks will complete and the workflow will collect their results.
+By contrast, Celery/BullMQ are Redis-backed and don't provide workflows, so they provide fewer guarantees but better performance.
+
+**When to use DBOS:** You need the reliability of enqueueing tasks from durable workflows.
+
+**When to use Celery/BullMQ**: You don't need durability, or you need very high throughput beyond what your Postgres server can support.
+</details>
+
+## Community
+
+If you want to ask questions or hang out with the community, join us on [Discord](https://discord.gg/fMwQjeW5zg)!
+If you see a bug or have a feature request, don't hesitate to open an issue here on GitHub.
+If you're interested in contributing, check out our [contributions guide](./CONTRIBUTING.md).
+
 
 
 
