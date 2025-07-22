@@ -39,18 +39,35 @@ You add durable workflows to your existing Java program by annotating ordinary f
 ```java
 
 public interface SimpleWorkflowService {
+
+    void setSimpleWorkflowService(SimpleWorkflowService e);
     String exampleWorkflow(String input) ;
+    void stepOne() ;
+    void stepTwo() ;
 }
 
 public class SimpleWorkflowServiceImpl implements SimpleWorkflowService {
+
+    public void setSimpleWorkflowService(SimpleWorkflowService simpleWorkflow) {
+        this.simpleWorkflowService = simpleWorkflow;
+    }
     
     @Workflow(name = "exampleWorkflow")
     public String exampleWorkflow(String input) {
         return input + input;
     }
+    @Step(name = "stepOne")
+    public void stepOne() {
+        logger.info("Executed stepOne") ;
+    }
+    @Step(name = "stepTwo")
+    public void stepTwo() {
+        logger.info("Executed stepTwo") ;
+    }
+    
 }
 
-public class SyncDemo {
+public class Demo {
     
     public static void main(String[] args) {
         
@@ -70,6 +87,7 @@ public class SyncDemo {
                 .interfaceClass(SimpleWorkflowService.class)
                 .implementation(new SimpleWorkflowServiceImpl())
                 .build();
+        syncExample.setSimpleWorkflowService(syncExample);
 
         String output = syncExample.exampleWorkflow("HelloDBOS") ;
         System.out.println("Sync result: " + output);
