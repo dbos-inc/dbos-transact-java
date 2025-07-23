@@ -25,10 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
@@ -37,6 +34,7 @@ public class DBOSExecutor {
     private DBOSConfig config;
     private SystemDatabase systemDatabase;
     private ExecutorService executorService ;
+    private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(4);
     private WorkflowRegistry workflowRegistry ;
     // private QueueRegistry queueRegistry ;
     private QueueService queueService;
@@ -81,7 +79,11 @@ public class DBOSExecutor {
         WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
         long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs() ;
-        long workflowDeadlineEpoch = System.currentTimeMillis() + workflowTimeoutMs ;
+        long workflowDeadlineEpoch = 0 ;
+
+        if (workflowTimeoutMs > 0) {
+            workflowDeadlineEpoch = System.currentTimeMillis() + workflowTimeoutMs ;
+        }
 
         WorkflowStatusInternal workflowStatusInternal =
                 new WorkflowStatusInternal(workflowId,
@@ -143,7 +145,7 @@ public class DBOSExecutor {
 
     }
 
-    public <T> T runWorkflow(String workflowName,
+    public <T> T syncWorkflow(String workflowName,
                              String targetClassName,
                              Object target,
                              Object[] args,
@@ -165,7 +167,27 @@ public class DBOSExecutor {
                 logger.warn("Idempotency check not impl for cancelled");
             }
 
-            return runAndSaveResult(target, args, function, workflowId) ;
+        long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis() ;
+        if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0 ) {
+            systemDatabase.cancelWorkflow(workflowId);
+            return null ;
+        }
+
+        if (allowedTime > 0) {
+            ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
+
+                WorkflowStatus status = systemDatabase.getWorkflowStatus(wfid) ;
+                if (status.getStatus() != WorkflowState.SUCCESS.name()
+                        && status.getStatus() != WorkflowState.ERROR.name()) {
+                    systemDatabase.cancelWorkflow(wfid);
+                }
+
+            }, allowedTime, TimeUnit.MILLISECONDS);
+
+        }
+
+
+        return runAndSaveResult(target, args, function, workflowId) ;
 
             /* @SuppressWarnings("unchecked")
             T result = (T) function.invoke(target, args);
@@ -273,10 +295,29 @@ public class DBOSExecutor {
             return result ;
         };
 
+        // todo : for queue just use workflowTimeout
+        long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis() ;
+
+        if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0 ) {
+            systemDatabase.cancelWorkflow(workflowId);
+            return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
+        }
+
         // Copy the context - dont just pass a reference - memory visibility
         ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(DBOSContextHolder.get().copy(),task);
         Future<T> future = executorService.submit(contextAwareTask);
 
+
+        if (allowedTime > 0) {
+            ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
+                if (!future.isDone()) {
+                    future.cancel(true);
+                    // Optionally: notify timeout handler
+                    systemDatabase.cancelWorkflow(wfId);
+                }
+            }, allowedTime, TimeUnit.MILLISECONDS);
+
+        }
 
         return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
 
