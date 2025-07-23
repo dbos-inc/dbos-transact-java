@@ -16,10 +16,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 
@@ -259,7 +257,54 @@ public class TimeoutTest {
 
     }
 
+    @Test
+    public void recovery() throws Exception {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+        simpleService.setSimpleService(simpleService);
+
+        // synchronous
+
+        String wfid1 = "wf-128";
+        String result;
+
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(3).build();
+
+        try (SetDBOSOptions id = new SetDBOSOptions(options)){
+            result = simpleService.workWithString("12345");
+        }
+
+        setDelayEpoch(dataSource, wfid1);
+
+        WorkflowHandle handle = dbosExecutor.executeWorkflowById(wfid1) ;
+        assertEquals(WorkflowState.CANCELLED.name(), handle.getStatus().getStatus()) ;
 
 
+    }
+
+    private void setDelayEpoch(DataSource ds, String workflowId) throws SQLException {
+
+        String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ?, workflow_deadline_epoch_ms = ? WHERE workflow_uuid = ?";
+
+        try (Connection connection = ds.getConnection();
+             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+            pstmt.setString(1, WorkflowState.PENDING.name());
+            pstmt.setLong(2, Instant.now().toEpochMilli());
+
+            long newEpoch = System.currentTimeMillis() - 10000 ;
+            pstmt.setLong(3, newEpoch);
+            pstmt.setString(4, workflowId);
+
+            // Execute the update and get the number of rows affected
+            int rowsAffected = pstmt.executeUpdate();
+
+            assertEquals(1, rowsAffected);
+
+        }
+    }
 
 }
