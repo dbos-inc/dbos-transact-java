@@ -22,4 +22,7 @@ public interface SimpleService {
 
     String syncWithQueued();
 
+    String longWorkflow(String input);
+    void stepWithSleep(long sleepSeconds) ;
+
 }

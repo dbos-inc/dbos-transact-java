@@ -3,6 +3,7 @@ package dev.dbos.transact.interceptor;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.exceptions.WorkflowCancelledException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.queue.Queue;
@@ -116,12 +117,15 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                     step.maxAttempts(),
                     step.backOffRate(),
                     args,
-                    ()-> method.invoke(target, args)) ;
+                    () -> method.invoke(target, args));
             logger.info("After: Step completed successfully");
             return result;
+        } catch (InterruptedException  | WorkflowCancelledException  e ) {
+            logger.error("Step Interrupted or Cancelled", e);
+            return null;
         } catch (Exception e) {
-            logger.info("Step failed: " + e.getCause().getMessage());
-            throw e.getCause();
+            logger.error("Step failed", e);
+            throw e;
         }
     }
 

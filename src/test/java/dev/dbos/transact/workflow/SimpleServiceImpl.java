@@ -125,4 +125,26 @@ public class SimpleServiceImpl implements SimpleService {
         return "QueuedChildren" ;
     }
 
+    @Workflow(name = "longWorkflow")
+    public String longWorkflow(String input) {
+
+        simpleService.stepWithSleep(1);
+        simpleService.stepWithSleep(1);
+
+        logger.info("Done with longWorkflow");
+        return input+input ;
+
+    }
+
+    @Step(name = "stepWithSleep")
+    public void stepWithSleep(long sleepSeconds)  {
+
+        try {
+            logger.info("Step sleeping for " + sleepSeconds) ;
+            Thread.sleep(sleepSeconds * 1000);
+        } catch(Exception e) {
+            logger.error("Sleep interrupted", e) ;
+        }
+    }
+
 }

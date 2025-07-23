@@ -661,6 +661,8 @@ public class WorkflowDAO {
 
     public void cancelWorkflow(String workflowId) throws SQLException {
 
+        logger.info("Received request to cancel workflow " + workflowId) ;
+
         try (Connection conn = dataSource.getConnection()) {
 
             // Check the status of the workflow. If it is complete, do nothing.
@@ -681,13 +683,15 @@ public class WorkflowDAO {
             if (currentStatus == null ||
                 WorkflowState.SUCCESS.name().equals(currentStatus) ||
                 WorkflowState.ERROR.name().equals(currentStatus)) {
+                logger.info("Returning without updating status") ;
                 return;
             }
 
             // Set the workflow's status to CANCELLED and remove it from any queue it is on
-            String updateSql = "UPDATE workflow_status SET status = ?, " +
+            String updateSql = "UPDATE %s.workflow_status SET status = ?, " +
                 " queue_name = NULL, deduplication_id = NULL, started_at_epoch_ms = NULL " +
                 " WHERE workflow_uuid = ? " ;
+            updateSql = String.format(updateSql, Constants.DB_SCHEMA) ;
 
             try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
                 stmt.setString(1, WorkflowState.CANCELLED.name());
