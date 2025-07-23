@@ -6,6 +6,7 @@ import dev.dbos.transact.context.DBOSOptions;
 import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.WorkflowCancelledException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
@@ -201,6 +202,63 @@ public class TimeoutTest {
         WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
         assertEquals(WorkflowState.CANCELLED.name(), s.getStatus()) ;
     }
+
+    @Test
+    public void sync() throws Exception  {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+        simpleService.setSimpleService(simpleService);
+
+        // synchronous
+
+        String wfid1 = "wf-128";
+        String result;
+
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(3).build();
+
+        try (SetDBOSOptions id = new SetDBOSOptions(options)){
+            result = simpleService.longWorkflow("12345");
+        }
+        assertEquals("1234512345", result);
+
+        WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
+        assertEquals(WorkflowState.SUCCESS.name(), s.getStatus()) ;
+
+    }
+
+    @Test
+    public void syncTimeout() throws Exception  {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+        simpleService.setSimpleService(simpleService);
+
+        // synchronous
+
+        String wfid1 = "wf-128";
+        String result = null;
+
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(1).build();
+
+        try {
+            try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+                result = simpleService.longWorkflow("12345");
+            }
+        } catch (Throwable t) {
+            assertNull(result);
+            assertTrue(t instanceof WorkflowCancelledException) ;
+        }
+
+        WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
+        assertEquals(WorkflowState.CANCELLED.name(), s.getStatus()) ;
+
+    }
+
 
 
 
