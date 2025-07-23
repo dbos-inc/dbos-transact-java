@@ -148,6 +148,44 @@ They don't require a separate queueing service or message broker&mdash;just Post
 
 </details>
 
+<details><summary><strong>📅 Durable Scheduling</strong></summary>
+
+####
+
+Schedule workflows using cron syntax, or use durable sleep to pause workflows for as long as you like (even days or weeks) before executing.
+
+You can schedule a workflow using a single annotation:
+
+```python
+@DBOS.scheduled('* * * * *') # crontab syntax to run once every minute
+@DBOS.workflow()
+def example_scheduled_workflow(scheduled_time: datetime, actual_time: datetime):
+    DBOS.logger.info("I am a workflow scheduled to run once a minute.")
+```
+
+You can add a durable sleep to any workflow with a single line of code.
+It stores its wakeup time in Postgres so the workflow sleeps through any interruption or restart, then always resumes on schedule.
+
+```java
+
+public class SchedulerImpl {
+    
+    @Workflow(name = "every5Second")
+    @Scheduled(cron = "0/5 * * * * ?")
+    public void every5Second(Instant schedule , Instant actual) {
+        log.info("Executed workflow  "+  schedule.toString() + "   " + actual.toString()) ;
+    }
+}
+
+// In your main
+// dbos.scheduleWorkflow(new SchedulerImpl());
+```
+
+[Read more ↗️](https://docs.dbos.dev/python/tutorials/scheduled-workflows)
+
+</details>
+
+
 
 ## Getting Started
 
