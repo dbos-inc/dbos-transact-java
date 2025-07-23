@@ -148,6 +148,44 @@ They don't require a separate queueing service or message broker&mdash;just Post
 
 </details>
 
+<details><summary><strong>📒 Asynchronous execution </strong></summary>
+
+####
+
+DBOS can run your workflows asynchronously without you needing to make any changes to the interface or implementation. 
+
+This is ideal for long-running workflows whose result might not be available immediately. 
+You code can return at a later point and check the status for completion and/or retrive the result.
+
+
+```java
+
+
+ public void runAsyncWorkflow() {
+
+     SimpleWorkflowService syncExample = dbos.<SimpleWorkflowService>Workflow()
+             .interfaceClass(SimpleWorkflowService.class)
+             .implementation(new SimpleWorkflowServiceImpl())
+             .build();
+     syncExample.setSimpleWorkflowService(syncExample);
+
+     String workflowId = "wf-124";
+     options = new DBOSOptions.Builder(workflowId).async().build();
+     try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+         syncExample.exampleWorkflow("HelloDBOS");
+     }
+
+     WorkflowHandle<String> handle = DBOS.retrieveWorkflow(workflowId); ;
+     result = handle.getResult();
+     
+ }
+```
+
+[Read more ↗️](https://docs.dbos.dev/python/tutorials/queue-tutorial)
+
+</details>
+
+
 <details><summary><strong>📅 Durable Scheduling</strong></summary>
 
 ####
@@ -185,6 +223,35 @@ public class SchedulerImpl {
 
 </details>
 
+<details><summary><strong>📫 Durable Notifications</strong></summary>
+
+####
+
+Pause your workflow executions until a notification is received, or emit events from your workflow to send progress updates to external clients.
+All notifications are stored in Postgres, so they can be sent and received with exactly-once semantics.
+Set durable timeouts when waiting for events, so you can wait for as long as you like (even days or weeks) through interruptions or restarts, then resume once a notification arrives or the timeout is reached.
+
+For example, build a reliable billing workflow that durably waits for a notification from a payments service, processing it exactly-once:
+
+```java
+@workflow(name = "billing")
+public void billingWorkflow() {
+    // Calculate the charge, then submit the bill to a payments service
+    String payment_status = (String) dbos.recv(PAYMENT_STATUS, timeout = payment_service_timeout);
+    if (payment_status.equals("paid")) {
+        // handle paid
+    } else {
+        // handle not paid
+    }
+}
+
+@workflow(name = "payment") 
+public void payment() {
+    dbos.send(targetWorkflowId, PAYMENT_STATUS, "paid") ;
+}
+      
+```
+</details>
 
 
 ## Getting Started
