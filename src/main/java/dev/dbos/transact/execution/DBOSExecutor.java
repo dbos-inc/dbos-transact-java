@@ -36,7 +36,6 @@ public class DBOSExecutor {
     private ExecutorService executorService ;
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(4);
     private WorkflowRegistry workflowRegistry ;
-    // private QueueRegistry queueRegistry ;
     private QueueService queueService;
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
@@ -137,7 +136,6 @@ public class DBOSExecutor {
 
     public void postInvokeWorkflow(String workflowId, Throwable error) {
 
-        // String errorString = error.toString() ;
         SerializableException se = new SerializableException(error);
         String errorString = JSONUtil.serialize(se) ;
 
@@ -155,17 +153,16 @@ public class DBOSExecutor {
         String wfid = workflowId ;
 
         WorkflowInitResult initResult = null;
-       // try {
 
-            initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, null);
+        initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, null);
 
-            if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
-                return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
-            } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
-                logger.warn("Idempotency check not impl for error");
-            } else if  (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
-                logger.warn("Idempotency check not impl for cancelled");
-            }
+        if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+            return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
+        } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+            logger.warn("Idempotency check not impl for error");
+        } else if  (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+            logger.warn("Idempotency check not impl for cancelled");
+        }
 
         long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis() ;
         if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0 ) {
@@ -189,23 +186,8 @@ public class DBOSExecutor {
 
         }
 
-
         return runAndSaveResult(target, args, function, workflowId) ;
 
-            /* @SuppressWarnings("unchecked")
-            T result = (T) function.invoke(target, args);
-
-            postInvokeWorkflow(initResult.getWorkflowId(), result);
-            return result;
-        } catch (Throwable e) {
-            Throwable actual = (e instanceof InvocationTargetException)
-                    ? ((InvocationTargetException) e).getTargetException()
-                    : e;
-
-            logger.error("Error in runWorkflow", actual);
-            postInvokeWorkflow(initResult.getWorkflowId(), actual);
-            throw actual;
-        } */
     }
 
     /**
@@ -242,7 +224,7 @@ public class DBOSExecutor {
             logger.error("Error in runWorkflow", actual);
 
             if (actual instanceof WorkflowCancelledException || actual instanceof InterruptedException) {
-                // don'nt mark the workflow status as error
+                // don'nt mark the workflow status as error. this is cancel
                 throw actual ;
             }
 
@@ -266,7 +248,6 @@ public class DBOSExecutor {
         WorkflowInitResult initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfId, null);
 
         if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
-            // return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
             return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
         } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
             logger.warn("Idempotency check not impl for error");
@@ -282,15 +263,7 @@ public class DBOSExecutor {
 
             try {
 
-                /* result = runWorkflow(workflowName,
-                        targetClassName,
-                        target,
-                        args,
-                        function,
-                        id); */
-
                 result = runAndSaveResult(target, args, function, id) ;
-
 
             } catch (Throwable e) {
                 Throwable actual = (e instanceof InvocationTargetException)
@@ -304,7 +277,6 @@ public class DBOSExecutor {
             return result ;
         };
 
-        // todo : for queue just use workflowTimeout
         long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis() ;
 
         if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0 ) {
@@ -317,13 +289,11 @@ public class DBOSExecutor {
         ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(DBOSContextHolder.get().copy(),task);
         Future<T> future = executorService.submit(contextAwareTask);
 
-
         if (allowedTime > 0) {
             ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
                 if (!future.isDone()) {
                     logger.info(" Workflow timed out " + wfId) ;
                     future.cancel(true);
-                    // Optionally: notify timeout handler
                     systemDatabase.cancelWorkflow(wfId);
                 }
             }, allowedTime, TimeUnit.MILLISECONDS);
@@ -331,7 +301,6 @@ public class DBOSExecutor {
         }
 
         return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
-
     }
 
     public void enqueueWorkflow(String workflowName,
