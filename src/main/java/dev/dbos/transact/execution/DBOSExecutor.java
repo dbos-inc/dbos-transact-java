@@ -238,6 +238,12 @@ public class DBOSExecutor {
                     : e;
 
             logger.error("Error in runWorkflow", actual);
+
+            if (actual instanceof WorkflowCancelledException || actual instanceof InterruptedException) {
+                // don'nt mark the workflow status as error
+                throw actual ;
+            }
+
             postInvokeWorkflow(workflowId, actual);
             throw actual;
         }
