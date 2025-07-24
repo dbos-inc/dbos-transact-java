@@ -397,14 +397,11 @@ public class TimeoutTest {
             DBOS.retrieveWorkflow(wfid1).getResult();
         } catch(Exception e) {
             assertTrue( e instanceof AwaitedWorkflowCancelledException) ;
-            // assertEquals("childwf",((AwaitedWorkflowCancelledException) e).getWorkflowId());
         }
 
         String parentStatus =  dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus() ;
         assertEquals(WorkflowState.CANCELLED.name(), parentStatus) ;
 
-        // String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus() ;
-        // assertEquals(WorkflowState.CANCELLED.name(), childStatus) ;
 
     }
 
