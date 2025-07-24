@@ -154,7 +154,7 @@ public class SimpleServiceImpl implements SimpleService {
         logger.info("Child done sleeping for " + sleepSeconds) ;
         return input ;
     }
-    
+
     @Workflow(name = "longParent")
     public String longParent(String input, long sleepSeconds, long timeoutSeconds) throws InterruptedException {
 
