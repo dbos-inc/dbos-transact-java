@@ -120,10 +120,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                     () -> method.invoke(target, args));
             logger.info("After: Step completed successfully");
             return result;
-        } /* catch (InterruptedException  | WorkflowCancelledException  e ) {
-            logger.error("Step Interrupted or Cancelled", e);
-            return null;
-        } */ catch (Exception e) {
+        }  catch (Exception e) {
             logger.error("Step failed", e);
             throw e;
         }

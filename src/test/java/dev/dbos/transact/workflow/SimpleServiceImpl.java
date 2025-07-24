@@ -149,18 +149,12 @@ public class SimpleServiceImpl implements SimpleService {
 
     @Workflow(name = "childWorkflowWithSleep")
     public String childWorkflowWithSleep(String input, long sleepSeconds) throws InterruptedException {
-
-
-            logger.info("Child sleeping for " + sleepSeconds) ;
-            Thread.sleep(sleepSeconds*1000);
-
-
-
+        logger.info("Child sleeping for " + sleepSeconds) ;
+        Thread.sleep(sleepSeconds*1000);
         logger.info("Child done sleeping for " + sleepSeconds) ;
         return input ;
     }
-
-
+    
     @Workflow(name = "longParent")
     public String longParent(String input, long sleepSeconds, long timeoutSeconds) throws InterruptedException {
 
