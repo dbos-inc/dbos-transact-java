@@ -661,8 +661,6 @@ public class WorkflowDAO {
 
     public void cancelWorkflow(String workflowId) throws SQLException {
 
-        logger.info("Received request to cancel workflow " + workflowId) ;
-
         try (Connection conn = dataSource.getConnection()) {
 
             // Check the status of the workflow. If it is complete, do nothing.

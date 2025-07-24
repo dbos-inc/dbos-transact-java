@@ -130,6 +130,7 @@ public class TimeoutTest {
             fail("Expected Exception to be thrown");
         } catch (Throwable t) {
             System.out.println(t.getClass().toString()) ;
+            assertTrue(t instanceof AwaitedWorkflowCancelledException) ;
         }
 
         WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
@@ -195,6 +196,7 @@ public class TimeoutTest {
             fail("Expected Exception to be thrown");
         } catch (Throwable t) {
             System.out.println(t.getClass().toString()) ;
+            assertTrue(t instanceof AwaitedWorkflowCancelledException) ;
         }
 
         WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
@@ -249,7 +251,7 @@ public class TimeoutTest {
             }
         } catch (Throwable t) {
             assertNull(result);
-            assertTrue(t instanceof WorkflowCancelledException) ;
+            assertTrue(t instanceof AwaitedWorkflowCancelledException) ;
         }
 
         WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);

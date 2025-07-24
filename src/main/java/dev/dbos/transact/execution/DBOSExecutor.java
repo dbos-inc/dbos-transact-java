@@ -224,8 +224,12 @@ public class DBOSExecutor {
             logger.error("Error in runWorkflow", actual);
 
             if (actual instanceof WorkflowCancelledException || actual instanceof InterruptedException) {
-                // don'nt mark the workflow status as error. this is cancel
-                throw actual ;
+                // don'nt mark the workflow status as error yet. this is cancel
+                // if this is a parent cancel, the exception is thrown to caller
+                //      state is already c
+                // if this is child cancel, its state is already Cancelled
+                //      in parent it will fall thru to PostInvoke call below to set state to Error
+                throw new AwaitedWorkflowCancelledException(workflowId) ;
             }
 
             postInvokeWorkflow(workflowId, actual);
