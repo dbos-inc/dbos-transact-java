@@ -168,16 +168,12 @@ public class DBOSExecutor {
 
         long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis() ;
         if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0 ) {
-            logger.info("Past timeout ... cancelling " + wfid);
             systemDatabase.cancelWorkflow(workflowId);
             return null ;
         }
 
         if (allowedTime > 0) {
-            logger.info("Scheduling timeout task" + wfid) ;
             ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
-                logger.info("We have a timeout" + wfid) ;
-
                 WorkflowStatus status = systemDatabase.getWorkflowStatus(wfid) ;
                 if (status.getStatus() != WorkflowState.SUCCESS.name()
                         && status.getStatus() != WorkflowState.ERROR.name()) {
