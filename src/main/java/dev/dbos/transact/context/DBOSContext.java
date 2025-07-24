@@ -75,15 +75,20 @@ public class DBOSContext {
         this.workflowTimeoutMs = workflowTimeout;
     }
 
-    private DBOSContext(DBOSOptions options, String parentWorkflowId, int parentFunctionId) {
+    private DBOSContext(DBOSOptions options, String parentWorkflowId, int parentFunctionId, long parentTimeout) {
         this.workflowId = options.getWorkflowId();
         this.parentWorkflowId = parentWorkflowId;
         this.parentFunctionId = parentFunctionId;
         this.inWorkflow = true;
         this.async = options.isAsync();
         this.queue = options.getQueue();
-        this.workflowTimeoutMs = options.getTimeout();
+        if (options.getTimeout() > 0) {
+            this.workflowTimeoutMs = options.getTimeout()*1000;
+        } else {
+            this.workflowTimeoutMs = parentTimeout ;
+        }
     }
+
 
     public String getWorkflowId() {
         return workflowId;
@@ -130,7 +135,7 @@ public class DBOSContext {
     }
 
     public DBOSContext createChild(DBOSOptions options) {
-        return new DBOSContext(options, workflowId, this.getAndIncrementFunctionId());
+        return new DBOSContext(options, workflowId, this.getAndIncrementFunctionId(), this.workflowTimeoutMs);
     }
 
     public boolean hasParent() {

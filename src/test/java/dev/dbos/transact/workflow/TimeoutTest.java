@@ -283,7 +283,64 @@ public class TimeoutTest {
 
         WorkflowHandle handle = dbosExecutor.executeWorkflowById(wfid1) ;
         assertEquals(WorkflowState.CANCELLED.name(), handle.getStatus().getStatus()) ;
+    }
 
+    @Test
+    public void parentChild() throws Exception  {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+        simpleService.setSimpleService(simpleService);
+
+        // asynchronous
+
+        String wfid1 = "wf-124";
+        String result;
+
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).build();
+        try (SetDBOSOptions id = new SetDBOSOptions(options)){
+            result = simpleService.longParent("12345",1,2);
+        }
+
+        assertEquals("1234512345", result);
+
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
+        result = handle.getResult();
+        assertEquals("1234512345", result);
+        assertEquals(wfid1, handle.getWorkflowId());
+        assertEquals("SUCCESS", handle.getStatus().getStatus()) ;
+
+    }
+
+    @Test
+    public void parentChildTimeOut() throws Exception  {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+        simpleService.setSimpleService(simpleService);
+
+        String wfid1 = "wf-124";
+        String result;
+
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).build();
+        try {
+            try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+                result = simpleService.longParent("12345", 3, 1);
+            }
+        } catch(Exception e) {
+            assertTrue( e instanceof AwaitedWorkflowCancelledException) ;
+            assertEquals("childwf",((AwaitedWorkflowCancelledException) e).getWorkflowId());
+        }
+
+        String parentStatus =  dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus() ;
+        assertEquals(WorkflowState.ERROR.name(), parentStatus) ;
+
+        String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus() ;
+        assertEquals(WorkflowState.CANCELLED.name(), childStatus) ;
 
     }
 

@@ -84,6 +84,8 @@ public class DBOSExecutor {
             workflowDeadlineEpoch = System.currentTimeMillis() + workflowTimeoutMs ;
         }
 
+        logger.info(workflowId + " timout = " + workflowTimeoutMs + " epoch = " + workflowDeadlineEpoch) ;
+
         WorkflowStatusInternal workflowStatusInternal =
                 new WorkflowStatusInternal(workflowId,
                         status,
@@ -281,7 +283,13 @@ public class DBOSExecutor {
             return result ;
         };
 
+        logger.info("submit wf " + workflowId + "current time " + System.currentTimeMillis()) ;
         long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis() ;
+
+        logger.info("submit wf " + workflowId + "epoch " + initResult.getDeadlineEpochMS()) ;
+        logger.info("submit wf " + workflowId + "allowed time " + allowedTime) ;
+
+
 
         if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0 ) {
             logger.info("Timeout deadline exceeded. Cancelling workflow " + workflowId) ;
@@ -295,6 +303,7 @@ public class DBOSExecutor {
 
         if (allowedTime > 0) {
             ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
+                logger.info("Starting timer task " + allowedTime) ;
                 if (!future.isDone()) {
                     logger.info(" Workflow timed out " + wfId) ;
                     future.cancel(true);
