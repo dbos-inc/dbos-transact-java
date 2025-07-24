@@ -306,7 +306,7 @@ public class DBOSExecutor {
                 logger.info("Starting timer task " + allowedTime) ;
                 if (!future.isDone()) {
                     logger.info(" Workflow timed out " + wfId) ;
-                    future.cancel(true);
+                    // future.cancel(false);
                     systemDatabase.cancelWorkflow(wfId);
                 }
             }, allowedTime, TimeUnit.MILLISECONDS);

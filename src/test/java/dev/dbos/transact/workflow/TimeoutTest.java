@@ -344,6 +344,72 @@ public class TimeoutTest {
 
     }
 
+    @Test
+    public void parentTimeoutInheritedByChild() throws Exception  {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+        simpleService.setSimpleService(simpleService);
+
+        String wfid1 = "wf-124";
+        String result;
+
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(1).build();
+        try {
+            try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+                result = simpleService.longParent("12345", 3, 0);
+            }
+        } catch(Exception e) {
+            assertTrue( e instanceof AwaitedWorkflowCancelledException) ;
+            assertEquals("childwf",((AwaitedWorkflowCancelledException) e).getWorkflowId());
+        }
+
+        String parentStatus =  dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus() ;
+        assertEquals(WorkflowState.ERROR.name(), parentStatus) ;
+
+        String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus() ;
+        assertEquals(WorkflowState.CANCELLED.name(), childStatus) ;
+
+    }
+
+    @Test
+    public void parentAsyncTimeoutInheritedByChild() throws Exception  {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+        simpleService.setSimpleService(simpleService);
+
+        String wfid1 = "wf-124";
+        String result;
+
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).async().timeout(2).build();
+
+        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+                result = simpleService.longParent("12345", 3, 0);
+        }
+
+
+        try {
+            DBOS.retrieveWorkflow(wfid1).getResult();
+        } catch(Exception e) {
+            assertTrue( e instanceof AwaitedWorkflowCancelledException) ;
+            // assertEquals("childwf",((AwaitedWorkflowCancelledException) e).getWorkflowId());
+        }
+
+        String parentStatus =  dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus() ;
+        assertEquals(WorkflowState.CANCELLED.name(), parentStatus) ;
+
+        String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus() ;
+        assertEquals(WorkflowState.CANCELLED.name(), childStatus) ;
+
+    }
+
+
+
     private void setDelayEpoch(DataSource ds, String workflowId) throws SQLException {
 
         String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ?, workflow_deadline_epoch_ms = ? WHERE workflow_uuid = ?";
