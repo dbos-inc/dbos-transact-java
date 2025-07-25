@@ -202,6 +202,8 @@ public class DBOSConfig {
 
         String dburl = String.format("jdbc:postgresql://%s:%d/%s",dbHost,dbPort,dbName);
 
+        System.out.println(dburl) ;
+
         hikariConfig.setJdbcUrl(dburl);
         hikariConfig.setUsername(dbUser);
         hikariConfig.setPassword(dbPassword);

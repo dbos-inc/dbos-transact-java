@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.*;
@@ -93,22 +95,49 @@ public class MigrationManager {
     }
 
     public void migrate() throws Exception {
-        try (Connection conn = dataSource.getConnection()) {
-            ensureMigrationTable(conn);
-            Set<String> appliedMigrations = getAppliedMigrations(conn);
-            List<Path> migrationFiles = listMigrationFiles();
+        logger.info("in migrate") ;
 
-            for (Path path : migrationFiles) {
-                String filename = path.getFileName().toString();
-                logger.info("processing migration file " + filename);
-                String version = filename.split("_")[0];
+        if (dataSource == null) {
+            logger.info("datasource is null cannot migrate") ;
+            return ;
+        } else {
+            logger.info("dataSource in not null") ;
+        }
 
-                if (!appliedMigrations.contains(version)) {
-                    System.out.println("Applying migration: " + filename);
-                    applyMigrationFile(conn, path);
-                    markMigrationApplied(conn, version);
+        try {
+            try (Connection conn = dataSource.getConnection()) {
+
+                if (conn == null) {
+                    logger.info("conn is null cannot migrate") ;
+                    return ;
+                }
+
+
+                ensureMigrationTable(conn);
+                logger.info("done with ensureMigration");
+
+                Set<String> appliedMigrations = getAppliedMigrations(conn);
+                logger.info("getAppliedMigrations") ;
+                List<MigrationFile> migrationFiles = loadMigrationFiles();
+                logger.info("files found == " + migrationFiles.size());
+
+                for (MigrationFile migrationFile : migrationFiles) {
+                    String filename = migrationFile.getFilename().toString();
+                    logger.info("processing migration file " + filename);
+                    String version = filename.split("_")[0];
+
+                    if (!appliedMigrations.contains(version)) {
+                        System.out.println("Applying migration: " + filename);
+                        applyMigrationFile(conn, migrationFile.getSql());
+                        markMigrationApplied(conn, version);
+                    }
                 }
             }
+        } catch(SQLException e ) {
+            logger.error("mjjjj " + e.getMessage()) ;
+        } catch(Throwable t) {
+            t.printStackTrace();
+            logger.error("mjjjj " + t.getMessage()) ;
         }
     }
 
@@ -139,21 +168,54 @@ public class MigrationManager {
         }
     }
 
-    private List<Path> listMigrationFiles() throws IOException, URISyntaxException {
-        URL resource = getClass().getClassLoader().getResource("db/migrations");
+    private List<MigrationFile> loadMigrationFiles() throws IOException, URISyntaxException {
+        String migrationsPath = "db/migrations";
+        URL resource = getClass().getClassLoader().getResource(migrationsPath);
         if (resource == null) {
+            logger.error("db/migrations not found");
             throw new IllegalStateException("Migration folder not found in classpath");
         }
 
-        Path dir = Paths.get(resource.toURI());
-        return Files.list(dir)
-                .filter(p -> p.getFileName().toString().matches("\\d+_.*\\.sql"))
-                .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                .collect(Collectors.toList());
+        URI uri = resource.toURI();
+
+        if ("jar".equals(uri.getScheme())) {
+            try (FileSystem fs = FileSystems.newFileSystem(uri, Collections.emptyMap())) {
+                Path pathInJar = fs.getPath("/" + migrationsPath);
+                return Files.list(pathInJar)
+                        .filter(p -> p.getFileName().toString().matches("\\d+_.*\\.sql"))
+                        .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                        .map(p -> {
+                            try {
+                                String filename = p.getFileName().toString();
+                                String sql = Files.readString(p);
+                                return new MigrationFile(filename, sql);
+                            } catch (IOException e) {
+                                throw new UncheckedIOException(e);
+                            }
+                        })
+                        .collect(Collectors.toList());
+            }
+        } else {
+            Path path = Paths.get(uri);
+            return Files.list(path)
+                    .filter(p -> p.getFileName().toString().matches("\\d+_.*\\.sql"))
+                    .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                    .map(p -> {
+                        try {
+                            String filename = p.getFileName().toString();
+                            String sql = Files.readString(p);
+                            return new MigrationFile(filename, sql);
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                    })
+                    .collect(Collectors.toList());
+        }
     }
 
-    private void applyMigrationFile(Connection conn, Path filePath) throws IOException, SQLException {
-        String sql = Files.readString(filePath).trim();
+
+    private void applyMigrationFile(Connection conn, String sql) throws IOException, SQLException {
+        //  String sql = Files.readString(filePath).trim();
         if (sql.isEmpty()) return;
 
         boolean originalAutoCommit = conn.getAutoCommit();

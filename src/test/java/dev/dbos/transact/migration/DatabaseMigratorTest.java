@@ -72,9 +72,10 @@ class DatabaseMigratorTest {
     @Order(1)
     void testRunMigrations_CreatesTables() throws Exception {
 
-        MigrationManager migrationManager = new MigrationManager(testDataSource) ;
+        // MigrationManager migrationManager = new MigrationManager(testDataSource) ;
 
-        migrationManager.migrate();
+        // migrationManager.migrate();
+        MigrationManager.runMigrations(dbosConfig);
 
         // Assert
         try (Connection conn = testDataSource.getConnection()) {
