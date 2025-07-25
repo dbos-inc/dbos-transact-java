@@ -5,6 +5,10 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migrations.MigrationManager;
 import org.junit.jupiter.api.*;
 import javax.sql.DataSource;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
@@ -113,6 +117,32 @@ class DatabaseMigratorTest {
                     migrationManager.migrate();
                 },
                 "Migrations should run successfully multiple times");
+    }
+
+    @Test
+    @Order(3)
+    void testAddingNewMigration() throws Exception {
+        // Create a new dummy migration file in test/resources/db/migrations
+        URL testMigrations = getClass().getClassLoader().getResource("db/migrations");
+        Assertions.assertNotNull(testMigrations, "Test migration path not found.");
+
+        Path migrationDir = Paths.get(testMigrations.toURI());
+        Path newMigration = migrationDir.resolve("999__create_dummy_table.sql");
+
+        String sql = "CREATE TABLE IF NOT EXISTS dummy_table(id SERIAL PRIMARY KEY);";
+        Files.writeString(newMigration, sql);
+
+        // Run migrations again
+        MigrationManager.runMigrations(dbosConfig);
+
+        // Validate the dummy_table was created
+        try (Connection conn = testDataSource.getConnection();
+             ResultSet rs = conn.getMetaData().getTables(null, null, "dummy_table", null)) {
+            Assertions.assertTrue(rs.next(), "Expected 'dummy_table' to exist after new migration.");
+        }
+
+        // Clean up test file
+        Files.deleteIfExists(newMigration);
     }
 
     @AfterAll

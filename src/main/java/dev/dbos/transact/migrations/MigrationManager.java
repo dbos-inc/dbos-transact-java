@@ -142,7 +142,10 @@ public class MigrationManager {
 
     private void ensureMigrationTable(Connection conn) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE IF NOT EXISTS migration_history ( " +
+
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS dbos");
+
+            stmt.execute("CREATE TABLE IF NOT EXISTS dbos.migration_history ( " +
                     "version TEXT PRIMARY KEY, " +
                     " applied_at TIMESTAMPTZ DEFAULT now() )");
         }
@@ -151,7 +154,7 @@ public class MigrationManager {
     private Set<String> getAppliedMigrations(Connection conn) throws SQLException {
         Set<String> applied = new HashSet<>();
         try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT version FROM migration_history")) {
+             ResultSet rs = stmt.executeQuery("SELECT version FROM dbos.migration_history")) {
             while (rs.next()) {
                 applied.add(rs.getString("version"));
             }
@@ -161,7 +164,7 @@ public class MigrationManager {
 
     private void markMigrationApplied(Connection conn, String version) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(
-                "INSERT INTO migration_history (version) VALUES (?)")) {
+                "INSERT INTO dbos.migration_history (version) VALUES (?)")) {
             ps.setString(1, version);
             ps.executeUpdate();
         }

@@ -398,7 +398,7 @@ public class TimeoutTest {
         } catch(Exception e) {
             assertTrue( e instanceof AwaitedWorkflowCancelledException) ;
         }
-        
+
     }
 
 
