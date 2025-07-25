@@ -73,7 +73,7 @@ public class MigrationManager {
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         logger.info("Database '{}' already exists", dbName);
-                        // DatabaseMigrator.createSchemaIfNotExists(config, dbName, Constants.DB_SCHEMA);
+                        // createSchemaIfNotExists(config, dbName, Constants.DB_SCHEMA);
                         return;
                     }
                 }
@@ -94,49 +94,28 @@ public class MigrationManager {
     }
 
     public void migrate() throws Exception {
-        logger.info("in migrate") ;
-
-        if (dataSource == null) {
-            logger.info("datasource is null cannot migrate") ;
-            return ;
-        } else {
-            logger.info("dataSource in not null") ;
-        }
 
         try {
             try (Connection conn = dataSource.getConnection()) {
 
-                if (conn == null) {
-                    logger.info("conn is null cannot migrate") ;
-                    return ;
-                }
-
-
                 ensureMigrationTable(conn);
-                logger.info("done with ensureMigration");
 
                 Set<String> appliedMigrations = getAppliedMigrations(conn);
-                logger.info("getAppliedMigrations") ;
                 List<MigrationFile> migrationFiles = loadMigrationFiles();
-                logger.info("files found == " + migrationFiles.size());
-
                 for (MigrationFile migrationFile : migrationFiles) {
                     String filename = migrationFile.getFilename().toString();
                     logger.info("processing migration file " + filename);
                     String version = filename.split("_")[0];
 
                     if (!appliedMigrations.contains(version)) {
-                        System.out.println("Applying migration: " + filename);
                         applyMigrationFile(conn, migrationFile.getSql());
                         markMigrationApplied(conn, version);
                     }
                 }
             }
-        } catch(SQLException e ) {
-            logger.error("mjjjj " + e.getMessage()) ;
         } catch(Throwable t) {
-            t.printStackTrace();
-            logger.error("mjjjj " + t.getMessage()) ;
+            logger.error("Migration error" + t.getMessage()) ;
+            throw t;
         }
     }
 
@@ -217,7 +196,6 @@ public class MigrationManager {
 
 
     private void applyMigrationFile(Connection conn, String sql) throws IOException, SQLException {
-        //  String sql = Files.readString(filePath).trim();
         if (sql.isEmpty()) return;
 
         boolean originalAutoCommit = conn.getAutoCommit();

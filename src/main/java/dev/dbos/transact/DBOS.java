@@ -191,10 +191,9 @@ public class DBOS {
         if (config.migration()) {
             MigrationManager.runMigrations(config);
         }
-        
+
         if (dbosExecutor == null) {
             SystemDatabase.initialize(config);
-            // systemDatabase = SystemDatabase.getInstance();
             dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance());
         }
 
