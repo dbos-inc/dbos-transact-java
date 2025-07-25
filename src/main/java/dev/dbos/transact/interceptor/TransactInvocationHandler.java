@@ -49,7 +49,7 @@ public class TransactInvocationHandler extends  BaseInvocationHandler {
                                      Object[] args
     ) throws Throwable {
 
-        return dbosExecutor.runWorkflow(
+        return dbosExecutor.syncWorkflow(
                 workflowName,
                 targetClassName,
                 wrapper.target,

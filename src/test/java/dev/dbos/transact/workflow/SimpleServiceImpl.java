@@ -125,4 +125,52 @@ public class SimpleServiceImpl implements SimpleService {
         return "QueuedChildren" ;
     }
 
+    @Workflow(name = "longWorkflow")
+    public String longWorkflow(String input) {
+
+        simpleService.stepWithSleep(1);
+        simpleService.stepWithSleep(1);
+
+        logger.info("Done with longWorkflow");
+        return input+input ;
+
+    }
+
+    @Step(name = "stepWithSleep")
+    public void stepWithSleep(long sleepSeconds)  {
+
+        try {
+            logger.info("Step sleeping for " + sleepSeconds) ;
+            Thread.sleep(sleepSeconds * 1000);
+        } catch(Exception e) {
+            logger.error("Sleep interrupted", e) ;
+        }
+    }
+
+    @Workflow(name = "childWorkflowWithSleep")
+    public String childWorkflowWithSleep(String input, long sleepSeconds) throws InterruptedException {
+        logger.info("Child sleeping for " + sleepSeconds) ;
+        Thread.sleep(sleepSeconds*1000);
+        logger.info("Child done sleeping for " + sleepSeconds) ;
+        return input ;
+    }
+
+    @Workflow(name = "longParent")
+    public String longParent(String input, long sleepSeconds, long timeoutSeconds) throws InterruptedException {
+
+        logger.info("In longParent") ;
+        String workflowId = "childwf" ;
+        DBOSOptions options = new DBOSOptions.Builder(workflowId).async().timeout(timeoutSeconds).build();
+
+        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+            simpleService.childWorkflowWithSleep(input, sleepSeconds);
+        }
+
+        String result = (String) DBOS.retrieveWorkflow(workflowId).getResult();
+
+        logger.info("Done with longWorkflow");
+        return input+result;
+
+    }
+
 }

@@ -659,4 +659,45 @@ public class WorkflowDAO {
 
     }
 
+    public void cancelWorkflow(String workflowId) throws SQLException {
+
+        try (Connection conn = dataSource.getConnection()) {
+
+            // Check the status of the workflow. If it is complete, do nothing.
+            String checkStatusSql = " SELECT status FROM %s.workflow_status WHERE workflow_uuid = ? " ;
+            checkStatusSql = String.format(checkStatusSql, Constants.DB_SCHEMA);
+
+            String currentStatus = null;
+            try (PreparedStatement stmt = conn.prepareStatement(checkStatusSql)) {
+                stmt.setString(1, workflowId);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        currentStatus = rs.getString("status");
+                    }
+                }
+            }
+
+            // If workflow doesn't exist or is already complete, do nothing
+            if (currentStatus == null ||
+                WorkflowState.SUCCESS.name().equals(currentStatus) ||
+                WorkflowState.ERROR.name().equals(currentStatus)) {
+                logger.info("Returning without updating status") ;
+                return;
+            }
+
+            // Set the workflow's status to CANCELLED and remove it from any queue it is on
+            String updateSql = "UPDATE %s.workflow_status SET status = ?, " +
+                " queue_name = NULL, deduplication_id = NULL, started_at_epoch_ms = NULL " +
+                " WHERE workflow_uuid = ? " ;
+            updateSql = String.format(updateSql, Constants.DB_SCHEMA) ;
+
+            try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
+                stmt.setString(1, WorkflowState.CANCELLED.name());
+                stmt.setString(2, workflowId);
+                stmt.executeUpdate();
+            }
+
+        }
+    }
+
 }

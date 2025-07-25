@@ -22,8 +22,8 @@ public class DBOSContext {
 
     // workflow timeouts
     private Queue queue;
-    private int workflowTimeoutMs ;
-    private int workflowDeadlineEpochMs ;
+    private long workflowTimeoutMs ;
+    private long workflowDeadlineEpochMs ;
 
     // Queues
     private String deduplicationId ;
@@ -45,7 +45,8 @@ public class DBOSContext {
         this.inWorkflow = false;
     }
 
-    public DBOSContext(String workflowId, int functionId, String parentWorkflowId, int parentFunctionId,boolean inWorkflow, boolean async, Queue q) {
+    public DBOSContext(String workflowId, int functionId, String parentWorkflowId, int parentFunctionId,
+                       boolean inWorkflow, boolean async, Queue q, long timeout) {
         this.workflowId = workflowId;
         this.functionId = functionId ;
         this.inWorkflow = inWorkflow;
@@ -53,6 +54,7 @@ public class DBOSContext {
         this.parentFunctionId = parentFunctionId;
         this.async = async;
         this.queue = q;
+        this.workflowTimeoutMs = timeout;
 
     }
 
@@ -62,25 +64,33 @@ public class DBOSContext {
         this.inWorkflow = false;
         this.async = options.isAsync() ;
         this.queue = options.getQueue();
+        this.workflowTimeoutMs = options.getTimeout()*1000;
     }
 
-    private DBOSContext(String childWorkflowId, String parentWorkflowId, int parentFunctionId, boolean async, Queue queue) {
+    private DBOSContext(String childWorkflowId, String parentWorkflowId, int parentFunctionId, boolean async, Queue queue, long workflowTimeout) {
         this.workflowId = childWorkflowId;
         this.parentWorkflowId = parentWorkflowId;
         this.parentFunctionId = parentFunctionId;
         this.inWorkflow = true;
         this.async = async ;
         this.queue = queue;
+        this.workflowTimeoutMs = workflowTimeout;
     }
 
-    private DBOSContext(DBOSOptions options, String parentWorkflowId, int parentFunctionId) {
+    private DBOSContext(DBOSOptions options, String parentWorkflowId, int parentFunctionId, long parentTimeout) {
         this.workflowId = options.getWorkflowId();
         this.parentWorkflowId = parentWorkflowId;
         this.parentFunctionId = parentFunctionId;
         this.inWorkflow = true;
         this.async = options.isAsync();
         this.queue = options.getQueue();
+        if (options.getTimeout() > 0) {
+            this.workflowTimeoutMs = options.getTimeout()*1000;
+        } else {
+            this.workflowTimeoutMs = parentTimeout ;
+        }
     }
+
 
     public String getWorkflowId() {
         return workflowId;
@@ -119,15 +129,15 @@ public class DBOSContext {
     }
 
     public DBOSContext copy() {
-        return new DBOSContext(workflowId, functionId, parentWorkflowId, parentFunctionId, inWorkflow, async, queue);
+        return new DBOSContext(workflowId, functionId, parentWorkflowId, parentFunctionId, inWorkflow, async, queue, workflowTimeoutMs);
     }
 
     public DBOSContext createChild(String childWorkflowId) {
-        return new DBOSContext(childWorkflowId, workflowId, this.getAndIncrementFunctionId(), this.async, this.getQueue());
+        return new DBOSContext(childWorkflowId, workflowId, this.getAndIncrementFunctionId(), this.async, this.getQueue(), this.workflowTimeoutMs);
     }
 
     public DBOSContext createChild(DBOSOptions options) {
-        return new DBOSContext(options, workflowId, this.getAndIncrementFunctionId());
+        return new DBOSContext(options, workflowId, this.getAndIncrementFunctionId(), this.workflowTimeoutMs);
     }
 
     public boolean hasParent() {
@@ -148,6 +158,10 @@ public class DBOSContext {
 
     public Queue getQueue() {
         return queue;
+    }
+
+    public long getWorkflowTimeoutMs() {
+        return workflowTimeoutMs ;
     }
 }
 

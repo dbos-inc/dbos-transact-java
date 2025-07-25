@@ -25,10 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
@@ -37,8 +34,8 @@ public class DBOSExecutor {
     private DBOSConfig config;
     private SystemDatabase systemDatabase;
     private ExecutorService executorService ;
+    private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(4);
     private WorkflowRegistry workflowRegistry ;
-    // private QueueRegistry queueRegistry ;
     private QueueService queueService;
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
@@ -80,6 +77,15 @@ public class DBOSExecutor {
 
         WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
+        long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs() ;
+        long workflowDeadlineEpoch = 0 ;
+
+        if (workflowTimeoutMs > 0) {
+            workflowDeadlineEpoch = System.currentTimeMillis() + workflowTimeoutMs ;
+        }
+
+        logger.info(workflowId + " timout = " + workflowTimeoutMs + " epoch = " + workflowDeadlineEpoch) ;
+
         WorkflowStatusInternal workflowStatusInternal =
                 new WorkflowStatusInternal(workflowId,
                         status,
@@ -98,8 +104,8 @@ public class DBOSExecutor {
                         Constants.DEFAULT_APP_VERSION,
                         null,
                         0,
-                        300000,
-                        System.currentTimeMillis() + 2400000,
+                        workflowTimeoutMs,
+                        workflowDeadlineEpoch,
                         null,
                         1,
                         inputString) ;
@@ -132,7 +138,6 @@ public class DBOSExecutor {
 
     public void postInvokeWorkflow(String workflowId, Throwable error) {
 
-        // String errorString = error.toString() ;
         SerializableException se = new SerializableException(error);
         String errorString = JSONUtil.serialize(se) ;
 
@@ -140,7 +145,7 @@ public class DBOSExecutor {
 
     }
 
-    public <T> T runWorkflow(String workflowName,
+    public <T> T syncWorkflow(String workflowName,
                              String targetClassName,
                              Object target,
                              Object[] args,
@@ -150,22 +155,64 @@ public class DBOSExecutor {
         String wfid = workflowId ;
 
         WorkflowInitResult initResult = null;
+
+        initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, null);
+
+        if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+            return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
+        } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+            logger.warn("Idempotency check not impl for error");
+        } else if  (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+            logger.warn("Idempotency check not impl for cancelled");
+        }
+
+        long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis() ;
+        if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0 ) {
+            systemDatabase.cancelWorkflow(workflowId);
+            return null ;
+        }
+
+        if (allowedTime > 0) {
+            ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
+                WorkflowStatus status = systemDatabase.getWorkflowStatus(wfid) ;
+                if (status.getStatus() != WorkflowState.SUCCESS.name()
+                        && status.getStatus() != WorkflowState.ERROR.name()) {
+                    systemDatabase.cancelWorkflow(wfid);
+                }
+
+            }, allowedTime, TimeUnit.MILLISECONDS);
+
+        }
+
+        return runAndSaveResult(target, args, function, workflowId) ;
+
+    }
+
+    /**
+     * Run and postInvoke reused separately
+     * preInvoke in reused separately
+     *
+     * @param target
+     * @param args
+     * @param function
+     * @param workflowId
+     * @return
+     * @param <T>
+     * @throws Throwable
+     */
+
+    <T> T runAndSaveResult(
+          Object target,
+          Object[] args,
+          WorkflowFunction function,
+          String workflowId) throws Throwable {
+
         try {
-
-            initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, null);
-
-            if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
-                return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
-            } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
-                logger.warn("Idempotency check not impl for error");
-            } else if  (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
-                logger.warn("Idempotency check not impl for cancelled");
-            }
 
             @SuppressWarnings("unchecked")
             T result = (T) function.invoke(target, args);
 
-            postInvokeWorkflow(initResult.getWorkflowId(), result);
+            postInvokeWorkflow(workflowId, result);
             return result;
         } catch (Throwable e) {
             Throwable actual = (e instanceof InvocationTargetException)
@@ -173,9 +220,20 @@ public class DBOSExecutor {
                     : e;
 
             logger.error("Error in runWorkflow", actual);
-            postInvokeWorkflow(initResult.getWorkflowId(), actual);
+
+            if (actual instanceof WorkflowCancelledException || actual instanceof InterruptedException) {
+                // don'nt mark the workflow status as error yet. this is cancel
+                // if this is a parent cancel, the exception is thrown to caller
+                //      state is already c
+                // if this is child cancel, its state is already Cancelled
+                //      in parent it will fall thru to PostInvoke call below to set state to Error
+                throw new AwaitedWorkflowCancelledException(workflowId) ;
+            }
+
+            postInvokeWorkflow(workflowId, actual);
             throw actual;
         }
+
     }
 
     public <T> WorkflowHandle<T> submitWorkflow(String workflowName,
@@ -189,6 +247,16 @@ public class DBOSExecutor {
 
         final String wfId = workflowId ;
 
+        WorkflowInitResult initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfId, null);
+
+        if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+            return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
+        } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+            logger.warn("Idempotency check not impl for error");
+        } else if  (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+            logger.warn("Idempotency check not impl for cancelled");
+        }
+
         Callable<T> task = () -> {
             T result = null ;
 
@@ -197,13 +265,7 @@ public class DBOSExecutor {
 
             try {
 
-                result = runWorkflow(workflowName,
-                        targetClassName,
-                        target,
-                        args,
-                        function,
-                        id);
-
+                result = runAndSaveResult(target, args, function, id) ;
 
             } catch (Throwable e) {
                 Throwable actual = (e instanceof InvocationTargetException)
@@ -217,12 +279,30 @@ public class DBOSExecutor {
             return result ;
         };
 
+        long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis() ;
+
+        if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0 ) {
+            logger.info("Timeout deadline exceeded. Cancelling workflow " + workflowId) ;
+            systemDatabase.cancelWorkflow(workflowId);
+            return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
+        }
+
         // Copy the context - dont just pass a reference - memory visibility
         ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(DBOSContextHolder.get().copy(),task);
         Future<T> future = executorService.submit(contextAwareTask);
 
-        return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
+        if (allowedTime > 0) {
+            ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
+                if (!future.isDone()) {
+                    logger.info(" Workflow timed out " + wfId) ;
+                    future.cancel(false);
+                    systemDatabase.cancelWorkflow(wfId);
+                }
+            }, allowedTime, TimeUnit.MILLISECONDS);
 
+        }
+
+        return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
     }
 
     public void enqueueWorkflow(String workflowName,
@@ -241,6 +321,7 @@ public class DBOSExecutor {
             wfid = UUID.randomUUID().toString();
             ctx.setWorkflowId(wfid);
         }
+
         WorkflowInitResult initResult = null;
         try {
             initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, queue.getName());
@@ -328,7 +409,6 @@ public class DBOSExecutor {
             throw eThrown;
         }
     }
-
 
     /**
      * Retrieve the workflowHandle for the workflowId

@@ -22,4 +22,10 @@ public interface SimpleService {
 
     String syncWithQueued();
 
+    String longWorkflow(String input);
+    void stepWithSleep(long sleepSeconds) ;
+
+    String longParent(String input, long sleepSeconds, long timeoutSeconds) throws InterruptedException;
+    String childWorkflowWithSleep(String input, long sleepSeconds) throws InterruptedException;
+
 }

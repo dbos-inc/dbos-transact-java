@@ -292,6 +292,16 @@ public class SystemDatabase {
 
     }
 
+    public void cancelWorkflow(String workflowId) {
+        try {
+            workflowDAO.cancelWorkflow(workflowId);
+        } catch (SQLException sq) {
+            logger.error("Sql Exception", sq);
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+        }
+
+    }
+
     private void createDataSource(String dbName) {
         HikariConfig hikariConfig = new HikariConfig();
 

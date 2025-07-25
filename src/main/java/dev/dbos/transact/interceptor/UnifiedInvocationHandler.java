@@ -87,7 +87,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
             logger.debug("invoking workflow synchronously");
 
-            return dbosExecutor.runWorkflow(
+            return dbosExecutor.syncWorkflow(
                     workflowName,
                     targetClassName,
                     wrapper.target,
