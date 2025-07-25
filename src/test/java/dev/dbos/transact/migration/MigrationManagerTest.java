@@ -18,7 +18,7 @@ import java.sql.Statement;
 import static org.junit.jupiter.api.Assertions.*;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class DatabaseMigratorTest {
+class MigrationManagerTest {
 
     private static DataSource testDataSource;
     private static DBOSConfig dbosConfig;
@@ -26,7 +26,7 @@ class DatabaseMigratorTest {
     @BeforeAll
     static void setup() throws Exception {
 
-        DatabaseMigratorTest.dbosConfig = new DBOSConfig
+        MigrationManagerTest.dbosConfig = new DBOSConfig
                 .Builder()
                 .name("migrationtest")
                 .dbHost("localhost")
@@ -53,31 +53,10 @@ class DatabaseMigratorTest {
 
     }
 
-    /*@Test
-    @Order(1)
-    void testRunMigrations_CreatesTables() throws Exception {
-        // Act
-        DatabaseMigrator.runMigrations(dbosConfig);
-
-        // Assert
-        try (Connection conn = testDataSource.getConnection()) {
-            DatabaseMetaData metaData = conn.getMetaData();
-
-            // Verify all expected tables exist in the dbos schema
-            assertTableExists(metaData, "operation_outputs");
-            assertTableExists(metaData, "workflow_status");
-            assertTableExists(metaData, "notifications");
-            assertTableExists(metaData, "workflow_events");
-        }
-    } */
-
     @Test
     @Order(1)
     void testRunMigrations_CreatesTables() throws Exception {
 
-        // MigrationManager migrationManager = new MigrationManager(testDataSource) ;
-
-        // migrationManager.migrate();
         MigrationManager.runMigrations(dbosConfig);
 
         // Assert
@@ -98,15 +77,6 @@ class DatabaseMigratorTest {
             assertTrue(rs.next(), "Table " + tableName + " should exist in schema dbos");
         }
     }
-
-    /*
-    @Test
-    @Order(2)
-    void testRunMigrations_IsIdempotent() {
-        // Running migrations again
-        assertDoesNotThrow(() -> DatabaseMigrator.runMigrations(dbosConfig),
-                "Migrations should run successfully multiple times");
-    } */
 
     @Test
     @Order(2)
