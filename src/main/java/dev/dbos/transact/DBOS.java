@@ -187,8 +187,11 @@ public class DBOS {
         }
     }
     public void launch() {
-        // DatabaseMigrator.runMigrations(config);
-        MigrationManager.runMigrations(config);
+
+        if (config.migration()) {
+            MigrationManager.runMigrations(config);
+        }
+        
         if (dbosExecutor == null) {
             SystemDatabase.initialize(config);
             // systemDatabase = SystemDatabase.getInstance();

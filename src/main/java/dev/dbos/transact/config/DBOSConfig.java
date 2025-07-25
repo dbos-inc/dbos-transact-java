@@ -23,6 +23,7 @@ public class DBOSConfig {
     private final boolean http ;
     private final int httpPort ;
     private final boolean httpAwaitOnStart ;
+    private final boolean migrate ;
 
 
     private DBOSConfig(Builder builder) {
@@ -39,6 +40,7 @@ public class DBOSConfig {
         this.http = builder.http ;
         this.httpPort = builder.httpPort ;
         this.httpAwaitOnStart = builder.httpAwaitOnStart;
+        this.migrate = builder.migrate;
 
     }
 
@@ -56,6 +58,7 @@ public class DBOSConfig {
         private boolean http = false ;
         private int httpPort ;
         private boolean httpAwaitOnStart = true ;
+        private boolean migrate = true ;
 
         public Builder name(String name) {
             this.name = name;
@@ -122,6 +125,11 @@ public class DBOSConfig {
             return this;
         }
 
+        public Builder migration(boolean migrate) {
+            this.migrate = migrate;
+            return this ;
+        }
+
         public DBOSConfig build() {
             if (name == null) throw new IllegalArgumentException("Name is required");
             if (dbPassword == null) {
@@ -182,6 +190,10 @@ public class DBOSConfig {
 
     public boolean isHttpAwaitOnStart() {
         return httpAwaitOnStart;
+    }
+
+    public boolean migration() {
+        return migrate ;
     }
 
     @Override
