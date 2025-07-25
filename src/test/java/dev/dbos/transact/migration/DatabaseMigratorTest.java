@@ -3,6 +3,7 @@ package dev.dbos.transact.migration;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migrations.DatabaseMigrator;
+import dev.dbos.transact.migrations.MigrationManager;
 import org.junit.jupiter.api.*;
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -49,7 +50,7 @@ class DatabaseMigratorTest {
 
     }
 
-    @Test
+    /*@Test
     @Order(1)
     void testRunMigrations_CreatesTables() throws Exception {
         // Act
@@ -65,7 +66,28 @@ class DatabaseMigratorTest {
             assertTableExists(metaData, "notifications");
             assertTableExists(metaData, "workflow_events");
         }
+    } */
+
+    @Test
+    @Order(1)
+    void testRunMigrations_CreatesTables() throws Exception {
+
+        MigrationManager migrationManager = new MigrationManager(testDataSource) ;
+
+        migrationManager.migrate();
+
+        // Assert
+        try (Connection conn = testDataSource.getConnection()) {
+            DatabaseMetaData metaData = conn.getMetaData();
+
+            // Verify all expected tables exist in the dbos schema
+            assertTableExists(metaData, "operation_outputs");
+            assertTableExists(metaData, "workflow_status");
+            assertTableExists(metaData, "notifications");
+            assertTableExists(metaData, "workflow_events");
+        }
     }
+
 
     private void assertTableExists(DatabaseMetaData metaData, String tableName) throws Exception {
         try (ResultSet rs = metaData.getTables(null, "dbos", tableName, null)) {
@@ -73,11 +95,23 @@ class DatabaseMigratorTest {
         }
     }
 
+    /*
     @Test
     @Order(2)
     void testRunMigrations_IsIdempotent() {
         // Running migrations again
         assertDoesNotThrow(() -> DatabaseMigrator.runMigrations(dbosConfig),
+                "Migrations should run successfully multiple times");
+    } */
+
+    @Test
+    @Order(2)
+    void testRunMigrations_IsIdempotent() {
+        // Running migrations again
+        assertDoesNotThrow(() -> {
+                    MigrationManager migrationManager = new MigrationManager(testDataSource) ;
+                    migrationManager.migrate();
+                },
                 "Migrations should run successfully multiple times");
     }
 
