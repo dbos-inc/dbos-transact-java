@@ -1,7 +1,7 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.migrations.DatabaseMigrator;
+import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
@@ -44,7 +44,8 @@ class SystemDatabaseTest {
             stmt.execute(createDbSql);
         }
 
-        DatabaseMigrator.runMigrations(dbosConfig);
+        // DatabaseMigrator.runMigrations(dbosConfig);
+        MigrationManager.runMigrations(dbosConfig);
         SystemDatabase.initialize(dbosConfig);
         systemDatabase = SystemDatabase.getInstance();
 

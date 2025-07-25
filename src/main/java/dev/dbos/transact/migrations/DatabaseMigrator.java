@@ -3,7 +3,7 @@ package dev.dbos.transact.migrations;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
-import org.flywaydb.core.Flyway;
+// import org.flywaydb.core.Flyway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +32,7 @@ public class DatabaseMigrator {
 
         DataSource dataSource = dbconfig.createDataSource(dbName);
 
-        try {
+        /* try {
             Flyway flyway = Flyway.configure()
                     .dataSource(dataSource)
                     .schemas(Constants.DB_SCHEMA)
@@ -43,7 +43,7 @@ public class DatabaseMigrator {
             flyway.migrate();
         } finally {
             ((HikariDataSource)dataSource).close();
-        }
+        } */
 
 
         logger.info("Database migrations completed successfully");

@@ -8,7 +8,6 @@ import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
-import dev.dbos.transact.migrations.DatabaseMigrator;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.Queue;
