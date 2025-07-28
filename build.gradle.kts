@@ -19,10 +19,7 @@ tasks.withType<JavaCompile> {
     // (Alternative: sourceCompatibility = "11"; targetCompatibility = "11")
 }
 
-// tasks.withType<JavaCompile> {
-//    sourceCompatibility = "11"
-//    targetCompatibility = "11"
-// }
+
 
 repositories {
     mavenCentral()
@@ -31,8 +28,8 @@ repositories {
 dependencies {
     api("org.slf4j:slf4j-api:2.0.13") // logging api
 
-    implementation("org.flywaydb:flyway-core:10.11.0") // migration
-    implementation("org.flywaydb:flyway-database-postgresql:10.11.0")
+ //   implementation("org.flywaydb:flyway-core:10.11.0") // migration
+ //   implementation("org.flywaydb:flyway-database-postgresql:10.11.0")
     implementation("org.postgresql:postgresql:42.7.2")
     implementation("com.zaxxer:HikariCP:5.0.1") // Connection pool
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.0") // json

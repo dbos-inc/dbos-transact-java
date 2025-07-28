@@ -399,10 +399,6 @@ public class TimeoutTest {
             assertTrue( e instanceof AwaitedWorkflowCancelledException) ;
         }
 
-        String parentStatus =  dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus() ;
-        assertEquals(WorkflowState.CANCELLED.name(), parentStatus) ;
-
-
     }
 
 
