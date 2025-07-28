@@ -104,10 +104,10 @@ class NotificationServiceTest {
             notService.sendWorkflow(wfid1, "topic1", "HelloDBOS") ;
         }
 
-        WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
-        WorkflowHandle<String> handle2 = DBOS.retrieveWorkflow(wfid2);
+        WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
 
-        String result = handle1.getResult();
+        String result = (String)handle1.getResult();
         assertEquals("HelloDBOS", result) ;
 
         assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
@@ -155,9 +155,9 @@ class NotificationServiceTest {
         }
         DBOS.retrieveWorkflow("send3").getResult();
 
-        WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
 
-        String result = handle1.getResult();
+        String result = (String)handle1.getResult();
         assertEquals("Hello1Hello2Hello3", result) ;
 
         assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
@@ -185,10 +185,10 @@ class NotificationServiceTest {
             notService.sendWorkflow(wfid1, null, "HelloDBOS") ;
         }
 
-        WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
-        WorkflowHandle<String> handle2 = DBOS.retrieveWorkflow(wfid2);
+        WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
 
-        String result = handle1.getResult();
+        String result = (String)handle1.getResult();
         assertEquals("HelloDBOS", result) ;
 
         assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
@@ -251,10 +251,10 @@ class NotificationServiceTest {
             notService.sendWorkflow(wfid1, "topic1", null) ;
         }
 
-        WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
-        WorkflowHandle<String> handle2 = DBOS.retrieveWorkflow(wfid2);
+        WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
 
-        String result = handle1.getResult();
+        String result = (String)handle1.getResult();
         assertNull(result) ;
 
         assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
@@ -351,10 +351,10 @@ class NotificationServiceTest {
             notService.sendWorkflow(wfid1, "topic1", "HelloDBOS") ;
         }
 
-        WorkflowHandle<String> handle1 = DBOS.retrieveWorkflow(wfid1);
-        WorkflowHandle<String> handle2 = DBOS.retrieveWorkflow(wfid2);
+        WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
 
-        String result = handle1.getResult();
+        String result = (String)handle1.getResult();
         assertEquals("HelloDBOS", result) ;
 
         assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());

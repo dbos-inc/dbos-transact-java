@@ -1,6 +1,7 @@
 package dev.dbos.transact.queue;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import org.slf4j.Logger;
@@ -23,6 +24,8 @@ public class QueueService {
     private Thread workerThread;
     private QueueRegistry queueRegistry ;
     private CountDownLatch shutdownLatch;
+
+    // private final Queue internalQueue = new DBOS.QueueBuilder(Constants.DBOS_INTERNAL_QUEUE).build() ;
 
     public QueueService(SystemDatabase systemDatabase) {
         this.systemDatabase = systemDatabase ;

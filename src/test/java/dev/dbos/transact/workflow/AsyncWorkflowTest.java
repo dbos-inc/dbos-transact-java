@@ -94,8 +94,8 @@ public class AsyncWorkflowTest {
             simpleService.workWithString("test-item");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid); ;
-        String result = handle.getResult();
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid); ;
+        String result = (String)handle.getResult();
         assertEquals("Processed: test-item", result);
         assertEquals("wf-123", handle.getWorkflowId());
         assertEquals("SUCCESS", handle.getStatus().getStatus()) ;
@@ -123,8 +123,8 @@ public class AsyncWorkflowTest {
             simpleService.workWithString("test-item");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid);
-        String result = handle.getResult() ;
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid);
+        String result = (String)handle.getResult() ;
         assertEquals("Processed: test-item", result);
         assertEquals("wf-123",handle.getWorkflowId());
 
@@ -137,7 +137,7 @@ public class AsyncWorkflowTest {
             simpleService.workWithString("test-item");
         }
        handle = dbosExecutor.retrieveWorkflow(wfid);
-        result = handle.getResult();
+        result = (String)handle.getResult();
         assertEquals(1, SimpleServiceImpl.executionCount);
         // TODO fix deser has quotes assertEquals("Processed: test-item", result);
         assertEquals("wf-123",handle.getWorkflowId());
@@ -152,7 +152,7 @@ public class AsyncWorkflowTest {
         }
 
         handle = dbosExecutor.retrieveWorkflow(wfid2);
-        result = handle.getResult();
+        result = (String)handle.getResult();
         assertEquals("wf-124",handle.getWorkflowId());
 
         assertEquals(2, SimpleServiceImpl.executionCount);
@@ -210,7 +210,7 @@ public class AsyncWorkflowTest {
             simpleService.parentWorkflowWithoutSet("123");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         System.out.println(handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
@@ -247,7 +247,7 @@ public class AsyncWorkflowTest {
             simpleService.WorkflowWithMultipleChildren("123");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         assertEquals("123abcdefghi", handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
@@ -295,7 +295,7 @@ public class AsyncWorkflowTest {
             simpleService.grandParent("123");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         assertEquals("p-c-gc-123",handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;

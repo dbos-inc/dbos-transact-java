@@ -10,6 +10,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import dev.dbos.transact.exceptions.SerializableException;
 
 import java.lang.reflect.Type;
 
@@ -54,8 +55,19 @@ public class JSONUtil {
         }
     }
 
+    public static String serializeError(Throwable error) {
 
-    public static <T> T deserialize(String json, Class<T> clazz) {
+        SerializableException se = new SerializableException(error);
+        return JSONUtil.serialize(se) ;
+    }
+
+    public static SerializableException deserializeError(String json) {
+        Object[] eArray = JSONUtil.deserializeToArray(json);
+        return (SerializableException) eArray[0];
+    }
+
+
+    /* public static <T> T deserialize(String json, Class<T> clazz) {
         try {
             return mapper.readValue(json, clazz);
         } catch (JsonProcessingException e) {
@@ -69,7 +81,7 @@ public class JSONUtil {
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Deserialization failed", e);
         }
-    }
+    } */
 
 }
 

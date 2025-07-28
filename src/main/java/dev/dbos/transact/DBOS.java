@@ -268,7 +268,7 @@ public class DBOS {
         }
     }
 
-    public static WorkflowHandle retrieveWorkflow(String workflowId) {
+    public static WorkflowHandle<?> retrieveWorkflow(String workflowId) {
         return DBOS.getInstance().dbosExecutor.retrieveWorkflow(workflowId);
     }
 
@@ -341,6 +341,10 @@ public class DBOS {
     public void sleep(float seconds) {
 
         this.dbosExecutor.sleep(seconds) ;
+    }
+
+    public WorkflowHandle<?> resumeWorkflow(String workflowId) {
+        return this.dbosExecutor.resumeWorkflow(workflowId) ;
     }
 }
 

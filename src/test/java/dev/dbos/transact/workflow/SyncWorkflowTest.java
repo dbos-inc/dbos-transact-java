@@ -232,7 +232,7 @@ public class SyncWorkflowTest {
             simpleService.WorkflowWithMultipleChildren("123");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         assertEquals("123abcdefghi", handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
@@ -281,7 +281,7 @@ public class SyncWorkflowTest {
             simpleService.grandParent("123");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         assertEquals("p-c-gc-123",handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;

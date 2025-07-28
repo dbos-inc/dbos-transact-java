@@ -12,4 +12,6 @@ public class Constants {
     public static final String DEFAULT_EXECUTORID = "local";
 
     public static final String DBOS_NULL_TOPIC = "__null__topic__" ;
+
+    public static final String DBOS_INTERNAL_QUEUE = "_dbos_internal_queue" ;
 }

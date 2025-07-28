@@ -24,8 +24,10 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.sql.SQLException;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.function.Supplier;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
@@ -414,7 +416,7 @@ public class DBOSExecutor {
      * Retrieve the workflowHandle for the workflowId
      *
      */
-    public WorkflowHandle retrieveWorkflow(String workflowId) {
+    public WorkflowHandle<?> retrieveWorkflow(String workflowId) {
         return new WorkflowHandleDBPoll(workflowId, systemDatabase) ;
     }
 
@@ -465,6 +467,18 @@ public class DBOSExecutor {
 
         systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), seconds, false);
 
+    }
+
+    public WorkflowHandle<?> resumeWorkflow(String workflowId)  {
+        // Define the function to be executed as a step
+        Supplier<Void> resumeFunction = () -> {
+            logger.info("Resuming workflow: {}", workflowId);
+            systemDatabase.resumeWorkflow(workflowId);
+            return null ; // void
+        };
+        // Execute the resume operation as a workflow step
+        systemDatabase.callFunctionAsStep(resumeFunction, "DBOS.resumeWorkflow");
+        return retrieveWorkflow(workflowId);
     }
 
 }
