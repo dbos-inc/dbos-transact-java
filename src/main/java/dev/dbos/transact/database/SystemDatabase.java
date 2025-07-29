@@ -4,7 +4,10 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.notifications.GetWorkflowEventContext;
 import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.Queue;
@@ -21,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import javax.sql.DataSource;
 import java.sql.*;
 import java.util.*;
+import java.util.function.Supplier;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
@@ -300,6 +304,82 @@ public class SystemDatabase {
             throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
         }
 
+    }
+
+    public void resumeWorkflow(String workflowId) {
+        try {
+            workflowDAO.resumeWorkflow(workflowId);
+        } catch (SQLException s) {
+            throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), s.getMessage()) ;
+        }
+
+    }
+
+
+    public <T> T callFunctionAsStep(Supplier<T> fn, String functionName)  {
+        DBOSContext ctx = DBOSContextHolder.get();
+
+        int nextFuncId = 0 ;
+
+        if (ctx != null && ctx.isInWorkflow()) {
+            nextFuncId = ctx.getAndIncrementFunctionId() ;
+
+            StepResult result = null ;
+
+            try (Connection connection = dataSource.getConnection()) {
+                result = stepsDAO.checkStepExecutionTxn(
+                        ctx.getWorkflowId(), nextFuncId, functionName, connection
+                );
+            } catch(SQLException e) {
+                throw new DBOSException(UNEXPECTED.getCode(), "Function execution failed: " + functionName, e);
+            }
+
+            if (result != null) {
+                return handleExistingResult(result, functionName);
+            }
+        }
+
+        T functionResult;
+        try {
+
+            try {
+                functionResult = fn.get();
+            } catch (Exception e) {
+                if (ctx != null && ctx.isInWorkflow()) {
+                    String jsonError = JSONUtil.serializeError(e);
+                    StepResult r = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError);
+                    stepsDAO.recordStepResultTxn(r);
+                }
+                throw new DBOSException(UNEXPECTED.getCode(), "Function execution failed: " + functionName, e);
+            }
+
+            // If we're in a workflow, record the successful result
+            if (ctx != null && ctx.isInWorkflow()) {
+                String jsonOutput = JSONUtil.serialize(functionResult);
+                StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, jsonOutput, null);
+                stepsDAO.recordStepResultTxn(o);
+            }
+        } catch(SQLException sq) {
+            throw new DBOSException(UNEXPECTED.getCode(), "Function execution failed: " + functionName, sq);
+        }
+
+        return functionResult;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T handleExistingResult(StepResult result, String functionName) {
+        if (result.getOutput() != null) {
+            Object[] resArray = JSONUtil.deserializeToArray(result.getOutput());
+            return resArray == null ? null : (T) resArray[0];
+        } else if (result.getError() != null) {
+            Object[] eArray = JSONUtil.deserializeToArray(result.getError());
+            SerializableException se = (SerializableException) eArray[0];
+            throw new DBOSAppException(String.format("Exception of type %s", se.className), se) ;
+        } else {
+            throw new IllegalStateException(
+                    String.format("Recorded output and error are both null for %s", functionName)
+            );
+        }
     }
 
     private void createDataSource(String dbName) {

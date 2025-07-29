@@ -107,8 +107,8 @@ public class UnifiedProxyTest {
         }
         assertNull(result);
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid2); ;
-        result = handle.getResult();
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid2); ;
+        result = (String)handle.getResult();
         assertEquals("Processed: test-item-async", result);
         assertEquals(wfid2, handle.getWorkflowId());
         assertEquals("SUCCESS", handle.getStatus().getStatus()) ;
@@ -123,7 +123,7 @@ public class UnifiedProxyTest {
         assertNull(result);
 
         handle = dbosExecutor.retrieveWorkflow(wfid3); ;
-        result = handle.getResult();
+        result = (String)handle.getResult();
         assertEquals("Processed: test-item-q", result);
         assertEquals(wfid3, handle.getWorkflowId());
         assertEquals("SUCCESS", handle.getStatus().getStatus()) ;

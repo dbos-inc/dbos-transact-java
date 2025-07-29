@@ -112,9 +112,9 @@ public class QueuesTest {
             serviceQ.simpleQWorkflow("inputq");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(id);
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id);
         assertEquals(id, handle.getWorkflowId());
-        String result = handle.getResult();
+        String result = (String)handle.getResult();
         assertEquals("inputqinputq",result) ;
 
     }
@@ -164,9 +164,9 @@ public class QueuesTest {
         for (int i = 0 ; i < 5 ; i++) {
             String id = "wfid"+i;
 
-            WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(id);
+            WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id);
             assertEquals(id, handle.getWorkflowId());
-            String result = handle.getResult();
+            String result = (String)handle.getResult();
             assertEquals("inputq"+i+"inputq"+i,result) ;
             assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
@@ -212,15 +212,15 @@ public class QueuesTest {
             serviceI.workflowI(25);
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(id1);
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id1);
         assertEquals(id1, handle.getWorkflowId());
-        String result = handle.getResult();
+        String result = (String)handle.getResult();
         assertEquals("firstinputfirstinput",result) ;
         assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
-        WorkflowHandle<Integer> handle2 = dbosExecutor.retrieveWorkflow(id2);
+        WorkflowHandle<?> handle2 = dbosExecutor.retrieveWorkflow(id2);
         assertEquals(id2, handle2.getWorkflowId());
-        Integer result2 = handle2.getResult();
+        Integer result2 = (Integer)handle2.getResult();
         assertEquals(50,result2) ;
         assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
     }
@@ -245,7 +245,7 @@ public class QueuesTest {
 
         int numWaves = 3;
         int numTasks = numWaves * limit ;
-        List<WorkflowHandle<Double>> handles = new ArrayList<>() ;
+        List<WorkflowHandle<?>> handles = new ArrayList<>() ;
         List<Double> times = new ArrayList<>();
 
         for (int i = 0 ; i < numTasks ; i++) {
@@ -256,8 +256,8 @@ public class QueuesTest {
             handles.add(dbosExecutor.retrieveWorkflow(id));
         }
 
-        for (WorkflowHandle<Double> h : handles) {
-            double result = h.getResult() ;
+        for (WorkflowHandle<?> h : handles) {
+            double result = (Double)h.getResult() ;
             logger.info(String.valueOf(result));
             times.add(result);
         }
@@ -285,7 +285,7 @@ public class QueuesTest {
                     String.format("Gap between wave %d and %d should be at most %.3f. Actual: %.3f", wave, wave + 1, period + periodTolerance, gap));
         }
 
-        for (WorkflowHandle<Double> h : handles) {
+        for (WorkflowHandle<?> h : handles) {
             assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
         }
 

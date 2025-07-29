@@ -1,6 +1,7 @@
 package dev.dbos.transact.queue;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import org.slf4j.Logger;
@@ -24,6 +25,8 @@ public class QueueService {
     private QueueRegistry queueRegistry ;
     private CountDownLatch shutdownLatch;
 
+    private Queue internalQueue ;
+
     public QueueService(SystemDatabase systemDatabase) {
         this.systemDatabase = systemDatabase ;
         queueRegistry = new QueueRegistry();
@@ -40,6 +43,8 @@ public class QueueService {
 
     private void pollForWorkflows() {
         logger.info("PollQueuesThread started ...." + Thread.currentThread().getId()) ;
+
+        internalQueue = new DBOS.QueueBuilder(Constants.DBOS_INTERNAL_QUEUE).build() ;
 
         double pollingInterval = 1.0 ;
         double minPollingInterval = 1.0 ;

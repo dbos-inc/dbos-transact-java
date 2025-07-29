@@ -11,7 +11,8 @@ public enum ErrorCode {
     WORKFLOW_CANCELLED(7),
     UNEXPECTED_STEP(8),
     WORKFLOW_FUNCTION_NOT_FOUND(9),
-    SLEEP_NOT_IN_WORKFLOW(10);
+    SLEEP_NOT_IN_WORKFLOW(10),
+    RESUME_WORKFLOW_ERROR(11);
 
     private int code ;
 

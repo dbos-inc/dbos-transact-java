@@ -24,8 +24,10 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.sql.SQLException;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.function.Supplier;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
@@ -363,8 +365,9 @@ public class DBOSExecutor {
 
             String output = recordedResult.getOutput() ;
             if (output != null) {
+                logger.info("Result has an output") ;
                 Object[] stepO = JSONUtil.deserializeToArray(output);
-                return(T) stepO[0];
+                return stepO == null ? null : (T) stepO[0];
             }
 
             String error = recordedResult.getError();
@@ -414,7 +417,7 @@ public class DBOSExecutor {
      * Retrieve the workflowHandle for the workflowId
      *
      */
-    public WorkflowHandle retrieveWorkflow(String workflowId) {
+    public WorkflowHandle<?> retrieveWorkflow(String workflowId) {
         return new WorkflowHandleDBPoll(workflowId, systemDatabase) ;
     }
 
@@ -464,6 +467,30 @@ public class DBOSExecutor {
         }
 
         systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), seconds, false);
+
+    }
+
+    public WorkflowHandle<?> resumeWorkflow(String workflowId)  {
+
+        Supplier<Void> resumeFunction = () -> {
+            logger.info("Resuming workflow: ", workflowId);
+            systemDatabase.resumeWorkflow(workflowId);
+            return null ; // void
+        };
+        // Execute the resume operation as a workflow step
+        systemDatabase.callFunctionAsStep(resumeFunction, "DBOS.resumeWorkflow");
+        return retrieveWorkflow(workflowId);
+    }
+
+    public void cancelWorkflow(String workflowId)  {
+
+        Supplier<Void> cancelFunction = () -> {
+            logger.info("Cancelling workflow: ", workflowId);
+            systemDatabase.cancelWorkflow(workflowId);
+            return null ; // void
+        };
+        // Execute the cancel operation as a workflow step
+        systemDatabase.callFunctionAsStep(cancelFunction, "DBOS.resumeWorkflow");
 
     }
 

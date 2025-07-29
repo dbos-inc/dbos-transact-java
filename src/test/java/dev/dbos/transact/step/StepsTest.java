@@ -167,8 +167,8 @@ public class StepsTest {
             serviceA.workflowWithSteps("hello");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(workflowId);
-        assertEquals("hellohello", handle.getResult());
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
+        assertEquals("hellohello", (String)handle.getResult());
 
         List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(workflowId);
         assertEquals(5, stepInfos.size());
@@ -209,8 +209,8 @@ public class StepsTest {
             service.aWorkflow("hello");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(workflowId);
-        assertEquals("helloonetwo", handle.getResult());
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
+        assertEquals("helloonetwo", (String)handle.getResult());
 
         List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(workflowId);
         assertEquals(2, stepInfos.size());

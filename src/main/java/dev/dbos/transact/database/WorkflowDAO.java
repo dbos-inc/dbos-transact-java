@@ -358,7 +358,6 @@ public class WorkflowDAO {
                 options.setError(error);
                 options.setResetDeduplicationID(true);
 
-
                 updateWorkflowStatus(connection, workflowId, WorkflowState.ERROR.toString(), options);
 
             }
@@ -697,6 +696,76 @@ public class WorkflowDAO {
                 stmt.executeUpdate();
             }
 
+        }
+    }
+
+    public void resumeWorkflow(String workflowId) throws SQLException {
+
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+
+            try {
+                String currentStatus = getWorkflowStatus(connection, workflowId);
+
+
+                if (currentStatus == null) {
+                    connection.rollback();
+                    return;
+                }
+
+                // If workflow is already complete, do nothing
+                if (WorkflowState.SUCCESS.name().equals(currentStatus) ||
+                        WorkflowState.ERROR.name().equals(currentStatus)) {
+                    connection.rollback();
+                    return;
+                }
+
+                // Set the workflow's status to ENQUEUED and clear recovery fields
+                updateWorkflowToEnqueued(connection, workflowId);
+
+                connection.commit();
+
+            } catch (SQLException e) {
+                connection.rollback();
+                throw e;
+            }
+        }
+    }
+
+    private String getWorkflowStatus(Connection connection, String workflowId) throws SQLException {
+        String sql = "SELECT status FROM dbos.workflow_status WHERE workflow_uuid = ?";
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, workflowId);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("status");
+                }
+                return null;
+            }
+        }
+    }
+
+    private void updateWorkflowToEnqueued(Connection connection, String workflowId) throws SQLException {
+        String sql = "UPDATE dbos.workflow_status " +
+            " SET status = ?, " +
+                " queue_name = ?, " +
+                " recovery_attempts = ?, " +
+                " workflow_deadline_epoch_ms = 0, " +
+                " deduplication_id = NULL, " +
+                " started_at_epoch_ms = NULL " +
+            " WHERE workflow_uuid = ? " ;
+
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, WorkflowState.ENQUEUED.name());
+            stmt.setString(2, Constants.DBOS_INTERNAL_QUEUE);
+            stmt.setInt(3, 0); // recovery_attempts = 0
+            stmt.setString(4, workflowId);
+
+            stmt.executeUpdate();
         }
     }
 
