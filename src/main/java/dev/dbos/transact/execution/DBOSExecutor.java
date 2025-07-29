@@ -81,7 +81,6 @@ public class DBOSExecutor {
 
         long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs() ;
         long workflowDeadlineEpoch = 0 ;
-
         if (workflowTimeoutMs > 0) {
             workflowDeadlineEpoch = System.currentTimeMillis() + workflowTimeoutMs ;
         }
@@ -505,7 +504,7 @@ public class DBOSExecutor {
 
         String forkedWorkflowId = systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
 
-        return resumeWorkflow(forkedWorkflowId);
+        return retrieveWorkflow(forkedWorkflowId);
 
     }
 

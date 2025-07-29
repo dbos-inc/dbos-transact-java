@@ -4,11 +4,11 @@ public class ForkServiceImpl implements ForkService {
 
     private ForkService forkService;
 
-    private int step1Count ;
-    private int step2Count ;
-    private int step3Count ;
-    private int step4Count ;
-    private int step5Count ;
+    int step1Count ;
+    int step2Count ;
+    int step3Count ;
+    int step4Count ;
+    int step5Count ;
 
     public ForkServiceImpl() {
 

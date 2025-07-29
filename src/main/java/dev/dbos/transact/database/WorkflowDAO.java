@@ -739,6 +739,8 @@ public class WorkflowDAO {
                                String applicationVersion) throws SQLException {
 
 
+        logger.info("Original " + originalWorkflowId + "forked " + forkedWorkflowId) ;
+
         WorkflowStatus status = getWorkflowStatus(originalWorkflowId) ;
 
         if (status == null) {
@@ -773,10 +775,15 @@ public class WorkflowDAO {
                                             WorkflowStatus originalStatus,
                                             String applicationVersion) throws SQLException {
 
+        long workflowDeadlineEpoch = 0 ;
+        if (originalStatus.getWorkflowTimeoutMs() > 0) {
+            workflowDeadlineEpoch = System.currentTimeMillis() + originalStatus.getWorkflowTimeoutMs() ;
+        }
+
         String sql = "INSERT INTO dbos.workflow_status ( " +
                 " workflow_uuid, status, name, class_name, config_name, application_version, application_id, " +
-                " authenticated_user, authenticated_roles, assumed_role, queue_name, inputs " +
-                " ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " ;
+                " authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_deadline_epoch_ms, workflow_timeout_ms " +
+                " ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " ;
 
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, forkedWorkflowId);
@@ -796,6 +803,9 @@ public class WorkflowDAO {
             stmt.setString(10, originalStatus.getAssumedRole());
             stmt.setString(11, Constants.DBOS_INTERNAL_QUEUE);
             stmt.setString(12, JSONUtil.serializeArray(originalStatus.getInput()));
+            stmt.setLong(13, workflowDeadlineEpoch);
+            stmt.setLong(14, originalStatus.getWorkflowTimeoutMs());
+
 
             stmt.executeUpdate();
         }
