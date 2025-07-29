@@ -742,7 +742,8 @@ public class WorkflowDAO {
         WorkflowStatus status = getWorkflowStatus(originalWorkflowId) ;
 
         if (status == null) {
-            throw new IllegalArgumentException("Workflow " + originalWorkflowId + " not found");
+            logger.info("mjjjj throwing non existent");
+            throw new NonExistentWorkflowException(originalWorkflowId);
         }
 
         try (Connection connection = dataSource.getConnection()) {

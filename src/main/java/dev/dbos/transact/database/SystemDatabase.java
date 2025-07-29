@@ -315,6 +315,18 @@ public class SystemDatabase {
 
     }
 
+    public String forkWorkflow(String originalWorkflowId,
+                               String forkedWorkflowId,
+                               int startStep,
+                               String applicationVersion) {
+
+        try {
+            return workflowDAO.forkWorkflow(originalWorkflowId, forkedWorkflowId, startStep, applicationVersion) ;
+        } catch (SQLException sq) {
+            throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), sq.getMessage()) ;
+        }
+    }
+
 
     public <T> T callFunctionAsStep(Supplier<T> fn, String functionName)  {
         DBOSContext ctx = DBOSContextHolder.get();
@@ -350,7 +362,12 @@ public class SystemDatabase {
                     StepResult r = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError);
                     stepsDAO.recordStepResultTxn(r);
                 }
-                throw new DBOSException(UNEXPECTED.getCode(), "Function execution failed: " + functionName, e);
+
+                if ( e instanceof NonExistentWorkflowException) {
+                    throw e;
+                } else {
+                    throw new DBOSException(UNEXPECTED.getCode(), "Function execution failed: " + functionName, e);
+                }
             }
 
             // If we're in a workflow, record the successful result

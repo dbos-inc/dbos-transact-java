@@ -6,6 +6,7 @@ import dev.dbos.transact.context.DBOSOptions;
 import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.exceptions.WorkflowCancelledException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ExecutingService;
@@ -26,9 +27,9 @@ import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class WorkflowMgmtTest {
 
@@ -249,5 +250,50 @@ public class WorkflowMgmtTest {
 
     }
 
+    @Test
+    public void testRestart() {
+
+        ForkService forkService = dbos.<ForkService>Workflow()
+                .interfaceClass(ForkService.class)
+                .implementation(new ForkServiceImpl())
+                .build();
+        forkService.setForkService(forkService);
+
+        String workflowId = "wfid1" ;
+        DBOSOptions options = new DBOSOptions.Builder(workflowId).build();
+        String result ;
+        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+            result = forkService.simpleWorkflow("hello");
+        }
+
+        assertEquals("hellohello", result);
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+
+        WorkflowHandle<?> rstatHandle = dbos.restartWorkflow(workflowId);
+        result = (String) rstatHandle.getResult() ;
+        assertEquals("hellohello", result);
+
+        assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
+        assertTrue(rstatHandle.getWorkflowId() != workflowId);
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId()) ;
+        assertEquals(5, steps.size()) ;
+
+
+    }
+
+    @Test
+    public void restartNonExistent() {
+
+        try {
+            WorkflowHandle<?> rstatHandle = dbos.restartWorkflow("12345");
+            fail("An exceptions should have been thrown");
+        } catch (Throwable t) {
+            logger.info(t.getClass().getName()) ;
+            assertTrue(t instanceof NonExistentWorkflowException);
+        }
+
+    }
 
 }

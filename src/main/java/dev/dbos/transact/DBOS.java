@@ -365,5 +365,44 @@ public class DBOS {
     public void cancelWorkflow(String workflowId) {
         this.dbosExecutor.cancelWorkflow(workflowId);
     }
+
+    /**
+     * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the provided
+     * step are copied over
+     *
+     * @param workflowId Original workflow Id
+     * @param startStep Start execution from this step. Prior steps copied over
+     * @param applicationVersion The version of the application to run
+     * @return handle to the workflow
+     */
+    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, String applicationVersion) {
+        return this.dbosExecutor.forkWorkflow(workflowId, startStep, applicationVersion) ;
+    }
+
+    /**
+     *
+     * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the provided
+     * step are copied over
+     *
+     * @param workflowId Original workflow Id
+     * @param startStep Start execution from this step. Prior steps copied over
+     * @return handle to the workflow
+     */
+
+    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep) {
+        return this.dbosExecutor.forkWorkflow(workflowId, startStep, null) ;
+    }
+
+    /**
+     * Rerun this workflow from the start with another generated workflow Id
+     *
+     * @param workflowId Original workflow id
+     * @return handle to the workflow
+     */
+
+    public WorkflowHandle<?> restartWorkflow(String workflowId) {
+        return this.dbosExecutor.forkWorkflow(workflowId, 0, null) ;
+    }
+
 }
 
