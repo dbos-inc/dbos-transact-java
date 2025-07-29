@@ -9,7 +9,7 @@ public class MgmtServiceImpl implements MgmtService{
 
     Logger logger = LoggerFactory.getLogger(MgmtServiceImpl.class) ;
 
-    private int stepsExecuted ;
+    private volatile int stepsExecuted ;
     CountDownLatch mainThreadEvent ;
     CountDownLatch workflowEvent ;
 
@@ -24,7 +24,7 @@ public class MgmtServiceImpl implements MgmtService{
     public void setMgmtService(MgmtService m) {
         service = m;
     }
-    
+
 
     @Workflow(name = "myworkflow")
     public int simpleWorkflow(int input) {
@@ -44,21 +44,21 @@ public class MgmtServiceImpl implements MgmtService{
     }
 
     @Step(name = "one")
-    public void stepOne() {
+    public synchronized void stepOne() {
         ++stepsExecuted;
     }
 
     @Step(name = "two")
-    public void stepTwo() {
+    public synchronized void stepTwo() {
         ++stepsExecuted;
     }
 
     @Step(name = "three")
-    public void stepThree() {
+    public synchronized void stepThree() {
         ++stepsExecuted;
     }
 
-    public int getStepsExecuted() {
+    public synchronized int getStepsExecuted() {
         return stepsExecuted ;
     }
 

@@ -5,7 +5,10 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSOptions;
 import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.WorkflowCancelledException;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.ExecutingService;
+import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -20,8 +23,11 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class WorkflowMgmtTest {
 
@@ -103,8 +109,18 @@ public class WorkflowMgmtTest {
         workLatch.countDown();
 
         assertEquals(1, mgmtService.getStepsExecuted()) ;
+        WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId) ;
+        assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
 
         WorkflowHandle<?> handle = dbos.resumeWorkflow(workflowId) ;
+
+        result = (Integer) handle.getResult() ;
+        assertEquals(23, result);
+        assertEquals(3, mgmtService.getStepsExecuted()) ;
+
+        // resume again
+
+        handle = dbos.resumeWorkflow(workflowId) ;
 
         result = (Integer) handle.getResult() ;
         assertEquals(23, result);
@@ -113,4 +129,140 @@ public class WorkflowMgmtTest {
         logger.info("Test completed");
 
     }
+
+    @Test
+    public void queuedCancelResumeTest() throws Exception {
+
+        CountDownLatch mainLatch = new CountDownLatch(1);
+        CountDownLatch workLatch = new CountDownLatch(1);
+
+        MgmtService mgmtService = dbos.<MgmtService>Workflow()
+                .interfaceClass(MgmtService.class)
+                .implementation(new MgmtServiceImpl(mainLatch, workLatch))
+                .build();
+        mgmtService.setMgmtService(mgmtService);
+
+        Queue myqueue = new DBOS.QueueBuilder("myqueue").build();
+
+        String workflowId = "wfid1" ;
+        DBOSOptions options = new DBOSOptions.Builder(workflowId).queue(myqueue).build();
+        int result ;
+        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+            mgmtService.simpleWorkflow(23);
+        }
+
+        mainLatch.await();
+        dbos.cancelWorkflow(workflowId);
+        workLatch.countDown();
+
+        assertEquals(1, mgmtService.getStepsExecuted()) ;
+        WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId) ;
+        assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
+
+        WorkflowHandle<?> handle = dbos.resumeWorkflow(workflowId) ;
+
+        result = (Integer) handle.getResult() ;
+        assertEquals(23, result);
+        assertEquals(3, mgmtService.getStepsExecuted()) ;
+
+        // resume again
+
+        handle = dbos.resumeWorkflow(workflowId) ;
+
+        result = (Integer) handle.getResult() ;
+        assertEquals(23, result);
+        assertEquals(3, mgmtService.getStepsExecuted()) ;
+
+        logger.info("Test completed");
+
+    }
+
+
+    @Test
+    public void syncCancelResumeTest() throws Exception {
+
+        CountDownLatch mainLatch = new CountDownLatch(1);
+        CountDownLatch workLatch = new CountDownLatch(1);
+
+        MgmtService mgmtService = dbos.<MgmtService>Workflow()
+                .interfaceClass(MgmtService.class)
+                .implementation(new MgmtServiceImpl(mainLatch, workLatch))
+                .build();
+        mgmtService.setMgmtService(mgmtService);
+
+
+        ExecutorService e = Executors.newFixedThreadPool(2);
+        String workflowId = "wfid1" ;
+
+        CountDownLatch testLatch = new CountDownLatch(2) ;
+
+        e.submit(() -> {
+
+            DBOSOptions options = new DBOSOptions.Builder(workflowId).build();
+
+            try {
+                try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+                    mgmtService.simpleWorkflow(23);
+                }
+            } catch(Throwable t) {
+                logger.info("caught ex");
+                // assertTrue(t instanceof WorkflowCancelledException) ;
+            }
+
+            assertEquals(1, mgmtService.getStepsExecuted()) ;
+            logger.info("counting down latch") ;
+            testLatch.countDown();
+            logger.info("exiting thread 1") ;
+        }) ;
+
+
+
+        // mainLatch.await();
+        // dbos.cancelWorkflow(workflowId);
+        // workLatch.countDown();
+
+
+
+        e.submit(() -> {
+            try {
+                mainLatch.await();
+                dbos.cancelWorkflow(workflowId);
+                workLatch.countDown();
+
+                logger.info("2 counting down lotch") ;
+                testLatch.countDown();
+                logger.info("2 after counting down lotch") ;
+
+
+            } catch(InterruptedException ie) {
+                logger.error(ie.toString()) ;
+            }
+            logger.info("Exiting thread 2") ;
+        }) ;
+
+        logger.info("Before test latch");
+        testLatch.await();
+        logger.info("after test latch");
+
+
+
+        WorkflowHandle<?> handle = dbos.resumeWorkflow(workflowId) ;
+
+        int result = (Integer) handle.getResult() ;
+        assertEquals(23, result);
+        assertEquals(3, mgmtService.getStepsExecuted()) ;
+
+        // resume again
+
+        handle = dbos.resumeWorkflow(workflowId) ;
+
+        result = (Integer) handle.getResult() ;
+        assertEquals(23, result);
+        assertEquals(3, mgmtService.getStepsExecuted()) ;
+
+        logger.info("Test completed");
+
+    }
+
+
 }

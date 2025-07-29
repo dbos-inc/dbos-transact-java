@@ -490,13 +490,13 @@ public class DBOSExecutor {
 
     public void cancelWorkflow(String workflowId)  {
 
-        Supplier<Void> resumeFunction = () -> {
+        Supplier<Void> cancelFunction = () -> {
             logger.info("Cancelling workflow: ", workflowId);
-            systemDatabase.resumeWorkflow(workflowId);
+            systemDatabase.cancelWorkflow(workflowId);
             return null ; // void
         };
         // Execute the cancel operation as a workflow step
-        systemDatabase.callFunctionAsStep(resumeFunction, "DBOS.resumeWorkflow");
+        systemDatabase.callFunctionAsStep(cancelFunction, "DBOS.resumeWorkflow");
 
     }
 
