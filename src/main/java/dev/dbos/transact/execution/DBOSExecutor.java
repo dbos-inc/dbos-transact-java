@@ -363,10 +363,13 @@ public class DBOSExecutor {
 
         if (recordedResult != null) {
 
+            logger.info("There is an recorded result for step " + stepFunctionId) ;
+
             String output = recordedResult.getOutput() ;
             if (output != null) {
+                logger.info("Result has an output") ;
                 Object[] stepO = JSONUtil.deserializeToArray(output);
-                return(T) stepO[0];
+                return stepO == null ? null : (T) stepO[0];
             }
 
             String error = recordedResult.getError();
@@ -374,6 +377,8 @@ public class DBOSExecutor {
                 // TODO: fix deserialization of errors
                 throw new Exception(error);
             }
+        } else {
+            logger.info("There is an No recorded result for step " + stepFunctionId) ;
         }
 
         int currAttempts = 1 ;
@@ -382,6 +387,8 @@ public class DBOSExecutor {
         T result = null ;
 
         while (retriedAllowed && currAttempts <= maxAttempts) {
+
+            logger.info("curr attempt " + currAttempts) ;
 
             try {
                 result = function.execute();
@@ -470,15 +477,27 @@ public class DBOSExecutor {
     }
 
     public WorkflowHandle<?> resumeWorkflow(String workflowId)  {
-        // Define the function to be executed as a step
+
         Supplier<Void> resumeFunction = () -> {
-            logger.info("Resuming workflow: {}", workflowId);
+            logger.info("Resuming workflow: ", workflowId);
             systemDatabase.resumeWorkflow(workflowId);
             return null ; // void
         };
         // Execute the resume operation as a workflow step
         systemDatabase.callFunctionAsStep(resumeFunction, "DBOS.resumeWorkflow");
         return retrieveWorkflow(workflowId);
+    }
+
+    public void cancelWorkflow(String workflowId)  {
+
+        Supplier<Void> resumeFunction = () -> {
+            logger.info("Cancelling workflow: ", workflowId);
+            systemDatabase.resumeWorkflow(workflowId);
+            return null ; // void
+        };
+        // Execute the cancel operation as a workflow step
+        systemDatabase.callFunctionAsStep(resumeFunction, "DBOS.resumeWorkflow");
+
     }
 
 }

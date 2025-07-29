@@ -358,7 +358,6 @@ public class WorkflowDAO {
                 options.setError(error);
                 options.setResetDeduplicationID(true);
 
-
                 updateWorkflowStatus(connection, workflowId, WorkflowState.ERROR.toString(), options);
 
             }
@@ -754,7 +753,7 @@ public class WorkflowDAO {
             " SET status = ?, " +
                 " queue_name = ?, " +
                 " recovery_attempts = ?, " +
-                " workflow_deadline_epoch_ms = NULL, " +
+                " workflow_deadline_epoch_ms = 0, " +
                 " deduplication_id = NULL, " +
                 " started_at_epoch_ms = NULL " +
             " WHERE workflow_uuid = ? " ;

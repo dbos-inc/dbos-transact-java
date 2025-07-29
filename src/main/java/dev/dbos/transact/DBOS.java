@@ -343,8 +343,27 @@ public class DBOS {
         this.dbosExecutor.sleep(seconds) ;
     }
 
+    /**
+     *
+     * Resume a workflow starting from the step after the last complete step
+     *
+     * @param workflowId id of the workflow
+     * @return A handle to the workflow
+     */
     public WorkflowHandle<?> resumeWorkflow(String workflowId) {
         return this.dbosExecutor.resumeWorkflow(workflowId) ;
+    }
+
+    /***
+     *
+     * Cancel the workflow. After this function is called, the next step (not the current one)
+     * will not execute
+     *
+     * @param workflowId
+     */
+
+    public void cancelWorkflow(String workflowId) {
+        this.dbosExecutor.cancelWorkflow(workflowId);
     }
 }
 
