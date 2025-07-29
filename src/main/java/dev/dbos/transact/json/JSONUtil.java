@@ -18,17 +18,6 @@ public class JSONUtil {
 
     private static final ObjectMapper mapper = new ObjectMapper();
 
-    /* static {
-        // mapper.activateDefaultTyping(mapper.getPolymorphicTypeValidator(), ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
-        PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
-                .allowIfSubType(Object.class)
-                .build();
-
-        // This ensures type info is added even for final classes like String, Integer, etc.
-        mapper.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.EVERYTHING, JsonTypeInfo.As.PROPERTY);
-
-    } */
-
     static {
         mapper.registerModule(new JavaTimeModule());
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional
@@ -67,21 +56,7 @@ public class JSONUtil {
     }
 
 
-    /* public static <T> T deserialize(String json, Class<T> clazz) {
-        try {
-            return mapper.readValue(json, clazz);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Deserialization failed", e);
-        }
-    }
 
-    public static <T> T deserialize(String json, TypeReference<T> typeRef) {
-        try {
-            return mapper.readValue(json, typeRef);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Deserialization failed", e);
-        }
-    } */
 
 }
 

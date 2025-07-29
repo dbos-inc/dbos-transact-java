@@ -346,7 +346,6 @@ public class SystemDatabase {
                 functionResult = fn.get();
             } catch (Exception e) {
                 if (ctx != null && ctx.isInWorkflow()) {
-                    // recordOperationError(ctx, functionName, e);
                     String jsonError = JSONUtil.serializeError(e);
                     StepResult r = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError);
                     stepsDAO.recordStepResultTxn(r);

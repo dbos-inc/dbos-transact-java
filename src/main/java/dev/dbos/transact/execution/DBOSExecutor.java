@@ -363,8 +363,6 @@ public class DBOSExecutor {
 
         if (recordedResult != null) {
 
-            logger.info("There is an recorded result for step " + stepFunctionId) ;
-
             String output = recordedResult.getOutput() ;
             if (output != null) {
                 logger.info("Result has an output") ;
@@ -377,8 +375,6 @@ public class DBOSExecutor {
                 // TODO: fix deserialization of errors
                 throw new Exception(error);
             }
-        } else {
-            logger.info("There is an No recorded result for step " + stepFunctionId) ;
         }
 
         int currAttempts = 1 ;
@@ -387,8 +383,6 @@ public class DBOSExecutor {
         T result = null ;
 
         while (retriedAllowed && currAttempts <= maxAttempts) {
-
-            logger.info("curr attempt " + currAttempts) ;
 
             try {
                 result = function.execute();

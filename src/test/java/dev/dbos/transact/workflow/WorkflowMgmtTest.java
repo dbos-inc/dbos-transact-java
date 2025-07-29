@@ -5,6 +5,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSOptions;
 import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.WorkflowCancelledException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ExecutingService;
@@ -125,6 +126,8 @@ public class WorkflowMgmtTest {
         result = (Integer) handle.getResult() ;
         assertEquals(23, result);
         assertEquals(3, mgmtService.getStepsExecuted()) ;
+        h = dbosExecutor.retrieveWorkflow(workflowId) ;
+        assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
 
         logger.info("Test completed");
 
@@ -172,6 +175,8 @@ public class WorkflowMgmtTest {
         result = (Integer) handle.getResult() ;
         assertEquals(23, result);
         assertEquals(3, mgmtService.getStepsExecuted()) ;
+        h = dbosExecutor.retrieveWorkflow(workflowId) ;
+        assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
 
         logger.info("Test completed");
 
@@ -205,46 +210,26 @@ public class WorkflowMgmtTest {
                     mgmtService.simpleWorkflow(23);
                 }
             } catch(Throwable t) {
-                logger.info("caught ex");
-                // assertTrue(t instanceof WorkflowCancelledException) ;
+                assertTrue(t instanceof AwaitedWorkflowCancelledException) ;
             }
 
             assertEquals(1, mgmtService.getStepsExecuted()) ;
-            logger.info("counting down latch") ;
             testLatch.countDown();
-            logger.info("exiting thread 1") ;
         }) ;
-
-
-
-        // mainLatch.await();
-        // dbos.cancelWorkflow(workflowId);
-        // workLatch.countDown();
-
-
 
         e.submit(() -> {
             try {
                 mainLatch.await();
                 dbos.cancelWorkflow(workflowId);
                 workLatch.countDown();
-
-                logger.info("2 counting down lotch") ;
                 testLatch.countDown();
-                logger.info("2 after counting down lotch") ;
-
 
             } catch(InterruptedException ie) {
                 logger.error(ie.toString()) ;
             }
-            logger.info("Exiting thread 2") ;
         }) ;
 
-        logger.info("Before test latch");
         testLatch.await();
-        logger.info("after test latch");
-
-
 
         WorkflowHandle<?> handle = dbos.resumeWorkflow(workflowId) ;
 
