@@ -776,7 +776,7 @@ public class WorkflowDAO {
                 // Create entry for forked workflow
                 insertForkedWorkflowStatus(connection, forkedWorkflowId, status, applicationVersion);
 
-                // Copy operation outputs if starting from step > 1
+                // Copy operation outputs if starting from step > 0
                 if (startStep > 0) {
                     copyOperationOutputs(connection, originalWorkflowId, forkedWorkflowId, startStep);
                 }
