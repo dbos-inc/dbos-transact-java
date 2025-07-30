@@ -62,14 +62,11 @@ public class ForkServiceImpl implements ForkService {
         forkService.stepOne("one");
         forkService.stepTwo(2);
 
-        // String id1 = UUID.randomUUID().toString();
         try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").async().build())) {
             forkService.child1(25);
         }
 
-       DBOS.retrieveWorkflow("child1").getResult();
-
-        // String id2 = UUID.randomUUID().toString();
+        DBOS.retrieveWorkflow("child1").getResult();
         try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").async().build())) {
             forkService.child2(25.75f);
         }
