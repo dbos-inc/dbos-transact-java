@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -756,14 +757,19 @@ public class WorkflowDAO {
     }
 
     public String forkWorkflow(String originalWorkflowId,
-                               String forkedWorkflowId,
                                int startStep,
-                               String applicationVersion) throws SQLException {
+                               ForkOptions options) throws SQLException {
 
+        String forkedWorkflowId = options.getForkedWorkflowId() == null ?
+                                        UUID.randomUUID().toString() : options.getForkedWorkflowId() ;
 
         logger.info("Original " + originalWorkflowId + "forked " + forkedWorkflowId) ;
 
+        String applicationVersion = options.getApplicationVersion() ;
+
         WorkflowStatus status = getWorkflowStatus(originalWorkflowId) ;
+
+        long timeoutMs = options.getTimeoutMS() == 0 ? status.getWorkflowTimeoutMs() : options.getTimeoutMS();
 
         if (status == null) {
             throw new NonExistentWorkflowException(originalWorkflowId);
@@ -774,7 +780,7 @@ public class WorkflowDAO {
 
             try {
                 // Create entry for forked workflow
-                insertForkedWorkflowStatus(connection, forkedWorkflowId, status, applicationVersion);
+                insertForkedWorkflowStatus(connection, forkedWorkflowId, status, applicationVersion, timeoutMs);
 
                 // Copy operation outputs if starting from step > 0
                 if (startStep > 0) {
@@ -794,11 +800,12 @@ public class WorkflowDAO {
     private void insertForkedWorkflowStatus(Connection connection,
                                             String forkedWorkflowId,
                                             WorkflowStatus originalStatus,
-                                            String applicationVersion) throws SQLException {
+                                            String applicationVersion,
+                                            long timeoutMs) throws SQLException {
 
         long workflowDeadlineEpoch = 0 ;
-        if (originalStatus.getWorkflowTimeoutMs() > 0) {
-            workflowDeadlineEpoch = System.currentTimeMillis() + originalStatus.getWorkflowTimeoutMs() ;
+        if (timeoutMs > 0) {
+            workflowDeadlineEpoch = System.currentTimeMillis() + timeoutMs ;
         }
 
         String sql = "INSERT INTO dbos.workflow_status ( " +
@@ -855,11 +862,11 @@ public class WorkflowDAO {
         }
     }
     
-    public String forkWorkflow(String originalWorkflowId,
+    /* public String forkWorkflow(String originalWorkflowId,
                                String forkedWorkflowId,
                                int startStep) throws SQLException {
         return forkWorkflow(originalWorkflowId, forkedWorkflowId, startStep, null);
-    }
+    } */
 
     private String getWorkflowStatus(Connection connection, String workflowId) throws SQLException {
         String sql = "SELECT status FROM dbos.workflow_status WHERE workflow_uuid = ?";

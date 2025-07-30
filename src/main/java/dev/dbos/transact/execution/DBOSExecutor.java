@@ -12,6 +12,7 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueRegistry;
 import dev.dbos.transact.queue.QueueService;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -513,7 +514,7 @@ public class DBOSExecutor {
 
     }
 
-    public WorkflowHandle<?> forkWorkflow(String workflowId, String forkedWorkflowId, int startStep, String applicationVersion) {
+    /* WorkflowHandle<?> forkWorkflow(String workflowId, String forkedWorkflowId, int startStep, String applicationVersion) {
 
         if (forkedWorkflowId == null) {
             forkedWorkflowId = UUID.randomUUID().toString();
@@ -529,6 +530,17 @@ public class DBOSExecutor {
 
         systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
         return retrieveWorkflow(newId);
-    }
+    } */
 
+    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
+
+        Supplier<String> forkFunction = () -> {
+            logger.info(String.format("Forking workflow:%s from step:%d ", workflowId, startStep));
+
+            return systemDatabase.forkWorkflow(workflowId, startStep, options);
+        };
+
+        String forkedId = systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
+        return retrieveWorkflow(forkedId);
+    }
 }

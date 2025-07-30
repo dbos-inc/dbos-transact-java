@@ -11,6 +11,7 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.notifications.GetWorkflowEventContext;
 import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -326,12 +327,11 @@ public class SystemDatabase {
     }
 
     public String forkWorkflow(String originalWorkflowId,
-                               String forkedWorkflowId,
                                int startStep,
-                               String applicationVersion) {
+                               ForkOptions options) {
 
         try {
-            return workflowDAO.forkWorkflow(originalWorkflowId, forkedWorkflowId, startStep, applicationVersion) ;
+            return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options) ;
         } catch (SQLException sq) {
             throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), sq.getMessage()) ;
         }

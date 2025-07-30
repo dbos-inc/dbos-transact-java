@@ -256,7 +256,8 @@ public class WorkflowMgmtTest {
     public void forkNonExistent() {
 
         try {
-            WorkflowHandle<?> rstatHandle = dbos.forkWorkflow("12345", 2);
+            ForkOptions options = new ForkOptions.Builder().build() ;
+            WorkflowHandle<?> rstatHandle = dbos.forkWorkflow("12345", 2, options);
             fail("An exceptions should have been thrown");
         } catch (Throwable t) {
             logger.info(t.getClass().getName()) ;
@@ -295,7 +296,8 @@ public class WorkflowMgmtTest {
 
         logger.info("First execution done starting fork") ;
 
-        WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 0);
+        ForkOptions foptions = new ForkOptions.Builder().build() ;
+        WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
         result = (String) rstatHandle.getResult() ;
         assertEquals("hellohello", result);
         assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
@@ -312,7 +314,7 @@ public class WorkflowMgmtTest {
 
         logger.info("first fork done . starting 2nd fork ") ;
 
-        rstatHandle = dbos.forkWorkflow(workflowId, 2);
+        rstatHandle = dbos.forkWorkflow(workflowId, 2, foptions);
         result = (String) rstatHandle.getResult() ;
         assertEquals("hellohello", result);
         assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
@@ -326,7 +328,7 @@ public class WorkflowMgmtTest {
 
         logger.info("Second fork done . starting 3rd fork ") ;
 
-        rstatHandle = dbos.forkWorkflow(workflowId, 4);
+        rstatHandle = dbos.forkWorkflow(workflowId, 4, foptions);
         result = (String) rstatHandle.getResult() ;
         assertEquals("hellohello", result);
         assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
@@ -373,7 +375,8 @@ public class WorkflowMgmtTest {
 
         logger.info("First execution done starting fork") ;
 
-        WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 0);
+        ForkOptions foptions = new ForkOptions.Builder().build() ;
+        WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
         result = (String) rstatHandle.getResult() ;
         assertEquals("hellohello", result);
         assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
@@ -393,7 +396,7 @@ public class WorkflowMgmtTest {
 
         logger.info("First execution done starting 2nd fork");
 
-        rstatHandle = dbos.forkWorkflow(workflowId, 3);
+        rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
         result = (String) rstatHandle.getResult() ;
         assertEquals("hellohello", result);
         assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
@@ -415,7 +418,7 @@ public class WorkflowMgmtTest {
 
         logger.info("First execution done starting 2nd fork");
 
-        rstatHandle = dbos.forkWorkflow(workflowId, 4);
+        rstatHandle = dbos.forkWorkflow(workflowId, 4, foptions);
         result = (String) rstatHandle.getResult() ;
         assertEquals("hellohello", result);
         assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
@@ -470,7 +473,8 @@ public class WorkflowMgmtTest {
 
         logger.info("First execution done starting fork");
 
-        WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 3);
+        ForkOptions foptions = new ForkOptions.Builder().build() ;
+        WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
         result = (String) rstatHandle.getResult();
 
         assertEquals("hellohello", result);
