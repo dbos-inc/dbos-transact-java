@@ -658,6 +658,28 @@ public class WorkflowDAO {
 
     }
 
+    public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) throws SQLException {
+        String sql = "SELECT child_workflow_id " +
+            " FROM dbos.operation_outputs " +
+            "WHERE workflow_uuid = ? AND function_id = ? " ;
+
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+
+            stmt.setString(1, workflowUuid);
+            stmt.setInt(2, functionId);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String childWorkflowId = rs.getString("child_workflow_id");
+                    return childWorkflowId != null ? Optional.of(childWorkflowId) : Optional.empty();
+                }
+                return Optional.empty();
+            }
+        }
+    }
+
     public void cancelWorkflow(String workflowId) throws SQLException {
 
         try (Connection conn = dataSource.getConnection()) {

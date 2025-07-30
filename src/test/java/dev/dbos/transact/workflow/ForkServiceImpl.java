@@ -1,5 +1,10 @@
 package dev.dbos.transact.workflow;
 
+import dev.dbos.transact.context.DBOSOptions;
+import dev.dbos.transact.context.SetDBOSOptions;
+
+import java.util.UUID;
+
 public class ForkServiceImpl implements ForkService {
 
     private ForkService forkService;
@@ -9,6 +14,8 @@ public class ForkServiceImpl implements ForkService {
     int step3Count ;
     int step4Count ;
     int step5Count ;
+    int child1Count ;
+    int child2Count ;
 
     public ForkServiceImpl() {
 
@@ -26,6 +33,25 @@ public class ForkServiceImpl implements ForkService {
         forkService.stepFour(Double.valueOf(23.73));
         forkService.stepFive(false);
 
+        return input+input;
+    }
+
+    @Workflow(name = "parent")
+    public String parentChild(String input) {
+
+        forkService.stepOne("one");
+        forkService.stepTwo(2);
+
+        String id1 = UUID.randomUUID().toString();
+        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder(id1).build())) {
+            forkService.child1(25);
+        }
+        String id2 = UUID.randomUUID().toString();
+        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder(id2).build())) {
+            forkService.child2(25.75f);
+        }
+
+        forkService.stepFive(false);
         return input+input;
     }
 
@@ -56,5 +82,17 @@ public class ForkServiceImpl implements ForkService {
     @Step(name = "five")
     public void stepFive(boolean b) {
         ++step5Count;
+    }
+
+    @Workflow(name = "child1")
+    public String child1(Integer number) {
+        ++child1Count ;
+        return String.valueOf(number);
+    }
+
+    @Workflow(name = "child2")
+    public String child2(Float number) {
+        ++child2Count;
+        return String.valueOf(number);
     }
 }

@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.sql.SQLException;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
@@ -121,6 +122,9 @@ public class DBOSExecutor {
 
         DBOSContext ctx = DBOSContextHolder.get();
         if (ctx.hasParent()) {
+
+
+
             systemDatabase.recordChildWorkflow(ctx.getParentWorkflowId(),
                                                 ctx.getWorkflowId(),
                                                 ctx.getParentFunctionId(),
@@ -156,6 +160,14 @@ public class DBOSExecutor {
         String wfid = workflowId ;
 
         WorkflowInitResult initResult = null;
+
+        DBOSContext ctx = DBOSContextHolder.get() ;
+        if (ctx.hasParent()) {
+            Optional<String> childId = systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId()) ;
+            if (childId.isPresent()) {
+                return (T)systemDatabase.awaitWorkflowResult(childId.get()) ;
+            }
+        }
 
         initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, null);
 

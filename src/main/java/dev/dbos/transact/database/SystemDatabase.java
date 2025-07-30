@@ -239,6 +239,16 @@ public class SystemDatabase {
         workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);
     }
 
+    public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
+
+        try {
+            return workflowDAO.checkChildWorkflow(workflowUuid, functionId) ;
+        } catch (SQLException sq) {
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+        }
+
+    }
+
     public void send(String workflowId, int functionId, String destinationId,
                      Object message, String topic)  {
 
