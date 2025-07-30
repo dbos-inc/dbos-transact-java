@@ -373,7 +373,7 @@ public class DBOS {
      *
      * @param workflowId Original workflow Id
      * @param startStep Start execution from this step. Prior steps copied over
-     * @param options Forkoptions forkedWorkflowId, applicationVersion, timeout
+     * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
      * @return handle to the workflow
      */
     public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, ForkOptions options) {

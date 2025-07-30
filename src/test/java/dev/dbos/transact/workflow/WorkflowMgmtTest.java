@@ -375,12 +375,12 @@ public class WorkflowMgmtTest {
 
         logger.info("First execution done starting fork") ;
 
-        ForkOptions foptions = new ForkOptions.Builder().build() ;
+        ForkOptions foptions = new ForkOptions.Builder().forkedWorkflowId("f1").build() ;
         WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
         result = (String) rstatHandle.getResult() ;
         assertEquals("hellohello", result);
         assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertTrue(rstatHandle.getWorkflowId() != workflowId);
+        assertEquals(rstatHandle.getWorkflowId(), "f1");
 
         assertEquals(2, impl.step1Count) ;
         assertEquals(2, impl.step2Count) ;
@@ -396,11 +396,12 @@ public class WorkflowMgmtTest {
 
         logger.info("First execution done starting 2nd fork");
 
+        foptions = new ForkOptions.Builder().forkedWorkflowId("f2").build() ;
         rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
         result = (String) rstatHandle.getResult() ;
         assertEquals("hellohello", result);
         assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertTrue(rstatHandle.getWorkflowId() != workflowId);
+        assertEquals(rstatHandle.getWorkflowId(), "f2");
 
         assertEquals(2, impl.step1Count) ;
         assertEquals(2, impl.step2Count) ;
@@ -416,13 +417,14 @@ public class WorkflowMgmtTest {
         assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
         assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
 
-        logger.info("First execution done starting 2nd fork");
+        logger.info("2nd execution done starting 3nd fork");
 
+        foptions = new ForkOptions.Builder().forkedWorkflowId("f3").build() ;
         rstatHandle = dbos.forkWorkflow(workflowId, 4, foptions);
         result = (String) rstatHandle.getResult() ;
         assertEquals("hellohello", result);
         assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertTrue(rstatHandle.getWorkflowId() != workflowId);
+        assertEquals(rstatHandle.getWorkflowId(),"f3");
 
         assertEquals(2, impl.step1Count) ;
         assertEquals(2, impl.step2Count) ;
