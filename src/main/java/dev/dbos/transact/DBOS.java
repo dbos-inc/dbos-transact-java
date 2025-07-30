@@ -3,6 +3,7 @@ package dev.dbos.transact;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.RecoveryService;
 import dev.dbos.transact.http.HttpServer;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
@@ -34,6 +35,7 @@ public class DBOS {
     private SchedulerService schedulerService ;
     private NotificationService notificationService ;
     private HttpServer httpServer ;
+    private RecoveryService recoveryService;
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
@@ -214,7 +216,6 @@ public class DBOS {
             schedulerService.start();
         }
 
-
         if (notificationService == null) {
             notificationService = SystemDatabase.getInstance().getNotificationService();
             notificationService.start();
@@ -236,6 +237,9 @@ public class DBOS {
             }
         }
 
+        recoveryService = new RecoveryService(dbosExecutor, SystemDatabase.getInstance());
+        recoveryService.start();
+
     }
 
 
@@ -243,6 +247,8 @@ public class DBOS {
     public void shutdown() {
 
         if (isShutdown.compareAndSet(false, true)) {
+
+            recoveryService.stop();
 
             if (queueService != null) {
                 queueService.stop();
