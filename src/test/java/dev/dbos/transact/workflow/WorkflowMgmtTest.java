@@ -412,15 +412,15 @@ public class WorkflowMgmtTest {
 
         assertEquals(2, impl.step1Count) ;
         assertEquals(2, impl.step2Count) ;
-        assertEquals(2, impl.child1Count) ;
-        assertEquals(2, impl.child2Count) ;
+        assertEquals(1, impl.child1Count) ;
+        assertEquals(1, impl.child2Count) ;
         assertEquals(2, impl.step5Count) ;
 
         List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId()) ;
         assertEquals(5, steps.size()) ;
 
-        assertTrue(!stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
-        assertTrue(!stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
 
         logger.info("First execution done starting 2nd fork");
 
@@ -432,8 +432,8 @@ public class WorkflowMgmtTest {
 
         assertEquals(2, impl.step1Count) ;
         assertEquals(2, impl.step2Count) ;
-        assertEquals(2, impl.child1Count) ;
-        assertEquals(3, impl.child2Count) ;
+        assertEquals(1, impl.child1Count) ;
+        assertEquals(1, impl.child2Count) ;
         assertEquals(3, impl.step5Count) ;
 
         steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId()) ;
@@ -442,7 +442,7 @@ public class WorkflowMgmtTest {
         logger.info(stepsRun0.get(2).getChildWorkflowId() ) ;
         logger.info(steps.get(2).getChildWorkflowId()) ;
         assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
-        assertTrue(!stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
 
         logger.info("First execution done starting 2nd fork");
 
@@ -454,8 +454,8 @@ public class WorkflowMgmtTest {
 
         assertEquals(2, impl.step1Count) ;
         assertEquals(2, impl.step2Count) ;
-        assertEquals(2, impl.child1Count) ;
-        assertEquals(3, impl.child2Count) ;
+        assertEquals(1, impl.child1Count) ;
+        assertEquals(1, impl.child2Count) ;
         assertEquals(4, impl.step5Count) ;
 
         steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId()) ;

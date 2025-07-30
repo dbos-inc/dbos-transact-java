@@ -43,12 +43,11 @@ public class ForkServiceImpl implements ForkService {
         forkService.stepOne("one");
         forkService.stepTwo(2);
 
-        String id1 = UUID.randomUUID().toString();
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder(id1).build())) {
+        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").build())) {
             forkService.child1(25);
         }
-        String id2 = UUID.randomUUID().toString();
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder(id2).build())) {
+
+        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").build())) {
             forkService.child2(25.75f);
         }
 
