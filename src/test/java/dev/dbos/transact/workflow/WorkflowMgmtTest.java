@@ -250,44 +250,13 @@ public class WorkflowMgmtTest {
 
     }
 
-    @Test
-    public void testRestart() {
 
-        ForkService forkService = dbos.<ForkService>Workflow()
-                .interfaceClass(ForkService.class)
-                .implementation(new ForkServiceImpl())
-                .build();
-        forkService.setForkService(forkService);
-
-        String workflowId = "wfid1" ;
-        DBOSOptions options = new DBOSOptions.Builder(workflowId).build();
-        String result ;
-        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
-            result = forkService.simpleWorkflow("hello");
-        }
-
-        assertEquals("hellohello", result);
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
-
-        WorkflowHandle<?> rstatHandle = dbos.restartWorkflow(workflowId);
-        result = (String) rstatHandle.getResult() ;
-        assertEquals("hellohello", result);
-
-        assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertTrue(rstatHandle.getWorkflowId() != workflowId);
-
-        List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId()) ;
-        assertEquals(5, steps.size()) ;
-
-
-    }
 
     @Test
-    public void restartNonExistent() {
+    public void forkNonExistent() {
 
         try {
-            WorkflowHandle<?> rstatHandle = dbos.restartWorkflow("12345");
+            WorkflowHandle<?> rstatHandle = dbos.forkWorkflow("12345", 2);
             fail("An exceptions should have been thrown");
         } catch (Throwable t) {
             logger.info(t.getClass().getName()) ;

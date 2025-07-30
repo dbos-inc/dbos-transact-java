@@ -513,19 +513,22 @@ public class DBOSExecutor {
 
     }
 
-    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, String applicationVersion) {
+    public WorkflowHandle<?> forkWorkflow(String workflowId, String forkedWorkflowId, int startStep, String applicationVersion) {
 
-        String newId = UUID.randomUUID().toString();
+        if (forkedWorkflowId == null) {
+            forkedWorkflowId = UUID.randomUUID().toString();
+        }
+
+        final String newId = forkedWorkflowId ;
+
         Supplier<String> forkFunction = () -> {
             logger.info(String.format("Forking workflow:%s from step:%d ", workflowId, startStep));
 
             return systemDatabase.forkWorkflow(workflowId, newId, startStep, applicationVersion);
         };
 
-        String forkedWorkflowId = systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
-
-        return retrieveWorkflow(forkedWorkflowId);
-
+        systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
+        return retrieveWorkflow(newId);
     }
 
 }

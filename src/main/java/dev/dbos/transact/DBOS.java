@@ -371,12 +371,26 @@ public class DBOS {
      * step are copied over
      *
      * @param workflowId Original workflow Id
+     * @param forkedWorkflowId Id of the new workflow
+     * @param startStep Start execution from this step. Prior steps copied over
+     * @param applicationVersion The version of the application to run
+     * @return handle to the workflow
+     */
+    public WorkflowHandle<?> forkWorkflow(String workflowId, String forkedWorkflowId, int startStep, String applicationVersion) {
+        return this.dbosExecutor.forkWorkflow(workflowId, forkedWorkflowId, startStep, applicationVersion) ;
+    }
+
+    /**
+     * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the provided
+     * step are copied over
+     *
+     * @param workflowId Original workflow Id
      * @param startStep Start execution from this step. Prior steps copied over
      * @param applicationVersion The version of the application to run
      * @return handle to the workflow
      */
     public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, String applicationVersion) {
-        return this.dbosExecutor.forkWorkflow(workflowId, startStep, applicationVersion) ;
+        return this.dbosExecutor.forkWorkflow(workflowId, null, startStep, applicationVersion) ;
     }
 
     /**
@@ -390,19 +404,9 @@ public class DBOS {
      */
 
     public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep) {
-        return this.dbosExecutor.forkWorkflow(workflowId, startStep, null) ;
+        return this.dbosExecutor.forkWorkflow(workflowId, null, startStep, null) ;
     }
 
-    /**
-     * Rerun this workflow from the start with another generated workflow Id
-     *
-     * @param workflowId Original workflow id
-     * @return handle to the workflow
-     */
-
-    public WorkflowHandle<?> restartWorkflow(String workflowId) {
-        return this.dbosExecutor.forkWorkflow(workflowId, 0, null) ;
-    }
 
 }
 
