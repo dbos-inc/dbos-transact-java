@@ -122,9 +122,6 @@ public class DBOSExecutor {
 
         DBOSContext ctx = DBOSContextHolder.get();
         if (ctx.hasParent()) {
-
-
-
             systemDatabase.recordChildWorkflow(ctx.getParentWorkflowId(),
                                                 ctx.getWorkflowId(),
                                                 ctx.getParentFunctionId(),

@@ -766,7 +766,6 @@ public class WorkflowDAO {
         WorkflowStatus status = getWorkflowStatus(originalWorkflowId) ;
 
         if (status == null) {
-            logger.info("mjjjj throwing non existent");
             throw new NonExistentWorkflowException(originalWorkflowId);
         }
 
@@ -778,7 +777,7 @@ public class WorkflowDAO {
                 insertForkedWorkflowStatus(connection, forkedWorkflowId, status, applicationVersion);
 
                 // Copy operation outputs if starting from step > 1
-                if (startStep > 1) {
+                if (startStep > 0) {
                     copyOperationOutputs(connection, originalWorkflowId, forkedWorkflowId, startStep);
                 }
 
