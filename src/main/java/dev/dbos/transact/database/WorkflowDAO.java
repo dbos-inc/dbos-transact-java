@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -658,6 +659,28 @@ public class WorkflowDAO {
 
     }
 
+    public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) throws SQLException {
+        String sql = "SELECT child_workflow_id " +
+            " FROM dbos.operation_outputs " +
+            "WHERE workflow_uuid = ? AND function_id = ? " ;
+
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+
+            stmt.setString(1, workflowUuid);
+            stmt.setInt(2, functionId);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String childWorkflowId = rs.getString("child_workflow_id");
+                    return childWorkflowId != null ? Optional.of(childWorkflowId) : Optional.empty();
+                }
+                return Optional.empty();
+            }
+        }
+    }
+
     public void cancelWorkflow(String workflowId) throws SQLException {
 
         try (Connection conn = dataSource.getConnection()) {
@@ -732,6 +755,118 @@ public class WorkflowDAO {
             }
         }
     }
+
+    public String forkWorkflow(String originalWorkflowId,
+                               int startStep,
+                               ForkOptions options) throws SQLException {
+
+        String forkedWorkflowId = options.getForkedWorkflowId() == null ?
+                                        UUID.randomUUID().toString() : options.getForkedWorkflowId() ;
+
+        logger.info("Original " + originalWorkflowId + "forked " + forkedWorkflowId) ;
+
+        String applicationVersion = options.getApplicationVersion() ;
+
+        WorkflowStatus status = getWorkflowStatus(originalWorkflowId) ;
+
+        long timeoutMs = options.getTimeoutMS() == 0 ? status.getWorkflowTimeoutMs() : options.getTimeoutMS();
+
+        if (status == null) {
+            throw new NonExistentWorkflowException(originalWorkflowId);
+        }
+
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+
+            try {
+                // Create entry for forked workflow
+                insertForkedWorkflowStatus(connection, forkedWorkflowId, status, applicationVersion, timeoutMs);
+
+                // Copy operation outputs if starting from step > 0
+                if (startStep > 0) {
+                    copyOperationOutputs(connection, originalWorkflowId, forkedWorkflowId, startStep);
+                }
+
+                connection.commit();
+                return forkedWorkflowId;
+
+            } catch (SQLException e) {
+                connection.rollback();
+                throw e;
+            }
+        }
+    }
+
+    private void insertForkedWorkflowStatus(Connection connection,
+                                            String forkedWorkflowId,
+                                            WorkflowStatus originalStatus,
+                                            String applicationVersion,
+                                            long timeoutMs) throws SQLException {
+
+        long workflowDeadlineEpoch = 0 ;
+        if (timeoutMs > 0) {
+            workflowDeadlineEpoch = System.currentTimeMillis() + timeoutMs ;
+        }
+
+        String sql = "INSERT INTO dbos.workflow_status ( " +
+                " workflow_uuid, status, name, class_name, config_name, application_version, application_id, " +
+                " authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_deadline_epoch_ms, workflow_timeout_ms " +
+                " ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " ;
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, forkedWorkflowId);
+            stmt.setString(2, WorkflowState.ENQUEUED.name());
+            stmt.setString(3, originalStatus.getName());
+            stmt.setString(4, originalStatus.getClassName());
+            stmt.setString(5, originalStatus.getConfigName());
+
+            // Use provided application version or fall back to original
+            String appVersion = applicationVersion != null ?
+                    applicationVersion : originalStatus.getAppVersion();
+            stmt.setString(6, appVersion);
+
+            stmt.setString(7, originalStatus.getAppId());
+            stmt.setString(8, originalStatus.getAuthenticatedUser());
+            stmt.setString(9, JSONUtil.serializeArray(originalStatus.getAuthenticatedRoles()));
+            stmt.setString(10, originalStatus.getAssumedRole());
+            stmt.setString(11, Constants.DBOS_INTERNAL_QUEUE);
+            stmt.setString(12, JSONUtil.serializeArray(originalStatus.getInput()));
+            stmt.setLong(13, workflowDeadlineEpoch);
+            stmt.setLong(14, originalStatus.getWorkflowTimeoutMs());
+
+
+            stmt.executeUpdate();
+        }
+    }
+
+    private void copyOperationOutputs(Connection connection,
+                                      String originalWorkflowId,
+                                      String forkedWorkflowId,
+                                      int startStep) throws SQLException {
+
+        String sql = "INSERT INTO dbos.operation_outputs ( " +
+                " workflow_uuid, function_id, output, error, function_name, child_workflow_id) " +
+                " SELECT ? as workflow_uuid, function_id, output, error, function_name, child_workflow_id " +
+                " FROM dbos.operation_outputs " +
+                " WHERE workflow_uuid = ? " +
+                " AND function_id < ? " ;
+
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, forkedWorkflowId);
+            stmt.setString(2, originalWorkflowId);
+            stmt.setInt(3, startStep);
+
+            int rowsCopied = stmt.executeUpdate();
+            System.out.println("Copied " + rowsCopied + " operation outputs to forked workflow");
+        }
+    }
+    
+    /* public String forkWorkflow(String originalWorkflowId,
+                               String forkedWorkflowId,
+                               int startStep) throws SQLException {
+        return forkWorkflow(originalWorkflowId, forkedWorkflowId, startStep, null);
+    } */
 
     private String getWorkflowStatus(Connection connection, String workflowId) throws SQLException {
         String sql = "SELECT status FROM dbos.workflow_status WHERE workflow_uuid = ?";

@@ -14,6 +14,7 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -365,5 +366,20 @@ public class DBOS {
     public void cancelWorkflow(String workflowId) {
         this.dbosExecutor.cancelWorkflow(workflowId);
     }
+
+    /**
+     * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the provided
+     * step are copied over
+     *
+     * @param workflowId Original workflow Id
+     * @param startStep Start execution from this step. Prior steps copied over
+     * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
+     * @return handle to the workflow
+     */
+    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
+        return this.dbosExecutor.forkWorkflow(workflowId, startStep, options) ;
+    }
+
+
 }
 

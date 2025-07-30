@@ -11,6 +11,7 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.notifications.GetWorkflowEventContext;
 import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -239,6 +240,16 @@ public class SystemDatabase {
         workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);
     }
 
+    public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
+
+        try {
+            return workflowDAO.checkChildWorkflow(workflowUuid, functionId) ;
+        } catch (SQLException sq) {
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+        }
+
+    }
+
     public void send(String workflowId, int functionId, String destinationId,
                      Object message, String topic)  {
 
@@ -315,6 +326,17 @@ public class SystemDatabase {
 
     }
 
+    public String forkWorkflow(String originalWorkflowId,
+                               int startStep,
+                               ForkOptions options) {
+
+        try {
+            return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options) ;
+        } catch (SQLException sq) {
+            throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), sq.getMessage()) ;
+        }
+    }
+
 
     public <T> T callFunctionAsStep(Supplier<T> fn, String functionName)  {
         DBOSContext ctx = DBOSContextHolder.get();
@@ -350,7 +372,12 @@ public class SystemDatabase {
                     StepResult r = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError);
                     stepsDAO.recordStepResultTxn(r);
                 }
-                throw new DBOSException(UNEXPECTED.getCode(), "Function execution failed: " + functionName, e);
+
+                if ( e instanceof NonExistentWorkflowException) {
+                    throw e;
+                } else {
+                    throw new DBOSException(UNEXPECTED.getCode(), "Function execution failed: " + functionName, e);
+                }
             }
 
             // If we're in a workflow, record the successful result

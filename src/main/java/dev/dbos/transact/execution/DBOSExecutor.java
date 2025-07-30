@@ -12,6 +12,7 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueRegistry;
 import dev.dbos.transact.queue.QueueService;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -25,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.sql.SQLException;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
@@ -81,7 +83,6 @@ public class DBOSExecutor {
 
         long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs() ;
         long workflowDeadlineEpoch = 0 ;
-
         if (workflowTimeoutMs > 0) {
             workflowDeadlineEpoch = System.currentTimeMillis() + workflowTimeoutMs ;
         }
@@ -157,6 +158,14 @@ public class DBOSExecutor {
         String wfid = workflowId ;
 
         WorkflowInitResult initResult = null;
+
+        DBOSContext ctx = DBOSContextHolder.get() ;
+        if (ctx.hasParent()) {
+            Optional<String> childId = systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId()) ;
+            if (childId.isPresent()) {
+                return (T)systemDatabase.awaitWorkflowResult(childId.get()) ;
+            }
+        }
 
         initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfid, null);
 
@@ -249,6 +258,16 @@ public class DBOSExecutor {
 
         final String wfId = workflowId ;
 
+
+        if (ctx.hasParent()) {
+            Optional<String> childId = systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId()) ;
+            if (childId.isPresent()) {
+                logger.info("child Id is present " + childId) ;
+                return new WorkflowHandleDBPoll<>(childId.get(), systemDatabase);
+            }
+        }
+
+
         WorkflowInitResult initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfId, null);
 
         if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
@@ -318,6 +337,7 @@ public class DBOSExecutor {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String wfid = ctx.getWorkflowId() ;
+
 
         if (wfid == null) {
             wfid = UUID.randomUUID().toString();
@@ -494,4 +514,33 @@ public class DBOSExecutor {
 
     }
 
+    /* WorkflowHandle<?> forkWorkflow(String workflowId, String forkedWorkflowId, int startStep, String applicationVersion) {
+
+        if (forkedWorkflowId == null) {
+            forkedWorkflowId = UUID.randomUUID().toString();
+        }
+
+        final String newId = forkedWorkflowId ;
+
+        Supplier<String> forkFunction = () -> {
+            logger.info(String.format("Forking workflow:%s from step:%d ", workflowId, startStep));
+
+            return systemDatabase.forkWorkflow(workflowId, newId, startStep, applicationVersion);
+        };
+
+        systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
+        return retrieveWorkflow(newId);
+    } */
+
+    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
+
+        Supplier<String> forkFunction = () -> {
+            logger.info(String.format("Forking workflow:%s from step:%d ", workflowId, startStep));
+
+            return systemDatabase.forkWorkflow(workflowId, startStep, options);
+        };
+
+        String forkedId = systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
+        return retrieveWorkflow(forkedId);
+    }
 }

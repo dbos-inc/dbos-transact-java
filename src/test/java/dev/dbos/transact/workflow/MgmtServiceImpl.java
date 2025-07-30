@@ -44,17 +44,17 @@ public class MgmtServiceImpl implements MgmtService{
     }
 
     @Step(name = "one")
-    public synchronized void stepOne() {
+    public void stepOne() {
         ++stepsExecuted;
     }
 
     @Step(name = "two")
-    public synchronized void stepTwo() {
+    public void stepTwo() {
         ++stepsExecuted;
     }
 
     @Step(name = "three")
-    public synchronized void stepThree() {
+    public void stepThree() {
         ++stepsExecuted;
     }
 

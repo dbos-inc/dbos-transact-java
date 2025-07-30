@@ -12,7 +12,8 @@ public enum ErrorCode {
     UNEXPECTED_STEP(8),
     WORKFLOW_FUNCTION_NOT_FOUND(9),
     SLEEP_NOT_IN_WORKFLOW(10),
-    RESUME_WORKFLOW_ERROR(11);
+    RESUME_WORKFLOW_ERROR(11),
+    FORK_WORKFLOW_ERROR(12) ;
 
     private int code ;
 
