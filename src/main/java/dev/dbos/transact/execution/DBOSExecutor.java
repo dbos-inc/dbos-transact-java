@@ -260,6 +260,16 @@ public class DBOSExecutor {
 
         final String wfId = workflowId ;
 
+
+        if (ctx.hasParent()) {
+            Optional<String> childId = systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId()) ;
+            if (childId.isPresent()) {
+                logger.info("child Id is present " + childId) ;
+                return new WorkflowHandleDBPoll<>(childId.get(), systemDatabase);
+            }
+        }
+
+
         WorkflowInitResult initResult = preInvokeWorkflow(workflowName, targetClassName,  args, wfId, null);
 
         if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
@@ -329,6 +339,7 @@ public class DBOSExecutor {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String wfid = ctx.getWorkflowId() ;
+
 
         if (wfid == null) {
             wfid = UUID.randomUUID().toString();

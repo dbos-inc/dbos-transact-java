@@ -4,6 +4,7 @@ public interface ForkService {
 
     String simpleWorkflow(String input);
     String parentChild(String input);
+    String parentChildAsync(String input);
 
     String stepOne(String input) ;
     int stepTwo(Integer input) ;

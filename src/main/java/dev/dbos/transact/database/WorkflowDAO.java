@@ -577,6 +577,8 @@ public class WorkflowDAO {
 
         while (true) {
 
+            logger.info("Await tring to get result for workflow " + workflowId) ;
+
             try (Connection connection = dataSource.getConnection();
                  PreparedStatement stmt = connection.prepareStatement(sql)) {
 

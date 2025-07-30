@@ -468,5 +468,58 @@ public class WorkflowMgmtTest {
 
     }
 
+    @Test
+    public void testParentChildAsyncFork() {
+
+        ForkServiceImpl impl = new ForkServiceImpl();
+
+        ForkService forkService = dbos.<ForkService>Workflow()
+                .interfaceClass(ForkService.class)
+                .implementation(impl)
+                .build();
+        forkService.setForkService(forkService);
+
+        String workflowId = "wfid1";
+        DBOSOptions options = new DBOSOptions.Builder(workflowId).build();
+        String result;
+        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+            result = forkService.parentChildAsync("hello");
+        }
+
+        assertEquals("hellohello", result);
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+
+        assertEquals(1, impl.step1Count);
+        assertEquals(1, impl.step2Count);
+        assertEquals(1, impl.child1Count);
+        assertEquals(1, impl.child2Count);
+        assertEquals(1, impl.step5Count);
+
+        List<StepInfo> stepsRun0 = systemDatabase.listWorkflowSteps(workflowId);
+        assertEquals(5, stepsRun0.size());
+
+        logger.info("First execution done starting fork");
+
+        WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 3);
+        result = (String) rstatHandle.getResult();
+
+        assertEquals("hellohello", result);
+        assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
+        assertTrue(rstatHandle.getWorkflowId() != workflowId);
+
+        assertEquals(1, impl.step1Count);
+        assertEquals(1, impl.step2Count);
+        assertEquals(1, impl.child1Count);
+        assertEquals(1, impl.child2Count); // 1 because the wf already executed even if we did not copy the step
+        assertEquals(2, impl.step5Count);
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
+        assertEquals(5, steps.size());
+
+        assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+
+    }
 
 }
