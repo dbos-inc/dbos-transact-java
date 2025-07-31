@@ -326,14 +326,11 @@ class DBOSExecutorTest {
         updateStepEndTime(dataSource, wfid, steps.get(0).getFunctionId(), endTimeAsJson);
 
         long starttime = System.currentTimeMillis();
-        System.out.println("Start time is " + starttime) ;
         WorkflowHandle h = dbosExecutor.executeWorkflowById(wfid) ;
         h.getResult();
 
         long duration = System.currentTimeMillis() - starttime ;
-        System.out.println("duratuin is " + duration);
         assertTrue(duration >= 1000);
-
     }
 
 
