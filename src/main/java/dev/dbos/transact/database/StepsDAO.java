@@ -63,7 +63,7 @@ public class StepsDAO {
         } catch (SQLException e) {
             if ("23505".equals(e.getSQLState())) {
                 throw new DBOSWorkflowConflictException(result.getWorkflowId(),
-                        String.format("Workflow %s already exists", result.getWorkflowId()));
+                        String.format("Workflow %s step %d already exists", result.getWorkflowId(), result.getFunctionId()));
             } else {
                 throw e;
             }

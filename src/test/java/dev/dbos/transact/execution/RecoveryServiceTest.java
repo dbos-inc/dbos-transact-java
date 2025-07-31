@@ -5,13 +5,17 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
+import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -28,6 +32,7 @@ class RecoveryServiceTest {
     private static SystemDatabase systemDatabase ;
     private DBOSExecutor dbosExecutor;
     private RecoveryService recoveryService ;
+    Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
     @BeforeAll
     public static void onetimeBefore() throws SQLException {
@@ -42,23 +47,11 @@ class RecoveryServiceTest {
                 .maximumPoolSize(2)
                 .build();
 
-        String sysDb = dbosConfig.getSysDbName();
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
-             Statement stmt = conn.createStatement()) {
-
-            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
-            String createDbSql = String.format("CREATE DATABASE %s", sysDb);
-            stmt.execute(dropDbSql);
-            stmt.execute(createDbSql);
-        }
-
-
-
     }
 
     @BeforeEach
     void setUp() throws SQLException{
+        DBUtils.recreateDB(dbosConfig);
         DBOS.initialize(dbosConfig);
         dbos = DBOS.getInstance();
         RecoveryServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
@@ -68,7 +61,6 @@ class RecoveryServiceTest {
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
-        DBUtils.clearTables(dataSource);
     }
 
     @AfterEach
@@ -127,6 +119,55 @@ class RecoveryServiceTest {
 
     }
 
+    @Test
+    public void recoveryThreadTest() throws SQLException {
+
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
+
+
+        String wfid = "wf-123";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            executingService.workflowMethod("test-item");
+        }
+        wfid = "wf-124";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            executingService.workflowMethod("test-item");
+        }
+
+        setWorkflowStateToPending(dataSource);
+
+        WorkflowStatus s = systemDatabase.getWorkflowStatus("wf-123");
+        assertEquals(WorkflowState.PENDING.name(), s.getStatus());
+
+        dbos.shutdown();
+
+        DBOS.initialize(dbosConfig);
+        dbos = DBOS.getInstance();
+
+        dbos.launch();
+
+        // need to register again
+        // towatch: we are registering after launch. could lead to a race condition
+        // toimprove : allow registration before launch
+        executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
+
+
+        WorkflowHandle h = DBOS.retrieveWorkflow("wf-123") ;
+        h.getResult() ;
+        assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
+
+        h = DBOS.retrieveWorkflow("wf-124") ;
+        h.getResult() ;
+        assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
+
+    }
+
     private void setWorkflowStateToPending(DataSource ds) throws SQLException {
 
         String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? ;";
@@ -140,7 +181,7 @@ class RecoveryServiceTest {
             // Execute the update and get the number of rows affected
             int rowsAffected = pstmt.executeUpdate();
 
-            assertEquals(5, rowsAffected);
+            logger.info("Number of workflows made pending " + rowsAffected) ;
 
         }
     }

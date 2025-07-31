@@ -1,17 +1,30 @@
 package dev.dbos.transact.http.controllers;
 
 
+import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Path("/")
 public class AdminController {
+
+    private SystemDatabase systemDatabase ;
+    private DBOSExecutor dbosExecutor ;
+    Logger logger = LoggerFactory.getLogger(AdminController.class) ;
+
+    public AdminController(SystemDatabase s, DBOSExecutor e) {
+        this.systemDatabase = s;
+        this.dbosExecutor = e;
+    }
 
     @GET
     @Path("/healthz")
@@ -38,7 +51,8 @@ public class AdminController {
     @Path("/workflows/{workflowId}/steps")
     @Produces(MediaType.APPLICATION_JSON)
     public List<StepInfo> ListSteps(@PathParam("workflowId") String workflowId) {
-        return new ArrayList<>() ;
+        logger.info("Retrieving steps for workflow: " + workflowId) ;
+        return systemDatabase.listWorkflowSteps(workflowId) ;
     }
 
     @GET

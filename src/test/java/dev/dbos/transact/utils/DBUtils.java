@@ -8,9 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
+import java.sql.*;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,6 +47,9 @@ public class DBUtils {
         try (Connection connection = ds.getConnection()) {
             deleteOperations(connection);
             deleteWorkflowsTestHelper(connection); ;
+        } catch(Exception e) {
+            logger.info("Error clearing tables" + e.getMessage()) ;
+            throw e ;
         }
 
     }
@@ -105,5 +106,20 @@ public class DBUtils {
 
     public void closeDS(HikariDataSource ds) {
         ds.close();
+    }
+
+    public static void recreateDB(DBOSConfig dbosConfig) throws SQLException{
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
+
+        String sysDb = dbosConfig.getSysDbName();
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
+             Statement stmt = conn.createStatement()) {
+
+
+            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
+            String createDbSql = String.format("CREATE DATABASE %s", sysDb);
+            stmt.execute(dropDbSql);
+            stmt.execute(createDbSql);
+        }
     }
 }

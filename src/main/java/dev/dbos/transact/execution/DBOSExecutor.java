@@ -38,7 +38,7 @@ public class DBOSExecutor {
     private DBOSConfig config;
     private SystemDatabase systemDatabase;
     private ExecutorService executorService ;
-    private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(4);
+    private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
     private WorkflowRegistry workflowRegistry ;
     private QueueService queueService;
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
@@ -513,24 +513,6 @@ public class DBOSExecutor {
         systemDatabase.callFunctionAsStep(cancelFunction, "DBOS.resumeWorkflow");
 
     }
-
-    /* WorkflowHandle<?> forkWorkflow(String workflowId, String forkedWorkflowId, int startStep, String applicationVersion) {
-
-        if (forkedWorkflowId == null) {
-            forkedWorkflowId = UUID.randomUUID().toString();
-        }
-
-        final String newId = forkedWorkflowId ;
-
-        Supplier<String> forkFunction = () -> {
-            logger.info(String.format("Forking workflow:%s from step:%d ", workflowId, startStep));
-
-            return systemDatabase.forkWorkflow(workflowId, newId, startStep, applicationVersion);
-        };
-
-        systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
-        return retrieveWorkflow(newId);
-    } */
 
     public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
 

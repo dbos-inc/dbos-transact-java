@@ -21,11 +21,13 @@ public class HttpServer {
 
     private Tomcat tomcat;
     private int port;
+    private AdminController adminController;
 
     Logger logger = LoggerFactory.getLogger(HttpServer.class);
 
-    private HttpServer(int port) {
+    private HttpServer(int port, AdminController ac) {
         this.port = port == 0 ? 3001 : port;
+        this.adminController = ac ;
     }
 
     private void init() {
@@ -33,8 +35,8 @@ public class HttpServer {
         setUpContext();
     }
 
-    public static HttpServer getInstance(int port) {
-        HttpServer s = new HttpServer(port);
+    public static HttpServer getInstance(int port, AdminController ac) {
+        HttpServer s = new HttpServer(port, ac);
         s.init();
         return s;
 
@@ -75,7 +77,7 @@ public class HttpServer {
         Context context = tomcat.addContext(contextPath, docBase);
 
         ResourceConfig resourceConfig = new ResourceConfig() ;
-        resourceConfig.registerInstances(new AdminController()) ;
+        resourceConfig.registerInstances(adminController) ;
 
         // In future if we need to scan from a package
         //    resourceConfig.packages(pkg);

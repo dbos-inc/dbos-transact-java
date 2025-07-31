@@ -46,23 +46,11 @@ class DBOSExecutorTest {
                 .maximumPoolSize(2)
                 .build();
 
-        String sysDb = dbosConfig.getSysDbName();
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
-             Statement stmt = conn.createStatement()) {
-
-            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
-            String createDbSql = String.format("CREATE DATABASE %s", sysDb);
-            stmt.execute(dropDbSql);
-            stmt.execute(createDbSql);
-        }
-
-
-
     }
 
     @BeforeEach
     void setUp() throws SQLException{
+        DBUtils.recreateDB(dbosConfig);
         DBOS.initialize(dbosConfig);
         dbos = DBOS.getInstance();
         DBOSExecutorTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
@@ -71,7 +59,6 @@ class DBOSExecutorTest {
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
-        DBUtils.clearTables(dataSource);
     }
 
     @AfterEach
@@ -344,7 +331,6 @@ class DBOSExecutorTest {
 
         long duration = System.currentTimeMillis() - starttime ;
         assertTrue(duration >= 1000);
-
     }
 
 

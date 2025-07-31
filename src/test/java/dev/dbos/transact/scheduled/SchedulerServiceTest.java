@@ -48,21 +48,11 @@ class SchedulerServiceTest {
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
 
-        String sysDb = dbosConfig.getSysDbName();
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
-             Statement stmt = conn.createStatement()) {
-
-
-            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
-            String createDbSql = String.format("CREATE DATABASE %s", sysDb);
-            stmt.execute(dropDbSql);
-            stmt.execute(createDbSql);
-        }
-
     }
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
+        DBUtils.recreateDB(dbosConfig);
         SchedulerServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
         DBOS.initialize(dbosConfig);
         dbos = DBOS.getInstance();
@@ -76,7 +66,6 @@ class SchedulerServiceTest {
         queueService.setDbosExecutor(dbosExecutor);
         dbos.setQueueService(queueService);
         dbos.launch();
-        DBUtils.clearTables(dataSource);
     }
 
     @AfterEach
