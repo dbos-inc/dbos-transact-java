@@ -238,8 +238,8 @@ public class DBOS {
             }
         }
 
-        recoveryService = new RecoveryService(dbosExecutor, SystemDatabase.getInstance());
-        recoveryService.start();
+        // recoveryService = new RecoveryService(dbosExecutor, SystemDatabase.getInstance());
+        // recoveryService.start();
 
     }
 
@@ -249,7 +249,7 @@ public class DBOS {
 
         if (isShutdown.compareAndSet(false, true)) {
 
-            recoveryService.stop();
+            // recoveryService.stop();
 
             if (queueService != null) {
                 queueService.stop();
