@@ -1,6 +1,8 @@
 package dev.dbos.transact.http.controllers;
 
 
+import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -12,6 +14,9 @@ import java.util.List;
 
 @Path("/")
 public class AdminController {
+
+    private SystemDatabase systemDatabase ;
+    private DBOSExecutor dbosExecutor ;
 
     @GET
     @Path("/healthz")

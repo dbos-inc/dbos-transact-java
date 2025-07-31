@@ -49,6 +49,9 @@ public class DBUtils {
         try (Connection connection = ds.getConnection()) {
             deleteOperations(connection);
             deleteWorkflowsTestHelper(connection); ;
+        } catch(Exception e) {
+            logger.info("Error clearing tables" + e.getMessage()) ;
+            throw e ;
         }
 
     }
