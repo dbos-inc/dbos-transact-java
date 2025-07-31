@@ -249,7 +249,7 @@ public class DBOS {
 
         if (isShutdown.compareAndSet(false, true)) {
 
-            // recoveryService.stop();
+            recoveryService.stop();
 
             if (queueService != null) {
                 queueService.stop();

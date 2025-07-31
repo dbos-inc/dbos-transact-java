@@ -84,7 +84,7 @@ public class QueuesTest {
         queueService.setDbosExecutor(dbosExecutor);
         dbos.setQueueService(queueService);
         dbos.launch();
-        DBUtils.clearTables(dataSource);
+        // DBUtils.clearTables(dataSource);
     }
 
     @AfterEach

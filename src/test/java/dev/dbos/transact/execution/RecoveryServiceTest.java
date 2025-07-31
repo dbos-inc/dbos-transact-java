@@ -69,7 +69,7 @@ class RecoveryServiceTest {
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
-        DBUtils.clearTables(dataSource);
+        // DBUtils.clearTables(dataSource);
     }
 
     @AfterEach
