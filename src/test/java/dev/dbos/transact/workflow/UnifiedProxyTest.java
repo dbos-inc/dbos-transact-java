@@ -72,7 +72,6 @@ public class UnifiedProxyTest {
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
-        // DBUtils.clearTables(dataSource);
     }
 
     @AfterEach

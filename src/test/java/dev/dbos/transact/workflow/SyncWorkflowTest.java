@@ -40,19 +40,6 @@ public class SyncWorkflowTest {
                 .adminAwaitOnStart(false)
                 .build();
 
-        /* String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
-
-        String sysDb = dbosConfig.getSysDbName();
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
-             Statement stmt = conn.createStatement()) {
-
-
-            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
-            String createDbSql = String.format("CREATE DATABASE %s", sysDb);
-            stmt.execute(dropDbSql);
-            stmt.execute(createDbSql);
-        } */
-
     }
 
     @BeforeEach
@@ -66,7 +53,6 @@ public class SyncWorkflowTest {
         this.dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
-        // DBUtils.clearTables(dataSource);
     }
 
     @AfterEach
