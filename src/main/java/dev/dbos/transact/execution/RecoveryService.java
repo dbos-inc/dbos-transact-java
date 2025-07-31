@@ -67,8 +67,17 @@ public class RecoveryService {
             return;
         }
 
+        List<GetPendingWorkflowsOutput> workflows = new ArrayList<>();
+
+        try {
+            workflows = getPendingWorkflows() ;
+        } catch (SQLException e) {
+            logger.error("Error getting pending workflows", e.getMessage());
+        }
+
+        final List<GetPendingWorkflowsOutput> toRecover = workflows ;
         stopRequested = false;
-        recoveryThread = new Thread(this::startupRecoveryThread, "RecoveryService-Thread");
+        recoveryThread = new Thread(()->startupRecoveryThread(toRecover), "RecoveryService-Thread");
         recoveryThread.setDaemon(true);
         recoveryThread.start();
         logger.info("Recovery service started");
@@ -99,9 +108,9 @@ public class RecoveryService {
      * Background thread method that attempts to recover local pending workflows on startup.
      * This method runs continuously until stop is requested or all workflows are recovered.
      */
-    private void startupRecoveryThread() {
+    private void startupRecoveryThread(List<GetPendingWorkflowsOutput> wToRecover) {
         try {
-            List<GetPendingWorkflowsOutput> pendingWorkflows = new CopyOnWriteArrayList<>(getPendingWorkflows());
+            List<GetPendingWorkflowsOutput> pendingWorkflows = new CopyOnWriteArrayList<>(wToRecover);
 
             logger.info("Starting recovery thread " + pendingWorkflows.size()) ;
 
@@ -135,9 +144,7 @@ public class RecoveryService {
             if (!stopRequested && pendingWorkflows.isEmpty()) {
                 logger.info("All pending workflows recovered successfully");
             }
-
-        } catch (SQLException e) {
-            logger.error("Recovery could not complete due to SQL error", e);
+            
         } catch (Exception e) {
             logger.error("Unexpected error during workflow recovery", e);
         } finally {
