@@ -80,7 +80,7 @@ public class WorkflowMgmtTest {
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
-        DBUtils.clearTables(dataSource);
+        // DBUtils.clearTables(dataSource);
     }
 
     @AfterEach

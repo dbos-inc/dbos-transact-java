@@ -78,7 +78,7 @@ public class QueueChildWorkflowTest {
         dbos.setQueueService(queueService);
 
         dbos.launch();
-        DBUtils.clearTables(dataSource);
+        // DBUtils.clearTables(dataSource);
     }
 
     @AfterEach
