@@ -51,13 +51,15 @@ class DBOSExecutorTest {
     @BeforeEach
     void setUp() throws SQLException{
         DBUtils.recreateDB(dbosConfig);
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
+
+        // dbos = DBOS.getInstance();
         DBOSExecutorTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+        // dbos.setDbosExecutor(dbosExecutor);
+
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 
@@ -411,13 +413,14 @@ class DBOSExecutorTest {
     }
 
     void startDBOS() throws SQLException{
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
+
+        // dbos = DBOS.getInstance();
         DBOSExecutorTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+        // dbos.setDbosExecutor(dbosExecutor);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 }

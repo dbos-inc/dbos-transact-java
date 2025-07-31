@@ -34,7 +34,6 @@ class NotificationServiceTest {
     private DBOS dbos ;
     private static SystemDatabase systemDatabase ;
     private DBOSExecutor dbosExecutor;
-    private NotificationService notificationService;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -56,12 +55,11 @@ class NotificationServiceTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         NotificationServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 

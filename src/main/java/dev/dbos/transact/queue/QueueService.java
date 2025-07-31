@@ -27,9 +27,10 @@ public class QueueService {
 
     private Queue internalQueue ;
 
-    public QueueService(SystemDatabase systemDatabase) {
+    public QueueService(SystemDatabase systemDatabase, DBOSExecutor dbosExecutor) {
         this.systemDatabase = systemDatabase ;
         queueRegistry = new QueueRegistry();
+        this.dbosExecutor = dbosExecutor ;
     }
 
     public void setDbosExecutor(DBOSExecutor dbosExecutor) {

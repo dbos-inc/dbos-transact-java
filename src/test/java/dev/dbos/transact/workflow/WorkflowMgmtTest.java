@@ -60,12 +60,10 @@ public class WorkflowMgmtTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         WorkflowMgmtTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 

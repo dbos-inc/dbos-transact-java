@@ -48,7 +48,7 @@ public class EventsTest {
                 .maximumPoolSize(2)
                 .build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
+        /* String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
 
         String sysDb = dbosConfig.getSysDbName();
         try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
@@ -59,21 +59,21 @@ public class EventsTest {
             String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
-        }
+        } */
 
     }
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
+        DBUtils.recreateDB(dbosConfig);
         EventsTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null) ;
         dbos.launch();
-        DBUtils.clearTables(dataSource);
+        // DBUtils.clearTables(dataSource);
     }
 
     @AfterEach
