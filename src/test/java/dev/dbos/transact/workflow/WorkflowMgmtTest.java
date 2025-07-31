@@ -53,7 +53,7 @@ public class WorkflowMgmtTest {
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
                 .build();
-        
+
     }
 
     @BeforeEach
