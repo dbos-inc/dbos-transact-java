@@ -238,8 +238,8 @@ public class DBOS {
             }
         }
 
-        // recoveryService = new RecoveryService(dbosExecutor, SystemDatabase.getInstance());
-        // recoveryService.start();
+        recoveryService = new RecoveryService(dbosExecutor, SystemDatabase.getInstance());
+        recoveryService.start();
 
     }
 

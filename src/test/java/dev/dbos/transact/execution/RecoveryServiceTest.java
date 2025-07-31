@@ -42,7 +42,7 @@ class RecoveryServiceTest {
                 .maximumPoolSize(2)
                 .build();
 
-        String sysDb = dbosConfig.getSysDbName();
+        /* String sysDb = dbosConfig.getSysDbName();
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
         try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
              Statement stmt = conn.createStatement()) {
@@ -51,7 +51,7 @@ class RecoveryServiceTest {
             String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
-        }
+        } */
 
 
 
@@ -59,6 +59,7 @@ class RecoveryServiceTest {
 
     @BeforeEach
     void setUp() throws SQLException{
+        DBUtils.recreateDB(dbosConfig);
         DBOS.initialize(dbosConfig);
         dbos = DBOS.getInstance();
         RecoveryServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;

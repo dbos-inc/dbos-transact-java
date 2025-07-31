@@ -56,7 +56,7 @@ public class WorkflowMgmtTest {
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
 
-        String sysDb = dbosConfig.getSysDbName();
+        /* String sysDb = dbosConfig.getSysDbName();
         try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
              Statement stmt = conn.createStatement()) {
 
@@ -65,12 +65,13 @@ public class WorkflowMgmtTest {
             String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
-        }
+        } */
 
     }
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
+        DBUtils.recreateDB(dbosConfig);
         WorkflowMgmtTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
         DBOS.initialize(dbosConfig);
         dbos = DBOS.getInstance();

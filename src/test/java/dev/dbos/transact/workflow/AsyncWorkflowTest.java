@@ -45,7 +45,7 @@ public class AsyncWorkflowTest {
                 .adminAwaitOnStart(false)
                 .build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
+        /* String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
 
         String sysDb = dbosConfig.getSysDbName();
         try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
@@ -56,12 +56,13 @@ public class AsyncWorkflowTest {
             String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
-        }
+        } */
 
     }
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
+        DBUtils.recreateDB(dbosConfig);
         AsyncWorkflowTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
         DBOS.initialize(dbosConfig);
         dbos = DBOS.getInstance();

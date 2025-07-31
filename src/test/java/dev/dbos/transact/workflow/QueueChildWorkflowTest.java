@@ -49,8 +49,7 @@ public class QueueChildWorkflowTest {
                 .maximumPoolSize(2)
                 .build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
-
+        /* String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
         String sysDb = dbosConfig.getSysDbName();
         try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
              Statement stmt = conn.createStatement()) {
@@ -59,13 +58,14 @@ public class QueueChildWorkflowTest {
             String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
-        }
+        } */
 
 
     }
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
+        DBUtils.recreateDB(dbosConfig);
         dataSource = DBUtils.createDataSource(dbosConfig);
         DBOS.initialize(dbosConfig);
         dbos = DBOS.getInstance();

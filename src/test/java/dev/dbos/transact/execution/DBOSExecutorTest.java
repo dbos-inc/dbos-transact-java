@@ -46,7 +46,7 @@ class DBOSExecutorTest {
                 .maximumPoolSize(2)
                 .build();
 
-        String sysDb = dbosConfig.getSysDbName();
+        /* String sysDb = dbosConfig.getSysDbName();
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
         try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
              Statement stmt = conn.createStatement()) {
@@ -55,7 +55,7 @@ class DBOSExecutorTest {
             String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
-        }
+        } */
 
 
 
@@ -63,6 +63,7 @@ class DBOSExecutorTest {
 
     @BeforeEach
     void setUp() throws SQLException{
+        DBUtils.recreateDB(dbosConfig);
         DBOS.initialize(dbosConfig);
         dbos = DBOS.getInstance();
         DBOSExecutorTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
@@ -71,7 +72,7 @@ class DBOSExecutorTest {
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
-        DBUtils.clearTables(dataSource);
+        // DBUtils.clearTables(dataSource);
     }
 
     @AfterEach
@@ -339,10 +340,12 @@ class DBOSExecutorTest {
         updateStepEndTime(dataSource, wfid, steps.get(0).getFunctionId(), endTimeAsJson);
 
         long starttime = System.currentTimeMillis();
+        System.out.println("Start time is " + starttime) ;
         WorkflowHandle h = dbosExecutor.executeWorkflowById(wfid) ;
         h.getResult();
 
         long duration = System.currentTimeMillis() - starttime ;
+        System.out.println("duratuin is " + duration);
         assertTrue(duration >= 1000);
 
     }
