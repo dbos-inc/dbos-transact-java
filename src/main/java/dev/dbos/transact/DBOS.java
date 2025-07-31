@@ -5,6 +5,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RecoveryService;
 import dev.dbos.transact.http.HttpServer;
+import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.TransactInvocationHandler;
@@ -224,7 +225,7 @@ public class DBOS {
         }
 
         if (config.isHttp()) {
-            httpServer = HttpServer.getInstance(config.getHttpPort());
+            httpServer = HttpServer.getInstance(config.getHttpPort(), new AdminController(SystemDatabase.getInstance(), dbosExecutor));
              if (config.isHttpAwaitOnStart()) {
                  Thread httpThread = new Thread(() ->
                     {  logger.info("Start http in background thread") ;

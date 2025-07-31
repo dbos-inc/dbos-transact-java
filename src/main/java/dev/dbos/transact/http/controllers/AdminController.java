@@ -18,6 +18,11 @@ public class AdminController {
     private SystemDatabase systemDatabase ;
     private DBOSExecutor dbosExecutor ;
 
+    public AdminController(SystemDatabase s, DBOSExecutor e) {
+        this.systemDatabase = s;
+        this.dbosExecutor = e;
+    }
+
     @GET
     @Path("/healthz")
     @Produces(MediaType.TEXT_PLAIN)
