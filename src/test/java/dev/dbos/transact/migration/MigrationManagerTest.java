@@ -3,6 +3,7 @@ package dev.dbos.transact.migration;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migrations.MigrationManager;
+import dev.dbos.transact.utils.DBUtils;
 import org.junit.jupiter.api.*;
 import javax.sql.DataSource;
 import java.net.URL;
@@ -49,7 +50,8 @@ class MigrationManagerTest {
             stmt.execute(createDbSql);
         }
 
-        testDataSource = dbosConfig.createDataSource(dbosConfig.getSysDbName());
+        // testDataSource = dbosConfig.createDataSource(dbosConfig.getSysDbName());
+        testDataSource = DBUtils.createDataSource(dbosConfig) ;
 
     }
 

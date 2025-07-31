@@ -209,7 +209,7 @@ public class DBOSConfig {
     }
 
 
-    public DataSource createDataSource(String dbName) {
+    /* public DataSource createDataSource(String dbName) {
         HikariConfig hikariConfig = new HikariConfig();
 
         String dburl = String.format("jdbc:postgresql://%s:%d/%s",dbHost,dbPort,dbName);
@@ -229,5 +229,5 @@ public class DBOSConfig {
         }
 
         return new HikariDataSource(hikariConfig);
-    }
+    } */
 }

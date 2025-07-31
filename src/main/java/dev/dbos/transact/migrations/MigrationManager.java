@@ -4,6 +4,7 @@ package dev.dbos.transact.migrations;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.ErrorCode;
 import org.slf4j.Logger;
@@ -46,7 +47,7 @@ public class MigrationManager {
 
         createDatabaseIfNotExists(dbconfig, dbName);
 
-        DataSource dataSource = dbconfig.createDataSource(dbName);
+        DataSource dataSource = SystemDatabase.createDataSource(dbconfig, dbName) ;
 
         try {
             MigrationManager m = new MigrationManager(dataSource);
@@ -63,7 +64,7 @@ public class MigrationManager {
     }
 
     public static void createDatabaseIfNotExists(DBOSConfig config, String dbName) {
-        DataSource adminDS = config.createDataSource(Constants.POSTGRES_DEFAULT_DB);
+        DataSource adminDS = SystemDatabase.createDataSource(config, Constants.POSTGRES_DEFAULT_DB);
         try {
             try (Connection conn = adminDS.getConnection();
                  PreparedStatement ps = conn.prepareStatement(
