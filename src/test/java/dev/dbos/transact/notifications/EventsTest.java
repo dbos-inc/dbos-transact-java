@@ -60,7 +60,6 @@ public class EventsTest {
 
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null) ;
         dbos.launch();
-        // DBUtils.clearTables(dataSource);
     }
 
     @AfterEach

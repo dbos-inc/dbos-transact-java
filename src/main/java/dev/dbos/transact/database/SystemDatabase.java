@@ -43,14 +43,6 @@ public class SystemDatabase {
 
     private SystemDatabase(DBOSConfig cfg) {
         config = cfg ;
-
-        /* String dbName;
-        if (config.getSysDbName() != null) {
-            dbName = config.getSysDbName();
-        } else {
-            dbName = config.getName() + Constants.SYS_DB_SUFFIX;
-        } */
-
         dataSource= SystemDatabase.createDataSource(config, null);
         stepsDAO = new StepsDAO(dataSource) ;
         workflowDAO = new WorkflowDAO(dataSource) ;
@@ -420,12 +412,6 @@ public class SystemDatabase {
             }
         }
 
-        /* String dburl = System.getenv(Constants.JDBC_URL_ENV_VAR) ;
-        logger.info("mjjjj env db_url " + dburl ) ;
-
-        if (config.getUrl() != null) {
-            dburl = config.getUrl();
-        } */
         String dburl = config.getUrl();
 
         if (dburl == null) {
@@ -433,17 +419,7 @@ public class SystemDatabase {
         }
 
         String dbUser = config.getDbUser();
-        /* String dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR) ;
-        if (config.getDbUser() != null) {
-            dbUser = config.getDbUser() ;
-        } */
-
         String dbPassword = config.getDbPassword();
-        /* String dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
-        if (config.getDbPassword() != null) {
-            dbPassword = config.getDbPassword();
-        } */
-
         hikariConfig.setJdbcUrl(dburl);
         hikariConfig.setUsername(dbUser);
         hikariConfig.setPassword(dbPassword);
@@ -466,9 +442,6 @@ public class SystemDatabase {
     public static DataSource createDataSource(DBOSConfig config) {
         return createDataSource(config, null) ;
     }
-
-
-
 
     Connection getSysDBConnection() throws SQLException {
         return dataSource.getConnection();
