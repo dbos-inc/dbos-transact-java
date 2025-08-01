@@ -17,31 +17,6 @@ public class DBUtils {
 
     public static Logger logger = LoggerFactory.getLogger(DBUtils.class) ;
 
-    /* public static DataSource createDataSource(DBOSConfig config) {
-
-        HikariConfig hikariConfig = new HikariConfig();
-
-        String dburl = String.format("jdbc:postgresql://%s:%d/%s",config.getDbHost(),config.getDbPort(), config.getSysDbName());
-
-        hikariConfig.setJdbcUrl(dburl);
-        hikariConfig.setUsername(config.getDbUser());
-        hikariConfig.setPassword(config.getDbPassword());
-
-        int maximumPoolSize = config.getMaximumPoolSize();
-        if (maximumPoolSize > 0) {
-            hikariConfig.setMaximumPoolSize(maximumPoolSize);
-        } else {
-            hikariConfig.setMaximumPoolSize(5);
-        }
-
-        int connectionTimeout = config.getConnectionTimeout();
-        if (connectionTimeout > 0) {
-            hikariConfig.setConnectionTimeout(connectionTimeout);
-        }
-
-       return new HikariDataSource(hikariConfig);
-    } */
-
     public static void clearTables(DataSource ds) throws SQLException {
 
         try (Connection connection = ds.getConnection()) {
@@ -109,8 +84,6 @@ public class DBUtils {
     }
 
     public static void recreateDB(DBOSConfig dbosConfig) throws SQLException{
-
-
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, "postgres");
 

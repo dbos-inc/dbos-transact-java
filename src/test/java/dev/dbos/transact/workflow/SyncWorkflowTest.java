@@ -45,15 +45,11 @@ public class SyncWorkflowTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-
-        System.out.println(System.getenv("mjjjjjjj  " + "DB_URL") );
-        // dbos = DBOS.getInstance();
         SyncWorkflowTest.dataSource = SystemDatabase.createDataSource(dbosConfig, null) ;
         SystemDatabase.initialize(dataSource );
         systemDatabase = SystemDatabase.getInstance();
         this.dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
-        // dbos.setDbosExecutor(dbosExecutor);
         dbos.launch();
     }
 
@@ -61,7 +57,6 @@ public class SyncWorkflowTest {
     void afterEachTest() throws SQLException {
         dbos.shutdown();
     }
-
 
     @Test
     public void workflowWithOneInput() throws SQLException  {

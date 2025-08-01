@@ -45,8 +45,6 @@ public class UnifiedProxyTest {
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
                 .build();
-
-
     }
 
     @BeforeEach
