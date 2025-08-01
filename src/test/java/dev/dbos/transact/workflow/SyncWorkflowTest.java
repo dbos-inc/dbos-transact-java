@@ -46,8 +46,9 @@ public class SyncWorkflowTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
 
+        System.out.println(System.getenv("mjjjjjjj  " + "DB_URL") );
         // dbos = DBOS.getInstance();
-        SyncWorkflowTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        SyncWorkflowTest.dataSource = SystemDatabase.createDataSource(dbosConfig, null) ;
         SystemDatabase.initialize(dataSource );
         systemDatabase = SystemDatabase.getInstance();
         this.dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);

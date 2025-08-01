@@ -31,7 +31,7 @@ import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
 public class SystemDatabase {
 
-    private Logger logger = LoggerFactory.getLogger(SystemDatabase.class) ;
+    private static Logger logger = LoggerFactory.getLogger(SystemDatabase.class) ;
     private DBOSConfig config ;
     private static SystemDatabase instance ;
     private DataSource dataSource ;
@@ -421,6 +421,7 @@ public class SystemDatabase {
         }
 
         String dburl = System.getenv(Constants.JDBC_URL_ENV_VAR) ;
+        logger.info("mjjjj env db_url " + dburl ) ;
 
         if (config.getUrl() != null) {
             dburl = config.getUrl();
