@@ -50,11 +50,7 @@ class MigrationManagerTest {
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
         }
-
-        // testDataSource = dbosConfig.createDataSource(dbosConfig.getSysDbName());
-        // testDataSource = DBUtils.createDataSource(dbosConfig) ;
         testDataSource = SystemDatabase.createDataSource(dbosConfig) ;
-
     }
 
     @Test
