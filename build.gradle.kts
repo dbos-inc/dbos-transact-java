@@ -8,18 +8,10 @@ plugins {
 group = "dev.dbos"
 version = "1.0-SNAPSHOT"
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
-    }
-}
-
 tasks.withType<JavaCompile> {
     options.release.set(11) // Targets Java 11 bytecode (RECOMMENDED)
     // (Alternative: sourceCompatibility = "11"; targetCompatibility = "11")
 }
-
-
 
 repositories {
     mavenCentral()
