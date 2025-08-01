@@ -109,7 +109,10 @@ public class DBUtils {
     }
 
     public static void recreateDB(DBOSConfig dbosConfig) throws SQLException{
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
+
+
+
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, "postgres");
 
         String sysDb = dbosConfig.getSysDbName();
         try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());

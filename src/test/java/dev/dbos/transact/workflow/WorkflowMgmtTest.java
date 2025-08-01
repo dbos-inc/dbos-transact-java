@@ -47,8 +47,7 @@ public class WorkflowMgmtTest {
         WorkflowMgmtTest.dbosConfig = new DBOSConfig
                 .Builder()
                 .name("systemdbtest")
-                .dbHost("localhost")
-                .dbPort(5432)
+                .url("jdbc:postgresql://localhost:5432/dbos_java_sys")
                 .dbUser("postgres")
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
@@ -59,7 +58,7 @@ public class WorkflowMgmtTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        WorkflowMgmtTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        WorkflowMgmtTest.dataSource = SystemDatabase.createDataSource(dbosConfig, null) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
