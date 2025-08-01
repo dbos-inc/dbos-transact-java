@@ -215,36 +215,12 @@ public class DBOS {
             MigrationManager.runMigrations(config);
         }
 
-        /* if (systemDatabase == null) {
-            SystemDatabase.initialize(config);
-            systemDatabase = SystemDatabase.getInstance();
-        }
-
-        if (dbosExecutor == null) {
-            dbosExecutor = new DBOSExecutor(config, systemDatabase);
-        }
-
-        if (queueService == null) {
-          logger.info("launch starting queue service");
-          queueService = new QueueService(SystemDatabase.getInstance());
-          queueService.setDbosExecutor(dbosExecutor);
-          queueService.start();
-        } else {
-          queueService.start();
-        } */
-
         queueService.start();
 
-        /* if (schedulerService == null) {
-            schedulerService = new SchedulerService(dbosExecutor);
-            schedulerService.start();
-        } else {
-            schedulerService.start();
-        } */
         schedulerService.start();
 
         if (notificationService == null) {
-            notificationService = SystemDatabase.getInstance().getNotificationService();
+            notificationService = systemDatabase.getNotificationService();
             notificationService.start();
         } else {
             notificationService.start();
@@ -279,11 +255,9 @@ public class DBOS {
 
             if (queueService != null) {
                 queueService.stop();
-                // queueService = null;
             }
             if (dbosExecutor != null) {
                 dbosExecutor.shutdown();
-                // dbosExecutor = null;
             }
 
             if (schedulerService != null) {

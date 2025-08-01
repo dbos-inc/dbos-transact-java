@@ -416,7 +416,7 @@ class DBOSExecutorTest {
     void startDBOS() throws SQLException{
 
         // dbos = DBOS.getInstance();
-        DBOSExecutorTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);

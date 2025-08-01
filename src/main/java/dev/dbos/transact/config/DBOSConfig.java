@@ -3,6 +3,8 @@ package dev.dbos.transact.config ;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.util.ArrayList;
@@ -25,6 +27,7 @@ public class DBOSConfig {
     private final boolean httpAwaitOnStart ;
     private final boolean migrate ;
 
+    static Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
 
     private DBOSConfig(Builder builder) {
         this.name = builder.name;
@@ -138,7 +141,7 @@ public class DBOSConfig {
             }
             if (url == null) {
                 url = System.getenv(Constants.JDBC_URL_ENV_VAR) ;
-                System.out.println("mjjjj env db_url " + url ) ;
+                logger.info("Using db_url env " + url ) ;
             }
             if (dbUser == null) {
                 dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR) ;
@@ -221,26 +224,4 @@ public class DBOSConfig {
                 '}';
     }
 
-
-    /* public DataSource createDataSource(String dbName) {
-        HikariConfig hikariConfig = new HikariConfig();
-
-        String dburl = String.format("jdbc:postgresql://%s:%d/%s",dbHost,dbPort,dbName);
-
-        System.out.println(dburl) ;
-
-        hikariConfig.setJdbcUrl(dburl);
-        hikariConfig.setUsername(dbUser);
-        hikariConfig.setPassword(dbPassword);
-
-        if (maximumPoolSize > 0) {
-            hikariConfig.setMaximumPoolSize(maximumPoolSize);
-        }
-
-        if (connectionTimeout > 0) {
-            hikariConfig.setConnectionTimeout(connectionTimeout);
-        }
-
-        return new HikariDataSource(hikariConfig);
-    } */
 }
