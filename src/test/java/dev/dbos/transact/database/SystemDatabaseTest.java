@@ -2,6 +2,7 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migrations.MigrationManager;
+import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
@@ -31,25 +32,11 @@ class SystemDatabaseTest {
                 .maximumPoolSize(3)
                 .build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",dbosConfig.getDbHost(),dbosConfig.getDbPort(),"postgres") ;
 
-        String sysDb = dbosConfig.getSysDbName();
-        try (Connection conn = DriverManager.getConnection(dbUrl,dbosConfig.getDbUser(), dbosConfig.getDbPassword());
-             Statement stmt = conn.createStatement()) {
-
-
-            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
-            String createDbSql = String.format("CREATE DATABASE %s", sysDb);
-            stmt.execute(dropDbSql);
-            stmt.execute(createDbSql);
-        }
-
-        // DatabaseMigrator.runMigrations(dbosConfig);
+        DBUtils.recreateDB(dbosConfig);
         MigrationManager.runMigrations(dbosConfig);
         SystemDatabase.initialize(dbosConfig);
         systemDatabase = SystemDatabase.getInstance();
-
-
     }
 
     @AfterAll

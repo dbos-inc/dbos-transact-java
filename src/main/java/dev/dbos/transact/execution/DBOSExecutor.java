@@ -87,8 +87,6 @@ public class DBOSExecutor {
             workflowDeadlineEpoch = System.currentTimeMillis() + workflowTimeoutMs ;
         }
 
-        logger.info(workflowId + " timout = " + workflowTimeoutMs + " epoch = " + workflowDeadlineEpoch) ;
-
         WorkflowStatusInternal workflowStatusInternal =
                 new WorkflowStatusInternal(workflowId,
                         status,

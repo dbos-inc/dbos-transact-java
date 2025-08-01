@@ -34,7 +34,6 @@ class NotificationServiceTest {
     private DBOS dbos ;
     private static SystemDatabase systemDatabase ;
     private DBOSExecutor dbosExecutor;
-    private NotificationService notificationService;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -55,13 +54,11 @@ class NotificationServiceTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        NotificationServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
+        NotificationServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 
@@ -298,9 +295,6 @@ class NotificationServiceTest {
 
             assertEquals(result1, result2);
             assertEquals(expectedMessage, result1);
-
-            // Make sure the notification map is empty
-            // assertTrue(dbos.getSysDb().getNotificationsMap().isEmpty());
 
         } finally {
             executor.shutdown();

@@ -26,10 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AdminControllerTest {
 
     private static DBOSConfig dbosConfig;
-    private static DataSource dataSource;
     private DBOS dbos;
-    private static SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -52,13 +49,7 @@ class AdminControllerTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
-        AdminControllerTest.dataSource = DBUtils.createDataSource(dbosConfig);
-        SystemDatabase.initialize(dataSource);
-        systemDatabase = SystemDatabase.getInstance();
-        this.dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+        dbos = DBOS.initialize(dbosConfig);
         dbos.launch();
     }
 

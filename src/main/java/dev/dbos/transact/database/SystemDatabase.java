@@ -31,7 +31,7 @@ import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
 public class SystemDatabase {
 
-    private Logger logger = LoggerFactory.getLogger(SystemDatabase.class) ;
+    private static Logger logger = LoggerFactory.getLogger(SystemDatabase.class) ;
     private DBOSConfig config ;
     private static SystemDatabase instance ;
     private DataSource dataSource ;
@@ -43,15 +43,7 @@ public class SystemDatabase {
 
     private SystemDatabase(DBOSConfig cfg) {
         config = cfg ;
-
-        String dbName;
-        if (config.getSysDbName() != null) {
-            dbName = config.getSysDbName();
-        } else {
-            dbName = config.getName() + Constants.SYS_DB_SUFFIX;
-        }
-
-        createDataSource(dbName);
+        dataSource= SystemDatabase.createDataSource(config, null);
         stepsDAO = new StepsDAO(dataSource) ;
         workflowDAO = new WorkflowDAO(dataSource) ;
         queuesDAO = new QueuesDAO(dataSource) ;
@@ -409,14 +401,28 @@ public class SystemDatabase {
         }
     }
 
-    private void createDataSource(String dbName) {
+    public static DataSource createDataSource(DBOSConfig config, String dbName) {
         HikariConfig hikariConfig = new HikariConfig();
 
-        String dburl = String.format("jdbc:postgresql://%s:%d/%s",config.getDbHost(),config.getDbPort(),dbName);
+        if (dbName == null) {
+            if (config.getSysDbName() != null) {
+                dbName = config.getSysDbName();
+            } else {
+                dbName = config.getName() + Constants.SYS_DB_SUFFIX;
+            }
+        }
 
+        String dburl = config.getUrl();
+
+        if (dburl == null) {
+            dburl = String.format("jdbc:postgresql://%s:%d/%s", config.getDbHost(), config.getDbPort(), dbName);
+        }
+
+        String dbUser = config.getDbUser();
+        String dbPassword = config.getDbPassword();
         hikariConfig.setJdbcUrl(dburl);
-        hikariConfig.setUsername(config.getDbUser());
-        hikariConfig.setPassword(config.getDbPassword());
+        hikariConfig.setUsername(dbUser);
+        hikariConfig.setPassword(dbPassword);
 
         int maximumPoolSize = config.getMaximumPoolSize();
         if (maximumPoolSize > 0) {
@@ -430,7 +436,11 @@ public class SystemDatabase {
             hikariConfig.setConnectionTimeout(connectionTimeout);
         }
 
-        dataSource = new HikariDataSource(hikariConfig);
+        return new HikariDataSource(hikariConfig);
+    }
+
+    public static DataSource createDataSource(DBOSConfig config) {
+        return createDataSource(config, null) ;
     }
 
     Connection getSysDBConnection() throws SQLException {

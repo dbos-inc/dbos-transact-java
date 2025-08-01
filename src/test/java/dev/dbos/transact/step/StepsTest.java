@@ -38,22 +38,17 @@ public class StepsTest {
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
                 .build();
-
     }
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        dataSource = DBUtils.createDataSource(dbosConfig);
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
+        dataSource = SystemDatabase.createDataSource(dbosConfig);
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
-
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
-
     }
 
     @AfterEach

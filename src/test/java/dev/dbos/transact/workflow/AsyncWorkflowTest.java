@@ -50,13 +50,11 @@ public class AsyncWorkflowTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        AsyncWorkflowTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
+        AsyncWorkflowTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 

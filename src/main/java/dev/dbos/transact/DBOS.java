@@ -31,9 +31,10 @@ public class DBOS {
     private static DBOS instance;
 
     private final DBOSConfig config;
-    private DBOSExecutor dbosExecutor  ;
-    private QueueService queueService ;
-    private SchedulerService schedulerService ;
+    private final SystemDatabase systemDatabase ;
+    private final DBOSExecutor dbosExecutor  ;
+    private final QueueService queueService ;
+    private final SchedulerService schedulerService ;
     private NotificationService notificationService ;
     private HttpServer httpServer ;
     private RecoveryService recoveryService;
@@ -42,7 +43,25 @@ public class DBOS {
 
     private DBOS(DBOSConfig config) {
         this.config = config;
+        SystemDatabase.initialize(config) ;
+        this.systemDatabase = SystemDatabase.getInstance() ;
+        dbosExecutor = new DBOSExecutor(config, systemDatabase);
+        queueService = new QueueService(SystemDatabase.getInstance(), dbosExecutor);
+        queueService.setDbosExecutor(dbosExecutor);
+        schedulerService = new SchedulerService(dbosExecutor);
+
     }
+
+    private DBOS(DBOSConfig config, SystemDatabase sd, DBOSExecutor de, QueueService q, SchedulerService s) {
+
+        this.config = config;
+        this.systemDatabase = sd ;
+        this.dbosExecutor = de;
+        this.queueService = q == null ? new QueueService(sd, dbosExecutor) : q ;
+        this.schedulerService = s == null ? new SchedulerService(de) : s;
+
+    }
+
 
     /**
      * Initializes the singleton instance of DBOS with config.
@@ -50,12 +69,27 @@ public class DBOS {
      *
      * @DBOSConfig config dbos configuration
      */
-    public static synchronized void initialize(DBOSConfig config) {
+    public static synchronized DBOS initialize(DBOSConfig config) {
         if (instance != null) {
             throw new IllegalStateException("DBOS has already been initialized.");
         }
         instance = new DBOS(config);
+        return instance ;
     }
+
+    public static synchronized DBOS initialize(DBOSConfig config, SystemDatabase sd, DBOSExecutor de, QueueService q, SchedulerService ss) {
+        if (instance != null) {
+            throw new IllegalStateException("DBOS has already been initialized.");
+        }
+
+        if (config == null || sd == null || de == null) {
+            throw new IllegalArgumentException("Config, systemdb, dbosexecutor cannot be null");
+        }
+
+        instance = new DBOS(config, sd, de, q, ss);
+        return instance ;
+    }
+
 
     /**
      * Gets the singleton instance of DBOS.
@@ -68,21 +102,6 @@ public class DBOS {
         return instance;
     }
 
-    public void setDbosExecutor(DBOSExecutor executor) {
-        this.dbosExecutor = executor;
-    }
-
-    public void setQueueService(QueueService queueService) {
-        this.queueService = queueService;
-    }
-
-    public void setSchedulerService(SchedulerService schedulerService) {
-        this.schedulerService = schedulerService ;
-    }
-
-    public void setNotificationService(NotificationService notificationService) {
-        this.notificationService = notificationService;
-    }
 
     public <T> WorkflowBuilder<T> Workflow() {
         return new WorkflowBuilder<>();
@@ -196,29 +215,12 @@ public class DBOS {
             MigrationManager.runMigrations(config);
         }
 
-        if (dbosExecutor == null) {
-            SystemDatabase.initialize(config);
-            dbosExecutor = new DBOSExecutor(config, SystemDatabase.getInstance());
-        }
+        queueService.start();
 
-        if (queueService == null) {
-          logger.info("launch starting queue service");
-          queueService = new QueueService(SystemDatabase.getInstance());
-          queueService.setDbosExecutor(dbosExecutor);
-          queueService.start();
-        } else {
-          queueService.start();
-        }
-
-        if (schedulerService == null) {
-            schedulerService = new SchedulerService(dbosExecutor);
-            schedulerService.start();
-        } else {
-            schedulerService.start();
-        }
+        schedulerService.start();
 
         if (notificationService == null) {
-            notificationService = SystemDatabase.getInstance().getNotificationService();
+            notificationService = systemDatabase.getNotificationService();
             notificationService.start();
         } else {
             notificationService.start();
@@ -253,11 +255,9 @@ public class DBOS {
 
             if (queueService != null) {
                 queueService.stop();
-                queueService = null;
             }
             if (dbosExecutor != null) {
                 dbosExecutor.shutdown();
-                dbosExecutor = null;
             }
 
             if (schedulerService != null) {

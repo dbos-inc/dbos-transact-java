@@ -51,13 +51,11 @@ class DBOSExecutorTest {
     @BeforeEach
     void setUp() throws SQLException{
         DBUtils.recreateDB(dbosConfig);
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
-        DBOSExecutorTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 
@@ -87,7 +85,6 @@ class DBOSExecutorTest {
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
         setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-
 
         WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
 
@@ -119,8 +116,6 @@ class DBOSExecutorTest {
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
-
-
 
         boolean error = false;
         try {
@@ -411,13 +406,12 @@ class DBOSExecutorTest {
     }
 
     void startDBOS() throws SQLException{
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
-        DBOSExecutorTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+
+        DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 }

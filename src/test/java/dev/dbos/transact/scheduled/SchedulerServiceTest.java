@@ -47,24 +47,17 @@ class SchedulerServiceTest {
                 .build();
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
-
     }
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        SchedulerServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
+        SchedulerServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         schedulerService = new SchedulerService(dbosExecutor);
-        dbos.setDbosExecutor(dbosExecutor);
-        dbos.setSchedulerService(schedulerService);
-        queueService = new QueueService(systemDatabase);
-        queueService.setDbosExecutor(dbosExecutor);
-        dbos.setQueueService(queueService);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, schedulerService);
         dbos.launch();
     }
 

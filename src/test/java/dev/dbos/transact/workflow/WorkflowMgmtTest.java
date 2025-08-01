@@ -7,9 +7,7 @@ import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
-import dev.dbos.transact.exceptions.WorkflowCancelledException;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.ExecutingService;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -18,12 +16,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -47,8 +41,7 @@ public class WorkflowMgmtTest {
         WorkflowMgmtTest.dbosConfig = new DBOSConfig
                 .Builder()
                 .name("systemdbtest")
-                .dbHost("localhost")
-                .dbPort(5432)
+                .url("jdbc:postgresql://localhost:5432/dbos_java_sys")
                 .dbUser("postgres")
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
@@ -59,13 +52,11 @@ public class WorkflowMgmtTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        WorkflowMgmtTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
+        WorkflowMgmtTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 

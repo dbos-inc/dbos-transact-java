@@ -52,14 +52,12 @@ class RecoveryServiceTest {
     @BeforeEach
     void setUp() throws SQLException{
         DBUtils.recreateDB(dbosConfig);
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
-        RecoveryServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
-        dbos.setDbosExecutor(dbosExecutor);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 
@@ -144,10 +142,8 @@ class RecoveryServiceTest {
 
         dbos.shutdown();
 
-        DBOS.initialize(dbosConfig);
-        dbos = DBOS.getInstance();
-
-        dbos.launch();
+        dbos = DBOS.initialize(dbosConfig);
+        // dbos = DBOS.getInstance();
 
         // need to register again
         // towatch: we are registering after launch. could lead to a race condition
@@ -156,6 +152,8 @@ class RecoveryServiceTest {
                 .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl())
                 .build();
+
+        dbos.launch();
 
 
         WorkflowHandle h = DBOS.retrieveWorkflow("wf-123") ;
