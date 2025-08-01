@@ -53,7 +53,7 @@ class SchedulerServiceTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        SchedulerServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        SchedulerServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);

@@ -17,7 +17,7 @@ public class DBUtils {
 
     public static Logger logger = LoggerFactory.getLogger(DBUtils.class) ;
 
-    public static DataSource createDataSource(DBOSConfig config) {
+    /* public static DataSource createDataSource(DBOSConfig config) {
 
         HikariConfig hikariConfig = new HikariConfig();
 
@@ -40,7 +40,7 @@ public class DBUtils {
         }
 
        return new HikariDataSource(hikariConfig);
-    }
+    } */
 
     public static void clearTables(DataSource ds) throws SQLException {
 

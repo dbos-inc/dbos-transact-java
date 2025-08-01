@@ -60,7 +60,7 @@ public class QueuesTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        dataSource = DBUtils.createDataSource(dbosConfig);
+        dataSource = SystemDatabase.createDataSource(dbosConfig);
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
