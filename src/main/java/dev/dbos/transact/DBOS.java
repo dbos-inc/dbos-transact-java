@@ -73,6 +73,9 @@ public class DBOS {
         if (instance != null) {
             throw new IllegalStateException("DBOS has already been initialized.");
         }
+        if (config.migration()) {
+            MigrationManager.runMigrations(config);
+        }
         instance = new DBOS(config);
         return instance ;
     }
@@ -86,6 +89,9 @@ public class DBOS {
             throw new IllegalArgumentException("Config, systemdb, dbosexecutor cannot be null");
         }
 
+        if (config.migration()) {
+            MigrationManager.runMigrations(config);
+        }
         instance = new DBOS(config, sd, de, q, ss);
         return instance ;
     }
@@ -211,9 +217,9 @@ public class DBOS {
     }
     public void launch() {
 
-        if (config.migration()) {
+        /* if (config.migration()) {
             MigrationManager.runMigrations(config);
-        }
+        } */
 
         queueService.start();
 
