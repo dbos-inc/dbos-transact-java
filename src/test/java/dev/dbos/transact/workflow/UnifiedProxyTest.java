@@ -52,7 +52,7 @@ public class UnifiedProxyTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        UnifiedProxyTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        UnifiedProxyTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);

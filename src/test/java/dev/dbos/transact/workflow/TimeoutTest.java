@@ -52,7 +52,7 @@ public class TimeoutTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        TimeoutTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        TimeoutTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);

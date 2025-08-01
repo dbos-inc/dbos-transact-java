@@ -57,7 +57,7 @@ tasks.test {
             }
         }))
     }
-    environment("DB_URL", "jdbc:postgresql://localhost:5432/dbos_java_sys")
+    environment("DBOS_SYSTEM_DATABASE_URL", "jdbc:postgresql://localhost:5432/dbos_java_sys")
 }
 
 tasks.jar {
