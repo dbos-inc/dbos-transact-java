@@ -16,5 +16,5 @@ public class Constants {
 
     public static final String DBOS_INTERNAL_QUEUE = "_dbos_internal_queue" ;
 
-    public static final String JDBC_URL_ENV_VAR = "DB_URL";
+    public static final String JDBC_URL_ENV_VAR = "DBOS_SYSTEM_DATABASE_URL";
 }

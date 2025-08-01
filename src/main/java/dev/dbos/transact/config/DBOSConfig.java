@@ -132,9 +132,22 @@ public class DBOSConfig {
 
         public DBOSConfig build() {
             if (name == null) throw new IllegalArgumentException("Name is required");
+
             if (dbPassword == null) {
-                dbPassword = System.getenv("PGPASSWORD");
+                dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
             }
+            if (url == null) {
+                url = System.getenv(Constants.JDBC_URL_ENV_VAR) ;
+                System.out.println("mjjjj env db_url " + url ) ;
+            }
+            if (dbUser == null) {
+                dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR) ;
+            }
+
+            if (sysDbName == null) {
+                sysDbName = name + Constants.SYS_DB_SUFFIX;
+            }
+
             return new DBOSConfig(this);
         }
     }

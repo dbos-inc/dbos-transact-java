@@ -420,26 +420,29 @@ public class SystemDatabase {
             }
         }
 
-        String dburl = System.getenv(Constants.JDBC_URL_ENV_VAR) ;
+        /* String dburl = System.getenv(Constants.JDBC_URL_ENV_VAR) ;
         logger.info("mjjjj env db_url " + dburl ) ;
 
         if (config.getUrl() != null) {
             dburl = config.getUrl();
-        }
+        } */
+        String dburl = config.getUrl();
 
         if (dburl == null) {
             dburl = String.format("jdbc:postgresql://%s:%d/%s", config.getDbHost(), config.getDbPort(), dbName);
         }
 
-        String dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR) ;
+        String dbUser = config.getDbUser();
+        /* String dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR) ;
         if (config.getDbUser() != null) {
             dbUser = config.getDbUser() ;
-        }
+        } */
 
-        String dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
+        String dbPassword = config.getDbPassword();
+        /* String dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
         if (config.getDbPassword() != null) {
             dbPassword = config.getDbPassword();
-        }
+        } */
 
         hikariConfig.setJdbcUrl(dburl);
         hikariConfig.setUsername(dbUser);
@@ -458,6 +461,10 @@ public class SystemDatabase {
         }
 
         return new HikariDataSource(hikariConfig);
+    }
+
+    public static DataSource createDataSource(DBOSConfig config) {
+        return createDataSource(config, null) ;
     }
 
 

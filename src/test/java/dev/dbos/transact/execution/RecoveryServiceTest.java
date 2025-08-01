@@ -54,7 +54,8 @@ class RecoveryServiceTest {
         DBUtils.recreateDB(dbosConfig);
         // DBOS.initialize(dbosConfig);
         // dbos = DBOS.getInstance();
-        RecoveryServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        // RecoveryServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
+        RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
