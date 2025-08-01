@@ -54,7 +54,6 @@ public class QueuesTest {
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
                 .build();
-
     }
 
     @BeforeEach
@@ -65,7 +64,6 @@ public class QueuesTest {
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         queueService = new QueueService(systemDatabase, dbosExecutor);
-
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, queueService, null);
         dbos.launch();
     }

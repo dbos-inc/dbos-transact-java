@@ -54,12 +54,10 @@ class NotificationServiceTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        // NotificationServiceTest.dataSource = DBUtils.createDataSource(dbosConfig) ;
         NotificationServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
@@ -297,9 +295,6 @@ class NotificationServiceTest {
 
             assertEquals(result1, result2);
             assertEquals(expectedMessage, result1);
-
-            // Make sure the notification map is empty
-            // assertTrue(dbos.getSysDb().getNotificationsMap().isEmpty());
 
         } finally {
             executor.shutdown();

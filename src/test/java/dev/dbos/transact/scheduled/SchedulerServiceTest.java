@@ -47,7 +47,6 @@ class SchedulerServiceTest {
                 .build();
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
-
     }
 
     @BeforeEach

@@ -47,7 +47,6 @@ public class EventsTest {
                 .sysDbName("dbos_java_sys")
                 .maximumPoolSize(2)
                 .build();
-
     }
 
     @BeforeEach
@@ -57,7 +56,6 @@ public class EventsTest {
         SystemDatabase.initialize(dataSource);
         systemDatabase = SystemDatabase.getInstance();
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null) ;
         dbos.launch();
     }
@@ -127,8 +125,6 @@ public class EventsTest {
             eventService.setEventWorkflow("key1", "value1");
         }
 
-        // DBOS.retrieveWorkflow("id1").getResult();
-
         try (SetWorkflowID id = new SetWorkflowID("id2")) {
             eventService.getEventWorkflow("id1", "key1", 3);
         }
@@ -167,8 +163,6 @@ public class EventsTest {
         assertEquals(2, steps.size());
         assertEquals("DBOS.getEvent", steps.get(0).getFunctionName()) ;
         assertEquals("DBOS.sleep", steps.get(1).getFunctionName()) ;
-
-
     }
 
     @Test
