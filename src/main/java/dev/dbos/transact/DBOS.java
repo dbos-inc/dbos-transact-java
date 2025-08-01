@@ -216,11 +216,7 @@ public class DBOS {
         }
     }
     public void launch() {
-
-        /* if (config.migration()) {
-            MigrationManager.runMigrations(config);
-        } */
-
+        
         queueService.start();
 
         schedulerService.start();
