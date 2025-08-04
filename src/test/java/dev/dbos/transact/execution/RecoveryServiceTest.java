@@ -53,8 +53,7 @@ class RecoveryServiceTest {
     void setUp() throws SQLException{
         DBUtils.recreateDB(dbosConfig);
         RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
-        SystemDatabase.initialize(dataSource);
-        systemDatabase = SystemDatabase.getInstance();
+        systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
