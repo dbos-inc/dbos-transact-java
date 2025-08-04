@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.*;
@@ -68,6 +69,13 @@ public class DBOSExecutor {
         return workflowRegistry.get(workflowName);
     }
 
+    public List<Queue> getAllQueuesSnapshot() {
+        if (queueService == null) {
+            throw new IllegalStateException("QueueService not set in DBOSExecutor");
+        }
+        return queueService.getAllQueuesSnapshot();
+
+    }
 
     public WorkflowInitResult preInvokeWorkflow(String workflowName,
                                                 String className,

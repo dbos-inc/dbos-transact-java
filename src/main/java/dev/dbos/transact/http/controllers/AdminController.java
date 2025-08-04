@@ -2,6 +2,7 @@ package dev.dbos.transact.http.controllers;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -47,9 +48,13 @@ public class AdminController {
     @GET
     @Path("/dbos-workflow-queues-metadata")
     @Produces(MediaType.APPLICATION_JSON)
-    public Object workflowQueuesMetadata() {
-        // TODO: this endpoint returns metadata about the workflow queues
-        return "queuesMetadata";
+    public List<QueueMetadata> workflowQueuesMetadata() {
+        List<Queue> queues = dbosExecutor.getAllQueuesSnapshot();
+        List<QueueMetadata> metadataList = new ArrayList<>();
+        for (Queue queue : queues) {
+            metadataList.add(new QueueMetadata(queue));
+        }
+        return metadataList;
     }
 
     @GET
@@ -110,6 +115,7 @@ public class AdminController {
 
     @POST
     @Path("/workflows/{workflowId}/fork")
+    @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public ForkWorkflowResponse fork(@PathParam("workflowId") String workflowId, ForkWorkflowRequest request) {
         logger.info("Forking workflow {} from step {} with a new ID", workflowId, request.startStep);
@@ -151,6 +157,36 @@ public class AdminController {
 
         public ForkWorkflowResponse(String workflowId) {
             this.workflowId = workflowId;
+        }
+    }
+
+    public static class RateLimitMetadata {
+        public Integer limit;
+        public Double period;
+
+        public RateLimitMetadata(dev.dbos.transact.queue.RateLimit rateLimit) {
+            this.limit = rateLimit.getLimit();
+            this.period = rateLimit.getPeriod();
+        }
+    }
+
+    public static class QueueMetadata {
+        public String name;
+        public Integer concurrency;
+        public Integer workerConcurrency;
+        public RateLimitMetadata rateLimit;
+        public Boolean priorityEnabled;
+
+        public QueueMetadata(Queue queue) {
+            this.name = queue.getName();
+            this.concurrency = queue.getConcurrency();
+            this.workerConcurrency = queue.getWorkerConcurrency();
+            if (queue.getRateLimit() != null) {
+                this.rateLimit = new RateLimitMetadata(queue.getRateLimit());
+            } else {
+                this.rateLimit = null;
+            }
+            this.priorityEnabled = queue.isPriorityEnabled();
         }
     }
 }
