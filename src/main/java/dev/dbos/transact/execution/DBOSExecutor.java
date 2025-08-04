@@ -1,6 +1,7 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -332,7 +333,6 @@ public class DBOSExecutor {
                                                 ) throws Throwable {
 
 
-
         DBOSContext ctx = DBOSContextHolder.get();
         String wfid = ctx.getWorkflowId() ;
 
@@ -435,7 +435,7 @@ public class DBOSExecutor {
      * Retrieve the workflowHandle for the workflowId
      *
      */
-    public WorkflowHandle<?> retrieveWorkflow(String workflowId) {
+    public <R> WorkflowHandle<R> retrieveWorkflow(String workflowId) {
         return new WorkflowHandleDBPoll(workflowId, systemDatabase) ;
     }
 
@@ -522,5 +522,47 @@ public class DBOSExecutor {
 
         String forkedId = systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
         return retrieveWorkflow(forkedId);
+    }
+
+    public <R> WorkflowHandle<R> startAsyncWorkflow(String workflowName, Object[] args)  {
+
+        DBOSContext ctx = DBOSContextHolder.get() ;
+
+        String workflowId = ctx.getWorkflowId() == null ? UUID.randomUUID().toString() : ctx.getWorkflowId() ;
+
+        WorkflowFunctionWrapper functionWrapper = workflowRegistry.get(workflowName) ;
+
+        if (functionWrapper == null) {
+            throw new WorkflowFunctionNotFoundException(workflowId) ;
+        }
+
+        WorkflowHandle handle = null ;
+        if (ctx.getQueue() == null) {
+            // async
+            try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+                DBOSContextHolder.get().setInWorkflow(true);
+                try {
+                    handle = submitWorkflow(workflowName, functionWrapper.targetClassName, functionWrapper.target, args, functionWrapper.function);
+                } catch (Throwable t) {
+                    logger.error(String.format("Error executing workflow by id : %s", workflowId) , t);
+                }
+            }
+
+            return handle ;
+
+        } else {
+            // enqueue
+            try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+                DBOSContextHolder.get().setInWorkflow(true);
+                try {
+                    enqueueWorkflow(workflowName, functionWrapper.targetClassName, functionWrapper, args, ctx.getQueue());
+                } catch (Throwable t) {
+                    logger.error(String.format("Error executing workflow by id : %s", workflowId) , t);
+                }
+            }
+
+            return retrieveWorkflow(workflowId) ;
+
+        }
     }
 }

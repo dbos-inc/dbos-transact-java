@@ -78,7 +78,7 @@ public class AsyncWorkflowTest {
             simpleService.workWithString("test-item");
         }
 
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid); ;
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid); ;
         String result = (String)handle.getResult();
         assertEquals("Processed: test-item", result);
         assertEquals("wf-123", handle.getWorkflowId());
@@ -107,7 +107,7 @@ public class AsyncWorkflowTest {
             simpleService.workWithString("test-item");
         }
 
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid);
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid);
         String result = (String)handle.getResult() ;
         assertEquals("Processed: test-item", result);
         assertEquals("wf-123",handle.getWorkflowId());
@@ -194,7 +194,7 @@ public class AsyncWorkflowTest {
             simpleService.parentWorkflowWithoutSet("123");
         }
 
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         System.out.println(handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
@@ -231,7 +231,7 @@ public class AsyncWorkflowTest {
             simpleService.WorkflowWithMultipleChildren("123");
         }
 
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         assertEquals("123abcdefghi", handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
@@ -279,7 +279,7 @@ public class AsyncWorkflowTest {
             simpleService.grandParent("123");
         }
 
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         assertEquals("p-c-gc-123",handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
