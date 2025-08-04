@@ -55,8 +55,7 @@ class NotificationServiceTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         NotificationServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
-        SystemDatabase.initialize(dataSource);
-        systemDatabase = SystemDatabase.getInstance();
+        systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();

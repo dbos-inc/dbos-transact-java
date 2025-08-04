@@ -35,13 +35,12 @@ class SystemDatabaseTest {
 
         DBUtils.recreateDB(dbosConfig);
         MigrationManager.runMigrations(dbosConfig);
-        SystemDatabase.initialize(dbosConfig);
-        systemDatabase = SystemDatabase.getInstance();
+        systemDatabase = new SystemDatabase(dbosConfig);
     }
 
     @AfterAll
     static void onetimeTearDown() {
-        SystemDatabase.destroy();
+        systemDatabase.destroy();
     }
 
     @BeforeEach

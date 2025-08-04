@@ -33,7 +33,6 @@ public class SystemDatabase {
 
     private static Logger logger = LoggerFactory.getLogger(SystemDatabase.class) ;
     private DBOSConfig config ;
-    private static SystemDatabase instance ;
     private DataSource dataSource ;
     private WorkflowDAO workflowDAO;
     private StepsDAO stepsDAO ;
@@ -41,7 +40,7 @@ public class SystemDatabase {
     private NotificationService notificationService;
     private NotificationsDAO notificationsDAO ;
 
-    private SystemDatabase(DBOSConfig cfg) {
+    public SystemDatabase(DBOSConfig cfg) {
         config = cfg ;
         dataSource= SystemDatabase.createDataSource(config, null);
         stepsDAO = new StepsDAO(dataSource) ;
@@ -51,8 +50,7 @@ public class SystemDatabase {
         notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService) ;
     }
 
-    private SystemDatabase(DataSource ds) {
-
+    public SystemDatabase(DataSource ds) {
         this.dataSource = ds ;
         workflowDAO = new WorkflowDAO(dataSource) ;
         stepsDAO = new StepsDAO(dataSource) ;
@@ -61,32 +59,8 @@ public class SystemDatabase {
         notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService) ;
     }
 
-    public static synchronized void initialize(DBOSConfig cfg) {
-        if (instance != null) {
-            throw new IllegalStateException("SystemDatabase has already been initialized.");
-        }
-        instance = new SystemDatabase(cfg);
-    }
-
-    public static synchronized void initialize(DataSource ds) {
-        if (instance != null) {
-            throw new IllegalStateException("SystemDatabase has already been initialized.");
-        }
-        instance = new SystemDatabase(ds);
-    }
-
-    public static SystemDatabase getInstance() {
-        if (instance == null) {
-            throw new RuntimeException("SystemDatabase should be initalized first") ;
-        }
-        return instance ;
-    }
-
-    public synchronized static void destroy() {
-        if (instance.dataSource != null) {
-            ((HikariDataSource)instance.dataSource).close();
-        }
-        instance = null ;
+    public synchronized void destroy() {
+        ((HikariDataSource)dataSource).close();
     }
 
     public void setNotificationService(NotificationService service) {

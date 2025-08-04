@@ -43,25 +43,21 @@ public class DBOS {
 
     private DBOS(DBOSConfig config) {
         this.config = config;
-        SystemDatabase.initialize(config) ;
-        this.systemDatabase = SystemDatabase.getInstance() ;
+        systemDatabase = new SystemDatabase(config);
         dbosExecutor = new DBOSExecutor(config, systemDatabase);
-        queueService = new QueueService(SystemDatabase.getInstance(), dbosExecutor);
+        queueService = new QueueService(systemDatabase, dbosExecutor);
         queueService.setDbosExecutor(dbosExecutor);
         schedulerService = new SchedulerService(dbosExecutor);
 
     }
 
     private DBOS(DBOSConfig config, SystemDatabase sd, DBOSExecutor de, QueueService q, SchedulerService s) {
-
         this.config = config;
         this.systemDatabase = sd ;
         this.dbosExecutor = de;
         this.queueService = q == null ? new QueueService(sd, dbosExecutor) : q ;
         this.schedulerService = s == null ? new SchedulerService(de) : s;
-
     }
-
 
     /**
      * Initializes the singleton instance of DBOS with config.
@@ -227,7 +223,7 @@ public class DBOS {
         }
 
         if (config.isHttp()) {
-            httpServer = HttpServer.getInstance(config.getHttpPort(), new AdminController(SystemDatabase.getInstance(), dbosExecutor));
+            httpServer = HttpServer.getInstance(config.getHttpPort(), new AdminController(systemDatabase, dbosExecutor));
              if (config.isHttpAwaitOnStart()) {
                  Thread httpThread = new Thread(() ->
                     {  logger.info("Start http in background thread") ;
@@ -240,12 +236,9 @@ public class DBOS {
             }
         }
 
-        recoveryService = new RecoveryService(dbosExecutor, SystemDatabase.getInstance());
+        recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         recoveryService.start();
-
     }
-
-
 
     public void shutdown() {
 
@@ -271,6 +264,8 @@ public class DBOS {
             if (config.isHttp()) {
                 httpServer.stop();
             }
+
+            systemDatabase.destroy();
 
             instance = null;
         }
