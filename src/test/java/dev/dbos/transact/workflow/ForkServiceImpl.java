@@ -4,114 +4,110 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSOptions;
 import dev.dbos.transact.context.SetDBOSOptions;
 
-import java.util.UUID;
-
 public class ForkServiceImpl implements ForkService {
 
-    private ForkService forkService;
+  private ForkService forkService;
 
-    int step1Count ;
-    int step2Count ;
-    int step3Count ;
-    int step4Count ;
-    int step5Count ;
-    int child1Count ;
-    int child2Count ;
+  int step1Count;
+  int step2Count;
+  int step3Count;
+  int step4Count;
+  int step5Count;
+  int child1Count;
+  int child2Count;
 
-    public ForkServiceImpl() {
+  public ForkServiceImpl() {}
 
+  public void setForkService(ForkService s) {
+    this.forkService = s;
+  }
+
+  @Workflow(name = "worfklow")
+  public String simpleWorkflow(String input) {
+    forkService.stepOne("one");
+    forkService.stepTwo(2);
+    forkService.stepThree(2.5f);
+    forkService.stepFour(Double.valueOf(23.73));
+    forkService.stepFive(false);
+
+    return input + input;
+  }
+
+  @Workflow(name = "parent")
+  public String parentChild(String input) {
+
+    forkService.stepOne("one");
+    forkService.stepTwo(2);
+
+    try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").build())) {
+      forkService.child1(25);
     }
 
-    public void setForkService(ForkService s) {
-        this.forkService = s;
+    try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").build())) {
+      forkService.child2(25.75f);
     }
 
-    @Workflow(name = "worfklow")
-    public String simpleWorkflow(String input) {
-        forkService.stepOne("one");
-        forkService.stepTwo(2);
-        forkService.stepThree(2.5f);
-        forkService.stepFour(Double.valueOf(23.73));
-        forkService.stepFive(false);
+    forkService.stepFive(false);
+    return input + input;
+  }
 
-        return input+input;
+  @Workflow(name = "parentasync")
+  public String parentChildAsync(String input) {
+
+    forkService.stepOne("one");
+    forkService.stepTwo(2);
+
+    try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").async().build())) {
+      forkService.child1(25);
     }
 
-    @Workflow(name = "parent")
-    public String parentChild(String input) {
-
-        forkService.stepOne("one");
-        forkService.stepTwo(2);
-
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").build())) {
-            forkService.child1(25);
-        }
-
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").build())) {
-            forkService.child2(25.75f);
-        }
-
-        forkService.stepFive(false);
-        return input+input;
+    DBOS.retrieveWorkflow("child1").getResult();
+    try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").async().build())) {
+      forkService.child2(25.75f);
     }
 
-    @Workflow(name = "parentasync")
-    public String parentChildAsync(String input) {
+    forkService.stepFive(false);
+    return input + input;
+  }
 
-        forkService.stepOne("one");
-        forkService.stepTwo(2);
+  @Step(name = "one")
+  public String stepOne(String input) {
+    ++step1Count;
+    return input;
+  }
 
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").async().build())) {
-            forkService.child1(25);
-        }
+  @Step(name = "two")
+  public int stepTwo(Integer input) {
+    ++step2Count;
+    return input;
+  }
 
-        DBOS.retrieveWorkflow("child1").getResult();
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").async().build())) {
-            forkService.child2(25.75f);
-        }
+  @Step(name = "three")
+  public float stepThree(Float input) {
+    ++step3Count;
+    return input;
+  }
 
-        forkService.stepFive(false);
-        return input+input;
-    }
+  @Step(name = "four")
+  public double stepFour(Double input) {
+    ++step4Count;
+    return input;
+  }
 
-    @Step(name = "one")
-    public String stepOne(String input) {
-        ++step1Count ;
-        return input ;
-    }
+  @Step(name = "five")
+  public void stepFive(boolean b) {
+    ++step5Count;
+  }
 
-    @Step(name = "two")
-    public int stepTwo(Integer input) {
-        ++step2Count;
-        return input;
-    }
+  @Workflow(name = "child1")
+  public String child1(Integer number) {
+    ++child1Count;
+    return String.valueOf(number);
+  }
 
-    @Step(name = "three")
-    public float stepThree(Float input) {
-        ++step3Count;
-        return input;
-    }
-
-    @Step(name = "four")
-    public double stepFour(Double input) {
-        ++step4Count;
-        return input;
-    }
-
-    @Step(name = "five")
-    public void stepFive(boolean b) {
-        ++step5Count;
-    }
-
-    @Workflow(name = "child1")
-    public String child1(Integer number) {
-        ++child1Count ;
-        return String.valueOf(number);
-    }
-
-    @Workflow(name = "child2")
-    public String child2(Float number) {
-        ++child2Count;
-        return String.valueOf(number);
-    }
+  @Workflow(name = "child2")
+  public String child2(Float number) {
+    ++child2Count;
+    return String.valueOf(number);
+  }
 }
