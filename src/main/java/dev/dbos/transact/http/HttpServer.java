@@ -1,21 +1,15 @@
 package dev.dbos.transact.http;
 
 import dev.dbos.transact.http.controllers.AdminController;
-import jakarta.servlet.Servlet;
 import org.apache.catalina.Context;
-import org.apache.catalina.Wrapper;
-import org.apache.catalina.connector.Connector;
-import org.apache.catalina.core.StandardContext;
-import org.apache.catalina.core.StandardWrapper;
 import org.apache.catalina.startup.Tomcat;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.servlet.ServletContainer;
+import org.glassfish.jersey.jackson.JacksonFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
 
 public class HttpServer {
 
@@ -76,14 +70,17 @@ public class HttpServer {
 
         Context context = tomcat.addContext(contextPath, docBase);
 
-        ResourceConfig resourceConfig = new ResourceConfig() ;
-        resourceConfig.registerInstances(adminController) ;
+        ResourceConfig resourceConfig = new ResourceConfig();
+        resourceConfig.registerInstances(adminController);
+        
+        // Register Jackson JSON providers for proper JSON serialization
+        resourceConfig.register(JacksonFeature.class);
 
         // In future if we need to scan from a package
         //    resourceConfig.packages(pkg);
 
         // Add the REST API servlet
-        var jerseyservlet = tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
+        tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
         context.addServletMappingDecoded("/*", "jersey-servlet");
 
     }
