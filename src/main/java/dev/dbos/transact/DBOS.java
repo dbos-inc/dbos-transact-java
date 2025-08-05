@@ -272,7 +272,7 @@ public class DBOS {
         }
     }
 
-    public static <R> WorkflowHandle<R> retrieveWorkflow(String workflowId) {
+    public static <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
         return DBOS.getInstance().dbosExecutor.retrieveWorkflow(workflowId);
     }
 
