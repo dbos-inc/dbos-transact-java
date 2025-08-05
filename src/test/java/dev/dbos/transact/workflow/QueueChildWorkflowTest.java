@@ -55,8 +55,7 @@ public class QueueChildWorkflowTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         dataSource = SystemDatabase.createDataSource(dbosConfig);
-        SystemDatabase.initialize(dataSource);
-        systemDatabase = SystemDatabase.getInstance();
+        systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         queueService = new QueueService(systemDatabase, dbosExecutor);
 
