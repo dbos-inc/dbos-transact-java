@@ -566,7 +566,7 @@ public class DBOSExecutor {
         }
     }
 
-    public <T1, R> WorkflowHandle<R> startWorkflow(WorkflowFunction1<T1, R> func, T1 arg1) {
+    /* public <T1, R> WorkflowHandle<R> startWorkflow(WorkflowFunction1<T1, R> func, T1 arg1) {
         // Object[] args = new Object[]{arg1};
         // return submitWorkflow(func, args);
         DBOSContext oldctx = DBOSContextHolder.get();
@@ -580,13 +580,19 @@ public class DBOSExecutor {
             DBOSContextHolder.set(oldctx);
         }
 
-    }
+    } */
 
     public <T> WorkflowHandle<T> startWorkflow(DBOSFunction<T> func) {
-        // Object[] args = new Object[]{arg1};
-        // return submitWorkflow(func, args);
         DBOSContext oldctx = DBOSContextHolder.get();
-        DBOSContext newCtx = oldctx.copyWithAsync() ;
+        DBOSContext newCtx = oldctx ;
+
+        if (newCtx.getWorkflowId() == null) {
+            newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString()) ;
+        }
+
+        if (newCtx.getQueue() == null) {
+            newCtx = oldctx.copyWithAsync() ;
+        }
 
         try {
             DBOSContextHolder.set(newCtx);
@@ -600,7 +606,7 @@ public class DBOSExecutor {
 
     }
 
-    public <T> WorkflowHandle<T> enqueueWorkflow(DBOSFunction<T> func, Queue q) {
+    /* public <T> WorkflowHandle<T> enqueueWorkflow(DBOSFunction<T> func, Queue q) {
         // Object[] args = new Object[]{arg1};
         // return submitWorkflow(func, args);
         DBOSContext oldctx = DBOSContextHolder.get();
@@ -616,7 +622,7 @@ public class DBOSExecutor {
             DBOSContextHolder.set(oldctx);
         }
 
-    }
+    } */
 
     public static <T1, T2, R> WorkflowHandle<R> startWorkflow(WorkflowFunction2<T1, T2, R> func, T1 arg1, T2 arg2) {
         Object[] args = new Object[]{arg1, arg2};

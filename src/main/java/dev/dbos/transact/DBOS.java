@@ -386,17 +386,17 @@ public class DBOS {
         return this.dbosExecutor.forkWorkflow(workflowId, startStep, options) ;
     }
 
-    public <T1, R> WorkflowHandle<R> startWorkflow(WorkflowFunction1<T1, R> func, T1 arg1) {
+    /* public <T1, R> WorkflowHandle<R> startWorkflow(WorkflowFunction1<T1, R> func, T1 arg1) {
         return this.dbosExecutor.startWorkflow(func, arg1);
-    }
+    } */
 
     public <T> WorkflowHandle<T> startWorkflow(DBOSFunction<T> func) {
         return this.dbosExecutor.startWorkflow(func) ;
     }
 
-    public <T> WorkflowHandle<T> enqueueWorkflow(DBOSFunction<T> func, Queue q) {
+    /* public <T> WorkflowHandle<T> enqueueWorkflow(DBOSFunction<T> func, Queue q) {
         return this.dbosExecutor.enqueueWorkflow(func, q) ;
-    }
+    } */
 
 }
 

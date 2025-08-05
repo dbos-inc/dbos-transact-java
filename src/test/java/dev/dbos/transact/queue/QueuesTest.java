@@ -3,6 +3,8 @@ package dev.dbos.transact.queue;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSOptions;
+import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -446,8 +448,9 @@ public class QueuesTest {
         String id = "q1234" ;
 
         WorkflowHandle<String> handle = null ;
-        try (SetWorkflowID ctx = new SetWorkflowID(id)) {
-            handle = dbos.enqueueWorkflow(()->serviceQ.simpleQWorkflow("inputq"), firstQ) ;
+        DBOSOptions option = new DBOSOptions.Builder(id).queue(firstQ).build() ;
+        try (SetDBOSOptions o = new SetDBOSOptions(option)) {
+            handle = dbos.startWorkflow(()->serviceQ.simpleQWorkflow("inputq")) ;
         }
 
         assertEquals(id, handle.getWorkflowId());
