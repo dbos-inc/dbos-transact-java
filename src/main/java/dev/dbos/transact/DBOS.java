@@ -383,17 +383,19 @@ public class DBOS {
         return this.dbosExecutor.forkWorkflow(workflowId, startStep, options) ;
     }
 
-    /* public <T1, R> WorkflowHandle<R> startWorkflow(WorkflowFunction1<T1, R> func, T1 arg1) {
-        return this.dbosExecutor.startWorkflow(func, arg1);
-    } */
+    /**
+     * Start a workflow asynchronously.
+     * If a queue is specified with DBOSOptions, the workflow is queued.
+     *
+     * @param func A function annotated with @Workflow
+     * @return handle {@link WorkflowHandle} to the workflow
+     * @param <T> type returned by the function
+     */
 
     public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
         return this.dbosExecutor.startWorkflow(func) ;
     }
 
-    /* public <T> WorkflowHandle<T> enqueueWorkflow(DBOSFunction<T> func, Queue q) {
-        return this.dbosExecutor.enqueueWorkflow(func, q) ;
-    } */
 
 }
 

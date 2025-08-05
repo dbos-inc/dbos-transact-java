@@ -521,64 +521,6 @@ public class DBOSExecutor {
         return retrieveWorkflow(forkedId);
     }
 
-    public <R> WorkflowHandle<R> startAsyncWorkflow(String workflowName, Object[] args)  {
-
-        DBOSContext ctx = DBOSContextHolder.get() ;
-
-        String workflowId = ctx.getWorkflowId() == null ? UUID.randomUUID().toString() : ctx.getWorkflowId() ;
-
-        WorkflowFunctionWrapper functionWrapper = workflowRegistry.get(workflowName) ;
-
-        if (functionWrapper == null) {
-            throw new WorkflowFunctionNotFoundException(workflowId) ;
-        }
-
-        WorkflowHandle handle = null ;
-        if (ctx.getQueue() == null) {
-            // async
-            try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
-                DBOSContextHolder.get().setInWorkflow(true);
-                try {
-                    handle = submitWorkflow(workflowName, functionWrapper.targetClassName, functionWrapper.target, args, functionWrapper.function);
-                } catch (Throwable t) {
-                    logger.error(String.format("Error executing workflow by id : %s", workflowId) , t);
-                }
-            }
-
-            return handle ;
-
-        } else {
-            // enqueue
-            try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
-                DBOSContextHolder.get().setInWorkflow(true);
-                try {
-                    enqueueWorkflow(workflowName, functionWrapper.targetClassName, functionWrapper, args, ctx.getQueue());
-                } catch (Throwable t) {
-                    logger.error(String.format("Error executing workflow by id : %s", workflowId) , t);
-                }
-            }
-
-            return retrieveWorkflow(workflowId) ;
-
-        }
-    }
-
-    /* public <T1, R> WorkflowHandle<R> startWorkflow(WorkflowFunction1<T1, R> func, T1 arg1) {
-        // Object[] args = new Object[]{arg1};
-        // return submitWorkflow(func, args);
-        DBOSContext oldctx = DBOSContextHolder.get();
-        DBOSContext newCtx = oldctx.copyWithAsync() ;
-
-        try {
-            DBOSContextHolder.set(newCtx);
-            func.run(arg1);
-            return retrieveWorkflow(newCtx.getWorkflowId());
-        } finally {
-            DBOSContextHolder.set(oldctx);
-        }
-
-    } */
-
     public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
         DBOSContext oldctx = DBOSContextHolder.get();
         DBOSContext newCtx = oldctx ;
@@ -603,27 +545,4 @@ public class DBOSExecutor {
 
     }
 
-    /* public <T> WorkflowHandle<T> enqueueWorkflow(DBOSFunction<T> func, Queue q) {
-        // Object[] args = new Object[]{arg1};
-        // return submitWorkflow(func, args);
-        DBOSContext oldctx = DBOSContextHolder.get();
-        DBOSContext newCtx = oldctx.copyWithQueue(q) ;
-
-        try {
-            DBOSContextHolder.set(newCtx);
-            func.execute();
-            return retrieveWorkflow(newCtx.getWorkflowId());
-        } catch(Throwable t) {
-            throw new DBOSException(UNEXPECTED.getCode(), t.getMessage());
-        } finally {
-            DBOSContextHolder.set(oldctx);
-        }
-
-    } */
-
-    public static <T1, T2, R> WorkflowHandle<R> startWorkflow(WorkflowFunction2<T1, T2, R> func, T1 arg1, T2 arg2) {
-        Object[] args = new Object[]{arg1, arg2};
-        // return submitWorkflow(func, args);
-        return null ;
-    }
 }
