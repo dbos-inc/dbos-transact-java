@@ -9,6 +9,7 @@ import java.util.UUID;
 public class ForkServiceImpl implements ForkService {
 
     private ForkService forkService;
+    private DBOS dbos;
 
     int step1Count ;
     int step2Count ;
@@ -18,8 +19,8 @@ public class ForkServiceImpl implements ForkService {
     int child1Count ;
     int child2Count ;
 
-    public ForkServiceImpl() {
-
+    public ForkServiceImpl(DBOS d) {
+        this.dbos = d;
     }
 
     public void setForkService(ForkService s) {
@@ -61,13 +62,14 @@ public class ForkServiceImpl implements ForkService {
         forkService.stepOne("one");
         forkService.stepTwo(2);
 
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").async().build())) {
-            forkService.child1(25);
+        WorkflowHandle<String> handle = null;
+        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").build())) {
+            handle = dbos.startWorkflow(()->forkService.child1(25));
         }
 
-        DBOS.retrieveWorkflow("child1").getResult();
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").async().build())) {
-            forkService.child2(25.75f);
+        handle.getResult();
+        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").build())) {
+            handle = dbos.startWorkflow(()->forkService.child2(25.75f));
         }
 
         forkService.stepFive(false);

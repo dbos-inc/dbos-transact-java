@@ -77,10 +77,11 @@ public class WorkflowMgmtTest {
         mgmtService.setMgmtService(mgmtService);
 
         String workflowId = "wfid1" ;
-        DBOSOptions options = new DBOSOptions.Builder(workflowId).async().build();
+        DBOSOptions options = new DBOSOptions.Builder(workflowId).build();
         int result ;
+        WorkflowHandle<Integer> h = null ;
         try (SetDBOSOptions o = new SetDBOSOptions(options)) {
-            mgmtService.simpleWorkflow(23);
+            h = dbos.startWorkflow(()->mgmtService.simpleWorkflow(23));
         }
 
         mainLatch.await();
@@ -88,7 +89,7 @@ public class WorkflowMgmtTest {
         workLatch.countDown();
 
         assertEquals(1, mgmtService.getStepsExecuted()) ;
-        WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId) ;
+        // WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId) ;
         assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
 
         WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId) ;
@@ -246,7 +247,7 @@ public class WorkflowMgmtTest {
     @Test
     public void testFork() {
 
-        ForkServiceImpl impl = new ForkServiceImpl();
+        ForkServiceImpl impl = new ForkServiceImpl(dbos);
 
         ForkService forkService = dbos.<ForkService>Workflow()
                 .interfaceClass(ForkService.class)
@@ -322,7 +323,7 @@ public class WorkflowMgmtTest {
     @Test
     public void testParentChildFork() {
 
-        ForkServiceImpl impl = new ForkServiceImpl();
+        ForkServiceImpl impl = new ForkServiceImpl(dbos);
 
         ForkService forkService = dbos.<ForkService>Workflow()
                 .interfaceClass(ForkService.class)
@@ -422,7 +423,7 @@ public class WorkflowMgmtTest {
     @Test
     public void testParentChildAsyncFork() {
 
-        ForkServiceImpl impl = new ForkServiceImpl();
+        ForkServiceImpl impl = new ForkServiceImpl(dbos);
 
         ForkService forkService = dbos.<ForkService>Workflow()
                 .interfaceClass(ForkService.class)

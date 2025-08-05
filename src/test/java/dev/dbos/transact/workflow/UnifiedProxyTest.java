@@ -84,14 +84,13 @@ public class UnifiedProxyTest {
         // asynchronous
 
         String wfid2 = "wf-124";
-        options = new DBOSOptions.Builder(wfid2).async().build();
+        options = new DBOSOptions.Builder(wfid2).build();
+        WorkflowHandle<String> handle = null ;
         try (SetDBOSOptions id = new SetDBOSOptions(options)){
-            result = simpleService.workWithString("test-item-async");
+            handle = dbos.startWorkflow(()->simpleService.workWithString("test-item-async"));
         }
-        assertNull(result);
 
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid2); ;
-        result = (String)handle.getResult();
+        result = handle.getResult();
         assertEquals("Processed: test-item-async", result);
         assertEquals(wfid2, handle.getWorkflowId());
         assertEquals("SUCCESS", handle.getStatus().getStatus()) ;
