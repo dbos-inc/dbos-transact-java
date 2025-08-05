@@ -509,7 +509,7 @@ public class DBOSExecutor {
 
     }
 
-    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
+    public <T> WorkflowHandle<T> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
 
         Supplier<String> forkFunction = () -> {
             logger.info(String.format("Forking workflow:%s from step:%d ", workflowId, startStep));

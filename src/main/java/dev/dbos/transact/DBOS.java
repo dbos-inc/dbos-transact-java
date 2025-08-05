@@ -379,7 +379,7 @@ public class DBOS {
      * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
      * @return handle to the workflow
      */
-    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
+    public <T> WorkflowHandle<T> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
         return this.dbosExecutor.forkWorkflow(workflowId, startStep, options) ;
     }
 
