@@ -10,7 +10,7 @@ public class WorkflowRegistry {
         if (registry.containsKey(workflowName)) {
             throw new IllegalStateException("Workflow already registered with name: " + workflowName);
         }
-        WorkflowFunction function = (t, args) -> method.invoke(t, args);
+        WorkflowFunctionReflect function = (t, args) -> method.invoke(t, args);
         registry.put(workflowName, new WorkflowFunctionWrapper(target, targetClassName, function));
     }
 

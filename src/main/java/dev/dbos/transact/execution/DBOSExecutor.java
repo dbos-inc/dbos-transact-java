@@ -10,7 +10,6 @@ import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.QueueRegistry;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -25,7 +24,6 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.sql.SQLException;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.*;
@@ -150,7 +148,7 @@ public class DBOSExecutor {
                              String targetClassName,
                              Object target,
                              Object[] args,
-                             WorkflowFunction function,
+                             WorkflowFunctionReflect function,
                              String workflowId) throws Throwable {
 
         String wfid = workflowId ;
@@ -213,7 +211,7 @@ public class DBOSExecutor {
     <T> T runAndSaveResult(
           Object target,
           Object[] args,
-          WorkflowFunction function,
+          WorkflowFunctionReflect function,
           String workflowId) throws Throwable {
 
         try {
@@ -249,7 +247,7 @@ public class DBOSExecutor {
                                                 String targetClassName,
                                                 Object target,
                                                 Object[] args,
-                                                WorkflowFunction function) throws Throwable {
+                                                WorkflowFunctionReflect function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId() ;
@@ -332,7 +330,6 @@ public class DBOSExecutor {
                                                 ) throws Throwable {
 
 
-
         DBOSContext ctx = DBOSContextHolder.get();
         String wfid = ctx.getWorkflowId() ;
 
@@ -363,7 +360,7 @@ public class DBOSExecutor {
                              int maxAttempts,
                              float backOffRate,
                              Object[] args,
-                             DBOSFunction<T> function
+                             WorkflowFunction<T> function
                          ) throws Throwable {
 
 
@@ -435,7 +432,7 @@ public class DBOSExecutor {
      * Retrieve the workflowHandle for the workflowId
      *
      */
-    public WorkflowHandle<?> retrieveWorkflow(String workflowId) {
+    public <R> WorkflowHandle<R> retrieveWorkflow(String workflowId) {
         return new WorkflowHandleDBPoll(workflowId, systemDatabase) ;
     }
 
@@ -488,7 +485,7 @@ public class DBOSExecutor {
 
     }
 
-    public WorkflowHandle<?> resumeWorkflow(String workflowId)  {
+    public <T> WorkflowHandle<T> resumeWorkflow(String workflowId)  {
 
         Supplier<Void> resumeFunction = () -> {
             logger.info("Resuming workflow: ", workflowId);
@@ -512,7 +509,7 @@ public class DBOSExecutor {
 
     }
 
-    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
+    public <T> WorkflowHandle<T> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
 
         Supplier<String> forkFunction = () -> {
             logger.info(String.format("Forking workflow:%s from step:%d ", workflowId, startStep));
@@ -523,4 +520,29 @@ public class DBOSExecutor {
         String forkedId = systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
         return retrieveWorkflow(forkedId);
     }
+
+    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
+        DBOSContext oldctx = DBOSContextHolder.get();
+        DBOSContext newCtx = oldctx ;
+
+        if (newCtx.getWorkflowId() == null) {
+            newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString()) ;
+        }
+
+        if (newCtx.getQueue() == null) {
+            newCtx = oldctx.copyWithAsync() ;
+        }
+
+        try {
+            DBOSContextHolder.set(newCtx);
+            func.execute();
+            return retrieveWorkflow(newCtx.getWorkflowId());
+        } catch(Throwable t) {
+            throw new DBOSException(UNEXPECTED.getCode(), t.getMessage());
+        } finally {
+            DBOSContextHolder.set(oldctx);
+        }
+
+    }
+
 }

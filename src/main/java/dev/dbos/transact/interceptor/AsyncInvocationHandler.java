@@ -3,6 +3,7 @@ package dev.dbos.transact.interceptor;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowHandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.lang.reflect.Method;

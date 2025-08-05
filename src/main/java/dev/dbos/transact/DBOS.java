@@ -3,12 +3,12 @@ package dev.dbos.transact;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.WorkflowFunction;
 import dev.dbos.transact.execution.RecoveryService;
 import dev.dbos.transact.http.HttpServer;
 import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
-import dev.dbos.transact.interceptor.TransactInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.notifications.NotificationService;
@@ -21,7 +21,6 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DBOS {
@@ -273,7 +272,7 @@ public class DBOS {
         }
     }
 
-    public static WorkflowHandle<?> retrieveWorkflow(String workflowId) {
+    public static <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
         return DBOS.getInstance().dbosExecutor.retrieveWorkflow(workflowId);
     }
 
@@ -355,7 +354,7 @@ public class DBOS {
      * @param workflowId id of the workflow
      * @return A handle to the workflow
      */
-    public WorkflowHandle<?> resumeWorkflow(String workflowId) {
+    public <T> WorkflowHandle<T> resumeWorkflow(String workflowId) {
         return this.dbosExecutor.resumeWorkflow(workflowId) ;
     }
 
@@ -380,8 +379,21 @@ public class DBOS {
      * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
      * @return handle to the workflow
      */
-    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
+    public <T> WorkflowHandle<T> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
         return this.dbosExecutor.forkWorkflow(workflowId, startStep, options) ;
+    }
+
+    /**
+     * Start a workflow asynchronously.
+     * If a queue is specified with DBOSOptions, the workflow is queued.
+     *
+     * @param func A function annotated with @Workflow
+     * @return handle {@link WorkflowHandle} to the workflow
+     * @param <T> type returned by the function
+     */
+
+    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
+        return this.dbosExecutor.startWorkflow(func) ;
     }
 
 

@@ -3,6 +3,8 @@ package dev.dbos.transact.queue;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSOptions;
+import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -167,7 +169,6 @@ public class QueuesTest {
         ServiceQ serviceQ1 = new DBOS.WorkflowBuilder<ServiceQ>()
                 .interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl())
-                .queue(firstQ)
                 .build() ;
 
         Queue secondQ = new DBOS.QueueBuilder("secondQueue")
@@ -178,30 +179,33 @@ public class QueuesTest {
         ServiceI serviceI = new DBOS.WorkflowBuilder<ServiceI>()
                 .interfaceClass(ServiceI.class)
                 .implementation(new ServiceIImpl())
-                .queue(secondQ)
                 .build() ;
 
 
         String id1 = "firstQ1234" ;
         String id2 = "second1234" ;
 
-        try (SetWorkflowID ctx = new SetWorkflowID(id1)) {
-            serviceQ1.simpleQWorkflow("firstinput");
+        DBOSOptions options1 = new DBOSOptions.Builder(id1).queue(firstQ).build();
+        WorkflowHandle<String> handle1 = null ;
+        try (SetDBOSOptions o = new SetDBOSOptions(options1)) {
+            handle1 = dbos.startWorkflow(()->serviceQ1.simpleQWorkflow("firstinput"));
         }
 
-        try (SetWorkflowID ctx = new SetWorkflowID(id2)) {
-            serviceI.workflowI(25);
+        DBOSOptions options2 = new DBOSOptions.Builder(id2).queue(secondQ).build();
+        WorkflowHandle<Integer> handle2 = null ;
+        try (SetDBOSOptions o = new SetDBOSOptions(options2)) {
+            handle2 = dbos.startWorkflow(()->serviceI.workflowI(25));
         }
 
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id1);
-        assertEquals(id1, handle.getWorkflowId());
-        String result = (String)handle.getResult();
+        assertEquals(id1, handle1.getWorkflowId());
+        String result = handle1.getResult();
+        assertEquals("firstQueue", handle1.getStatus().getQueueName());
         assertEquals("firstinputfirstinput",result) ;
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
 
-        WorkflowHandle<?> handle2 = dbosExecutor.retrieveWorkflow(id2);
         assertEquals(id2, handle2.getWorkflowId());
         Integer result2 = (Integer)handle2.getResult();
+        assertEquals("secondQueue", handle2.getStatus().getQueueName());
         assertEquals(50,result2) ;
         assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
     }
@@ -221,24 +225,26 @@ public class QueuesTest {
         ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>()
                 .interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl())
-                .queue(limitQ)
                 .build() ;
 
         int numWaves = 3;
         int numTasks = numWaves * limit ;
-        List<WorkflowHandle<?>> handles = new ArrayList<>() ;
+        List<WorkflowHandle<Double>> handles = new ArrayList<>() ;
         List<Double> times = new ArrayList<>();
+
 
         for (int i = 0 ; i < numTasks ; i++) {
             String id = "id"+i ;
-            try (SetWorkflowID ctx = new SetWorkflowID(id)) {
-                serviceQ.limitWorkflow("abc","123");
+            DBOSOptions options = new DBOSOptions.Builder(id).queue(limitQ).build();
+            WorkflowHandle<Double> handle = null;
+            try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+                handle = dbos.startWorkflow(()->serviceQ.limitWorkflow("abc","123"));
             }
-            handles.add(dbosExecutor.retrieveWorkflow(id));
+            handles.add(handle);
         }
 
-        for (WorkflowHandle<?> h : handles) {
-            double result = (Double)h.getResult() ;
+        for (WorkflowHandle<Double> h : handles) {
+            double result = h.getResult() ;
             logger.info(String.valueOf(result));
             times.add(result);
         }
@@ -266,7 +272,7 @@ public class QueuesTest {
                     String.format("Gap between wave %d and %d should be at most %.3f. Actual: %.3f", wave, wave + 1, period + periodTolerance, gap));
         }
 
-        for (WorkflowHandle<?> h : handles) {
+        for (WorkflowHandle<Double> h : handles) {
             assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
         }
 
@@ -429,6 +435,31 @@ public class QueuesTest {
         DBUtils.updateWorkflowState(dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION) ;
         assertEquals(2, idsToRun.size()) ;
+
+    }
+
+    @Test
+    public void testenQueueWF() throws Exception {
+
+        Queue firstQ = new DBOS.QueueBuilder("firstQueue")
+                .build();
+
+        ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>()
+                .interfaceClass(ServiceQ.class)
+                .implementation(new ServiceQImpl())
+                .build() ;
+
+        String id = "q1234" ;
+
+        WorkflowHandle<String> handle = null ;
+        DBOSOptions option = new DBOSOptions.Builder(id).queue(firstQ).build() ;
+        try (SetDBOSOptions o = new SetDBOSOptions(option)) {
+            handle = dbos.startWorkflow(()->serviceQ.simpleQWorkflow("inputq")) ;
+        }
+
+        assertEquals(id, handle.getWorkflowId());
+        String result = handle.getResult();
+        assertEquals("inputqinputq",result) ;
 
     }
 }
