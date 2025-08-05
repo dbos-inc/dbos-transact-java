@@ -1,7 +1,6 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -11,7 +10,6 @@ import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.QueueRegistry;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -26,7 +24,6 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.sql.SQLException;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.*;
@@ -151,7 +148,7 @@ public class DBOSExecutor {
                              String targetClassName,
                              Object target,
                              Object[] args,
-                             WorkflowFunction function,
+                             WorkflowFunctionReflect function,
                              String workflowId) throws Throwable {
 
         String wfid = workflowId ;
@@ -214,7 +211,7 @@ public class DBOSExecutor {
     <T> T runAndSaveResult(
           Object target,
           Object[] args,
-          WorkflowFunction function,
+          WorkflowFunctionReflect function,
           String workflowId) throws Throwable {
 
         try {
@@ -250,7 +247,7 @@ public class DBOSExecutor {
                                                 String targetClassName,
                                                 Object target,
                                                 Object[] args,
-                                                WorkflowFunction function) throws Throwable {
+                                                WorkflowFunctionReflect function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId() ;

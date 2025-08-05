@@ -1,6 +1,6 @@
 package dev.dbos.transact.execution;
 
 @FunctionalInterface
-public interface WorkflowFunction {
+public interface WorkflowFunctionReflect {
     Object invoke(Object target, Object[] args) throws Exception;
 }
