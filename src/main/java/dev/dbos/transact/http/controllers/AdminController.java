@@ -51,7 +51,7 @@ public class AdminController {
     @Produces(MediaType.APPLICATION_JSON)
     public List<QueueMetadata> workflowQueuesMetadata() {
         List<Queue> queues = dbosExecutor.getAllQueuesSnapshot();
-        List<QueueMetadata> metadataList = new ArrayList<>();
+        List<QueueMetadata> metadataList = new ArrayList<QueueMetadata>();
         for (Queue queue : queues) {
             metadataList.add(new QueueMetadata(queue));
         }
