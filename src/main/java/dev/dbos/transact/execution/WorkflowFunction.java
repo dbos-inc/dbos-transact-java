@@ -1,6 +1,6 @@
 package dev.dbos.transact.execution;
 
 @FunctionalInterface
-public interface DBOSFunction<T> {
+public interface WorkflowFunction<T> {
     T execute() throws Throwable;
 }

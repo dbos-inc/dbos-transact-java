@@ -3,14 +3,12 @@ package dev.dbos.transact;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.DBOSFunction;
+import dev.dbos.transact.execution.WorkflowFunction;
 import dev.dbos.transact.execution.RecoveryService;
-import dev.dbos.transact.execution.WorkflowFunction1;
 import dev.dbos.transact.http.HttpServer;
 import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
-import dev.dbos.transact.interceptor.TransactInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.notifications.NotificationService;
@@ -23,7 +21,6 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DBOS {
@@ -390,7 +387,7 @@ public class DBOS {
         return this.dbosExecutor.startWorkflow(func, arg1);
     } */
 
-    public <T> WorkflowHandle<T> startWorkflow(DBOSFunction<T> func) {
+    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
         return this.dbosExecutor.startWorkflow(func) ;
     }
 

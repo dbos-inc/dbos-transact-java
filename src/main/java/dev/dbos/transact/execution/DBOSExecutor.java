@@ -360,7 +360,7 @@ public class DBOSExecutor {
                              int maxAttempts,
                              float backOffRate,
                              Object[] args,
-                             DBOSFunction<T> function
+                             WorkflowFunction<T> function
                          ) throws Throwable {
 
 
@@ -579,7 +579,7 @@ public class DBOSExecutor {
 
     } */
 
-    public <T> WorkflowHandle<T> startWorkflow(DBOSFunction<T> func) {
+    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
         DBOSContext oldctx = DBOSContextHolder.get();
         DBOSContext newCtx = oldctx ;
 
