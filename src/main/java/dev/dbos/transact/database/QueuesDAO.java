@@ -2,6 +2,8 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.workflow.WorkflowState;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -222,6 +224,22 @@ public class QueuesDAO {
         } catch (SQLException e) {
             logger.error( "Error starting queued workflows", e);
             throw e;
+        }
+    }
+
+    public boolean clearQueueAssignment(String workflowId) throws SQLException {
+        String updateQuery = "UPDATE %s.workflow_status " + 
+            "SET started_at_epoch_ms = NULL, status = ? " +
+            "WHERE workflow_uuid = ? AND queue_name is NOT NULL AND status = ?";
+        updateQuery = String.format(updateQuery, Constants.DB_SCHEMA);
+        try (Connection connection = dataSource.getConnection()) {
+            try (PreparedStatement ps = connection.prepareStatement(updateQuery)) {
+                ps.setString(1, WorkflowState.ENQUEUED.name());
+                ps.setString(2, workflowId);
+                ps.setString(3, WorkflowState.PENDING.name());
+                int rowCount = ps.executeUpdate();
+                return rowCount > 0;
+            }
         }
     }
 }

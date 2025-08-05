@@ -15,6 +15,7 @@ import jakarta.ws.rs.core.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -78,8 +79,17 @@ public class AdminController {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public List<String> recovery(List<String> executorIds) {
-        // TODO: this endpoint takes a JSON string array of executor IDs and calls dbosExec.recoverPendingWorkflows
-        return new ArrayList<>();
+        try {
+            List<WorkflowHandle<?>> handles = dbosExecutor.recoverPendingWorkflows(executorIds);
+            List<String> workflowIds = new ArrayList<String>();
+            for (WorkflowHandle<?> handle : handles) {
+                workflowIds.add(handle.getWorkflowId());
+            }
+            return workflowIds;
+        } catch (SQLException e) {
+            logger.error("Error recovering workflows {}", e.getMessage());
+            throw new WebApplicationException(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR);
+        }
     }
 
     @POST
@@ -89,8 +99,8 @@ public class AdminController {
     public List<WorkflowStatus> workflows(ListWorkflowsInput input) {
         try {
             return systemDatabase.listWorkflows(input);
-        } catch (java.sql.SQLException e) {
-            logger.error("Error listing workflows", e);
+        } catch (SQLException e) {
+            logger.error("Error listing workflows {}", e.getMessage());
             throw new WebApplicationException(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR);
         }
     }
