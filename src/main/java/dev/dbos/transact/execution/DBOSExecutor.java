@@ -485,7 +485,7 @@ public class DBOSExecutor {
 
     }
 
-    public WorkflowHandle<?> resumeWorkflow(String workflowId)  {
+    public <T> WorkflowHandle<T> resumeWorkflow(String workflowId)  {
 
         Supplier<Void> resumeFunction = () -> {
             logger.info("Resuming workflow: ", workflowId);

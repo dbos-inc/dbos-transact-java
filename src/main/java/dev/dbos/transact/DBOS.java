@@ -354,7 +354,7 @@ public class DBOS {
      * @param workflowId id of the workflow
      * @return A handle to the workflow
      */
-    public WorkflowHandle<?> resumeWorkflow(String workflowId) {
+    public <T> WorkflowHandle<T> resumeWorkflow(String workflowId) {
         return this.dbosExecutor.resumeWorkflow(workflowId) ;
     }
 

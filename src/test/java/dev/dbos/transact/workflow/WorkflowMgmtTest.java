@@ -91,9 +91,9 @@ public class WorkflowMgmtTest {
         WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId) ;
         assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
 
-        WorkflowHandle<?> handle = dbos.resumeWorkflow(workflowId) ;
+        WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId) ;
 
-        result = (Integer) handle.getResult() ;
+        result = handle.getResult() ;
         assertEquals(23, result);
         assertEquals(3, mgmtService.getStepsExecuted()) ;
 
@@ -101,7 +101,7 @@ public class WorkflowMgmtTest {
 
         handle = dbos.resumeWorkflow(workflowId) ;
 
-        result = (Integer) handle.getResult() ;
+        result = handle.getResult() ;
         assertEquals(23, result);
         assertEquals(3, mgmtService.getStepsExecuted()) ;
         h = dbosExecutor.retrieveWorkflow(workflowId) ;
@@ -140,9 +140,9 @@ public class WorkflowMgmtTest {
         WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId) ;
         assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
 
-        WorkflowHandle<?> handle = dbos.resumeWorkflow(workflowId) ;
+        WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId) ;
 
-        result = (Integer) handle.getResult() ;
+        result = handle.getResult() ;
         assertEquals(23, result);
         assertEquals(3, mgmtService.getStepsExecuted()) ;
 
@@ -150,7 +150,7 @@ public class WorkflowMgmtTest {
 
         handle = dbos.resumeWorkflow(workflowId) ;
 
-        result = (Integer) handle.getResult() ;
+        result =  handle.getResult() ;
         assertEquals(23, result);
         assertEquals(3, mgmtService.getStepsExecuted()) ;
         h = dbosExecutor.retrieveWorkflow(workflowId) ;
@@ -209,9 +209,9 @@ public class WorkflowMgmtTest {
 
         testLatch.await();
 
-        WorkflowHandle<?> handle = dbos.resumeWorkflow(workflowId) ;
+        WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId) ;
 
-        int result = (Integer) handle.getResult() ;
+        int result =  handle.getResult() ;
         assertEquals(23, result);
         assertEquals(3, mgmtService.getStepsExecuted()) ;
 
