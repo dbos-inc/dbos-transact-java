@@ -225,24 +225,26 @@ public class QueuesTest {
         ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>()
                 .interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl())
-                .queue(limitQ)
                 .build() ;
 
         int numWaves = 3;
         int numTasks = numWaves * limit ;
-        List<WorkflowHandle<?>> handles = new ArrayList<>() ;
+        List<WorkflowHandle<Double>> handles = new ArrayList<>() ;
         List<Double> times = new ArrayList<>();
+
 
         for (int i = 0 ; i < numTasks ; i++) {
             String id = "id"+i ;
-            try (SetWorkflowID ctx = new SetWorkflowID(id)) {
-                serviceQ.limitWorkflow("abc","123");
+            DBOSOptions options = new DBOSOptions.Builder(id).queue(limitQ).build();
+            WorkflowHandle<Double> handle = null;
+            try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+                handle = dbos.startWorkflow(()->serviceQ.limitWorkflow("abc","123"));
             }
-            handles.add(dbosExecutor.retrieveWorkflow(id));
+            handles.add(handle);
         }
 
-        for (WorkflowHandle<?> h : handles) {
-            double result = (Double)h.getResult() ;
+        for (WorkflowHandle<Double> h : handles) {
+            double result = h.getResult() ;
             logger.info(String.valueOf(result));
             times.add(result);
         }
@@ -270,7 +272,7 @@ public class QueuesTest {
                     String.format("Gap between wave %d and %d should be at most %.3f. Actual: %.3f", wave, wave + 1, period + periodTolerance, gap));
         }
 
-        for (WorkflowHandle<?> h : handles) {
+        for (WorkflowHandle<Double> h : handles) {
             assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
         }
 
