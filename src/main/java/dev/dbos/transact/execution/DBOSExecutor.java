@@ -565,4 +565,62 @@ public class DBOSExecutor {
 
         }
     }
+
+    public <T1, R> WorkflowHandle<R> startWorkflow(WorkflowFunction1<T1, R> func, T1 arg1) {
+        // Object[] args = new Object[]{arg1};
+        // return submitWorkflow(func, args);
+        DBOSContext oldctx = DBOSContextHolder.get();
+        DBOSContext newCtx = oldctx.copyWithAsync() ;
+
+        try {
+            DBOSContextHolder.set(newCtx);
+            func.run(arg1);
+            return retrieveWorkflow(newCtx.getWorkflowId());
+        } finally {
+            DBOSContextHolder.set(oldctx);
+        }
+
+    }
+
+    public <T> WorkflowHandle<T> startWorkflow(DBOSFunction<T> func) {
+        // Object[] args = new Object[]{arg1};
+        // return submitWorkflow(func, args);
+        DBOSContext oldctx = DBOSContextHolder.get();
+        DBOSContext newCtx = oldctx.copyWithAsync() ;
+
+        try {
+            DBOSContextHolder.set(newCtx);
+            func.execute();
+            return retrieveWorkflow(newCtx.getWorkflowId());
+        } catch(Throwable t) {
+            throw new DBOSException(UNEXPECTED.getCode(), t.getMessage());
+        } finally {
+            DBOSContextHolder.set(oldctx);
+        }
+
+    }
+
+    public <T> WorkflowHandle<T> enqueueWorkflow(DBOSFunction<T> func, Queue q) {
+        // Object[] args = new Object[]{arg1};
+        // return submitWorkflow(func, args);
+        DBOSContext oldctx = DBOSContextHolder.get();
+        DBOSContext newCtx = oldctx.copyWithQueue(q) ;
+
+        try {
+            DBOSContextHolder.set(newCtx);
+            func.execute();
+            return retrieveWorkflow(newCtx.getWorkflowId());
+        } catch(Throwable t) {
+            throw new DBOSException(UNEXPECTED.getCode(), t.getMessage());
+        } finally {
+            DBOSContextHolder.set(oldctx);
+        }
+
+    }
+
+    public static <T1, T2, R> WorkflowHandle<R> startWorkflow(WorkflowFunction2<T1, T2, R> func, T1 arg1, T2 arg2) {
+        Object[] args = new Object[]{arg1, arg2};
+        // return submitWorkflow(func, args);
+        return null ;
+    }
 }

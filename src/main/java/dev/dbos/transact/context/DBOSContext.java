@@ -163,5 +163,13 @@ public class DBOSContext {
     public long getWorkflowTimeoutMs() {
         return workflowTimeoutMs ;
     }
+
+    public DBOSContext copyWithAsync() {
+        return new DBOSContext(workflowId, functionId, parentWorkflowId, parentFunctionId, inWorkflow, true, queue, workflowTimeoutMs);
+    }
+
+    public DBOSContext copyWithQueue(Queue q) {
+        return new DBOSContext(workflowId, functionId, parentWorkflowId, parentFunctionId, inWorkflow, async, q, workflowTimeoutMs);
+    }
 }
 

@@ -308,4 +308,46 @@ public class AsyncWorkflowTest {
 
 
     }
+
+    @Test
+    public void startWorkflowNoClosure() {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+
+
+        String wfid = "wf-123";
+        WorkflowHandle<String> handle = null ;
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            handle = dbos.startWorkflow(simpleService::workWithString, "test-item");
+        }
+
+        String result = handle.getResult();
+        assertEquals("Processed: test-item", result);
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus()) ;
+
+    }
+
+    @Test
+    public void startWorkflowClosure() {
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class)
+                .implementation(new SimpleServiceImpl())
+                .build();
+
+
+        String wfid = "wf-123";
+        WorkflowHandle<String> handle = null ;
+        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+            handle = dbos.startWorkflow(()->simpleService.workWithString("test-item"));
+        }
+
+        String result = handle.getResult();
+        assertEquals("Processed: test-item", result);
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus()) ;
+
+    }
 }

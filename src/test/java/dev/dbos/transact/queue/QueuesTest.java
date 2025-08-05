@@ -431,5 +431,29 @@ public class QueuesTest {
         assertEquals(2, idsToRun.size()) ;
 
     }
+
+    @Test
+    public void testenQueueWF() throws Exception {
+
+        Queue firstQ = new DBOS.QueueBuilder("firstQueue")
+                .build();
+
+        ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>()
+                .interfaceClass(ServiceQ.class)
+                .implementation(new ServiceQImpl())
+                .build() ;
+
+        String id = "q1234" ;
+
+        WorkflowHandle<String> handle = null ;
+        try (SetWorkflowID ctx = new SetWorkflowID(id)) {
+            handle = dbos.enqueueWorkflow(()->serviceQ.simpleQWorkflow("inputq"), firstQ) ;
+        }
+
+        assertEquals(id, handle.getWorkflowId());
+        String result = handle.getResult();
+        assertEquals("inputqinputq",result) ;
+
+    }
 }
 

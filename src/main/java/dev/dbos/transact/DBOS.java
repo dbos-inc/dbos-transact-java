@@ -3,7 +3,9 @@ package dev.dbos.transact;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.DBOSFunction;
 import dev.dbos.transact.execution.RecoveryService;
+import dev.dbos.transact.execution.WorkflowFunction1;
 import dev.dbos.transact.http.HttpServer;
 import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
@@ -384,6 +386,17 @@ public class DBOS {
         return this.dbosExecutor.forkWorkflow(workflowId, startStep, options) ;
     }
 
+    public <T1, R> WorkflowHandle<R> startWorkflow(WorkflowFunction1<T1, R> func, T1 arg1) {
+        return this.dbosExecutor.startWorkflow(func, arg1);
+    }
+
+    public <T> WorkflowHandle<T> startWorkflow(DBOSFunction<T> func) {
+        return this.dbosExecutor.startWorkflow(func) ;
+    }
+
+    public <T> WorkflowHandle<T> enqueueWorkflow(DBOSFunction<T> func, Queue q) {
+        return this.dbosExecutor.enqueueWorkflow(func, q) ;
+    }
 
 }
 
