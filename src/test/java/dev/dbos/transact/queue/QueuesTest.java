@@ -169,7 +169,6 @@ public class QueuesTest {
         ServiceQ serviceQ1 = new DBOS.WorkflowBuilder<ServiceQ>()
                 .interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl())
-                //.queue(firstQ)
                 .build() ;
 
         Queue secondQ = new DBOS.QueueBuilder("secondQueue")
@@ -180,7 +179,6 @@ public class QueuesTest {
         ServiceI serviceI = new DBOS.WorkflowBuilder<ServiceI>()
                 .interfaceClass(ServiceI.class)
                 .implementation(new ServiceIImpl())
-                //.queue(secondQ)
                 .build() ;
 
 
@@ -188,7 +186,6 @@ public class QueuesTest {
         String id2 = "second1234" ;
 
         DBOSOptions options1 = new DBOSOptions.Builder(id1).queue(firstQ).build();
-        // try (SetWorkflowID ctx = new SetWorkflowID(id1)) {
         WorkflowHandle<String> handle1 = null ;
         try (SetDBOSOptions o = new SetDBOSOptions(options1)) {
             handle1 = dbos.startWorkflow(()->serviceQ1.simpleQWorkflow("firstinput"));
@@ -196,19 +193,16 @@ public class QueuesTest {
 
         DBOSOptions options2 = new DBOSOptions.Builder(id2).queue(secondQ).build();
         WorkflowHandle<Integer> handle2 = null ;
-        // try (SetWorkflowID ctx = new SetWorkflowID(id2)) {
         try (SetDBOSOptions o = new SetDBOSOptions(options2)) {
             handle2 = dbos.startWorkflow(()->serviceI.workflowI(25));
         }
 
-        // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id1);
         assertEquals(id1, handle1.getWorkflowId());
         String result = handle1.getResult();
         assertEquals("firstQueue", handle1.getStatus().getQueueName());
         assertEquals("firstinputfirstinput",result) ;
         assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
 
-        // WorkflowHandle<Integer> handle2 = dbosExecutor.retrieveWorkflow(id2);
         assertEquals(id2, handle2.getWorkflowId());
         Integer result2 = (Integer)handle2.getResult();
         assertEquals("secondQueue", handle2.getStatus().getQueueName());

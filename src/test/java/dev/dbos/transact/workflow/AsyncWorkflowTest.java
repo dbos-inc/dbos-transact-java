@@ -153,7 +153,6 @@ public class AsyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
                 .implementation(new SimpleServiceImpl())
-                // .async()
                 .build();
 
         WorkflowHandle<Void> handle = null;
@@ -165,7 +164,6 @@ public class AsyncWorkflowTest {
             });
         }
 
-        // handle = dbosExecutor.retrieveWorkflow(wfid);
         try {
             handle.getResult();
         } catch (DBOSAppException e) {
@@ -188,19 +186,16 @@ public class AsyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
                 .implementation(new SimpleServiceImpl())
-                //.async()
                 .build();
 
         simpleService.setSimpleService(simpleService);
 
         WorkflowHandle<String> handle = null ;
         DBOSOptions options = new DBOSOptions.Builder("wf-123456").build();
-        // try (SetWorkflowID id = new SetWorkflowID()){
         try (SetDBOSOptions o = new SetDBOSOptions(options)) {
             handle = dbos.startWorkflow(()->simpleService.parentWorkflowWithoutSet("123"));
         }
 
-        // WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         System.out.println(handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
@@ -225,20 +220,17 @@ public class AsyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
                 .implementation(new SimpleServiceImpl())
-        //        .async() unified instead
                 .build();
 
         simpleService.setSimpleService(simpleService);
 
         DBOSOptions options = new DBOSOptions.Builder("wf-123456").build();
 
-        // try (SetWorkflowID id = new SetWorkflowID("wf-123456")){
         WorkflowHandle<String> handle = null ;
         try(SetDBOSOptions o = new SetDBOSOptions(options)) {
             handle = dbos.startWorkflow(()->simpleService.WorkflowWithMultipleChildren("123"));
         }
 
-        // WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         assertEquals("123abcdefghi", handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
@@ -277,7 +269,6 @@ public class AsyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
                 .implementation(new SimpleServiceImpl())
-               // .async()
                 .build();
 
         simpleService.setSimpleService(simpleService);
@@ -288,7 +279,6 @@ public class AsyncWorkflowTest {
             handle = dbos.startWorkflow(()->simpleService.grandParent("123"));
         }
 
-        // WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         assertEquals("p-c-gc-123",handle.getResult());
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
@@ -316,27 +306,6 @@ public class AsyncWorkflowTest {
         assertEquals("grandchildWorkflow", steps.get(0).getFunctionName());
 
     }
-
-    /* @Test
-    public void startWorkflowNoClosure() {
-
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl())
-                .build();
-
-
-        String wfid = "wf-123";
-        WorkflowHandle<String> handle = null ;
-        try (SetWorkflowID id = new SetWorkflowID(wfid)){
-            handle = dbos.startWorkflow(simpleService::workWithString, "test-item");
-        }
-
-        String result = handle.getResult();
-        assertEquals("Processed: test-item", result);
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus()) ;
-
-    } */
 
     @Test
     public void startWorkflowClosure() {
