@@ -10,13 +10,19 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.ExecutingService;
 import dev.dbos.transact.execution.ExecutingServiceImpl;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.ForkService;
+import dev.dbos.transact.workflow.ForkServiceImpl;
 import dev.dbos.transact.workflow.SimpleService;
 import dev.dbos.transact.workflow.SimpleServiceImpl;
+import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowState;
+import io.restassured.response.ExtractableResponse;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpRequest.BodyPublisher;
 import java.sql.SQLException;
 
 import org.junit.jupiter.api.AfterEach;
@@ -258,5 +264,53 @@ class AdminControllerTest {
                 .then()
                 .statusCode(200)
                 .body("size()", equalTo(3));
+    }
+
+ 
+    @Test
+    public void fork() throws Exception {
+
+        ForkServiceImpl impl = new ForkServiceImpl(dbos);
+
+        ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
+                .implementation(impl).build();
+        forkService.setForkService(forkService);
+
+        String workflowId = "wfid1";
+        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+            String result = forkService.simpleWorkflow("hello");
+            assertEquals("hellohello", result);
+        }
+
+        WorkflowHandle<String> handle = DBOS.retrieveWorkflow(workflowId);
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+
+        assertEquals(1, impl.step1Count);
+        assertEquals(1, impl.step2Count);
+        assertEquals(1, impl.step3Count);
+        assertEquals(1, impl.step4Count);
+        assertEquals(1, impl.step5Count);
+
+        String newWorkflowId = given()
+            .port(3010)
+            .contentType("application/json")
+            .body("{ \"startStep\": 3 }")
+            .when()
+            .post("/workflows/" + workflowId + "/fork")
+            .then()
+            .statusCode(200)
+            .body("workflowId", notNullValue())
+            .extract()
+            .path("workflowId");
+
+        WorkflowHandle<String> newHandle = DBOS.retrieveWorkflow(newWorkflowId);
+        assertEquals("hellohello", newHandle.getResult());
+
+        assertEquals(1, impl.step1Count);
+        assertEquals(1, impl.step2Count);
+        assertEquals(1, impl.step3Count);
+        assertEquals(2, impl.step4Count);
+        assertEquals(2, impl.step5Count);
+
     }
 }

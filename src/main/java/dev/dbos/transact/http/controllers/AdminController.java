@@ -100,7 +100,7 @@ public class AdminController {
     @Path("/workflows")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public List<WorkflowStatus> workflows(ListWorkflowsInput input) {
+    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
         if (input == null) {
             input = new ListWorkflowsInput();
         }
@@ -151,9 +151,13 @@ public class AdminController {
     @Path("/workflows/{workflowId}/fork")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public ForkWorkflowResponse fork(@PathParam("workflowId") String workflowId, ForkWorkflowRequest request) {
-        logger.info("Forking workflow {} from step {} with a new ID", workflowId, request.startStep);
+    public ForkWorkflowResponse fork(@PathParam("workflowId") String workflowId, ForkWorkflowRequest request) { 
+        if (request == null) {
+            request = new ForkWorkflowRequest();
+        }
         int startStep = (request.startStep != null) ? request.startStep : 0;
+        logger.info("Forking workflow {} from step {} with a new ID", workflowId, startStep);
+
         ForkOptions.Builder builder = ForkOptions.builder();
         if (request.newWorkflowId != null) {
             builder.forkedWorkflowId(request.newWorkflowId);
@@ -178,10 +182,10 @@ public class AdminController {
     }
 
     public static class ForkWorkflowRequest {
-        private Integer startStep;
-        private String newWorkflowId;
-        private String applicationVersion;
-        private Long timeoutMs;
+        public Integer startStep;
+        public String newWorkflowId;
+        public String applicationVersion;
+        public Long timeoutMs;
 
         public ForkWorkflowRequest() {
         }
