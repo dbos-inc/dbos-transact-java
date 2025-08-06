@@ -35,8 +35,8 @@ public class UnifiedProxyTest {
     static void onetimeSetup() throws Exception {
 
         UnifiedProxyTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(2).build();
     }
 
     @BeforeEach
@@ -57,9 +57,9 @@ public class UnifiedProxyTest {
     @Test
     public void optionsWithCall() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         // synchronous
         String wfid1 = "wf-123";
@@ -76,8 +76,7 @@ public class UnifiedProxyTest {
         options = new DBOSOptions.Builder(wfid2).build();
         WorkflowHandle<String> handle = null;
         try (SetDBOSOptions id = new SetDBOSOptions(options)) {
-            handle = dbos
-                    .startWorkflow(() -> simpleService.workWithString("test-item-async"));
+            handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
         }
 
         result = handle.getResult();
@@ -94,8 +93,7 @@ public class UnifiedProxyTest {
         }
         assertNull(result);
 
-        handle = dbosExecutor.retrieveWorkflow(wfid3);
-        ;
+        handle = dbosExecutor.retrieveWorkflow(wfid3);;
         result = (String) handle.getResult();
         assertEquals("Processed: test-item-q", result);
         assertEquals(wfid3, handle.getWorkflowId());
@@ -110,9 +108,9 @@ public class UnifiedProxyTest {
     @Test
     public void syncParentWithQueuedChildren() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         simpleService.setSimpleService(simpleService);
 

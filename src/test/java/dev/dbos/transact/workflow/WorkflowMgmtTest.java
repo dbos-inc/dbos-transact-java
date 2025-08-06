@@ -67,8 +67,7 @@ public class WorkflowMgmtTest {
         CountDownLatch mainLatch = new CountDownLatch(1);
         CountDownLatch workLatch = new CountDownLatch(1);
 
-        MgmtService mgmtService = dbos.<MgmtService> Workflow()
-                .interfaceClass(MgmtService.class)
+        MgmtService mgmtService = dbos.<MgmtService>Workflow().interfaceClass(MgmtService.class)
                 .implementation(new MgmtServiceImpl(mainLatch, workLatch)).build();
         mgmtService.setMgmtService(mgmtService);
 
@@ -113,8 +112,7 @@ public class WorkflowMgmtTest {
         CountDownLatch mainLatch = new CountDownLatch(1);
         CountDownLatch workLatch = new CountDownLatch(1);
 
-        MgmtService mgmtService = dbos.<MgmtService> Workflow()
-                .interfaceClass(MgmtService.class)
+        MgmtService mgmtService = dbos.<MgmtService>Workflow().interfaceClass(MgmtService.class)
                 .implementation(new MgmtServiceImpl(mainLatch, workLatch)).build();
         mgmtService.setMgmtService(mgmtService);
 
@@ -160,8 +158,7 @@ public class WorkflowMgmtTest {
         CountDownLatch mainLatch = new CountDownLatch(1);
         CountDownLatch workLatch = new CountDownLatch(1);
 
-        MgmtService mgmtService = dbos.<MgmtService> Workflow()
-                .interfaceClass(MgmtService.class)
+        MgmtService mgmtService = dbos.<MgmtService>Workflow().interfaceClass(MgmtService.class)
                 .implementation(new MgmtServiceImpl(mainLatch, workLatch)).build();
         mgmtService.setMgmtService(mgmtService);
 
@@ -177,8 +174,7 @@ public class WorkflowMgmtTest {
                 try (SetDBOSOptions o = new SetDBOSOptions(options)) {
                     mgmtService.simpleWorkflow(23);
                 }
-            }
-            catch (Throwable t) {
+            } catch (Throwable t) {
                 assertTrue(t instanceof AwaitedWorkflowCancelledException);
             }
 
@@ -193,8 +189,7 @@ public class WorkflowMgmtTest {
                 workLatch.countDown();
                 testLatch.countDown();
 
-            }
-            catch (InterruptedException ie) {
+            } catch (InterruptedException ie) {
                 logger.error(ie.toString());
             }
         });
@@ -225,8 +220,7 @@ public class WorkflowMgmtTest {
             ForkOptions options = new ForkOptions.Builder().build();
             WorkflowHandle<String> rstatHandle = dbos.forkWorkflow("12345", 2, options);
             fail("An exceptions should have been thrown");
-        }
-        catch (Throwable t) {
+        } catch (Throwable t) {
             logger.info(t.getClass().getName());
             assertTrue(t instanceof NonExistentWorkflowException);
         }
@@ -237,8 +231,8 @@ public class WorkflowMgmtTest {
 
         ForkServiceImpl impl = new ForkServiceImpl(dbos);
 
-        ForkService forkService = dbos.<ForkService> Workflow()
-                .interfaceClass(ForkService.class).implementation(impl).build();
+        ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
+                .implementation(impl).build();
         forkService.setForkService(forkService);
 
         String workflowId = "wfid1";
@@ -273,8 +267,7 @@ public class WorkflowMgmtTest {
         assertEquals(2, impl.step4Count);
         assertEquals(2, impl.step5Count);
 
-        List<StepInfo> steps = systemDatabase
-                .listWorkflowSteps(rstatHandle.getWorkflowId());
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
         assertEquals(5, steps.size());
 
         logger.info("first fork done . starting 2nd fork ");
@@ -311,8 +304,8 @@ public class WorkflowMgmtTest {
 
         ForkServiceImpl impl = new ForkServiceImpl(dbos);
 
-        ForkService forkService = dbos.<ForkService> Workflow()
-                .interfaceClass(ForkService.class).implementation(impl).build();
+        ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
+                .implementation(impl).build();
         forkService.setForkService(forkService);
 
         String workflowId = "wfid1";
@@ -350,14 +343,11 @@ public class WorkflowMgmtTest {
         assertEquals(1, impl.child2Count);
         assertEquals(2, impl.step5Count);
 
-        List<StepInfo> steps = systemDatabase
-                .listWorkflowSteps(rstatHandle.getWorkflowId());
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
         assertEquals(5, steps.size());
 
-        assertTrue(stepsRun0.get(2).getChildWorkflowId()
-                .equals(steps.get(2).getChildWorkflowId()));
-        assertTrue(stepsRun0.get(3).getChildWorkflowId()
-                .equals(steps.get(3).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
 
         logger.info("First execution done starting 2nd fork");
 
@@ -379,10 +369,8 @@ public class WorkflowMgmtTest {
 
         logger.info(stepsRun0.get(2).getChildWorkflowId());
         logger.info(steps.get(2).getChildWorkflowId());
-        assertTrue(stepsRun0.get(2).getChildWorkflowId()
-                .equals(steps.get(2).getChildWorkflowId()));
-        assertTrue(stepsRun0.get(3).getChildWorkflowId()
-                .equals(steps.get(3).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
 
         logger.info("2nd execution done starting 3nd fork");
 
@@ -402,10 +390,8 @@ public class WorkflowMgmtTest {
         steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
         assertEquals(5, steps.size());
 
-        assertTrue(stepsRun0.get(2).getChildWorkflowId()
-                .equals(steps.get(2).getChildWorkflowId()));
-        assertTrue(stepsRun0.get(3).getChildWorkflowId()
-                .equals(steps.get(3).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
 
         logger.info("First execution done starting 2nd fork");
     }
@@ -415,8 +401,8 @@ public class WorkflowMgmtTest {
 
         ForkServiceImpl impl = new ForkServiceImpl(dbos);
 
-        ForkService forkService = dbos.<ForkService> Workflow()
-                .interfaceClass(ForkService.class).implementation(impl).build();
+        ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
+                .implementation(impl).build();
         forkService.setForkService(forkService);
 
         String workflowId = "wfid1";
@@ -456,13 +442,10 @@ public class WorkflowMgmtTest {
                                            // did not copy the step
         assertEquals(2, impl.step5Count);
 
-        List<StepInfo> steps = systemDatabase
-                .listWorkflowSteps(rstatHandle.getWorkflowId());
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
         assertEquals(5, steps.size());
 
-        assertTrue(stepsRun0.get(2).getChildWorkflowId()
-                .equals(steps.get(2).getChildWorkflowId()));
-        assertTrue(stepsRun0.get(3).getChildWorkflowId()
-                .equals(steps.get(3).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
+        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
     }
 }

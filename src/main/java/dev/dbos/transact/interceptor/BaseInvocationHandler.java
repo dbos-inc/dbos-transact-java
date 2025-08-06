@@ -17,8 +17,7 @@ import org.slf4j.LoggerFactory;
 
 public abstract class BaseInvocationHandler implements InvocationHandler {
 
-    private static final Logger logger = LoggerFactory
-            .getLogger(BaseInvocationHandler.class);
+    private static final Logger logger = LoggerFactory.getLogger(BaseInvocationHandler.class);
 
     private final Object target;
     private final String targetClassName;
@@ -38,8 +37,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
         if (implMethod.isAnnotationPresent(Workflow.class)) {
             return handleWorkflow(method, args, implMethod.getAnnotation(Workflow.class));
 
-        }
-        else if (implMethod.isAnnotationPresent(Step.class)) {
+        } else if (implMethod.isAnnotationPresent(Step.class)) {
             return handleStep(method, args, implMethod.getAnnotation(Step.class));
         }
 
@@ -50,11 +48,11 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
     protected Object handleWorkflow(Method method, Object[] args, Workflow workflow)
             throws Throwable {
 
-        String workflowName = workflow.name().isEmpty() ? method.getName()
-                : workflow.name();
+        String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
 
         String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
-                workflowName, workflow.timeout());
+                workflowName,
+                workflow.timeout());
 
         logger.info(msg);
 
@@ -73,8 +71,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
             if (ctx.hasParent()) {
                 // child called with SetWorkflowId
                 result = submitWorkflow(workflowName, targetClassName, wrapper, args);
-            }
-            else {
+            } else {
                 // child called without Set
                 // create child context from the parent
 
@@ -83,8 +80,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                     result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
             }
-        }
-        else {
+        } else {
 
             // parent
             if (ctx.getWorkflowId() == null) {
@@ -94,8 +90,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                     DBOSContextHolder.get().setInWorkflow(true);
                     result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
-            }
-            else {
+            } else {
                 // not child called with Set just run
                 DBOSContextHolder.get().setInWorkflow(true);
                 result = submitWorkflow(workflowName, targetClassName, wrapper, args);
@@ -104,26 +99,25 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
         if (result != null) {
             return result;
-        }
-        else {
+        } else {
             return getDefaultValue(method.getReturnType());
             // always return null or default
         }
     }
 
-    protected Object handleStep(Method method, Object[] args, Step step)
-            throws Throwable {
-        String msg = String.format("Before : Executing step %s %s", method.getName(),
-                step.name());
+    protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
+        String msg = String.format("Before : Executing step %s %s", method.getName(), step.name());
         logger.info(msg);
         try {
-            Object result = dbosExecutor.runStep(step.name(), step.retriesAllowed(),
-                    step.maxAttempts(), step.backOffRate(), args,
+            Object result = dbosExecutor.runStep(step.name(),
+                    step.retriesAllowed(),
+                    step.maxAttempts(),
+                    step.backOffRate(),
+                    args,
                     () -> method.invoke(target, args));
             logger.info("After: Step completed successfully");
             return result;
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             logger.error("Step failed", e);
             throw e;
         }
@@ -136,8 +130,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
             return false;
         if (returnType == char.class)
             return '\0';
-        if (returnType == byte.class || returnType == short.class
-                || returnType == int.class)
+        if (returnType == byte.class || returnType == short.class || returnType == int.class)
             return 0;
         if (returnType == long.class)
             return 0L;

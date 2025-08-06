@@ -42,8 +42,8 @@ class RecoveryServiceTest {
     public static void onetimeBefore() throws SQLException {
 
         RecoveryServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(2).build();
     }
 
     @BeforeEach
@@ -65,9 +65,9 @@ class RecoveryServiceTest {
     @Test
     void recoverWorkflows() throws Exception {
 
-        ExecutingService executingService = dbos.<ExecutingService> Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl()).build();
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
+                .build();
 
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
@@ -84,8 +84,7 @@ class RecoveryServiceTest {
         wfid = "wf-126";
         WorkflowHandle<String> handle6 = null;
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            handle6 = dbos
-                    .startWorkflow(() -> executingService.workflowMethod("test-item"));
+            handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
         handle6.getResult();
 
@@ -94,8 +93,7 @@ class RecoveryServiceTest {
         Queue q = new DBOS.QueueBuilder("q1").build();
         DBOSOptions options = new DBOSOptions.Builder(wfid).queue(q).build();
         try (SetDBOSOptions id = new SetDBOSOptions(options)) {
-            handle7 = dbos
-                    .startWorkflow(() -> executingService.workflowMethod("test-item"));
+            handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
         assertEquals("q1", handle7.getStatus().getQueueName());
         handle7.getResult();
@@ -111,10 +109,8 @@ class RecoveryServiceTest {
         recoveredHandles.forEach((handle) -> {
             try {
                 handle.getResult();
-                assertEquals(WorkflowState.SUCCESS.name(),
-                        handle.getStatus().getStatus());
-            }
-            catch (Exception e) {
+                assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+            } catch (Exception e) {
                 assertTrue(false); // fail the test
             }
         });
@@ -123,9 +119,9 @@ class RecoveryServiceTest {
     @Test
     public void recoveryThreadTest() throws SQLException {
 
-        ExecutingService executingService = dbos.<ExecutingService> Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl()).build();
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
+                .build();
 
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
@@ -149,8 +145,7 @@ class RecoveryServiceTest {
         // need to register again
         // towatch: we are registering after launch. could lead to a race condition
         // toimprove : allow registration before launch
-        executingService = dbos.<ExecutingService> Workflow()
-                .interfaceClass(ExecutingService.class)
+        executingService = dbos.<ExecutingService>Workflow().interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl()).build();
 
         dbos.launch();

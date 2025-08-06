@@ -48,8 +48,7 @@ public class WorkflowDAO {
                         String output = rs.getString("output");
                         return Optional.ofNullable(output);
 
-                    }
-                    else if (WorkflowState.ERROR.toString().equals(status)) {
+                    } else if (WorkflowState.ERROR.toString().equals(status)) {
                         String error = rs.getString("error");
                         return Optional.ofNullable(error);
                     }
@@ -62,8 +61,7 @@ public class WorkflowDAO {
                 return Optional.empty();
             }
 
-        }
-        catch (SQLException e) {
+        } catch (SQLException e) {
             logger.error("Error getting workflow result", e);
             throw e;
         }
@@ -78,33 +76,28 @@ public class WorkflowDAO {
                 connection.setAutoCommit(false);
                 connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
-                InsertWorkflowResult resRow = insertWorkflowStatus(connection,
-                        initStatus);
+                InsertWorkflowResult resRow = insertWorkflowStatus(connection, initStatus);
 
                 if (!Objects.equals(resRow.getName(), initStatus.getName())) {
                     String msg = String.format(
                             "Workflow already exists with a different function name: %s, but the provided function name is: %s",
-                            resRow.getName(), initStatus.getName());
-                    throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(),
-                            msg);
-                }
-                else if (!Objects.equals(resRow.getClassName(),
-                        initStatus.getClassName())) {
+                            resRow.getName(),
+                            initStatus.getName());
+                    throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(), msg);
+                } else if (!Objects.equals(resRow.getClassName(), initStatus.getClassName())) {
                     String msg = String.format(
                             "Workflow already exists with a different class name: %s, but the provided class name is: %s",
-                            resRow.getClassName(), initStatus.getClassName());
-                    throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(),
-                            msg);
-                }
-                else if (!Objects.equals(
+                            resRow.getClassName(),
+                            initStatus.getClassName());
+                    throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(), msg);
+                } else if (!Objects.equals(
                         resRow.getConfigName() != null ? resRow.getConfigName() : "",
-                        initStatus.getConfigName() != null ? initStatus.getConfigName()
-                                : "")) {
+                        initStatus.getConfigName() != null ? initStatus.getConfigName() : "")) {
                     String msg = String.format(
                             "Workflow already exists with a different class configuration: %s, but the provided class configuration is: %s",
-                            resRow.getConfigName(), initStatus.getConfigName());
-                    throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(),
-                            msg);
+                            resRow.getConfigName(),
+                            initStatus.getConfigName());
+                    throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(), msg);
                 }
 
                 final int attempts = resRow.getRecoveryAttempts();
@@ -114,33 +107,31 @@ public class WorkflowDAO {
                     options.setWhereStatus(WorkflowState.PENDING.toString());
                     options.setThrowOnFailure(false);
 
-                    updateWorkflowStatus(connection, initStatus.getWorkflowUUID(),
-                            WorkflowState.RETRIES_EXCEEDED.toString(), options);
+                    updateWorkflowStatus(connection,
+                            initStatus.getWorkflowUUID(),
+                            WorkflowState.RETRIES_EXCEEDED.toString(),
+                            options);
                     throw new DBOSDeadLetterQueueException(initStatus.getWorkflowUUID(),
                             maxRetries);
                 }
 
                 connection.commit(); // Commit transaction on success
-                return new WorkflowInitResult(initStatus.getWorkflowUUID(),
-                        resRow.getStatus(), resRow.getWorkflowDeadlineEpochMs());
+                return new WorkflowInitResult(initStatus.getWorkflowUUID(), resRow.getStatus(),
+                        resRow.getWorkflowDeadlineEpochMs());
 
-            }
-            catch (SQLException e) {
+            } catch (SQLException e) {
 
                 try {
                     connection.rollback();
-                }
-                catch (SQLException rollbackEx) {
+                } catch (SQLException rollbackEx) {
                     logger.error("Rollback failed: " + rollbackEx.getMessage());
                 }
                 throw e; // Re-throw the original SQLException
-            }
-            catch (DBOSWorkflowConflictException | DBOSDeadLetterQueueException e) {
+            } catch (DBOSWorkflowConflictException | DBOSDeadLetterQueueException e) {
                 // Rollback for custom business exceptions
                 try {
                     connection.rollback();
-                }
-                catch (SQLException rollbackEx) {
+                } catch (SQLException rollbackEx) {
                     logger.error("Rollback failed: " + rollbackEx.getMessage());
                 }
                 throw e; // Re-throw the custom exception
@@ -168,8 +159,7 @@ public class WorkflowDAO {
                 + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 + "ON CONFLICT (workflow_uuid) DO UPDATE "
                 + "SET recovery_attempts = EXCLUDED.recovery_attempts + 1, "
-                + "updated_at = EXCLUDED.updated_at, "
-                + "executor_id = EXCLUDED.executor_id "
+                + "updated_at = EXCLUDED.updated_at, " + "executor_id = EXCLUDED.executor_id "
                 + "RETURNING recovery_attempts, status, workflow_deadline_epoch_ms, name, class_name, config_name, queue_name";
 
         try (PreparedStatement stmt = connection.prepareStatement(insertSQL)) {
@@ -204,21 +194,17 @@ public class WorkflowDAO {
                             rs.getObject("workflow_deadline_epoch_ms", Long.class));
 
                     return result;
-                }
-                else {
+                } else {
                     throw new RuntimeException("Attempt to insert workflow "
                             + status.getWorkflowUUID() + " failed: No rows returned.");
                 }
 
-            }
-            catch (SQLException e) {
+            } catch (SQLException e) {
 
                 if ("23505".equals(e.getSQLState())) {
                     throw new DBOSQueueDuplicatedException(status.getWorkflowUUID(),
                             status.getQueueName() != null ? status.getQueueName() : "",
-                            status.getDeduplicationId() != null
-                                    ? status.getDeduplicationId()
-                                    : "");
+                            status.getDeduplicationId() != null ? status.getDeduplicationId() : "");
                 }
                 // Re-throw other SQL exceptions
                 throw e;
@@ -226,11 +212,10 @@ public class WorkflowDAO {
         }
     }
 
-    public void updateWorkflowStatus(Connection connection, String workflowID,
-            String status, UpdateWorkflowOptions options) throws SQLException {
+    public void updateWorkflowStatus(Connection connection, String workflowID, String status,
+            UpdateWorkflowOptions options) throws SQLException {
 
-        StringBuilder setClauseBuilder = new StringBuilder(
-                "SET status = ?, updated_at = ?");
+        StringBuilder setClauseBuilder = new StringBuilder("SET status = ?, updated_at = ?");
         StringBuilder whereClauseBuilder = new StringBuilder("WHERE workflow_uuid = ?");
 
         List<Object> finalOrderedArgs = new ArrayList<>();
@@ -248,8 +233,7 @@ public class WorkflowDAO {
             finalOrderedArgs.add(options.getError());
         }
 
-        if (options.getResetRecoveryAttempts() != null
-                && options.getResetRecoveryAttempts()) {
+        if (options.getResetRecoveryAttempts() != null && options.getResetRecoveryAttempts()) {
             setClauseBuilder.append(", recovery_attempts = 0");
         }
 
@@ -263,13 +247,11 @@ public class WorkflowDAO {
                                                           // null
         }
 
-        if (options.getResetDeduplicationID() != null
-                && options.getResetDeduplicationID()) {
+        if (options.getResetDeduplicationID() != null && options.getResetDeduplicationID()) {
             setClauseBuilder.append(", deduplication_id = NULL");
         }
 
-        if (options.getResetStartedAtEpochMs() != null
-                && options.getResetStartedAtEpochMs()) {
+        if (options.getResetStartedAtEpochMs() != null && options.getResetStartedAtEpochMs()) {
             setClauseBuilder.append(", started_at_epoch_ms = NULL");
         }
 
@@ -283,8 +265,10 @@ public class WorkflowDAO {
         }
 
         // Construct the final SQL query
-        String sql = String.format("UPDATE %s.workflow_status %s %s", Constants.DB_SCHEMA,
-                setClauseBuilder.toString(), whereClauseBuilder.toString());
+        String sql = String.format("UPDATE %s.workflow_status %s %s",
+                Constants.DB_SCHEMA,
+                setClauseBuilder.toString(),
+                whereClauseBuilder.toString());
 
         int affectedRows;
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -294,17 +278,13 @@ public class WorkflowDAO {
                 if (arg == null) {
                     pstmt.setNull(i + 1, Types.VARCHAR); // Default to VARCHAR for null
                                                          // strings
-                }
-                else if (arg instanceof String) {
+                } else if (arg instanceof String) {
                     pstmt.setString(i + 1, (String) arg);
-                }
-                else if (arg instanceof Long) {
+                } else if (arg instanceof Long) {
                     pstmt.setLong(i + 1, (Long) arg);
-                }
-                else if (arg instanceof Integer) {
+                } else if (arg instanceof Integer) {
                     pstmt.setInt(i + 1, (Integer) arg);
-                }
-                else {
+                } else {
                     pstmt.setObject(i + 1, arg); // Fallback for other types
                 }
             }
@@ -315,15 +295,18 @@ public class WorkflowDAO {
         if (options.getThrowOnFailure() && affectedRows != 1) {
             throw new DBOSWorkflowConflictException(workflowID, String.format(
                     "Attempt to record transition of nonexistent workflow %s (affected rows: %d)",
-                    workflowID, affectedRows));
+                    workflowID,
+                    affectedRows));
         }
     }
 
     /**
      * Store the result to workflow_status
      *
-     * @param workflowId id of the workflow
-     * @param result output serialized as json
+     * @param workflowId
+     *            id of the workflow
+     * @param result
+     *            output serialized as json
      */
     public void recordWorkflowOutput(String workflowId, String result) {
 
@@ -334,11 +317,12 @@ public class WorkflowDAO {
                 options.setOutput(result);
                 options.setResetDeduplicationID(true);
 
-                updateWorkflowStatus(connection, workflowId,
-                        WorkflowState.SUCCESS.toString(), options);
+                updateWorkflowStatus(connection,
+                        workflowId,
+                        WorkflowState.SUCCESS.toString(),
+                        options);
             }
-        }
-        catch (SQLException e) {
+        } catch (SQLException e) {
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
         }
     }
@@ -346,8 +330,10 @@ public class WorkflowDAO {
     /**
      * Store the error to workflow_status
      *
-     * @param workflowId id of the workflow
-     * @param error output serialized as json
+     * @param workflowId
+     *            id of the workflow
+     * @param error
+     *            output serialized as json
      */
     public void recordWorkflowError(String workflowId, String error) {
 
@@ -358,11 +344,9 @@ public class WorkflowDAO {
                 options.setError(error);
                 options.setResetDeduplicationID(true);
 
-                updateWorkflowStatus(connection, workflowId,
-                        WorkflowState.ERROR.toString(), options);
+                updateWorkflowStatus(connection, workflowId, WorkflowState.ERROR.toString(), options);
             }
-        }
-        catch (SQLException e) {
+        } catch (SQLException e) {
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
         }
     }
@@ -376,16 +360,14 @@ public class WorkflowDAO {
             if (output.size() > 0) {
                 return output.get(0);
             }
-        }
-        catch (SQLException e) {
+        } catch (SQLException e) {
             logger.error("Error retrieving workflow for " + workflowId, e);
         }
 
         throw new NonExistentWorkflowException(workflowId);
     }
 
-    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input)
-            throws SQLException {
+    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
 
         List<WorkflowStatus> workflows = new ArrayList<>();
 
@@ -455,8 +437,7 @@ public class WorkflowDAO {
         sqlBuilder.append(" ORDER BY created_at ");
         if (input.getSortDesc() != null && input.getSortDesc()) {
             sqlBuilder.append("DESC");
-        }
-        else {
+        } else {
             sqlBuilder.append("ASC");
         }
 
@@ -471,22 +452,18 @@ public class WorkflowDAO {
         }
 
         try (Connection connection = dataSource.getConnection();
-                PreparedStatement pstmt = connection
-                        .prepareStatement(sqlBuilder.toString())) {
+                PreparedStatement pstmt = connection.prepareStatement(sqlBuilder.toString())) {
 
             for (int i = 0; i < parameters.size(); i++) {
 
                 Object param = parameters.get(i);
                 if (param instanceof String) {
                     pstmt.setString(i + 1, (String) param);
-                }
-                else if (param instanceof Long) {
+                } else if (param instanceof Long) {
                     pstmt.setLong(i + 1, (Long) param);
-                }
-                else if (param instanceof Integer) {
+                } else if (param instanceof Integer) {
                     pstmt.setInt(i + 1, (Integer) param);
-                }
-                else {
+                } else {
                     // Fallback for other types, or if OffsetDateTime was directly added
                     // to
                     // parameters list
@@ -510,8 +487,8 @@ public class WorkflowDAO {
 
                     String authenticatedRolesJson = rs.getString("authenticated_roles");
                     if (authenticatedRolesJson != null) {
-                        info.setAuthenticatedRoles((String[]) JSONUtil
-                                .deserializeToArray(authenticatedRolesJson));
+                        info.setAuthenticatedRoles(
+                                (String[]) JSONUtil.deserializeToArray(authenticatedRolesJson));
                     }
 
                     info.setAssumedRole(rs.getString("assumed_role"));
@@ -543,8 +520,7 @@ public class WorkflowDAO {
 
                     info.setWorkflowDeadlineEpochMs(
                             rs.getObject("workflow_deadline_epoch_ms", Long.class));
-                    info.setWorkflowTimeoutMs(
-                            rs.getObject("workflow_timeout_ms", Long.class));
+                    info.setWorkflowTimeoutMs(rs.getObject("workflow_timeout_ms", Long.class));
 
                     workflows.add(info);
                 }
@@ -554,12 +530,11 @@ public class WorkflowDAO {
         return workflows;
     }
 
-    public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId,
-            String appVersion) throws SQLException {
+    public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
+            throws SQLException {
 
-        String sqlTemplate = "SELECT workflow_uuid, queue_name "
-                + "FROM %s.workflow_status " + "WHERE status = ? "
-                + "AND executor_id = ? " + "AND application_version = ?";
+        String sqlTemplate = "SELECT workflow_uuid, queue_name " + "FROM %s.workflow_status "
+                + "WHERE status = ? " + "AND executor_id = ? " + "AND application_version = ?";
 
         final String sql = String.format(sqlTemplate, Constants.DB_SCHEMA);
 
@@ -574,8 +549,8 @@ public class WorkflowDAO {
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    results.add(new GetPendingWorkflowsOutput(
-                            rs.getString("workflow_uuid"), rs.getString("queue_name")));
+                    results.add(new GetPendingWorkflowsOutput(rs.getString("workflow_uuid"),
+                            rs.getString("queue_name")));
                 }
             }
         }
@@ -600,41 +575,37 @@ public class WorkflowDAO {
                         String status = rs.getString("status");
 
                         switch (WorkflowState.valueOf(status.toUpperCase())) {
-                        case SUCCESS:
-                            String output = rs.getString("output");
-                            Object[] oArray = JSONUtil.deserializeToArray(output);
-                            return oArray[0];
+                            case SUCCESS :
+                                String output = rs.getString("output");
+                                Object[] oArray = JSONUtil.deserializeToArray(output);
+                                return oArray[0];
 
-                        case ERROR:
-                            String error = rs.getString("error");
-                            Object[] eArray = JSONUtil.deserializeToArray(error);
-                            SerializableException se = (SerializableException) eArray[0];
-                            throw new DBOSAppException(
-                                    String.format("Exception of type %s", se.className),
-                                    se);
-                        case CANCELLED:
-                            throw new AwaitedWorkflowCancelledException(workflowId);
+                            case ERROR :
+                                String error = rs.getString("error");
+                                Object[] eArray = JSONUtil.deserializeToArray(error);
+                                SerializableException se = (SerializableException) eArray[0];
+                                throw new DBOSAppException(
+                                        String.format("Exception of type %s", se.className), se);
+                            case CANCELLED :
+                                throw new AwaitedWorkflowCancelledException(workflowId);
 
-                        default:
-                            // Status is PENDING or other - continue polling
-                            break;
+                            default :
+                                // Status is PENDING or other - continue polling
+                                break;
                         }
                     }
                     // Row not found - workflow hasn't appeared yet, continue polling
                 }
-            }
-            catch (SQLException e) {
+            } catch (SQLException e) {
                 logger.error("Database error while polling workflow " + workflowId + ": "
                         + e.getMessage());
             }
 
             try {
                 Thread.sleep(1000);
-            }
-            catch (InterruptedException e) {
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new RuntimeException(
-                        "Workflow polling interrupted for " + workflowId, e);
+                throw new RuntimeException("Workflow polling interrupted for " + workflowId, e);
             }
         }
     }
@@ -660,14 +631,13 @@ public class WorkflowDAO {
 
                 pStmt.executeUpdate();
             }
-        }
-        catch (SQLException sqe) {
+        } catch (SQLException sqe) {
             if ("23505".equals(sqe.getSQLState())) {
-                throw new DBOSWorkflowConflictException(parentId,
-                        String.format("Record exists for parent %s and functionId %d",
-                                parentId, functionId));
-            }
-            else {
+                throw new DBOSWorkflowConflictException(parentId, String.format(
+                        "Record exists for parent %s and functionId %d",
+                        parentId,
+                        functionId));
+            } else {
                 throw new DBOSException(UNEXPECTED.getCode(), sqe.getMessage());
             }
         }
@@ -687,7 +657,8 @@ public class WorkflowDAO {
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     String childWorkflowId = rs.getString("child_workflow_id");
-                    return childWorkflowId != null ? Optional.of(childWorkflowId)
+                    return childWorkflowId != null
+                            ? Optional.of(childWorkflowId)
                             : Optional.empty();
                 }
                 return Optional.empty();
@@ -714,8 +685,7 @@ public class WorkflowDAO {
             }
 
             // If workflow doesn't exist or is already complete, do nothing
-            if (currentStatus == null
-                    || WorkflowState.SUCCESS.name().equals(currentStatus)
+            if (currentStatus == null || WorkflowState.SUCCESS.name().equals(currentStatus)
                     || WorkflowState.ERROR.name().equals(currentStatus)) {
                 logger.info("Returning without updating status");
                 return;
@@ -762,16 +732,15 @@ public class WorkflowDAO {
 
                 connection.commit();
 
-            }
-            catch (SQLException e) {
+            } catch (SQLException e) {
                 connection.rollback();
                 throw e;
             }
         }
     }
 
-    public String forkWorkflow(String originalWorkflowId, int startStep,
-            ForkOptions options) throws SQLException {
+    public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options)
+            throws SQLException {
 
         String forkedWorkflowId = options.getForkedWorkflowId() == null
                 ? UUID.randomUUID().toString()
@@ -783,7 +752,8 @@ public class WorkflowDAO {
 
         WorkflowStatus status = getWorkflowStatus(originalWorkflowId);
 
-        long timeoutMs = options.getTimeoutMS() == 0 ? status.getWorkflowTimeoutMs()
+        long timeoutMs = options.getTimeoutMS() == 0
+                ? status.getWorkflowTimeoutMs()
                 : options.getTimeoutMS();
 
         if (status == null) {
@@ -795,29 +765,30 @@ public class WorkflowDAO {
 
             try {
                 // Create entry for forked workflow
-                insertForkedWorkflowStatus(connection, forkedWorkflowId, status,
-                        applicationVersion, timeoutMs);
+                insertForkedWorkflowStatus(connection,
+                        forkedWorkflowId,
+                        status,
+                        applicationVersion,
+                        timeoutMs);
 
                 // Copy operation outputs if starting from step > 0
                 if (startStep > 0) {
-                    copyOperationOutputs(connection, originalWorkflowId, forkedWorkflowId,
-                            startStep);
+                    copyOperationOutputs(connection, originalWorkflowId, forkedWorkflowId, startStep);
                 }
 
                 connection.commit();
                 return forkedWorkflowId;
 
-            }
-            catch (SQLException e) {
+            } catch (SQLException e) {
                 connection.rollback();
                 throw e;
             }
         }
     }
 
-    private void insertForkedWorkflowStatus(Connection connection,
-            String forkedWorkflowId, WorkflowStatus originalStatus,
-            String applicationVersion, long timeoutMs) throws SQLException {
+    private void insertForkedWorkflowStatus(Connection connection, String forkedWorkflowId,
+            WorkflowStatus originalStatus, String applicationVersion, long timeoutMs)
+            throws SQLException {
 
         long workflowDeadlineEpoch = 0;
         if (timeoutMs > 0) {
@@ -837,14 +808,14 @@ public class WorkflowDAO {
             stmt.setString(5, originalStatus.getConfigName());
 
             // Use provided application version or fall back to original
-            String appVersion = applicationVersion != null ? applicationVersion
+            String appVersion = applicationVersion != null
+                    ? applicationVersion
                     : originalStatus.getAppVersion();
             stmt.setString(6, appVersion);
 
             stmt.setString(7, originalStatus.getAppId());
             stmt.setString(8, originalStatus.getAuthenticatedUser());
-            stmt.setString(9,
-                    JSONUtil.serializeArray(originalStatus.getAuthenticatedRoles()));
+            stmt.setString(9, JSONUtil.serializeArray(originalStatus.getAuthenticatedRoles()));
             stmt.setString(10, originalStatus.getAssumedRole());
             stmt.setString(11, Constants.DBOS_INTERNAL_QUEUE);
             stmt.setString(12, JSONUtil.serializeArray(originalStatus.getInput()));
@@ -870,19 +841,17 @@ public class WorkflowDAO {
             stmt.setInt(3, startStep);
 
             int rowsCopied = stmt.executeUpdate();
-            System.out.println(
-                    "Copied " + rowsCopied + " operation outputs to forked workflow");
+            System.out.println("Copied " + rowsCopied + " operation outputs to forked workflow");
         }
     }
 
     /*
-     * public String forkWorkflow(String originalWorkflowId, String forkedWorkflowId, int
-     * startStep) throws SQLException { return forkWorkflow(originalWorkflowId,
-     * forkedWorkflowId, startStep, null); }
+     * public String forkWorkflow(String originalWorkflowId, String
+     * forkedWorkflowId, int startStep) throws SQLException { return
+     * forkWorkflow(originalWorkflowId, forkedWorkflowId, startStep, null); }
      */
 
-    private String getWorkflowStatus(Connection connection, String workflowId)
-            throws SQLException {
+    private String getWorkflowStatus(Connection connection, String workflowId) throws SQLException {
         String sql = "SELECT status FROM dbos.workflow_status WHERE workflow_uuid = ?";
 
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -899,10 +868,10 @@ public class WorkflowDAO {
 
     private void updateWorkflowToEnqueued(Connection connection, String workflowId)
             throws SQLException {
-        String sql = "UPDATE dbos.workflow_status " + " SET status = ?, "
-                + " queue_name = ?, " + " recovery_attempts = ?, "
-                + " workflow_deadline_epoch_ms = 0, " + " deduplication_id = NULL, "
-                + " started_at_epoch_ms = NULL " + " WHERE workflow_uuid = ? ";
+        String sql = "UPDATE dbos.workflow_status " + " SET status = ?, " + " queue_name = ?, "
+                + " recovery_attempts = ?, " + " workflow_deadline_epoch_ms = 0, "
+                + " deduplication_id = NULL, " + " started_at_epoch_ms = NULL "
+                + " WHERE workflow_uuid = ? ";
 
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, WorkflowState.ENQUEUED.name());

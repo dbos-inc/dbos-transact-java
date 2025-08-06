@@ -28,9 +28,8 @@ public class SyncWorkflowTest {
     static void onetimeSetup() throws Exception {
 
         SyncWorkflowTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).runAdminServer()
-                .adminAwaitOnStart(false).build();
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(2).runAdminServer().adminAwaitOnStart(false).build();
     }
 
     @BeforeEach
@@ -51,9 +50,9 @@ public class SyncWorkflowTest {
     @Test
     public void workflowWithOneInput() throws SQLException {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         String result = simpleService.workWithString("test-item");
         assertEquals("Processed: test-item", result);
@@ -69,14 +68,13 @@ public class SyncWorkflowTest {
     @Test
     public void workflowWithError() throws SQLException {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         try {
             simpleService.workWithError();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             assertEquals("DBOS Test error", e.getMessage());
         }
 
@@ -89,9 +87,9 @@ public class SyncWorkflowTest {
     @Test
     public void setWorkflowId() throws SQLException {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         String result = null;
 
@@ -110,9 +108,9 @@ public class SyncWorkflowTest {
     @Test
     public void sameWorkflowId() throws SQLException {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         String result = null;
         SimpleServiceImpl.executionCount = 0;
@@ -151,9 +149,9 @@ public class SyncWorkflowTest {
     @Test
     public void childWorkflowWithoutSet() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         simpleService.setSimpleService(simpleService);
 
@@ -184,9 +182,9 @@ public class SyncWorkflowTest {
     @Test
     public void multipleChildren() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         simpleService.setSimpleService(simpleService);
 
@@ -232,9 +230,9 @@ public class SyncWorkflowTest {
     @Test
     public void nestedChildren() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         simpleService.setSimpleService(simpleService);
 

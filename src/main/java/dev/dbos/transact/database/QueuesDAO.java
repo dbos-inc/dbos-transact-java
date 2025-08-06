@@ -25,9 +25,12 @@ public class QueuesDAO {
     /**
      * Get queued workflows based on queue configuration and concurrency limits.
      *
-     * @param queue The queue configuration
-     * @param executorId The executor ID
-     * @param appVersion The application version
+     * @param queue
+     *            The queue configuration
+     * @param executorId
+     *            The executor ID
+     * @param appVersion
+     *            The application version
      * @return List of workflow UUIDs that are due for execution
      */
     public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId,
@@ -96,19 +99,18 @@ public class QueuesDAO {
                     }
                 }
 
-                int localPendingWorkflows = pendingWorkflowsDict.getOrDefault(executorId,
-                        0);
+                int localPendingWorkflows = pendingWorkflowsDict.getOrDefault(executorId, 0);
 
                 // Check worker concurrency limit
                 if (queue.getWorkerConcurrency() > 0) {
                     if (localPendingWorkflows > queue.getWorkerConcurrency()) {
                         logger.warn(String.format(
                                 "The number of local pending workflows (%d) on queue %s exceeds the local concurrency limit (%d)",
-                                localPendingWorkflows, queue.getName(),
+                                localPendingWorkflows,
+                                queue.getName(),
                                 queue.getWorkerConcurrency()));
                     }
-                    maxTasks = Math.max(0,
-                            queue.getWorkerConcurrency() - localPendingWorkflows);
+                    maxTasks = Math.max(0, queue.getWorkerConcurrency() - localPendingWorkflows);
                 }
 
                 // Check global concurrency limit
@@ -119,7 +121,8 @@ public class QueuesDAO {
                     if (globalPendingWorkflows > queue.getConcurrency()) {
                         logger.warn(String.format(
                                 "The total number of pending workflows (%d) on queue %s exceeds the global concurrency limit (%d)",
-                                globalPendingWorkflows, queue.getName(),
+                                globalPendingWorkflows,
+                                queue.getName(),
                                 queue.getConcurrency()));
                     }
 
@@ -138,8 +141,7 @@ public class QueuesDAO {
             // Add ordering
             if (queue.isPriorityEnabled()) {
                 queryBuilder.append(" ORDER BY priority ASC, created_at ASC");
-            }
-            else {
+            } else {
                 queryBuilder.append(" ORDER BY created_at ASC");
             }
 
@@ -151,13 +153,11 @@ public class QueuesDAO {
             // Add FOR UPDATE NOWAIT or SKIP Locked
             if (queue.getConcurrency() > 0) {
                 queryBuilder.append(" FOR UPDATE NOWAIT");
-            }
-            else {
+            } else {
                 queryBuilder.append(" FOR UPDATE SKIP LOCKED");
             }
 
-            String workflowsQuery = String.format(queryBuilder.toString(),
-                    Constants.DB_SCHEMA);
+            String workflowsQuery = String.format(queryBuilder.toString(), Constants.DB_SCHEMA);
 
             List<String> dequeuedIds = new ArrayList<>();
             try (PreparedStatement ps = connection.prepareStatement(workflowsQuery)) {
@@ -177,17 +177,17 @@ public class QueuesDAO {
             }
 
             if (!dequeuedIds.isEmpty()) {
-                logger.trace(String.format("[%s] dequeueing %d task(s)", queue.getName(),
+                logger.trace(String.format("[%s] dequeueing %d task(s)",
+                        queue.getName(),
                         dequeuedIds.size()));
             }
 
             List<String> retIds = new ArrayList<>();
 
             // Update workflow status for each dequeued workflow
-            String updateQuery = "UPDATE %s.workflow_status "
-                    + " SET status = 'PENDING', " + " application_version = ?, "
-                    + " executor_id = ?, " + " started_at_epoch_ms = ?, "
-                    + "workflow_deadline_epoch_ms = CASE "
+            String updateQuery = "UPDATE %s.workflow_status " + " SET status = 'PENDING', "
+                    + " application_version = ?, " + " executor_id = ?, "
+                    + " started_at_epoch_ms = ?, " + "workflow_deadline_epoch_ms = CASE "
                     + "    WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL "
                     + "       THEN ? + workflow_timeout_ms "
                     + "     ELSE workflow_deadline_epoch_ms " + "      END "
@@ -199,8 +199,7 @@ public class QueuesDAO {
                 for (String id : dequeuedIds) {
                     // Check limiter again for each workflow
                     if (queue.hasLimiter()) {
-                        if (retIds.size() + numRecentQueries >= queue.getRateLimit()
-                                .getLimit()) {
+                        if (retIds.size() + numRecentQueries >= queue.getRateLimit().getLimit()) {
                             break;
                         }
                     }
@@ -220,8 +219,7 @@ public class QueuesDAO {
             connection.commit();
             return retIds;
 
-        }
-        catch (SQLException e) {
+        } catch (SQLException e) {
             logger.error("Error starting queued workflows", e);
             throw e;
         }

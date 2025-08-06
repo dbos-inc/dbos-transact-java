@@ -1,8 +1,8 @@
 package dev.dbos.transact.workflow;
 
 /**
- * Configuration options for forking workflows. This class is immutable and uses the
- * Builder pattern for construction.
+ * Configuration options for forking workflows. This class is immutable and uses
+ * the Builder pattern for construction.
  */
 public class ForkOptions {
     private final String forkedWorkflowId;
@@ -47,8 +47,8 @@ public class ForkOptions {
     }
 
     /**
-     * Builder class for constructing ForkOptions instances. Provides a fluent interface
-     * for setting configuration values.
+     * Builder class for constructing ForkOptions instances. Provides a fluent
+     * interface for setting configuration values.
      */
     public static class Builder {
         private String forkedWorkflowId;
@@ -61,7 +61,8 @@ public class ForkOptions {
         /**
          * Sets the forked workflow identifier.
          *
-         * @param forkedWorkflowId the workflow ID to set
+         * @param forkedWorkflowId
+         *            the workflow ID to set
          * @return this Builder instance for method chaining
          */
         public Builder forkedWorkflowId(String forkedWorkflowId) {
@@ -72,7 +73,8 @@ public class ForkOptions {
         /**
          * Sets the application version for the forked workflow.
          *
-         * @param applicationVersion the application version to set
+         * @param applicationVersion
+         *            the application version to set
          * @return this Builder instance for method chaining
          */
         public Builder applicationVersion(String applicationVersion) {
@@ -83,7 +85,8 @@ public class ForkOptions {
         /**
          * Sets the timeout in milliseconds for the forked workflow.
          *
-         * @param timeoutMS the timeout in milliseconds
+         * @param timeoutMS
+         *            the timeout in milliseconds
          * @return this Builder instance for method chaining
          */
         public Builder timeoutMS(long timeoutMS) {
@@ -99,7 +102,7 @@ public class ForkOptions {
     @Override
     public String toString() {
         return "ForkOptions{" + "forkedWorkflowId='" + forkedWorkflowId + '\''
-                + ", applicationVersion='" + applicationVersion + '\'' + ", timeoutMS="
-                + timeoutMS + '}';
+                + ", applicationVersion='" + applicationVersion + '\'' + ", timeoutMS=" + timeoutMS
+                + '}';
     }
 }

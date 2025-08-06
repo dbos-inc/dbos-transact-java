@@ -28,9 +28,9 @@ public class StepsTest {
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
-        StepsTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+        StepsTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost")
+                .dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(2)
+                .build();
     }
 
     @BeforeEach
@@ -51,10 +51,10 @@ public class StepsTest {
     @Test
     public void workflowWithStepsSync() throws SQLException {
 
-        ServiceB serviceB = dbos.<ServiceB> Workflow().interfaceClass(ServiceB.class)
+        ServiceB serviceB = dbos.<ServiceB>Workflow().interfaceClass(ServiceB.class)
                 .implementation(new ServiceBImpl()).build();
 
-        ServiceA serviceA = dbos.<ServiceA> Workflow().interfaceClass(ServiceA.class)
+        ServiceA serviceA = dbos.<ServiceA>Workflow().interfaceClass(ServiceA.class)
                 .implementation(new ServiceAImpl(serviceB)).build();
 
         String wid = "sync123";
@@ -88,10 +88,10 @@ public class StepsTest {
     @Test
     public void workflowWithStepsSyncError() throws SQLException {
 
-        ServiceB serviceB = dbos.<ServiceB> Workflow().interfaceClass(ServiceB.class)
+        ServiceB serviceB = dbos.<ServiceB>Workflow().interfaceClass(ServiceB.class)
                 .implementation(new ServiceBImpl()).build();
 
-        ServiceA serviceA = dbos.<ServiceA> Workflow().interfaceClass(ServiceA.class)
+        ServiceA serviceA = dbos.<ServiceA>Workflow().interfaceClass(ServiceA.class)
                 .implementation(new ServiceAImpl(serviceB)).build();
 
         String wid = "sync123er";
@@ -113,10 +113,10 @@ public class StepsTest {
     @Test
     public void AsyncworkflowWithSteps() throws Exception {
 
-        ServiceB serviceB = dbos.<ServiceB> Workflow().interfaceClass(ServiceB.class)
+        ServiceB serviceB = dbos.<ServiceB>Workflow().interfaceClass(ServiceB.class)
                 .implementation(new ServiceBImpl()).build();
 
-        ServiceA serviceA = dbos.<ServiceA> Workflow().interfaceClass(ServiceA.class)
+        ServiceA serviceA = dbos.<ServiceA>Workflow().interfaceClass(ServiceA.class)
                 .implementation(new ServiceAImpl(serviceB)).async().build();
 
         String workflowId = "wf-1234";
@@ -152,9 +152,9 @@ public class StepsTest {
     @Test
     public void SameInterfaceWorkflowWithSteps() throws Exception {
 
-        ServiceWFAndStep service = dbos.<ServiceWFAndStep> Workflow()
-                .interfaceClass(ServiceWFAndStep.class)
-                .implementation(new ServiceWFAndStepImpl()).async().build();
+        ServiceWFAndStep service = dbos.<ServiceWFAndStep>Workflow()
+                .interfaceClass(ServiceWFAndStep.class).implementation(new ServiceWFAndStepImpl())
+                .async().build();
 
         service.setSelf(service);
 

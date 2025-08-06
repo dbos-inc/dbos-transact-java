@@ -15,7 +15,7 @@ public class EveryThirdSec {
     @Scheduled(cron = "0/3 * * * * ?")
     public void everyThird(Instant schedule, Instant actual) {
         ++wfCounter;
-        System.out.println("Execute count " + wfCounter + "  " + schedule.toString()
-                + "   " + actual.toString());
+        System.out.println("Execute count " + wfCounter + "  " + schedule.toString() + "   "
+                + actual.toString());
     }
 }

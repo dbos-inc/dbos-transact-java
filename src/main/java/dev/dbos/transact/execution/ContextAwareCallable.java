@@ -24,8 +24,7 @@ public class ContextAwareCallable<T> implements Callable<T> {
         DBOSContextHolder.set(capturedContext);
         try {
             return task.call();
-        }
-        finally {
+        } finally {
             DBOSContextHolder.clear();
         }
     }

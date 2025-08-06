@@ -23,8 +23,8 @@ class SystemDatabaseTest {
     static void onetimeSetup() throws Exception {
 
         SystemDatabaseTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(3).build();
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(3).build();
 
         DBUtils.recreateDB(dbosConfig);
         MigrationManager.runMigrations(dbosConfig);
@@ -51,12 +51,12 @@ class SystemDatabaseTest {
 
         WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal(workflowId,
                 WorkflowState.SUCCESS, "OrderProcessingWorkflow",
-                "com.example.workflows.OrderWorkflow", "prod-config",
-                "user123@example.com", "admin", "admin,operator",
-                "{\"result\":\"success\"}", null, System.currentTimeMillis() - 3600000,
-                System.currentTimeMillis(), "order-queue", "exec-98765", "1.2.3",
-                "order-app-123", 0, 300000l, System.currentTimeMillis() + 2400000,
-                "dedup-112233", 1, "{\"orderId\":\"ORD-12345\"}");
+                "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
+                "admin", "admin,operator", "{\"result\":\"success\"}", null,
+                System.currentTimeMillis() - 3600000, System.currentTimeMillis(), "order-queue",
+                "exec-98765", "1.2.3", "order-app-123", 0, 300000l,
+                System.currentTimeMillis() + 2400000, "dedup-112233", 1,
+                "{\"orderId\":\"ORD-12345\"}");
 
         try (Connection conn = systemDatabase.getSysDBConnection()) {
             InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn,

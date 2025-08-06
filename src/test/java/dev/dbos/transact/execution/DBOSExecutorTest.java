@@ -37,8 +37,8 @@ class DBOSExecutorTest {
     public static void onetimeBefore() throws SQLException {
 
         DBOSExecutorTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(2).build();
     }
 
     @BeforeEach
@@ -59,9 +59,9 @@ class DBOSExecutorTest {
     @Test
     void executeWorkflowById() throws Exception {
 
-        ExecutingService executingService = dbos.<ExecutingService> Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl()).build();
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
+                .build();
 
         String result = null;
 
@@ -90,9 +90,9 @@ class DBOSExecutorTest {
     @Test
     void executeWorkflowByIdNonExistent() throws Exception {
 
-        ExecutingService executingService = dbos.<ExecutingService> Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl()).build();
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
+                .build();
 
         String result = null;
 
@@ -109,12 +109,10 @@ class DBOSExecutorTest {
         boolean error = false;
         try {
             WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById("wf-124");
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             error = true;
             assert e instanceof NonExistentWorkflowException
-                    : "Expected NonExistentWorkflowException but got "
-                            + e.getClass().getName();
+                    : "Expected NonExistentWorkflowException but got " + e.getClass().getName();
         }
 
         assertTrue(error);
@@ -123,9 +121,9 @@ class DBOSExecutorTest {
     @Test
     void workflowFunctionNotfound() throws Exception {
 
-        ExecutingService executingService = dbos.<ExecutingService> Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl()).build();
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
+                .build();
 
         String result = null;
 
@@ -145,8 +143,7 @@ class DBOSExecutorTest {
         boolean error = false;
         try {
             WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             error = true;
             assert e instanceof WorkflowFunctionNotFoundException
                     : "Expected WorkflowFunctionNotfoundException but got "
@@ -159,9 +156,9 @@ class DBOSExecutorTest {
     @Test
     public void executeWithStep() throws Exception {
 
-        ExecutingService executingService = dbos.<ExecutingService> Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl()).build();
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
+                .build();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -201,9 +198,9 @@ class DBOSExecutorTest {
     @Test
     public void ReExecuteWithStepTwoOnly() throws Exception {
 
-        ExecutingService executingService = dbos.<ExecutingService> Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl()).build();
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
+                .build();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -248,7 +245,7 @@ class DBOSExecutorTest {
     @Test
     public void sleep() {
 
-        ExecutingService executingService = dbos.<ExecutingService> Workflow()
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl(dbos)).build();
 
@@ -276,7 +273,7 @@ class DBOSExecutorTest {
     @Test
     public void sleepRecovery() throws Exception {
 
-        ExecutingService executingService = dbos.<ExecutingService> Workflow()
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl(dbos)).build();
 
@@ -347,8 +344,8 @@ class DBOSExecutorTest {
         }
     }
 
-    private void updateStepEndTime(DataSource ds, String workflowId, int functionId,
-            String endtime) throws SQLException {
+    private void updateStepEndTime(DataSource ds, String workflowId, int functionId, String endtime)
+            throws SQLException {
 
         String sql = "update dbos.operation_outputs SET output = ? WHERE workflow_uuid = ? AND function_id = ? ";
 

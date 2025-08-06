@@ -33,12 +33,14 @@ public class TimeoutTest {
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
-        TimeoutTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+        TimeoutTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost")
+                .dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(2)
+                .build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(),
-                dbosConfig.getDbPort(), "postgres");
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",
+                dbosConfig.getDbHost(),
+                dbosConfig.getDbPort(),
+                "postgres");
     }
 
     @BeforeEach
@@ -59,9 +61,9 @@ public class TimeoutTest {
     @Test
     public void async() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
         simpleService.setSimpleService(simpleService);
 
         // asynchronous
@@ -86,9 +88,9 @@ public class TimeoutTest {
     @Test
     public void asyncTimedOut() {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
         simpleService.setSimpleService(simpleService);
 
         // make it timeout
@@ -105,8 +107,7 @@ public class TimeoutTest {
         try {
             handle.getResult();
             fail("Expected Exception to be thrown");
-        }
-        catch (Throwable t) {
+        } catch (Throwable t) {
             System.out.println(t.getClass().toString());
             assertTrue(t instanceof AwaitedWorkflowCancelledException);
         }
@@ -118,9 +119,9 @@ public class TimeoutTest {
     @Test
     public void queued() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
         simpleService.setSimpleService(simpleService);
 
         // queued
@@ -130,8 +131,7 @@ public class TimeoutTest {
 
         Queue simpleQ = new DBOS.QueueBuilder("simpleQ").build();
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).queue(simpleQ).timeout(3)
-                .build();
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).queue(simpleQ).timeout(3).build();
         WorkflowHandle<String> handle = null;
         try (SetDBOSOptions id = new SetDBOSOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
@@ -148,9 +148,9 @@ public class TimeoutTest {
     @Test
     public void queuedTimedOut() {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
         simpleService.setSimpleService(simpleService);
 
         // make it timeout
@@ -159,8 +159,7 @@ public class TimeoutTest {
 
         Queue simpleQ = new DBOS.QueueBuilder("simpleQ").build();
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).queue(simpleQ).timeout(1)
-                .build();
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).queue(simpleQ).timeout(1).build();
         WorkflowHandle<String> handle = null;
         try (SetDBOSOptions id = new SetDBOSOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
@@ -171,8 +170,7 @@ public class TimeoutTest {
         try {
             handle.getResult();
             fail("Expected Exception to be thrown");
-        }
-        catch (Throwable t) {
+        } catch (Throwable t) {
             System.out.println(t.getClass().toString());
             assertTrue(t instanceof AwaitedWorkflowCancelledException);
         }
@@ -184,9 +182,9 @@ public class TimeoutTest {
     @Test
     public void sync() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
         simpleService.setSimpleService(simpleService);
 
         // synchronous
@@ -208,9 +206,9 @@ public class TimeoutTest {
     @Test
     public void syncTimeout() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
         simpleService.setSimpleService(simpleService);
 
         // synchronous
@@ -224,8 +222,7 @@ public class TimeoutTest {
             try (SetDBOSOptions id = new SetDBOSOptions(options)) {
                 result = simpleService.longWorkflow("12345");
             }
-        }
-        catch (Throwable t) {
+        } catch (Throwable t) {
             assertNull(result);
             assertTrue(t instanceof AwaitedWorkflowCancelledException);
         }
@@ -237,9 +234,9 @@ public class TimeoutTest {
     @Test
     public void recovery() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
         simpleService.setSimpleService(simpleService);
 
         // synchronous
@@ -262,9 +259,9 @@ public class TimeoutTest {
     @Test
     public void parentChild() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl(dbos)).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .build();
         simpleService.setSimpleService(simpleService);
 
         // asynchronous
@@ -279,8 +276,7 @@ public class TimeoutTest {
 
         assertEquals("1234512345", result);
 
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1);
-        ;
+        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1);;
         result = (String) handle.getResult();
         assertEquals("1234512345", result);
         assertEquals(wfid1, handle.getWorkflowId());
@@ -290,9 +286,9 @@ public class TimeoutTest {
     @Test
     public void parentChildTimeOut() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl(dbos)).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .build();
         simpleService.setSimpleService(simpleService);
 
         String wfid1 = "wf-124";
@@ -303,28 +299,24 @@ public class TimeoutTest {
             try (SetDBOSOptions id = new SetDBOSOptions(options)) {
                 result = simpleService.longParent("12345", 3, 1);
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             assertTrue(e instanceof AwaitedWorkflowCancelledException);
-            assertEquals("childwf",
-                    ((AwaitedWorkflowCancelledException) e).getWorkflowId());
+            assertEquals("childwf", ((AwaitedWorkflowCancelledException) e).getWorkflowId());
         }
 
-        String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus()
-                .getStatus();
+        String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus();
         assertEquals(WorkflowState.ERROR.name(), parentStatus);
 
-        String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus()
-                .getStatus();
+        String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus();
         assertEquals(WorkflowState.CANCELLED.name(), childStatus);
     }
 
     @Test
     public void parentTimeoutInheritedByChild() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl(dbos)).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .build();
         simpleService.setSimpleService(simpleService);
 
         String wfid1 = "wf-124";
@@ -335,19 +327,15 @@ public class TimeoutTest {
             try (SetDBOSOptions id = new SetDBOSOptions(options)) {
                 result = simpleService.longParent("12345", 3, 0);
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             assertTrue(e instanceof AwaitedWorkflowCancelledException);
-            assertEquals("childwf",
-                    ((AwaitedWorkflowCancelledException) e).getWorkflowId());
+            assertEquals("childwf", ((AwaitedWorkflowCancelledException) e).getWorkflowId());
         }
 
-        String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus()
-                .getStatus();
+        String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus();
         assertEquals(WorkflowState.ERROR.name(), parentStatus);
 
-        String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus()
-                .getStatus();
+        String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus();
         assertEquals(WorkflowState.CANCELLED.name(), childStatus);
     }
 
@@ -355,9 +343,9 @@ public class TimeoutTest {
     public void parentAsyncTimeoutInheritedByChild() throws Exception {
         // TOFIX : fails at times
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl(dbos)).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .build();
         simpleService.setSimpleService(simpleService);
 
         String wfid1 = "wf-124";
@@ -371,12 +359,10 @@ public class TimeoutTest {
 
         try {
             handle.getResult();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             System.out.println(e.getClass().getName());
             assertTrue(e instanceof AwaitedWorkflowCancelledException);
-        }
-        catch (Throwable t) {
+        } catch (Throwable t) {
             System.out.println("a throwable " + t.getClass().getName());
         }
     }

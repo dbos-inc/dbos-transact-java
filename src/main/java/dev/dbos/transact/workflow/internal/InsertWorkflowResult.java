@@ -10,9 +10,8 @@ public class InsertWorkflowResult {
     private String queueName;
     private Long workflowDeadlineEpochMs;
 
-    public InsertWorkflowResult(int recoveryAttempts, String status, String name,
-            String className, String configName, String queueName,
-            Long workflowDeadlineEpochMs) {
+    public InsertWorkflowResult(int recoveryAttempts, String status, String name, String className,
+            String configName, String queueName, Long workflowDeadlineEpochMs) {
         this.recoveryAttempts = recoveryAttempts;
         this.status = status;
         this.name = name;
@@ -64,8 +63,8 @@ public class InsertWorkflowResult {
         result = prime * result + ((className == null) ? 0 : className.hashCode());
         result = prime * result + ((configName == null) ? 0 : configName.hashCode());
         result = prime * result + ((queueName == null) ? 0 : queueName.hashCode());
-        result = prime * result + ((workflowDeadlineEpochMs == null) ? 0
-                : workflowDeadlineEpochMs.hashCode());
+        result = prime * result
+                + ((workflowDeadlineEpochMs == null) ? 0 : workflowDeadlineEpochMs.hashCode());
         return result;
     }
 
@@ -83,48 +82,41 @@ public class InsertWorkflowResult {
         if (status == null) {
             if (other.status != null)
                 return false;
-        }
-        else if (!status.equals(other.status))
+        } else if (!status.equals(other.status))
             return false;
         if (name == null) {
             if (other.name != null)
                 return false;
-        }
-        else if (!name.equals(other.name))
+        } else if (!name.equals(other.name))
             return false;
         if (className == null) {
             if (other.className != null)
                 return false;
-        }
-        else if (!className.equals(other.className))
+        } else if (!className.equals(other.className))
             return false;
         if (configName == null) {
             if (other.configName != null)
                 return false;
-        }
-        else if (!configName.equals(other.configName))
+        } else if (!configName.equals(other.configName))
             return false;
         if (queueName == null) {
             if (other.queueName != null)
                 return false;
-        }
-        else if (!queueName.equals(other.queueName))
+        } else if (!queueName.equals(other.queueName))
             return false;
         if (workflowDeadlineEpochMs == null) {
             if (other.workflowDeadlineEpochMs != null)
                 return false;
-        }
-        else if (!workflowDeadlineEpochMs.equals(other.workflowDeadlineEpochMs))
+        } else if (!workflowDeadlineEpochMs.equals(other.workflowDeadlineEpochMs))
             return false;
         return true;
     }
 
     @Override
     public String toString() {
-        return "InsertWorkflowResult{" + "recoveryAttempts=" + recoveryAttempts
-                + ", status='" + status + '\'' + ", name='" + name + '\''
-                + ", className='" + className + '\'' + ", configName='" + configName
-                + '\'' + ", queueName='" + queueName + '\'' + ", workflowDeadlineEpochMs="
-                + workflowDeadlineEpochMs + '}';
+        return "InsertWorkflowResult{" + "recoveryAttempts=" + recoveryAttempts + ", status='"
+                + status + '\'' + ", name='" + name + '\'' + ", className='" + className + '\''
+                + ", configName='" + configName + '\'' + ", queueName='" + queueName + '\''
+                + ", workflowDeadlineEpochMs=" + workflowDeadlineEpochMs + '}';
     }
 }

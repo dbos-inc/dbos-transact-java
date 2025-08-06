@@ -68,8 +68,7 @@ public class NotificationService {
             notificationListenerThread.interrupt();
             try {
                 notificationListenerThread.join(5000); // Wait up to 5 seconds
-            }
-            catch (InterruptedException e) {
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
@@ -87,8 +86,7 @@ public class NotificationService {
         }
         int stepFunctionId = ctx.getAndIncrementFunctionId();
 
-        systemDatabase.send(ctx.getWorkflowId(), stepFunctionId, destinationId, message,
-                topic);
+        systemDatabase.send(ctx.getWorkflowId(), stepFunctionId, destinationId, message, topic);
     }
 
     public Object recv(String topic, float timeoutSeconds) {
@@ -101,8 +99,11 @@ public class NotificationService {
         int stepFunctionId = ctx.getAndIncrementFunctionId();
         int timeoutFunctionId = ctx.getAndIncrementFunctionId();
 
-        return systemDatabase.recv(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId,
-                topic, timeoutSeconds);
+        return systemDatabase.recv(ctx.getWorkflowId(),
+                stepFunctionId,
+                timeoutFunctionId,
+                topic,
+                timeoutSeconds);
     }
 
     public void setEvent(String key, Object value) {
@@ -127,8 +128,8 @@ public class NotificationService {
         if (ctx.isInWorkflow()) {
             int stepFunctionId = ctx.getAndIncrementFunctionId();
             int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(
-                    ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId);
+            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(ctx.getWorkflowId(),
+                    stepFunctionId, timeoutFunctionId);
             return systemDatabase.getEvent(workflowId, key, timeOut, callerCtx);
         }
 
@@ -144,8 +145,7 @@ public class NotificationService {
                 notificationConnection.setAutoCommit(true);
 
                 // Cast to PostgreSQL connection for notification support
-                PGConnection pgConnection = notificationConnection
-                        .unwrap(PGConnection.class);
+                PGConnection pgConnection = notificationConnection.unwrap(PGConnection.class);
 
                 // Listen to notification channels
                 try (Statement stmt = notificationConnection.createStatement()) {
@@ -166,45 +166,39 @@ public class NotificationService {
                             String channel = notification.getName();
                             String payload = notification.getParameter();
 
-                            logger.debug(
-                                    "Received notification on channel: {}, payload: {}",
-                                    channel, payload);
+                            logger.debug("Received notification on channel: {}, payload: {}",
+                                    channel,
+                                    payload);
 
                             if ("dbos_notifications_channel".equals(channel)) {
                                 handleNotification(payload, "notifications");
-                            }
-                            else if ("dbos_workflow_events_channel".equals(channel)) {
+                            } else if ("dbos_workflow_events_channel".equals(channel)) {
                                 handleNotification(payload, "workflow_events");
-                            }
-                            else {
+                            } else {
                                 logger.error("Unknown channel: {}", channel);
                             }
                         }
                     }
                 }
 
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 if (running) {
                     logger.warn("Notification listener error: {}", e.getMessage());
                     try {
                         Thread.sleep(1000); // Wait before retrying
-                    }
-                    catch (InterruptedException ie) {
+                    } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         break;
                     }
                     // Loop will try to reconnect and restart the listener
                 }
-            }
-            finally {
+            } finally {
 
                 try {
                     if (notificationConnection != null) {
                         notificationConnection.close();
                     }
-                }
-                catch (SQLException e) {
+                } catch (SQLException e) {
                     logger.error("Error closing notification connection", e);
                 }
             }
@@ -222,13 +216,11 @@ public class NotificationService {
                 pair.lock.lock();
                 try {
                     pair.condition.signalAll();
-                }
-                finally {
+                } finally {
                     pair.lock.unlock();
                 }
                 logger.debug("Signaled {} condition for {}", mapType, payload);
-            }
-            else {
+            } else {
                 logger.warn("ConditionMap has no entry for " + payload);
             }
             // If no condition found, we simply ignore the notification

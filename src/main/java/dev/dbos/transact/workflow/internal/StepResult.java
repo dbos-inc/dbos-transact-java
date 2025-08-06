@@ -10,8 +10,8 @@ public class StepResult {
     public StepResult() {
     }
 
-    public StepResult(String workflowId, int functionID, String functionName,
-            String output, String error) {
+    public StepResult(String workflowId, int functionID, String functionName, String output,
+            String error) {
         this.workflowId = workflowId;
         this.functionId = functionID;
         this.functionName = functionName;

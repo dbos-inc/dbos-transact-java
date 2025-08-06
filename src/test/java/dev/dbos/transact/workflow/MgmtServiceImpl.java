@@ -34,8 +34,7 @@ public class MgmtServiceImpl implements MgmtService {
             service.stepTwo();
             service.stepThree();
 
-        }
-        catch (InterruptedException e) {
+        } catch (InterruptedException e) {
             logger.error(e.getMessage());
         }
 

@@ -37,9 +37,9 @@ public class EventsTest {
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
-        EventsTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+        EventsTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost")
+                .dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(2)
+                .build();
     }
 
     @BeforeEach
@@ -60,9 +60,9 @@ public class EventsTest {
     @Test
     public void basic_set_get() throws Exception {
 
-        EventsService eventService = dbos.<EventsService> Workflow()
-                .interfaceClass(EventsService.class)
-                .implementation(new EventsServiceImpl(dbos)).build();
+        EventsService eventService = dbos.<EventsService>Workflow()
+                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl(dbos))
+                .build();
 
         try (SetWorkflowID id = new SetWorkflowID("id1")) {
             eventService.setEventWorkflow("key1", "value1");
@@ -81,9 +81,9 @@ public class EventsTest {
     @Test
     public void multipleEvents() throws Exception {
 
-        EventsService eventService = dbos.<EventsService> Workflow()
-                .interfaceClass(EventsService.class)
-                .implementation(new EventsServiceImpl(dbos)).build();
+        EventsService eventService = dbos.<EventsService>Workflow()
+                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl(dbos))
+                .build();
 
         try (SetWorkflowID id = new SetWorkflowID("id1")) {
             eventService.setMultipleEvents();
@@ -102,9 +102,9 @@ public class EventsTest {
     @Test
     public void async_set_get() throws Exception {
 
-        EventsService eventService = dbos.<EventsService> Workflow()
-                .interfaceClass(EventsService.class)
-                .implementation(new EventsServiceImpl(dbos)).async().build();
+        EventsService eventService = dbos.<EventsService>Workflow()
+                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl(dbos))
+                .async().build();
 
         try (SetWorkflowID id = new SetWorkflowID("id1")) {
             eventService.setEventWorkflow("key1", "value1");
@@ -121,9 +121,9 @@ public class EventsTest {
     @Test
     public void notification() throws Exception {
 
-        EventsService eventService = dbos.<EventsService> Workflow()
-                .interfaceClass(EventsService.class)
-                .implementation(new EventsServiceImpl(dbos)).async().build();
+        EventsService eventService = dbos.<EventsService>Workflow()
+                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl(dbos))
+                .async().build();
 
         try (SetWorkflowID id = new SetWorkflowID("id2")) {
             eventService.getWithlatch("id1", "key1", 5);
@@ -158,21 +158,18 @@ public class EventsTest {
     @Test
     public void concurrency() throws Exception {
 
-        EventsService eventService = dbos.<EventsService> Workflow()
-                .interfaceClass(EventsService.class)
-                .implementation(new EventsServiceImpl(dbos)).build();
+        EventsService eventService = dbos.<EventsService>Workflow()
+                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl(dbos))
+                .build();
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<Object> future1 = executor
-                    .submit(() -> dbos.getEvent("id1", "key1", 5));
-            Future<Object> future2 = executor
-                    .submit(() -> dbos.getEvent("id1", "key1", 5));
+            Future<Object> future1 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
+            Future<Object> future2 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
 
             String expectedMessage = "test message";
             try (SetWorkflowID id = new SetWorkflowID("id1")) {
-                eventService.setEventWorkflow("key1", expectedMessage);
-                ;
+                eventService.setEventWorkflow("key1", expectedMessage);;
             }
 
             // Both should return the same message
@@ -182,8 +179,7 @@ public class EventsTest {
             assertEquals(result1, result2);
             assertEquals(expectedMessage, result1);
 
-        }
-        finally {
+        } finally {
             executor.shutdown();
             executor.awaitTermination(5, TimeUnit.SECONDS);
         }

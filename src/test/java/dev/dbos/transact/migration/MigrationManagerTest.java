@@ -31,14 +31,17 @@ class MigrationManagerTest {
     static void setup() throws Exception {
 
         MigrationManagerTest.dbosConfig = new DBOSConfig.Builder().name("migrationtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(3).build();
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(3).build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(),
-                dbosConfig.getDbPort(), "postgres");
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",
+                dbosConfig.getDbHost(),
+                dbosConfig.getDbPort(),
+                "postgres");
 
         String sysDb = dbosConfig.getSysDbName();
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(),
+        try (Connection conn = DriverManager.getConnection(dbUrl,
+                dbosConfig.getDbUser(),
                 dbosConfig.getDbPassword()); Statement stmt = conn.createStatement()) {
 
             String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
@@ -67,8 +70,7 @@ class MigrationManagerTest {
         }
     }
 
-    private void assertTableExists(DatabaseMetaData metaData, String tableName)
-            throws Exception {
+    private void assertTableExists(DatabaseMetaData metaData, String tableName) throws Exception {
         try (ResultSet rs = metaData.getTables(null, "dbos", tableName, null)) {
             assertTrue(rs.next(), "Table " + tableName + " should exist in schema dbos");
         }
@@ -102,10 +104,8 @@ class MigrationManagerTest {
 
         // Validate the dummy_table was created
         try (Connection conn = testDataSource.getConnection();
-                ResultSet rs = conn.getMetaData().getTables(null, null, "dummy_table",
-                        null)) {
-            Assertions.assertTrue(rs.next(),
-                    "Expected 'dummy_table' to exist after new migration.");
+                ResultSet rs = conn.getMetaData().getTables(null, null, "dummy_table", null)) {
+            Assertions.assertTrue(rs.next(), "Expected 'dummy_table' to exist after new migration.");
         }
 
         // Clean up test file

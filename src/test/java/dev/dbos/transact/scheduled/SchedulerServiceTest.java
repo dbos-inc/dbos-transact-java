@@ -36,11 +36,13 @@ class SchedulerServiceTest {
     static void onetimeSetup() throws Exception {
 
         SchedulerServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(2).build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(),
-                dbosConfig.getDbPort(), "postgres");
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",
+                dbosConfig.getDbHost(),
+                dbosConfig.getDbPort(),
+                "postgres");
     }
 
     @BeforeEach
@@ -50,8 +52,7 @@ class SchedulerServiceTest {
         systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         schedulerService = new SchedulerService(dbosExecutor);
-        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null,
-                schedulerService);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, schedulerService);
         dbos.launch();
     }
 
@@ -130,8 +131,7 @@ class SchedulerServiceTest {
         try {
             dbos.scheduleWorkflow(imv);
             assertTrue(false); // fail if we get here
-        }
-        catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException e) {
             assertEquals(
                     "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)",
                     e.getMessage());
@@ -146,8 +146,7 @@ class SchedulerServiceTest {
         try {
             dbos.scheduleWorkflow(icw);
             assertTrue(false); // fail if we get here
-        }
-        catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException e) {
 
             System.out.println(e.getMessage());
             assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]",
@@ -158,7 +157,7 @@ class SchedulerServiceTest {
     @Test
     public void stepsTest() throws Exception {
 
-        Steps steps = dbos.<Steps> Workflow().interfaceClass(Steps.class)
+        Steps steps = dbos.<Steps>Workflow().interfaceClass(Steps.class)
                 .implementation(new StepsImpl()).build();
 
         WorkflowWithSteps swf = new WorkflowWithSteps(steps);
@@ -170,8 +169,7 @@ class SchedulerServiceTest {
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertTrue(wfs.size() <= 2);
 
-        List<StepInfo> wsteps = systemDatabase
-                .listWorkflowSteps(wfs.get(0).getWorkflowId());
+        List<StepInfo> wsteps = systemDatabase.listWorkflowSteps(wfs.get(0).getWorkflowId());
         assertEquals(2, wsteps.size());
     }
 

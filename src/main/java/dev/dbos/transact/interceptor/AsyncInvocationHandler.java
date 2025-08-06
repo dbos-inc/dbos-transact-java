@@ -12,8 +12,7 @@ import org.slf4j.LoggerFactory;
 
 public class AsyncInvocationHandler extends BaseInvocationHandler {
 
-    private static final Logger logger = LoggerFactory
-            .getLogger(AsyncInvocationHandler.class);
+    private static final Logger logger = LoggerFactory.getLogger(AsyncInvocationHandler.class);
 
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation,
             DBOSExecutor executor) {
@@ -26,17 +25,20 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
         for (Method method : methods) {
             Workflow wfAnnotation = method.getAnnotation(Workflow.class);
             if (wfAnnotation != null) {
-                String workflowName = wfAnnotation.name().isEmpty() ? method.getName()
+                String workflowName = wfAnnotation.name().isEmpty()
+                        ? method.getName()
                         : wfAnnotation.name();
                 method.setAccessible(true); // In case it's not public
 
-                executor.registerWorkflow(workflowName, implementation,
-                        implementation.getClass().getName(), method);
+                executor.registerWorkflow(workflowName,
+                        implementation,
+                        implementation.getClass().getName(),
+                        method);
             }
         }
 
         T proxy = (T) Proxy.newProxyInstance(interfaceClass.getClassLoader(),
-                new Class<?>[] { interfaceClass },
+                new Class<?>[]{interfaceClass},
                 new AsyncInvocationHandler(implementation, executor));
 
         return proxy;
@@ -49,7 +51,10 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
     protected Object submitWorkflow(String workflowName, String targetClassName,
             WorkflowFunctionWrapper wrapper, Object[] args) throws Throwable {
 
-        dbosExecutor.submitWorkflow(workflowName, targetClassName, wrapper.target, args,
+        dbosExecutor.submitWorkflow(workflowName,
+                targetClassName,
+                wrapper.target,
+                args,
                 wrapper.function);
 
         return null;

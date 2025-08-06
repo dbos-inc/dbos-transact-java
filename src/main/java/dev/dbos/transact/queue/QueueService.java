@@ -61,8 +61,7 @@ public class QueueService {
 
                 try {
                     Thread.sleep(randomSleep);
-                }
-                catch (InterruptedException e) {
+                } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     logger.error("QueuesPollThread interrupted while sleeping");
                     running = false;
@@ -79,17 +78,15 @@ public class QueueService {
 
                     try {
 
-                        List<String> workflowIds = systemDatabase
-                                .getAndStartQueuedWorkflows(queue,
-                                        Constants.DEFAULT_EXECUTORID,
-                                        Constants.DEFAULT_APP_VERSION);
+                        List<String> workflowIds = systemDatabase.getAndStartQueuedWorkflows(queue,
+                                Constants.DEFAULT_EXECUTORID,
+                                Constants.DEFAULT_APP_VERSION);
 
                         for (String id : workflowIds) {
                             dbosExecutor.executeWorkflowById(id);
                         }
 
-                    }
-                    catch (Exception e) {
+                    } catch (Exception e) {
 
                         pollingInterval = min(maxPollingInterval, pollingInterval * 2);
                         logger.error("Error executing queued workflow", e);
@@ -99,11 +96,9 @@ public class QueueService {
                 pollingInterval = max(minPollingInterval, pollingInterval * 0.9);
             }
 
-        }
-        finally {
+        } finally {
             shutdownLatch.countDown();
-            logger.info("QueuesPolThread has ended. Exiting "
-                    + Thread.currentThread().getId());
+            logger.info("QueuesPolThread has ended. Exiting " + Thread.currentThread().getId());
         }
     }
 
@@ -139,12 +134,10 @@ public class QueueService {
                             "QueuePollThread did not stop gracefully. It might be stuck. Interrupting...");
                     workerThread.interrupt(); // Interrupt if it's still alive after join
                 }
-            }
-            catch (InterruptedException e) {
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt(); // Restore interrupt status
                 logger.warn("Interrupted QueuesPollThread", e);
-            }
-            finally {
+            } finally {
                 workerThread = null;
             }
         }
@@ -162,7 +155,6 @@ public class QueueService {
         // worker's run() method
         // has completed.
         // We also check !workerThread.isAlive() as a final confirmation.
-        return shutdownLatch != null && shutdownLatch.getCount() == 0
-                && !workerThread.isAlive();
+        return shutdownLatch != null && shutdownLatch.getCount() == 0 && !workerThread.isAlive();
     }
 }

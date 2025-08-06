@@ -39,8 +39,7 @@ public class HttpServer {
 
         try {
             tomcat.start();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             logger.error("Error starting http server", e);
         }
     }
@@ -54,8 +53,7 @@ public class HttpServer {
         try {
             tomcat.stop();
             tomcat.destroy();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             logger.error("Error stopping httpserver", e);
         }
     }
@@ -77,7 +75,8 @@ public class HttpServer {
         // resourceConfig.packages(pkg);
 
         // Add the REST API servlet
-        var jerseyservlet = tomcat.addServlet(contextPath, "jersey-servlet",
+        var jerseyservlet = tomcat.addServlet(contextPath,
+                "jersey-servlet",
                 new ServletContainer(resourceConfig));
         context.addServletMappingDecoded("/*", "jersey-servlet");
     }

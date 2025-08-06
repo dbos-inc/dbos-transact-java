@@ -54,8 +54,7 @@ class JSONUtilTest {
         try {
             String msg = "Remote Exception of type: " + fromStr.className;
             throw new DBOSAppException(msg, fromStr);
-        }
-        catch (Throwable t) {
+        } catch (Throwable t) {
             assertEquals("Remote Exception of type: dev.dbos.transact.json.TestException",
                     t.getMessage());
         }
@@ -74,7 +73,7 @@ class JSONUtilTest {
 
     @Test
     public void testArraySerialization() {
-        int[] nums = { 1, 2, 3, 4 };
+        int[] nums = {1, 2, 3, 4};
         String json = JSONUtil.serialize(nums);
         System.out.println(json);
         Object[] dser = JSONUtil.deserializeToArray(json);
@@ -132,7 +131,7 @@ class JSONUtilTest {
 
     @Test
     public void testMixedArrayTypes() {
-        Object[] mixed = { "abc", 123, true, Arrays.asList("x", "y") };
+        Object[] mixed = {"abc", 123, true, Arrays.asList("x", "y")};
         String json = JSONUtil.serializeArray(mixed);
         Object[] deserialized = JSONUtil.deserializeToArray(json);
 
@@ -142,8 +141,8 @@ class JSONUtilTest {
 
     @Test
     public void testInstantArraySerialization() {
-        Object[] args = new Object[] { Instant.parse("2024-01-01T00:00:00Z"),
-                Instant.parse("2024-01-02T00:00:00Z") };
+        Object[] args = new Object[]{Instant.parse("2024-01-01T00:00:00Z"),
+                Instant.parse("2024-01-02T00:00:00Z")};
         String json = JSONUtil.serializeArray(args);
         Object[] restored = JSONUtil.deserializeToArray(json);
 

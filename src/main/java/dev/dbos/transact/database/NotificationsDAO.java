@@ -32,8 +32,8 @@ public class NotificationsDAO {
         this.notificationService = nService;
     }
 
-    public void send(String workflowUuid, int functionId, String destinationUuid,
-            Object message, String topic) throws SQLException {
+    public void send(String workflowUuid, int functionId, String destinationUuid, Object message,
+            String topic) throws SQLException {
 
         String functionName = "DBOS.send";
         String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
@@ -44,19 +44,24 @@ public class NotificationsDAO {
             try {
                 // Check if operation was already executed
                 StepResult recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid,
-                        functionId, functionName, conn);
+                        functionId,
+                        functionName,
+                        conn);
 
                 if (recordedOutput != null) {
-                    logger.debug(String.format(
-                            "Replaying send, id: %d, destination_uuid: %s, topic: %s",
-                            functionId, destinationUuid, finalTopic));
+                    logger.debug(
+                            String.format("Replaying send, id: %d, destination_uuid: %s, topic: %s",
+                                    functionId,
+                                    destinationUuid,
+                                    finalTopic));
                     conn.commit();
                     return;
-                }
-                else {
-                    logger.debug(String.format(
-                            "Running send, id: %d, destination_uuid: %s, topic: %s",
-                            functionId, destinationUuid, finalTopic));
+                } else {
+                    logger.debug(
+                            String.format("Running send, id: %d, destination_uuid: %s, topic: %s",
+                                    functionId,
+                                    destinationUuid,
+                                    finalTopic));
                 }
 
                 // Insert notification
@@ -72,8 +77,7 @@ public class NotificationsDAO {
                     stmt.setString(2, finalTopic);
                     stmt.setString(3, JSONUtil.serialize(message));
                     stmt.executeUpdate();
-                }
-                catch (SQLException e) {
+                } catch (SQLException e) {
                     // Foreign key violation
                     if ("23503".equals(e.getSQLState())) {
                         throw new NonExistentWorkflowException(destinationUuid);
@@ -93,12 +97,10 @@ public class NotificationsDAO {
 
                 conn.commit();
 
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 try {
                     conn.rollback();
-                }
-                catch (SQLException rollbackEx) {
+                } catch (SQLException rollbackEx) {
                     e.addSuppressed(rollbackEx);
                 }
                 throw e;
@@ -106,9 +108,8 @@ public class NotificationsDAO {
         }
     }
 
-    public Object recv(String workflowUuid, int functionId, int timeoutFunctionId,
-            String topic, double timeoutSeconds)
-            throws SQLException, InterruptedException {
+    public Object recv(String workflowUuid, int functionId, int timeoutFunctionId, String topic,
+            double timeoutSeconds) throws SQLException, InterruptedException {
 
         String functionName = "DBOS.recv";
         String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
@@ -117,25 +118,19 @@ public class NotificationsDAO {
         StepResult recordedOutput = null;
 
         try (Connection c = dataSource.getConnection()) {
-            recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid, functionId,
-                    functionName, c);
+            recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c);
         }
 
         if (recordedOutput != null) {
-            logger.debug(String.format("Replaying recv, id: %d, topic: %s", functionId,
-                    finalTopic));
+            logger.debug(String.format("Replaying recv, id: %d, topic: %s", functionId, finalTopic));
             if (recordedOutput.getOutput() != null) {
-                Object[] dSerOut = JSONUtil
-                        .deserializeToArray(recordedOutput.getOutput());
+                Object[] dSerOut = JSONUtil.deserializeToArray(recordedOutput.getOutput());
                 return dSerOut == null ? null : dSerOut[0];
-            }
-            else {
+            } else {
                 throw new RuntimeException("No output recorded in the last recv");
             }
-        }
-        else {
-            logger.debug(String.format("Running recv, id: %d, topic: %s", functionId,
-                    finalTopic));
+        } else {
+            logger.debug(String.format("Running recv, id: %d, topic: %s", functionId, finalTopic));
         }
 
         // Insert a condition to the notifications map
@@ -144,8 +139,7 @@ public class NotificationsDAO {
 
         try {
             lockPair.lock.lock();
-            boolean success = notificationService.registerNotificationCondition(payload,
-                    lockPair);
+            boolean success = notificationService.registerNotificationCondition(payload, lockPair);
             if (!success) {
                 // This should not happen, but if it does, it means the workflow is
                 // executed
@@ -175,17 +169,17 @@ public class NotificationsDAO {
             if (!hasExistingNotification) {
                 // Wait for the notification
                 // Support OAOO sleep
-                double actualTimeout = stepsDAO.sleep(workflowUuid, timeoutFunctionId,
-                        timeoutSeconds, true);
+                double actualTimeout = stepsDAO.sleep(workflowUuid,
+                        timeoutFunctionId,
+                        timeoutSeconds,
+                        true);
                 long timeoutMs = (long) (actualTimeout * 1000);
                 lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
 
-            }
-            else {
+            } else {
                 logger.info("We have notification. no need to sleep");
             }
-        }
-        finally {
+        } finally {
             lockPair.lock.unlock();
             notificationService.unregisterNotificationCondition(payload);
         }
@@ -198,8 +192,7 @@ public class NotificationsDAO {
                 // Find and delete the oldest entry for this workflow+topic
                 String deleteAndReturnSql = " WITH oldest_entry AS ( "
                         + " SELECT destination_uuid, topic, message, created_at_epoch_ms "
-                        + " FROM %s.notifications "
-                        + " WHERE destination_uuid = ? AND topic = ? "
+                        + " FROM %s.notifications " + " WHERE destination_uuid = ? AND topic = ? "
                         + " ORDER BY created_at_epoch_ms ASC " + " LIMIT 1 " + " ) "
                         + " DELETE FROM %s.notifications "
                         + " WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry) "
@@ -208,7 +201,8 @@ public class NotificationsDAO {
                         + " RETURNING message ";
 
                 deleteAndReturnSql = String.format(deleteAndReturnSql,
-                        Constants.DB_SCHEMA, Constants.DB_SCHEMA);
+                        Constants.DB_SCHEMA,
+                        Constants.DB_SCHEMA);
 
                 Object[] recvdSermessage = null;
                 try (PreparedStatement stmt = conn.prepareStatement(deleteAndReturnSql)) {
@@ -218,8 +212,7 @@ public class NotificationsDAO {
                     try (ResultSet rs = stmt.executeQuery()) {
                         if (rs.next()) {
                             String serializedMessage = rs.getString("message");
-                            recvdSermessage = JSONUtil
-                                    .deserializeToArray(serializedMessage);
+                            recvdSermessage = JSONUtil.deserializeToArray(serializedMessage);
                         }
                     }
                 }
@@ -238,8 +231,7 @@ public class NotificationsDAO {
                 conn.commit();
                 return toSave;
 
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 conn.rollback();
                 throw e;
             }
@@ -256,14 +248,15 @@ public class NotificationsDAO {
             try {
                 // Check if operation was already executed
                 StepResult recordedOutput = stepsDAO.checkStepExecutionTxn(workflowId,
-                        functionId, functionName, conn);
+                        functionId,
+                        functionName,
+                        conn);
 
                 if (recordedOutput != null) {
                     logger.debug("Replaying setEvent, id: {}, key: {}", functionId, key);
                     conn.commit();
                     return; // Already sent before
-                }
-                else {
+                } else {
                     logger.debug("Running setEvent, id: {}, key: {}", functionId, key);
                 }
 
@@ -297,8 +290,7 @@ public class NotificationsDAO {
 
                 conn.commit();
 
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 conn.rollback();
                 throw e;
             }
@@ -316,24 +308,21 @@ public class NotificationsDAO {
 
             try (Connection conn = dataSource.getConnection()) {
                 recordedOutput = stepsDAO.checkStepExecutionTxn(callerCtx.getWorkflowId(),
-                        callerCtx.getFunctionId(), functionName, conn);
+                        callerCtx.getFunctionId(),
+                        functionName,
+                        conn);
             }
 
             if (recordedOutput != null) {
-                logger.debug("Replaying getEvent, id: {}, key: {}",
-                        callerCtx.getFunctionId(), key);
+                logger.debug("Replaying getEvent, id: {}, key: {}", callerCtx.getFunctionId(), key);
                 if (recordedOutput.getOutput() != null) {
-                    Object[] outputArray = JSONUtil
-                            .deserializeToArray(recordedOutput.getOutput());
+                    Object[] outputArray = JSONUtil.deserializeToArray(recordedOutput.getOutput());
                     return outputArray == null ? null : outputArray[0];
-                }
-                else {
+                } else {
                     throw new RuntimeException("No output recorded in the last getEvent");
                 }
-            }
-            else {
-                logger.debug("Running getEvent, id: {}, key: {}",
-                        callerCtx.getFunctionId(), key);
+            } else {
+                logger.debug("Running getEvent, id: {}, key: {}", callerCtx.getFunctionId(), key);
             }
         }
 
@@ -360,13 +349,11 @@ public class NotificationsDAO {
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
                         String serializedValue = rs.getString("value");
-                        Object[] valueArray = JSONUtil
-                                .deserializeToArray(serializedValue);
+                        Object[] valueArray = JSONUtil.deserializeToArray(serializedValue);
                         value = valueArray == null ? null : valueArray[0];
                     }
                 }
-            }
-            catch (SQLException e) {
+            } catch (SQLException e) {
                 logger.error("Database error in getEvent initial check", e);
                 throw new RuntimeException("Failed to check event", e);
             }
@@ -377,7 +364,9 @@ public class NotificationsDAO {
                 if (callerCtx != null) {
                     // Support OAOO sleep for workflows
                     actualTimeout = stepsDAO.sleep(callerCtx.getWorkflowId(),
-                            callerCtx.getTimeoutFunctionId(), timeoutSeconds, true // skip_sleep
+                            callerCtx.getTimeoutFunctionId(),
+                            timeoutSeconds,
+                            true // skip_sleep
                     );
                 }
 
@@ -385,8 +374,7 @@ public class NotificationsDAO {
                     long timeout = (long) (actualTimeout * 1000);
                     logger.debug("Waiting for notification ..." + timeout);
                     lockConditionPair.condition.await(timeout, TimeUnit.MILLISECONDS);
-                }
-                catch (InterruptedException e) {
+                } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException("Interrupted while waiting for event", e);
                 }
@@ -402,16 +390,13 @@ public class NotificationsDAO {
                     try (ResultSet rs = stmt.executeQuery()) {
                         if (rs.next()) {
                             String serializedValue = rs.getString("value");
-                            Object[] valueArray = JSONUtil
-                                    .deserializeToArray(serializedValue);
+                            Object[] valueArray = JSONUtil.deserializeToArray(serializedValue);
                             value = valueArray == null ? null : valueArray[0];
                         }
                     }
-                }
-                catch (SQLException e) {
+                } catch (SQLException e) {
                     logger.error("Database error in getEvent final check", e);
-                    throw new RuntimeException("Failed to read event after notification",
-                            e);
+                    throw new RuntimeException("Failed to read event after notification", e);
                 }
             }
 
@@ -430,8 +415,7 @@ public class NotificationsDAO {
 
             return value;
 
-        }
-        finally {
+        } finally {
             lockConditionPair.lock.unlock();
             // Remove the condition from the map after use
             notificationService.unregisterNotificationCondition(payload);

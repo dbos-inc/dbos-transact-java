@@ -69,15 +69,19 @@ public class Queue {
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, concurrency, workerConcurrency, rateLimit.getLimit(),
-                rateLimit.getPeriod(), priorityEnabled);
+        return Objects.hash(name,
+                concurrency,
+                workerConcurrency,
+                rateLimit.getLimit(),
+                rateLimit.getPeriod(),
+                priorityEnabled);
     }
 
     @Override
     public String toString() {
         return "WorkflowQueue{" + "name='" + name + '\'' + ", concurrency=" + concurrency
-                + ", workerConcurrency=" + workerConcurrency + ", limit="
-                + rateLimit.getLimit() + ", period=" + rateLimit.getPeriod()
-                + ", priorityEnabled=" + priorityEnabled + '}';
+                + ", workerConcurrency=" + workerConcurrency + ", limit=" + rateLimit.getLimit()
+                + ", period=" + rateLimit.getPeriod() + ", priorityEnabled=" + priorityEnabled
+                + '}';
     }
 }

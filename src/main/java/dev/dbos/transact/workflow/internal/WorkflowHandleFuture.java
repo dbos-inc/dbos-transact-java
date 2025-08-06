@@ -15,8 +15,7 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
     private Future<T> futureResult;
     private SystemDatabase systemDatabase;
 
-    public WorkflowHandleFuture(String workflowId, Future<T> future,
-            SystemDatabase sysdb) {
+    public WorkflowHandleFuture(String workflowId, Future<T> future, SystemDatabase sysdb) {
         this.workflowId = workflowId;
         this.futureResult = future;
         this.systemDatabase = sysdb;
@@ -31,8 +30,7 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
     public T getResult() {
         try {
             return futureResult.get();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
         }
     }

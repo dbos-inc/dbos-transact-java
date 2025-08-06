@@ -39,8 +39,8 @@ public class QueueChildWorkflowTest {
     static void onetimeSetup() throws Exception {
 
         QueueChildWorkflowTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(2).build();
     }
 
     @BeforeEach
@@ -51,8 +51,7 @@ public class QueueChildWorkflowTest {
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         queueService = new QueueService(systemDatabase, dbosExecutor);
 
-        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, queueService,
-                null);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, queueService, null);
         dbos.launch();
     }
 
@@ -64,12 +63,11 @@ public class QueueChildWorkflowTest {
     @Test
     public void multipleChildren() throws Exception {
 
-        Queue childQ = new DBOS.QueueBuilder("childQ").concurrency(5).workerConcurrency(5)
-                .build();
+        Queue childQ = new DBOS.QueueBuilder("childQ").concurrency(5).workerConcurrency(5).build();
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).queue(childQ).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .queue(childQ).build();
 
         simpleService.setSimpleService(simpleService);
 
@@ -113,12 +111,11 @@ public class QueueChildWorkflowTest {
     @Test
     public void nestedChildren() throws Exception {
 
-        Queue childQ = new DBOS.QueueBuilder("childQ").concurrency(5).workerConcurrency(5)
-                .build();
+        Queue childQ = new DBOS.QueueBuilder("childQ").concurrency(5).workerConcurrency(5).build();
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).queue(childQ).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .queue(childQ).build();
 
         simpleService.setSimpleService(simpleService);
 

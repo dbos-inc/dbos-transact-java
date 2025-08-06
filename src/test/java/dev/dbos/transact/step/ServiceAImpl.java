@@ -26,8 +26,7 @@ public class ServiceAImpl implements ServiceA {
         serviceBproxy.step2("two");
         try {
             serviceBproxy.step3("three", false);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             // Nothing to do
             System.out.println(e.getMessage());
         }
@@ -44,8 +43,7 @@ public class ServiceAImpl implements ServiceA {
         serviceBproxy.step2("two");
         try {
             serviceBproxy.step3("three", true);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             // Nothing to do
             System.out.println(e.getMessage());
         }

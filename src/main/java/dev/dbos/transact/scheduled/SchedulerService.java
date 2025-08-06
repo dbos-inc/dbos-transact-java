@@ -29,8 +29,7 @@ import org.slf4j.LoggerFactory;
 
 public class SchedulerService {
 
-    private final ScheduledExecutorService scheduler = Executors
-            .newScheduledThreadPool(4);
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
     private final DBOSExecutor dbosExecutor;
     private final CronParser cronParser;
     Logger logger = LoggerFactory.getLogger(SchedulerService.class);
@@ -49,26 +48,29 @@ public class SchedulerService {
                     && method.isAnnotationPresent(Scheduled.class)) {
 
                 if (!Arrays.equals(method.getParameterTypes(),
-                        new Class<?>[] { Instant.class, Instant.class })) {
+                        new Class<?>[]{Instant.class, Instant.class})) {
                     throw new IllegalArgumentException(
                             "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)");
                 }
 
                 Workflow wfAnnotation = method.getAnnotation(Workflow.class);
                 Scheduled scheduled = method.getAnnotation(Scheduled.class);
-                String workflowName = wfAnnotation.name().isEmpty() ? method.getName()
+                String workflowName = wfAnnotation.name().isEmpty()
+                        ? method.getName()
                         : wfAnnotation.name();
                 // register with dbosExecutor for recovery
-                dbosExecutor.registerWorkflow(workflowName, implementation,
-                        implementation.getClass().getName(), method);
+                dbosExecutor.registerWorkflow(workflowName,
+                        implementation,
+                        implementation.getClass().getName(),
+                        method);
                 String cron = scheduled.cron();
                 scheduleRecurringWorkflow(workflowName, implementation, method, cron);
             }
         }
     }
 
-    private void scheduleRecurringWorkflow(String workflowName, Object instance,
-            Method method, String cronExpr) {
+    private void scheduleRecurringWorkflow(String workflowName, Object instance, Method method,
+            String cronExpr) {
 
         logger.info("Scheduling wf " + workflowName);
         Cron cron = cronParser.parse(cronExpr);
@@ -88,15 +90,17 @@ public class SchedulerService {
                     args[0] = scheduledTime.toInstant();
                     args[1] = ZonedDateTime.now(ZoneOffset.UTC).toInstant();
                     logger.info("submitting to dbos Executor " + workflowName);
-                    String workflowId = String.format("sched-%s-%s", workflowName,
+                    String workflowId = String.format("sched-%s-%s",
+                            workflowName,
                             scheduledTime.toString());
                     try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
                         dbosExecutor.enqueueWorkflow(workflowName,
-                                instance.getClass().getName(), wrapper, args,
+                                instance.getClass().getName(),
+                                wrapper,
+                                args,
                                 schedulerQueue);
                     }
-                }
-                catch (Throwable e) {
+                } catch (Throwable e) {
                     e.printStackTrace();
                 }
 

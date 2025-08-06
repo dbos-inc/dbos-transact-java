@@ -42,13 +42,11 @@ public class ForkServiceImpl implements ForkService {
         forkService.stepOne("one");
         forkService.stepTwo(2);
 
-        try (SetDBOSOptions o = new SetDBOSOptions(
-                new DBOSOptions.Builder("child1").build())) {
+        try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").build())) {
             forkService.child1(25);
         }
 
-        try (SetDBOSOptions o = new SetDBOSOptions(
-                new DBOSOptions.Builder("child2").build())) {
+        try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").build())) {
             forkService.child2(25.75f);
         }
 
@@ -63,14 +61,12 @@ public class ForkServiceImpl implements ForkService {
         forkService.stepTwo(2);
 
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions o = new SetDBOSOptions(
-                new DBOSOptions.Builder("child1").build())) {
+        try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").build())) {
             handle = dbos.startWorkflow(() -> forkService.child1(25));
         }
 
         handle.getResult();
-        try (SetDBOSOptions o = new SetDBOSOptions(
-                new DBOSOptions.Builder("child2").build())) {
+        try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").build())) {
             handle = dbos.startWorkflow(() -> forkService.child2(25.75f));
         }
 

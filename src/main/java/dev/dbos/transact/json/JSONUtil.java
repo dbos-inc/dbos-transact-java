@@ -17,14 +17,13 @@ public class JSONUtil {
     }
 
     public static String serialize(Object obj) {
-        return serializeArray(new Object[] { obj });
+        return serializeArray(new Object[]{obj});
     }
 
     public static String serializeArray(Object[] args) {
         try {
             return mapper.writeValueAsString(new Boxed(args));
-        }
-        catch (JsonProcessingException e) {
+        } catch (JsonProcessingException e) {
             throw new RuntimeException("Serialization failed", e);
         }
     }
@@ -33,8 +32,7 @@ public class JSONUtil {
         try {
             Boxed boxed = mapper.readValue(json, Boxed.class);
             return boxed.args;
-        }
-        catch (JsonProcessingException e) {
+        } catch (JsonProcessingException e) {
             throw new RuntimeException("Deserialization failed", e);
         }
     }

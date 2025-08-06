@@ -81,8 +81,7 @@ public class DBOS {
         }
 
         if (config == null || sd == null || de == null) {
-            throw new IllegalArgumentException(
-                    "Config, systemdb, dbosexecutor cannot be null");
+            throw new IllegalArgumentException("Config, systemdb, dbosexecutor cannot be null");
         }
 
         if (config.migration()) {
@@ -93,7 +92,8 @@ public class DBOS {
     }
 
     /**
-     * Gets the singleton instance of DBOS. Throws if accessed before initialization.
+     * Gets the singleton instance of DBOS. Throws if accessed before
+     * initialization.
      */
     public static DBOS getInstance() {
         if (instance == null) {
@@ -136,21 +136,22 @@ public class DBOS {
 
         public T build() {
             if (interfaceClass == null || implementation == null) {
-                throw new IllegalStateException(
-                        "Interface and implementation must be set");
+                throw new IllegalStateException("Interface and implementation must be set");
             }
 
             if (async) {
-                return AsyncInvocationHandler.createProxy(interfaceClass, implementation,
+                return AsyncInvocationHandler.createProxy(interfaceClass,
+                        implementation,
                         DBOS.getInstance().dbosExecutor);
-            }
-            else if (queue != null) {
-                return QueueInvocationHandler.createProxy(interfaceClass, implementation,
-                        queue, DBOS.getInstance().dbosExecutor);
-            }
-            else {
+            } else if (queue != null) {
+                return QueueInvocationHandler.createProxy(interfaceClass,
+                        implementation,
+                        queue,
+                        DBOS.getInstance().dbosExecutor);
+            } else {
                 return UnifiedInvocationHandler.createProxy(interfaceClass,
-                        implementation, DBOS.getInstance().dbosExecutor);
+                        implementation,
+                        DBOS.getInstance().dbosExecutor);
             }
         }
     }
@@ -167,7 +168,8 @@ public class DBOS {
         /**
          * Constructor for the Builder, taking the required 'name' field.
          *
-         * @param name The name of the queue.
+         * @param name
+         *            The name of the queue.
          */
         public QueueBuilder(String name) {
             this.name = name;
@@ -195,8 +197,7 @@ public class DBOS {
 
         public Queue build() {
 
-            Queue q = Queue.createQueue(name, concurrency, workerConcurrency, limit,
-                    priorityEnabled);
+            Queue q = Queue.createQueue(name, concurrency, workerConcurrency, limit, priorityEnabled);
             DBOS.getInstance().queueService.register(q);
             return q;
         }
@@ -211,8 +212,7 @@ public class DBOS {
         if (notificationService == null) {
             notificationService = systemDatabase.getNotificationService();
             notificationService.start();
-        }
-        else {
+        } else {
             notificationService.start();
         }
 
@@ -226,8 +226,7 @@ public class DBOS {
                 }, "http-server-thread");
                 httpThread.setDaemon(false); // Keep process alive
                 httpThread.start();
-            }
-            else {
+            } else {
                 httpServer.start();
             }
         }
@@ -272,10 +271,11 @@ public class DBOS {
     }
 
     /**
-     * Scans the class for all methods that have Workflow and Scheduled annotations and
-     * schedules them for execution
+     * Scans the class for all methods that have Workflow and Scheduled annotations
+     * and schedules them for execution
      *
-     * @param implementation instance of a class
+     * @param implementation
+     *            instance of a class
      */
     public void scheduleWorkflow(Object implementation) {
         schedulerService.scanAndSchedule(implementation);
@@ -284,9 +284,12 @@ public class DBOS {
     /**
      * Send a message to a workflow
      *
-     * @param destinationId recipient of the message
-     * @param message message to be sent
-     * @param topic topic to which the message is send
+     * @param destinationId
+     *            recipient of the message
+     * @param message
+     *            message to be sent
+     * @param topic
+     *            topic to which the message is send
      */
     public void send(String destinationId, Object message, String topic) {
         notificationService.send(destinationId, message, topic);
@@ -295,8 +298,10 @@ public class DBOS {
     /**
      * Get a message sent to a particular topic
      *
-     * @param topic the topic whose message to get
-     * @param timeoutSeconds time in seconds after which the call times out
+     * @param topic
+     *            the topic whose message to get
+     * @param timeoutSeconds
+     *            time in seconds after which the call times out
      * @return the message if there is one or else null
      */
     public Object recv(String topic, float timeoutSeconds) {
@@ -306,8 +311,10 @@ public class DBOS {
     /**
      * Call within a workflow to publish a key value pair
      *
-     * @param key identifier for published data
-     * @param value data that is published
+     * @param key
+     *            identifier for published data
+     * @param value
+     *            data that is published
      */
     public void setEvent(String key, Object value) {
         notificationService.setEvent(key, value);
@@ -316,9 +323,12 @@ public class DBOS {
     /**
      * Get the data published by a workflow
      *
-     * @param workflowId id of the workflow who data is to be retrieved
-     * @param key identifies the data
-     * @param timeOut time in seconds to wait for data
+     * @param workflowId
+     *            id of the workflow who data is to be retrieved
+     * @param key
+     *            identifies the data
+     * @param timeOut
+     *            time in seconds to wait for data
      * @return the published value or null
      */
     public Object getEvent(String workflowId, String key, float timeOut) {
@@ -326,11 +336,12 @@ public class DBOS {
     }
 
     /**
-     * Durable sleep. When you are in a workflow, use this instead of Thread.sleep. On
-     * restart or during recovery the original expected wakeup time is honoured as opposed
-     * to sleeping all over again.
+     * Durable sleep. When you are in a workflow, use this instead of Thread.sleep.
+     * On restart or during recovery the original expected wakeup time is honoured
+     * as opposed to sleeping all over again.
      *
-     * @param seconds in seconds
+     * @param seconds
+     *            in seconds
      */
     public void sleep(float seconds) {
 
@@ -340,7 +351,8 @@ public class DBOS {
     /**
      * Resume a workflow starting from the step after the last complete step
      *
-     * @param workflowId id of the workflow
+     * @param workflowId
+     *            id of the workflow
      * @return A handle to the workflow
      */
     public <T> WorkflowHandle<T> resumeWorkflow(String workflowId) {
@@ -349,8 +361,8 @@ public class DBOS {
 
     /***
      *
-     * Cancel the workflow. After this function is called, the next step (not the current
-     * one) will not execute
+     * Cancel the workflow. After this function is called, the next step (not the
+     * current one) will not execute
      *
      * @param workflowId
      */
@@ -360,13 +372,16 @@ public class DBOS {
     }
 
     /**
-     * Fork the workflow. Re-execute with another Id from the step provided. Steps prior
-     * to the provided step are copied over
+     * Fork the workflow. Re-execute with another Id from the step provided. Steps
+     * prior to the provided step are copied over
      *
-     * @param workflowId Original workflow Id
-     * @param startStep Start execution from this step. Prior steps copied over
-     * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion,
-     *     timeout
+     * @param workflowId
+     *            Original workflow Id
+     * @param startStep
+     *            Start execution from this step. Prior steps copied over
+     * @param options
+     *            {@link ForkOptions} containing forkedWorkflowId,
+     *            applicationVersion, timeout
      * @return handle to the workflow
      */
     public <T> WorkflowHandle<T> forkWorkflow(String workflowId, int startStep,
@@ -375,12 +390,14 @@ public class DBOS {
     }
 
     /**
-     * Start a workflow asynchronously. If a queue is specified with DBOSOptions, the
-     * workflow is queued.
+     * Start a workflow asynchronously. If a queue is specified with DBOSOptions,
+     * the workflow is queued.
      *
-     * @param func A function annotated with @Workflow
+     * @param func
+     *            A function annotated with @Workflow
      * @return handle {@link WorkflowHandle} to the workflow
-     * @param <T> type returned by the function
+     * @param <T>
+     *            type returned by the function
      */
     public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
         return this.dbosExecutor.startWorkflow(func);

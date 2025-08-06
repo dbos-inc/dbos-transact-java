@@ -33,9 +33,8 @@ public class AsyncWorkflowTest {
     static void onetimeSetup() throws Exception {
 
         AsyncWorkflowTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres")
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).runAdminServer()
-                .adminAwaitOnStart(false).build();
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(2).runAdminServer().adminAwaitOnStart(false).build();
     }
 
     @BeforeEach
@@ -56,17 +55,16 @@ public class AsyncWorkflowTest {
     @Test
     public void setWorkflowId() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).async().build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl()).async()
+                .build();
 
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
             simpleService.workWithString("test-item");
         }
 
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid);
-        ;
+        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid);;
         String result = (String) handle.getResult();
         assertEquals("Processed: test-item", result);
         assertEquals("wf-123", handle.getWorkflowId());
@@ -81,9 +79,9 @@ public class AsyncWorkflowTest {
     @Test
     public void sameWorkflowId() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).async().build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl()).async()
+                .build();
 
         SimpleServiceImpl.executionCount = 0;
 
@@ -133,9 +131,9 @@ public class AsyncWorkflowTest {
     @Test
     public void workflowWithError() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         WorkflowHandle<Void> handle = null;
         String wfid = "abc";
@@ -148,8 +146,7 @@ public class AsyncWorkflowTest {
 
         try {
             handle.getResult();
-        }
-        catch (DBOSAppException e) {
+        } catch (DBOSAppException e) {
             assertEquals("Exception of type java.lang.Exception", e.getMessage());
             SerializableException se = e.original;
             assertEquals("DBOS Test error", se.message);
@@ -165,17 +162,16 @@ public class AsyncWorkflowTest {
     @Test
     public void childWorkflowWithoutSet() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         simpleService.setSimpleService(simpleService);
 
         WorkflowHandle<String> handle = null;
         DBOSOptions options = new DBOSOptions.Builder("wf-123456").build();
         try (SetDBOSOptions o = new SetDBOSOptions(options)) {
-            handle = dbos
-                    .startWorkflow(() -> simpleService.parentWorkflowWithoutSet("123"));
+            handle = dbos.startWorkflow(() -> simpleService.parentWorkflowWithoutSet("123"));
         }
 
         System.out.println(handle.getResult());
@@ -199,9 +195,9 @@ public class AsyncWorkflowTest {
     @Test
     public void multipleChildren() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         simpleService.setSimpleService(simpleService);
 
@@ -209,8 +205,7 @@ public class AsyncWorkflowTest {
 
         WorkflowHandle<String> handle = null;
         try (SetDBOSOptions o = new SetDBOSOptions(options)) {
-            handle = dbos.startWorkflow(
-                    () -> simpleService.WorkflowWithMultipleChildren("123"));
+            handle = dbos.startWorkflow(() -> simpleService.WorkflowWithMultipleChildren("123"));
         }
 
         assertEquals("123abcdefghi", handle.getResult());
@@ -248,9 +243,9 @@ public class AsyncWorkflowTest {
     @Test
     public void nestedChildren() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         simpleService.setSimpleService(simpleService);
 
@@ -290,9 +285,9 @@ public class AsyncWorkflowTest {
     @Test
     public void startWorkflowClosure() {
 
-        SimpleService simpleService = dbos.<SimpleService> Workflow()
-                .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl()).build();
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
 
         String wfid = "wf-123";
         WorkflowHandle<String> handle = null;
