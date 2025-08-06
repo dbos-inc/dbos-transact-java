@@ -76,7 +76,6 @@ public class DBOSExecutor {
         return queueService.getAllQueuesSnapshot();
     }
 
-
     public WorkflowInitResult preInvokeWorkflow(String workflowName, String className,
             Object[] inputs, String workflowId, String queueName) {
 

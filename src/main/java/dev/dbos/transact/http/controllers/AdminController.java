@@ -48,7 +48,7 @@ public class AdminController {
     @GET
     @Path("/dbos-deactivate")
     public String deactivate() {
-        // TODO: implement dbosExec.deactivateEventReceivers 
+        // TODO: implement dbosExec.deactivateEventReceivers
         throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
     }
 
@@ -57,21 +57,21 @@ public class AdminController {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public List<String> recovery(List<String> executorIds) {
-        // TODO: implement dbosExec.recoverPendingWorkflows 
+        // TODO: implement dbosExec.recoverPendingWorkflows
         throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
     }
 
     @POST
     @Path("/dbos-garbage-collect")
     public List<String> garbageCollect() {
-        // TODO: implement systemDatabase.garbageCollect 
+        // TODO: implement systemDatabase.garbageCollect
         throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
     }
 
     @POST
     @Path("/dbos-global-timeout")
     public List<String> globalTimeout() {
-        // TODO: implement globalTimeout 
+        // TODO: implement globalTimeout
         throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
     }
 
@@ -151,7 +151,7 @@ public class AdminController {
     @Path("/workflows/{workflowId}/fork")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public ForkWorkflowResponse fork(@PathParam("workflowId") String workflowId, ForkWorkflowRequest request) { 
+    public ForkWorkflowResponse fork(@PathParam("workflowId") String workflowId, ForkWorkflowRequest request) {
         if (request == null) {
             request = new ForkWorkflowRequest();
         }

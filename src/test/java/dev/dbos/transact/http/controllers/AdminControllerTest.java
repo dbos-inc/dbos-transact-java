@@ -16,13 +16,11 @@ import dev.dbos.transact.workflow.SimpleService;
 import dev.dbos.transact.workflow.SimpleServiceImpl;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
-import io.restassured.response.ExtractableResponse;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.net.http.HttpRequest.BodyPublisher;
 import java.sql.SQLException;
 
 import org.junit.jupiter.api.AfterEach;
@@ -266,7 +264,6 @@ class AdminControllerTest {
                 .body("size()", equalTo(3));
     }
 
- 
     @Test
     public void fork() throws Exception {
 
@@ -292,16 +289,16 @@ class AdminControllerTest {
         assertEquals(1, impl.step5Count);
 
         String newWorkflowId = given()
-            .port(3010)
-            .contentType("application/json")
-            .body("{ \"startStep\": 3 }")
-            .when()
-            .post("/workflows/" + workflowId + "/fork")
-            .then()
-            .statusCode(200)
-            .body("workflowId", notNullValue())
-            .extract()
-            .path("workflowId");
+                .port(3010)
+                .contentType("application/json")
+                .body("{ \"startStep\": 3 }")
+                .when()
+                .post("/workflows/" + workflowId + "/fork")
+                .then()
+                .statusCode(200)
+                .body("workflowId", notNullValue())
+                .extract()
+                .path("workflowId");
 
         WorkflowHandle<String> newHandle = DBOS.retrieveWorkflow(newWorkflowId);
         assertEquals("hellohello", newHandle.getResult());
