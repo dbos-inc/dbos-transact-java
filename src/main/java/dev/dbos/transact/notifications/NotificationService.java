@@ -87,11 +87,8 @@ public class NotificationService {
 
         DBOSContext ctx = DBOSContextHolder.get();
         if (!ctx.isInWorkflow()) {
-            // TODO : temp workflow
-            // throw new IllegalArgumentException("send must be called from a workflow.");
             this.internalWorkflowsService.sendWorkflow(destinationId, message, topic);
             return;
-
         }
         int stepFunctionId = ctx.getAndIncrementFunctionId();
 
