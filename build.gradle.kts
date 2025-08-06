@@ -15,7 +15,11 @@ tasks.withType<JavaCompile> {
 
 spotless {
     java {
-        googleJavaFormat()
+        eclipse().configFile("config/eclipse-code-formatter.xml")
+        importOrder("dev.dbos", "java", "javax", "")
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
     }
 }
 
