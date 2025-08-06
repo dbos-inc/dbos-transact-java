@@ -155,11 +155,11 @@ public class DBOSExecutor {
     }
 
     public <T> T syncWorkflow(String workflowName,
-            String targetClassName,
-            Object target,
-            Object[] args,
-            WorkflowFunction function,
-            String workflowId) throws Throwable {
+                             String targetClassName,
+                             Object target,
+                             Object[] args,
+                             WorkflowFunctionReflect function,
+                             String workflowId) throws Throwable {
 
         String wfid = workflowId;
 
@@ -220,10 +220,10 @@ public class DBOSExecutor {
      */
 
     <T> T runAndSaveResult(
-            Object target,
-            Object[] args,
-            WorkflowFunction function,
-            String workflowId) throws Throwable {
+          Object target,
+          Object[] args,
+          WorkflowFunctionReflect function,
+          String workflowId) throws Throwable {
 
         try {
 
@@ -255,10 +255,10 @@ public class DBOSExecutor {
     }
 
     public <T> WorkflowHandle<T> submitWorkflow(String workflowName,
-            String targetClassName,
-            Object target,
-            Object[] args,
-            WorkflowFunction function) throws Throwable {
+                                                String targetClassName,
+                                                Object target,
+                                                Object[] args,
+                                                WorkflowFunctionReflect function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId();
@@ -333,10 +333,12 @@ public class DBOSExecutor {
     }
 
     public void enqueueWorkflow(String workflowName,
-            String targetClassName,
-            WorkflowFunctionWrapper wrapper,
-            Object[] args,
-            Queue queue) throws Throwable {
+                                                String targetClassName,
+                                                WorkflowFunctionWrapper wrapper,
+                                                Object[] args,
+                                                 Queue queue
+                                                ) throws Throwable {
+
 
         DBOSContext ctx = DBOSContextHolder.get();
         String wfid = ctx.getWorkflowId();
@@ -362,11 +364,13 @@ public class DBOSExecutor {
     }
 
     public <T> T runStep(String stepName,
-            boolean retriedAllowed,
-            int maxAttempts,
-            float backOffRate,
-            Object[] args,
-            DBOSFunction<T> function) throws Throwable {
+                             boolean retriedAllowed,
+                             int maxAttempts,
+                             float backOffRate,
+                             Object[] args,
+                             WorkflowFunction<T> function
+                         ) throws Throwable {
+
 
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId();
@@ -436,8 +440,8 @@ public class DBOSExecutor {
      * Retrieve the workflowHandle for the workflowId
      *
      */
-    public WorkflowHandle<?> retrieveWorkflow(String workflowId) {
-        return new WorkflowHandleDBPoll(workflowId, systemDatabase);
+    public <R> WorkflowHandle<R> retrieveWorkflow(String workflowId) {
+        return new WorkflowHandleDBPoll(workflowId, systemDatabase) ;
     }
 
     public WorkflowHandle executeWorkflowById(String workflowId) {
@@ -526,7 +530,7 @@ public class DBOSExecutor {
 
     }
 
-    public WorkflowHandle<?> resumeWorkflow(String workflowId) {
+    public <T> WorkflowHandle<T> resumeWorkflow(String workflowId)  {
 
         Supplier<Void> resumeFunction = () -> {
             logger.info("Resuming workflow: ", workflowId);
@@ -550,7 +554,7 @@ public class DBOSExecutor {
 
     }
 
-    public WorkflowHandle<?> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
+    public <T> WorkflowHandle<T> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
 
         Supplier<String> forkFunction = () -> {
             logger.info(String.format("Forking workflow:%s from step:%d ", workflowId, startStep));
@@ -561,4 +565,29 @@ public class DBOSExecutor {
         String forkedId = systemDatabase.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
         return retrieveWorkflow(forkedId);
     }
+
+    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
+        DBOSContext oldctx = DBOSContextHolder.get();
+        DBOSContext newCtx = oldctx ;
+
+        if (newCtx.getWorkflowId() == null) {
+            newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString()) ;
+        }
+
+        if (newCtx.getQueue() == null) {
+            newCtx = oldctx.copyWithAsync() ;
+        }
+
+        try {
+            DBOSContextHolder.set(newCtx);
+            func.execute();
+            return retrieveWorkflow(newCtx.getWorkflowId());
+        } catch(Throwable t) {
+            throw new DBOSException(UNEXPECTED.getCode(), t.getMessage());
+        } finally {
+            DBOSContextHolder.set(oldctx);
+        }
+
+    }
+
 }

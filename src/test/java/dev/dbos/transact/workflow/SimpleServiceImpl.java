@@ -20,6 +20,18 @@ public class SimpleServiceImpl implements SimpleService {
 
     public static int executionCount = 0 ;
 
+    private DBOS dbos;
+
+    public SimpleServiceImpl() {
+
+    }
+
+    public SimpleServiceImpl(DBOS d) {
+        dbos = d;
+    }
+
+
+
     @Workflow(name = "workWithString")
     public String workWithString(String input) {
         logger.info("Executed workflow workWithString");
@@ -160,13 +172,14 @@ public class SimpleServiceImpl implements SimpleService {
 
         logger.info("In longParent") ;
         String workflowId = "childwf" ;
-        DBOSOptions options = new DBOSOptions.Builder(workflowId).async().timeout(timeoutSeconds).build();
+        DBOSOptions options = new DBOSOptions.Builder(workflowId).timeout(timeoutSeconds).build();
 
+        WorkflowHandle<String> handle = null ;
         try (SetDBOSOptions o = new SetDBOSOptions(options)) {
-            simpleService.childWorkflowWithSleep(input, sleepSeconds);
+            handle = dbos.startWorkflow(()->simpleService.childWorkflowWithSleep(input, sleepSeconds));
         }
 
-        String result = (String) DBOS.retrieveWorkflow(workflowId).getResult();
+        String result = handle.getResult();
 
         logger.info("Done with longWorkflow");
         return input+result;

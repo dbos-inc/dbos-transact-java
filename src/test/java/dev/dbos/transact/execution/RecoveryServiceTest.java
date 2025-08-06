@@ -2,8 +2,11 @@ package dev.dbos.transact.execution;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSOptions;
+import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -88,13 +91,21 @@ class RecoveryServiceTest {
             executingService.workflowMethod("test-item");
         }
         wfid = "wf-126";
+        WorkflowHandle<String> handle6 = null ;
         try (SetWorkflowID id = new SetWorkflowID(wfid)){
-            executingService.workflowMethod("test-item");
+            handle6 = dbos.startWorkflow(()->executingService.workflowMethod("test-item"));
         }
+        handle6.getResult();
+
         wfid = "wf-127";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)){
-            executingService.workflowMethod("test-item");
+        WorkflowHandle<String> handle7 = null ;
+        Queue q = new DBOS.QueueBuilder("q1").build();
+        DBOSOptions options = new DBOSOptions.Builder(wfid).queue(q).build();
+        try (SetDBOSOptions id = new SetDBOSOptions(options)){
+            handle7 =  dbos.startWorkflow(()->executingService.workflowMethod("test-item"));
         }
+        assertEquals("q1", handle7.getStatus().getQueueName());
+        handle7.getResult();
 
         setWorkflowStateToPending(dataSource);
 

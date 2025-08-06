@@ -6,7 +6,6 @@ import dev.dbos.transact.context.DBOSOptions;
 import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
-import dev.dbos.transact.exceptions.WorkflowCancelledException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
@@ -18,8 +17,6 @@ import org.junit.jupiter.api.Test;
 import javax.sql.DataSource;
 import java.sql.*;
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -79,14 +76,15 @@ public class TimeoutTest {
         String wfid1 = "wf-124";
         String result;
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).async().timeout(3).build();
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(3).build();
+        WorkflowHandle<String> handle = null ;
         try (SetDBOSOptions id = new SetDBOSOptions(options)){
-            result = simpleService.longWorkflow("12345");
+            handle = dbos.startWorkflow(()->simpleService.longWorkflow("12345"));
         }
-        assertNull(result);
+        // assertNull(result);
 
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
-        result = (String)handle.getResult();
+        // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
+        result = handle.getResult();
         assertEquals("1234512345", result);
         assertEquals(wfid1, handle.getWorkflowId());
         assertEquals("SUCCESS", handle.getStatus().getStatus()) ;
@@ -105,12 +103,13 @@ public class TimeoutTest {
         // make it timeout
         String wfid1 = "wf-125";
         String result ;
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).async().timeout(1).build();
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(1).build();
+        WorkflowHandle<String> handle = null ;
         try (SetDBOSOptions id = new SetDBOSOptions(options)){
-            result = simpleService.longWorkflow("12345");
+            handle = dbos.startWorkflow(()->simpleService.longWorkflow("12345"));
         }
-        assertNull(result);
-        WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
+        // assertNull(result);
+        // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
 
         try {
             handle.getResult();
@@ -142,12 +141,13 @@ public class TimeoutTest {
                 .build();
 
         DBOSOptions options = new DBOSOptions.Builder(wfid1).queue(simpleQ).timeout(3).build();
+        WorkflowHandle<String> handle = null ;
         try (SetDBOSOptions id = new SetDBOSOptions(options)){
-            result = simpleService.longWorkflow("12345");
+            handle = dbos.startWorkflow(()->simpleService.longWorkflow("12345"));
         }
-        assertNull(result);
+        // assertNull(result);
 
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
+        // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
         result = (String)handle.getResult();
         assertEquals("1234512345", result);
         assertEquals(wfid1, handle.getWorkflowId());
@@ -172,11 +172,12 @@ public class TimeoutTest {
                 .build();
 
         DBOSOptions options = new DBOSOptions.Builder(wfid1).queue(simpleQ).timeout(1).build();
+        WorkflowHandle<String> handle = null ;
         try (SetDBOSOptions id = new SetDBOSOptions(options)){
-            result = simpleService.longWorkflow("12345");
+            handle = dbos.startWorkflow(()->simpleService.longWorkflow("12345"));
         }
-        assertNull(result);
-        WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
+        // assertNull(result);
+        // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
 
         try {
             handle.getResult();
@@ -277,7 +278,7 @@ public class TimeoutTest {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl())
+                .implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 
@@ -306,7 +307,7 @@ public class TimeoutTest {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl())
+                .implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 
@@ -336,7 +337,7 @@ public class TimeoutTest {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl())
+                .implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 
@@ -367,21 +368,21 @@ public class TimeoutTest {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class)
-                .implementation(new SimpleServiceImpl())
+                .implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 
         String wfid1 = "wf-124";
         String result;
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).async().timeout(2).build();
-
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(2).build();
+        WorkflowHandle<String> handle = null ;
         try (SetDBOSOptions id = new SetDBOSOptions(options)) {
-                result = simpleService.longParent("12345", 3, 0);
+               handle = dbos.startWorkflow(()->simpleService.longParent("12345", 3, 0));
         }
 
         try {
-            DBOS.retrieveWorkflow(wfid1).getResult();
+            handle.getResult();
         } catch(Exception e) {
             System.out.println(e.getClass().getName());
             assertTrue( e instanceof AwaitedWorkflowCancelledException) ;
@@ -390,8 +391,6 @@ public class TimeoutTest {
         }
 
     }
-
-
 
     private void setDelayEpoch(DataSource ds, String workflowId) throws SQLException {
 

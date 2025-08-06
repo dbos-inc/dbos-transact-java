@@ -46,10 +46,10 @@ public class DBOSOptions {
             this.workflowId = workflowId;
         }
 
-        public Builder async() {
+        /* public Builder async() {
             this.async = true;
             return this;
-        }
+        } */
 
         public Builder queue(Queue queue) {
             this.queue = queue;
