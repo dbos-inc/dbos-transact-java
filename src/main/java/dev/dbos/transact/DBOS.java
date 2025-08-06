@@ -211,6 +211,7 @@ public class DBOS {
 
         if (notificationService == null) {
             notificationService = systemDatabase.getNotificationService();
+            notificationService.setInternalWorkflowsService(dbosExecutor.createInternalWorkflowsService(this));
             notificationService.start();
         } else {
             notificationService.start();

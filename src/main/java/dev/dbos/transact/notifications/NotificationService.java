@@ -3,6 +3,7 @@ package dev.dbos.transact.notifications;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -33,10 +34,15 @@ public class NotificationService {
     private Thread notificationListenerThread;
     private final DataSource dataSource;
     private final SystemDatabase systemDatabase;
+    private InternalWorkflowsService internalWorkflowsService;
 
     public NotificationService(DataSource dataSource, SystemDatabase sdb) {
         this.dataSource = dataSource;
         this.systemDatabase = sdb;
+    }
+
+    public void setInternalWorkflowsService(InternalWorkflowsService service) {
+        this.internalWorkflowsService = service;
     }
 
     public boolean registerNotificationCondition(String key, LockConditionPair pair) {
@@ -82,7 +88,10 @@ public class NotificationService {
         DBOSContext ctx = DBOSContextHolder.get();
         if (!ctx.isInWorkflow()) {
             // TODO : temp workflow
-            throw new IllegalArgumentException("send must be called from a workflow.");
+            // throw new IllegalArgumentException("send must be called from a workflow.");
+            this.internalWorkflowsService.sendWorkflow(destinationId, message, topic);
+            return;
+
         }
         int stepFunctionId = ctx.getAndIncrementFunctionId();
 
@@ -93,7 +102,6 @@ public class NotificationService {
 
         DBOSContext ctx = DBOSContextHolder.get();
         if (!ctx.isInWorkflow()) {
-            // TODO : temp workflow
             throw new IllegalArgumentException("recv() must be called from a workflow.");
         }
         int stepFunctionId = ctx.getAndIncrementFunctionId();

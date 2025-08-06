@@ -23,6 +23,9 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
 
+        logger.info("interface " + interfaceClass.getName());
+        logger.info("impl " + implementation.getClass().getName());
+
         // Register all @Workflow methods
         Method[] methods = implementation.getClass().getDeclaredMethods();
         for (Method method : methods) {

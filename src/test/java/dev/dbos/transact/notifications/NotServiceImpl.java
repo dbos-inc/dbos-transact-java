@@ -38,7 +38,10 @@ public class NotServiceImpl {
     @Workflow(name = "recvWorkflow")
     public String recvWorkflow(String topic, float timeoutSecond) {
         recvReadyLatch.countDown();
-        return (String) dbos.recv(topic, timeoutSecond);
+        System.out.println("mjjjj waiting for msg");
+        String msg = (String) dbos.recv(topic, timeoutSecond);
+        System.out.println("mjjjj Received msg " + msg);;
+        return msg;
     }
 
     @Workflow(name = "recvMultiple")
