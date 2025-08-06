@@ -206,12 +206,8 @@ public class SystemDatabase {
         return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
     }
 
-    public boolean clearQueueAssignment(String workflowId) throws SQLException {
-        return queuesDAO.clearQueueAssignment(workflowId);
-    }
-
-    public void recordChildWorkflow(String parentId,
-            String childId, // workflowId of the child
+    public void recordChildWorkflow(String parentId, String childId, // workflowId of the
+                                                                     // child
             int functionId, // func id in the parent
             String functionName) {
         workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);

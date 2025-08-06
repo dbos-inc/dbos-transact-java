@@ -17,7 +17,6 @@ import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
@@ -25,8 +24,6 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -77,14 +74,11 @@ public class DBOSExecutor {
             throw new IllegalStateException("QueueService not set in DBOSExecutor");
         }
         return queueService.getAllQueuesSnapshot();
-
     }
 
-    public WorkflowInitResult preInvokeWorkflow(String workflowName,
-            String className,
-            Object[] inputs,
-            String workflowId,
-            String queueName) {
+
+    public WorkflowInitResult preInvokeWorkflow(String workflowName, String className,
+            Object[] inputs, String workflowId, String queueName) {
 
         // TODO: queue deduplication and priority
 
@@ -99,27 +93,9 @@ public class DBOSExecutor {
         }
 
         WorkflowStatusInternal workflowStatusInternal = new WorkflowStatusInternal(workflowId,
-                status,
-                workflowName,
-                className,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                queueName,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION,
-                null,
-                0,
-                workflowTimeoutMs,
-                workflowDeadlineEpoch,
-                null,
-                1,
-                inputString);
+                status, workflowName, className, null, null, null, null, null, null, null, null,
+                queueName, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null, 0,
+                workflowTimeoutMs, workflowDeadlineEpoch, null, 1, inputString);
 
         WorkflowInitResult initResult = null;
         try {
@@ -233,7 +209,8 @@ public class DBOSExecutor {
                 // if this is a parent cancel, the exception is thrown to caller
                 // state is already c
                 // if this is child cancel, its state is already Cancelled
-                // in parent it will fall thru to PostInvoke call below to set state to Error
+                // in parent it will fall thru to PostInvoke call below to set state to
+                // Error
                 throw new AwaitedWorkflowCancelledException(workflowId);
             }
 
@@ -259,7 +236,11 @@ public class DBOSExecutor {
             }
         }
 
-        WorkflowInitResult initResult = preInvokeWorkflow(workflowName, targetClassName, args, wfId, null);
+        WorkflowInitResult initResult = preInvokeWorkflow(workflowName,
+                targetClassName,
+                args,
+                wfId,
+                null);
 
         if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
             return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
@@ -299,7 +280,8 @@ public class DBOSExecutor {
         }
 
         // Copy the context - dont just pass a reference - memory visibility
-        ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(DBOSContextHolder.get().copy(), task);
+        ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(
+                DBOSContextHolder.get().copy(), task);
         Future<T> future = executorService.submit(contextAwareTask);
 
         if (allowedTime > 0) {
@@ -340,12 +322,8 @@ public class DBOSExecutor {
         }
     }
 
-    public <T> T runStep(String stepName,
-            boolean retriedAllowed,
-            int maxAttempts,
-            float backOffRate,
-            Object[] args,
-            WorkflowFunction<T> function) throws Throwable {
+    public <T> T runStep(String stepName, boolean retriedAllowed, int maxAttempts,
+            float backOffRate, Object[] args, WorkflowFunction<T> function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId();
@@ -358,7 +336,9 @@ public class DBOSExecutor {
 
         int stepFunctionId = ctx.getAndIncrementFunctionId();
 
-        StepResult recordedResult = systemDatabase.checkStepExecutionTxn(workflowId, stepFunctionId, stepName);
+        StepResult recordedResult = systemDatabase.checkStepExecutionTxn(workflowId,
+                stepFunctionId,
+                stepName);
 
         if (recordedResult != null) {
 
@@ -392,7 +372,8 @@ public class DBOSExecutor {
                 Throwable actual = (e instanceof InvocationTargetException)
                         ? ((InvocationTargetException) e).getTargetException()
                         : e;
-                logger.info("After: step threw exception " + actual.getMessage() + "-----" + actual.toString());
+                logger.info("After: step threw exception " + actual.getMessage() + "-----"
+                        + actual.toString());
                 eThrown = actual;
             }
 
@@ -407,7 +388,8 @@ public class DBOSExecutor {
         } else {
             // TODO: serialize
             logger.info("After: step threw exception saving error " + eThrown.getMessage());
-            StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, null, eThrown.getMessage());
+            StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, null,
+                    eThrown.getMessage());
             systemDatabase.recordStepResultTxn(stepResult);
             throw eThrown;
         }
@@ -434,7 +416,7 @@ public class DBOSExecutor {
             throw new WorkflowFunctionNotFoundException(workflowId);
         }
 
-        WorkflowHandle handle = null;
+        WorkflowHandle<?> handle = null;
         try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
             DBOSContextHolder.get().setInWorkflow(true);
             try {
@@ -451,47 +433,10 @@ public class DBOSExecutor {
         return handle;
     }
 
-    public List<WorkflowHandle<?>> recoverPendingWorkflows(List<String> executorIds) throws SQLException {
-        List<WorkflowHandle<?>> handles = new ArrayList<WorkflowHandle<?>>();
-        for (String executorId : executorIds) {
-            logger.debug("recovering workflows for executor {}", executorId);
-
-            List<GetPendingWorkflowsOutput> pendingWorkflows = systemDatabase.getPendingWorkflows(executorId,
-                    Constants.DEFAULT_APP_VERSION);
-            if (pendingWorkflows.size() > 0) {
-                logger.info("Recovering {} workflows from application version {}",
-                        pendingWorkflows.size(),
-                        Constants.DEFAULT_APP_VERSION);
-            } else {
-                logger.info("No workflows to recover from  application version {}", Constants.DEFAULT_APP_VERSION);
-            }
-
-            for (GetPendingWorkflowsOutput pendingWorkflow : pendingWorkflows) {
-                String workflowID = pendingWorkflow.getWorkflowUuid();
-                String queueName = pendingWorkflow.getQueueName();
-                logger.debug("Recovering workflow {} in queue {}", workflowID, queueName);
-                try {
-                    if (queueName != null) {
-                        boolean cleared = systemDatabase.clearQueueAssignment(workflowID);
-                        if (cleared) {
-                            handles.add(retrieveWorkflow(workflowID));
-                        } else {
-                            handles.add(executeWorkflowById(workflowID));
-                        }
-                    } else {
-                        handles.add(executeWorkflowById(workflowID));
-                    }
-                } catch (Exception e) {
-                    logger.warn("Recovery of workflow {} failed: {}", workflowID, e.getMessage());
-                }
-            }
-        }
-        return handles;
-    }
-
     public void submit(Runnable task) {
 
-        ContextAwareRunnable contextAwareTask = new ContextAwareRunnable(DBOSContextHolder.get().copy(), task);
+        ContextAwareRunnable contextAwareTask = new ContextAwareRunnable(
+                DBOSContextHolder.get().copy(), task);
         executorService.submit(contextAwareTask);
     }
 

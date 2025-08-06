@@ -39,11 +39,20 @@ public class AdminController {
     }
 
     @GET
-    @Path("/deactivate")
+    @Path("/dbos-deactivate")
     @Produces(MediaType.TEXT_PLAIN)
     public String deactivate() {
-        // TODO: this endpoint deactivates the system for new workflows
-        return "deactivated";
+        // TODO: implement dbosExec.deactivateEventReceivers 
+        throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
+    }
+
+    @POST
+    @Path("/dbos-workflow-recovery")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<String> recovery(List<String> executorIds) {
+        // TODO: implement dbosExec.recoverPendingWorkflows 
+        throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
     }
 
     @GET
@@ -56,40 +65,6 @@ public class AdminController {
             metadataList.add(new QueueMetadata(queue));
         }
         return metadataList;
-    }
-
-    @GET
-    @Path("/workflows/{workflowId}/steps")
-    @Produces(MediaType.APPLICATION_JSON)
-    public List<StepInfo> ListSteps(@PathParam("workflowId") String workflowId) {
-        logger.info("Retrieving steps for workflow {}", workflowId);
-        return systemDatabase.listWorkflowSteps(workflowId);
-    }
-
-    @GET
-    @Path("/workflows/{workflowId}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public WorkflowStatus GetWorkflowStatus(@PathParam("workflowId") String workflowId) {
-        logger.info("Get workflow status for workflow {}", workflowId);
-        return systemDatabase.getWorkflowStatus(workflowId);
-    }
-
-    @POST
-    @Path("/dbos-workflow-recovery")
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
-    public List<String> recovery(List<String> executorIds) {
-        try {
-            List<WorkflowHandle<?>> handles = dbosExecutor.recoverPendingWorkflows(executorIds);
-            List<String> workflowIds = new ArrayList<String>();
-            for (WorkflowHandle<?> handle : handles) {
-                workflowIds.add(handle.getWorkflowId());
-            }
-            return workflowIds;
-        } catch (SQLException e) {
-            logger.error("Error recovering workflows {}", e.getMessage());
-            throw new WebApplicationException(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR);
-        }
     }
 
     @POST
@@ -107,6 +82,22 @@ public class AdminController {
             logger.error("Error listing workflows {}", e.getMessage());
             throw new WebApplicationException(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    @GET
+    @Path("/workflows/{workflowId}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public WorkflowStatus GetWorkflowStatus(@PathParam("workflowId") String workflowId) {
+        logger.info("Get workflow status for workflow {}", workflowId);
+        return systemDatabase.getWorkflowStatus(workflowId);
+    }
+
+    @GET
+    @Path("/workflows/{workflowId}/steps")
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<StepInfo> ListSteps(@PathParam("workflowId") String workflowId) {
+        logger.info("Retrieving steps for workflow {}", workflowId);
+        return systemDatabase.listWorkflowSteps(workflowId);
     }
 
     @POST
