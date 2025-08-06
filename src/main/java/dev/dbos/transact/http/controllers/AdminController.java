@@ -39,8 +39,14 @@ public class AdminController {
     }
 
     @GET
+    @Path("/dbos-perf")
+    public String perf() {
+        // TODO: implement perf hooks
+        throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
+    }
+
+    @GET
     @Path("/dbos-deactivate")
-    @Produces(MediaType.TEXT_PLAIN)
     public String deactivate() {
         // TODO: implement dbosExec.deactivateEventReceivers 
         throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
@@ -55,6 +61,20 @@ public class AdminController {
         throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
     }
 
+    @POST
+    @Path("/dbos-garbage-collect")
+    public List<String> garbageCollect() {
+        // TODO: implement systemDatabase.garbageCollect 
+        throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
+    }
+
+    @POST
+    @Path("/dbos-global-timeout")
+    public List<String> globalTimeout() {
+        // TODO: implement globalTimeout 
+        throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
+    }
+
     @GET
     @Path("/dbos-workflow-queues-metadata")
     @Produces(MediaType.APPLICATION_JSON)
@@ -65,6 +85,15 @@ public class AdminController {
             metadataList.add(new QueueMetadata(queue));
         }
         return metadataList;
+    }
+
+    @POST
+    @Path("/queues")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<WorkflowStatus> listQueuedWorkflow() {
+        // TODO: implement dbosExec.listQueuedWorkflows
+        throw new WebApplicationException("Not Implemented", Response.Status.INTERNAL_SERVER_ERROR);
     }
 
     @POST
