@@ -7,7 +7,8 @@ public class StepInfo {
     private final Exception error;
     private final String childWorkflowId;
 
-    public StepInfo(int functionId, String functionName, Object output, Exception error, String childWorkflowId) {
+    public StepInfo(int functionId, String functionName, Object output, Exception error,
+            String childWorkflowId) {
         this.functionId = functionId;
         this.functionName = functionName;
         this.output = output;
@@ -37,8 +38,9 @@ public class StepInfo {
 
     @Override
     public String toString() {
-        return "StepInfo{" + "functionId=" + functionId + ", functionName='" + functionName + '\'' + ", output="
-                + output + ", error=" + error + ", childWorkflowId='" + childWorkflowId + '\'' + '}';
+        return "StepInfo{" + "functionId=" + functionId + ", functionName='"
+                + functionName + '\'' + ", output=" + output + ", error=" + error
+                + ", childWorkflowId='" + childWorkflowId + '\'' + '}';
     }
 
     @Override
@@ -58,8 +60,7 @@ public class StepInfo {
             return false;
         if (error != null ? !error.equals(stepInfo.error) : stepInfo.error != null)
             return false;
-        return childWorkflowId != null
-                ? childWorkflowId.equals(stepInfo.childWorkflowId)
+        return childWorkflowId != null ? childWorkflowId.equals(stepInfo.childWorkflowId)
                 : stepInfo.childWorkflowId == null;
     }
 

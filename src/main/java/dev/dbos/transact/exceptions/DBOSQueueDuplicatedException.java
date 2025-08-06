@@ -7,10 +7,11 @@ public class DBOSQueueDuplicatedException extends DBOSException {
     private final String queueName;
     private final String deduplicationID;
 
-    public DBOSQueueDuplicatedException(String workflowUUID, String queueName, String deduplicationID) {
-        super(QUEUE_DUPLICATED.getCode(),
-                String.format("Workflow %s (Queue: %s, Deduplication ID: %s) is already enqueued.",workflowUUID,
-                        queueName,deduplicationID));
+    public DBOSQueueDuplicatedException(String workflowUUID, String queueName,
+            String deduplicationID) {
+        super(QUEUE_DUPLICATED.getCode(), String.format(
+                "Workflow %s (Queue: %s, Deduplication ID: %s) is already enqueued.",
+                workflowUUID, queueName, deduplicationID));
         this.workflowUUID = workflowUUID;
         this.queueName = queueName;
         this.deduplicationID = deduplicationID;

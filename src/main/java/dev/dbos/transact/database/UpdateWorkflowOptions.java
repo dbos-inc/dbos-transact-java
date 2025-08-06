@@ -26,7 +26,8 @@ public class UpdateWorkflowOptions {
         return this;
     }
 
-    public UpdateWorkflowOptions withResetRecoveryAttempts(Boolean resetRecoveryAttempts) {
+    public UpdateWorkflowOptions withResetRecoveryAttempts(
+            Boolean resetRecoveryAttempts) {
         this.resetRecoveryAttempts = resetRecoveryAttempts;
         return this;
     }
@@ -46,7 +47,8 @@ public class UpdateWorkflowOptions {
         return this;
     }
 
-    public UpdateWorkflowOptions withResetStartedAtEpochMs(Boolean resetStartedAtEpochMs) {
+    public UpdateWorkflowOptions withResetStartedAtEpochMs(
+            Boolean resetStartedAtEpochMs) {
         this.resetStartedAtEpochMs = resetStartedAtEpochMs;
         return this;
     }

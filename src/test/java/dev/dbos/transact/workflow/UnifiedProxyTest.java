@@ -34,8 +34,9 @@ public class UnifiedProxyTest {
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
-        UnifiedProxyTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost").dbPort(5432)
-                .dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+        UnifiedProxyTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres")
+                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
     }
 
     @BeforeEach
@@ -44,7 +45,7 @@ public class UnifiedProxyTest {
         UnifiedProxyTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
         systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos = DBOS.initialize(dbosConfig,systemDatabase,dbosExecutor,null,null);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 
@@ -56,7 +57,8 @@ public class UnifiedProxyTest {
     @Test
     public void optionsWithCall() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService>Workflow().interfaceClass(SimpleService.class)
+        SimpleService simpleService = dbos.<SimpleService> Workflow()
+                .interfaceClass(SimpleService.class)
                 .implementation(new SimpleServiceImpl()).build();
 
         // synchronous
@@ -66,7 +68,7 @@ public class UnifiedProxyTest {
         try (SetDBOSOptions id = new SetDBOSOptions(options)) {
             result = simpleService.workWithString("test-item");
         }
-        assertEquals("Processed: test-item",result);
+        assertEquals("Processed: test-item", result);
 
         // asynchronous
 
@@ -74,13 +76,14 @@ public class UnifiedProxyTest {
         options = new DBOSOptions.Builder(wfid2).build();
         WorkflowHandle<String> handle = null;
         try (SetDBOSOptions id = new SetDBOSOptions(options)) {
-            handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
+            handle = dbos
+                    .startWorkflow(() -> simpleService.workWithString("test-item-async"));
         }
 
         result = handle.getResult();
-        assertEquals("Processed: test-item-async",result);
-        assertEquals(wfid2,handle.getWorkflowId());
-        assertEquals("SUCCESS",handle.getStatus().getStatus());
+        assertEquals("Processed: test-item-async", result);
+        assertEquals(wfid2, handle.getWorkflowId());
+        assertEquals("SUCCESS", handle.getStatus().getStatus());
 
         // Queued
         String wfid3 = "wf-125";
@@ -91,22 +94,24 @@ public class UnifiedProxyTest {
         }
         assertNull(result);
 
-        handle = dbosExecutor.retrieveWorkflow(wfid3);;
+        handle = dbosExecutor.retrieveWorkflow(wfid3);
+        ;
         result = (String) handle.getResult();
-        assertEquals("Processed: test-item-q",result);
-        assertEquals(wfid3,handle.getWorkflowId());
-        assertEquals("SUCCESS",handle.getStatus().getStatus());
+        assertEquals("Processed: test-item-q", result);
+        assertEquals(wfid3, handle.getWorkflowId());
+        assertEquals("SUCCESS", handle.getStatus().getStatus());
 
         ListWorkflowsInput input = new ListWorkflowsInput();
         input.setWorkflowIDs(Arrays.asList(wfid3));
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(input);
-        assertEquals("simpleQ",wfs.get(0).getQueueName());
+        assertEquals("simpleQ", wfs.get(0).getQueueName());
     }
 
     @Test
     public void syncParentWithQueuedChildren() throws Exception {
 
-        SimpleService simpleService = dbos.<SimpleService>Workflow().interfaceClass(SimpleService.class)
+        SimpleService simpleService = dbos.<SimpleService> Workflow()
+                .interfaceClass(SimpleService.class)
                 .implementation(new SimpleServiceImpl()).build();
 
         simpleService.setSimpleService(simpleService);
@@ -117,28 +122,28 @@ public class UnifiedProxyTest {
         try (SetDBOSOptions id = new SetDBOSOptions(options)) {
             result = simpleService.syncWithQueued();
         }
-        assertEquals("QueuedChildren",result);
+        assertEquals("QueuedChildren", result);
 
         for (int i = 0; i < 3; i++) {
             String wid = "child" + i;
             WorkflowHandle h = DBOS.retrieveWorkflow(wid);
-            assertEquals(wid,h.getResult());
+            assertEquals(wid, h.getResult());
         }
 
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
-        assertEquals(wfs.size(),4);
+        assertEquals(wfs.size(), 4);
 
-        assertEquals(wfid1,wfs.get(0).getWorkflowId());
-        assertEquals("child0",wfs.get(1).getWorkflowId());
-        assertEquals("childQ",wfs.get(1).getQueueName());
-        assertEquals(WorkflowState.SUCCESS.name(),wfs.get(1).getStatus());
+        assertEquals(wfid1, wfs.get(0).getWorkflowId());
+        assertEquals("child0", wfs.get(1).getWorkflowId());
+        assertEquals("childQ", wfs.get(1).getQueueName());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
 
-        assertEquals("child1",wfs.get(2).getWorkflowId());
-        assertEquals("childQ",wfs.get(2).getQueueName());
-        assertEquals(WorkflowState.SUCCESS.name(),wfs.get(2).getStatus());
+        assertEquals("child1", wfs.get(2).getWorkflowId());
+        assertEquals("childQ", wfs.get(2).getQueueName());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).getStatus());
 
-        assertEquals("child2",wfs.get(3).getWorkflowId());
-        assertEquals("childQ",wfs.get(3).getQueueName());
-        assertEquals(WorkflowState.SUCCESS.name(),wfs.get(3).getStatus());
+        assertEquals("child2", wfs.get(3).getWorkflowId());
+        assertEquals("childQ", wfs.get(3).getQueueName());
+        assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).getStatus());
     }
 }

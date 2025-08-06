@@ -58,7 +58,8 @@ public class AdminController {
     @GET
     @Path("/workflows/{workflowId}")
     @Produces(MediaType.APPLICATION_JSON)
-    public List<WorkflowStatus> ListWorkflows(@PathParam("workflowId") String workflowId) {
+    public List<WorkflowStatus> ListWorkflows(
+            @PathParam("workflowId") String workflowId) {
         return new ArrayList<>();
     }
 

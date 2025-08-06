@@ -41,8 +41,9 @@ class RecoveryServiceTest {
     @BeforeAll
     public static void onetimeBefore() throws SQLException {
 
-        RecoveryServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost").dbPort(5432)
-                .dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+        RecoveryServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres")
+                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
     }
 
     @BeforeEach
@@ -52,7 +53,7 @@ class RecoveryServiceTest {
         systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
-        dbos = DBOS.initialize(dbosConfig,systemDatabase,dbosExecutor,null,null);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 
@@ -64,7 +65,8 @@ class RecoveryServiceTest {
     @Test
     void recoverWorkflows() throws Exception {
 
-        ExecutingService executingService = dbos.<ExecutingService>Workflow().interfaceClass(ExecutingService.class)
+        ExecutingService executingService = dbos.<ExecutingService> Workflow()
+                .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl()).build();
 
         String wfid = "wf-123";
@@ -82,7 +84,8 @@ class RecoveryServiceTest {
         wfid = "wf-126";
         WorkflowHandle<String> handle6 = null;
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+            handle6 = dbos
+                    .startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
         handle6.getResult();
 
@@ -91,24 +94,27 @@ class RecoveryServiceTest {
         Queue q = new DBOS.QueueBuilder("q1").build();
         DBOSOptions options = new DBOSOptions.Builder(wfid).queue(q).build();
         try (SetDBOSOptions id = new SetDBOSOptions(options)) {
-            handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+            handle7 = dbos
+                    .startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
-        assertEquals("q1",handle7.getStatus().getQueueName());
+        assertEquals("q1", handle7.getStatus().getQueueName());
         handle7.getResult();
 
         setWorkflowStateToPending(dataSource);
 
         List<GetPendingWorkflowsOutput> pending = recoveryService.getPendingWorkflows();
-        assertEquals(5,pending.size());
+        assertEquals(5, pending.size());
 
         List<WorkflowHandle> recoveredHandles = recoveryService.recoverWorkflows(pending);
-        assertEquals(5,recoveredHandles.size());
+        assertEquals(5, recoveredHandles.size());
 
         recoveredHandles.forEach((handle) -> {
             try {
                 handle.getResult();
-                assertEquals(WorkflowState.SUCCESS.name(),handle.getStatus().getStatus());
-            } catch (Exception e) {
+                assertEquals(WorkflowState.SUCCESS.name(),
+                        handle.getStatus().getStatus());
+            }
+            catch (Exception e) {
                 assertTrue(false); // fail the test
             }
         });
@@ -117,7 +123,8 @@ class RecoveryServiceTest {
     @Test
     public void recoveryThreadTest() throws SQLException {
 
-        ExecutingService executingService = dbos.<ExecutingService>Workflow().interfaceClass(ExecutingService.class)
+        ExecutingService executingService = dbos.<ExecutingService> Workflow()
+                .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl()).build();
 
         String wfid = "wf-123";
@@ -132,7 +139,7 @@ class RecoveryServiceTest {
         setWorkflowStateToPending(dataSource);
 
         WorkflowStatus s = systemDatabase.getWorkflowStatus("wf-123");
-        assertEquals(WorkflowState.PENDING.name(),s.getStatus());
+        assertEquals(WorkflowState.PENDING.name(), s.getStatus());
 
         dbos.shutdown();
 
@@ -142,28 +149,30 @@ class RecoveryServiceTest {
         // need to register again
         // towatch: we are registering after launch. could lead to a race condition
         // toimprove : allow registration before launch
-        executingService = dbos.<ExecutingService>Workflow().interfaceClass(ExecutingService.class)
+        executingService = dbos.<ExecutingService> Workflow()
+                .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl()).build();
 
         dbos.launch();
 
         WorkflowHandle h = DBOS.retrieveWorkflow("wf-123");
         h.getResult();
-        assertEquals(WorkflowState.SUCCESS.name(),h.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
 
         h = DBOS.retrieveWorkflow("wf-124");
         h.getResult();
-        assertEquals(WorkflowState.SUCCESS.name(),h.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
     }
 
     private void setWorkflowStateToPending(DataSource ds) throws SQLException {
 
         String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? ;";
 
-        try (Connection connection = ds.getConnection(); PreparedStatement pstmt = connection.prepareStatement(sql)) {
+        try (Connection connection = ds.getConnection();
+                PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
-            pstmt.setString(1,WorkflowState.PENDING.name());
-            pstmt.setLong(2,Instant.now().toEpochMilli());
+            pstmt.setString(1, WorkflowState.PENDING.name());
+            pstmt.setLong(2, Instant.now().toEpochMilli());
 
             // Execute the update and get the number of rows affected
             int rowsAffected = pstmt.executeUpdate();

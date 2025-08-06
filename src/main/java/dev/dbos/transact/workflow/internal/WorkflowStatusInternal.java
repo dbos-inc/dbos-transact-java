@@ -27,11 +27,13 @@ public class WorkflowStatusInternal {
     private int priority; // default 0 = highest priority
     private String inputs; // serialized workflow inputs
 
-    public WorkflowStatusInternal(String workflowUUID, WorkflowState status, String name, String className,
-            String configName, String authenticatedUser, String assumedRole, String authenticatedRoles, String output,
-            String error, Long createdAt, Long updatedAt, String queueName, String executorId, String appVersion,
-            String appId, Integer recoveryAttempts, Long workflowTimeoutMs, Long workflowDeadlineEpochMs,
-            String deduplicationId, int priority, String inputs) {
+    public WorkflowStatusInternal(String workflowUUID, WorkflowState status, String name,
+            String className, String configName, String authenticatedUser,
+            String assumedRole, String authenticatedRoles, String output, String error,
+            Long createdAt, Long updatedAt, String queueName, String executorId,
+            String appVersion, String appId, Integer recoveryAttempts,
+            Long workflowTimeoutMs, Long workflowDeadlineEpochMs, String deduplicationId,
+            int priority, String inputs) {
         this.workflowUUID = workflowUUID;
         this.status = status;
         this.name = name;

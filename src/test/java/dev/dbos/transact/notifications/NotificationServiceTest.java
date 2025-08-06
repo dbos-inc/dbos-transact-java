@@ -37,8 +37,9 @@ class NotificationServiceTest {
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
-        NotificationServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost")
-                .dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+        NotificationServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres")
+                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
     }
 
     @BeforeEach
@@ -47,7 +48,7 @@ class NotificationServiceTest {
         NotificationServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
         systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos = DBOS.initialize(dbosConfig,systemDatabase,dbosExecutor,null,null);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
         dbos.launch();
     }
 
@@ -59,45 +60,47 @@ class NotificationServiceTest {
     @Test
     public void basic_send_recv() throws Exception {
 
-        NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).async().build();
+        NotService notService = dbos.<NotService> Workflow()
+                .interfaceClass(NotService.class).implementation(new NotServiceImpl(dbos))
+                .async().build();
 
         String wfid1 = "recvwf1";
 
         try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
-            notService.recvWorkflow("topic1",10);
+            notService.recvWorkflow("topic1", 10);
         }
 
         String wfid2 = "sendf1";
 
         try (SetWorkflowID id = new SetWorkflowID(wfid2)) {
-            notService.sendWorkflow(wfid1,"topic1","HelloDBOS");
+            notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
         }
 
         WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
         WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
 
         String result = (String) handle1.getResult();
-        assertEquals("HelloDBOS",result);
+        assertEquals("HelloDBOS", result);
 
-        assertEquals(WorkflowState.SUCCESS.name(),handle1.getStatus().getStatus());
-        assertEquals(WorkflowState.SUCCESS.name(),handle2.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
 
         List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(wfid1);
 
         // assertEquals(1, stepInfos.size()) ; cannot do this because sleep is a maybe
-        assertEquals("DBOS.recv",stepInfos.get(0).getFunctionName());
+        assertEquals("DBOS.recv", stepInfos.get(0).getFunctionName());
 
         stepInfos = systemDatabase.listWorkflowSteps(wfid2);
-        assertEquals(1,stepInfos.size());
-        assertEquals("DBOS.send",stepInfos.get(0).getFunctionName());
+        assertEquals(1, stepInfos.size());
+        assertEquals("DBOS.send", stepInfos.get(0).getFunctionName());
     }
 
     @Test
     public void multiple_send_recv() throws Exception {
 
-        NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).async().build();
+        NotService notService = dbos.<NotService> Workflow()
+                .interfaceClass(NotService.class).implementation(new NotServiceImpl(dbos))
+                .async().build();
 
         String wfid1 = "recvwf1";
 
@@ -106,103 +109,108 @@ class NotificationServiceTest {
         }
 
         try (SetWorkflowID id = new SetWorkflowID("send1")) {
-            notService.sendWorkflow(wfid1,"topic1","Hello1");
+            notService.sendWorkflow(wfid1, "topic1", "Hello1");
         }
         DBOS.retrieveWorkflow("send1").getResult();
 
         try (SetWorkflowID id = new SetWorkflowID("send2")) {
-            notService.sendWorkflow(wfid1,"topic1","Hello2");
+            notService.sendWorkflow(wfid1, "topic1", "Hello2");
         }
         DBOS.retrieveWorkflow("send2").getResult();
 
         try (SetWorkflowID id = new SetWorkflowID("send3")) {
-            notService.sendWorkflow(wfid1,"topic1","Hello3");
+            notService.sendWorkflow(wfid1, "topic1", "Hello3");
         }
         DBOS.retrieveWorkflow("send3").getResult();
 
         WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
 
         String result = (String) handle1.getResult();
-        assertEquals("Hello1Hello2Hello3",result);
+        assertEquals("Hello1Hello2Hello3", result);
 
-        assertEquals(WorkflowState.SUCCESS.name(),handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
     }
 
     @Test
     public void notopic() throws Exception {
 
-        NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).async().build();
+        NotService notService = dbos.<NotService> Workflow()
+                .interfaceClass(NotService.class).implementation(new NotServiceImpl(dbos))
+                .async().build();
 
         String wfid1 = "recvwf1";
 
         try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
-            notService.recvWorkflow(null,5);
+            notService.recvWorkflow(null, 5);
         }
 
         String wfid2 = "sendf1";
 
         try (SetWorkflowID id = new SetWorkflowID(wfid2)) {
-            notService.sendWorkflow(wfid1,null,"HelloDBOS");
+            notService.sendWorkflow(wfid1, null, "HelloDBOS");
         }
 
         WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
         WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
 
         String result = (String) handle1.getResult();
-        assertEquals("HelloDBOS",result);
+        assertEquals("HelloDBOS", result);
 
-        assertEquals(WorkflowState.SUCCESS.name(),handle1.getStatus().getStatus());
-        assertEquals(WorkflowState.SUCCESS.name(),handle2.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
     }
 
     @Test
     public void noWorkflowRecv() {
         try {
-            dbos.recv("someTopic",5);
+            dbos.recv("someTopic", 5);
             assertTrue(false);
-        } catch (IllegalArgumentException e) {
-            assertEquals("recv() must be called from a workflow.",e.getMessage());
+        }
+        catch (IllegalArgumentException e) {
+            assertEquals("recv() must be called from a workflow.", e.getMessage());
         }
     }
 
     @Test
     public void sendNotexistingID() throws Exception {
 
-        NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).build();
+        NotService notService = dbos.<NotService> Workflow()
+                .interfaceClass(NotService.class).implementation(new NotServiceImpl(dbos))
+                .build();
 
         // just to open the latch
         try (SetWorkflowID id = new SetWorkflowID("abc")) {
-            notService.recvWorkflow(null,1);
+            notService.recvWorkflow(null, 1);
         }
 
         try {
             try (SetWorkflowID id = new SetWorkflowID("send1")) {
-                notService.sendWorkflow("fakeid","topic1","HelloDBOS");
+                notService.sendWorkflow("fakeid", "topic1", "HelloDBOS");
             }
             assertTrue(false);
-        } catch (NonExistentWorkflowException e) {
-            assertEquals("fakeid",e.getWorkflowId());
+        }
+        catch (NonExistentWorkflowException e) {
+            assertEquals("fakeid", e.getWorkflowId());
         }
     }
 
     @Test
     public void sendNull() throws Exception {
 
-        NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).async().build();
+        NotService notService = dbos.<NotService> Workflow()
+                .interfaceClass(NotService.class).implementation(new NotServiceImpl(dbos))
+                .async().build();
 
         String wfid1 = "recvwf1";
 
         try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
-            notService.recvWorkflow("topic1",5);
+            notService.recvWorkflow("topic1", 5);
         }
 
         String wfid2 = "sendf1";
 
         try (SetWorkflowID id = new SetWorkflowID(wfid2)) {
-            notService.sendWorkflow(wfid1,"topic1",null);
+            notService.sendWorkflow(wfid1, "topic1", null);
         }
 
         WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
@@ -211,25 +219,26 @@ class NotificationServiceTest {
         String result = (String) handle1.getResult();
         assertNull(result);
 
-        assertEquals(WorkflowState.SUCCESS.name(),handle1.getStatus().getStatus());
-        assertEquals(WorkflowState.SUCCESS.name(),handle2.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
     }
 
     @Test
     public void timeout() {
 
-        NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).build();
+        NotService notService = dbos.<NotService> Workflow()
+                .interfaceClass(NotService.class).implementation(new NotServiceImpl(dbos))
+                .build();
 
         String wfid1 = "recvwf1";
 
         long start = System.currentTimeMillis();
         try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
-            notService.recvWorkflow("topic1",3);
+            notService.recvWorkflow("topic1", 3);
         }
 
         long elapsed = System.currentTimeMillis() - start;
-        assertTrue(elapsed < 4000,"Call should return in under 4 seconds");
+        assertTrue(elapsed < 4000, "Call should return in under 4 seconds");
     }
 
     @Test
@@ -238,30 +247,34 @@ class NotificationServiceTest {
         String wfuuid = UUID.randomUUID().toString();
         String topic = "test_topic";
 
-        NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).build();
+        NotService notService = dbos.<NotService> Workflow()
+                .interfaceClass(NotService.class).implementation(new NotServiceImpl(dbos))
+                .build();
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<String> future1 = executor.submit(() -> testThread(notService,wfuuid,topic));
-            Future<String> future2 = executor.submit(() -> testThread(notService,wfuuid,topic));
+            Future<String> future1 = executor
+                    .submit(() -> testThread(notService, wfuuid, topic));
+            Future<String> future2 = executor
+                    .submit(() -> testThread(notService, wfuuid, topic));
 
             String expectedMessage = "test message";
             // dbos.send(wfuuid, expectedMessage, topic);
             try (SetWorkflowID id = new SetWorkflowID("send1")) {
-                notService.sendWorkflow(wfuuid,topic,expectedMessage);
+                notService.sendWorkflow(wfuuid, topic, expectedMessage);
             }
 
             // Both should return the same message
             String result1 = future1.get();
             String result2 = future2.get();
 
-            assertEquals(result1,result2);
-            assertEquals(expectedMessage,result1);
+            assertEquals(result1, result2);
+            assertEquals(expectedMessage, result1);
 
-        } finally {
+        }
+        finally {
             executor.shutdown();
-            executor.awaitTermination(5,TimeUnit.SECONDS);
+            executor.awaitTermination(5, TimeUnit.SECONDS);
         }
     }
 
@@ -274,13 +287,14 @@ class NotificationServiceTest {
     @Test
     public void recv_sleep() throws Exception {
 
-        NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).async().build();
+        NotService notService = dbos.<NotService> Workflow()
+                .interfaceClass(NotService.class).implementation(new NotServiceImpl(dbos))
+                .async().build();
 
         String wfid1 = "recvwf1";
 
         try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
-            notService.recvWorkflow("topic1",5);
+            notService.recvWorkflow("topic1", 5);
         }
 
         String wfid2 = "sendf1";
@@ -289,26 +303,26 @@ class NotificationServiceTest {
         Thread.sleep(2000);
 
         try (SetWorkflowID id = new SetWorkflowID(wfid2)) {
-            notService.sendWorkflow(wfid1,"topic1","HelloDBOS");
+            notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
         }
 
         WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
         WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
 
         String result = (String) handle1.getResult();
-        assertEquals("HelloDBOS",result);
+        assertEquals("HelloDBOS", result);
 
-        assertEquals(WorkflowState.SUCCESS.name(),handle1.getStatus().getStatus());
-        assertEquals(WorkflowState.SUCCESS.name(),handle2.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
 
         List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(wfid1);
         // Will be 2 when we implement DBOS.sleep
-        assertEquals(2,stepInfos.size());
-        assertEquals("DBOS.recv",stepInfos.get(0).getFunctionName());
-        assertEquals("DBOS.sleep",stepInfos.get(1).getFunctionName());
+        assertEquals(2, stepInfos.size());
+        assertEquals("DBOS.recv", stepInfos.get(0).getFunctionName());
+        assertEquals("DBOS.sleep", stepInfos.get(1).getFunctionName());
 
         stepInfos = systemDatabase.listWorkflowSteps(wfid2);
-        assertEquals(1,stepInfos.size());
-        assertEquals("DBOS.send",stepInfos.get(0).getFunctionName());
+        assertEquals(1, stepInfos.size());
+        assertEquals("DBOS.send", stepInfos.get(0).getFunctionName());
     }
 }

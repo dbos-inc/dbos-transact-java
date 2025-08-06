@@ -19,23 +19,28 @@ public class DBUtils {
 
         try (Connection connection = ds.getConnection()) {
             deleteOperations(connection);
-            deleteWorkflowsTestHelper(connection);;
-        } catch (Exception e) {
+            deleteWorkflowsTestHelper(connection);
+            ;
+        }
+        catch (Exception e) {
             logger.info("Error clearing tables" + e.getMessage());
             throw e;
         }
     }
 
-    public static void deleteWorkflowsTestHelper(Connection connection) throws SQLException {
+    public static void deleteWorkflowsTestHelper(Connection connection)
+            throws SQLException {
 
         String sql = "delete from dbos.workflow_status";
 
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
             int rowsAffected = pstmt.executeUpdate();
-            logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.workflow_status");
+            logger.info("Cleaned up: Deleted " + rowsAffected
+                    + " rows from dbos.workflow_status");
 
-        } catch (SQLException e) {
+        }
+        catch (SQLException e) {
             logger.error("Error deleting workflows in test helper: " + e.getMessage());
             throw e;
         }
@@ -48,23 +53,27 @@ public class DBUtils {
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
             int rowsAffected = pstmt.executeUpdate();
-            logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.operation_outputs");
+            logger.info("Cleaned up: Deleted " + rowsAffected
+                    + " rows from dbos.operation_outputs");
 
-        } catch (SQLException e) {
+        }
+        catch (SQLException e) {
             logger.error("Error deleting workflows in test helper: " + e.getMessage());
             throw e;
         }
     }
 
-    public static void updateWorkflowState(DataSource ds, String oldState, String newState) throws SQLException {
+    public static void updateWorkflowState(DataSource ds, String oldState,
+            String newState) throws SQLException {
 
         String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? where status = ? ;";
 
-        try (Connection connection = ds.getConnection(); PreparedStatement pstmt = connection.prepareStatement(sql)) {
+        try (Connection connection = ds.getConnection();
+                PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
-            pstmt.setString(1,newState);
-            pstmt.setLong(2,Instant.now().toEpochMilli());
-            pstmt.setString(3,oldState);
+            pstmt.setString(1, newState);
+            pstmt.setLong(2, Instant.now().toEpochMilli());
+            pstmt.setString(3, oldState);
 
             // Execute the update and get the number of rows affected
             int rowsAffected = pstmt.executeUpdate();
@@ -77,14 +86,15 @@ public class DBUtils {
 
     public static void recreateDB(DBOSConfig dbosConfig) throws SQLException {
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s","localhost",5432,"postgres");
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432,
+                "postgres");
 
         String sysDb = dbosConfig.getSysDbName();
-        try (Connection conn = DriverManager.getConnection(dbUrl,dbosConfig.getDbUser(),dbosConfig.getDbPassword());
-                Statement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(),
+                dbosConfig.getDbPassword()); Statement stmt = conn.createStatement()) {
 
-            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s",sysDb);
-            String createDbSql = String.format("CREATE DATABASE %s",sysDb);
+            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
+            String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
         }

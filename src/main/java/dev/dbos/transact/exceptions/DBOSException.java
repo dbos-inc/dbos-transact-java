@@ -20,6 +20,6 @@ public class DBOSException extends RuntimeException {
 
     @Override
     public String toString() {
-        return String.format("DBOSException[%d]: %s",errorCode,getMessage());
+        return String.format("DBOSException[%d]: %s", errorCode, getMessage());
     }
 }

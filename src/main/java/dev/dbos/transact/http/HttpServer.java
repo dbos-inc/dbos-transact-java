@@ -39,8 +39,9 @@ public class HttpServer {
 
         try {
             tomcat.start();
-        } catch (Exception e) {
-            logger.error("Error starting http server",e);
+        }
+        catch (Exception e) {
+            logger.error("Error starting http server", e);
         }
     }
 
@@ -53,8 +54,9 @@ public class HttpServer {
         try {
             tomcat.stop();
             tomcat.destroy();
-        } catch (Exception e) {
-            logger.error("Error stopping httpserver",e);
+        }
+        catch (Exception e) {
+            logger.error("Error stopping httpserver", e);
         }
     }
 
@@ -66,7 +68,7 @@ public class HttpServer {
         String contextPath = "";
         String docBase = new File(".").getAbsolutePath();
 
-        Context context = tomcat.addContext(contextPath,docBase);
+        Context context = tomcat.addContext(contextPath, docBase);
 
         ResourceConfig resourceConfig = new ResourceConfig();
         resourceConfig.registerInstances(adminController);
@@ -75,7 +77,8 @@ public class HttpServer {
         // resourceConfig.packages(pkg);
 
         // Add the REST API servlet
-        var jerseyservlet = tomcat.addServlet(contextPath,"jersey-servlet",new ServletContainer(resourceConfig));
-        context.addServletMappingDecoded("/*","jersey-servlet");
+        var jerseyservlet = tomcat.addServlet(contextPath, "jersey-servlet",
+                new ServletContainer(resourceConfig));
+        context.addServletMappingDecoded("/*", "jersey-servlet");
     }
 }

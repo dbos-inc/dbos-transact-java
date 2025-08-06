@@ -9,7 +9,8 @@ public class SetDBOSOptions implements Closeable {
     public SetDBOSOptions(DBOSOptions options) {
 
         if (options.getWorkflowId() == null) {
-            throw new IllegalArgumentException("Workflow Id cannot be null with SetDBOSOptions. ");
+            throw new IllegalArgumentException(
+                    "Workflow Id cannot be null with SetDBOSOptions. ");
         }
 
         previousCtx = DBOSContextHolder.get();
@@ -19,7 +20,8 @@ public class SetDBOSOptions implements Closeable {
         if (previousCtx.getWorkflowId() != null) {
             // we must be a child workflow
             newCtx = previousCtx.createChild(options);
-        } else {
+        }
+        else {
             newCtx = new DBOSContext(options, 0);
         }
         DBOSContextHolder.set(newCtx);

@@ -117,7 +117,8 @@ public class SimpleServiceImpl implements SimpleService {
     @Workflow(name = "syncWithQueued")
     public String syncWithQueued() {
 
-        System.out.println("In syncWithQueued " + DBOSContextHolder.get().getWorkflowId());
+        System.out
+                .println("In syncWithQueued " + DBOSContextHolder.get().getWorkflowId());
 
         Queue q = new DBOS.QueueBuilder("childQ").build();
         for (int i = 0; i < 3; i++) {
@@ -148,13 +149,15 @@ public class SimpleServiceImpl implements SimpleService {
         try {
             logger.info("Step sleeping for " + sleepSeconds);
             Thread.sleep(sleepSeconds * 1000);
-        } catch (Exception e) {
-            logger.error("Sleep interrupted",e);
+        }
+        catch (Exception e) {
+            logger.error("Sleep interrupted", e);
         }
     }
 
     @Workflow(name = "childWorkflowWithSleep")
-    public String childWorkflowWithSleep(String input, long sleepSeconds) throws InterruptedException {
+    public String childWorkflowWithSleep(String input, long sleepSeconds)
+            throws InterruptedException {
         logger.info("Child sleeping for " + sleepSeconds);
         Thread.sleep(sleepSeconds * 1000);
         logger.info("Child done sleeping for " + sleepSeconds);
@@ -162,15 +165,18 @@ public class SimpleServiceImpl implements SimpleService {
     }
 
     @Workflow(name = "longParent")
-    public String longParent(String input, long sleepSeconds, long timeoutSeconds) throws InterruptedException {
+    public String longParent(String input, long sleepSeconds, long timeoutSeconds)
+            throws InterruptedException {
 
         logger.info("In longParent");
         String workflowId = "childwf";
-        DBOSOptions options = new DBOSOptions.Builder(workflowId).timeout(timeoutSeconds).build();
+        DBOSOptions options = new DBOSOptions.Builder(workflowId).timeout(timeoutSeconds)
+                .build();
 
         WorkflowHandle<String> handle = null;
         try (SetDBOSOptions o = new SetDBOSOptions(options)) {
-            handle = dbos.startWorkflow(() -> simpleService.childWorkflowWithSleep(input,sleepSeconds));
+            handle = dbos.startWorkflow(
+                    () -> simpleService.childWorkflowWithSleep(input, sleepSeconds));
         }
 
         String result = handle.getResult();

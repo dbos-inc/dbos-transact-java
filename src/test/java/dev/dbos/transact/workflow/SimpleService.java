@@ -30,7 +30,9 @@ public interface SimpleService {
 
     void stepWithSleep(long sleepSeconds);
 
-    String longParent(String input, long sleepSeconds, long timeoutSeconds) throws InterruptedException;
+    String longParent(String input, long sleepSeconds, long timeoutSeconds)
+            throws InterruptedException;
 
-    String childWorkflowWithSleep(String input, long sleepSeconds) throws InterruptedException;
+    String childWorkflowWithSleep(String input, long sleepSeconds)
+            throws InterruptedException;
 }

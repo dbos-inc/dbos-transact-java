@@ -9,7 +9,8 @@ public class Queue {
     private RateLimit rateLimit;
     private final boolean priorityEnabled;
 
-    private Queue(String name, int concurrency, int workerConcurrency, RateLimit limit, boolean priorityEnabled) {
+    private Queue(String name, int concurrency, int workerConcurrency, RateLimit limit,
+            boolean priorityEnabled) {
         this.name = name;
         this.concurrency = concurrency;
         this.workerConcurrency = workerConcurrency;
@@ -17,12 +18,13 @@ public class Queue {
         this.priorityEnabled = priorityEnabled;
     }
 
-    public static Queue createQueue(String name, int concurrency, int workerConcurrency, RateLimit limit,
-            boolean priorityEnabled) {
+    public static Queue createQueue(String name, int concurrency, int workerConcurrency,
+            RateLimit limit, boolean priorityEnabled) {
 
         if (workerConcurrency > concurrency) {
             throw new IllegalArgumentException(
-                    "worker_concurrency must be less than or equal to concurrency for queue '" + name + "'");
+                    "worker_concurrency must be less than or equal to concurrency for queue '"
+                            + name + "'");
         }
 
         return new Queue(name, concurrency, workerConcurrency, limit, priorityEnabled);
@@ -59,21 +61,23 @@ public class Queue {
         if (o == null || getClass() != o.getClass())
             return false;
         Queue that = (Queue) o;
-        return priorityEnabled == that.priorityEnabled && Objects.equals(name,that.name)
-                && Objects.equals(concurrency,that.concurrency)
-                && Objects.equals(workerConcurrency,that.workerConcurrency) && Objects.equals(rateLimit,that.rateLimit);
+        return priorityEnabled == that.priorityEnabled && Objects.equals(name, that.name)
+                && Objects.equals(concurrency, that.concurrency)
+                && Objects.equals(workerConcurrency, that.workerConcurrency)
+                && Objects.equals(rateLimit, that.rateLimit);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name,concurrency,workerConcurrency,rateLimit.getLimit(),rateLimit.getPeriod(),
-                priorityEnabled);
+        return Objects.hash(name, concurrency, workerConcurrency, rateLimit.getLimit(),
+                rateLimit.getPeriod(), priorityEnabled);
     }
 
     @Override
     public String toString() {
-        return "WorkflowQueue{" + "name='" + name + '\'' + ", concurrency=" + concurrency + ", workerConcurrency="
-                + workerConcurrency + ", limit=" + rateLimit.getLimit() + ", period=" + rateLimit.getPeriod()
+        return "WorkflowQueue{" + "name='" + name + '\'' + ", concurrency=" + concurrency
+                + ", workerConcurrency=" + workerConcurrency + ", limit="
+                + rateLimit.getLimit() + ", period=" + rateLimit.getPeriod()
                 + ", priorityEnabled=" + priorityEnabled + '}';
     }
 }

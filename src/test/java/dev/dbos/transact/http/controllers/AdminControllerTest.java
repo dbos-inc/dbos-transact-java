@@ -25,9 +25,10 @@ class AdminControllerTest {
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
-        AdminControllerTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost").dbPort(5432)
-                .dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(2).runAdminServer().adminServerPort(3010)
-                .adminAwaitOnStart(false).build();
+        AdminControllerTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres")
+                .sysDbName("dbos_java_sys").maximumPoolSize(2).runAdminServer()
+                .adminServerPort(3010).adminAwaitOnStart(false).build();
     }
 
     @BeforeEach
@@ -47,11 +48,13 @@ class AdminControllerTest {
 
         HttpClient client = HttpClient.newHttpClient();
 
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create("http://localhost:3010/healthz")).GET().build();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:3010/healthz")).GET().build();
 
-        HttpResponse<String> response = client.send(request,HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
 
-        assertEquals(200,response.statusCode());
-        assertEquals("Healthy",response.body());
+        assertEquals(200, response.statusCode());
+        assertEquals("Healthy", response.body());
     }
 }

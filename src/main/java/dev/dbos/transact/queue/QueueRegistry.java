@@ -14,10 +14,11 @@ public class QueueRegistry {
 
     public void register(String queueName, Queue queue) {
         if (registry.containsKey(queueName)) {
-            logger.warn(String.format("Queue %s has already been registered.",queueName));
+            logger.warn(
+                    String.format("Queue %s has already been registered.", queueName));
         }
 
-        registry.put(queueName,queue);
+        registry.put(queueName, queue);
     }
 
     public Queue get(String queueName) {

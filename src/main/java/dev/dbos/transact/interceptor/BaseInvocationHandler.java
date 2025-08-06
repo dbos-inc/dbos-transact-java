@@ -17,7 +17,8 @@ import org.slf4j.LoggerFactory;
 
 public abstract class BaseInvocationHandler implements InvocationHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(BaseInvocationHandler.class);
+    private static final Logger logger = LoggerFactory
+            .getLogger(BaseInvocationHandler.class);
 
     private final Object target;
     private final String targetClassName;
@@ -31,24 +32,29 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
 
-        Method implMethod = target.getClass().getMethod(method.getName(),method.getParameterTypes());
+        Method implMethod = target.getClass().getMethod(method.getName(),
+                method.getParameterTypes());
 
         if (implMethod.isAnnotationPresent(Workflow.class)) {
-            return handleWorkflow(method,args,implMethod.getAnnotation(Workflow.class));
+            return handleWorkflow(method, args, implMethod.getAnnotation(Workflow.class));
 
-        } else if (implMethod.isAnnotationPresent(Step.class)) {
-            return handleStep(method,args,implMethod.getAnnotation(Step.class));
+        }
+        else if (implMethod.isAnnotationPresent(Step.class)) {
+            return handleStep(method, args, implMethod.getAnnotation(Step.class));
         }
 
         // No special annotation, proceed normally
-        return method.invoke(target,args);
+        return method.invoke(target, args);
     }
 
-    protected Object handleWorkflow(Method method, Object[] args, Workflow workflow) throws Throwable {
+    protected Object handleWorkflow(Method method, Object[] args, Workflow workflow)
+            throws Throwable {
 
-        String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
+        String workflowName = workflow.name().isEmpty() ? method.getName()
+                : workflow.name();
 
-        String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",workflowName,workflow.timeout());
+        String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
+                workflowName, workflow.timeout());
 
         logger.info(msg);
 
@@ -66,17 +72,19 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
             // child workflow
             if (ctx.hasParent()) {
                 // child called with SetWorkflowId
-                result = submitWorkflow(workflowName,targetClassName,wrapper,args);
-            } else {
+                result = submitWorkflow(workflowName, targetClassName, wrapper, args);
+            }
+            else {
                 // child called without Set
                 // create child context from the parent
 
                 String childId = ctx.getWorkflowId() + "-" + ctx.getParentFunctionId();
                 try (SetWorkflowID id = new SetWorkflowID(childId)) {
-                    result = submitWorkflow(workflowName,targetClassName,wrapper,args);
+                    result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
             }
-        } else {
+        }
+        else {
 
             // parent
             if (ctx.getWorkflowId() == null) {
@@ -84,33 +92,39 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                 String workflowfId = UUID.randomUUID().toString();
                 try (SetWorkflowID id = new SetWorkflowID(workflowfId)) {
                     DBOSContextHolder.get().setInWorkflow(true);
-                    result = submitWorkflow(workflowName,targetClassName,wrapper,args);
+                    result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
-            } else {
+            }
+            else {
                 // not child called with Set just run
                 DBOSContextHolder.get().setInWorkflow(true);
-                result = submitWorkflow(workflowName,targetClassName,wrapper,args);
+                result = submitWorkflow(workflowName, targetClassName, wrapper, args);
             }
         }
 
         if (result != null) {
             return result;
-        } else {
+        }
+        else {
             return getDefaultValue(method.getReturnType());
             // always return null or default
         }
     }
 
-    protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
-        String msg = String.format("Before : Executing step %s %s",method.getName(),step.name());
+    protected Object handleStep(Method method, Object[] args, Step step)
+            throws Throwable {
+        String msg = String.format("Before : Executing step %s %s", method.getName(),
+                step.name());
         logger.info(msg);
         try {
-            Object result = dbosExecutor.runStep(step.name(),step.retriesAllowed(),step.maxAttempts(),
-                    step.backOffRate(),args,() -> method.invoke(target,args));
+            Object result = dbosExecutor.runStep(step.name(), step.retriesAllowed(),
+                    step.maxAttempts(), step.backOffRate(), args,
+                    () -> method.invoke(target, args));
             logger.info("After: Step completed successfully");
             return result;
-        } catch (Exception e) {
-            logger.error("Step failed",e);
+        }
+        catch (Exception e) {
+            logger.error("Step failed", e);
             throw e;
         }
     }
@@ -122,7 +136,8 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
             return false;
         if (returnType == char.class)
             return '\0';
-        if (returnType == byte.class || returnType == short.class || returnType == int.class)
+        if (returnType == byte.class || returnType == short.class
+                || returnType == int.class)
             return 0;
         if (returnType == long.class)
             return 0L;

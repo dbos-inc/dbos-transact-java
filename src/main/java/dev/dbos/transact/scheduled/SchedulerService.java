@@ -29,7 +29,8 @@ import org.slf4j.LoggerFactory;
 
 public class SchedulerService {
 
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
+    private final ScheduledExecutorService scheduler = Executors
+            .newScheduledThreadPool(4);
     private final DBOSExecutor dbosExecutor;
     private final CronParser cronParser;
     Logger logger = LoggerFactory.getLogger(SchedulerService.class);
@@ -38,30 +39,36 @@ public class SchedulerService {
 
     public SchedulerService(DBOSExecutor dbosExecutor) {
         this.dbosExecutor = dbosExecutor;
-        this.cronParser = new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
+        this.cronParser = new CronParser(
+                CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
     }
 
     public void scanAndSchedule(Object implementation) {
         for (Method method : implementation.getClass().getDeclaredMethods()) {
-            if (method.isAnnotationPresent(Workflow.class) && method.isAnnotationPresent(Scheduled.class)) {
+            if (method.isAnnotationPresent(Workflow.class)
+                    && method.isAnnotationPresent(Scheduled.class)) {
 
-                if (!Arrays.equals(method.getParameterTypes(),new Class<?>[]{Instant.class, Instant.class})) {
+                if (!Arrays.equals(method.getParameterTypes(),
+                        new Class<?>[] { Instant.class, Instant.class })) {
                     throw new IllegalArgumentException(
                             "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)");
                 }
 
                 Workflow wfAnnotation = method.getAnnotation(Workflow.class);
                 Scheduled scheduled = method.getAnnotation(Scheduled.class);
-                String workflowName = wfAnnotation.name().isEmpty() ? method.getName() : wfAnnotation.name();
+                String workflowName = wfAnnotation.name().isEmpty() ? method.getName()
+                        : wfAnnotation.name();
                 // register with dbosExecutor for recovery
-                dbosExecutor.registerWorkflow(workflowName,implementation,implementation.getClass().getName(),method);
+                dbosExecutor.registerWorkflow(workflowName, implementation,
+                        implementation.getClass().getName(), method);
                 String cron = scheduled.cron();
-                scheduleRecurringWorkflow(workflowName,implementation,method,cron);
+                scheduleRecurringWorkflow(workflowName, implementation, method, cron);
             }
         }
     }
 
-    private void scheduleRecurringWorkflow(String workflowName, Object instance, Method method, String cronExpr) {
+    private void scheduleRecurringWorkflow(String workflowName, Object instance,
+            Method method, String cronExpr) {
 
         logger.info("Scheduling wf " + workflowName);
         Cron cron = cronParser.parse(cronExpr);
@@ -81,12 +88,15 @@ public class SchedulerService {
                     args[0] = scheduledTime.toInstant();
                     args[1] = ZonedDateTime.now(ZoneOffset.UTC).toInstant();
                     logger.info("submitting to dbos Executor " + workflowName);
-                    String workflowId = String.format("sched-%s-%s",workflowName,scheduledTime.toString());
+                    String workflowId = String.format("sched-%s-%s", workflowName,
+                            scheduledTime.toString());
                     try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
-                        dbosExecutor.enqueueWorkflow(workflowName,instance.getClass().getName(),wrapper,args,
+                        dbosExecutor.enqueueWorkflow(workflowName,
+                                instance.getClass().getName(), wrapper, args,
                                 schedulerQueue);
                     }
-                } catch (Throwable e) {
+                }
+                catch (Throwable e) {
                     e.printStackTrace();
                 }
 
@@ -95,8 +105,8 @@ public class SchedulerService {
                     ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
                     executionTime.nextExecution(now).ifPresent(nextTime -> {
                         logger.info("Next execution time " + nextTime.toString());
-                        long delayMs = Duration.between(now,nextTime).toMillis();
-                        scheduler.schedule(this,delayMs,TimeUnit.MILLISECONDS);
+                        long delayMs = Duration.between(now, nextTime).toMillis();
+                        scheduler.schedule(this, delayMs, TimeUnit.MILLISECONDS);
                     });
                 }
             }
@@ -105,8 +115,8 @@ public class SchedulerService {
         // Kick off the first run (but only scheduled at the next proper time)
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
         executionTime.nextExecution(now).ifPresent(nextTime -> {
-            long initialDelayMs = Duration.between(now,nextTime).toMillis();
-            scheduler.schedule(scheduleTask,initialDelayMs,TimeUnit.MILLISECONDS);
+            long initialDelayMs = Duration.between(now, nextTime).toMillis();
+            scheduler.schedule(scheduleTask, initialDelayMs, TimeUnit.MILLISECONDS);
         });
     }
 

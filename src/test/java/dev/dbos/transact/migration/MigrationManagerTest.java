@@ -30,18 +30,19 @@ class MigrationManagerTest {
     @BeforeAll
     static void setup() throws Exception {
 
-        MigrationManagerTest.dbosConfig = new DBOSConfig.Builder().name("migrationtest").dbHost("localhost")
-                .dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(3).build();
+        MigrationManagerTest.dbosConfig = new DBOSConfig.Builder().name("migrationtest")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres")
+                .sysDbName("dbos_java_sys").maximumPoolSize(3).build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",dbosConfig.getDbHost(),dbosConfig.getDbPort(),
-                "postgres");
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(),
+                dbosConfig.getDbPort(), "postgres");
 
         String sysDb = dbosConfig.getSysDbName();
-        try (Connection conn = DriverManager.getConnection(dbUrl,dbosConfig.getDbUser(),dbosConfig.getDbPassword());
-                Statement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(),
+                dbosConfig.getDbPassword()); Statement stmt = conn.createStatement()) {
 
-            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s",sysDb);
-            String createDbSql = String.format("CREATE DATABASE %s",sysDb);
+            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
+            String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
         }
@@ -59,16 +60,17 @@ class MigrationManagerTest {
             DatabaseMetaData metaData = conn.getMetaData();
 
             // Verify all expected tables exist in the dbos schema
-            assertTableExists(metaData,"operation_outputs");
-            assertTableExists(metaData,"workflow_status");
-            assertTableExists(metaData,"notifications");
-            assertTableExists(metaData,"workflow_events");
+            assertTableExists(metaData, "operation_outputs");
+            assertTableExists(metaData, "workflow_status");
+            assertTableExists(metaData, "notifications");
+            assertTableExists(metaData, "workflow_events");
         }
     }
 
-    private void assertTableExists(DatabaseMetaData metaData, String tableName) throws Exception {
-        try (ResultSet rs = metaData.getTables(null,"dbos",tableName,null)) {
-            assertTrue(rs.next(),"Table " + tableName + " should exist in schema dbos");
+    private void assertTableExists(DatabaseMetaData metaData, String tableName)
+            throws Exception {
+        try (ResultSet rs = metaData.getTables(null, "dbos", tableName, null)) {
+            assertTrue(rs.next(), "Table " + tableName + " should exist in schema dbos");
         }
     }
 
@@ -79,7 +81,7 @@ class MigrationManagerTest {
         assertDoesNotThrow(() -> {
             MigrationManager migrationManager = new MigrationManager(testDataSource);
             migrationManager.migrate();
-        },"Migrations should run successfully multiple times");
+        }, "Migrations should run successfully multiple times");
     }
 
     @Test
@@ -87,21 +89,23 @@ class MigrationManagerTest {
     void testAddingNewMigration() throws Exception {
         // Create a new dummy migration file in test/resources/db/migrations
         URL testMigrations = getClass().getClassLoader().getResource("db/migrations");
-        Assertions.assertNotNull(testMigrations,"Test migration path not found.");
+        Assertions.assertNotNull(testMigrations, "Test migration path not found.");
 
         Path migrationDir = Paths.get(testMigrations.toURI());
         Path newMigration = migrationDir.resolve("999__create_dummy_table.sql");
 
         String sql = "CREATE TABLE IF NOT EXISTS dummy_table(id SERIAL PRIMARY KEY);";
-        Files.writeString(newMigration,sql);
+        Files.writeString(newMigration, sql);
 
         // Run migrations again
         MigrationManager.runMigrations(dbosConfig);
 
         // Validate the dummy_table was created
         try (Connection conn = testDataSource.getConnection();
-                ResultSet rs = conn.getMetaData().getTables(null,null,"dummy_table",null)) {
-            Assertions.assertTrue(rs.next(),"Expected 'dummy_table' to exist after new migration.");
+                ResultSet rs = conn.getMetaData().getTables(null, null, "dummy_table",
+                        null)) {
+            Assertions.assertTrue(rs.next(),
+                    "Expected 'dummy_table' to exist after new migration.");
         }
 
         // Clean up test file

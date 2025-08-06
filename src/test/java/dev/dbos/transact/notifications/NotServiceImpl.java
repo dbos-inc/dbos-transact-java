@@ -27,8 +27,9 @@ public class NotServiceImpl {
             // Wait for recv to signal that it's ready
             recvReadyLatch.await();
             // Now proceed with sending
-            dbos.send(target,msg,topic);
-        } catch (InterruptedException e) {
+            dbos.send(target, msg, topic);
+        }
+        catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while waiting for recv signal", e);
         }
@@ -38,15 +39,15 @@ public class NotServiceImpl {
     @Workflow(name = "recvWorkflow")
     public String recvWorkflow(String topic, float timeoutSecond) {
         recvReadyLatch.countDown();
-        return (String) dbos.recv(topic,timeoutSecond);
+        return (String) dbos.recv(topic, timeoutSecond);
     }
 
     @Workflow(name = "recvMultiple")
     public String recvMultiple(String topic) {
         recvReadyLatch.countDown();
-        String msg1 = (String) dbos.recv(topic,5);
-        String msg2 = (String) dbos.recv(topic,5);
-        String msg3 = (String) dbos.recv(topic,5);
+        String msg1 = (String) dbos.recv(topic, 5);
+        String msg2 = (String) dbos.recv(topic, 5);
+        String msg3 = (String) dbos.recv(topic, 5);
         return msg1 + msg2 + msg3;
     }
 
@@ -60,21 +61,24 @@ public class NotServiceImpl {
                 // Wait for the other one to notify
                 try {
                     condition.await();
-                } catch (InterruptedException e) {
+                }
+                catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException("Interrupted while waiting", e);
                 }
-            } else {
+            }
+            else {
                 // Notify the other one
-                String message = (String) dbos.recv(topic,5);
+                String message = (String) dbos.recv(topic, 5);
                 condition.signalAll();
                 return message;
             }
-        } finally {
+        }
+        finally {
             lock.unlock();
         }
 
-        String message = (String) dbos.recv(topic,5);
+        String message = (String) dbos.recv(topic, 5);
         return message;
     }
 }

@@ -17,7 +17,8 @@ public class ContextAwareRunnable implements Runnable {
         DBOSContextHolder.set(capturedContext);
         try {
             task.run();
-        } finally {
+        }
+        finally {
             DBOSContextHolder.clear();
         }
     }

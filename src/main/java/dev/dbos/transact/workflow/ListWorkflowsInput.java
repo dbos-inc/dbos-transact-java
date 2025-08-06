@@ -19,9 +19,10 @@ public class ListWorkflowsInput {
     public ListWorkflowsInput() {
     }
 
-    public ListWorkflowsInput(List<String> workflowIDs, String workflowName, String authenticatedUser,
-            OffsetDateTime startTime, OffsetDateTime endTime, String status, String applicationVersion, Integer limit,
-            Integer offset, Boolean sortDesc, String workflowIdPrefix) {
+    public ListWorkflowsInput(List<String> workflowIDs, String workflowName,
+            String authenticatedUser, OffsetDateTime startTime, OffsetDateTime endTime,
+            String status, String applicationVersion, Integer limit, Integer offset,
+            Boolean sortDesc, String workflowIdPrefix) {
         this.workflowIDs = workflowIDs;
         this.workflowName = workflowName;
         this.authenticatedUser = authenticatedUser;

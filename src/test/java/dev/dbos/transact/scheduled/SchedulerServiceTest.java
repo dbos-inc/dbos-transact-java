@@ -35,11 +35,12 @@ class SchedulerServiceTest {
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
-        SchedulerServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost").dbPort(5432)
-                .dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+        SchedulerServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres")
+                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",dbosConfig.getDbHost(),dbosConfig.getDbPort(),
-                "postgres");
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(),
+                dbosConfig.getDbPort(), "postgres");
     }
 
     @BeforeEach
@@ -49,7 +50,8 @@ class SchedulerServiceTest {
         systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         schedulerService = new SchedulerService(dbosExecutor);
-        dbos = DBOS.initialize(dbosConfig,systemDatabase,dbosExecutor,null,schedulerService);
+        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null,
+                schedulerService);
         dbos.launch();
     }
 
@@ -116,7 +118,7 @@ class SchedulerServiceTest {
 
         assertNotNull(swf.scheduled);
         assertNotNull(swf.actual);
-        Duration delta = Duration.between(swf.scheduled,swf.actual).abs();
+        Duration delta = Duration.between(swf.scheduled, swf.actual).abs();
         assertTrue(delta.toMillis() < 1000);
     }
 
@@ -128,8 +130,10 @@ class SchedulerServiceTest {
         try {
             dbos.scheduleWorkflow(imv);
             assertTrue(false); // fail if we get here
-        } catch (IllegalArgumentException e) {
-            assertEquals("Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)",
+        }
+        catch (IllegalArgumentException e) {
+            assertEquals(
+                    "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)",
                     e.getMessage());
         }
     }
@@ -142,17 +146,20 @@ class SchedulerServiceTest {
         try {
             dbos.scheduleWorkflow(icw);
             assertTrue(false); // fail if we get here
-        } catch (IllegalArgumentException e) {
+        }
+        catch (IllegalArgumentException e) {
 
             System.out.println(e.getMessage());
-            assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]",e.getMessage());
+            assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]",
+                    e.getMessage());
         }
     }
 
     @Test
     public void stepsTest() throws Exception {
 
-        Steps steps = dbos.<Steps>Workflow().interfaceClass(Steps.class).implementation(new StepsImpl()).build();
+        Steps steps = dbos.<Steps> Workflow().interfaceClass(Steps.class)
+                .implementation(new StepsImpl()).build();
 
         WorkflowWithSteps swf = new WorkflowWithSteps(steps);
         dbos.scheduleWorkflow(swf);
@@ -163,8 +170,9 @@ class SchedulerServiceTest {
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertTrue(wfs.size() <= 2);
 
-        List<StepInfo> wsteps = systemDatabase.listWorkflowSteps(wfs.get(0).getWorkflowId());
-        assertEquals(2,wsteps.size());
+        List<StepInfo> wsteps = systemDatabase
+                .listWorkflowSteps(wfs.get(0).getWorkflowId());
+        assertEquals(2, wsteps.size());
     }
 
     // Manual test only do not enable and commit

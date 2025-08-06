@@ -208,8 +208,9 @@ public class DBOSConfig {
 
     @Override
     public String toString() {
-        return "DBOSConfig{" + "name='" + name + '\'' + ", url='" + url + '\'' + ", maximumPoolSize=" + maximumPoolSize
-                + ", connectionTimeout=" + connectionTimeout + ", appDbName='" + appDbName + '\'' + ", sysDbName='"
+        return "DBOSConfig{" + "name='" + name + '\'' + ", url='" + url + '\''
+                + ", maximumPoolSize=" + maximumPoolSize + ", connectionTimeout="
+                + connectionTimeout + ", appDbName='" + appDbName + '\'' + ", sysDbName='"
                 + sysDbName + '\'' + '}';
     }
 }

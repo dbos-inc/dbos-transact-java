@@ -33,12 +33,14 @@ public class RecoveryService {
         try {
             List<GetPendingWorkflowsOutput> pendingWorkflowsOutputs = getPendingWorkflows();
             recoverWorkflows(pendingWorkflowsOutputs);
-        } catch (SQLException e) {
-            logger.error("Recovery could not complete due to SQL error",e);
+        }
+        catch (SQLException e) {
+            logger.error("Recovery could not complete due to SQL error", e);
         }
     }
 
-    public List<WorkflowHandle> recoverWorkflows(List<GetPendingWorkflowsOutput> pendingWorkflowsOutputs) {
+    public List<WorkflowHandle> recoverWorkflows(
+            List<GetPendingWorkflowsOutput> pendingWorkflowsOutputs) {
 
         List<WorkflowHandle> handles = new ArrayList<>();
 
@@ -51,12 +53,13 @@ public class RecoveryService {
     }
 
     public List<GetPendingWorkflowsOutput> getPendingWorkflows() throws SQLException {
-        return systemDatabase.getPendingWorkflows(Constants.DEFAULT_EXECUTORID,Constants.DEFAULT_APP_VERSION);
+        return systemDatabase.getPendingWorkflows(Constants.DEFAULT_EXECUTORID,
+                Constants.DEFAULT_APP_VERSION);
     }
 
     /**
-     * Starts the background recovery thread for startup workflow recovery. This method will attempt to recover pending
-     * workflows in a separate thread.
+     * Starts the background recovery thread for startup workflow recovery. This method
+     * will attempt to recover pending workflows in a separate thread.
      */
     public void start() {
         if (recoveryThread != null && recoveryThread.isAlive()) {
@@ -68,20 +71,23 @@ public class RecoveryService {
 
         try {
             workflows = getPendingWorkflows();
-        } catch (SQLException e) {
-            logger.error("Error getting pending workflows",e.getMessage());
+        }
+        catch (SQLException e) {
+            logger.error("Error getting pending workflows", e.getMessage());
         }
 
         final List<GetPendingWorkflowsOutput> toRecover = workflows;
         stopRequested = false;
-        recoveryThread = new Thread(() -> startupRecoveryThread(toRecover), "RecoveryService-Thread");
+        recoveryThread = new Thread(() -> startupRecoveryThread(toRecover),
+                "RecoveryService-Thread");
         recoveryThread.setDaemon(true);
         recoveryThread.start();
         logger.info("Recovery service started");
     }
 
     /**
-     * Stops the background recovery thread. This method will signal the thread to stop and wait for it to complete.
+     * Stops the background recovery thread. This method will signal the thread to stop
+     * and wait for it to complete.
      */
     public void stop() {
         stopRequested = true;
@@ -92,28 +98,32 @@ public class RecoveryService {
                     logger.warn("Recovery thread did not stop within timeout");
                     recoveryThread.interrupt();
                 }
-            } catch (InterruptedException e) {
+            }
+            catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                logger.warn("Interrupted while stopping recovery thread",e);
+                logger.warn("Interrupted while stopping recovery thread", e);
             }
         }
         logger.info("Recovery service stopped");
     }
 
     /**
-     * Background thread method that attempts to recover local pending workflows on startup. This method runs
-     * continuously until stop is requested or all workflows are recovered.
+     * Background thread method that attempts to recover local pending workflows on
+     * startup. This method runs continuously until stop is requested or all workflows are
+     * recovered.
      */
     private void startupRecoveryThread(List<GetPendingWorkflowsOutput> wToRecover) {
         try {
-            List<GetPendingWorkflowsOutput> pendingWorkflows = new CopyOnWriteArrayList<>(wToRecover);
+            List<GetPendingWorkflowsOutput> pendingWorkflows = new CopyOnWriteArrayList<>(
+                    wToRecover);
 
             logger.info("Starting recovery thread " + pendingWorkflows.size());
 
             while (!stopRequested && !pendingWorkflows.isEmpty()) {
                 try {
                     // Create a copy to iterate over to avoid concurrent modification
-                    List<GetPendingWorkflowsOutput> currentPending = new ArrayList<>(pendingWorkflows);
+                    List<GetPendingWorkflowsOutput> currentPending = new ArrayList<>(
+                            pendingWorkflows);
 
                     for (GetPendingWorkflowsOutput pendingWorkflow : currentPending) {
                         if (stopRequested) {
@@ -122,17 +132,22 @@ public class RecoveryService {
                         recoverWorkflow(pendingWorkflow);
                         pendingWorkflows.remove(pendingWorkflow);
                     }
-                } catch (WorkflowFunctionNotFoundException e) {
-                    logger.debug("Workflow function not found during recovery, retrying in 1 second",e);
+                }
+                catch (WorkflowFunctionNotFoundException e) {
+                    logger.debug(
+                            "Workflow function not found during recovery, retrying in 1 second",
+                            e);
                     try {
                         Thread.sleep(1000);
-                    } catch (InterruptedException ie) {
+                    }
+                    catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         logger.info("Recovery thread interrupted during sleep");
                         break;
                     }
-                } catch (Exception e) {
-                    logger.error("Exception encountered when recovering workflows",e);
+                }
+                catch (Exception e) {
+                    logger.error("Exception encountered when recovering workflows", e);
                     throw e;
                 }
             }
@@ -141,9 +156,11 @@ public class RecoveryService {
                 logger.info("All pending workflows recovered successfully");
             }
 
-        } catch (Exception e) {
-            logger.error("Unexpected error during workflow recovery",e);
-        } finally {
+        }
+        catch (Exception e) {
+            logger.error("Unexpected error during workflow recovery", e);
+        }
+        finally {
             logger.info("Exiting recovery thread ");
         }
     }
@@ -151,8 +168,7 @@ public class RecoveryService {
     /**
      * Recovers a single workflow.
      *
-     * @param pendingWorkflow
-     *            the workflow to recover
+     * @param pendingWorkflow the workflow to recover
      */
     private void recoverWorkflow(GetPendingWorkflowsOutput pendingWorkflow) {
         logger.info("Recovery executing workflow " + pendingWorkflow.getWorkflowUuid());

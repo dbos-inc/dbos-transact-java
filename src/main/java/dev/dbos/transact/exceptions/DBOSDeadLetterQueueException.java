@@ -8,10 +8,9 @@ public class DBOSDeadLetterQueueException extends DBOSException {
     private int maxRetries;
 
     public DBOSDeadLetterQueueException(String workflowId, int maxRetries) {
-        super(DEAD_LETTER_QUEUE.getCode(),
-                String.format(
-                        "Workflow %s has been moved to the dead-letter queue after exceeding the maximum of %d retries",
-                        workflowId,maxRetries));
+        super(DEAD_LETTER_QUEUE.getCode(), String.format(
+                "Workflow %s has been moved to the dead-letter queue after exceeding the maximum of %d retries",
+                workflowId, maxRetries));
     }
 
     public String getWorkflowId() {

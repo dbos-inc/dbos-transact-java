@@ -29,10 +29,12 @@ public class WorkflowStatus {
     public WorkflowStatus() {
     }
 
-    public WorkflowStatus(String workflowId, String status, String name, String className, String configName,
-            String authenticatedUser, String assumedRole, String[] authenticatedRoles, Object[] input, Object output,
-            String error, Long createdAt, Long updatedAt, String queueName, String executorId, String appVersion,
-            Long workflowTimeoutMs, Long workflowDeadlineEpochMs, String appId, Integer recoveryAttempts) {
+    public WorkflowStatus(String workflowId, String status, String name, String className,
+            String configName, String authenticatedUser, String assumedRole,
+            String[] authenticatedRoles, Object[] input, Object output, String error,
+            Long createdAt, Long updatedAt, String queueName, String executorId,
+            String appVersion, Long workflowTimeoutMs, Long workflowDeadlineEpochMs,
+            String appId, Integer recoveryAttempts) {
         this.workflowId = workflowId;
         this.status = status;
         this.name = name;
@@ -222,37 +224,47 @@ public class WorkflowStatus {
         if (o == null || getClass() != o.getClass())
             return false;
         WorkflowStatus that = (WorkflowStatus) o;
-        return Objects.equals(workflowId,that.workflowId) && Objects.equals(status,that.status)
-                && Objects.equals(name,that.name) && Objects.equals(className,that.className)
-                && Objects.equals(configName,that.configName)
-                && Objects.equals(authenticatedUser,that.authenticatedUser)
-                && Objects.equals(assumedRole,that.assumedRole)
-                && Objects.equals(authenticatedRoles,that.authenticatedRoles) && Objects.equals(input,that.input)
-                && Objects.equals(output,that.output) && Objects.equals(error,that.error)
-                && Objects.equals(createdAt,that.createdAt) && Objects.equals(updatedAt,that.updatedAt)
-                && Objects.equals(queueName,that.queueName) && Objects.equals(executorId,that.executorId)
-                && Objects.equals(appVersion,that.appVersion)
-                && Objects.equals(workflowTimeoutMs,that.workflowTimeoutMs)
-                && Objects.equals(workflowDeadlineEpochMs,that.workflowDeadlineEpochMs)
-                && Objects.equals(appId,that.appId) && Objects.equals(recoveryAttempts,that.recoveryAttempts);
+        return Objects.equals(workflowId, that.workflowId)
+                && Objects.equals(status, that.status) && Objects.equals(name, that.name)
+                && Objects.equals(className, that.className)
+                && Objects.equals(configName, that.configName)
+                && Objects.equals(authenticatedUser, that.authenticatedUser)
+                && Objects.equals(assumedRole, that.assumedRole)
+                && Objects.equals(authenticatedRoles, that.authenticatedRoles)
+                && Objects.equals(input, that.input)
+                && Objects.equals(output, that.output)
+                && Objects.equals(error, that.error)
+                && Objects.equals(createdAt, that.createdAt)
+                && Objects.equals(updatedAt, that.updatedAt)
+                && Objects.equals(queueName, that.queueName)
+                && Objects.equals(executorId, that.executorId)
+                && Objects.equals(appVersion, that.appVersion)
+                && Objects.equals(workflowTimeoutMs, that.workflowTimeoutMs)
+                && Objects.equals(workflowDeadlineEpochMs, that.workflowDeadlineEpochMs)
+                && Objects.equals(appId, that.appId)
+                && Objects.equals(recoveryAttempts, that.recoveryAttempts);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(workflowId,status,name,className,configName,authenticatedUser,assumedRole,
-                authenticatedRoles,input,output,error,createdAt,updatedAt,queueName,executorId,appVersion,
-                workflowTimeoutMs,workflowDeadlineEpochMs,appId,recoveryAttempts);
+        return Objects.hash(workflowId, status, name, className, configName,
+                authenticatedUser, assumedRole, authenticatedRoles, input, output, error,
+                createdAt, updatedAt, queueName, executorId, appVersion,
+                workflowTimeoutMs, workflowDeadlineEpochMs, appId, recoveryAttempts);
     }
 
     @Override
     public String toString() {
-        return "WorkflowStatus{" + "workflowId='" + workflowId + '\'' + ", status='" + status + '\'' + ", name='" + name
-                + '\'' + ", className='" + className + '\'' + ", configName='" + configName + '\''
-                + ", authenticatedUser='" + authenticatedUser + '\'' + ", assumedRole='" + assumedRole + '\''
-                + ", authenticatedRoles=" + authenticatedRoles + ", input=" + input + ", output=" + output + ", error="
-                + error + ", createdAt=" + createdAt + ", updatedAt=" + updatedAt + ", queueName='" + queueName + '\''
-                + ", executorId='" + executorId + '\'' + ", appVersion='" + appVersion + '\'' + ", workflowTimeoutMs="
-                + workflowTimeoutMs + ", workflowDeadlineEpochMs=" + workflowDeadlineEpochMs + ", appId='" + appId
-                + '\'' + ", recoveryAttempts=" + recoveryAttempts + '}';
+        return "WorkflowStatus{" + "workflowId='" + workflowId + '\'' + ", status='"
+                + status + '\'' + ", name='" + name + '\'' + ", className='" + className
+                + '\'' + ", configName='" + configName + '\'' + ", authenticatedUser='"
+                + authenticatedUser + '\'' + ", assumedRole='" + assumedRole + '\''
+                + ", authenticatedRoles=" + authenticatedRoles + ", input=" + input
+                + ", output=" + output + ", error=" + error + ", createdAt=" + createdAt
+                + ", updatedAt=" + updatedAt + ", queueName='" + queueName + '\''
+                + ", executorId='" + executorId + '\'' + ", appVersion='" + appVersion
+                + '\'' + ", workflowTimeoutMs=" + workflowTimeoutMs
+                + ", workflowDeadlineEpochMs=" + workflowDeadlineEpochMs + ", appId='"
+                + appId + '\'' + ", recoveryAttempts=" + recoveryAttempts + '}';
     }
 }

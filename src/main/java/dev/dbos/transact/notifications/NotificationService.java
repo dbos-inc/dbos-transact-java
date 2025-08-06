@@ -40,11 +40,11 @@ public class NotificationService {
     }
 
     public boolean registerNotificationCondition(String key, LockConditionPair pair) {
-        return notificationsMap.putIfAbsent(key,pair) == null;
+        return notificationsMap.putIfAbsent(key, pair) == null;
     }
 
     public LockConditionPair getOrCreateNotificationCondition(String key) {
-        return notificationsMap.computeIfAbsent(key,k -> new LockConditionPair());
+        return notificationsMap.computeIfAbsent(key, k -> new LockConditionPair());
     }
 
     public void unregisterNotificationCondition(String key) {
@@ -54,7 +54,8 @@ public class NotificationService {
     public void start() {
         if (!running) {
             running = true;
-            notificationListenerThread = new Thread(this::notificationListener, "NotificationListener");
+            notificationListenerThread = new Thread(this::notificationListener,
+                    "NotificationListener");
             notificationListenerThread.setDaemon(true);
             notificationListenerThread.start();
             logger.info("Notification listener started");
@@ -67,7 +68,8 @@ public class NotificationService {
             notificationListenerThread.interrupt();
             try {
                 notificationListenerThread.join(5000); // Wait up to 5 seconds
-            } catch (InterruptedException e) {
+            }
+            catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
@@ -85,7 +87,8 @@ public class NotificationService {
         }
         int stepFunctionId = ctx.getAndIncrementFunctionId();
 
-        systemDatabase.send(ctx.getWorkflowId(),stepFunctionId,destinationId,message,topic);
+        systemDatabase.send(ctx.getWorkflowId(), stepFunctionId, destinationId, message,
+                topic);
     }
 
     public Object recv(String topic, float timeoutSeconds) {
@@ -98,7 +101,8 @@ public class NotificationService {
         int stepFunctionId = ctx.getAndIncrementFunctionId();
         int timeoutFunctionId = ctx.getAndIncrementFunctionId();
 
-        return systemDatabase.recv(ctx.getWorkflowId(),stepFunctionId,timeoutFunctionId,topic,timeoutSeconds);
+        return systemDatabase.recv(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId,
+                topic, timeoutSeconds);
     }
 
     public void setEvent(String key, Object value) {
@@ -111,7 +115,7 @@ public class NotificationService {
         }
         int stepFunctionId = ctx.getAndIncrementFunctionId();
 
-        systemDatabase.setEvent(ctx.getWorkflowId(),stepFunctionId,key,value);
+        systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
     }
 
     public Object getEvent(String workflowId, String key, float timeOut) {
@@ -123,12 +127,12 @@ public class NotificationService {
         if (ctx.isInWorkflow()) {
             int stepFunctionId = ctx.getAndIncrementFunctionId();
             int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(ctx.getWorkflowId(), stepFunctionId,
-                    timeoutFunctionId);
-            return systemDatabase.getEvent(workflowId,key,timeOut,callerCtx);
+            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(
+                    ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId);
+            return systemDatabase.getEvent(workflowId, key, timeOut, callerCtx);
         }
 
-        return systemDatabase.getEvent(workflowId,key,timeOut,null);
+        return systemDatabase.getEvent(workflowId, key, timeOut, null);
     }
 
     private void notificationListener() {
@@ -140,7 +144,8 @@ public class NotificationService {
                 notificationConnection.setAutoCommit(true);
 
                 // Cast to PostgreSQL connection for notification support
-                PGConnection pgConnection = notificationConnection.unwrap(PGConnection.class);
+                PGConnection pgConnection = notificationConnection
+                        .unwrap(PGConnection.class);
 
                 // Listen to notification channels
                 try (Statement stmt = notificationConnection.createStatement()) {
@@ -152,45 +157,55 @@ public class NotificationService {
 
                 while (running) {
                     // Check for notifications with a timeout
-                    PGNotification[] notifications = pgConnection.getNotifications(1000); // 1 second timeout
+                    PGNotification[] notifications = pgConnection.getNotifications(1000); // 1
+                                                                                          // second
+                                                                                          // timeout
 
                     if (notifications != null) {
                         for (PGNotification notification : notifications) {
                             String channel = notification.getName();
                             String payload = notification.getParameter();
 
-                            logger.debug("Received notification on channel: {}, payload: {}",channel,payload);
+                            logger.debug(
+                                    "Received notification on channel: {}, payload: {}",
+                                    channel, payload);
 
                             if ("dbos_notifications_channel".equals(channel)) {
-                                handleNotification(payload,"notifications");
-                            } else if ("dbos_workflow_events_channel".equals(channel)) {
-                                handleNotification(payload,"workflow_events");
-                            } else {
-                                logger.error("Unknown channel: {}",channel);
+                                handleNotification(payload, "notifications");
+                            }
+                            else if ("dbos_workflow_events_channel".equals(channel)) {
+                                handleNotification(payload, "workflow_events");
+                            }
+                            else {
+                                logger.error("Unknown channel: {}", channel);
                             }
                         }
                     }
                 }
 
-            } catch (Exception e) {
+            }
+            catch (Exception e) {
                 if (running) {
-                    logger.warn("Notification listener error: {}",e.getMessage());
+                    logger.warn("Notification listener error: {}", e.getMessage());
                     try {
                         Thread.sleep(1000); // Wait before retrying
-                    } catch (InterruptedException ie) {
+                    }
+                    catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         break;
                     }
                     // Loop will try to reconnect and restart the listener
                 }
-            } finally {
+            }
+            finally {
 
                 try {
                     if (notificationConnection != null) {
                         notificationConnection.close();
                     }
-                } catch (SQLException e) {
-                    logger.error("Error closing notification connection",e);
+                }
+                catch (SQLException e) {
+                    logger.error("Error closing notification connection", e);
                 }
             }
         }
@@ -207,11 +222,13 @@ public class NotificationService {
                 pair.lock.lock();
                 try {
                     pair.condition.signalAll();
-                } finally {
+                }
+                finally {
                     pair.lock.unlock();
                 }
-                logger.debug("Signaled {} condition for {}",mapType,payload);
-            } else {
+                logger.debug("Signaled {} condition for {}", mapType, payload);
+            }
+            else {
                 logger.warn("ConditionMap has no entry for " + payload);
             }
             // If no condition found, we simply ignore the notification

@@ -6,7 +6,8 @@ public class GetWorkflowEventContext {
     private int functionId;
     private int timeoutFunctionId;
 
-    public GetWorkflowEventContext(String workflowId, int functionId, int timeoutFunctionId) {
+    public GetWorkflowEventContext(String workflowId, int functionId,
+            int timeoutFunctionId) {
         this.workflowId = workflowId;
         this.functionId = functionId;
         this.timeoutFunctionId = timeoutFunctionId;

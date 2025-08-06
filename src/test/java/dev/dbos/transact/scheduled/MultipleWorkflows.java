@@ -17,13 +17,15 @@ public class MultipleWorkflows {
     @Scheduled(cron = "0/1 * * * * ?")
     public void everySecond(Instant schedule, Instant actual) {
         ++wfCounter;
-        System.out.println("Execute count " + wfCounter + "  " + schedule.toString() + "   " + actual.toString());
+        System.out.println("Execute count " + wfCounter + "  " + schedule.toString()
+                + "   " + actual.toString());
     }
 
     @Workflow(name = "everyThird")
     @Scheduled(cron = "0/3 * * * * ?")
     public void every(Instant schedule, Instant actual) {
         ++wfCounter3;
-        System.out.println("Execute count " + wfCounter3 + "  " + schedule.toString() + "   " + actual.toString());
+        System.out.println("Execute count " + wfCounter3 + "  " + schedule.toString()
+                + "   " + actual.toString());
     }
 }
