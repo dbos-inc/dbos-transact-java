@@ -8,7 +8,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
 public @interface Workflow {
-  String name() default "";
+    String name() default "";
 
-  int timeout() default 60; // in seconds
+    int timeout() default 60; // in seconds
 }

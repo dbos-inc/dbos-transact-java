@@ -2,11 +2,11 @@ package dev.dbos.transact.step;
 
 public interface ServiceWFAndStep {
 
-  void setSelf(ServiceWFAndStep serviceWFAndStep);
+    void setSelf(ServiceWFAndStep serviceWFAndStep);
 
-  String aWorkflow(String input);
+    String aWorkflow(String input);
 
-  String stepOne(String input);
+    String stepOne(String input);
 
-  String stepTwo(String input);
+    String stepTwo(String input);
 }

@@ -10,13 +10,16 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.StepInfo;
+
 import java.sql.SQLException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+
 import javax.sql.DataSource;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,180 +27,155 @@ import org.junit.jupiter.api.Test;
 
 public class EventsTest {
 
-  private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
-  private DBOS dbos;
-  private static SystemDatabase systemDatabase;
-  private DBOSExecutor dbosExecutor;
-  private NotificationService notificationService;
+    private static DBOSConfig dbosConfig;
+    private static DataSource dataSource;
+    private DBOS dbos;
+    private static SystemDatabase systemDatabase;
+    private DBOSExecutor dbosExecutor;
+    private NotificationService notificationService;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
+    @BeforeAll
+    static void onetimeSetup() throws Exception {
 
-    EventsTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .name("systemdbtest")
-            .dbHost("localhost")
-            .dbPort(5432)
-            .dbUser("postgres")
-            .sysDbName("dbos_java_sys")
-            .maximumPoolSize(2)
-            .build();
-  }
-
-  @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    EventsTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
-    systemDatabase = new SystemDatabase(dataSource);
-    dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-    dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
-    dbos.launch();
-  }
-
-  @AfterEach
-  void afterEachTest() throws SQLException {
-    dbos.shutdown();
-  }
-
-  @Test
-  public void basic_set_get() throws Exception {
-
-    EventsService eventService =
-        dbos.<EventsService>Workflow()
-            .interfaceClass(EventsService.class)
-            .implementation(new EventsServiceImpl(dbos))
-            .build();
-
-    try (SetWorkflowID id = new SetWorkflowID("id1")) {
-      eventService.setEventWorkflow("key1", "value1");
+        EventsTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost").dbPort(5432)
+                .dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(2).build();
     }
 
-    try (SetWorkflowID id = new SetWorkflowID("id2")) {
-      Object event = eventService.getEventWorkflow("id1", "key1", 3);
-      assertEquals("value1", (String) event);
+    @BeforeEach
+    void beforeEachTest() throws SQLException {
+        DBUtils.recreateDB(dbosConfig);
+        EventsTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+        systemDatabase = new SystemDatabase(dataSource);
+        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
+        dbos = DBOS.initialize(dbosConfig,systemDatabase,dbosExecutor,null,null);
+        dbos.launch();
     }
 
-    // outside workflow
-    String val = (String) dbos.getEvent("id1", "key1", 3);
-    assertEquals("value1", val);
-  }
-
-  @Test
-  public void multipleEvents() throws Exception {
-
-    EventsService eventService =
-        dbos.<EventsService>Workflow()
-            .interfaceClass(EventsService.class)
-            .implementation(new EventsServiceImpl(dbos))
-            .build();
-
-    try (SetWorkflowID id = new SetWorkflowID("id1")) {
-      eventService.setMultipleEvents();
+    @AfterEach
+    void afterEachTest() throws SQLException {
+        dbos.shutdown();
     }
 
-    try (SetWorkflowID id = new SetWorkflowID("id2")) {
-      Object event = eventService.getEventWorkflow("id1", "key1", 3);
-      assertEquals("value1", (String) event);
+    @Test
+    public void basic_set_get() throws Exception {
+
+        EventsService eventService = dbos.<EventsService>Workflow().interfaceClass(EventsService.class)
+                .implementation(new EventsServiceImpl(dbos)).build();
+
+        try (SetWorkflowID id = new SetWorkflowID("id1")) {
+            eventService.setEventWorkflow("key1","value1");
+        }
+
+        try (SetWorkflowID id = new SetWorkflowID("id2")) {
+            Object event = eventService.getEventWorkflow("id1","key1",3);
+            assertEquals("value1",(String) event);
+        }
+
+        // outside workflow
+        String val = (String) dbos.getEvent("id1","key1",3);
+        assertEquals("value1",val);
     }
 
-    // outside workflow
-    Double val = (Double) dbos.getEvent("id1", "key2", 3);
-    assertEquals(241.5, val);
-  }
+    @Test
+    public void multipleEvents() throws Exception {
 
-  @Test
-  public void async_set_get() throws Exception {
+        EventsService eventService = dbos.<EventsService>Workflow().interfaceClass(EventsService.class)
+                .implementation(new EventsServiceImpl(dbos)).build();
 
-    EventsService eventService =
-        dbos.<EventsService>Workflow()
-            .interfaceClass(EventsService.class)
-            .implementation(new EventsServiceImpl(dbos))
-            .async()
-            .build();
+        try (SetWorkflowID id = new SetWorkflowID("id1")) {
+            eventService.setMultipleEvents();
+        }
 
-    try (SetWorkflowID id = new SetWorkflowID("id1")) {
-      eventService.setEventWorkflow("key1", "value1");
+        try (SetWorkflowID id = new SetWorkflowID("id2")) {
+            Object event = eventService.getEventWorkflow("id1","key1",3);
+            assertEquals("value1",(String) event);
+        }
+
+        // outside workflow
+        Double val = (Double) dbos.getEvent("id1","key2",3);
+        assertEquals(241.5,val);
     }
 
-    try (SetWorkflowID id = new SetWorkflowID("id2")) {
-      eventService.getEventWorkflow("id1", "key1", 3);
+    @Test
+    public void async_set_get() throws Exception {
+
+        EventsService eventService = dbos.<EventsService>Workflow().interfaceClass(EventsService.class)
+                .implementation(new EventsServiceImpl(dbos)).async().build();
+
+        try (SetWorkflowID id = new SetWorkflowID("id1")) {
+            eventService.setEventWorkflow("key1","value1");
+        }
+
+        try (SetWorkflowID id = new SetWorkflowID("id2")) {
+            eventService.getEventWorkflow("id1","key1",3);
+        }
+
+        String event = (String) DBOS.retrieveWorkflow("id2").getResult();
+        assertEquals("value1",event);
     }
 
-    String event = (String) DBOS.retrieveWorkflow("id2").getResult();
-    assertEquals("value1", event);
-  }
+    @Test
+    public void notification() throws Exception {
 
-  @Test
-  public void notification() throws Exception {
+        EventsService eventService = dbos.<EventsService>Workflow().interfaceClass(EventsService.class)
+                .implementation(new EventsServiceImpl(dbos)).async().build();
 
-    EventsService eventService =
-        dbos.<EventsService>Workflow()
-            .interfaceClass(EventsService.class)
-            .implementation(new EventsServiceImpl(dbos))
-            .async()
-            .build();
+        try (SetWorkflowID id = new SetWorkflowID("id2")) {
+            eventService.getWithlatch("id1","key1",5);
+        }
 
-    try (SetWorkflowID id = new SetWorkflowID("id2")) {
-      eventService.getWithlatch("id1", "key1", 5);
+        try (SetWorkflowID id = new SetWorkflowID("id1")) {
+            eventService.setWithLatch("key1","value1");
+        }
+
+        String event = (String) DBOS.retrieveWorkflow("id2").getResult();
+        assertEquals("value1",event);
+
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps("id1");
+        assertEquals(1,steps.size());
+        assertEquals("DBOS.setEvent",steps.get(0).getFunctionName());
+
+        steps = systemDatabase.listWorkflowSteps("id2");
+        assertEquals(2,steps.size());
+        assertEquals("DBOS.getEvent",steps.get(0).getFunctionName());
+        assertEquals("DBOS.sleep",steps.get(1).getFunctionName());
     }
 
-    try (SetWorkflowID id = new SetWorkflowID("id1")) {
-      eventService.setWithLatch("key1", "value1");
+    @Test
+    public void timeout() {
+
+        long start = System.currentTimeMillis();
+        dbos.getEvent("nonexistingid","fake_key",2);
+        long elapsed = System.currentTimeMillis() - start;
+        assertTrue(elapsed < 3000);
     }
 
-    String event = (String) DBOS.retrieveWorkflow("id2").getResult();
-    assertEquals("value1", event);
+    @Test
+    public void concurrency() throws Exception {
 
-    List<StepInfo> steps = systemDatabase.listWorkflowSteps("id1");
-    assertEquals(1, steps.size());
-    assertEquals("DBOS.setEvent", steps.get(0).getFunctionName());
+        EventsService eventService = dbos.<EventsService>Workflow().interfaceClass(EventsService.class)
+                .implementation(new EventsServiceImpl(dbos)).build();
 
-    steps = systemDatabase.listWorkflowSteps("id2");
-    assertEquals(2, steps.size());
-    assertEquals("DBOS.getEvent", steps.get(0).getFunctionName());
-    assertEquals("DBOS.sleep", steps.get(1).getFunctionName());
-  }
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Object> future1 = executor.submit(() -> dbos.getEvent("id1","key1",5));
+            Future<Object> future2 = executor.submit(() -> dbos.getEvent("id1","key1",5));
 
-  @Test
-  public void timeout() {
+            String expectedMessage = "test message";
+            try (SetWorkflowID id = new SetWorkflowID("id1")) {
+                eventService.setEventWorkflow("key1",expectedMessage);;
+            }
 
-    long start = System.currentTimeMillis();
-    dbos.getEvent("nonexistingid", "fake_key", 2);
-    long elapsed = System.currentTimeMillis() - start;
-    assertTrue(elapsed < 3000);
-  }
+            // Both should return the same message
+            String result1 = (String) future1.get();
+            String result2 = (String) future2.get();
 
-  @Test
-  public void concurrency() throws Exception {
+            assertEquals(result1,result2);
+            assertEquals(expectedMessage,result1);
 
-    EventsService eventService =
-        dbos.<EventsService>Workflow()
-            .interfaceClass(EventsService.class)
-            .implementation(new EventsServiceImpl(dbos))
-            .build();
-
-    ExecutorService executor = Executors.newFixedThreadPool(2);
-    try {
-      Future<Object> future1 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
-      Future<Object> future2 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
-
-      String expectedMessage = "test message";
-      try (SetWorkflowID id = new SetWorkflowID("id1")) {
-        eventService.setEventWorkflow("key1", expectedMessage);
-        ;
-      }
-
-      // Both should return the same message
-      String result1 = (String) future1.get();
-      String result2 = (String) future2.get();
-
-      assertEquals(result1, result2);
-      assertEquals(expectedMessage, result1);
-
-    } finally {
-      executor.shutdown();
-      executor.awaitTermination(5, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdown();
+            executor.awaitTermination(5,TimeUnit.SECONDS);
+        }
     }
-  }
 }

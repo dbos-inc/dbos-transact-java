@@ -2,7 +2,7 @@ package dev.dbos.transact.scheduled;
 
 public interface Steps {
 
-  void stepOne();
+    void stepOne();
 
-  void stepTwo();
+    void stepTwo();
 }
