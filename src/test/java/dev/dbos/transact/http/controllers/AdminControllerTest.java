@@ -2,6 +2,9 @@ package dev.dbos.transact.http.controllers;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.execution.ExecutingService;
+import dev.dbos.transact.execution.ExecutingServiceImpl;
 import dev.dbos.transact.utils.DBUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -99,4 +102,56 @@ class AdminControllerTest {
 
     }
 
+    @Test
+    public void listWorkflowSteps() throws Exception {
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
+
+        // Needed to call the step
+        executingService.setExecutingService(executingService);
+
+        try (SetWorkflowID id = new SetWorkflowID("abc123")) {
+            String result = executingService.workflowMethodWithStep("test-item");
+            assertEquals("test-itemstepOnestepTwo", result);
+        }
+
+        // HttpRequest request = HttpRequest.newBuilder()
+        //         .uri(URI.create("http://localhost:3010/workflows/abc123/steps"))
+        //         .GET()
+        //         .build();
+
+        // HttpClient client = HttpClient.newHttpClient();
+
+        // HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        // String body = response.body();
+
+        given()
+                .port(3010)
+                .when()
+                .get("/workflows/abc123/steps")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(2));
+
+    }
+
 }
+
+// [
+//     {
+//         "functionId": 0,
+//         "functionName": "stepOne",
+//         "output": "stepOne",
+//         "error": null,
+//         "childWorkflowId": null
+//     },
+//     {
+//         "functionId": 1,
+//         "functionName": "stepTwo",
+//         "output": "stepTwo",
+//         "error": null,
+//         "childWorkflowId": null
+//     }
+// ]
