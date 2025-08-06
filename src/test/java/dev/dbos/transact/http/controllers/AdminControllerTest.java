@@ -1,5 +1,7 @@
 package dev.dbos.transact.http.controllers;
 
+import static io.restassured.RestAssured.*;
+import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
@@ -8,18 +10,12 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.ExecutingService;
 import dev.dbos.transact.execution.ExecutingServiceImpl;
 import dev.dbos.transact.utils.DBUtils;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.SQLException;
-import static io.restassured.RestAssured.*;
-import static org.hamcrest.Matchers.*;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -122,13 +118,14 @@ class AdminControllerTest {
         }
 
         // HttpRequest request = HttpRequest.newBuilder()
-        //         .uri(URI.create("http://localhost:3010/workflows/abc123/steps"))
-        //         .GET()
-        //         .build();
+        // .uri(URI.create("http://localhost:3010/workflows/abc123/steps"))
+        // .GET()
+        // .build();
 
         // HttpClient client = HttpClient.newHttpClient();
 
-        // HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        // HttpResponse<String> response = client.send(request,
+        // HttpResponse.BodyHandlers.ofString());
         // String body = response.body();
 
         given()
@@ -144,18 +141,18 @@ class AdminControllerTest {
 }
 
 // [
-//     {
-//         "functionId": 0,
-//         "functionName": "stepOne",
-//         "output": "stepOne",
-//         "error": null,
-//         "childWorkflowId": null
-//     },
-//     {
-//         "functionId": 1,
-//         "functionName": "stepTwo",
-//         "output": "stepTwo",
-//         "error": null,
-//         "childWorkflowId": null
-//     }
+// {
+// "functionId": 0,
+// "functionName": "stepOne",
+// "output": "stepOne",
+// "error": null,
+// "childWorkflowId": null
+// },
+// {
+// "functionId": 1,
+// "functionName": "stepTwo",
+// "output": "stepTwo",
+// "error": null,
+// "childWorkflowId": null
+// }
 // ]

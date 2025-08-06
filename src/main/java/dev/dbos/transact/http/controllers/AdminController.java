@@ -9,19 +9,15 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
 
 @Path("/")
 public class AdminController {
@@ -163,7 +159,8 @@ public class AdminController {
         private String applicationVersion;
         private Long timeoutMs;
 
-        public ForkWorkflowRequest() { }
+        public ForkWorkflowRequest() {
+        }
     }
 
     public static class ForkWorkflowResponse {

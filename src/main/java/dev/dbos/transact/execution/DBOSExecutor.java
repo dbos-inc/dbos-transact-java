@@ -341,13 +341,11 @@ public class DBOSExecutor {
     }
 
     public <T> T runStep(String stepName,
-                             boolean retriedAllowed,
-                             int maxAttempts,
-                             float backOffRate,
-                             Object[] args,
-                             WorkflowFunction<T> function
-                         ) throws Throwable {
-
+            boolean retriedAllowed,
+            int maxAttempts,
+            float backOffRate,
+            Object[] args,
+            WorkflowFunction<T> function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
         String workflowId = ctx.getWorkflowId();
@@ -440,8 +438,11 @@ public class DBOSExecutor {
         try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
             DBOSContextHolder.get().setInWorkflow(true);
             try {
-                handle = submitWorkflow(status.getName(), functionWrapper.targetClassName, functionWrapper.target,
-                        inputs, functionWrapper.function);
+                handle = submitWorkflow(status.getName(),
+                        functionWrapper.targetClassName,
+                        functionWrapper.target,
+                        inputs,
+                        functionWrapper.function);
             } catch (Throwable t) {
                 logger.error(String.format("Error executing workflow by id : %s", workflowId), t);
             }
@@ -455,9 +456,12 @@ public class DBOSExecutor {
         for (String executorId : executorIds) {
             logger.debug("recovering workflows for executor {}", executorId);
 
-            List<GetPendingWorkflowsOutput> pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, Constants.DEFAULT_APP_VERSION);
+            List<GetPendingWorkflowsOutput> pendingWorkflows = systemDatabase.getPendingWorkflows(executorId,
+                    Constants.DEFAULT_APP_VERSION);
             if (pendingWorkflows.size() > 0) {
-                logger.info("Recovering {} workflows from application version {}", pendingWorkflows.size(), Constants.DEFAULT_APP_VERSION);
+                logger.info("Recovering {} workflows from application version {}",
+                        pendingWorkflows.size(),
+                        Constants.DEFAULT_APP_VERSION);
             } else {
                 logger.info("No workflows to recover from  application version {}", Constants.DEFAULT_APP_VERSION);
             }

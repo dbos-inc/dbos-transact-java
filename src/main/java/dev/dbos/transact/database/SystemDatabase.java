@@ -211,9 +211,9 @@ public class SystemDatabase {
     }
 
     public void recordChildWorkflow(String parentId,
-                                    String childId, // workflowId of the child
-                                    int functionId, // func id in the parent
-                                    String functionName) {
+            String childId, // workflowId of the child
+            int functionId, // func id in the parent
+            String functionName) {
         workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);
     }
 

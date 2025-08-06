@@ -1,15 +1,16 @@
 package dev.dbos.transact.http;
 
 import dev.dbos.transact.http.controllers.AdminController;
-import org.apache.catalina.Context;
-import org.apache.catalina.startup.Tomcat;
-import org.glassfish.jersey.server.ResourceConfig;
-import org.glassfish.jersey.servlet.ServletContainer;
-import org.glassfish.jersey.jackson.JacksonFeature;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
+
+import org.apache.catalina.Context;
+import org.apache.catalina.startup.Tomcat;
+import org.glassfish.jersey.jackson.JacksonFeature;
+import org.glassfish.jersey.server.ResourceConfig;
+import org.glassfish.jersey.servlet.ServletContainer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HttpServer {
 
@@ -70,7 +71,7 @@ public class HttpServer {
 
         ResourceConfig resourceConfig = new ResourceConfig();
         resourceConfig.registerInstances(adminController);
-        
+
         // Register Jackson JSON providers for proper JSON serialization
         resourceConfig.register(JacksonFeature.class);
 

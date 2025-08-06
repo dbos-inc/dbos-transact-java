@@ -4,9 +4,6 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.WorkflowState;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -230,9 +227,9 @@ public class QueuesDAO {
     }
 
     public boolean clearQueueAssignment(String workflowId) throws SQLException {
-        String updateQuery = "UPDATE %s.workflow_status " + 
-            "SET started_at_epoch_ms = NULL, status = ? " +
-            "WHERE workflow_uuid = ? AND queue_name is NOT NULL AND status = ?";
+        String updateQuery = "UPDATE %s.workflow_status " +
+                "SET started_at_epoch_ms = NULL, status = ? " +
+                "WHERE workflow_uuid = ? AND queue_name is NOT NULL AND status = ?";
         updateQuery = String.format(updateQuery, Constants.DB_SCHEMA);
         try (Connection connection = dataSource.getConnection()) {
             try (PreparedStatement ps = connection.prepareStatement(updateQuery)) {
