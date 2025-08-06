@@ -5,7 +5,7 @@ import dev.dbos.transact.workflow.Step;
 public class ServiceBImpl implements ServiceB {
 
     @Step(name = "step1")
-    public String step1(String input)  {
+    public String step1(String input) {
         return input;
     }
 
@@ -21,16 +21,15 @@ public class ServiceBImpl implements ServiceB {
         }
 
         return input;
-
     }
 
     @Step(name = "step4")
     public String step4(String input) {
-        return input ;
+        return input;
     }
 
     @Step(name = "step5")
     public String step5(String input) {
-        return input ;
+        return input;
     }
 }

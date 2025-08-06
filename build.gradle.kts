@@ -2,7 +2,7 @@ plugins {
     id("java")
     id("java-library")
     id("maven-publish")
-
+    id("com.diffplug.spotless") version "6.25.0"
 }
 
 group = "dev.dbos"
@@ -13,7 +13,18 @@ tasks.withType<JavaCompile> {
     // (Alternative: sourceCompatibility = "11"; targetCompatibility = "11")
 }
 
+spotless {
+    java {
+        eclipse().configFile("config/eclipse-code-formatter.xml")
+        importOrder("dev.dbos", "java", "javax", "")
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
 repositories {
+    gradlePluginPortal()
     mavenCentral()
 }
 

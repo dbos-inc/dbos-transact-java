@@ -1,12 +1,11 @@
 package dev.dbos.transact.migration;
 
-import com.zaxxer.hikari.HikariDataSource;
+import static org.junit.jupiter.api.Assertions.*;
+
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.migrations.MigrationManager;
-import dev.dbos.transact.utils.DBUtils;
-import org.junit.jupiter.api.*;
-import javax.sql.DataSource;
+
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,7 +16,10 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
-import static org.junit.jupiter.api.Assertions.*;
+import javax.sql.DataSource;
+
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.*;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class MigrationManagerTest {
@@ -28,29 +30,26 @@ class MigrationManagerTest {
     @BeforeAll
     static void setup() throws Exception {
 
-        MigrationManagerTest.dbosConfig = new DBOSConfig
-                .Builder()
-                .name("migrationtest")
-                .dbHost("localhost")
-                .dbPort(5432)
-                .dbUser("postgres")
-                .sysDbName("dbos_java_sys")
-                .maximumPoolSize(3)
-                .build();
+        MigrationManagerTest.dbosConfig = new DBOSConfig.Builder().name("migrationtest")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(3).build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",dbosConfig.getDbHost(),dbosConfig.getDbPort(),"postgres") ;
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",
+                dbosConfig.getDbHost(),
+                dbosConfig.getDbPort(),
+                "postgres");
 
         String sysDb = dbosConfig.getSysDbName();
-        try (Connection conn = DriverManager.getConnection(dbUrl,dbosConfig.getDbUser(), dbosConfig.getDbPassword());
-             Statement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(dbUrl,
+                dbosConfig.getDbUser(),
+                dbosConfig.getDbPassword()); Statement stmt = conn.createStatement()) {
 
-
-            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s",sysDb) ;
-            String createDbSql = String.format("CREATE DATABASE %s",sysDb) ;
+            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
+            String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
         }
-        testDataSource = SystemDatabase.createDataSource(dbosConfig) ;
+        testDataSource = SystemDatabase.createDataSource(dbosConfig);
     }
 
     @Test
@@ -71,7 +70,6 @@ class MigrationManagerTest {
         }
     }
 
-
     private void assertTableExists(DatabaseMetaData metaData, String tableName) throws Exception {
         try (ResultSet rs = metaData.getTables(null, "dbos", tableName, null)) {
             assertTrue(rs.next(), "Table " + tableName + " should exist in schema dbos");
@@ -83,10 +81,9 @@ class MigrationManagerTest {
     void testRunMigrations_IsIdempotent() {
         // Running migrations again
         assertDoesNotThrow(() -> {
-                    MigrationManager migrationManager = new MigrationManager(testDataSource) ;
-                    migrationManager.migrate();
-                },
-                "Migrations should run successfully multiple times");
+            MigrationManager migrationManager = new MigrationManager(testDataSource);
+            migrationManager.migrate();
+        }, "Migrations should run successfully multiple times");
     }
 
     @Test
@@ -107,7 +104,7 @@ class MigrationManagerTest {
 
         // Validate the dummy_table was created
         try (Connection conn = testDataSource.getConnection();
-             ResultSet rs = conn.getMetaData().getTables(null, null, "dummy_table", null)) {
+                ResultSet rs = conn.getMetaData().getTables(null, null, "dummy_table", null)) {
             Assertions.assertTrue(rs.next(), "Expected 'dummy_table' to exist after new migration.");
         }
 
@@ -117,6 +114,6 @@ class MigrationManagerTest {
 
     @AfterAll
     static void cleanup() throws Exception {
-        ((HikariDataSource)testDataSource).close();
+        ((HikariDataSource) testDataSource).close();
     }
 }

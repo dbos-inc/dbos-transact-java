@@ -19,8 +19,9 @@ public class WorkflowWithSteps {
 
     @Workflow(name = "everySecond")
     @Scheduled(cron = "0/4 * * * * ?")
-    public void every4Second(Instant schedule , Instant actual) {
-        System.out.println("Execute every 4th Second  " + schedule.toString() + "  " + actual.toString()) ;
+    public void every4Second(Instant schedule, Instant actual) {
+        System.out.println(
+                "Execute every 4th Second  " + schedule.toString() + "  " + actual.toString());
         stepService.stepOne();
         stepService.stepTwo();
     }

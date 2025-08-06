@@ -9,5 +9,6 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 public @interface Workflow {
     String name() default "";
+
     int timeout() default 60; // in seconds
 }

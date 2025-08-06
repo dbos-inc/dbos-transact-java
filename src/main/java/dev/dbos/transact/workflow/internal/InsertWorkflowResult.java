@@ -1,6 +1,5 @@
 package dev.dbos.transact.workflow.internal;
 
-
 public class InsertWorkflowResult {
 
     private int recoveryAttempts;
@@ -11,14 +10,8 @@ public class InsertWorkflowResult {
     private String queueName;
     private Long workflowDeadlineEpochMs;
 
-    public InsertWorkflowResult(
-            int recoveryAttempts,
-            String status,
-            String name,
-            String className,
-            String configName,
-            String queueName,
-            Long workflowDeadlineEpochMs) {
+    public InsertWorkflowResult(int recoveryAttempts, String status, String name, String className,
+            String configName, String queueName, Long workflowDeadlineEpochMs) {
         this.recoveryAttempts = recoveryAttempts;
         this.status = status;
         this.name = name;
@@ -28,31 +21,25 @@ public class InsertWorkflowResult {
         this.workflowDeadlineEpochMs = workflowDeadlineEpochMs;
     }
 
-
     public int getRecoveryAttempts() {
         return recoveryAttempts;
     }
-
 
     public String getStatus() {
         return status;
     }
 
-
     public String getName() {
         return name;
     }
-
 
     public String getClassName() {
         return className;
     }
 
-
     public String getConfigName() {
         return configName;
     }
-
 
     public String getQueueName() {
         return queueName;
@@ -66,7 +53,6 @@ public class InsertWorkflowResult {
         return workflowDeadlineEpochMs;
     }
 
-
     @Override
     public int hashCode() {
         final int prime = 31;
@@ -77,7 +63,8 @@ public class InsertWorkflowResult {
         result = prime * result + ((className == null) ? 0 : className.hashCode());
         result = prime * result + ((configName == null) ? 0 : configName.hashCode());
         result = prime * result + ((queueName == null) ? 0 : queueName.hashCode());
-        result = prime * result + ((workflowDeadlineEpochMs == null) ? 0 : workflowDeadlineEpochMs.hashCode());
+        result = prime * result
+                + ((workflowDeadlineEpochMs == null) ? 0 : workflowDeadlineEpochMs.hashCode());
         return result;
     }
 
@@ -127,14 +114,9 @@ public class InsertWorkflowResult {
 
     @Override
     public String toString() {
-        return "InsertWorkflowResult{" +
-                "recoveryAttempts=" + recoveryAttempts +
-                ", status='" + status + '\'' +
-                ", name='" + name + '\'' +
-                ", className='" + className + '\'' +
-                ", configName='" + configName + '\'' +
-                ", queueName='" + queueName + '\'' +
-                ", workflowDeadlineEpochMs=" + workflowDeadlineEpochMs +
-                '}';
+        return "InsertWorkflowResult{" + "recoveryAttempts=" + recoveryAttempts + ", status='"
+                + status + '\'' + ", name='" + name + '\'' + ", className='" + className + '\''
+                + ", configName='" + configName + '\'' + ", queueName='" + queueName + '\''
+                + ", workflowDeadlineEpochMs=" + workflowDeadlineEpochMs + '}';
     }
 }

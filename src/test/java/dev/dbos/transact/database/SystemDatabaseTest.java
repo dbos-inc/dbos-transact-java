@@ -1,37 +1,30 @@
 package dev.dbos.transact.database;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
-import org.junit.jupiter.api.*;
+
 import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.Statement;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.*;
 
 class SystemDatabaseTest {
 
-    private static SystemDatabase systemDatabase ;
+    private static SystemDatabase systemDatabase;
     private static DBOSConfig dbosConfig;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
-        SystemDatabaseTest.dbosConfig = new DBOSConfig
-                .Builder()
-                .name("systemdbtest")
-                .dbHost("localhost")
-                .dbPort(5432)
-                .dbUser("postgres")
-                .sysDbName("dbos_java_sys")
-                .maximumPoolSize(3)
-                .build();
-
+        SystemDatabaseTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(3).build();
 
         DBUtils.recreateDB(dbosConfig);
         MigrationManager.runMigrations(dbosConfig);
@@ -56,34 +49,18 @@ class SystemDatabaseTest {
 
         String workflowId = UUID.randomUUID().toString();
 
-        WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal(
-                workflowId,
-                WorkflowState.SUCCESS,
-                "OrderProcessingWorkflow",
-                "com.example.workflows.OrderWorkflow",
-                "prod-config",
-                "user123@example.com",
-                "admin",
-                "admin,operator",
-                "{\"result\":\"success\"}",
-                null,
-                System.currentTimeMillis() - 3600000,
-                System.currentTimeMillis(),
-                "order-queue",
-                "exec-98765",
-                "1.2.3",
-                "order-app-123",
-                0,
-                300000l,
-                System.currentTimeMillis() + 2400000,
-                "dedup-112233",
-                1,
-                "{\"orderId\":\"ORD-12345\"}"
-        );
+        WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal(workflowId,
+                WorkflowState.SUCCESS, "OrderProcessingWorkflow",
+                "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
+                "admin", "admin,operator", "{\"result\":\"success\"}", null,
+                System.currentTimeMillis() - 3600000, System.currentTimeMillis(), "order-queue",
+                "exec-98765", "1.2.3", "order-app-123", 0, 300000l,
+                System.currentTimeMillis() + 2400000, "dedup-112233", 1,
+                "{\"orderId\":\"ORD-12345\"}");
 
         try (Connection conn = systemDatabase.getSysDBConnection()) {
-            InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
-
+            InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn,
+                    wfStatusInternal);
 
             assertNotNull(result);
             assertEquals(0, result.getRecoveryAttempts());
@@ -92,9 +69,8 @@ class SystemDatabaseTest {
             assertEquals(wfStatusInternal.getClassName(), result.getClassName());
             assertEquals(wfStatusInternal.getConfigName(), result.getConfigName());
             assertEquals(wfStatusInternal.getQueueName(), result.getQueueName());
-            assertEquals(wfStatusInternal.getWorkflowDeadlineEpochMs(), result.getWorkflowDeadlineEpochMs());
-
+            assertEquals(wfStatusInternal.getWorkflowDeadlineEpochMs(),
+                    result.getWorkflowDeadlineEpochMs());
         }
-
     }
 }

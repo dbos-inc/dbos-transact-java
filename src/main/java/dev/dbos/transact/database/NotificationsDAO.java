@@ -1,42 +1,39 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.notifications.GetWorkflowEventContext;
 import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.workflow.internal.StepResult;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
+
+import javax.sql.DataSource;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class NotificationsDAO {
 
     Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
-    private DataSource dataSource ;
-    private StepsDAO stepsDAO ;
+    private DataSource dataSource;
+    private StepsDAO stepsDAO;
     private NotificationService notificationService;
 
     NotificationsDAO(DataSource ds, StepsDAO stepsDAO, NotificationService nService) {
-        this.dataSource = ds ;
+        this.dataSource = ds;
         this.stepsDAO = stepsDAO;
         this.notificationService = nService;
     }
 
-    public void send(String workflowUuid, int functionId, String destinationUuid,
-                     Object message, String topic) throws SQLException {
+    public void send(String workflowUuid, int functionId, String destinationUuid, Object message,
+            String topic) throws SQLException {
 
         String functionName = "DBOS.send";
         String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
@@ -46,26 +43,34 @@ public class NotificationsDAO {
 
             try {
                 // Check if operation was already executed
-                StepResult recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, conn);
+                StepResult recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid,
+                        functionId,
+                        functionName,
+                        conn);
 
                 if (recordedOutput != null) {
-                    logger.debug(String.format("Replaying send, id: %d, destination_uuid: %s, topic: %s",
-                            functionId, destinationUuid, finalTopic));
+                    logger.debug(
+                            String.format("Replaying send, id: %d, destination_uuid: %s, topic: %s",
+                                    functionId,
+                                    destinationUuid,
+                                    finalTopic));
                     conn.commit();
                     return;
                 } else {
-                    logger.debug(String.format("Running send, id: %d, destination_uuid: %s, topic: %s",
-                            functionId, destinationUuid, finalTopic));
+                    logger.debug(
+                            String.format("Running send, id: %d, destination_uuid: %s, topic: %s",
+                                    functionId,
+                                    destinationUuid,
+                                    finalTopic));
                 }
 
                 // Insert notification
-                String insertSql = "INSERT INTO %s.notifications (destination_uuid, topic, message) " +
-                                " VALUES (?, ?, ?) " ;
+                String insertSql = "INSERT INTO %s.notifications (destination_uuid, topic, message) "
+                        + " VALUES (?, ?, ?) ";
 
+                insertSql = String.format(insertSql, Constants.DB_SCHEMA);
 
-                insertSql = String.format(insertSql, Constants.DB_SCHEMA) ;
-
-                logger.info(insertSql) ;
+                logger.info(insertSql);
 
                 try (PreparedStatement stmt = conn.prepareStatement(insertSql)) {
                     stmt.setString(1, destinationUuid);
@@ -103,14 +108,14 @@ public class NotificationsDAO {
         }
     }
 
-    public Object recv(String workflowUuid, int functionId, int timeoutFunctionId,
-                       String topic, double timeoutSeconds) throws SQLException, InterruptedException {
+    public Object recv(String workflowUuid, int functionId, int timeoutFunctionId, String topic,
+            double timeoutSeconds) throws SQLException, InterruptedException {
 
         String functionName = "DBOS.recv";
-        String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC ;
+        String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
 
         // First, check for previous executions
-        StepResult recordedOutput = null ;
+        StepResult recordedOutput = null;
 
         try (Connection c = dataSource.getConnection()) {
             recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c);
@@ -136,15 +141,19 @@ public class NotificationsDAO {
             lockPair.lock.lock();
             boolean success = notificationService.registerNotificationCondition(payload, lockPair);
             if (!success) {
-                // This should not happen, but if it does, it means the workflow is executed concurrently
-                throw new DBOSWorkflowConflictException(workflowUuid, "Workflow might be executing concurrently. ");
+                // This should not happen, but if it does, it means the workflow is
+                // executed
+                // concurrently
+                throw new DBOSWorkflowConflictException(workflowUuid,
+                        "Workflow might be executing concurrently. ");
             }
 
-            // Check if the key is already in the database. If not, wait for the notification
+            // Check if the key is already in the database. If not, wait for the
+            // notification
             boolean hasExistingNotification = false;
             try (Connection conn = dataSource.getConnection()) {
-                String checkSql = " SELECT topic FROM %s.notifications " +
-                                    " WHERE destination_uuid = ? AND topic = ? " ;
+                String checkSql = " SELECT topic FROM %s.notifications "
+                        + " WHERE destination_uuid = ? AND topic = ? ";
 
                 checkSql = String.format(checkSql, Constants.DB_SCHEMA);
 
@@ -160,12 +169,15 @@ public class NotificationsDAO {
             if (!hasExistingNotification) {
                 // Wait for the notification
                 // Support OAOO sleep
-                double actualTimeout = stepsDAO.sleep(workflowUuid, timeoutFunctionId, timeoutSeconds, true);
+                double actualTimeout = stepsDAO.sleep(workflowUuid,
+                        timeoutFunctionId,
+                        timeoutSeconds,
+                        true);
                 long timeoutMs = (long) (actualTimeout * 1000);
                 lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
 
             } else {
-                logger.info("We have notification. no need to sleep") ;
+                logger.info("We have notification. no need to sleep");
             }
         } finally {
             lockPair.lock.unlock();
@@ -178,20 +190,19 @@ public class NotificationsDAO {
 
             try {
                 // Find and delete the oldest entry for this workflow+topic
-                String deleteAndReturnSql = " WITH oldest_entry AS ( " +
-                    " SELECT destination_uuid, topic, message, created_at_epoch_ms " +
-                    " FROM %s.notifications " +
-                    " WHERE destination_uuid = ? AND topic = ? " +
-                    " ORDER BY created_at_epoch_ms ASC " +
-                    " LIMIT 1 " +
-                " ) " +
-                " DELETE FROM %s.notifications " +
-                " WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry) " +
-                "  AND topic = (SELECT topic FROM oldest_entry) " +
-                " AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry) " +
-                " RETURNING message " ;
+                String deleteAndReturnSql = " WITH oldest_entry AS ( "
+                        + " SELECT destination_uuid, topic, message, created_at_epoch_ms "
+                        + " FROM %s.notifications " + " WHERE destination_uuid = ? AND topic = ? "
+                        + " ORDER BY created_at_epoch_ms ASC " + " LIMIT 1 " + " ) "
+                        + " DELETE FROM %s.notifications "
+                        + " WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry) "
+                        + "  AND topic = (SELECT topic FROM oldest_entry) "
+                        + " AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry) "
+                        + " RETURNING message ";
 
-                deleteAndReturnSql = String.format(deleteAndReturnSql, Constants.DB_SCHEMA, Constants.DB_SCHEMA);
+                deleteAndReturnSql = String.format(deleteAndReturnSql,
+                        Constants.DB_SCHEMA,
+                        Constants.DB_SCHEMA);
 
                 Object[] recvdSermessage = null;
                 try (PreparedStatement stmt = conn.prepareStatement(deleteAndReturnSql)) {
@@ -211,7 +222,7 @@ public class NotificationsDAO {
                 output.setWorkflowId(workflowUuid);
                 output.setFunctionId(functionId);
                 output.setFunctionName(functionName);
-                Object toSave =  recvdSermessage == null ? null : recvdSermessage[0] ;
+                Object toSave = recvdSermessage == null ? null : recvdSermessage[0];
                 output.setOutput(JSONUtil.serialize(toSave));
                 output.setError(null);
 
@@ -226,8 +237,9 @@ public class NotificationsDAO {
             }
         }
     }
-    
-    public void setEvent(String workflowId, int functionId, String key, Object message) throws SQLException {
+
+    public void setEvent(String workflowId, int functionId, String key, Object message)
+            throws SQLException {
         String functionName = "DBOS.setEvent";
 
         try (Connection conn = dataSource.getConnection()) {
@@ -235,10 +247,10 @@ public class NotificationsDAO {
 
             try {
                 // Check if operation was already executed
-                StepResult recordedOutput = stepsDAO.checkStepExecutionTxn(
-                        workflowId, functionId, functionName, conn
-                );
-
+                StepResult recordedOutput = stepsDAO.checkStepExecutionTxn(workflowId,
+                        functionId,
+                        functionName,
+                        conn);
 
                 if (recordedOutput != null) {
                     logger.debug("Replaying setEvent, id: {}, key: {}", functionId, key);
@@ -252,10 +264,9 @@ public class NotificationsDAO {
                 String serializedMessage = JSONUtil.serialize(message);
 
                 // Insert or update the workflow event using UPSERT
-                String upsertSql = " INSERT INTO %s.workflow_events (workflow_uuid, key, value) " +
-                                    " VALUES (?, ?, ?) " +
-                                    " ON CONFLICT (workflow_uuid, key) " +
-                                    " DO UPDATE SET value = EXCLUDED.value" ;
+                String upsertSql = " INSERT INTO %s.workflow_events (workflow_uuid, key, value) "
+                        + " VALUES (?, ?, ?) " + " ON CONFLICT (workflow_uuid, key) "
+                        + " DO UPDATE SET value = EXCLUDED.value";
 
                 upsertSql = String.format(upsertSql, Constants.DB_SCHEMA);
 
@@ -286,20 +297,21 @@ public class NotificationsDAO {
         }
     }
 
-    public Object getEvent(String targetUuid, String key, double timeoutSeconds, GetWorkflowEventContext callerCtx) throws SQLException{
+    public Object getEvent(String targetUuid, String key, double timeoutSeconds,
+            GetWorkflowEventContext callerCtx) throws SQLException {
         String functionName = "DBOS.getEvent";
 
         // Check for previous executions only if it's in a workflow
         if (callerCtx != null) {
 
-            StepResult recordedOutput = null ;
+            StepResult recordedOutput = null;
 
             try (Connection conn = dataSource.getConnection()) {
-                recordedOutput = stepsDAO.checkStepExecutionTxn(
-                    callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName, conn
-                );
+                recordedOutput = stepsDAO.checkStepExecutionTxn(callerCtx.getWorkflowId(),
+                        callerCtx.getFunctionId(),
+                        functionName,
+                        conn);
             }
-
 
             if (recordedOutput != null) {
                 logger.debug("Replaying getEvent, id: {}, key: {}", callerCtx.getFunctionId(), key);
@@ -315,11 +327,13 @@ public class NotificationsDAO {
         }
 
         String payload = targetUuid + "::" + key;
-        NotificationService.LockConditionPair lockConditionPair = notificationService.getOrCreateNotificationCondition(payload);
+        NotificationService.LockConditionPair lockConditionPair = notificationService
+                .getOrCreateNotificationCondition(payload);
 
         lockConditionPair.lock.lock();
         try {
-            // Check if the key is already in the database. If not, wait for the notification.
+            // Check if the key is already in the database. If not, wait for the
+            // notification.
             Object value = null;
 
             // Initial database check
@@ -327,7 +341,7 @@ public class NotificationsDAO {
             getSql = String.format(getSql, Constants.DB_SCHEMA);
 
             try (Connection conn = dataSource.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(getSql)) {
+                    PreparedStatement stmt = conn.prepareStatement(getSql)) {
 
                 stmt.setString(1, targetUuid);
                 stmt.setString(2, key);
@@ -336,7 +350,7 @@ public class NotificationsDAO {
                     if (rs.next()) {
                         String serializedValue = rs.getString("value");
                         Object[] valueArray = JSONUtil.deserializeToArray(serializedValue);
-                        value = valueArray == null ? null : valueArray[0] ;
+                        value = valueArray == null ? null : valueArray[0];
                     }
                 }
             } catch (SQLException e) {
@@ -349,8 +363,7 @@ public class NotificationsDAO {
                 double actualTimeout = timeoutSeconds;
                 if (callerCtx != null) {
                     // Support OAOO sleep for workflows
-                    actualTimeout = stepsDAO.sleep(
-                            callerCtx.getWorkflowId(),
+                    actualTimeout = stepsDAO.sleep(callerCtx.getWorkflowId(),
                             callerCtx.getTimeoutFunctionId(),
                             timeoutSeconds,
                             true // skip_sleep
@@ -369,7 +382,7 @@ public class NotificationsDAO {
                 logger.debug("Awoken from await");
                 // Read the value from the database after notification
                 try (Connection conn = dataSource.getConnection();
-                     PreparedStatement stmt = conn.prepareStatement(getSql)) {
+                        PreparedStatement stmt = conn.prepareStatement(getSql)) {
 
                     stmt.setString(1, targetUuid);
                     stmt.setString(2, key);
@@ -378,7 +391,7 @@ public class NotificationsDAO {
                         if (rs.next()) {
                             String serializedValue = rs.getString("value");
                             Object[] valueArray = JSONUtil.deserializeToArray(serializedValue);
-                            value = valueArray == null ? null : valueArray[0] ;
+                            value = valueArray == null ? null : valueArray[0];
                         }
                     }
                 } catch (SQLException e) {
@@ -393,7 +406,8 @@ public class NotificationsDAO {
                 output.setWorkflowId(callerCtx.getWorkflowId());
                 output.setFunctionId(callerCtx.getFunctionId());
                 output.setFunctionName(functionName);
-                output.setOutput(JSONUtil.serialize(value)); // null will be serialized to 'null'
+                output.setOutput(JSONUtil.serialize(value)); // null will be serialized to
+                                                             // 'null'
                 output.setError(null);
 
                 stepsDAO.recordStepResultTxn(output);
@@ -407,5 +421,4 @@ public class NotificationsDAO {
             notificationService.unregisterNotificationCondition(payload);
         }
     }
-
 }

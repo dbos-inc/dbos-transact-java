@@ -1,25 +1,25 @@
 package dev.dbos.transact.http.controllers;
 
-
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowStatus;
+
+import java.util.ArrayList;
+import java.util.List;
+
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-
 @Path("/")
 public class AdminController {
 
-    private SystemDatabase systemDatabase ;
-    private DBOSExecutor dbosExecutor ;
-    Logger logger = LoggerFactory.getLogger(AdminController.class) ;
+    private SystemDatabase systemDatabase;
+    private DBOSExecutor dbosExecutor;
+    Logger logger = LoggerFactory.getLogger(AdminController.class);
 
     public AdminController(SystemDatabase s, DBOSExecutor e) {
         this.systemDatabase = s;
@@ -51,15 +51,15 @@ public class AdminController {
     @Path("/workflows/{workflowId}/steps")
     @Produces(MediaType.APPLICATION_JSON)
     public List<StepInfo> ListSteps(@PathParam("workflowId") String workflowId) {
-        logger.info("Retrieving steps for workflow: " + workflowId) ;
-        return systemDatabase.listWorkflowSteps(workflowId) ;
+        logger.info("Retrieving steps for workflow: " + workflowId);
+        return systemDatabase.listWorkflowSteps(workflowId);
     }
 
     @GET
     @Path("/workflows/{workflowId}")
     @Produces(MediaType.APPLICATION_JSON)
     public List<WorkflowStatus> ListWorkflows(@PathParam("workflowId") String workflowId) {
-        return new ArrayList<>() ;
+        return new ArrayList<>();
     }
 
     @POST
@@ -74,7 +74,7 @@ public class AdminController {
     @Path("/workflows")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public List<WorkflowStatus> workflows( ListWorkflowsInput input) {
+    public List<WorkflowStatus> workflows(ListWorkflowsInput input) {
 
         return new ArrayList<>();
     }
@@ -83,33 +83,23 @@ public class AdminController {
     @Path("/workflows/{workflowId}/restart")
     @Produces(MediaType.APPLICATION_JSON)
     public void restart(@PathParam("workflowId") String workflowId) {
-
-
     }
 
     @POST
     @Path("/workflows/{workflowId}/resume")
     @Produces(MediaType.APPLICATION_JSON)
     public void resume(@PathParam("workflowId") String workflowId) {
-
-
     }
 
     @POST
     @Path("/workflows/{workflowId}/fork")
     @Produces(MediaType.APPLICATION_JSON)
     public void fork(@PathParam("workflowId") String workflowId) {
-
-
     }
 
     @POST
     @Path("/workflows/{workflowId}/cancel")
     @Produces(MediaType.APPLICATION_JSON)
     public void cancel(@PathParam("workflowId") String workflowId) {
-
-
     }
-
-
 }

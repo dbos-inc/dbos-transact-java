@@ -1,21 +1,15 @@
 package dev.dbos.transact.http;
 
 import dev.dbos.transact.http.controllers.AdminController;
-import jakarta.servlet.Servlet;
+
+import java.io.File;
+
 import org.apache.catalina.Context;
-import org.apache.catalina.Wrapper;
-import org.apache.catalina.connector.Connector;
-import org.apache.catalina.core.StandardContext;
-import org.apache.catalina.core.StandardWrapper;
 import org.apache.catalina.startup.Tomcat;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.servlet.ServletContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
 
 public class HttpServer {
 
@@ -27,7 +21,7 @@ public class HttpServer {
 
     private HttpServer(int port, AdminController ac) {
         this.port = port == 0 ? 3001 : port;
-        this.adminController = ac ;
+        this.adminController = ac;
     }
 
     private void init() {
@@ -39,15 +33,14 @@ public class HttpServer {
         HttpServer s = new HttpServer(port, ac);
         s.init();
         return s;
-
     }
 
     public void start() {
 
         try {
             tomcat.start();
-        } catch(Exception e) {
-            logger.error("Error starting http server", e) ;
+        } catch (Exception e) {
+            logger.error("Error starting http server", e);
         }
     }
 
@@ -60,11 +53,10 @@ public class HttpServer {
         try {
             tomcat.stop();
             tomcat.destroy();
-        } catch(Exception e) {
-            logger.error("Error stopping httpserver", e) ;
+        } catch (Exception e) {
+            logger.error("Error stopping httpserver", e);
         }
     }
-    
 
     private void setUpContext() {
 
@@ -76,16 +68,16 @@ public class HttpServer {
 
         Context context = tomcat.addContext(contextPath, docBase);
 
-        ResourceConfig resourceConfig = new ResourceConfig() ;
-        resourceConfig.registerInstances(adminController) ;
+        ResourceConfig resourceConfig = new ResourceConfig();
+        resourceConfig.registerInstances(adminController);
 
         // In future if we need to scan from a package
-        //    resourceConfig.packages(pkg);
+        // resourceConfig.packages(pkg);
 
         // Add the REST API servlet
-        var jerseyservlet = tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
+        var jerseyservlet = tomcat.addServlet(contextPath,
+                "jersey-servlet",
+                new ServletContainer(resourceConfig));
         context.addServletMappingDecoded("/*", "jersey-servlet");
-
     }
-
 }

@@ -4,20 +4,18 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSOptions;
 import dev.dbos.transact.context.SetDBOSOptions;
 
-import java.util.UUID;
-
 public class ForkServiceImpl implements ForkService {
 
     private ForkService forkService;
     private DBOS dbos;
 
-    int step1Count ;
-    int step2Count ;
-    int step3Count ;
-    int step4Count ;
-    int step5Count ;
-    int child1Count ;
-    int child2Count ;
+    int step1Count;
+    int step2Count;
+    int step3Count;
+    int step4Count;
+    int step5Count;
+    int child1Count;
+    int child2Count;
 
     public ForkServiceImpl(DBOS d) {
         this.dbos = d;
@@ -35,7 +33,7 @@ public class ForkServiceImpl implements ForkService {
         forkService.stepFour(Double.valueOf(23.73));
         forkService.stepFive(false);
 
-        return input+input;
+        return input + input;
     }
 
     @Workflow(name = "parent")
@@ -44,16 +42,16 @@ public class ForkServiceImpl implements ForkService {
         forkService.stepOne("one");
         forkService.stepTwo(2);
 
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").build())) {
+        try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").build())) {
             forkService.child1(25);
         }
 
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").build())) {
+        try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").build())) {
             forkService.child2(25.75f);
         }
 
         forkService.stepFive(false);
-        return input+input;
+        return input + input;
     }
 
     @Workflow(name = "parentasync")
@@ -63,23 +61,23 @@ public class ForkServiceImpl implements ForkService {
         forkService.stepTwo(2);
 
         WorkflowHandle<String> handle = null;
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").build())) {
-            handle = dbos.startWorkflow(()->forkService.child1(25));
+        try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child1").build())) {
+            handle = dbos.startWorkflow(() -> forkService.child1(25));
         }
 
         handle.getResult();
-        try(SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").build())) {
-            handle = dbos.startWorkflow(()->forkService.child2(25.75f));
+        try (SetDBOSOptions o = new SetDBOSOptions(new DBOSOptions.Builder("child2").build())) {
+            handle = dbos.startWorkflow(() -> forkService.child2(25.75f));
         }
 
         forkService.stepFive(false);
-        return input+input;
+        return input + input;
     }
 
     @Step(name = "one")
     public String stepOne(String input) {
-        ++step1Count ;
-        return input ;
+        ++step1Count;
+        return input;
     }
 
     @Step(name = "two")
@@ -107,7 +105,7 @@ public class ForkServiceImpl implements ForkService {
 
     @Workflow(name = "child1")
     public String child1(Integer number) {
-        ++child1Count ;
+        ++child1Count;
         return String.valueOf(number);
     }
 

@@ -4,7 +4,7 @@ import java.io.Closeable;
 
 public class SetDBOSOptions implements Closeable {
 
-    private final DBOSContext previousCtx ;
+    private final DBOSContext previousCtx;
 
     public SetDBOSOptions(DBOSOptions options) {
 
@@ -16,9 +16,9 @@ public class SetDBOSOptions implements Closeable {
 
         DBOSContext newCtx;
 
-        if (previousCtx.getWorkflowId() != null ) {
+        if (previousCtx.getWorkflowId() != null) {
             // we must be a child workflow
-            newCtx = previousCtx.createChild(options) ;
+            newCtx = previousCtx.createChild(options);
         } else {
             newCtx = new DBOSContext(options, 0);
         }
@@ -27,6 +27,6 @@ public class SetDBOSOptions implements Closeable {
 
     @Override
     public void close() {
-        DBOSContextHolder.set(previousCtx) ;
+        DBOSContextHolder.set(previousCtx);
     }
 }

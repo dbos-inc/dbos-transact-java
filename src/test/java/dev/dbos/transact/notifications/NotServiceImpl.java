@@ -38,23 +38,22 @@ public class NotServiceImpl {
     @Workflow(name = "recvWorkflow")
     public String recvWorkflow(String topic, float timeoutSecond) {
         recvReadyLatch.countDown();
-        return (String)dbos.recv(topic, timeoutSecond) ;
+        return (String) dbos.recv(topic, timeoutSecond);
     }
 
     @Workflow(name = "recvMultiple")
     public String recvMultiple(String topic) {
         recvReadyLatch.countDown();
-        String msg1 = (String)dbos.recv(topic, 5) ;
-        String msg2 = (String)dbos.recv(topic, 5) ;
-        String msg3 = (String)dbos.recv(topic, 5) ;
-        return msg1+msg2+msg3 ;
-
+        String msg1 = (String) dbos.recv(topic, 5);
+        String msg2 = (String) dbos.recv(topic, 5);
+        String msg3 = (String) dbos.recv(topic, 5);
+        return msg1 + msg2 + msg3;
     }
 
-    @Workflow( name = "concWorkflow")
+    @Workflow(name = "concWorkflow")
     public String concWorkflow(String topic) {
         recvReadyLatch.countDown();
-       lock.lock();
+        lock.lock();
         try {
             int currentCount = counter.incrementAndGet();
             if (currentCount % 2 == 1) {
@@ -70,7 +69,6 @@ public class NotServiceImpl {
                 String message = (String) dbos.recv(topic, 5);
                 condition.signalAll();
                 return message;
-
             }
         } finally {
             lock.unlock();
@@ -79,6 +77,4 @@ public class NotServiceImpl {
         String message = (String) dbos.recv(topic, 5);
         return message;
     }
-
-
 }

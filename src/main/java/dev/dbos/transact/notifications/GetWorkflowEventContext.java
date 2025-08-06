@@ -12,7 +12,15 @@ public class GetWorkflowEventContext {
         this.timeoutFunctionId = timeoutFunctionId;
     }
 
-    public String getWorkflowId() { return workflowId; }
-    public int getFunctionId() { return functionId; }
-    public int getTimeoutFunctionId() { return timeoutFunctionId; }
+    public String getWorkflowId() {
+        return workflowId;
+    }
+
+    public int getFunctionId() {
+        return functionId;
+    }
+
+    public int getTimeoutFunctionId() {
+        return timeoutFunctionId;
+    }
 }

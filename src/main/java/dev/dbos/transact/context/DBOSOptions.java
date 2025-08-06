@@ -2,14 +2,12 @@ package dev.dbos.transact.context;
 
 import dev.dbos.transact.queue.Queue;
 
-import java.util.UUID;
-
 public class DBOSOptions {
 
     private final boolean async;
     private final Queue queue;
     private final String workflowId;
-    private final long timeoutSeconds ;
+    private final long timeoutSeconds;
 
     private DBOSOptions(Builder builder) {
         this.async = builder.async;
@@ -26,11 +24,9 @@ public class DBOSOptions {
         return queue;
     }
 
-
     public String getWorkflowId() {
         return workflowId;
     }
-
 
     public long getTimeout() {
         return timeoutSeconds;
@@ -46,16 +42,14 @@ public class DBOSOptions {
             this.workflowId = workflowId;
         }
 
-        /* public Builder async() {
-            this.async = true;
-            return this;
-        } */
+        /*
+         * public Builder async() { this.async = true; return this; }
+         */
 
         public Builder queue(Queue queue) {
             this.queue = queue;
             return this;
         }
-
 
         public Builder timeout(long timeout) {
             this.timeoutSeconds = timeout;

@@ -10,14 +10,13 @@ public class TimedWorkflow {
     volatile Instant actual;
 
     public TimedWorkflow() {
-
     }
 
     @Workflow(name = "everyfourth")
     @Scheduled(cron = "0/4 * * * * ?")
-    public void everyfourth(Instant scheduled , Instant actual) {
+    public void everyfourth(Instant scheduled, Instant actual) {
         this.scheduled = scheduled;
         this.actual = actual;
-        System.out.println("Execute " + scheduled.toString() + "   " + actual.toString()) ;
+        System.out.println("Execute " + scheduled.toString() + "   " + actual.toString());
     }
 }

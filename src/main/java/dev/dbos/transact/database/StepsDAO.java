@@ -6,39 +6,38 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.StepResult;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import javax.sql.DataSource;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import javax.sql.DataSource;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class StepsDAO {
 
     private Logger logger = LoggerFactory.getLogger(StepsDAO.class);
-    private DataSource dataSource ;
+    private DataSource dataSource;
 
     StepsDAO(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
-    public void recordStepResultTxn(StepResult result) throws SQLException
-    {
+    public void recordStepResultTxn(StepResult result) throws SQLException {
 
-        try (Connection connection = dataSource.getConnection() ;) {
-             recordStepResultTxn(result, connection);
+        try (Connection connection = dataSource.getConnection();) {
+            recordStepResultTxn(result, connection);
         }
     }
 
-    public void recordStepResultTxn(StepResult result, Connection connection) throws SQLException
-    {
+    public void recordStepResultTxn(StepResult result, Connection connection) throws SQLException {
         String sql = String.format(
-                "INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, output, error) " +
-                        "VALUES (?, ?, ?, ?, ?)",
-                Constants.DB_SCHEMA
-        );
+                "INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, output, error) "
+                        + "VALUES (?, ?, ?, ?, ?)",
+                Constants.DB_SCHEMA);
 
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             int paramIdx = 1;
@@ -63,40 +62,48 @@ public class StepsDAO {
         } catch (SQLException e) {
             if ("23505".equals(e.getSQLState())) {
                 throw new DBOSWorkflowConflictException(result.getWorkflowId(),
-                        String.format("Workflow %s step %d already exists", result.getWorkflowId(), result.getFunctionId()));
+                        String.format("Workflow %s step %d already exists",
+                                result.getWorkflowId(),
+                                result.getFunctionId()));
             } else {
                 throw e;
             }
         }
-
     }
 
-
     /**
-     * Checks the execution status and output of a specific operation within a workflow.
-     * This method corresponds to Python's '_check_operation_execution_txn'.
+     * Checks the execution status and output of a specific operation within a
+     * workflow. This method corresponds to Python's
+     * '_check_operation_execution_txn'.
      *
-     * @param workflowId The UUID of the workflow.
-     * @param functionId The ID of the function/operation.
-     * @param functionName The expected name of the function/operation.
-     * @param connection The active JDBC connection (corresponding to Python's 'conn: sa.Connection').
-     * @return A {@link StepResult} object if the operation has completed, otherwise {@code null}.
-     * @throws IllegalStateException If the workflow does not exist in the status table.
-     * @throws WorkflowCancelledException If the workflow is in a cancelled status.
-     * @throws UnExpectedStepException If the recorded function name for the operation does not match the provided name.
-     * @throws SQLException For other database access errors.
+     * @param workflowId
+     *            The UUID of the workflow.
+     * @param functionId
+     *            The ID of the function/operation.
+     * @param functionName
+     *            The expected name of the function/operation.
+     * @param connection
+     *            The active JDBC connection (corresponding to Python's 'conn:
+     *            sa.Connection').
+     * @return A {@link StepResult} object if the operation has completed, otherwise
+     *         {@code null}.
+     * @throws IllegalStateException
+     *             If the workflow does not exist in the status table.
+     * @throws WorkflowCancelledException
+     *             If the workflow is in a cancelled status.
+     * @throws UnExpectedStepException
+     *             If the recorded function name for the operation does not match
+     *             the provided name.
+     * @throws SQLException
+     *             For other database access errors.
      */
-    public StepResult checkStepExecutionTxn(
-            String workflowId,
-            int functionId,
-            String functionName,
-            Connection connection
-    ) throws SQLException, IllegalStateException, WorkflowCancelledException, UnExpectedStepException {
+    public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName,
+            Connection connection) throws SQLException, IllegalStateException,
+            WorkflowCancelledException, UnExpectedStepException {
 
         String workflowStatusSql = String.format(
                 "SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?",
-                Constants.DB_SCHEMA
-        );
+                Constants.DB_SCHEMA);
 
         String workflowStatus = null;
         try (PreparedStatement pstmt = connection.prepareStatement(workflowStatusSql)) {
@@ -109,21 +116,18 @@ public class StepsDAO {
         }
 
         if (workflowStatus == null) {
-            throw new IllegalStateException(String.format("Error: Workflow %s does not exist", workflowId));
+            throw new IllegalStateException(
+                    String.format("Error: Workflow %s does not exist", workflowId));
         }
 
         if (Objects.equals(workflowStatus, WorkflowState.CANCELLED.name())) {
             throw new WorkflowCancelledException(
-                    String.format("Workflow %s is cancelled. Aborting function.", workflowId)
-            );
+                    String.format("Workflow %s is cancelled. Aborting function.", workflowId));
         }
 
-        String operationOutputSql = String.format(
-                "SELECT output, error, function_name " +
-                        "FROM %s.operation_outputs " +
-                        "WHERE workflow_uuid = ? AND function_id = ?",
-                Constants.DB_SCHEMA
-        );
+        String operationOutputSql = String.format("SELECT output, error, function_name "
+                + "FROM %s.operation_outputs " + "WHERE workflow_uuid = ? AND function_id = ?",
+                Constants.DB_SCHEMA);
 
         StepResult recordedResult = null;
         String recordedFunctionName = null;
@@ -136,7 +140,8 @@ public class StepsDAO {
                     String output = rs.getString("output");
                     String error = rs.getString("error");
                     recordedFunctionName = rs.getString("function_name");
-                    recordedResult = new StepResult(workflowId, functionId, recordedFunctionName, output, error);
+                    recordedResult = new StepResult(workflowId, functionId, recordedFunctionName,
+                            output, error);
                 }
             }
         }
@@ -146,30 +151,24 @@ public class StepsDAO {
         }
 
         if (!Objects.equals(functionName, recordedFunctionName)) {
-            throw new UnExpectedStepException(
-                    workflowId,
-                    functionId,
-                    functionName,
-                    recordedFunctionName
-            );
+            throw new UnExpectedStepException(workflowId, functionId, functionName,
+                    recordedFunctionName);
         }
 
         return recordedResult;
     }
 
     public List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
-        String sqlTemplate = "SELECT function_id, function_name, output, error, child_workflow_id " +
-            "FROM %s.operation_outputs " +
-            "WHERE workflow_uuid = ? " +
-            "ORDER BY function_id;";
+        String sqlTemplate = "SELECT function_id, function_name, output, error, child_workflow_id "
+                + "FROM %s.operation_outputs " + "WHERE workflow_uuid = ? "
+                + "ORDER BY function_id;";
         final String sql = String.format(sqlTemplate, Constants.DB_SCHEMA);
         System.out.println(sql);
-
 
         List<StepInfo> steps = new ArrayList<>();
 
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement stmt = connection.prepareStatement(sql)) {
+                PreparedStatement stmt = connection.prepareStatement(sql)) {
 
             stmt.setString(1, workflowId);
 
@@ -189,7 +188,8 @@ public class StepsDAO {
                         try {
                             output = JSONUtil.deserializeToArray(outputData);
                         } catch (Exception e) {
-                            throw new RuntimeException("Failed to deserialize output for function " + functionId, e);
+                            throw new RuntimeException(
+                                    "Failed to deserialize output for function " + functionId, e);
                         }
                     }
 
@@ -198,24 +198,28 @@ public class StepsDAO {
                     if (errorData != null) {
                         try {
                             // TODO error = JSONUtil.deserialize(errorData);
-                            error = new Exception(errorData) ;
+                            error = new Exception(errorData);
                         } catch (Exception e) {
-                            throw new RuntimeException("Failed to deserialize error for function " + functionId, e);
+                            throw new RuntimeException(
+                                    "Failed to deserialize error for function " + functionId, e);
                         }
                     }
 
-                    Object outputVal = output != null ? output[0] : null ;
-                    steps.add(new StepInfo(functionId, functionName, outputVal, error, childWorkflowId));
+                    Object outputVal = output != null ? output[0] : null;
+                    steps.add(new StepInfo(functionId, functionName, outputVal, error,
+                            childWorkflowId));
                 }
             }
         } catch (SQLException e) {
-            throw new SQLException("Failed to retrieve workflow steps for workflow: " + workflowId, e);
+            throw new SQLException("Failed to retrieve workflow steps for workflow: " + workflowId,
+                    e);
         }
 
         return steps;
     }
 
-    public double sleep(String workflowUuid, int functionId, double seconds, boolean skipSleep) throws SQLException {
+    public double sleep(String workflowUuid, int functionId, double seconds, boolean skipSleep)
+            throws SQLException {
         String functionName = "DBOS.sleep";
 
         StepResult recordedOutput;
@@ -229,10 +233,11 @@ public class StepsDAO {
         if (recordedOutput != null) {
             logger.debug("Replaying sleep, id: {}, seconds: {}", functionId, seconds);
             if (recordedOutput.getOutput() == null) {
-                throw new DBOSException(ErrorCode.UNEXPECTED.getCode(), "No recorded timeout for sleep");
+                throw new DBOSException(ErrorCode.UNEXPECTED.getCode(),
+                        "No recorded timeout for sleep");
             }
             Object[] dser = JSONUtil.deserializeToArray(recordedOutput.getOutput());
-            endTime = (Double) dser[0] ;
+            endTime = (Double) dser[0];
         } else {
             logger.debug("Running sleep, id: {}, seconds: {}", functionId, seconds);
             endTime = System.currentTimeMillis() / 1000.0 + seconds;
@@ -247,7 +252,7 @@ public class StepsDAO {
 
                 recordStepResultTxn(output);
             } catch (DBOSWorkflowConflictException e) {
-                logger.error("Error recording sleep", e.getMessage()) ;
+                logger.error("Error recording sleep", e.getMessage());
             }
         }
 
@@ -267,5 +272,3 @@ public class StepsDAO {
         return duration;
     }
 }
-
-

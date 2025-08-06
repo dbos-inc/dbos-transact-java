@@ -16,7 +16,6 @@ public class UpdateWorkflowOptions {
     public UpdateWorkflowOptions() {
     }
 
-
     public UpdateWorkflowOptions withOutput(String output) {
         this.output = output;
         return this;
@@ -51,7 +50,6 @@ public class UpdateWorkflowOptions {
         this.resetStartedAtEpochMs = resetStartedAtEpochMs;
         return this;
     }
-
 
     public String getOutput() {
         return output;
@@ -89,7 +87,6 @@ public class UpdateWorkflowOptions {
         return throwOnFailure;
     }
 
-
     public void setOutput(String output) {
         this.output = output;
     }
@@ -120,9 +117,7 @@ public class UpdateWorkflowOptions {
 
     public void setWhereStatus(String status) {
         this.whereStatus = status;
-    }
-
-    ;
+    };
 
     public void setThrowOnFailure(Boolean throwOnFailure) {
         this.throwOnFailure = throwOnFailure;

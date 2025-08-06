@@ -1,31 +1,25 @@
-package dev.dbos.transact.config ;
+package dev.dbos.transact.config;
 
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.sql.DataSource;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 
 public class DBOSConfig {
     private final String name;
     private final String url;
     private final String dbHost;
     private final int dbPort;
-    private final String dbUser ;
-    private final String dbPassword ;
+    private final String dbUser;
+    private final String dbPassword;
     private final int maximumPoolSize;
     private final int connectionTimeout;
     private final String appDbName;
     private final String sysDbName;
-    private final boolean http ;
-    private final int httpPort ;
-    private final boolean httpAwaitOnStart ;
-    private final boolean migrate ;
+    private final boolean http;
+    private final int httpPort;
+    private final boolean httpAwaitOnStart;
+    private final boolean migrate;
 
     static Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
 
@@ -40,11 +34,10 @@ public class DBOSConfig {
         this.dbPassword = builder.dbPassword;
         this.dbHost = builder.dbHost;
         this.dbPort = builder.dbPort;
-        this.http = builder.http ;
-        this.httpPort = builder.httpPort ;
+        this.http = builder.http;
+        this.httpPort = builder.httpPort;
         this.httpAwaitOnStart = builder.httpAwaitOnStart;
         this.migrate = builder.migrate;
-
     }
 
     public static class Builder {
@@ -52,16 +45,16 @@ public class DBOSConfig {
         private String url;
         private String dbHost;
         private int dbPort;
-        private String dbUser ;
-        private String dbPassword ;
+        private String dbUser;
+        private String dbPassword;
         private int maximumPoolSize = 3;
         private int connectionTimeout = 30000;
         private String appDbName;
         private String sysDbName;
-        private boolean http = false ;
-        private int httpPort ;
-        private boolean httpAwaitOnStart = true ;
-        private boolean migrate = true ;
+        private boolean http = false;
+        private int httpPort;
+        private boolean httpAwaitOnStart = true;
+        private boolean migrate = true;
 
         public Builder name(String name) {
             this.name = name;
@@ -105,7 +98,7 @@ public class DBOSConfig {
 
         public Builder dbPort(int dbPort) {
             this.dbPort = dbPort;
-            return this ;
+            return this;
         }
 
         public Builder sysDbName(String sysDbName) {
@@ -114,7 +107,7 @@ public class DBOSConfig {
         }
 
         public Builder runAdminServer() {
-            this.http = true ;
+            this.http = true;
             return this;
         }
 
@@ -130,21 +123,22 @@ public class DBOSConfig {
 
         public Builder migration(boolean migrate) {
             this.migrate = migrate;
-            return this ;
+            return this;
         }
 
         public DBOSConfig build() {
-            if (name == null) throw new IllegalArgumentException("Name is required");
+            if (name == null)
+                throw new IllegalArgumentException("Name is required");
 
             if (dbPassword == null) {
                 dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
             }
             if (url == null) {
-                url = System.getenv(Constants.JDBC_URL_ENV_VAR) ;
-                logger.info("Using db_url env " + url ) ;
+                url = System.getenv(Constants.JDBC_URL_ENV_VAR);
+                logger.info("Using db_url env " + url);
             }
             if (dbUser == null) {
-                dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR) ;
+                dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);
             }
 
             if (sysDbName == null) {
@@ -209,19 +203,14 @@ public class DBOSConfig {
     }
 
     public boolean migration() {
-        return migrate ;
+        return migrate;
     }
 
     @Override
     public String toString() {
-        return "DBOSConfig{" +
-                "name='" + name + '\'' +
-                ", url='" + url + '\'' +
-                ", maximumPoolSize=" + maximumPoolSize +
-                ", connectionTimeout=" + connectionTimeout +
-                ", appDbName='" + appDbName + '\'' +
-                ", sysDbName='" + sysDbName + '\'' +
-                '}';
+        return "DBOSConfig{" + "name='" + name + '\'' + ", url='" + url + '\''
+                + ", maximumPoolSize=" + maximumPoolSize + ", connectionTimeout="
+                + connectionTimeout + ", appDbName='" + appDbName + '\'' + ", sysDbName='"
+                + sysDbName + '\'' + '}';
     }
-
 }
