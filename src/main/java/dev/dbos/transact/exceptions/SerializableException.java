@@ -1,10 +1,8 @@
 package dev.dbos.transact.exceptions;
 
-
 /**
- * Wrapper for safe serialization of exceptions to the database. Serializing
- * a user defined Throwable as is can be huge.
- *
+ * Wrapper for safe serialization of exceptions to the database. Serializing a
+ * user defined Throwable as is can be huge.
  */
 public class SerializableException {
     public final String className;
@@ -34,5 +32,3 @@ public class SerializableException {
         this.cause = null;
     }
 }
-
-

@@ -1,7 +1,7 @@
 package dev.dbos.transact.database;
 
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
+import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
+
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
@@ -19,65 +19,70 @@ import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import javax.sql.DataSource;
 import java.sql.*;
 import java.util.*;
 import java.util.function.Supplier;
 
-import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
+import javax.sql.DataSource;
+
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SystemDatabase {
 
-    private static Logger logger = LoggerFactory.getLogger(SystemDatabase.class) ;
-    private DBOSConfig config ;
-    private DataSource dataSource ;
+    private static Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
+    private DBOSConfig config;
+    private DataSource dataSource;
     private WorkflowDAO workflowDAO;
-    private StepsDAO stepsDAO ;
+    private StepsDAO stepsDAO;
     private QueuesDAO queuesDAO;
     private NotificationService notificationService;
-    private NotificationsDAO notificationsDAO ;
+    private NotificationsDAO notificationsDAO;
 
     public SystemDatabase(DBOSConfig cfg) {
-        config = cfg ;
-        dataSource= SystemDatabase.createDataSource(config, null);
-        stepsDAO = new StepsDAO(dataSource) ;
-        workflowDAO = new WorkflowDAO(dataSource) ;
-        queuesDAO = new QueuesDAO(dataSource) ;
-        notificationService = new NotificationService(dataSource, this) ;
-        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService) ;
+        config = cfg;
+        dataSource = SystemDatabase.createDataSource(config, null);
+        stepsDAO = new StepsDAO(dataSource);
+        workflowDAO = new WorkflowDAO(dataSource);
+        queuesDAO = new QueuesDAO(dataSource);
+        notificationService = new NotificationService(dataSource, this);
+        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService);
     }
 
     public SystemDatabase(DataSource ds) {
-        this.dataSource = ds ;
-        workflowDAO = new WorkflowDAO(dataSource) ;
-        stepsDAO = new StepsDAO(dataSource) ;
-        queuesDAO = new QueuesDAO(dataSource) ;
-        notificationService = new NotificationService(dataSource, this) ;
-        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService) ;
+        this.dataSource = ds;
+        workflowDAO = new WorkflowDAO(dataSource);
+        stepsDAO = new StepsDAO(dataSource);
+        queuesDAO = new QueuesDAO(dataSource);
+        notificationService = new NotificationService(dataSource, this);
+        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService);
     }
 
     public synchronized void destroy() {
-        ((HikariDataSource)dataSource).close();
+        ((HikariDataSource) dataSource).close();
     }
 
     public void setNotificationService(NotificationService service) {
         notificationService = service;
-        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, service) ;
+        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, service);
     }
 
     public NotificationService getNotificationService() {
-        return notificationService ;
+        return notificationService;
     }
-
 
     /**
      * Get workflow result by workflow ID
-     * @param workflowId The workflow UUID
-     * @return Optional containing the raw output string if workflow completed successfully, empty otherwise
-     * @throws SQLException if database operation fails
+     *
+     * @param workflowId
+     *            The workflow UUID
+     * @return Optional containing the raw output string if workflow completed
+     *         successfully, empty otherwise
+     * @throws SQLException
+     *             if database operation fails
      */
     public Optional<String> getWorkflowResult(String workflowId) throws SQLException {
         return workflowDAO.getWorkflowResult(workflowId);
@@ -86,43 +91,45 @@ public class SystemDatabase {
     /**
      * Initializes the status of a workflow.
      *
-     * @param initStatus The initial workflow status details.
-     * @param maxRetries Optional maximum number of retries.
-     * @return An object containing the current status and optionally the deadline epoch milliseconds.
-     * @throws SQLException If a database error occurs.
-     * @throws DBOSWorkflowConflictException If a conflicting workflow already exists.
-     * @throws DBOSDeadLetterQueueException If the workflow exceeds max retries.
+     * @param initStatus
+     *            The initial workflow status details.
+     * @param maxRetries
+     *            Optional maximum number of retries.
+     * @return An object containing the current status and optionally the deadline
+     *         epoch milliseconds.
+     * @throws SQLException
+     *             If a database error occurs.
+     * @throws DBOSWorkflowConflictException
+     *             If a conflicting workflow already exists.
+     * @throws DBOSDeadLetterQueueException
+     *             If the workflow exceeds max retries.
      */
-    public WorkflowInitResult initWorkflowStatus(
-            WorkflowStatusInternal initStatus,
-            Integer maxRetries
-    ) throws SQLException {
+    public WorkflowInitResult initWorkflowStatus(WorkflowStatusInternal initStatus,
+            Integer maxRetries) throws SQLException {
 
-             return workflowDAO.initWorkflowStatus(initStatus, maxRetries);
+        return workflowDAO.initWorkflowStatus(initStatus, maxRetries);
     }
 
     /**
      * Insert into the workflow_status table
      *
-     * @param status @WorkflowStatusInternal holds the data for a workflow_status row
+     * @param status
+     * @WorkflowStatusInternal holds the data for a workflow_status row
      * @return @InsertWorkflowResult some of the column inserted
      * @throws SQLException
      */
-
-    public InsertWorkflowResult insertWorkflowStatus(
-            Connection connection,
-            WorkflowStatusInternal status
-    ) throws SQLException {
+    public InsertWorkflowResult insertWorkflowStatus(Connection connection,
+            WorkflowStatusInternal status) throws SQLException {
         return workflowDAO.insertWorkflowStatus(connection, status);
-
     }
-
 
     /**
      * Store the result to workflow_status
      *
-     * @param workflowId id of the workflow
-     * @param result output serialized as json
+     * @param workflowId
+     *            id of the workflow
+     * @param result
+     *            output serialized as json
      */
     public void recordWorkflowOutput(String workflowId, String result) {
         workflowDAO.recordWorkflowOutput(workflowId, result);
@@ -131,8 +138,10 @@ public class SystemDatabase {
     /**
      * Store the error to workflow_status
      *
-     * @param workflowId id of the workflow
-     * @param error output serialized as json
+     * @param workflowId
+     *            id of the workflow
+     * @param error
+     *            output serialized as json
      */
     public void recordWorkflowError(String workflowId, String error) {
         workflowDAO.recordWorkflowError(workflowId, error);
@@ -149,53 +158,51 @@ public class SystemDatabase {
 
     public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
             throws SQLException {
-        return workflowDAO.getPendingWorkflows(executorId, appVersion) ;
+        return workflowDAO.getPendingWorkflows(executorId, appVersion);
     }
 
-    public StepResult checkStepExecutionTxn(
-            String workflowId,
-            int functionId,
-            String functionName
-    ) throws IllegalStateException, WorkflowCancelledException, UnExpectedStepException {
+    public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName)
+            throws IllegalStateException, WorkflowCancelledException, UnExpectedStepException {
 
         try {
             try (Connection connection = dataSource.getConnection()) {
-                return stepsDAO.checkStepExecutionTxn(workflowId, functionId, functionName, connection);
+                return stepsDAO.checkStepExecutionTxn(workflowId,
+                        functionId,
+                        functionName,
+                        connection);
             }
-        } catch(SQLException sq) {
-            logger.error("Unexpected SQL exception", sq) ;
-            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage()) ;
+        } catch (SQLException sq) {
+            logger.error("Unexpected SQL exception", sq);
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
         }
     }
 
-    public void recordStepResultTxn(StepResult result)  {
+    public void recordStepResultTxn(StepResult result) {
 
         try {
             stepsDAO.recordStepResultTxn(result);
-        } catch(SQLException sq) {
-            logger.error("Unexpected SQL exception", sq) ;
-            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage()) ;
+        } catch (SQLException sq) {
+            logger.error("Unexpected SQL exception", sq);
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
         }
-
     }
 
     public List<StepInfo> listWorkflowSteps(String workflowId) {
         try {
             return stepsDAO.listWorkflowSteps(workflowId);
-        } catch(SQLException sq) {
-            logger.error("Unexpected SQL exception", sq) ;
-            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage()) ;
+        } catch (SQLException sq) {
+            logger.error("Unexpected SQL exception", sq);
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
         }
-
     }
 
     public Object awaitWorkflowResult(String workflowId) {
 
-        return workflowDAO.awaitWorkflowResult(workflowId) ;
-
+        return workflowDAO.awaitWorkflowResult(workflowId);
     }
 
-    public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId, String appVersion) throws SQLException {
+    public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId,
+            String appVersion) throws SQLException {
         return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
     }
 
@@ -213,29 +220,32 @@ public class SystemDatabase {
     public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
 
         try {
-            return workflowDAO.checkChildWorkflow(workflowUuid, functionId) ;
+            return workflowDAO.checkChildWorkflow(workflowUuid, functionId);
         } catch (SQLException sq) {
             throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
         }
-
     }
 
-    public void send(String workflowId, int functionId, String destinationId,
-                     Object message, String topic)  {
+    public void send(String workflowId, int functionId, String destinationId, Object message,
+            String topic) {
 
         try {
             notificationsDAO.send(workflowId, functionId, destinationId, message, topic);
-        } catch(SQLException sq) {
+        } catch (SQLException sq) {
             logger.error("Sql Exception", sq);
             throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
         }
     }
 
-    public Object recv(String workflowId, int functionId, int timeoutFunctionId,
-                       String topic, double timeoutSeconds)  {
+    public Object recv(String workflowId, int functionId, int timeoutFunctionId, String topic,
+            double timeoutSeconds) {
 
         try {
-            return notificationsDAO.recv(workflowId, functionId, timeoutFunctionId, topic, timeoutSeconds) ;
+            return notificationsDAO.recv(workflowId,
+                    functionId,
+                    timeoutFunctionId,
+                    topic,
+                    timeoutSeconds);
         } catch (SQLException sq) {
             logger.error("Sql Exception", sq);
             throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
@@ -243,7 +253,6 @@ public class SystemDatabase {
             logger.error("recv() was interrupted", ie);
             throw new DBOSException(UNEXPECTED.getCode(), ie.getMessage());
         }
-
     }
 
     public void setEvent(String workflowId, int functionId, String key, Object message) {
@@ -256,7 +265,8 @@ public class SystemDatabase {
         }
     }
 
-    public Object getEvent(String targetId, String key, double timeoutSeconds, GetWorkflowEventContext callerCtx) {
+    public Object getEvent(String targetId, String key, double timeoutSeconds,
+            GetWorkflowEventContext callerCtx) {
 
         try {
             return notificationsDAO.getEvent(targetId, key, timeoutSeconds, callerCtx);
@@ -274,7 +284,6 @@ public class SystemDatabase {
             logger.error("Sql Exception", sq);
             throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
         }
-
     }
 
     public void cancelWorkflow(String workflowId) {
@@ -284,46 +293,43 @@ public class SystemDatabase {
             logger.error("Sql Exception", sq);
             throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
         }
-
     }
 
     public void resumeWorkflow(String workflowId) {
         try {
             workflowDAO.resumeWorkflow(workflowId);
         } catch (SQLException s) {
-            throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), s.getMessage()) ;
+            throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), s.getMessage());
         }
-
     }
 
-    public String forkWorkflow(String originalWorkflowId,
-                               int startStep,
-                               ForkOptions options) {
+    public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
 
         try {
-            return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options) ;
+            return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options);
         } catch (SQLException sq) {
-            throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), sq.getMessage()) ;
+            throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), sq.getMessage());
         }
     }
 
-
-    public <T> T callFunctionAsStep(Supplier<T> fn, String functionName)  {
+    public <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
         DBOSContext ctx = DBOSContextHolder.get();
 
-        int nextFuncId = 0 ;
+        int nextFuncId = 0;
 
         if (ctx != null && ctx.isInWorkflow()) {
-            nextFuncId = ctx.getAndIncrementFunctionId() ;
+            nextFuncId = ctx.getAndIncrementFunctionId();
 
-            StepResult result = null ;
+            StepResult result = null;
 
             try (Connection connection = dataSource.getConnection()) {
-                result = stepsDAO.checkStepExecutionTxn(
-                        ctx.getWorkflowId(), nextFuncId, functionName, connection
-                );
-            } catch(SQLException e) {
-                throw new DBOSException(UNEXPECTED.getCode(), "Function execution failed: " + functionName, e);
+                result = stepsDAO.checkStepExecutionTxn(ctx.getWorkflowId(),
+                        nextFuncId,
+                        functionName,
+                        connection);
+            } catch (SQLException e) {
+                throw new DBOSException(UNEXPECTED.getCode(),
+                        "Function execution failed: " + functionName, e);
             }
 
             if (result != null) {
@@ -339,25 +345,29 @@ public class SystemDatabase {
             } catch (Exception e) {
                 if (ctx != null && ctx.isInWorkflow()) {
                     String jsonError = JSONUtil.serializeError(e);
-                    StepResult r = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError);
+                    StepResult r = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
+                            null, jsonError);
                     stepsDAO.recordStepResultTxn(r);
                 }
 
-                if ( e instanceof NonExistentWorkflowException) {
+                if (e instanceof NonExistentWorkflowException) {
                     throw e;
                 } else {
-                    throw new DBOSException(UNEXPECTED.getCode(), "Function execution failed: " + functionName, e);
+                    throw new DBOSException(UNEXPECTED.getCode(),
+                            "Function execution failed: " + functionName, e);
                 }
             }
 
             // If we're in a workflow, record the successful result
             if (ctx != null && ctx.isInWorkflow()) {
                 String jsonOutput = JSONUtil.serialize(functionResult);
-                StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, jsonOutput, null);
+                StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
+                        jsonOutput, null);
                 stepsDAO.recordStepResultTxn(o);
             }
-        } catch(SQLException sq) {
-            throw new DBOSException(UNEXPECTED.getCode(), "Function execution failed: " + functionName, sq);
+        } catch (SQLException sq) {
+            throw new DBOSException(UNEXPECTED.getCode(),
+                    "Function execution failed: " + functionName, sq);
         }
 
         return functionResult;
@@ -371,11 +381,10 @@ public class SystemDatabase {
         } else if (result.getError() != null) {
             Object[] eArray = JSONUtil.deserializeToArray(result.getError());
             SerializableException se = (SerializableException) eArray[0];
-            throw new DBOSAppException(String.format("Exception of type %s", se.className), se) ;
+            throw new DBOSAppException(String.format("Exception of type %s", se.className), se);
         } else {
             throw new IllegalStateException(
-                    String.format("Recorded output and error are both null for %s", functionName)
-            );
+                    String.format("Recorded output and error are both null for %s", functionName));
         }
     }
 
@@ -393,7 +402,10 @@ public class SystemDatabase {
         String dburl = config.getUrl();
 
         if (dburl == null) {
-            dburl = String.format("jdbc:postgresql://%s:%d/%s", config.getDbHost(), config.getDbPort(), dbName);
+            dburl = String.format("jdbc:postgresql://%s:%d/%s",
+                    config.getDbHost(),
+                    config.getDbPort(),
+                    dbName);
         }
 
         String dbUser = config.getDbUser();
@@ -418,11 +430,10 @@ public class SystemDatabase {
     }
 
     public static DataSource createDataSource(DBOSConfig config) {
-        return createDataSource(config, null) ;
+        return createDataSource(config, null);
     }
 
     Connection getSysDBConnection() throws SQLException {
         return dataSource.getConnection();
     }
-
 }

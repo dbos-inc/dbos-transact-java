@@ -21,7 +21,7 @@ public class HttpServer {
 
     private HttpServer(int port, AdminController ac) {
         this.port = port == 0 ? 3001 : port;
-        this.adminController = ac ;
+        this.adminController = ac;
     }
 
     private void init() {
@@ -33,15 +33,14 @@ public class HttpServer {
         HttpServer s = new HttpServer(port, ac);
         s.init();
         return s;
-
     }
 
     public void start() {
 
         try {
             tomcat.start();
-        } catch(Exception e) {
-            logger.error("Error starting http server", e) ;
+        } catch (Exception e) {
+            logger.error("Error starting http server", e);
         }
     }
 
@@ -54,11 +53,10 @@ public class HttpServer {
         try {
             tomcat.stop();
             tomcat.destroy();
-        } catch(Exception e) {
-            logger.error("Error stopping httpserver", e) ;
+        } catch (Exception e) {
+            logger.error("Error stopping httpserver", e);
         }
     }
-    
 
     private void setUpContext() {
 
@@ -77,12 +75,10 @@ public class HttpServer {
         resourceConfig.register(JacksonFeature.class);
 
         // In future if we need to scan from a package
-        //    resourceConfig.packages(pkg);
+        // resourceConfig.packages(pkg);
 
         // Add the REST API servlet
         tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
         context.addServletMappingDecoded("/*", "jersey-servlet");
-
     }
-
 }

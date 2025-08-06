@@ -1,5 +1,7 @@
 package dev.dbos.transact.http.controllers;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
@@ -19,7 +21,10 @@ import java.sql.SQLException;
 import static io.restassured.RestAssured.*;
 import static org.hamcrest.Matchers.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class AdminControllerTest {
 
@@ -40,7 +45,6 @@ class AdminControllerTest {
                 .adminServerPort(3010)
                 .adminAwaitOnStart(false)
                 .build();
-
     }
 
     @BeforeEach

@@ -1,5 +1,7 @@
 package dev.dbos.transact.scheduled;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
@@ -7,52 +9,46 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
+
+import java.sql.SQLException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+
+import javax.sql.DataSource;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-
 class SchedulerServiceTest {
 
     private static DBOSConfig dbosConfig;
-    private static DataSource dataSource ;
-    private DBOS dbos ;
-    private static SystemDatabase systemDatabase ;
+    private static DataSource dataSource;
+    private DBOS dbos;
+    private static SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
-    private SchedulerService schedulerService ;
-    private static QueueService queueService ;
+    private SchedulerService schedulerService;
+    private static QueueService queueService;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
-        SchedulerServiceTest.dbosConfig = new DBOSConfig
-                .Builder()
-                .name("systemdbtest")
-                .dbHost("localhost")
-                .dbPort(5432)
-                .dbUser("postgres")
-                .sysDbName("dbos_java_sys")
-                .maximumPoolSize(2)
-                .build();
+        SchedulerServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(2).build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",
+                dbosConfig.getDbHost(),
+                dbosConfig.getDbPort(),
+                "postgres");
     }
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        SchedulerServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
+        SchedulerServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
         systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         schedulerService = new SchedulerService(dbosExecutor);
@@ -70,7 +66,7 @@ class SchedulerServiceTest {
     @Test
     public void simpleScheduledWorkflow() throws Exception {
 
-        EverySecWorkflow swf = new EverySecWorkflow() ;
+        EverySecWorkflow swf = new EverySecWorkflow();
         dbos.scheduleWorkflow(swf);
         Thread.sleep(5000);
         schedulerService.stop();
@@ -79,13 +75,12 @@ class SchedulerServiceTest {
         int count = swf.wfCounter;
         System.out.println("Final count: " + count);
         assertTrue(count >= 2 && count <= 5);
-
     }
 
     @Test
     public void ThirdSecWorkflow() throws Exception {
 
-        EveryThirdSec swf = new EveryThirdSec() ;
+        EveryThirdSec swf = new EveryThirdSec();
         dbos.scheduleWorkflow(swf);
         Thread.sleep(5000);
         schedulerService.stop();
@@ -94,13 +89,12 @@ class SchedulerServiceTest {
         int count = swf.wfCounter;
         System.out.println("Final count: " + count);
         assertTrue(count <= 2);
-
     }
 
     @Test
     public void MultipleWorkflowsTest() throws Exception {
 
-        MultipleWorkflows swf = new MultipleWorkflows() ;
+        MultipleWorkflows swf = new MultipleWorkflows();
         dbos.scheduleWorkflow(swf);
         Thread.sleep(5000);
         schedulerService.stop();
@@ -109,16 +103,15 @@ class SchedulerServiceTest {
         int count = swf.wfCounter;
         System.out.println("Final count: " + count);
         assertTrue(count >= 2 && count <= 5);
-        int count3 = swf.wfCounter3 ;
+        int count3 = swf.wfCounter3;
         System.out.println("Final count3: " + count3);
         assertTrue(count3 <= 2);
-
     }
 
     @Test
     public void TimedWorkflowsTest() throws Exception {
 
-        TimedWorkflow swf = new TimedWorkflow() ;
+        TimedWorkflow swf = new TimedWorkflow();
         dbos.scheduleWorkflow(swf);
         Thread.sleep(5000);
         schedulerService.stop();
@@ -128,77 +121,72 @@ class SchedulerServiceTest {
         assertNotNull(swf.actual);
         Duration delta = Duration.between(swf.scheduled, swf.actual).abs();
         assertTrue(delta.toMillis() < 1000);
-
     }
 
     @Test
     public void invalidMethod() {
 
-        InvalidMethodWorkflow imv = new InvalidMethodWorkflow() ;
+        InvalidMethodWorkflow imv = new InvalidMethodWorkflow();
 
         try {
             dbos.scheduleWorkflow(imv);
             assertTrue(false); // fail if we get here
-        } catch(IllegalArgumentException e) {
-            assertEquals("Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            assertEquals(
+                    "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)",
+                    e.getMessage());
         }
     }
 
     @Test
     public void invalidCron() {
 
-        InvalidCronWorkflow icw = new InvalidCronWorkflow() ;
+        InvalidCronWorkflow icw = new InvalidCronWorkflow();
 
         try {
             dbos.scheduleWorkflow(icw);
             assertTrue(false); // fail if we get here
-        } catch(IllegalArgumentException e) {
+        } catch (IllegalArgumentException e) {
 
-           System.out.println(e.getMessage()) ;
-           assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]", e.getMessage());
+            System.out.println(e.getMessage());
+            assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]",
+                    e.getMessage());
         }
     }
 
     @Test
     public void stepsTest() throws Exception {
 
-        Steps steps = dbos.<Steps>Workflow()
-                .interfaceClass(Steps.class)
-                .implementation(new StepsImpl())
-                .build();
+        Steps steps = dbos.<Steps>Workflow().interfaceClass(Steps.class)
+                .implementation(new StepsImpl()).build();
 
-        WorkflowWithSteps swf = new WorkflowWithSteps(steps) ;
+        WorkflowWithSteps swf = new WorkflowWithSteps(steps);
         dbos.scheduleWorkflow(swf);
         Thread.sleep(5000);
         schedulerService.stop();
         Thread.sleep(1000);
 
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
-        assertTrue(wfs.size() <= 2) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertTrue(wfs.size() <= 2);
 
-        List<StepInfo> wsteps =systemDatabase.listWorkflowSteps(wfs.get(0).getWorkflowId());
-        assertEquals(2, wsteps.size()) ;
-
-
+        List<StepInfo> wsteps = systemDatabase.listWorkflowSteps(wfs.get(0).getWorkflowId());
+        assertEquals(2, wsteps.size());
     }
 
     // Manual test only do not enable and commit
     // @Test
-    public void everyMinute() throws Exception{
-        EveryMinute em = new EveryMinute() ;
+    public void everyMinute() throws Exception {
+        EveryMinute em = new EveryMinute();
         dbos.scheduleWorkflow(em);
         Thread.sleep(600000);
     }
-
 
     public static class InvalidMethodWorkflow {
 
         @Workflow
         @Scheduled(cron = "0/1 * * * * ?")
         public void scheduledWF(Instant scheduled, String actual) {
-
         }
-
     }
 
     public static class InvalidCronWorkflow {
@@ -206,9 +194,6 @@ class SchedulerServiceTest {
         @Workflow
         @Scheduled(cron = "* * * * *")
         public void scheduledWF(Instant scheduled, Instant actual) {
-
         }
-
     }
-
 }

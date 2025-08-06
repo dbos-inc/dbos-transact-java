@@ -1,9 +1,9 @@
 package dev.dbos.transact.json;
 
-public class TestException extends Exception{
+public class TestException extends Exception {
     TestException() {
-
     }
+
     TestException(String msg) {
         super(msg);
     }

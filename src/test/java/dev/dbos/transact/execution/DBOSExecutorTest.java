@@ -1,5 +1,7 @@
 package dev.dbos.transact.execution;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
@@ -9,49 +11,40 @@ import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.time.Instant;
+import java.util.List;
+
+import javax.sql.DataSource;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.PreparedStatement;
-import java.time.Instant;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-
 class DBOSExecutorTest {
 
     private static DBOSConfig dbosConfig;
-    private static DataSource dataSource ;
-    private DBOS dbos ;
-    private static SystemDatabase systemDatabase ;
+    private static DataSource dataSource;
+    private DBOS dbos;
+    private static SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     public static void onetimeBefore() throws SQLException {
 
-        DBOSExecutorTest.dbosConfig = new DBOSConfig
-                .Builder()
-                .name("systemdbtest")
-                .dbHost("localhost")
-                .dbPort(5432)
-                .dbUser("postgres")
-                .sysDbName("dbos_java_sys")
-                .maximumPoolSize(2)
-                .build();
-
+        DBOSExecutorTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .maximumPoolSize(2).build();
     }
 
     @BeforeEach
-    void setUp() throws SQLException{
+    void setUp() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
+        DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
         systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
@@ -66,21 +59,20 @@ class DBOSExecutorTest {
     @Test
     void executeWorkflowById() throws Exception {
 
-       ExecutingService executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl())
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
 
-        String result = null ;
+        String result = null;
 
         String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
             result = executingService.workflowMethod("test-item");
         }
 
         assertEquals("test-itemtest-item", result);
 
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
         setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
@@ -89,31 +81,29 @@ class DBOSExecutorTest {
 
         result = handle.getResult();
         assertEquals("test-itemtest-item", result);
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus()) ;
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
-        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
-
     }
 
     @Test
     void executeWorkflowByIdNonExistent() throws Exception {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl())
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
 
-        String result = null ;
+        String result = null;
 
         String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
             result = executingService.workflowMethod("test-item");
         }
 
         assertEquals("test-itemtest-item", result);
 
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
         boolean error = false;
@@ -121,31 +111,30 @@ class DBOSExecutorTest {
             WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById("wf-124");
         } catch (Exception e) {
             error = true;
-            assert e instanceof NonExistentWorkflowException : "Expected NonExistentWorkflowException but got " + e.getClass().getName();
+            assert e instanceof NonExistentWorkflowException
+                    : "Expected NonExistentWorkflowException but got " + e.getClass().getName();
         }
 
         assertTrue(error);
-
     }
 
     @Test
     void workflowFunctionNotfound() throws Exception {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl())
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
 
-        String result = null ;
+        String result = null;
 
         String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
             result = executingService.workflowMethod("test-item");
         }
 
         assertEquals("test-itemtest-item", result);
 
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
         dbos.shutdown(); // clear out the registry
@@ -156,105 +145,101 @@ class DBOSExecutorTest {
             WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
         } catch (Exception e) {
             error = true;
-            assert e instanceof WorkflowFunctionNotFoundException : "Expected WorkflowFunctionNotfoundException but got " + e.getClass().getName();
+            assert e instanceof WorkflowFunctionNotFoundException
+                    : "Expected WorkflowFunctionNotfoundException but got "
+                            + e.getClass().getName();
         }
 
         assertTrue(error);
-
     }
 
     @Test
     public void executeWithStep() throws Exception {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl())
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
 
-        String result = null ;
+        String result = null;
 
         String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
             result = executingService.workflowMethodWithStep("test-item");
         }
 
         assertEquals("test-itemstepOnestepTwo", result);
 
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
-        List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid) ;
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid);
         assertEquals(2, steps.size());
 
         setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
         deleteSteps(dataSource, wfid);
-        steps = systemDatabase.listWorkflowSteps(wfid) ;
+        steps = systemDatabase.listWorkflowSteps(wfid);
         assertEquals(0, steps.size());
 
         WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
 
         result = handle.getResult();
         assertEquals("test-itemstepOnestepTwo", result);
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus()) ;
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
-        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
-        steps = systemDatabase.listWorkflowSteps(wfid) ;
+        steps = systemDatabase.listWorkflowSteps(wfid);
         assertEquals(2, steps.size());
-
     }
 
     @Test
     public void ReExecuteWithStepTwoOnly() throws Exception {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl())
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
 
-        String result = null ;
+        String result = null;
 
         String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
             result = executingService.workflowMethodWithStep("test-item");
         }
 
         assertEquals("test-itemstepOnestepTwo", result);
-        assertEquals(1, ExecutingServiceImpl.step1Count) ;
-        assertEquals(1, ExecutingServiceImpl.step2Count) ;
+        assertEquals(1, ExecutingServiceImpl.step1Count);
+        assertEquals(1, ExecutingServiceImpl.step2Count);
 
-
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
-        List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid) ;
+        List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid);
         assertEquals(2, steps.size());
 
         setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-        deleteStepTwo(dataSource, wfid,1);
-        steps = systemDatabase.listWorkflowSteps(wfid) ;
+        deleteStepTwo(dataSource, wfid, 1);
+        steps = systemDatabase.listWorkflowSteps(wfid);
         assertEquals(1, steps.size());
 
         WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
 
         result = handle.getResult();
         assertEquals("test-itemstepOnestepTwo", result);
-        assertEquals(1, ExecutingServiceImpl.step1Count) ;
-        assertEquals(2, ExecutingServiceImpl.step2Count) ;
+        assertEquals(1, ExecutingServiceImpl.step1Count);
+        assertEquals(2, ExecutingServiceImpl.step2Count);
 
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus()) ;
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
-        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput()) ;
+        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
-        steps = systemDatabase.listWorkflowSteps(wfid) ;
+        steps = systemDatabase.listWorkflowSteps(wfid);
         assertEquals(2, steps.size());
-
     }
 
     @Test
@@ -262,47 +247,44 @@ class DBOSExecutorTest {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl(dbos))
-                .build();
+                .implementation(new ExecutingServiceImpl(dbos)).build();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
 
-        String result = null ;
+        String result = null;
 
         String wfid = "wf-123";
-        long start = System.currentTimeMillis() ;
-        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+        long start = System.currentTimeMillis();
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
             executingService.sleepingWorkflow(2);
         }
 
-        long duration = System.currentTimeMillis() - start ;
-        System.out.println("Duration " + duration) ;
+        long duration = System.currentTimeMillis() - start;
+        System.out.println("Duration " + duration);
         assertTrue(duration >= 2000);
-        assertTrue(duration < 2200) ;
+        assertTrue(duration < 2200);
 
         List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid);
 
         assertEquals("DBOS.sleep", steps.get(0).getFunctionName());
     }
 
-
     @Test
     public void sleepRecovery() throws Exception {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl(dbos))
-                .build();
+                .implementation(new ExecutingServiceImpl(dbos)).build();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
 
-        String result = null ;
+        String result = null;
 
         String wfid = "wf-123";
-        long start = System.currentTimeMillis() ;
-        try (SetWorkflowID id = new SetWorkflowID(wfid)){
+        long start = System.currentTimeMillis();
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
             executingService.sleepingWorkflow(.002f);
         }
 
@@ -312,30 +294,28 @@ class DBOSExecutorTest {
 
         // let us set the state to PENDING and increase the sleep time
         setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-        long currenttime = System.currentTimeMillis() ;
-        double newEndtime = (currenttime + 2000)/1000 ;
+        long currenttime = System.currentTimeMillis();
+        double newEndtime = (currenttime + 2000) / 1000;
 
-        String endTimeAsJson = JSONUtil.serialize(newEndtime) ;
+        String endTimeAsJson = JSONUtil.serialize(newEndtime);
 
         updateStepEndTime(dataSource, wfid, steps.get(0).getFunctionId(), endTimeAsJson);
 
         long starttime = System.currentTimeMillis();
-        WorkflowHandle h = dbosExecutor.executeWorkflowById(wfid) ;
+        WorkflowHandle h = dbosExecutor.executeWorkflowById(wfid);
         h.getResult();
 
-        long duration = System.currentTimeMillis() - starttime ;
+        long duration = System.currentTimeMillis() - starttime;
         assertTrue(duration >= 1000);
     }
 
-
-
-
-    private void setWorkflowState(DataSource ds, String workflowId, String newState) throws SQLException {
+    private void setWorkflowState(DataSource ds, String workflowId, String newState)
+            throws SQLException {
 
         String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? WHERE workflow_uuid = ?";
 
         try (Connection connection = ds.getConnection();
-             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+                PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
             pstmt.setString(1, newState);
             pstmt.setLong(2, Instant.now().toEpochMilli());
@@ -345,7 +325,6 @@ class DBOSExecutorTest {
             int rowsAffected = pstmt.executeUpdate();
 
             assertEquals(1, rowsAffected);
-
         }
     }
 
@@ -354,7 +333,7 @@ class DBOSExecutorTest {
         String sql = "DELETE from dbos.operation_outputs WHERE workflow_uuid = ?";
 
         try (Connection connection = ds.getConnection();
-             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+                PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
             pstmt.setString(1, workflowId);
 
@@ -362,51 +341,49 @@ class DBOSExecutorTest {
             int rowsAffected = pstmt.executeUpdate();
 
             assertEquals(2, rowsAffected);
-
         }
     }
 
-    private void updateStepEndTime(DataSource ds, String workflowId, int functionId, String endtime) throws SQLException {
+    private void updateStepEndTime(DataSource ds, String workflowId, int functionId, String endtime)
+            throws SQLException {
 
         String sql = "update dbos.operation_outputs SET output = ? WHERE workflow_uuid = ? AND function_id = ? ";
 
         try (Connection connection = ds.getConnection();
-             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+                PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
             pstmt.setString(1, endtime);
             pstmt.setString(2, workflowId);
-            pstmt.setInt(3, functionId) ;
+            pstmt.setInt(3, functionId);
 
             // Execute the update and get the number of rows affected
             int rowsAffected = pstmt.executeUpdate();
 
             assertEquals(1, rowsAffected);
-
         }
     }
 
-    private void deleteStepTwo(DataSource ds, String workflowId, int function_id) throws SQLException {
+    private void deleteStepTwo(DataSource ds, String workflowId, int function_id)
+            throws SQLException {
 
         String sql = "DELETE from dbos.operation_outputs WHERE workflow_uuid = ? and function_id = ?;";
 
         try (Connection connection = ds.getConnection();
-             PreparedStatement pstmt = connection.prepareStatement(sql)) {
+                PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
             pstmt.setString(1, workflowId);
             pstmt.setInt(2, function_id);
-
 
             // Execute the update and get the number of rows affected
             int rowsAffected = pstmt.executeUpdate();
 
             assertEquals(1, rowsAffected);
-
         }
     }
 
-    void startDBOS() throws SQLException{
+    void startDBOS() throws SQLException {
 
-        DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig) ;
+        DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
         systemDatabase = new SystemDatabase(dataSource);
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);

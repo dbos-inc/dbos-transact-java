@@ -1,13 +1,13 @@
 package dev.dbos.transact.workflow.internal;
 
+import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
+
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.util.concurrent.Future;
-
-import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
 public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
 
@@ -17,7 +17,7 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
 
     public WorkflowHandleFuture(String workflowId, Future<T> future, SystemDatabase sysdb) {
         this.workflowId = workflowId;
-        this.futureResult = future ;
+        this.futureResult = future;
         this.systemDatabase = sysdb;
     }
 
@@ -27,16 +27,16 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
     }
 
     @Override
-    public T getResult()  {
+    public T getResult() {
         try {
             return futureResult.get();
         } catch (Exception e) {
-            throw new DBOSException(UNEXPECTED.getCode(), e.getMessage()) ;
+            throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
         }
     }
 
     @Override
     public WorkflowStatus getStatus() {
-        return systemDatabase.getWorkflowStatus(workflowId) ;
+        return systemDatabase.getWorkflowStatus(workflowId);
     }
 }

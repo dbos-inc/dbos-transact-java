@@ -9,7 +9,10 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 public @interface Step {
     String name() default "";
+
     boolean retriesAllowed() default true;
+
     int maxAttempts() default 1;
+
     float backOffRate() default 1.0f;
 }

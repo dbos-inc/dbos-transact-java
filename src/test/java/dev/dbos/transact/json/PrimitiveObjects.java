@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class PrimitiveObjects {
 
     public PrimitiveObjects() {
-
     }
 
     public PrimitiveObjects(int i, long l, float f, double d, boolean b) {
@@ -13,17 +12,17 @@ public class PrimitiveObjects {
         longValue = l;
         floatValue = f;
         doubleValue = d;
-        boolValue = b ;
+        boolValue = b;
     }
 
     @JsonProperty
-    Integer intValue ;
+    Integer intValue;
 
     @JsonProperty
-    Long longValue ;
+    Long longValue;
 
     @JsonProperty
-    Float floatValue ;
+    Float floatValue;
 
     @JsonProperty
     Double doubleValue;

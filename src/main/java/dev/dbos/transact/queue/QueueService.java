@@ -1,36 +1,37 @@
 package dev.dbos.transact.queue;
 
+import static java.lang.Math.max;
+import static java.lang.Math.min;
+
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static java.lang.Math.max;
-import static java.lang.Math.min;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class QueueService {
 
     Logger logger = LoggerFactory.getLogger(QueueService.class);
 
-    private SystemDatabase systemDatabase ;
+    private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
-    private volatile boolean running = false ;
+    private volatile boolean running = false;
     private Thread workerThread;
-    private QueueRegistry queueRegistry ;
+    private QueueRegistry queueRegistry;
     private CountDownLatch shutdownLatch;
 
-    private Queue internalQueue ;
+    private Queue internalQueue;
 
     public QueueService(SystemDatabase systemDatabase, DBOSExecutor dbosExecutor) {
-        this.systemDatabase = systemDatabase ;
+        this.systemDatabase = systemDatabase;
         queueRegistry = new QueueRegistry();
-        this.dbosExecutor = dbosExecutor ;
+        this.dbosExecutor = dbosExecutor;
     }
 
     public void setDbosExecutor(DBOSExecutor dbosExecutor) {
@@ -43,13 +44,13 @@ public class QueueService {
     }
 
     private void pollForWorkflows() {
-        logger.info("PollQueuesThread started ...." + Thread.currentThread().getId()) ;
+        logger.info("PollQueuesThread started ...." + Thread.currentThread().getId());
 
-        internalQueue = new DBOS.QueueBuilder(Constants.DBOS_INTERNAL_QUEUE).build() ;
+        internalQueue = new DBOS.QueueBuilder(Constants.DBOS_INTERNAL_QUEUE).build();
 
-        double pollingInterval = 1.0 ;
-        double minPollingInterval = 1.0 ;
-        double maxPollingInterval = 120.0 ;
+        double pollingInterval = 1.0;
+        double minPollingInterval = 1.0;
+        double maxPollingInterval = 120.0;
         int randomSleep = 0;
 
         try {
@@ -77,8 +78,9 @@ public class QueueService {
 
                     try {
 
-
-                        List<String> workflowIds = systemDatabase.getAndStartQueuedWorkflows(queue, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION);
+                        List<String> workflowIds = systemDatabase.getAndStartQueuedWorkflows(queue,
+                                Constants.DEFAULT_EXECUTORID,
+                                Constants.DEFAULT_APP_VERSION);
 
                         for (String id : workflowIds) {
                             dbosExecutor.executeWorkflowById(id);
@@ -86,21 +88,18 @@ public class QueueService {
 
                     } catch (Exception e) {
 
-                        pollingInterval = min(maxPollingInterval, pollingInterval*2);
+                        pollingInterval = min(maxPollingInterval, pollingInterval * 2);
                         logger.error("Error executing queued workflow", e);
                     }
-
                 }
 
                 pollingInterval = max(minPollingInterval, pollingInterval * 0.9);
-
             }
 
         } finally {
             shutdownLatch.countDown();
             logger.info("QueuesPolThread has ended. Exiting " + Thread.currentThread().getId());
         }
-
     }
 
     public synchronized void start() {
@@ -115,8 +114,6 @@ public class QueueService {
         workerThread.setDaemon(true);
         workerThread.start();
         logger.info("QueuesPollThread started.");
-
-
     }
 
     public synchronized void stop() {
@@ -129,15 +126,17 @@ public class QueueService {
         if (workerThread != null) {
             try {
                 workerThread.join(100);
-                // Adding a latch so stop is absolute and there is no race condition for tests
+                // Adding a latch so stop is absolute and there is no race condition for
+                // tests
                 shutdownLatch.await(); // timeout ?
                 if (workerThread.isAlive()) {
-                    logger.warn("QueuePollThread did not stop gracefully. It might be stuck. Interrupting...");
+                    logger.warn(
+                            "QueuePollThread did not stop gracefully. It might be stuck. Interrupting...");
                     workerThread.interrupt(); // Interrupt if it's still alive after join
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt(); // Restore interrupt status
-                logger.warn( "Interrupted QueuesPollThread", e);
+                logger.warn("Interrupted QueuesPollThread", e);
             } finally {
                 workerThread = null;
             }
@@ -145,12 +144,16 @@ public class QueueService {
         logger.info("QueuePollThread stopped.");
     }
 
-    public synchronized  boolean isStopped() {
-        // If the workerThread reference is null, it implies it hasn't started or has been fully cleaned up.
+    public synchronized boolean isStopped() {
+        // If the workerThread reference is null, it implies it hasn't started or has
+        // been fully cleaned
+        // up.
         if (workerThread == null) {
             return true;
         }
-        // The most definitive check: if the latch has counted down to zero, the worker's run() method has completed.
+        // The most definitive check: if the latch has counted down to zero, the
+        // worker's run() method
+        // has completed.
         // We also check !workerThread.isAlive() as a final confirmation.
         return shutdownLatch != null && shutdownLatch.getCount() == 0 && !workerThread.isAlive();
     }

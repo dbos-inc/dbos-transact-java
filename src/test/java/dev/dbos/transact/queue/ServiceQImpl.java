@@ -1,18 +1,17 @@
 package dev.dbos.transact.queue;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Instant;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ServiceQImpl implements ServiceQ {
 
     @Workflow(name = "simpleQWorkflow")
     public String simpleQWorkflow(String input) {
-        return input+input;
+        return input + input;
     }
-
 
     @Workflow(name = "limitWorkflow")
     public Double limitWorkflow(String var1, String var2) {

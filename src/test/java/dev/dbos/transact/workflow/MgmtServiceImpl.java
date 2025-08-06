@@ -1,30 +1,28 @@
 package dev.dbos.transact.workflow;
 
+import java.util.concurrent.CountDownLatch;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.CountDownLatch;
+public class MgmtServiceImpl implements MgmtService {
 
-public class MgmtServiceImpl implements MgmtService{
+    Logger logger = LoggerFactory.getLogger(MgmtServiceImpl.class);
 
-    Logger logger = LoggerFactory.getLogger(MgmtServiceImpl.class) ;
+    private volatile int stepsExecuted;
+    CountDownLatch mainThreadEvent;
+    CountDownLatch workflowEvent;
 
-    private volatile int stepsExecuted ;
-    CountDownLatch mainThreadEvent ;
-    CountDownLatch workflowEvent ;
-
-    MgmtService service ;
+    MgmtService service;
 
     public MgmtServiceImpl(CountDownLatch mainLatch, CountDownLatch workLatch) {
-        this.mainThreadEvent = mainLatch ;
-        this.workflowEvent = workLatch ;
-
+        this.mainThreadEvent = mainLatch;
+        this.workflowEvent = workLatch;
     }
 
     public void setMgmtService(MgmtService m) {
         service = m;
     }
-
 
     @Workflow(name = "myworkflow")
     public int simpleWorkflow(int input) {
@@ -59,7 +57,6 @@ public class MgmtServiceImpl implements MgmtService{
     }
 
     public synchronized int getStepsExecuted() {
-        return stepsExecuted ;
+        return stepsExecuted;
     }
-
 }

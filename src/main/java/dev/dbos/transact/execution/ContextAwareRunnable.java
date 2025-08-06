@@ -7,9 +7,9 @@ public class ContextAwareRunnable implements Runnable {
     private final Runnable task;
     private final DBOSContext capturedContext;
 
-    public ContextAwareRunnable(DBOSContext ctx,Runnable task) {
+    public ContextAwareRunnable(DBOSContext ctx, Runnable task) {
         this.task = task;
-        this.capturedContext = ctx ;
+        this.capturedContext = ctx;
     }
 
     @Override

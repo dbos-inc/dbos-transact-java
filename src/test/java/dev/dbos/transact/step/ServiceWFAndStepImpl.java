@@ -5,7 +5,7 @@ import dev.dbos.transact.workflow.Workflow;
 
 public class ServiceWFAndStepImpl implements ServiceWFAndStep {
 
-    private ServiceWFAndStep self ;
+    private ServiceWFAndStep self;
 
     public void setSelf(ServiceWFAndStep serviceWFAndStep) {
         self = serviceWFAndStep;
@@ -16,12 +16,12 @@ public class ServiceWFAndStepImpl implements ServiceWFAndStep {
 
         String s1 = self.stepOne("one");
         String s2 = self.stepTwo("two");
-        return input+s1+s2 ;
+        return input + s1 + s2;
     }
 
     @Step(name = "step1")
     public String stepOne(String input) {
-        return input ;
+        return input;
     }
 
     @Step(name = "step2")

@@ -1,16 +1,11 @@
 package dev.dbos.transact.migrations;
 
-
-import com.zaxxer.hikari.HikariDataSource;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.ErrorCode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import javax.sql.DataSource;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
@@ -21,11 +16,16 @@ import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import javax.sql.DataSource;
+
+import com.zaxxer.hikari.HikariDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class MigrationManager {
 
-    static Logger logger = LoggerFactory.getLogger(MigrationManager.class) ;
+    static Logger logger = LoggerFactory.getLogger(MigrationManager.class);
     private final DataSource dataSource;
-
 
     public MigrationManager(DataSource dataSource) {
         this.dataSource = dataSource;
@@ -35,7 +35,7 @@ public class MigrationManager {
 
         if (dbconfig == null) {
             logger.warn("No database configuration. Skipping migration");
-            return ;
+            return;
         }
 
         String dbName;
@@ -47,18 +47,17 @@ public class MigrationManager {
 
         createDatabaseIfNotExists(dbconfig, dbName);
 
-        DataSource dataSource = SystemDatabase.createDataSource(dbconfig, dbName) ;
+        DataSource dataSource = SystemDatabase.createDataSource(dbconfig, dbName);
 
         try {
             MigrationManager m = new MigrationManager(dataSource);
             m.migrate();
-        } catch(Exception e) {
-            throw new DBOSException(ErrorCode.UNEXPECTED.getCode(), e.getMessage()) ;
+        } catch (Exception e) {
+            throw new DBOSException(ErrorCode.UNEXPECTED.getCode(), e.getMessage());
 
         } finally {
-            ((HikariDataSource)dataSource).close();
+            ((HikariDataSource) dataSource).close();
         }
-
 
         logger.info("Database migrations completed successfully");
     }
@@ -67,8 +66,8 @@ public class MigrationManager {
         DataSource adminDS = SystemDatabase.createDataSource(config, Constants.POSTGRES_DEFAULT_DB);
         try {
             try (Connection conn = adminDS.getConnection();
-                 PreparedStatement ps = conn.prepareStatement(
-                         "SELECT 1 FROM pg_database WHERE datname = ?")) {
+                    PreparedStatement ps = conn
+                            .prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
 
                 ps.setString(1, dbName);
                 try (ResultSet rs = ps.executeQuery()) {
@@ -89,9 +88,8 @@ public class MigrationManager {
         } finally {
             // temporary
             // later keep the datasource global so we are not recreating them
-            ((HikariDataSource)adminDS).close() ;
+            ((HikariDataSource) adminDS).close();
         }
-
     }
 
     public void migrate() throws Exception {
@@ -114,8 +112,8 @@ public class MigrationManager {
                     }
                 }
             }
-        } catch(Throwable t) {
-            logger.error("Migration error" + t.getMessage()) ;
+        } catch (Throwable t) {
+            logger.error("Migration error" + t.getMessage());
             throw t;
         }
     }
@@ -125,16 +123,15 @@ public class MigrationManager {
 
             stmt.execute("CREATE SCHEMA IF NOT EXISTS dbos");
 
-            stmt.execute("CREATE TABLE IF NOT EXISTS dbos.migration_history ( " +
-                    "version TEXT PRIMARY KEY, " +
-                    " applied_at TIMESTAMPTZ DEFAULT now() )");
+            stmt.execute("CREATE TABLE IF NOT EXISTS dbos.migration_history ( "
+                    + "version TEXT PRIMARY KEY, " + " applied_at TIMESTAMPTZ DEFAULT now() )");
         }
     }
 
     private Set<String> getAppliedMigrations(Connection conn) throws SQLException {
         Set<String> applied = new HashSet<>();
         try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT version FROM dbos.migration_history")) {
+                ResultSet rs = stmt.executeQuery("SELECT version FROM dbos.migration_history")) {
             while (rs.next()) {
                 applied.add(rs.getString("version"));
             }
@@ -143,8 +140,8 @@ public class MigrationManager {
     }
 
     private void markMigrationApplied(Connection conn, String version) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(
-                "INSERT INTO dbos.migration_history (version) VALUES (?)")) {
+        try (PreparedStatement ps = conn
+                .prepareStatement("INSERT INTO dbos.migration_history (version) VALUES (?)")) {
             ps.setString(1, version);
             ps.executeUpdate();
         }
@@ -165,8 +162,7 @@ public class MigrationManager {
                 Path pathInJar = fs.getPath("/" + migrationsPath);
                 return Files.list(pathInJar)
                         .filter(p -> p.getFileName().toString().matches("\\d+_.*\\.sql"))
-                        .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                        .map(p -> {
+                        .sorted(Comparator.comparing(p -> p.getFileName().toString())).map(p -> {
                             try {
                                 String filename = p.getFileName().toString();
                                 String sql = Files.readString(p);
@@ -174,15 +170,12 @@ public class MigrationManager {
                             } catch (IOException e) {
                                 throw new UncheckedIOException(e);
                             }
-                        })
-                        .collect(Collectors.toList());
+                        }).collect(Collectors.toList());
             }
         } else {
             Path path = Paths.get(uri);
-            return Files.list(path)
-                    .filter(p -> p.getFileName().toString().matches("\\d+_.*\\.sql"))
-                    .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                    .map(p -> {
+            return Files.list(path).filter(p -> p.getFileName().toString().matches("\\d+_.*\\.sql"))
+                    .sorted(Comparator.comparing(p -> p.getFileName().toString())).map(p -> {
                         try {
                             String filename = p.getFileName().toString();
                             String sql = Files.readString(p);
@@ -190,14 +183,13 @@ public class MigrationManager {
                         } catch (IOException e) {
                             throw new UncheckedIOException(e);
                         }
-                    })
-                    .collect(Collectors.toList());
+                    }).collect(Collectors.toList());
         }
     }
 
-
     private void applyMigrationFile(Connection conn, String sql) throws IOException, SQLException {
-        if (sql.isEmpty()) return;
+        if (sql.isEmpty())
+            return;
 
         boolean originalAutoCommit = conn.getAutoCommit();
         conn.setAutoCommit(false);
@@ -213,4 +205,3 @@ public class MigrationManager {
         }
     }
 }
-

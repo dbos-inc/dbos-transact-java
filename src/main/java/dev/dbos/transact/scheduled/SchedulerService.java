@@ -1,10 +1,5 @@
 package dev.dbos.transact.scheduled;
 
-import com.cronutils.model.Cron;
-import com.cronutils.model.CronType;
-import com.cronutils.model.definition.CronDefinitionBuilder;
-import com.cronutils.model.time.ExecutionTime;
-import com.cronutils.parser.CronParser;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -12,8 +7,6 @@ import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.Scheduled;
 import dev.dbos.transact.workflow.Workflow;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
@@ -26,46 +19,60 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import com.cronutils.model.Cron;
+import com.cronutils.model.CronType;
+import com.cronutils.model.definition.CronDefinitionBuilder;
+import com.cronutils.model.time.ExecutionTime;
+import com.cronutils.parser.CronParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class SchedulerService {
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
     private final DBOSExecutor dbosExecutor;
     private final CronParser cronParser;
     Logger logger = LoggerFactory.getLogger(SchedulerService.class);
-    private volatile boolean stop = false ;
-    private Queue schedulerQueue ;
-
+    private volatile boolean stop = false;
+    private Queue schedulerQueue;
 
     public SchedulerService(DBOSExecutor dbosExecutor) {
         this.dbosExecutor = dbosExecutor;
-        this.cronParser = new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
-
+        this.cronParser = new CronParser(
+                CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
     }
 
     public void scanAndSchedule(Object implementation) {
         for (Method method : implementation.getClass().getDeclaredMethods()) {
-            if (method.isAnnotationPresent(Workflow.class) && method.isAnnotationPresent(Scheduled.class)) {
+            if (method.isAnnotationPresent(Workflow.class)
+                    && method.isAnnotationPresent(Scheduled.class)) {
 
-                if (!Arrays.equals(
-                        method.getParameterTypes(),
+                if (!Arrays.equals(method.getParameterTypes(),
                         new Class<?>[]{Instant.class, Instant.class})) {
-                    throw new IllegalArgumentException("Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)");
+                    throw new IllegalArgumentException(
+                            "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)");
                 }
 
                 Workflow wfAnnotation = method.getAnnotation(Workflow.class);
                 Scheduled scheduled = method.getAnnotation(Scheduled.class);
-                String workflowName = wfAnnotation.name().isEmpty() ? method.getName() : wfAnnotation.name();
+                String workflowName = wfAnnotation.name().isEmpty()
+                        ? method.getName()
+                        : wfAnnotation.name();
                 // register with dbosExecutor for recovery
-                dbosExecutor.registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
+                dbosExecutor.registerWorkflow(workflowName,
+                        implementation,
+                        implementation.getClass().getName(),
+                        method);
                 String cron = scheduled.cron();
                 scheduleRecurringWorkflow(workflowName, implementation, method, cron);
             }
         }
     }
 
-    private void scheduleRecurringWorkflow(String workflowName, Object instance, Method method, String cronExpr) {
+    private void scheduleRecurringWorkflow(String workflowName, Object instance, Method method,
+            String cronExpr) {
 
-        logger.info("Scheduling wf " + workflowName) ;
+        logger.info("Scheduling wf " + workflowName);
         Cron cron = cronParser.parse(cronExpr);
         ExecutionTime executionTime = ExecutionTime.forCron(cron);
 
@@ -83,16 +90,22 @@ public class SchedulerService {
                     args[0] = scheduledTime.toInstant();
                     args[1] = ZonedDateTime.now(ZoneOffset.UTC).toInstant();
                     logger.info("submitting to dbos Executor " + workflowName);
-                    String workflowId = String.format("sched-%s-%s",workflowName, scheduledTime.toString()) ;
-                    try(SetWorkflowID id = new SetWorkflowID(workflowId)) {
-                        dbosExecutor.enqueueWorkflow(workflowName, instance.getClass().getName(), wrapper, args, schedulerQueue);
+                    String workflowId = String.format("sched-%s-%s",
+                            workflowName,
+                            scheduledTime.toString());
+                    try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+                        dbosExecutor.enqueueWorkflow(workflowName,
+                                instance.getClass().getName(),
+                                wrapper,
+                                args,
+                                schedulerQueue);
                     }
                 } catch (Throwable e) {
                     e.printStackTrace();
                 }
 
                 if (!stop) {
-                    logger.info("Scheduling the next execution") ;
+                    logger.info("Scheduling the next execution");
                     ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
                     executionTime.nextExecution(now).ifPresent(nextTime -> {
                         logger.info("Next execution time " + nextTime.toString());
@@ -111,15 +124,14 @@ public class SchedulerService {
         });
     }
 
-    public void stop () {
+    public void stop() {
         stop = true;
         List<Runnable> notRun = scheduler.shutdownNow();
-        logger.info("Shutting down scheduler service. Tasks not run :" + notRun.size()) ;
+        logger.info("Shutting down scheduler service. Tasks not run :" + notRun.size());
     }
 
-    public void start () {
-        schedulerQueue = new DBOS.QueueBuilder("schedulerQueue")
-                .build();
-        stop = false ;
+    public void start() {
+        schedulerQueue = new DBOS.QueueBuilder("schedulerQueue").build();
+        stop = false;
     }
 }

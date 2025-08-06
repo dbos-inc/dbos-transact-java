@@ -1,6 +1,5 @@
 package dev.dbos.transact.workflow.internal;
 
-
 import dev.dbos.transact.workflow.WorkflowState;
 
 public class WorkflowStatusInternal {
@@ -28,13 +27,12 @@ public class WorkflowStatusInternal {
     private int priority; // default 0 = highest priority
     private String inputs; // serialized workflow inputs
 
-    public WorkflowStatusInternal(String workflowUUID, WorkflowState status, String name, String className,
-                                  String configName, String authenticatedUser, String assumedRole,
-                                  String authenticatedRoles, String output, String error, Long createdAt,
-                                  Long updatedAt, String queueName, String executorId, String appVersion,
-                                  String appId, Integer recoveryAttempts, Long workflowTimeoutMs,
-                                  Long workflowDeadlineEpochMs, String deduplicationId, int priority,
-                                  String inputs) {
+    public WorkflowStatusInternal(String workflowUUID, WorkflowState status, String name,
+            String className, String configName, String authenticatedUser, String assumedRole,
+            String authenticatedRoles, String output, String error, Long createdAt, Long updatedAt,
+            String queueName, String executorId, String appVersion, String appId,
+            Integer recoveryAttempts, Long workflowTimeoutMs, Long workflowDeadlineEpochMs,
+            String deduplicationId, int priority, String inputs) {
         this.workflowUUID = workflowUUID;
         this.status = status;
         this.name = name;
@@ -70,8 +68,9 @@ public class WorkflowStatusInternal {
     public WorkflowState getStatus() {
         return status;
     }
-    public void setStatus( WorkflowState state) {
-        this.status = state ;
+
+    public void setStatus(WorkflowState state) {
+        this.status = state;
     }
 
     public String getName() {
@@ -110,25 +109,21 @@ public class WorkflowStatusInternal {
         return createdAt;
     }
 
-
     public Long getUpdatedAt() {
         return updatedAt;
     }
 
-
     public String getQueueName() {
         return queueName;
     }
-
 
     public String getExecutorId() {
         return executorId;
     }
 
     public void setExecutorId(String eid) {
-        this.executorId = eid ;
+        this.executorId = eid;
     }
-
 
     public String getAppVersion() {
         return appVersion;
@@ -138,21 +133,17 @@ public class WorkflowStatusInternal {
         return appId;
     }
 
-
     public Integer getRecoveryAttempts() {
         return recoveryAttempts;
     }
-
 
     public Long getWorkflowTimeoutMs() {
         return workflowTimeoutMs;
     }
 
-
     public Long getWorkflowDeadlineEpochMs() {
         return workflowDeadlineEpochMs;
     }
-
 
     public String getDeduplicationId() {
         return deduplicationId;
@@ -162,7 +153,6 @@ public class WorkflowStatusInternal {
         this.deduplicationId = dedupId;
     }
 
-
     public int getPriority() {
         return priority;
     }
@@ -170,5 +160,4 @@ public class WorkflowStatusInternal {
     public String getInputs() {
         return inputs;
     }
-
 }

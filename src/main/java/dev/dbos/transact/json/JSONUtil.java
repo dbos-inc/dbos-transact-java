@@ -1,18 +1,11 @@
 package dev.dbos.transact.json;
 
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import dev.dbos.transact.exceptions.SerializableException;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
-import dev.dbos.transact.exceptions.SerializableException;
-
-import java.lang.reflect.Type;
 
 public class JSONUtil {
 
@@ -24,7 +17,7 @@ public class JSONUtil {
     }
 
     public static String serialize(Object obj) {
-        return serializeArray(new Object[]{obj}) ;
+        return serializeArray(new Object[]{obj});
     }
 
     public static String serializeArray(Object[] args) {
@@ -47,16 +40,11 @@ public class JSONUtil {
     public static String serializeError(Throwable error) {
 
         SerializableException se = new SerializableException(error);
-        return JSONUtil.serialize(se) ;
+        return JSONUtil.serialize(se);
     }
 
     public static SerializableException deserializeError(String json) {
         Object[] eArray = JSONUtil.deserializeToArray(json);
         return (SerializableException) eArray[0];
     }
-
-
-
-
 }
-

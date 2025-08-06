@@ -7,7 +7,8 @@ public class StepInfo {
     private final Exception error;
     private final String childWorkflowId;
 
-    public StepInfo(int functionId, String functionName, Object output, Exception error, String childWorkflowId) {
+    public StepInfo(int functionId, String functionName, Object output, Exception error,
+            String childWorkflowId) {
         this.functionId = functionId;
         this.functionName = functionName;
         this.output = output;
@@ -37,27 +38,31 @@ public class StepInfo {
 
     @Override
     public String toString() {
-        return "StepInfo{" +
-                "functionId=" + functionId +
-                ", functionName='" + functionName + '\'' +
-                ", output=" + output +
-                ", error=" + error +
-                ", childWorkflowId='" + childWorkflowId + '\'' +
-                '}';
+        return "StepInfo{" + "functionId=" + functionId + ", functionName='" + functionName + '\''
+                + ", output=" + output + ", error=" + error + ", childWorkflowId='"
+                + childWorkflowId + '\'' + '}';
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         StepInfo stepInfo = (StepInfo) o;
 
-        if (functionId != stepInfo.functionId) return false;
-        if (!functionName.equals(stepInfo.functionName)) return false;
-        if (output != null ? !output.equals(stepInfo.output) : stepInfo.output != null) return false;
-        if (error != null ? !error.equals(stepInfo.error) : stepInfo.error != null) return false;
-        return childWorkflowId != null ? childWorkflowId.equals(stepInfo.childWorkflowId) : stepInfo.childWorkflowId == null;
+        if (functionId != stepInfo.functionId)
+            return false;
+        if (!functionName.equals(stepInfo.functionName))
+            return false;
+        if (output != null ? !output.equals(stepInfo.output) : stepInfo.output != null)
+            return false;
+        if (error != null ? !error.equals(stepInfo.error) : stepInfo.error != null)
+            return false;
+        return childWorkflowId != null
+                ? childWorkflowId.equals(stepInfo.childWorkflowId)
+                : stepInfo.childWorkflowId == null;
     }
 
     @Override

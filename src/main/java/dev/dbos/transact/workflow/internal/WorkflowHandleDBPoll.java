@@ -19,15 +19,14 @@ public class WorkflowHandleDBPoll<T> implements WorkflowHandle<T> {
     }
 
     @Override
-    public T getResult()  {
+    public T getResult() {
 
-        T result = (T)systemDatabase.awaitWorkflowResult(workflowId);
-        return result ;
-
+        T result = (T) systemDatabase.awaitWorkflowResult(workflowId);
+        return result;
     }
 
     @Override
     public WorkflowStatus getStatus() {
-        return systemDatabase.getWorkflowStatus(workflowId) ;
+        return systemDatabase.getWorkflowStatus(workflowId);
     }
 }
