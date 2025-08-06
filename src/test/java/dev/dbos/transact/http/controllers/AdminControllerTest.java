@@ -10,6 +10,8 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.ExecutingService;
 import dev.dbos.transact.execution.ExecutingServiceImpl;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.SimpleService;
+import dev.dbos.transact.workflow.SimpleServiceImpl;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -39,7 +41,7 @@ class AdminControllerTest {
                 .maximumPoolSize(2)
                 .runAdminServer()
                 .adminServerPort(3010)
-                .adminAwaitOnStart(false)
+                .adminAwaitOnStart(true)
                 .build();
     }
 
@@ -117,42 +119,144 @@ class AdminControllerTest {
             assertEquals("test-itemstepOnestepTwo", result);
         }
 
-        // HttpRequest request = HttpRequest.newBuilder()
-        // .uri(URI.create("http://localhost:3010/workflows/abc123/steps"))
-        // .GET()
-        // .build();
-
-        // HttpClient client = HttpClient.newHttpClient();
-
-        // HttpResponse<String> response = client.send(request,
-        // HttpResponse.BodyHandlers.ofString());
-        // String body = response.body();
-
         given()
                 .port(3010)
                 .when()
                 .get("/workflows/abc123/steps")
                 .then()
                 .statusCode(200)
-                .body("size()", equalTo(2));
-
+                .body("size()", equalTo(2))
+                .body("[0].functionId", equalTo(0))
+                .body("[0].functionName", equalTo("stepOne"))
+                .body("[0].output", equalTo("stepOne"))
+                .body("[0].error", nullValue())
+                .body("[0].childWorkflowId", nullValue())
+                .body("[1].functionId", equalTo(1))
+                .body("[1].functionName", equalTo("stepTwo"))
+                .body("[1].output", equalTo("stepTwo"))
+                .body("[1].error", nullValue())
+                .body("[1].childWorkflowId", nullValue());
     }
 
-}
+    @Test
+    public void getWorkflowStatus() throws Exception {
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
 
-// [
-// {
-// "functionId": 0,
-// "functionName": "stepOne",
-// "output": "stepOne",
-// "error": null,
-// "childWorkflowId": null
-// },
-// {
-// "functionId": 1,
-// "functionName": "stepTwo",
-// "output": "stepTwo",
-// "error": null,
-// "childWorkflowId": null
-// }
-// ]
+        // Needed to call the step
+        executingService.setExecutingService(executingService);
+
+        try (SetWorkflowID id = new SetWorkflowID("abc123")) {
+            String result = executingService.workflowMethodWithStep("test-item");
+            assertEquals("test-itemstepOnestepTwo", result);
+        }
+
+        given()
+                .port(3010)
+                .when()
+                .get("/workflows/abc123")
+                .then()
+                .statusCode(200)
+                .body("workflowId", equalTo("abc123"))
+                .body("status", equalTo("SUCCESS"))
+                .body("name", equalTo("workflowMethodWithStep"))
+                .body("className", equalTo("dev.dbos.transact.execution.ExecutingServiceImpl"))
+                .body("input", hasSize(1))
+                .body("input[0]", equalTo("test-item"))
+                .body("output", equalTo("test-itemstepOnestepTwo"))
+                .body("error", nullValue());
+    }
+
+    @Test
+    public void workflows() throws Exception {
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
+
+        // Needed to call the step
+        executingService.setExecutingService(executingService);
+
+        // Execute multiple workflows with different IDs and inputs
+        try (SetWorkflowID id1 = new SetWorkflowID("workflow-001")) {
+            String result1 = executingService.workflowMethodWithStep("input-alpha");
+            assertEquals("input-alphastepOnestepTwo", result1);
+        }
+
+        try (SetWorkflowID id2 = new SetWorkflowID("workflow-002")) {
+            String result2 = executingService.workflowMethodWithStep("input-beta");
+            assertEquals("input-betastepOnestepTwo", result2);
+        }
+
+        try (SetWorkflowID id3 = new SetWorkflowID("workflow-003")) {
+            String result3 = executingService.workflowMethodWithStep("input-gamma");
+            assertEquals("input-gammastepOnestepTwo", result3);
+        }
+
+        try (SetWorkflowID id4 = new SetWorkflowID("workflow-004")) {
+            String result3 = simpleService.workWithString("input-delta");
+            assertEquals("Processed: input-delta", result3);
+        }
+
+        try (SetWorkflowID id5 = new SetWorkflowID("workflow-005")) {
+            simpleService.workWithError();
+        } catch (Exception e) {
+            assertEquals("DBOS Test error", e.getMessage());
+        }
+
+        given()
+                .port(3010)
+                .contentType("application/json")
+                .when()
+                .post("/workflows")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(5));
+
+        given()
+                .port(3010)
+                .contentType("application/json")
+                .body("{ }")
+                .when()
+                .post("/workflows")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(5));
+
+        given()
+                .port(3010)
+                .contentType("application/json")
+                .body("{ \"status\": \"SUCCESS\" }")
+                .when()
+                .post("/workflows")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(4));
+
+        given()
+                .port(3010)
+                .contentType("application/json")
+                .body("{ \"status\": \"ERROR\" }")
+                .when()
+                .post("/workflows")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(1));
+
+        given()
+                .port(3010)
+                .contentType("application/json")
+                .body("{ \"workflowName\": \"workflowMethodWithStep\" }")
+                .when()
+                .post("/workflows")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(3));
+    }
+}

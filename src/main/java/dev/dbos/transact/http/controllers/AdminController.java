@@ -97,6 +97,10 @@ public class AdminController {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public List<WorkflowStatus> workflows(ListWorkflowsInput input) {
+        if (input == null) {
+            input = new ListWorkflowsInput();
+        }
+
         try {
             return systemDatabase.listWorkflows(input);
         } catch (SQLException e) {
