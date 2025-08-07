@@ -17,10 +17,7 @@ import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
 import dev.dbos.transact.utils.GlobalParams;
-import dev.dbos.transact.workflow.ForkOptions;
-import dev.dbos.transact.workflow.ListWorkflowsInput;
-import dev.dbos.transact.workflow.WorkflowHandle;
-import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.*;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -412,7 +409,25 @@ public class DBOS {
         return this.dbosExecutor.startWorkflow(func);
     }
 
+    /**
+     * List all workflows
+     *
+     * @param input
+     *            {@link ListWorkflowsInput} parameters to query workflows
+     * @return a list of workflow status {@link WorkflowStatus}
+     */
     public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
         return systemDatabase.listWorkflows(input);
+    }
+
+    /**
+     * List the steps in the workflow
+     *
+     * @param workflowId
+     *            Id of the workflow whose steps to return
+     * @return list of step information {@link StepInfo}
+     */
+    public List<StepInfo> listWorkflowSteps(String workflowId) {
+        return systemDatabase.listWorkflowSteps(workflowId);
     }
 }
