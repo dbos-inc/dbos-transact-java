@@ -45,9 +45,13 @@ dependencies {
     implementation("org.glassfish.jersey.containers:jersey-container-servlet-core:3.1.0")
     implementation("org.glassfish.jersey.inject:jersey-hk2:3.1.1")
     implementation("org.glassfish.jersey.core:jersey-server:3.1.0")
+    implementation("org.glassfish.jersey.media:jersey-media-json-jackson:3.1.0")
 
     testImplementation("ch.qos.logback:logback-classic:1.5.6")
     testImplementation("org.mockito:mockito-core:5.12.0")
+    testImplementation("io.rest-assured:rest-assured:5.4.0")
+    testImplementation("io.rest-assured:json-path:5.4.0")
+    testImplementation("io.rest-assured:xml-path:5.4.0")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }

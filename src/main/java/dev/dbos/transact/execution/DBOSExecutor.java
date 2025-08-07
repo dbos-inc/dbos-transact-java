@@ -27,6 +27,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -71,6 +72,13 @@ public class DBOSExecutor {
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
         return workflowRegistry.get(workflowName);
+    }
+
+    public List<Queue> getAllQueuesSnapshot() {
+        if (queueService == null) {
+            throw new IllegalStateException("QueueService not set in DBOSExecutor");
+        }
+        return queueService.getAllQueuesSnapshot();
     }
 
     public WorkflowInitResult preInvokeWorkflow(String workflowName, String className,
@@ -418,7 +426,7 @@ public class DBOSExecutor {
             throw new WorkflowFunctionNotFoundException(workflowId);
         }
 
-        WorkflowHandle handle = null;
+        WorkflowHandle<?> handle = null;
         try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
             DBOSContextHolder.get().setInWorkflow(true);
             try {
