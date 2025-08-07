@@ -57,7 +57,7 @@ public class DBOSContext {
         this.workflowTimeoutMs = timeout;
     }
 
-    public DBOSContext(DBOSOptions options, int functionId) {
+    public DBOSContext(WorkflowOptions options, int functionId) {
         this.workflowId = options.getWorkflowId();
         this.functionId = functionId;
         this.inWorkflow = false;
@@ -77,7 +77,7 @@ public class DBOSContext {
         this.workflowTimeoutMs = workflowTimeout;
     }
 
-    private DBOSContext(DBOSOptions options, String parentWorkflowId, int parentFunctionId,
+    private DBOSContext(WorkflowOptions options, String parentWorkflowId, int parentFunctionId,
             long parentTimeout) {
         this.workflowId = options.getWorkflowId();
         this.parentWorkflowId = parentWorkflowId;
@@ -142,7 +142,7 @@ public class DBOSContext {
                 this.async, this.getQueue(), this.workflowTimeoutMs);
     }
 
-    public DBOSContext createChild(DBOSOptions options) {
+    public DBOSContext createChild(WorkflowOptions options) {
         return new DBOSContext(options, workflowId, this.getAndIncrementFunctionId(),
                 this.workflowTimeoutMs);
     }

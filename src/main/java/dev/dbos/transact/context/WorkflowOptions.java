@@ -2,14 +2,14 @@ package dev.dbos.transact.context;
 
 import dev.dbos.transact.queue.Queue;
 
-public class DBOSOptions {
+public class WorkflowOptions {
 
     private final boolean async;
     private final Queue queue;
     private final String workflowId;
     private final long timeoutSeconds;
 
-    private DBOSOptions(Builder builder) {
+    private WorkflowOptions(Builder builder) {
         this.async = builder.async;
         this.queue = builder.queue;
         this.workflowId = builder.workflowId;
@@ -56,8 +56,8 @@ public class DBOSOptions {
             return this;
         }
 
-        public DBOSOptions build() {
-            return new DBOSOptions(this);
+        public WorkflowOptions build() {
+            return new WorkflowOptions(this);
         }
     }
 }

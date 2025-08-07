@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSOptions;
-import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.SetWorkflowOptions;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAppException;
 import dev.dbos.transact.exceptions.SerializableException;
@@ -169,8 +169,8 @@ public class AsyncWorkflowTest {
         simpleService.setSimpleService(simpleService);
 
         WorkflowHandle<String> handle = null;
-        DBOSOptions options = new DBOSOptions.Builder("wf-123456").build();
-        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+        WorkflowOptions options = new WorkflowOptions.Builder("wf-123456").build();
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.parentWorkflowWithoutSet("123"));
         }
 
@@ -201,10 +201,10 @@ public class AsyncWorkflowTest {
 
         simpleService.setSimpleService(simpleService);
 
-        DBOSOptions options = new DBOSOptions.Builder("wf-123456").build();
+        WorkflowOptions options = new WorkflowOptions.Builder("wf-123456").build();
 
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.WorkflowWithMultipleChildren("123"));
         }
 
@@ -249,9 +249,9 @@ public class AsyncWorkflowTest {
 
         simpleService.setSimpleService(simpleService);
 
-        DBOSOptions options = new DBOSOptions.Builder("wf-123456").build();
+        WorkflowOptions options = new WorkflowOptions.Builder("wf-123456").build();
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.grandParent("123"));
         }
 
@@ -291,7 +291,7 @@ public class AsyncWorkflowTest {
 
         String wfid = "wf-123";
         WorkflowHandle<String> handle = null;
-        DBOSOptions options = new DBOSOptions.Builder(wfid).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid).build();
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
             handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item"));
         }

@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSOptions;
-import dev.dbos.transact.context.SetDBOSOptions;
+import dev.dbos.transact.context.SetWorkflowOptions;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
@@ -72,10 +72,10 @@ public class WorkflowMgmtTest {
         mgmtService.setMgmtService(mgmtService);
 
         String workflowId = "wfid1";
-        DBOSOptions options = new DBOSOptions.Builder(workflowId).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
         int result;
         WorkflowHandle<Integer> h = null;
-        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
             h = dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23));
         }
 
@@ -119,9 +119,9 @@ public class WorkflowMgmtTest {
         Queue myqueue = new DBOS.QueueBuilder("myqueue").build();
 
         String workflowId = "wfid1";
-        DBOSOptions options = new DBOSOptions.Builder(workflowId).queue(myqueue).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).queue(myqueue).build();
         int result;
-        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
             mgmtService.simpleWorkflow(23);
         }
 
@@ -168,10 +168,10 @@ public class WorkflowMgmtTest {
         CountDownLatch testLatch = new CountDownLatch(2);
 
         e.submit(() -> {
-            DBOSOptions options = new DBOSOptions.Builder(workflowId).build();
+            WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
 
             try {
-                try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+                try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
                     mgmtService.simpleWorkflow(23);
                 }
             } catch (Throwable t) {
@@ -236,9 +236,9 @@ public class WorkflowMgmtTest {
         forkService.setForkService(forkService);
 
         String workflowId = "wfid1";
-        DBOSOptions options = new DBOSOptions.Builder(workflowId).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
         String result;
-        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
             result = forkService.simpleWorkflow("hello");
         }
 
@@ -309,9 +309,9 @@ public class WorkflowMgmtTest {
         forkService.setForkService(forkService);
 
         String workflowId = "wfid1";
-        DBOSOptions options = new DBOSOptions.Builder(workflowId).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
         String result;
-        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
             result = forkService.parentChild("hello");
         }
 
@@ -406,9 +406,9 @@ public class WorkflowMgmtTest {
         forkService.setForkService(forkService);
 
         String workflowId = "wfid1";
-        DBOSOptions options = new DBOSOptions.Builder(workflowId).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
         String result;
-        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
             result = forkService.parentChildAsync("hello");
         }
 

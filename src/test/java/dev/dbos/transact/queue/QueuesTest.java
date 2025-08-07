@@ -6,9 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSOptions;
-import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.SetWorkflowOptions;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
@@ -150,15 +150,15 @@ public class QueuesTest {
         String id1 = "firstQ1234";
         String id2 = "second1234";
 
-        DBOSOptions options1 = new DBOSOptions.Builder(id1).queue(firstQ).build();
+        WorkflowOptions options1 = new WorkflowOptions.Builder(id1).queue(firstQ).build();
         WorkflowHandle<String> handle1 = null;
-        try (SetDBOSOptions o = new SetDBOSOptions(options1)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options1)) {
             handle1 = dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"));
         }
 
-        DBOSOptions options2 = new DBOSOptions.Builder(id2).queue(secondQ).build();
+        WorkflowOptions options2 = new WorkflowOptions.Builder(id2).queue(secondQ).build();
         WorkflowHandle<Integer> handle2 = null;
-        try (SetDBOSOptions o = new SetDBOSOptions(options2)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options2)) {
             handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25));
         }
 
@@ -194,9 +194,9 @@ public class QueuesTest {
 
         for (int i = 0; i < numTasks; i++) {
             String id = "id" + i;
-            DBOSOptions options = new DBOSOptions.Builder(id).queue(limitQ).build();
+            WorkflowOptions options = new WorkflowOptions.Builder(id).queue(limitQ).build();
             WorkflowHandle<Double> handle = null;
-            try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+            try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
                 handle = dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"));
             }
             handles.add(handle);
@@ -400,8 +400,8 @@ public class QueuesTest {
         String id = "q1234";
 
         WorkflowHandle<String> handle = null;
-        DBOSOptions option = new DBOSOptions.Builder(id).queue(firstQ).build();
-        try (SetDBOSOptions o = new SetDBOSOptions(option)) {
+        WorkflowOptions option = new WorkflowOptions.Builder(id).queue(firstQ).build();
+        try (SetWorkflowOptions o = new SetWorkflowOptions(option)) {
             handle = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"));
         }
 

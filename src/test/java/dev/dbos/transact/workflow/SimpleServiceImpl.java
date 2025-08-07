@@ -2,9 +2,9 @@ package dev.dbos.transact.workflow;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSContextHolder;
-import dev.dbos.transact.context.DBOSOptions;
-import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.SetWorkflowOptions;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.queue.Queue;
 
 import org.slf4j.Logger;
@@ -123,8 +123,8 @@ public class SimpleServiceImpl implements SimpleService {
         for (int i = 0; i < 3; i++) {
 
             String wid = "child" + i;
-            DBOSOptions options = new DBOSOptions.Builder(wid).queue(q).build();
-            try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+            WorkflowOptions options = new WorkflowOptions.Builder(wid).queue(q).build();
+            try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
                 simpleService.childWorkflow(wid);
             }
         }
@@ -168,10 +168,10 @@ public class SimpleServiceImpl implements SimpleService {
 
         logger.info("In longParent");
         String workflowId = "childwf";
-        DBOSOptions options = new DBOSOptions.Builder(workflowId).timeout(timeoutSeconds).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).timeout(timeoutSeconds).build();
 
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
             handle = dbos
                     .startWorkflow(() -> simpleService.childWorkflowWithSleep(input, sleepSeconds));
         }
