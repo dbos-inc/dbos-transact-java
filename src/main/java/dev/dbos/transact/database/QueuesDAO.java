@@ -257,7 +257,7 @@ public class QueuesDAO {
             queryBuilder.append(", inputs"); // 18
         }
 
-        queryBuilder.append(" FROM workflow_status ");
+        queryBuilder.append(" FROM dbos.workflow_status ");
 
         // Build WHERE clause
         queryBuilder.append("WHERE queue_name IS NOT NULL ")

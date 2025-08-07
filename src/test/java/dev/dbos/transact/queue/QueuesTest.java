@@ -13,7 +13,6 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.GlobalParams;
-import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -22,6 +21,8 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -110,7 +111,7 @@ public class QueuesTest {
             }
         }
 
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
 
         for (int i = 0; i < 5; i++) {
             String id = "wfid" + i;
@@ -130,6 +131,75 @@ public class QueuesTest {
             assertEquals("inputq" + i + "inputq" + i, result);
             assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
         }
+    }
+
+    @Test
+    void testListQueuedWorkflow() throws Exception {
+
+        queueService.stop();
+        while (!queueService.isStopped()) {
+            Thread.sleep(2000);
+            logger.info("Waiting for queueService to stop");
+        }
+
+        Queue firstQ = new DBOS.QueueBuilder("firstQueue").concurrency(1).workerConcurrency(1)
+                .build();
+
+        ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>().interfaceClass(ServiceQ.class)
+                .implementation(new ServiceQImpl()).build();
+
+        for (int i = 0; i < 5; i++) {
+            String id = "wfid" + i;
+
+            WorkflowOptions option = new WorkflowOptions.Builder(id).queue(firstQ).build();
+            try (SetWorkflowOptions ctx = new SetWorkflowOptions(option)) {
+                serviceQ.simpleQWorkflow("inputq" + i);
+            }
+        }
+
+        List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
+
+        for (int i = 0; i < 5; i++) {
+            String id = "wfid" + i;
+
+            assertEquals(id, wfs.get(i).getWorkflowId());
+            assertEquals(WorkflowState.ENQUEUED.name(), wfs.get(i).getStatus());
+        }
+
+        ListQueuedWorkflowsInput input = new ListQueuedWorkflowsInput();
+        input.setQueueName("abc");
+
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(0, wfs.size());
+
+        input = new ListQueuedWorkflowsInput();
+        input.setQueueName("firstQueue");
+
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(5, wfs.size());
+
+        input = new ListQueuedWorkflowsInput();
+        input.setStartTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS));
+
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(5, wfs.size());
+
+        input = new ListQueuedWorkflowsInput();
+        input.setStartTime(OffsetDateTime.now().plus(10, ChronoUnit.SECONDS));
+
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(0, wfs.size());
+
+        input = new ListQueuedWorkflowsInput();
+        input.setEndTime(OffsetDateTime.now());
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(5, wfs.size());
+
+        input = new ListQueuedWorkflowsInput();
+        input.setEndTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS));
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(0, wfs.size());
+
     }
 
     @Test
