@@ -12,6 +12,7 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.GlobalParams;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -266,7 +267,9 @@ public class QueuesTest {
                 "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
                 "admin", "admin,operator", "{\"result\":\"success\"}", null,
                 System.currentTimeMillis() - 3600000, System.currentTimeMillis(), "QwithWCLimit",
-                Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, "order-app-123", 0,
+                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
+                        .getAppVersion(),
+                "order-app-123", 0,
                 300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
                 "{\"orderId\":\"ORD-12345\"}");
 
@@ -284,15 +287,16 @@ public class QueuesTest {
         }
 
         List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION);
+                GlobalParams.getInstance().getExecutorId(),
+                GlobalParams.getInstance().getAppVersion());
+
         assertEquals(2, idsToRun.size());
 
         // run the same above 2 are in Pending.
         // So no de queueing
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION);
+                GlobalParams.getInstance().getExecutorId(),
+                GlobalParams.getInstance().getAppVersion());
         assertEquals(0, idsToRun.size());
 
         // mark the first 2 as success
@@ -302,8 +306,8 @@ public class QueuesTest {
 
         // next 2 get dequeued
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION);
+                GlobalParams.getInstance().getExecutorId(),
+                GlobalParams.getInstance().getAppVersion());
         assertEquals(2, idsToRun.size());
 
         DBUtils.updateWorkflowState(dataSource,
@@ -332,7 +336,9 @@ public class QueuesTest {
                 "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
                 "admin", "admin,operator", "{\"result\":\"success\"}", null,
                 System.currentTimeMillis() - 3600000, System.currentTimeMillis(), "QwithWCLimit",
-                Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, "order-app-123", 0,
+                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
+                        .getAppVersion(),
+                "order-app-123", 0,
                 300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
                 "{\"orderId\":\"ORD-12345\"}");
 
@@ -368,8 +374,8 @@ public class QueuesTest {
         }
 
         List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION);
+                GlobalParams.getInstance().getExecutorId(),
+                GlobalParams.getInstance().getAppVersion());
         // 0 because global concurrency limit is reached
         assertEquals(0, idsToRun.size());
 
@@ -377,8 +383,9 @@ public class QueuesTest {
                 WorkflowState.PENDING.name(),
                 WorkflowState.SUCCESS.name());
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION);
+                // GlobalParams.getInstance().getExecutorId(),
+                executor2,
+                GlobalParams.getInstance().getAppVersion());
         assertEquals(2, idsToRun.size());
     }
 

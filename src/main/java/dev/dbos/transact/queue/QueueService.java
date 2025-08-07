@@ -7,6 +7,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.utils.GlobalParams;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -79,8 +80,8 @@ public class QueueService {
                     try {
 
                         List<String> workflowIds = systemDatabase.getAndStartQueuedWorkflows(queue,
-                                Constants.DEFAULT_EXECUTORID,
-                                Constants.DEFAULT_APP_VERSION);
+                                GlobalParams.getInstance().getExecutorId(),
+                                GlobalParams.getInstance().getAppVersion());
 
                         for (String id : workflowIds) {
                             dbosExecutor.executeWorkflowById(id);

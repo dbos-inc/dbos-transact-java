@@ -16,6 +16,7 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
+import dev.dbos.transact.utils.GlobalParams;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
@@ -204,6 +205,9 @@ public class DBOS {
     }
 
     public void launch() {
+        GlobalParams gp = GlobalParams.getInstance(dbosExecutor);
+        logger.info("Executor ID: {}", gp.getExecutorId());
+        logger.info("Application version: " + gp.getAppVersion());
 
         queueService.start();
 
@@ -234,6 +238,7 @@ public class DBOS {
 
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         recoveryService.start();
+
     }
 
     public void shutdown() {

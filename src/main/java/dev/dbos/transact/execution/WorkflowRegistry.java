@@ -1,7 +1,9 @@
 package dev.dbos.transact.execution;
 
 import java.lang.reflect.Method;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class WorkflowRegistry {
     private final ConcurrentHashMap<String, WorkflowFunctionWrapper> registry = new ConcurrentHashMap<>();
@@ -17,5 +19,11 @@ public class WorkflowRegistry {
 
     public WorkflowFunctionWrapper get(String workflowName) {
         return registry.get(workflowName);
+    }
+
+    public Set<Class<?>> getClasses() {
+        return registry.values().stream()
+                .map(wrapper -> wrapper.target.getClass())
+                .collect(Collectors.toSet());
     }
 }
