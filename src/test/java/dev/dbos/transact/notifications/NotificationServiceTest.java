@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSOptions;
+import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
@@ -311,5 +313,30 @@ class NotificationServiceTest {
         stepInfos = systemDatabase.listWorkflowSteps(wfid2);
         assertEquals(1, stepInfos.size());
         assertEquals("DBOS.send", stepInfos.get(0).getFunctionName());
+    }
+
+    @Test
+    public void sendOutsideWFTest() throws Exception {
+
+        NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
+                .implementation(new NotServiceImpl(dbos)).build();
+
+        String wfid1 = "recvwf1";
+
+        DBOSOptions options = new DBOSOptions.Builder(wfid1).build();
+        WorkflowHandle<String> handle = null;
+        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+            handle = dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5));
+        }
+
+        assertEquals(WorkflowState.PENDING.name(), handle.getStatus().getStatus());
+        dbos.send(wfid1, "hello", "topic1");
+
+        assertEquals("hello", handle.getResult());
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+
+        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(2, wfs.size());
+
     }
 }
