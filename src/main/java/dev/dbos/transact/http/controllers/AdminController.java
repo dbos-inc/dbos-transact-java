@@ -2,15 +2,21 @@ package dev.dbos.transact.http.controllers;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.queue.QueueMetadata;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,79 +33,170 @@ public class AdminController {
     }
 
     @GET
-    @Path("/healthz")
+    @Path("/dbos-healthz")
     @Produces(MediaType.TEXT_PLAIN)
     public String health() {
-        return "Healthy";
+        return "healthy";
     }
 
     @GET
-    @Path("/deactivate")
-    @Produces(MediaType.TEXT_PLAIN)
-    public String deactivate() {
-        return "deactivated";
+    @Path("/dbos-perf")
+    public Response perf() {
+        // TODO: implement perf hooks
+        return Response.serverError().build();
     }
 
     @GET
-    @Path("/workflow-queues-metadata")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Object workflowQueuesMetadata() {
-        return "queuesMetadata";
-    }
-
-    @GET
-    @Path("/workflows/{workflowId}/steps")
-    @Produces(MediaType.APPLICATION_JSON)
-    public List<StepInfo> ListSteps(@PathParam("workflowId") String workflowId) {
-        logger.info("Retrieving steps for workflow: " + workflowId);
-        return systemDatabase.listWorkflowSteps(workflowId);
-    }
-
-    @GET
-    @Path("/workflows/{workflowId}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public List<WorkflowStatus> ListWorkflows(@PathParam("workflowId") String workflowId) {
-        return new ArrayList<>();
+    @Path("/dbos-deactivate")
+    public Response deactivate() {
+        // TODO: implement dbosExec.deactivateEventReceivers
+        return Response.serverError().build();
     }
 
     @POST
-    @Path("/recovery")
+    @Path("/dbos-workflow-recovery")
+    @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public List<String> recovery() {
+    public Response recovery(List<String> executorIds) {
+        // TODO: implement dbosExec.recoverPendingWorkflows
+        return Response.serverError().build();
+    }
 
-        return new ArrayList<>();
+    @POST
+    @Path("/dbos-garbage-collect")
+    public Response garbageCollect() {
+        // TODO: implement systemDatabase.garbageCollect
+        return Response.serverError().build();
+    }
+
+    @POST
+    @Path("/dbos-global-timeout")
+    public Response globalTimeout() {
+        // TODO: implement globalTimeout
+        return Response.serverError().build();
+    }
+
+    @GET
+    @Path("/dbos-workflow-queues-metadata")
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<QueueMetadata> workflowQueuesMetadata() {
+        List<Queue> queues = dbosExecutor.getAllQueuesSnapshot();
+        List<QueueMetadata> metadataList = new ArrayList<QueueMetadata>();
+        for (Queue queue : queues) {
+            metadataList.add(new QueueMetadata(queue));
+        }
+        return metadataList;
+    }
+
+    @POST
+    @Path("/queues")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response listQueuedWorkflow() {
+        // TODO: implement dbosExec.listQueuedWorkflows
+        return Response.serverError().build();
     }
 
     @POST
     @Path("/workflows")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public List<WorkflowStatus> workflows(ListWorkflowsInput input) {
+    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+        if (input == null) {
+            input = new ListWorkflowsInput();
+        }
 
-        return new ArrayList<>();
+        try {
+            return systemDatabase.listWorkflows(input);
+        } catch (SQLException e) {
+            logger.error("Error listing workflows {}", e.getMessage());
+            throw new WebApplicationException(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GET
+    @Path("/workflows/{workflowId}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public WorkflowStatus GetWorkflowStatus(@PathParam("workflowId") String workflowId) {
+        logger.info("Get workflow status for workflow {}", workflowId);
+        return systemDatabase.getWorkflowStatus(workflowId);
+    }
+
+    @GET
+    @Path("/workflows/{workflowId}/steps")
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<StepInfo> ListSteps(@PathParam("workflowId") String workflowId) {
+        logger.info("Retrieving steps for workflow {}", workflowId);
+        return systemDatabase.listWorkflowSteps(workflowId);
     }
 
     @POST
     @Path("/workflows/{workflowId}/restart")
     @Produces(MediaType.APPLICATION_JSON)
-    public void restart(@PathParam("workflowId") String workflowId) {
+    public ForkWorkflowResponse restart(@PathParam("workflowId") String workflowId) {
+        logger.info("Restarting workflow {} with a new ID", workflowId);
+        WorkflowHandle<?> handle = dbosExecutor.forkWorkflow(workflowId, 0, null);
+        return new ForkWorkflowResponse(handle.getWorkflowId());
     }
 
     @POST
     @Path("/workflows/{workflowId}/resume")
     @Produces(MediaType.APPLICATION_JSON)
-    public void resume(@PathParam("workflowId") String workflowId) {
+    public Response resume(@PathParam("workflowId") String workflowId) {
+        logger.info("Resuming workflow {}", workflowId);
+        dbosExecutor.resumeWorkflow(workflowId);
+        return Response.noContent().build();
     }
 
     @POST
     @Path("/workflows/{workflowId}/fork")
+    @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public void fork(@PathParam("workflowId") String workflowId) {
+    public ForkWorkflowResponse fork(@PathParam("workflowId") String workflowId, ForkWorkflowRequest request) {
+        if (request == null) {
+            request = new ForkWorkflowRequest();
+        }
+        int startStep = (request.startStep != null) ? request.startStep : 0;
+        logger.info("Forking workflow {} from step {} with a new ID", workflowId, startStep);
+
+        ForkOptions.Builder builder = ForkOptions.builder();
+        if (request.newWorkflowId != null) {
+            builder.forkedWorkflowId(request.newWorkflowId);
+        }
+        if (request.applicationVersion != null) {
+            builder.applicationVersion(request.applicationVersion);
+        }
+        if (request.timeoutMs != null) {
+            builder.timeoutMS(request.timeoutMs);
+        }
+
+        WorkflowHandle<?> handle = dbosExecutor.forkWorkflow(workflowId, startStep, builder.build());
+        return new ForkWorkflowResponse(handle.getWorkflowId());
     }
 
     @POST
     @Path("/workflows/{workflowId}/cancel")
-    @Produces(MediaType.APPLICATION_JSON)
-    public void cancel(@PathParam("workflowId") String workflowId) {
+    public Response cancel(@PathParam("workflowId") String workflowId) {
+        logger.info("Cancel workflow {}", workflowId);
+        dbosExecutor.cancelWorkflow(workflowId);
+        return Response.noContent().build();
+    }
+
+    public static class ForkWorkflowRequest {
+        public Integer startStep;
+        public String newWorkflowId;
+        public String applicationVersion;
+        public Long timeoutMs;
+
+        public ForkWorkflowRequest() {
+        }
+    }
+
+    public static class ForkWorkflowResponse {
+        public String workflowId;
+
+        public ForkWorkflowResponse(String workflowId) {
+            this.workflowId = workflowId;
+        }
     }
 }

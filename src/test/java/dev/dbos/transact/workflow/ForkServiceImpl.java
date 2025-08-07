@@ -9,13 +9,13 @@ public class ForkServiceImpl implements ForkService {
     private ForkService forkService;
     private DBOS dbos;
 
-    int step1Count;
-    int step2Count;
-    int step3Count;
-    int step4Count;
-    int step5Count;
-    int child1Count;
-    int child2Count;
+    public int step1Count;
+    public int step2Count;
+    public int step3Count;
+    public int step4Count;
+    public int step5Count;
+    public int child1Count;
+    public int child2Count;
 
     public ForkServiceImpl(DBOS d) {
         this.dbos = d;

@@ -157,4 +157,8 @@ public class QueueService {
         // We also check !workerThread.isAlive() as a final confirmation.
         return shutdownLatch != null && shutdownLatch.getCount() == 0 && !workerThread.isAlive();
     }
+
+    public List<Queue> getAllQueuesSnapshot() {
+        return queueRegistry.getAllQueuesSnapshot();
+    }
 }
