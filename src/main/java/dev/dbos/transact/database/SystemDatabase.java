@@ -10,6 +10,7 @@ import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.notifications.GetWorkflowEventContext;
 import dev.dbos.transact.notifications.NotificationService;
+import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -153,11 +154,19 @@ public class SystemDatabase {
     }
 
     public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-        try {
-            return workflowDAO.listWorkflows(input);
-        } catch (SQLException se) {
-            throw new DBOSException(UNEXPECTED.getCode(), se.getMessage());
-        }
+
+        Supplier<List<WorkflowStatus>> listWorkflowFunction = () -> {
+            logger.info("List workflows");
+
+            try {
+                return workflowDAO.listWorkflows(input);
+            } catch (SQLException sq) {
+                logger.error("Unexpected SQL exception", sq);
+                throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+            }
+        };
+
+        return this.callFunctionAsStep(listWorkflowFunction, "listWorkflows");
     }
 
     public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
@@ -192,12 +201,20 @@ public class SystemDatabase {
     }
 
     public List<StepInfo> listWorkflowSteps(String workflowId) {
-        try {
-            return stepsDAO.listWorkflowSteps(workflowId);
-        } catch (SQLException sq) {
-            logger.error("Unexpected SQL exception", sq);
-            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-        }
+
+        Supplier<List<StepInfo>> listWorkflowStepsFunction = () -> {
+            logger.info("List steps for {}", workflowId);
+
+            try {
+                return stepsDAO.listWorkflowSteps(workflowId);
+            } catch (SQLException sq) {
+                logger.error("Unexpected SQL exception", sq);
+                throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+            }
+        };
+
+        return this.callFunctionAsStep(listWorkflowStepsFunction, "listWorkflowSteps");
+
     }
 
     public Object awaitWorkflowResult(String workflowId) {
@@ -208,6 +225,22 @@ public class SystemDatabase {
     public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId,
             String appVersion) throws SQLException {
         return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
+    }
+
+    public List<WorkflowStatus> getQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput) {
+
+        Supplier<List<WorkflowStatus>> listQueuedWorkflowFunction = () -> {
+            logger.info("List queued workflows ");
+
+            try {
+                return queuesDAO.getQueuedWorkflows(input, loadInput);
+            } catch (SQLException sq) {
+                logger.error("Unexpected SQL exception", sq);
+                throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+            }
+        };
+
+        return this.callFunctionAsStep(listQueuedWorkflowFunction, "listQueuedWorkflows");
     }
 
     public void recordChildWorkflow(String parentId, String childId, // workflowId of the

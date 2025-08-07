@@ -12,6 +12,7 @@ import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.notifications.NotificationService;
+import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
@@ -429,5 +430,18 @@ public class DBOS {
      */
     public List<StepInfo> listWorkflowSteps(String workflowId) {
         return systemDatabase.listWorkflowSteps(workflowId);
+    }
+
+    /**
+     * List workflows queued
+     *
+     * @param query
+     *            parameters to query by
+     * @param loadInput
+     *            Whether to load input or not
+     * @return list of workflow statuses {@link WorkflowStatus}
+     */
+    public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput query, boolean loadInput) {
+        return systemDatabase.getQueuedWorkflows(query, loadInput);
     }
 }
