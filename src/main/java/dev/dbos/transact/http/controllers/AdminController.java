@@ -3,6 +3,7 @@ package dev.dbos.transact.http.controllers;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.queue.QueueMetadata;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -40,39 +41,39 @@ public class AdminController {
 
     @GET
     @Path("/dbos-perf")
-    public String perf() {
+    public Response perf() {
         // TODO: implement perf hooks
-        throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
+        return Response.serverError().build();
     }
 
     @GET
     @Path("/dbos-deactivate")
-    public String deactivate() {
+    public Response deactivate() {
         // TODO: implement dbosExec.deactivateEventReceivers
-        throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
+        return Response.serverError().build();
     }
 
     @POST
     @Path("/dbos-workflow-recovery")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public List<String> recovery(List<String> executorIds) {
+    public Response recovery(List<String> executorIds) {
         // TODO: implement dbosExec.recoverPendingWorkflows
-        throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
+        return Response.serverError().build();
     }
 
     @POST
     @Path("/dbos-garbage-collect")
-    public List<String> garbageCollect() {
+    public Response garbageCollect() {
         // TODO: implement systemDatabase.garbageCollect
-        throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
+        return Response.serverError().build();
     }
 
     @POST
     @Path("/dbos-global-timeout")
-    public List<String> globalTimeout() {
+    public Response globalTimeout() {
         // TODO: implement globalTimeout
-        throw new WebApplicationException("Not implemented", Response.Status.INTERNAL_SERVER_ERROR);
+        return Response.serverError().build();
     }
 
     @GET
@@ -91,9 +92,9 @@ public class AdminController {
     @Path("/queues")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public List<WorkflowStatus> listQueuedWorkflow() {
+    public Response listQueuedWorkflow() {
         // TODO: implement dbosExec.listQueuedWorkflows
-        throw new WebApplicationException("Not Implemented", Response.Status.INTERNAL_SERVER_ERROR);
+        return Response.serverError().build();
     }
 
     @POST
@@ -196,36 +197,6 @@ public class AdminController {
 
         public ForkWorkflowResponse(String workflowId) {
             this.workflowId = workflowId;
-        }
-    }
-
-    public static class RateLimitMetadata {
-        public Integer limit;
-        public Double period;
-
-        public RateLimitMetadata(dev.dbos.transact.queue.RateLimit rateLimit) {
-            this.limit = rateLimit.getLimit();
-            this.period = rateLimit.getPeriod();
-        }
-    }
-
-    public static class QueueMetadata {
-        public String name;
-        public Integer concurrency;
-        public Integer workerConcurrency;
-        public RateLimitMetadata rateLimit;
-        public Boolean priorityEnabled;
-
-        public QueueMetadata(Queue queue) {
-            this.name = queue.getName();
-            this.concurrency = queue.getConcurrency();
-            this.workerConcurrency = queue.getWorkerConcurrency();
-            if (queue.getRateLimit() != null) {
-                this.rateLimit = new RateLimitMetadata(queue.getRateLimit());
-            } else {
-                this.rateLimit = null;
-            }
-            this.priorityEnabled = queue.isPriorityEnabled();
         }
     }
 }
