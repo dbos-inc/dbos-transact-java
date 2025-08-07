@@ -324,8 +324,11 @@ public class DBOSExecutor {
         String workflowId = ctx.getWorkflowId();
 
         if (workflowId == null) {
-            throw new DBOSException(UNEXPECTED.getCode(),
-                    "No workflow id. Step must be called from workflow");
+            // throw new DBOSException(UNEXPECTED.getCode(),
+            // "No workflow id. Step must be called from workflow");
+            logger.warn("Step executed outside a workflow. DBOS features like Checkpointing " +
+                    "will not apply: " + stepName);
+            return function.execute();
         }
         logger.info(String.format("Running step %s for workflow %s", stepName, workflowId));
 

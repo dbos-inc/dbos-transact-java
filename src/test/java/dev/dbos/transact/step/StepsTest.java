@@ -178,4 +178,24 @@ public class StepsTest {
         assertEquals("two", stepInfos.get(1).getOutput());
         assertNull(stepInfos.get(1).getError());
     }
+
+    @Test
+    public void stepOutsideWorkflow() {
+
+        ServiceB serviceB = dbos.<ServiceB>Workflow().interfaceClass(ServiceB.class)
+                .implementation(new ServiceBImpl()).build();
+
+        String result = serviceB.step2("abcde") ;
+        assertEquals("abcde", result);
+
+        serviceB = new ServiceBImpl() ;
+        result = serviceB.step2("hello") ;
+        assertEquals("hello", result);
+
+        dbos.shutdown();
+
+        result = serviceB.step2("pqrstu") ;
+        assertEquals("pqrstu", result);
+        
+    }
 }
