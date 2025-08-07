@@ -210,7 +210,7 @@ public class AsyncWorkflowTest {
 
         assertEquals("123abcdefghi", handle.getResult());
 
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
 
         assertEquals(4, wfs.size());
         assertEquals("wf-123456", wfs.get(0).getWorkflowId());
@@ -257,7 +257,7 @@ public class AsyncWorkflowTest {
 
         assertEquals("p-c-gc-123", handle.getResult());
 
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
 
         assertEquals(3, wfs.size());
         assertEquals("wf-123456", wfs.get(0).getWorkflowId());

@@ -152,8 +152,12 @@ public class SystemDatabase {
         return workflowDAO.getWorkflowStatus(workflowId);
     }
 
-    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
-        return workflowDAO.listWorkflows(input);
+    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+        try {
+            return workflowDAO.listWorkflows(input);
+        } catch (SQLException se) {
+            throw new DBOSException(UNEXPECTED.getCode(), se.getMessage());
+        }
     }
 
     public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)

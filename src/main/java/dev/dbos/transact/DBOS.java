@@ -18,8 +18,11 @@ import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
 import dev.dbos.transact.utils.GlobalParams;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowStatus;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
@@ -407,5 +410,9 @@ public class DBOS {
      */
     public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
         return this.dbosExecutor.startWorkflow(func);
+    }
+
+    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+        return systemDatabase.listWorkflows(input);
     }
 }

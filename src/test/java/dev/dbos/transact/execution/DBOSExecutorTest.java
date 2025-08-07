@@ -72,7 +72,7 @@ class DBOSExecutorTest {
 
         assertEquals("test-itemtest-item", result);
 
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        List<WorkflowStatus> wfs = DBOS.getInstance().listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
         setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
@@ -83,7 +83,7 @@ class DBOSExecutorTest {
         assertEquals("test-itemtest-item", result);
         assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
-        wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        wfs = dbos.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
     }
 
