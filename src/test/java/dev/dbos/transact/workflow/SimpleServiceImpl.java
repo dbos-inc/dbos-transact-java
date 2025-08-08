@@ -64,17 +64,17 @@ public class SimpleServiceImpl implements SimpleService {
         try (SetWorkflowID id = new SetWorkflowID("child1")) {
             simpleService.childWorkflow("abc");
         }
-        result = result + DBOS.retrieveWorkflow("child1").getResult();
+        result = result + DBOS.getInstance().retrieveWorkflow("child1").getResult();
 
         try (SetWorkflowID id = new SetWorkflowID("child2")) {
             simpleService.childWorkflow2("def");
         }
-        result = result + DBOS.retrieveWorkflow("child2").getResult();
+        result = result + DBOS.getInstance().retrieveWorkflow("child2").getResult();
 
         try (SetWorkflowID id = new SetWorkflowID("child3")) {
             simpleService.childWorkflow3("ghi");
         }
-        result = result + DBOS.retrieveWorkflow("child3").getResult();
+        result = result + DBOS.getInstance().retrieveWorkflow("child3").getResult();
 
         return result;
     }
@@ -95,7 +95,7 @@ public class SimpleServiceImpl implements SimpleService {
         try (SetWorkflowID id = new SetWorkflowID("child5")) {
             simpleService.grandchildWorkflow(input);
         }
-        result = "c-" + DBOS.retrieveWorkflow("child5").getResult();
+        result = "c-" + DBOS.getInstance().retrieveWorkflow("child5").getResult();
         return result;
     }
 
@@ -110,7 +110,7 @@ public class SimpleServiceImpl implements SimpleService {
         try (SetWorkflowID id = new SetWorkflowID("child4")) {
             simpleService.childWorkflow4(input);
         }
-        result = "p-" + DBOS.retrieveWorkflow("child4").getResult();
+        result = "p-" + DBOS.getInstance().retrieveWorkflow("child4").getResult();
         return result;
     }
 

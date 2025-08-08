@@ -150,11 +150,11 @@ class RecoveryServiceTest {
 
         dbos.launch();
 
-        WorkflowHandle h = DBOS.retrieveWorkflow("wf-123");
+        WorkflowHandle h = DBOS.getInstance().retrieveWorkflow("wf-123");
         h.getResult();
         assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
 
-        h = DBOS.retrieveWorkflow("wf-124");
+        h = dbos.retrieveWorkflow("wf-124");
         h.getResult();
         assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
     }

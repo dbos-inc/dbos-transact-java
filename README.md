@@ -38,24 +38,34 @@ You add durable workflows to your existing Java program by annotating ordinary f
 
 ```java
 
-public interface SimpleWorkflowService {
-
-    void setSimpleWorkflowService(SimpleWorkflowService e);
+public interface WorkflowService {
+    void setStepService(StepService stepService);
     String exampleWorkflow(String input) ;
+}
+
+public interface StepService {
     void stepOne() ;
     void stepTwo() ;
 }
 
-public class SimpleWorkflowServiceImpl implements SimpleWorkflowService {
+public class WorkflowServiceImpl implements WorkflowService {
 
-    public void setSimpleWorkflowService(SimpleWorkflowService simpleWorkflow) {
-        this.simpleWorkflowService = simpleWorkflow;
+    private Stepservice stepService;
+    public void setStepService(StepService stepService) {
+        this.stepService = stepService;
     }
     
     @Workflow(name = "exampleWorkflow")
     public String exampleWorkflow(String input) {
+        stepService.stepOne();
+        stepService.stepTwo();
         return input + input;
     }
+    
+}
+
+public class StepServiceImpl implements StepService {
+
     @Step(name = "stepOne")
     public void stepOne() {
         logger.info("Executed stepOne") ;
@@ -78,16 +88,23 @@ public class Demo {
                 .dbUser("postgres")
                 .sysDbName("demo_dbos_sys")
                 .build() ;
+        // Remember to export the DB password to the env variable PGPASSWORD
 
         DBOS.initialize(dbosConfig);
         DBOS dbos = DBOS.getInstance();
         dbos.launch();
         
-        SimpleWorkflowService syncExample = dbos.<SimpleWorkflowService>Workflow()
-                .interfaceClass(SimpleWorkflowService.class)
-                .implementation(new SimpleWorkflowServiceImpl())
+        WorkflowService syncExample = dbos.<WorkflowService>Workflow()
+                .interfaceClass(WorkflowService.class)
+                .implementation(new WorkflowServiceImpl())
                 .build();
-        syncExample.setSimpleWorkflowService(syncExample);
+
+        StepService steps = dbos.<StepService>Workflow()
+                .interfaceClass(StepService.class)
+                .implementation(new StepServiceImpl())
+                .build();
+        
+        syncExample.setStepService(steps);
 
         String output = syncExample.exampleWorkflow("HelloDBOS") ;
         System.out.println("Sync result: " + output);
@@ -131,14 +148,14 @@ They don't require a separate queueing service or message broker&mdash;just Post
 
          String wid = "child" + i;
          DBOSOptions options = new DBOSOptions.Builder(wid).queue(q).build();
+         List<WorkflowHandle<String>> handles = new ArrayList<>();
          try (SetDBOSOptions o = new SetDBOSOptions(options)) {
-             simpleService.childWorkflow(wid);
+             handles.add(dbos.startWorkflow(()->simpleService.childWorkflow(wid)));
          }
      }
 
      for (int i = 0 ; i < 3 ; i++) {
          String wid = "child"+i;
-         WorkflowHandle h = DBOS.retrieveWorkflow(wid);
          System.out.println(h.getResult());
      }
  }
@@ -163,21 +180,26 @@ You code can return at a later point and check the status for completion and/or 
 
  public void runAsyncWorkflow() {
 
-     SimpleWorkflowService syncExample = dbos.<SimpleWorkflowService>Workflow()
-             .interfaceClass(SimpleWorkflowService.class)
-             .implementation(new SimpleWorkflowServiceImpl())
+     WorkflowService asyncExample = dbos.<WorkflowService>Workflow()
+             .interfaceClass(WorkflowService.class)
+             .implementation(new WorkflowServiceImpl())
              .build();
-     syncExample.setSimpleWorkflowService(syncExample);
+
+     StepService steps = dbos.<StepService>Workflow()
+             .interfaceClass(StepService.class)
+             .implementation(new StepServiceImpl())
+             .build();
+
+     syncExample.setStepService(steps);
 
      String workflowId = "wf-124";
      options = new DBOSOptions.Builder(workflowId).async().build();
+     WorkflowHandle<String> handle = null;
      try (SetDBOSOptions id = new SetDBOSOptions(options)) {
-         syncExample.exampleWorkflow("HelloDBOS");
+         handle = dbos.startWorkflow(()->syncExample.exampleWorkflow("HelloDBOS"));
      }
-
-     WorkflowHandle<String> handle = DBOS.retrieveWorkflow(workflowId); ;
-     result = handle.getResult();
      
+     result = handle.getResult();
  }
 ```
 

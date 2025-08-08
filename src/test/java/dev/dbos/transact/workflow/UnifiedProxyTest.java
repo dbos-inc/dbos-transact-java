@@ -124,7 +124,7 @@ public class UnifiedProxyTest {
 
         for (int i = 0; i < 3; i++) {
             String wid = "child" + i;
-            WorkflowHandle h = DBOS.retrieveWorkflow(wid);
+            WorkflowHandle h = dbos.retrieveWorkflow(wid);
             assertEquals(wid, h.getResult());
         }
 
