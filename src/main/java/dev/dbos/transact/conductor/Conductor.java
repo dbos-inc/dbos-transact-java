@@ -22,6 +22,7 @@ import dev.dbos.transact.conductor.protocol.WorkflowsOutput;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.http.controllers.AdminController;
+import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -33,27 +34,44 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.net.http.WebSocket.Listener;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class Conductor {
 
     private static Logger logger = LoggerFactory.getLogger(AdminController.class);
+    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
-    private String url;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
+    static final int PING_PERIOD_MS = 20000;
+    static final int PING_TIMEOUT_MS = 15000;
+    static final int RECONNECT_DELAY_MS = 1000;
+    static final int CONNECT_TIMEOUT_MS = 5000;
+
+    private final String url;
+    private final SystemDatabase systemDatabase;
+    private final DBOSExecutor dbosExecutor;
+    private final AtomicBoolean isShutdown = new AtomicBoolean(false);
+
     private WebSocket webSocket;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private volatile boolean webSocketOpen = false;
+    private ScheduledFuture<?> pingInterval;
+    private ScheduledFuture<?> pingTimeout;
+    private ScheduledFuture<?> reconnectTimeout;
+
 
     public Conductor(SystemDatabase s, DBOSExecutor e, String key) {
         Objects.requireNonNull(s);
@@ -74,62 +92,125 @@ public class Conductor {
         this.url = "wss://" + dbosDomain + "/conductor/v1alpha1/websocket/" + appName + "/" + key;
     }
 
-    public CompletableFuture<Void> createWebSocket() {
-        HttpClient client = HttpClient.newHttpClient();
-        return client.newWebSocketBuilder().buildAsync(URI.create(url), new Listener() {
-
-        }).thenAccept(socket -> {
-            this.webSocket = socket;
-        });
-    }
-
     public void start() {
-
+        dispatchLoop();
     }
 
     public void stop() {
+        if (isShutdown.compareAndSet(false, true)) {
+            if (pingInterval != null) { pingInterval.cancel(true); }
+            if (pingTimeout != null) { pingTimeout.cancel(true); }
+            if (reconnectTimeout != null) { reconnectTimeout.cancel(true); }
 
+            if (webSocket != null) {
+                webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "");
+                webSocket = null;
+            }
+        }
     }
 
-    public void dispatchLoop() {
+    void setPingInterval() {
+        if (pingInterval != null) {
+            pingInterval.cancel(false);
+        }
+        pingInterval = scheduler.scheduleAtFixedRate(() -> {
+            if (webSocketOpen) {
+                logger.debug("Sending ping to conductor");
+                webSocket.sendPing(null);
+                pingTimeout = scheduler.schedule(() -> {
+                    if (!isShutdown.get()) {
+                        logger.warn("Connection to conductor lost. Reconnecting.");
+                        webSocketOpen = false;
+                        resetWebSocket();
+                    }
+                }, PING_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            }
+        }, 0, PING_PERIOD_MS, TimeUnit.MILLISECONDS);
+    }
+
+    void resetWebSocket() {
+        if (pingInterval != null) {
+            pingInterval.cancel(false);
+            pingInterval = null;
+        }
+
+        if (pingTimeout != null) {
+            pingTimeout.cancel(false);
+            pingTimeout = null;
+        }
+
+        if (webSocket != null) {
+            webSocket.abort();
+            webSocket = null;
+        }
+
+        if (!isShutdown.get() && reconnectTimeout == null) {
+            reconnectTimeout = scheduler.schedule(() -> {
+                reconnectTimeout = null;
+                dispatchLoop();
+            }, RECONNECT_DELAY_MS, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    void dispatchLoop() {
         if (webSocket != null) {
             logger.warn("Conductor websocket already exists");
             return;
         }
 
-        // TODO: shutting down check
+        if (isShutdown.get()) {
+            logger.debug("Not starting dispatch loop as conductor is shutting down");
+            return;
+        }
 
         try {
-            logger.debug("Connecting to conductor at {}", this.url);
+            logger.debug("Connecting to conductor at {}", url);
 
             HttpClient client = HttpClient.newHttpClient();
-
             webSocket = client.newWebSocketBuilder()
-                    .connectTimeout(Duration.ofSeconds(5))
+                    .connectTimeout(Duration.ofMillis(CONNECT_TIMEOUT_MS))
                     .buildAsync(URI.create(url), new WebSocket.Listener() {
                         @Override
                         public void onOpen(WebSocket webSocket) {
+                            webSocketOpen = true;
                             logger.debug("Opened connection to DBOS conductor");
-                            Listener.super.onOpen(webSocket);
+                            setPingInterval();
+                        }
+
+                        @Override
+                        public CompletionStage<?> onPong(WebSocket webSocket, ByteBuffer message) {
+                            logger.debug("Received pong from conductor");
+                            if (pingTimeout != null) {
+                                pingTimeout.cancel(false);
+                                pingTimeout = null;
+                            }
+                            return Listener.super.onPong(webSocket, message);
                         }
 
                         @Override
                         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-                            // TODO Auto-generated method stub
+                            webSocketOpen = false;
+                            if (isShutdown.get()) {
+                                logger.info("Shutdown Conductor connection");
+                            } else if (reconnectTimeout == null) {
+                                logger.warn("Connection to conductor lost. Reconnecting");
+                                resetWebSocket();
+                            }
                             return Listener.super.onClose(webSocket, statusCode, reason);
                         }
 
                         @Override
                         public void onError(WebSocket webSocket, Throwable error) {
-                            // TODO Auto-generated method stub
-                            Listener.super.onError(webSocket, error);
+                            webSocketOpen = false;
+                            logger.warn("Unexpected exception in connection to conductor. Reconnecting", error);
+                            resetWebSocket();
                         }
 
                         @Override
                         public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
                             BaseMessage request;
                             try {
-                                request = mapper.readValue(data.toString(), BaseMessage.class);
+                                request = JSONUtil.fromJson(data.toString(), BaseMessage.class);
                             } catch (Exception e) {
                                 logger.error("Conductor JSON Parsing error", e);
                                 webSocket.request(1);
@@ -139,7 +220,7 @@ public class Conductor {
                             String responseText;
                             try {
                                 BaseResponse response = getResponse(request);
-                                responseText = mapper.writeValueAsString(response);
+                                responseText = JSONUtil.toJson(response);
                             } catch (Exception e) {
                                 logger.error("Conductor JSON Serialization error", e);
                                 webSocket.request(1);
@@ -156,9 +237,8 @@ public class Conductor {
                     }).join();
         } catch (Exception e) {
             logger.warn("Error in conductor loop. Reconnecting", e);
-
+            resetWebSocket();
         }
-
     }
 
     BaseResponse getResponse(BaseMessage message) {
