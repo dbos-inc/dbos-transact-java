@@ -10,7 +10,6 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -105,13 +104,7 @@ public class AdminController {
         if (input == null) {
             input = new ListWorkflowsInput();
         }
-
-        try {
-            return systemDatabase.listWorkflows(input);
-        } catch (SQLException e) {
-            logger.error("Error listing workflows {}", e.getMessage());
-            throw new WebApplicationException(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR);
-        }
+        return systemDatabase.listWorkflows(input);
     }
 
     @GET

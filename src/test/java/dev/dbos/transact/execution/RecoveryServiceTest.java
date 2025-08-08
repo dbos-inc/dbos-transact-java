@@ -4,9 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSOptions;
-import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.SetWorkflowOptions;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
@@ -91,8 +91,8 @@ class RecoveryServiceTest {
         wfid = "wf-127";
         WorkflowHandle<String> handle7 = null;
         Queue q = new DBOS.QueueBuilder("q1").build();
-        DBOSOptions options = new DBOSOptions.Builder(wfid).queue(q).build();
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(q).build();
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
         assertEquals("q1", handle7.getStatus().getQueueName());
@@ -150,11 +150,11 @@ class RecoveryServiceTest {
 
         dbos.launch();
 
-        WorkflowHandle h = DBOS.retrieveWorkflow("wf-123");
+        WorkflowHandle h = DBOS.getInstance().retrieveWorkflow("wf-123");
         h.getResult();
         assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
 
-        h = DBOS.retrieveWorkflow("wf-124");
+        h = dbos.retrieveWorkflow("wf-124");
         h.getResult();
         assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
     }

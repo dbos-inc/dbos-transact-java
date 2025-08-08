@@ -4,9 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSOptions;
-import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.SetWorkflowOptions;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -77,8 +77,8 @@ class NotificationServiceTest {
             notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
         }
 
-        WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
-        WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
+        WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle2 = dbos.retrieveWorkflow(wfid2);
 
         String result = (String) handle1.getResult();
         assertEquals("HelloDBOS", result);
@@ -111,19 +111,19 @@ class NotificationServiceTest {
         try (SetWorkflowID id = new SetWorkflowID("send1")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello1");
         }
-        DBOS.retrieveWorkflow("send1").getResult();
+        dbos.retrieveWorkflow("send1").getResult();
 
         try (SetWorkflowID id = new SetWorkflowID("send2")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello2");
         }
-        DBOS.retrieveWorkflow("send2").getResult();
+        dbos.retrieveWorkflow("send2").getResult();
 
         try (SetWorkflowID id = new SetWorkflowID("send3")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello3");
         }
-        DBOS.retrieveWorkflow("send3").getResult();
+        dbos.retrieveWorkflow("send3").getResult();
 
-        WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
 
         String result = (String) handle1.getResult();
         assertEquals("Hello1Hello2Hello3", result);
@@ -149,8 +149,8 @@ class NotificationServiceTest {
             notService.sendWorkflow(wfid1, null, "HelloDBOS");
         }
 
-        WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
-        WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
+        WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle2 = dbos.retrieveWorkflow(wfid2);
 
         String result = (String) handle1.getResult();
         assertEquals("HelloDBOS", result);
@@ -208,8 +208,8 @@ class NotificationServiceTest {
             notService.sendWorkflow(wfid1, "topic1", null);
         }
 
-        WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
-        WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
+        WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle2 = dbos.retrieveWorkflow(wfid2);
 
         String result = (String) handle1.getResult();
         assertNull(result);
@@ -295,8 +295,8 @@ class NotificationServiceTest {
             notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
         }
 
-        WorkflowHandle<?> handle1 = DBOS.retrieveWorkflow(wfid1);
-        WorkflowHandle<?> handle2 = DBOS.retrieveWorkflow(wfid2);
+        WorkflowHandle<?> handle1 = DBOS.getInstance().retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle2 = DBOS.getInstance().retrieveWorkflow(wfid2);
 
         String result = (String) handle1.getResult();
         assertEquals("HelloDBOS", result);
@@ -323,9 +323,9 @@ class NotificationServiceTest {
 
         String wfid1 = "recvwf1";
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
             handle = dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5));
         }
 

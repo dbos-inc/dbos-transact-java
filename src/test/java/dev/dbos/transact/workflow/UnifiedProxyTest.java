@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSOptions;
-import dev.dbos.transact.context.SetDBOSOptions;
+import dev.dbos.transact.context.SetWorkflowOptions;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
@@ -63,9 +63,9 @@ public class UnifiedProxyTest {
 
         // synchronous
         String wfid1 = "wf-123";
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
         String result;
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             result = simpleService.workWithString("test-item");
         }
         assertEquals("Processed: test-item", result);
@@ -73,9 +73,9 @@ public class UnifiedProxyTest {
         // asynchronous
 
         String wfid2 = "wf-124";
-        options = new DBOSOptions.Builder(wfid2).build();
+        options = new WorkflowOptions.Builder(wfid2).build();
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
         }
 
@@ -87,8 +87,8 @@ public class UnifiedProxyTest {
         // Queued
         String wfid3 = "wf-125";
         Queue q = new DBOS.QueueBuilder("simpleQ").build();
-        options = new DBOSOptions.Builder(wfid3).queue(q).build();
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        options = new WorkflowOptions.Builder(wfid3).queue(q).build();
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             result = simpleService.workWithString("test-item-q");
         }
         assertNull(result);
@@ -115,16 +115,16 @@ public class UnifiedProxyTest {
         simpleService.setSimpleService(simpleService);
 
         String wfid1 = "wf-123";
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
         String result;
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             result = simpleService.syncWithQueued();
         }
         assertEquals("QueuedChildren", result);
 
         for (int i = 0; i < 3; i++) {
             String wid = "child" + i;
-            WorkflowHandle h = DBOS.retrieveWorkflow(wid);
+            WorkflowHandle h = dbos.retrieveWorkflow(wid);
             assertEquals(wid, h.getResult());
         }
 

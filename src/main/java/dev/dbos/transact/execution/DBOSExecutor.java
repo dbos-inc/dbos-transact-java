@@ -2,7 +2,6 @@ package dev.dbos.transact.execution;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
@@ -16,6 +15,7 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
+import dev.dbos.transact.utils.GlobalParams;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -29,6 +29,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
@@ -101,7 +102,10 @@ public class DBOSExecutor {
 
         WorkflowStatusInternal workflowStatusInternal = new WorkflowStatusInternal(workflowId,
                 status, workflowName, className, null, null, null, null, null, null, null, null,
-                queueName, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null, 0,
+                queueName,
+                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
+                        .getAppVersion(),
+                null, 0,
                 workflowTimeoutMs, workflowDeadlineEpoch, null, 1, inputString);
 
         WorkflowInitResult initResult = null;
@@ -336,8 +340,11 @@ public class DBOSExecutor {
         String workflowId = ctx.getWorkflowId();
 
         if (workflowId == null) {
-            throw new DBOSException(UNEXPECTED.getCode(),
-                    "No workflow id. Step must be called from workflow");
+            // throw new DBOSException(UNEXPECTED.getCode(),
+            // "No workflow id. Step must be called from workflow");
+            logger.warn("Step executed outside a workflow. DBOS features like Checkpointing " +
+                    "will not apply: " + stepName);
+            return function.execute();
         }
         logger.info(String.format("Running step %s for workflow %s", stepName, workflowId));
 
@@ -539,5 +546,9 @@ public class DBOSExecutor {
 
         return internalWorkflowsService;
 
+    }
+
+    public Set<Class<?>> getRegisteredClasses() {
+        return workflowRegistry.getClasses();
     }
 }

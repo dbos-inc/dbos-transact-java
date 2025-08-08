@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSOptions;
-import dev.dbos.transact.context.SetDBOSOptions;
+import dev.dbos.transact.context.SetWorkflowOptions;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -71,9 +71,9 @@ public class TimeoutTest {
         String wfid1 = "wf-124";
         String result;
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(3).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(3).build();
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
         }
         // assertNull(result);
@@ -96,9 +96,9 @@ public class TimeoutTest {
         // make it timeout
         String wfid1 = "wf-125";
         String result;
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(1).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(1).build();
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
         }
         // assertNull(result);
@@ -131,9 +131,9 @@ public class TimeoutTest {
 
         Queue simpleQ = new DBOS.QueueBuilder("simpleQ").build();
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).queue(simpleQ).timeout(3).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).queue(simpleQ).timeout(3).build();
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
         }
         // assertNull(result);
@@ -159,9 +159,9 @@ public class TimeoutTest {
 
         Queue simpleQ = new DBOS.QueueBuilder("simpleQ").build();
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).queue(simpleQ).timeout(1).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).queue(simpleQ).timeout(1).build();
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
         }
         // assertNull(result);
@@ -192,9 +192,9 @@ public class TimeoutTest {
         String wfid1 = "wf-128";
         String result;
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(3).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(3).build();
 
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             result = simpleService.longWorkflow("12345");
         }
         assertEquals("1234512345", result);
@@ -216,10 +216,10 @@ public class TimeoutTest {
         String wfid1 = "wf-128";
         String result = null;
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(1).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(1).build();
 
         try {
-            try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+            try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
                 result = simpleService.longWorkflow("12345");
             }
         } catch (Throwable t) {
@@ -244,9 +244,9 @@ public class TimeoutTest {
         String wfid1 = "wf-128";
         String result;
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(3).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(3).build();
 
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             result = simpleService.workWithString("12345");
         }
 
@@ -269,8 +269,8 @@ public class TimeoutTest {
         String wfid1 = "wf-124";
         String result;
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).build();
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             result = simpleService.longParent("12345", 1, 2);
         }
 
@@ -294,9 +294,9 @@ public class TimeoutTest {
         String wfid1 = "wf-124";
         String result;
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
         try {
-            try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+            try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
                 result = simpleService.longParent("12345", 3, 1);
             }
         } catch (Exception e) {
@@ -322,9 +322,9 @@ public class TimeoutTest {
         String wfid1 = "wf-124";
         String result;
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(1).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(1).build();
         try {
-            try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+            try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
                 result = simpleService.longParent("12345", 3, 0);
             }
         } catch (Exception e) {
@@ -351,9 +351,9 @@ public class TimeoutTest {
         String wfid1 = "wf-124";
         String result;
 
-        DBOSOptions options = new DBOSOptions.Builder(wfid1).timeout(2).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(2).build();
         WorkflowHandle<String> handle = null;
-        try (SetDBOSOptions id = new SetDBOSOptions(options)) {
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle = dbos.startWorkflow(() -> simpleService.longParent("12345", 3, 0));
         }
 
