@@ -21,7 +21,6 @@ import dev.dbos.transact.conductor.protocol.WorkflowOutputsResponse;
 import dev.dbos.transact.conductor.protocol.WorkflowsOutput;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -51,15 +50,15 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class Conductor {
+public class Conductor implements AutoCloseable {
 
-    private static Logger logger = LoggerFactory.getLogger(AdminController.class);
+    private static Logger logger = LoggerFactory.getLogger(Conductor.class);
     private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
-    static final int PING_PERIOD_MS = 20000;
-    static final int PING_TIMEOUT_MS = 15000;
-    static final int RECONNECT_DELAY_MS = 1000;
-    static final int CONNECT_TIMEOUT_MS = 5000;
+    private final int pingPeriodMs;
+    private final int pingTimeoutMs;
+    private final int reconnectDelayMs;
+    private final int connectTimeoutMs;
 
     private final String url;
     private final SystemDatabase systemDatabase;
@@ -72,24 +71,84 @@ public class Conductor {
     private ScheduledFuture<?> pingTimeout;
     private ScheduledFuture<?> reconnectTimeout;
 
+    private Conductor(Builder builder) {
+        Objects.requireNonNull(builder.systemDatabase);
+        Objects.requireNonNull(builder.dbosExecutor);
+        Objects.requireNonNull(builder.conductorKey);
 
-    public Conductor(SystemDatabase s, DBOSExecutor e, String key) {
-        Objects.requireNonNull(s);
-        Objects.requireNonNull(e);
-        Objects.requireNonNull(key);
+        this.systemDatabase = builder.systemDatabase;
+        this.dbosExecutor = builder.dbosExecutor;
 
-        String appName = e.getAppName();
+        String appName = dbosExecutor.getAppName();
         Objects.requireNonNull(appName, "App Name must not be null to use Conductor");
 
-        this.systemDatabase = s;
-        this.dbosExecutor = e;
-
-        String dbosDomain = System.getenv("DBOS_DOMAIN");
-        if (dbosDomain == null || dbosDomain.trim().isEmpty()) {
-            dbosDomain = "cloud.dbos.dev";
+        String domain = builder.domain;
+        if (domain == null) {
+            String dbosDomain = System.getenv("DBOS_DOMAIN");
+            if (dbosDomain == null || dbosDomain.trim().isEmpty()) {
+                domain = "wss://cloud.dbos.dev";
+            } else {
+                domain = "wss://" + dbosDomain.trim();
+            }
         }
 
-        this.url = "wss://" + dbosDomain + "/conductor/v1alpha1/websocket/" + appName + "/" + key;
+        this.url = domain + "/conductor/v1alpha1/websocket/" + appName + "/" + builder.conductorKey;
+
+        this.pingPeriodMs = builder.pingPeriodMs;
+        this.pingTimeoutMs = builder.pingTimeoutMs;
+        this.reconnectDelayMs = builder.reconnectDelayMs;
+        this.connectTimeoutMs = builder.connectTimeoutMs;
+    }
+
+    public static class Builder {
+        private SystemDatabase systemDatabase;
+        private DBOSExecutor dbosExecutor;
+        private String conductorKey;
+        private String domain;
+        private int pingPeriodMs = 20000;
+        private int pingTimeoutMs = 15000;
+        private int reconnectDelayMs = 1000;
+        private int connectTimeoutMs = 5000;
+
+        public Builder(SystemDatabase s, DBOSExecutor e, String key) {
+            systemDatabase =s;
+            dbosExecutor = e;
+            conductorKey = key;
+        }
+
+        public Builder domain(String domain) {
+            this.domain = domain;
+            return this;
+        }
+
+        Builder pingPeriodMs(int pingPeriodMs) {
+            this.pingPeriodMs = pingPeriodMs;
+            return this;
+        }
+
+        Builder pingTimeoutMs(int pingTimeoutMs) {
+            this.pingTimeoutMs = pingTimeoutMs;
+            return this;
+        }
+
+        Builder reconnectDelayMs(int reconnectDelayMs) {
+            this.reconnectDelayMs = reconnectDelayMs;
+            return this;
+        }
+
+        Builder connectTimeoutMs(int connectTimeoutMs) {
+            this.connectTimeoutMs = connectTimeoutMs;
+            return this;
+        }
+
+        public Conductor build() {
+            return new Conductor(this);
+        }
+    }
+
+    @Override
+    public void close() throws Exception {
+        this.stop();
     }
 
     public void start() {
@@ -98,9 +157,15 @@ public class Conductor {
 
     public void stop() {
         if (isShutdown.compareAndSet(false, true)) {
-            if (pingInterval != null) { pingInterval.cancel(true); }
-            if (pingTimeout != null) { pingTimeout.cancel(true); }
-            if (reconnectTimeout != null) { reconnectTimeout.cancel(true); }
+            if (pingInterval != null) {
+                pingInterval.cancel(true);
+            }
+            if (pingTimeout != null) {
+                pingTimeout.cancel(true);
+            }
+            if (reconnectTimeout != null) {
+                reconnectTimeout.cancel(true);
+            }
 
             if (webSocket != null) {
                 webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "");
@@ -116,16 +181,16 @@ public class Conductor {
         pingInterval = scheduler.scheduleAtFixedRate(() -> {
             if (webSocketOpen) {
                 logger.debug("Sending ping to conductor");
-                webSocket.sendPing(null);
+                webSocket.sendPing(ByteBuffer.allocate(0)).join();
                 pingTimeout = scheduler.schedule(() -> {
                     if (!isShutdown.get()) {
                         logger.warn("Connection to conductor lost. Reconnecting.");
                         webSocketOpen = false;
                         resetWebSocket();
                     }
-                }, PING_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                }, pingTimeoutMs, TimeUnit.MILLISECONDS);
             }
-        }, 0, PING_PERIOD_MS, TimeUnit.MILLISECONDS);
+        }, 0, pingPeriodMs, TimeUnit.MILLISECONDS);
     }
 
     void resetWebSocket() {
@@ -148,7 +213,7 @@ public class Conductor {
             reconnectTimeout = scheduler.schedule(() -> {
                 reconnectTimeout = null;
                 dispatchLoop();
-            }, RECONNECT_DELAY_MS, TimeUnit.MILLISECONDS);
+            }, reconnectDelayMs, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -168,23 +233,25 @@ public class Conductor {
 
             HttpClient client = HttpClient.newHttpClient();
             webSocket = client.newWebSocketBuilder()
-                    .connectTimeout(Duration.ofMillis(CONNECT_TIMEOUT_MS))
+                    .connectTimeout(Duration.ofMillis(connectTimeoutMs))
                     .buildAsync(URI.create(url), new WebSocket.Listener() {
                         @Override
                         public void onOpen(WebSocket webSocket) {
                             webSocketOpen = true;
                             logger.debug("Opened connection to DBOS conductor");
+                            webSocket.request(1);
                             setPingInterval();
                         }
 
                         @Override
                         public CompletionStage<?> onPong(WebSocket webSocket, ByteBuffer message) {
                             logger.debug("Received pong from conductor");
+                            webSocket.request(1);
                             if (pingTimeout != null) {
                                 pingTimeout.cancel(false);
                                 pingTimeout = null;
                             }
-                            return Listener.super.onPong(webSocket, message);
+                            return null;
                         }
 
                         @Override
@@ -209,11 +276,11 @@ public class Conductor {
                         @Override
                         public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
                             BaseMessage request;
+                            webSocket.request(1);
                             try {
                                 request = JSONUtil.fromJson(data.toString(), BaseMessage.class);
                             } catch (Exception e) {
                                 logger.error("Conductor JSON Parsing error", e);
-                                webSocket.request(1);
                                 return CompletableFuture.completedStage(null);
                             }
 
@@ -223,7 +290,6 @@ public class Conductor {
                                 responseText = JSONUtil.toJson(response);
                             } catch (Exception e) {
                                 logger.error("Conductor JSON Serialization error", e);
-                                webSocket.request(1);
                                 return CompletableFuture.completedStage(null);
                             }
 
@@ -231,8 +297,7 @@ public class Conductor {
                                     .exceptionally(ex -> {
                                         logger.error("Conductor sendText error", ex);
                                         return null;
-                                    })
-                                    .thenRun(() -> webSocket.request(1));
+                                    });
                         }
                     }).join();
         } catch (Exception e) {
@@ -359,7 +424,6 @@ public class Conductor {
             case RETENTION : {
                 // TODO: implement garbage collect and global timeout
                 return new SuccessResponse(message, new RuntimeException("not yet implemented"));
-
             }
 
             default :
@@ -368,5 +432,4 @@ public class Conductor {
         }
 
     }
-
 }

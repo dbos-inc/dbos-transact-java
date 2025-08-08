@@ -226,7 +226,7 @@ public class DBOS {
 
         String conductorKey = config.getConductorKey();
         if (conductorKey != null) {
-            conductor = new Conductor(systemDatabase, dbosExecutor, conductorKey);
+            conductor = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey).build();
             conductor.start();
         }
 
