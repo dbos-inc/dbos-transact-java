@@ -83,6 +83,14 @@ public class Conductor {
         });
     }
 
+    public void start() {
+
+    }
+
+    public void stop() {
+
+    }
+
     public void dispatchLoop() {
         if (webSocket != null) {
             logger.warn("Conductor websocket already exists");
