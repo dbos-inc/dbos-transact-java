@@ -2,11 +2,11 @@ package dev.dbos.transact.context;
 
 import java.io.Closeable;
 
-public class SetDBOSOptions implements Closeable {
+public class SetWorkflowOptions implements Closeable {
 
     private final DBOSContext previousCtx;
 
-    public SetDBOSOptions(DBOSOptions options) {
+    public SetWorkflowOptions(WorkflowOptions options) {
 
         if (options.getWorkflowId() == null) {
             throw new IllegalArgumentException("Workflow Id cannot be null with SetDBOSOptions. ");

@@ -12,13 +12,15 @@ import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.notifications.NotificationService;
+import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
-import dev.dbos.transact.workflow.ForkOptions;
-import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.utils.GlobalParams;
+import dev.dbos.transact.workflow.*;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
@@ -204,6 +206,9 @@ public class DBOS {
     }
 
     public void launch() {
+        GlobalParams gp = GlobalParams.getInstance(dbosExecutor);
+        logger.info("Executor ID: {}", gp.getExecutorId());
+        logger.info("Application version: " + gp.getAppVersion());
 
         queueService.start();
 
@@ -234,6 +239,7 @@ public class DBOS {
 
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         recoveryService.start();
+
     }
 
     public void shutdown() {
@@ -267,7 +273,7 @@ public class DBOS {
         }
     }
 
-    public static <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
+    public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
         return DBOS.getInstance().dbosExecutor.retrieveWorkflow(workflowId);
     }
 
@@ -402,5 +408,40 @@ public class DBOS {
      */
     public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
         return this.dbosExecutor.startWorkflow(func);
+    }
+
+    /**
+     * List all workflows
+     *
+     * @param input
+     *            {@link ListWorkflowsInput} parameters to query workflows
+     * @return a list of workflow status {@link WorkflowStatus}
+     */
+    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+        return systemDatabase.listWorkflows(input);
+    }
+
+    /**
+     * List the steps in the workflow
+     *
+     * @param workflowId
+     *            Id of the workflow whose steps to return
+     * @return list of step information {@link StepInfo}
+     */
+    public List<StepInfo> listWorkflowSteps(String workflowId) {
+        return systemDatabase.listWorkflowSteps(workflowId);
+    }
+
+    /**
+     * List workflows queued
+     *
+     * @param query
+     *            parameters to query by
+     * @param loadInput
+     *            Whether to load input or not
+     * @return list of workflow statuses {@link WorkflowStatus}
+     */
+    public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput query, boolean loadInput) {
+        return systemDatabase.getQueuedWorkflows(query, loadInput);
     }
 }

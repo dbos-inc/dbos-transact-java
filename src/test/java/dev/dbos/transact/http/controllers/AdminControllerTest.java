@@ -279,7 +279,7 @@ class AdminControllerTest {
             assertEquals("hellohello", result);
         }
 
-        WorkflowHandle<String> handle = DBOS.retrieveWorkflow(workflowId);
+        WorkflowHandle<String> handle = DBOS.getInstance().retrieveWorkflow(workflowId);
         assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
         assertEquals(1, impl.step1Count);
@@ -300,7 +300,7 @@ class AdminControllerTest {
                 .extract()
                 .path("workflowId");
 
-        WorkflowHandle<String> newHandle = DBOS.retrieveWorkflow(newWorkflowId);
+        WorkflowHandle<String> newHandle = DBOS.getInstance().retrieveWorkflow(newWorkflowId);
         assertEquals("hellohello", newHandle.getResult());
 
         assertEquals(1, impl.step1Count);

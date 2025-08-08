@@ -114,7 +114,7 @@ public class EventsTest {
             eventService.getEventWorkflow("id1", "key1", 3);
         }
 
-        String event = (String) DBOS.retrieveWorkflow("id2").getResult();
+        String event = (String) DBOS.getInstance().retrieveWorkflow("id2").getResult();
         assertEquals("value1", event);
     }
 
@@ -133,7 +133,7 @@ public class EventsTest {
             eventService.setWithLatch("key1", "value1");
         }
 
-        String event = (String) DBOS.retrieveWorkflow("id2").getResult();
+        String event = (String) dbos.retrieveWorkflow("id2").getResult();
         assertEquals("value1", event);
 
         List<StepInfo> steps = systemDatabase.listWorkflowSteps("id1");

@@ -172,7 +172,7 @@ public class SyncWorkflowTest {
         assertEquals("wf-123456-0", wfs.get(1).getWorkflowId());
         assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
 
-        List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+        List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
         assertEquals(1, steps.size());
         assertEquals("wf-123456-0", steps.get(0).getChildWorkflowId());
         assertEquals(0, steps.get(0).getFunctionId());
@@ -212,7 +212,7 @@ public class SyncWorkflowTest {
         assertEquals("child3", wfs.get(3).getWorkflowId());
         assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).getStatus());
 
-        List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+        List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
         assertEquals(3, steps.size());
         assertEquals("child1", steps.get(0).getChildWorkflowId());
         assertEquals(0, steps.get(0).getFunctionId());
@@ -257,13 +257,13 @@ public class SyncWorkflowTest {
         assertEquals("child5", wfs.get(2).getWorkflowId());
         assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).getStatus());
 
-        List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+        List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
         assertEquals(1, steps.size());
         assertEquals("child4", steps.get(0).getChildWorkflowId());
         assertEquals(0, steps.get(0).getFunctionId());
         assertEquals("childWorkflow4", steps.get(0).getFunctionName());
 
-        steps = systemDatabase.listWorkflowSteps("child4");
+        steps = dbos.listWorkflowSteps("child4");
         assertEquals(1, steps.size());
         assertEquals("child5", steps.get(0).getChildWorkflowId());
         assertEquals(0, steps.get(0).getFunctionId());

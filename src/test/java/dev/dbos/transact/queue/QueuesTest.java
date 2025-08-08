@@ -6,13 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSOptions;
-import dev.dbos.transact.context.SetDBOSOptions;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.SetWorkflowOptions;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
-import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.utils.GlobalParams;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -21,6 +21,8 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -109,7 +111,7 @@ public class QueuesTest {
             }
         }
 
-        List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
 
         for (int i = 0; i < 5; i++) {
             String id = "wfid" + i;
@@ -132,6 +134,75 @@ public class QueuesTest {
     }
 
     @Test
+    void testListQueuedWorkflow() throws Exception {
+
+        queueService.stop();
+        while (!queueService.isStopped()) {
+            Thread.sleep(2000);
+            logger.info("Waiting for queueService to stop");
+        }
+
+        Queue firstQ = new DBOS.QueueBuilder("firstQueue").concurrency(1).workerConcurrency(1)
+                .build();
+
+        ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>().interfaceClass(ServiceQ.class)
+                .implementation(new ServiceQImpl()).build();
+
+        for (int i = 0; i < 5; i++) {
+            String id = "wfid" + i;
+
+            WorkflowOptions option = new WorkflowOptions.Builder(id).queue(firstQ).build();
+            try (SetWorkflowOptions ctx = new SetWorkflowOptions(option)) {
+                serviceQ.simpleQWorkflow("inputq" + i);
+            }
+        }
+
+        List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
+
+        for (int i = 0; i < 5; i++) {
+            String id = "wfid" + i;
+
+            assertEquals(id, wfs.get(i).getWorkflowId());
+            assertEquals(WorkflowState.ENQUEUED.name(), wfs.get(i).getStatus());
+        }
+
+        ListQueuedWorkflowsInput input = new ListQueuedWorkflowsInput();
+        input.setQueueName("abc");
+
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(0, wfs.size());
+
+        input = new ListQueuedWorkflowsInput();
+        input.setQueueName("firstQueue");
+
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(5, wfs.size());
+
+        input = new ListQueuedWorkflowsInput();
+        input.setStartTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS));
+
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(5, wfs.size());
+
+        input = new ListQueuedWorkflowsInput();
+        input.setStartTime(OffsetDateTime.now().plus(10, ChronoUnit.SECONDS));
+
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(0, wfs.size());
+
+        input = new ListQueuedWorkflowsInput();
+        input.setEndTime(OffsetDateTime.now());
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(5, wfs.size());
+
+        input = new ListQueuedWorkflowsInput();
+        input.setEndTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS));
+        wfs = dbos.listQueuedWorkflows(input, true);
+        assertEquals(0, wfs.size());
+
+    }
+
+    @Test
     public void multipleQueues() throws Exception {
 
         Queue firstQ = new DBOS.QueueBuilder("firstQueue").concurrency(1).workerConcurrency(1)
@@ -149,15 +220,15 @@ public class QueuesTest {
         String id1 = "firstQ1234";
         String id2 = "second1234";
 
-        DBOSOptions options1 = new DBOSOptions.Builder(id1).queue(firstQ).build();
+        WorkflowOptions options1 = new WorkflowOptions.Builder(id1).queue(firstQ).build();
         WorkflowHandle<String> handle1 = null;
-        try (SetDBOSOptions o = new SetDBOSOptions(options1)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options1)) {
             handle1 = dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"));
         }
 
-        DBOSOptions options2 = new DBOSOptions.Builder(id2).queue(secondQ).build();
+        WorkflowOptions options2 = new WorkflowOptions.Builder(id2).queue(secondQ).build();
         WorkflowHandle<Integer> handle2 = null;
-        try (SetDBOSOptions o = new SetDBOSOptions(options2)) {
+        try (SetWorkflowOptions o = new SetWorkflowOptions(options2)) {
             handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25));
         }
 
@@ -193,9 +264,9 @@ public class QueuesTest {
 
         for (int i = 0; i < numTasks; i++) {
             String id = "id" + i;
-            DBOSOptions options = new DBOSOptions.Builder(id).queue(limitQ).build();
+            WorkflowOptions options = new WorkflowOptions.Builder(id).queue(limitQ).build();
             WorkflowHandle<Double> handle = null;
-            try (SetDBOSOptions o = new SetDBOSOptions(options)) {
+            try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
                 handle = dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"));
             }
             handles.add(handle);
@@ -266,7 +337,9 @@ public class QueuesTest {
                 "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
                 "admin", "admin,operator", "{\"result\":\"success\"}", null,
                 System.currentTimeMillis() - 3600000, System.currentTimeMillis(), "QwithWCLimit",
-                Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, "order-app-123", 0,
+                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
+                        .getAppVersion(),
+                "order-app-123", 0,
                 300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
                 "{\"orderId\":\"ORD-12345\"}");
 
@@ -284,15 +357,16 @@ public class QueuesTest {
         }
 
         List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION);
+                GlobalParams.getInstance().getExecutorId(),
+                GlobalParams.getInstance().getAppVersion());
+
         assertEquals(2, idsToRun.size());
 
         // run the same above 2 are in Pending.
         // So no de queueing
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION);
+                GlobalParams.getInstance().getExecutorId(),
+                GlobalParams.getInstance().getAppVersion());
         assertEquals(0, idsToRun.size());
 
         // mark the first 2 as success
@@ -302,8 +376,8 @@ public class QueuesTest {
 
         // next 2 get dequeued
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION);
+                GlobalParams.getInstance().getExecutorId(),
+                GlobalParams.getInstance().getAppVersion());
         assertEquals(2, idsToRun.size());
 
         DBUtils.updateWorkflowState(dataSource,
@@ -332,7 +406,9 @@ public class QueuesTest {
                 "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
                 "admin", "admin,operator", "{\"result\":\"success\"}", null,
                 System.currentTimeMillis() - 3600000, System.currentTimeMillis(), "QwithWCLimit",
-                Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, "order-app-123", 0,
+                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
+                        .getAppVersion(),
+                "order-app-123", 0,
                 300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
                 "{\"orderId\":\"ORD-12345\"}");
 
@@ -368,8 +444,8 @@ public class QueuesTest {
         }
 
         List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION);
+                GlobalParams.getInstance().getExecutorId(),
+                GlobalParams.getInstance().getAppVersion());
         // 0 because global concurrency limit is reached
         assertEquals(0, idsToRun.size());
 
@@ -377,8 +453,9 @@ public class QueuesTest {
                 WorkflowState.PENDING.name(),
                 WorkflowState.SUCCESS.name());
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                Constants.DEFAULT_EXECUTORID,
-                Constants.DEFAULT_APP_VERSION);
+                // GlobalParams.getInstance().getExecutorId(),
+                executor2,
+                GlobalParams.getInstance().getAppVersion());
         assertEquals(2, idsToRun.size());
     }
 
@@ -393,8 +470,8 @@ public class QueuesTest {
         String id = "q1234";
 
         WorkflowHandle<String> handle = null;
-        DBOSOptions option = new DBOSOptions.Builder(id).queue(firstQ).build();
-        try (SetDBOSOptions o = new SetDBOSOptions(option)) {
+        WorkflowOptions option = new WorkflowOptions.Builder(id).queue(firstQ).build();
+        try (SetWorkflowOptions o = new SetWorkflowOptions(option)) {
             handle = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"));
         }
 
