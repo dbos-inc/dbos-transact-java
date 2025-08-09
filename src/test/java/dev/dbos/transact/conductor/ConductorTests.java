@@ -5,17 +5,17 @@ import static org.mockito.Mockito.*;
 
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.conductor.protocol.CancelRequest;
-import dev.dbos.transact.conductor.protocol.SuccessResponse;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JSONUtil;
-
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.java_websocket.WebSocket;
 import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ClientHandshake;
@@ -23,7 +23,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,12 +30,13 @@ import org.slf4j.LoggerFactory;
 public class ConductorTests {
 
     static Logger logger = LoggerFactory.getLogger(ConductorTests.class);
+    static TestWebSocketServer testServer;
+    static String domain;
 
     SystemDatabase mockDB;
     DBOSExecutor mockExec;
     Conductor.Builder builder;
-    static TestWebSocketServer testServer;
-    static String domain;
+    final ObjectMapper mapper = new ObjectMapper();
 
     @BeforeAll
     static void beforeAll() throws Exception {
@@ -91,7 +91,7 @@ public class ConductorTests {
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
-            assertTrue(listener.latch.await(10, TimeUnit.SECONDS));
+            assertTrue(listener.latch.await(10, TimeUnit.SECONDS), "latch timed out");
             assertEquals("/conductor/v1alpha1/websocket/test-app-name/conductor-key", listener.resourceDescriptor);
         }
     }
@@ -121,7 +121,7 @@ public class ConductorTests {
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
-            assertTrue(listener.latch.await(10, TimeUnit.SECONDS));
+            assertTrue(listener.latch.await(10, TimeUnit.SECONDS), "latch timed out");
             assertFalse(listener.onCloseCalled);
         }
     }
@@ -155,7 +155,7 @@ public class ConductorTests {
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
-            assertTrue(listener.latch.await(15, TimeUnit.SECONDS));
+            assertTrue(listener.latch.await(15, TimeUnit.SECONDS), "latch timed out");
             assertTrue(listener.openCount >= 2);
         }
     }
@@ -190,13 +190,12 @@ public class ConductorTests {
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
-            assertTrue(listener.latch.await(15, TimeUnit.SECONDS));
+            assertTrue(listener.latch.await(15, TimeUnit.SECONDS), "latch timed out");
             assertTrue(listener.closeCount >= 2);
         }
     }
 
     @Test
-    @Disabled("skip for now")
     public void canCancel() throws Exception {
         class Listener implements WebSocketTestListener {
             WebSocket webSocket;
@@ -223,16 +222,64 @@ public class ConductorTests {
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
-            listener.openLatch.await(1, TimeUnit.SECONDS);
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
             CancelRequest req = new CancelRequest("12345", "sample-wf-id");
             String json = JSONUtil.toJson(req);
             listener.webSocket.send(json);
-            listener.messageLatch.await(1, TimeUnit.SECONDS);
+            assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
-            SuccessResponse resp = JSONUtil.fromJson(listener.message, SuccessResponse.class);
-            assertEquals(new SuccessResponse(req, true), resp);
+            JsonNode root = mapper.readTree(listener.message);
+            assertEquals("cancel", root.get("type").asText());
+            assertEquals("12345", root.get("request_id").asText());
+            assertTrue(root.get("success").asBoolean());
+            assertNull(root.get("error_message"));
         }
     }
 
+    @Test
+    public void canCancelThrows() throws Exception {
+        class Listener implements WebSocketTestListener {
+            WebSocket webSocket;
+            CountDownLatch openLatch = new CountDownLatch(1);
+            String message;
+            CountDownLatch messageLatch = new CountDownLatch(1);
+
+            @Override
+            public void onOpen(WebSocket conn, ClientHandshake handshake) {
+                this.webSocket = conn;
+                openLatch.countDown();
+            }
+
+            @Override
+            public void onMessage(WebSocket conn, String message) {
+                this.message = message;
+                messageLatch.countDown();
+            }
+        }
+
+        Listener listener = new Listener();
+        testServer.setListener(listener);
+
+        String errorMessage = "canCancelThrows error";
+
+        doThrow(new RuntimeException(errorMessage)).when(mockExec).cancelWorkflow(anyString());
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            CancelRequest req = new CancelRequest("12345", "sample-wf-id");
+            String json = JSONUtil.toJson(req);
+            listener.webSocket.send(json);
+            assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+            JsonNode root = mapper.readTree(listener.message);
+            assertEquals("cancel", root.get("type").asText());
+            assertEquals("12345", root.get("request_id").asText());
+            assertEquals(errorMessage, root.get("error_message").asText());
+            assertFalse(root.get("success").asBoolean());
+        }
+    }
 }
