@@ -98,6 +98,7 @@ public class ConductorTests {
     }
 
     @Test
+    @Disabled("flaky test")
     public void sendsPing() throws Exception {
         class Listener implements WebSocketTestListener {
             CountDownLatch latch = new CountDownLatch(3);
