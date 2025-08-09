@@ -164,7 +164,12 @@ public class Conductor implements AutoCloseable {
         pingInterval = scheduler.scheduleAtFixedRate(() -> {
             if (webSocketOpen) {
                 logger.debug("Sending ping to conductor");
-                webSocket.sendPing(ByteBuffer.allocate(0)).join();
+                webSocket.sendPing(ByteBuffer.allocate(0))
+                        .exceptionally(ex -> {
+                            logger.error("Error sending ping to conductor", ex);
+                            return null;
+                        })
+                        .join();
                 pingTimeout = scheduler.schedule(() -> {
                     if (!isShutdown.get()) {
                         logger.warn("Connection to conductor lost. Reconnecting.");

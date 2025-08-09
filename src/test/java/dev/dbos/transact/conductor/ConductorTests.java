@@ -19,11 +19,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.java_websocket.WebSocket;
 import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ClientHandshake;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,34 +28,23 @@ import org.slf4j.LoggerFactory;
 public class ConductorTests {
 
     static Logger logger = LoggerFactory.getLogger(ConductorTests.class);
-    static TestWebSocketServer testServer;
-    static String domain;
 
     SystemDatabase mockDB;
     DBOSExecutor mockExec;
     Conductor.Builder builder;
+    TestWebSocketServer testServer;
+
     final ObjectMapper mapper = new ObjectMapper();
 
-    @BeforeAll
-    static void beforeAll() throws Exception {
+    @BeforeEach
+    void beforeEach() throws Exception {
         testServer = new TestWebSocketServer(0);
         testServer.start();
         testServer.waitStart(1000);
 
         int port = testServer.getPort();
         assertTrue(port != 0, "Invalid Web Socket Server port");
-        domain = String.format("ws://localhost:%d", port);
-        logger.info("Test WS Domain {}", domain);
-    }
-
-    @AfterAll
-    static void afterAll() throws Exception {
-        testServer.stop();
-    }
-
-    @BeforeEach
-    void beforeEach() throws Exception {
-        testServer.setListener(null);
+        String domain = String.format("ws://localhost:%d", port);
 
         mockDB = mock(SystemDatabase.class);
         mockExec = mock(DBOSExecutor.class);
@@ -69,7 +55,7 @@ public class ConductorTests {
 
     @AfterEach
     void afterEach() throws Exception {
-        testServer.setListener(null);
+        testServer.stop();
     }
 
     @Test
@@ -98,8 +84,8 @@ public class ConductorTests {
     }
 
     @Test
-    @Disabled("flaky test")
     public void sendsPing() throws Exception {
+        logger.info("sendsPing Starting");
         class Listener implements WebSocketTestListener {
             CountDownLatch latch = new CountDownLatch(3);
             boolean onCloseCalled = false;
@@ -125,12 +111,14 @@ public class ConductorTests {
 
             assertTrue(listener.latch.await(10, TimeUnit.SECONDS), "latch timed out");
             assertFalse(listener.onCloseCalled);
+        } finally {
+            logger.info("sendsPing ending");
         }
     }
 
     @Test
-    @Disabled("flaky test")
     public void reconnectsOnFailedPing() throws Exception {
+        logger.info("reconnectsOnFailedPing Starting");
         class Listener implements WebSocketTestListener {
             int openCount = 0;
             CountDownLatch latch = new CountDownLatch(2);
@@ -160,6 +148,8 @@ public class ConductorTests {
 
             assertTrue(listener.latch.await(15, TimeUnit.SECONDS), "latch timed out");
             assertTrue(listener.openCount >= 2);
+        } finally {
+            logger.info("reconnectsOnFailedPing ending");
         }
     }
 
