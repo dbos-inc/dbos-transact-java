@@ -33,8 +33,9 @@ class TestWebSocketServer extends WebSocketServer {
         }
     }
 
-    private Logger logger = LoggerFactory.getLogger(ConductorTests.class);
+    private Logger logger = LoggerFactory.getLogger(TestWebSocketServer.class);
     private WebSocketTestListener listener;
+    private ManualResetEvent startEvent = new ManualResetEvent(false);
 
     public TestWebSocketServer(int port) {
         super(new InetSocketAddress(port));
@@ -42,6 +43,14 @@ class TestWebSocketServer extends WebSocketServer {
 
     public void setListener(WebSocketTestListener listener) {
         this.listener = listener;
+    }
+
+    public void waitStart() throws InterruptedException {
+        startEvent.waitOne();
+    }
+
+    public boolean waitStart(long millis) throws InterruptedException {
+        return startEvent.waitOne(millis);
     }
 
     @Override
@@ -54,6 +63,7 @@ class TestWebSocketServer extends WebSocketServer {
 
     @Override
     public void onClose(WebSocket conn, int code, String reason, boolean remote) {
+        startEvent.reset();
         logger.info("onClose");
         if (listener != null) {
             listener.onClose(conn, code, reason, remote);
@@ -78,6 +88,7 @@ class TestWebSocketServer extends WebSocketServer {
 
     @Override
     public void onError(WebSocket conn, Exception ex) {
+        startEvent.reset();
         logger.error("onError", ex);
         if (listener != null) {
             listener.onError(conn, ex);
@@ -86,7 +97,8 @@ class TestWebSocketServer extends WebSocketServer {
 
     @Override
     public void onStart() {
-        logger.info("onStart");
+        startEvent.set();
+        logger.info("onStart {}", getPort());
         if (listener != null) {
             listener.onStart();
         }

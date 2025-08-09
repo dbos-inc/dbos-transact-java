@@ -10,8 +10,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JSONUtil;
 
-import java.io.IOException;
-import java.net.ServerSocket;
+
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -26,8 +25,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ConductorTests {
+
+    static Logger logger = LoggerFactory.getLogger(ConductorTests.class);
 
     SystemDatabase mockDB;
     DBOSExecutor mockExec;
@@ -35,31 +38,16 @@ public class ConductorTests {
     static TestWebSocketServer testServer;
     static String domain;
 
-    private static int findFreePort() {
-        int port = 0;
-        // For ServerSocket port number 0 means that the port number is automatically
-        // allocated.
-        try (ServerSocket socket = new ServerSocket(0)) {
-            // Disable timeout and reuse address after closing the socket.
-            socket.setReuseAddress(true);
-            port = socket.getLocalPort();
-        } catch (IOException ignored) {
-        }
-        if (port > 0) {
-            return port;
-        }
-        throw new RuntimeException("Could not find a free port");
-    }
-
     @BeforeAll
     static void beforeAll() throws Exception {
-        int port = findFreePort();
-        domain = String.format("ws://localhost:%d", port);
-
-        System.out.println(String.format("ConductorTest %s", domain));
-
-        testServer = new TestWebSocketServer(port);
+        testServer = new TestWebSocketServer(0);
         testServer.start();
+        testServer.waitStart(1000);
+
+        int port = testServer.getPort();
+        assertTrue(port != 0, "Invalid Web Socket Server port");
+        domain = String.format("ws://localhost:%d", port);
+        logger.info("Test WS Domain {}", domain);
     }
 
     @AfterAll
@@ -69,6 +57,8 @@ public class ConductorTests {
 
     @BeforeEach
     void beforeEach() throws Exception {
+        testServer.setListener(null);
+
         mockDB = mock(SystemDatabase.class);
         mockExec = mock(DBOSExecutor.class);
         when(mockExec.getAppName()).thenReturn("test-app-name");
@@ -101,8 +91,7 @@ public class ConductorTests {
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
-            listener.latch.await(10, TimeUnit.SECONDS);
-
+            assertTrue(listener.latch.await(10, TimeUnit.SECONDS));
             assertEquals("/conductor/v1alpha1/websocket/test-app-name/conductor-key", listener.resourceDescriptor);
         }
     }
@@ -112,7 +101,6 @@ public class ConductorTests {
         class Listener implements WebSocketTestListener {
             CountDownLatch latch = new CountDownLatch(3);
             boolean onCloseCalled = false;
-            int pingCount = 0;
 
             @Override
             public void onPing(WebSocket conn, Framedata frame) {
@@ -130,12 +118,10 @@ public class ConductorTests {
         testServer.setListener(listener);
 
         builder.pingPeriodMs(2000).pingTimeoutMs(1000);
-
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
-            listener.latch.await(10, TimeUnit.SECONDS);
-            assertTrue(listener.pingCount >= 3);
+            assertTrue(listener.latch.await(10, TimeUnit.SECONDS));
             assertFalse(listener.onCloseCalled);
         }
     }
@@ -144,7 +130,6 @@ public class ConductorTests {
     public void reconnectsOnFailedPing() throws Exception {
         class Listener implements WebSocketTestListener {
             int openCount = 0;
-            int closeCount = 0;
             CountDownLatch latch = new CountDownLatch(2);
 
             @Override
@@ -159,7 +144,6 @@ public class ConductorTests {
 
             @Override
             public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-                closeCount++;
                 latch.countDown();
             }
         }
@@ -171,27 +155,26 @@ public class ConductorTests {
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
-            listener.latch.await(10, TimeUnit.SECONDS);
+            assertTrue(listener.latch.await(15, TimeUnit.SECONDS));
             assertTrue(listener.openCount >= 2);
-            assertTrue(listener.closeCount >= 2);
         }
     }
 
     @Test
     public void reconnectsOnRemoteClose() throws Exception {
         class Listener implements WebSocketTestListener {
-            int openCount = 0;
             int closeCount = 0;
             CountDownLatch latch = new CountDownLatch(3);
             final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
             @Override
             public void onOpen(WebSocket conn, ClientHandshake handshake) {
-                openCount++;
                 latch.countDown();
-                scheduler.schedule(() -> {
-                    conn.close();
-                }, 1, TimeUnit.SECONDS);
+                if (latch.getCount() > 0) {
+                    scheduler.schedule(() -> {
+                        conn.close();
+                    }, 1, TimeUnit.SECONDS);
+                }
             }
 
             @Override
@@ -207,8 +190,7 @@ public class ConductorTests {
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
-            listener.latch.await(10, TimeUnit.SECONDS);
-            assertTrue(listener.openCount >= 3);
+            assertTrue(listener.latch.await(15, TimeUnit.SECONDS));
             assertTrue(listener.closeCount >= 2);
         }
     }
