@@ -111,7 +111,7 @@ public class Conductor implements AutoCloseable {
         private int connectTimeoutMs = 5000;
 
         public Builder(SystemDatabase s, DBOSExecutor e, String key) {
-            systemDatabase =s;
+            systemDatabase = s;
             dbosExecutor = e;
             conductorKey = key;
         }
@@ -121,6 +121,7 @@ public class Conductor implements AutoCloseable {
             return this;
         }
 
+        // timing fields are package public for tests
         Builder pingPeriodMs(int pingPeriodMs) {
             this.pingPeriodMs = pingPeriodMs;
             return this;
