@@ -1,17 +1,25 @@
 package dev.dbos.transact.conductor;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.conductor.protocol.BaseMessage;
 import dev.dbos.transact.conductor.protocol.CancelRequest;
+import dev.dbos.transact.conductor.protocol.ForkWorkflowRequest;
+import dev.dbos.transact.conductor.protocol.ForkWorkflowResponse;
 import dev.dbos.transact.conductor.protocol.RestartRequest;
 import dev.dbos.transact.conductor.protocol.ResumeRequest;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -25,6 +33,7 @@ import org.java_websocket.handshake.ClientHandshake;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -349,9 +358,8 @@ public class ConductorTests {
         MessageListener listener = new MessageListener();
         testServer.setListener(listener);
 
-        String errorMessage = "canRestartThrows error";
         String workflowId = "sample-wf-id";
-
+        String errorMessage = "canRestartThrows error";
         doThrow(new RuntimeException(errorMessage)).when(mockExec).forkWorkflow(anyString(), anyInt(), any());
 
         try (Conductor conductor = builder.build()) {
@@ -369,6 +377,77 @@ public class ConductorTests {
             assertEquals("12345", resp.request_id);
             assertEquals(errorMessage, resp.error_message);
             assertFalse(resp.success);
+        }
+    }
+
+    @Test
+    public void canFork() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+        String workflowId = "sample-wf-id";
+        String newWorkflowId = "new-" + workflowId;
+
+        @SuppressWarnings("unchecked")
+        WorkflowHandle<Object> mockHandle = (WorkflowHandle<Object>) mock(WorkflowHandle.class);
+        when(mockHandle.getWorkflowId()).thenReturn(newWorkflowId);
+        when(mockExec.forkWorkflow(eq(workflowId), anyInt(), any())).thenReturn(mockHandle);
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(50000, TimeUnit.SECONDS), "open latch timed out");
+
+            ForkWorkflowRequest req = new ForkWorkflowRequest("12345", workflowId, 2, "appver-12345", newWorkflowId);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(10000, TimeUnit.SECONDS), "message latch timed out");
+            ArgumentCaptor<ForkOptions> optionsCaptor = ArgumentCaptor.forClass(ForkOptions.class);
+            verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
+            ForkOptions capturedOptions = optionsCaptor.getValue();
+            assertNotNull(capturedOptions);
+            assertEquals("appver-12345", capturedOptions.getApplicationVersion());
+            assertEquals(newWorkflowId, capturedOptions.getForkedWorkflowId());
+            assertEquals(0,capturedOptions.getTimeoutMS());
+
+
+            ForkWorkflowResponse resp = mapper.readValue(listener.message, ForkWorkflowResponse.class);
+            assertEquals("fork_workflow", resp.type);
+            assertEquals("12345", resp.request_id);
+            assertEquals(newWorkflowId, resp.new_workflow_id);
+            assertNull(resp.error_message);
+        }
+    }
+
+    @Test
+    public void canForkThrow() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+        String workflowId = "sample-wf-id";
+
+        String errorMessage = "canForkThrow error";
+        doThrow(new RuntimeException(errorMessage)).when(mockExec).forkWorkflow(eq(workflowId), anyInt(), any());
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(50000, TimeUnit.SECONDS), "open latch timed out");
+
+            ForkWorkflowRequest req = new ForkWorkflowRequest("12345", workflowId, 2, "appver-12345", "new-wf-id");
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(10000, TimeUnit.SECONDS), "message latch timed out");
+            ArgumentCaptor<ForkOptions> optionsCaptor = ArgumentCaptor.forClass(ForkOptions.class);
+            verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
+            ForkOptions capturedOptions = optionsCaptor.getValue();
+            assertNotNull(capturedOptions);
+            assertEquals("appver-12345", capturedOptions.getApplicationVersion());
+            assertEquals("new-wf-id", capturedOptions.getForkedWorkflowId());
+            assertEquals(0,capturedOptions.getTimeoutMS());
+
+
+            ForkWorkflowResponse resp = mapper.readValue(listener.message, ForkWorkflowResponse.class);
+            assertEquals("fork_workflow", resp.type);
+            assertEquals("12345", resp.request_id);
+            assertNull(resp.new_workflow_id);
+            assertEquals(errorMessage, resp.error_message);
         }
     }
 
