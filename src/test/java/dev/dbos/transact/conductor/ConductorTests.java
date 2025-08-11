@@ -188,28 +188,28 @@ public class ConductorTests {
         }
     }
 
-    @Test
-    public void canCancel() throws Exception {
-        class Listener implements WebSocketTestListener {
-            WebSocket webSocket;
-            CountDownLatch openLatch = new CountDownLatch(1);
-            String message;
-            CountDownLatch messageLatch = new CountDownLatch(1);
+    class MessageListener implements WebSocketTestListener {
+        WebSocket webSocket;
+        CountDownLatch openLatch = new CountDownLatch(1);
+        String message;
+        CountDownLatch messageLatch = new CountDownLatch(1);
 
-            @Override
-            public void onOpen(WebSocket conn, ClientHandshake handshake) {
-                this.webSocket = conn;
-                openLatch.countDown();
-            }
-
-            @Override
-            public void onMessage(WebSocket conn, String message) {
-                this.message = message;
-                messageLatch.countDown();
-            }
+        @Override
+        public void onOpen(WebSocket conn, ClientHandshake handshake) {
+            this.webSocket = conn;
+            openLatch.countDown();
         }
 
-        Listener listener = new Listener();
+        @Override
+        public void onMessage(WebSocket conn, String message) {
+            this.message = message;
+            messageLatch.countDown();
+        }
+    }
+
+    @Test
+    public void canCancel() throws Exception {
+        MessageListener listener = new MessageListener();
         testServer.setListener(listener);
 
         try (Conductor conductor = builder.build()) {
@@ -232,26 +232,7 @@ public class ConductorTests {
 
     @Test
     public void canCancelThrows() throws Exception {
-        class Listener implements WebSocketTestListener {
-            WebSocket webSocket;
-            CountDownLatch openLatch = new CountDownLatch(1);
-            String message;
-            CountDownLatch messageLatch = new CountDownLatch(1);
-
-            @Override
-            public void onOpen(WebSocket conn, ClientHandshake handshake) {
-                this.webSocket = conn;
-                openLatch.countDown();
-            }
-
-            @Override
-            public void onMessage(WebSocket conn, String message) {
-                this.message = message;
-                messageLatch.countDown();
-            }
-        }
-
-        Listener listener = new Listener();
+        MessageListener listener = new MessageListener();
         testServer.setListener(listener);
 
         String errorMessage = "canCancelThrows error";

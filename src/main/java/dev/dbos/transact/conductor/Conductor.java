@@ -165,7 +165,8 @@ public class Conductor implements AutoCloseable {
         pingInterval = scheduler.scheduleAtFixedRate(() -> {
             try {
                 logger.info("setPingInterval::scheduleAtFixedRate");
-                // Note, checking for null because websocket can connect before websocket variable is assigned
+                // Note, checking for null because websocket can connect before websocket
+                // variable is assigned
                 if (webSocket != null && !webSocket.isOutputClosed()) {
                     logger.info("Sending ping to conductor");
 
