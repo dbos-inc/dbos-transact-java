@@ -13,6 +13,7 @@ import dev.dbos.transact.conductor.protocol.CancelRequest;
 import dev.dbos.transact.conductor.protocol.ExistPendingWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.ForkWorkflowRequest;
 import dev.dbos.transact.conductor.protocol.GetWorkflowRequest;
+import dev.dbos.transact.conductor.protocol.ListQueuedWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.ListStepsRequest;
 import dev.dbos.transact.conductor.protocol.ListWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.RestartRequest;
@@ -20,6 +21,7 @@ import dev.dbos.transact.conductor.protocol.ResumeRequest;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -524,6 +526,65 @@ public class ConductorTests {
             assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
         }
     }
+
+    @Test
+    public void canListQueuedWorkflows() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+        List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+        statuses.add(new WorkflowStatus("wf-1", "PENDING", "WF1", null, null,
+                null, null, null,
+                new Object[0], null, null,
+                1754936102215L, 1754936102215L, null, "test-executor",
+                "test-app-ver", null, null,
+                "test-app-id", null));
+        statuses.add(new WorkflowStatus("wf-2", "PENDING", "WF2", null, null,
+                null, null, null,
+                new Object[0], null, null,
+                1754936722066L, 1754936722066L, null, "test-executor",
+                "test-app-ver", null, null,
+                "test-app-id", null));
+        statuses.add(new WorkflowStatus("wf-3", "PENDING", "WF3", null, null,
+                null, null, null,
+                new Object[0], null, null,
+                1754946202215L, 1754946202215L, null, "test-executor",
+                "test-app-ver", null, null,
+                "test-app-id", null));
+
+        when(mockDB.getQueuedWorkflows(any(), anyBoolean())).thenReturn(statuses);
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            ListQueuedWorkflowsRequest req = new ListQueuedWorkflowsRequest.Builder()
+                    .startTime("2024-06-01T12:34:56Z")
+                    .workflowName("foobarbaz")
+                    .build("12345");
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(100000000, TimeUnit.SECONDS), "message latch timed out");
+            ArgumentCaptor<ListQueuedWorkflowsInput> inputCaptor = ArgumentCaptor.forClass(ListQueuedWorkflowsInput.class);
+            verify(mockDB).getQueuedWorkflows(inputCaptor.capture(), eq(false));
+            ListQueuedWorkflowsInput input = inputCaptor.getValue();
+            assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.getStartTime());
+            assertEquals("foobarbaz", input.getName());
+            assertNull(input.getLimit());
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("list_queued_workflows", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+
+            JsonNode outputNode = jsonNode.get("output");
+            assertNotNull(outputNode);
+            assertTrue(outputNode.isArray());
+            assertTrue(outputNode.size() == 3);
+
+            assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
+        }
+    }
+
 
     @Test
     public void canGetWorkflow() throws Exception {
