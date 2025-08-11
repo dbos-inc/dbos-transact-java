@@ -108,7 +108,6 @@ public class ConductorTests {
     }
 
     @Test
-    @Disabled
     public void sendsPing() throws Exception {
         logger.info("sendsPing Starting");
         class Listener implements WebSocketTestListener {
@@ -142,7 +141,6 @@ public class ConductorTests {
     }
 
     @Test
-    @Disabled
     public void reconnectsOnFailedPing() throws Exception {
         logger.info("reconnectsOnFailedPing Starting");
         class Listener implements WebSocketTestListener {
@@ -180,7 +178,6 @@ public class ConductorTests {
     }
 
     @Test
-    @Disabled
     public void reconnectsOnRemoteClose() throws Exception {
         class Listener implements WebSocketTestListener {
             int closeCount = 0;
