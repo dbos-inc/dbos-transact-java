@@ -11,16 +11,13 @@ import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.conductor.protocol.BaseMessage;
 import dev.dbos.transact.conductor.protocol.CancelRequest;
 import dev.dbos.transact.conductor.protocol.ForkWorkflowRequest;
-import dev.dbos.transact.conductor.protocol.ForkWorkflowResponse;
+import dev.dbos.transact.conductor.protocol.GetWorkflowRequest;
 import dev.dbos.transact.conductor.protocol.ListWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.RestartRequest;
 import dev.dbos.transact.conductor.protocol.ResumeRequest;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
-import dev.dbos.transact.conductor.protocol.WorkflowOutputsResponse;
-import dev.dbos.transact.conductor.protocol.WorkflowsOutput;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -256,11 +253,12 @@ public class ConductorTests {
             // Verify that resumeWorkflow was called with the correct argument
             verify(mockExec).cancelWorkflow(workflowId);
 
-            SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
-            assertEquals("cancel", resp.type);
-            assertEquals("12345", resp.request_id);
-            assertTrue(resp.success);
-            assertNull(resp.error_message);
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("cancel", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertNull(jsonNode.get("error_message"));
+            assertTrue(jsonNode.get("success").asBoolean());
         }
     }
 
@@ -284,11 +282,12 @@ public class ConductorTests {
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
             verify(mockExec).cancelWorkflow(workflowId);
 
-            SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
-            assertEquals("cancel", resp.type);
-            assertEquals("12345", resp.request_id);
-            assertEquals(errorMessage, resp.error_message);
-            assertFalse(resp.success);
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("cancel", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertEquals(errorMessage, jsonNode.get("error_message").asText());
+            assertFalse(jsonNode.get("success").asBoolean());
         }
     }
 
@@ -308,11 +307,12 @@ public class ConductorTests {
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
             verify(mockExec).resumeWorkflow(workflowId);
 
-            SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
-            assertEquals("resume", resp.type);
-            assertEquals("12345", resp.request_id);
-            assertTrue(resp.success);
-            assertNull(resp.error_message);
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("resume", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertNull(jsonNode.get("error_message"));
+            assertTrue(jsonNode.get("success").asBoolean());
         }
     }
 
@@ -387,11 +387,12 @@ public class ConductorTests {
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
             verify(mockExec).forkWorkflow(eq(workflowId), eq(0), any());
 
-            SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
-            assertEquals("restart", resp.type);
-            assertEquals("12345", resp.request_id);
-            assertEquals(errorMessage, resp.error_message);
-            assertFalse(resp.success);
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("restart", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertEquals(errorMessage, jsonNode.get("error_message").asText());
+            assertFalse(jsonNode.get("success").asBoolean());
         }
     }
 
@@ -423,11 +424,12 @@ public class ConductorTests {
             assertEquals(newWorkflowId, capturedOptions.getForkedWorkflowId());
             assertEquals(0, capturedOptions.getTimeoutMS());
 
-            ForkWorkflowResponse resp = mapper.readValue(listener.message, ForkWorkflowResponse.class);
-            assertEquals("fork_workflow", resp.type);
-            assertEquals("12345", resp.request_id);
-            assertEquals(newWorkflowId, resp.new_workflow_id);
-            assertNull(resp.error_message);
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("fork_workflow", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertEquals(newWorkflowId, jsonNode.get("new_workflow_id").asText());
+            assertNull(jsonNode.get("error_message"));
         }
     }
 
@@ -456,11 +458,12 @@ public class ConductorTests {
             assertEquals("new-wf-id", options.getForkedWorkflowId());
             assertEquals(0, options.getTimeoutMS());
 
-            ForkWorkflowResponse resp = mapper.readValue(listener.message, ForkWorkflowResponse.class);
-            assertEquals("fork_workflow", resp.type);
-            assertEquals("12345", resp.request_id);
-            assertNull(resp.new_workflow_id);
-            assertEquals(errorMessage, resp.error_message);
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("fork_workflow", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertNull(jsonNode.get("new_workflow_id"));
+            assertEquals(errorMessage, jsonNode.get("error_message").asText());
         }
     }
 
@@ -519,6 +522,42 @@ public class ConductorTests {
             assertTrue(outputNode.size() == 3);
 
             assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
+        }
+    }
+
+    @Test
+    public void canGetWorkflow() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+        String workflowId = "sample-wf-id";
+
+        WorkflowStatus status = new WorkflowStatus("wf-1", "PENDING", "WF1", null, null,
+                null, null, null,
+                new Object[0], null, null,
+                1754936102215L, 1754936102215L, null, "test-executor",
+                "test-app-ver", null, null,
+                "test-app-id", null);
+
+        when(mockDB.getWorkflowStatus(workflowId)).thenReturn(status);
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            GetWorkflowRequest req = new GetWorkflowRequest("12345", workflowId);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+            verify(mockDB).getWorkflowStatus(workflowId);
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("get_workflow", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            JsonNode outputNode = jsonNode.get("output");
+            assertNotNull(outputNode);
+            assertTrue(outputNode.isObject());
+            assertEquals("wf-1", outputNode.get("WorkflowUUID").asText());
         }
     }
 

@@ -6,7 +6,8 @@ import java.util.List;
 public class WorkflowOutputsResponse extends BaseResponse {
     public List<WorkflowsOutput> output;
 
-    public WorkflowOutputsResponse() {}
+    public WorkflowOutputsResponse() {
+    }
 
     public WorkflowOutputsResponse(BaseMessage message, List<WorkflowsOutput> output) {
         super(message.type, message.request_id);

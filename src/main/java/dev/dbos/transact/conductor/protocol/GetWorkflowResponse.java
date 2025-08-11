@@ -1,7 +1,10 @@
 package dev.dbos.transact.conductor.protocol;
 
 public class GetWorkflowResponse extends BaseResponse {
-    WorkflowsOutput output; // optional
+    public WorkflowsOutput output; // optional
+
+    public GetWorkflowResponse() {
+    }
 
     public GetWorkflowResponse(BaseMessage message, WorkflowsOutput output) {
         super(message.type, message.request_id);
