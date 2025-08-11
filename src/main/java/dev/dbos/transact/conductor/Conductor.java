@@ -163,8 +163,9 @@ public class Conductor implements AutoCloseable {
             pingInterval.cancel(false);
         }
         pingInterval = scheduler.scheduleAtFixedRate(() -> {
-            logger.info("setPingInterval::scheduleAtFixedRate");
             try {
+                logger.info("setPingInterval::scheduleAtFixedRate");
+                // Note, checking for null because websocket can connect before websocket variable is assigned
                 if (webSocket != null && !webSocket.isOutputClosed()) {
                     logger.info("Sending ping to conductor");
 
@@ -177,7 +178,7 @@ public class Conductor implements AutoCloseable {
 
                     pingTimeout = scheduler.schedule(() -> {
                         if (!isShutdown.get()) {
-                            logger.warn("Connection to conductor lost. Reconnecting.");
+                            logger.warn("pingTimeout: Connection to conductor lost. Reconnecting.");
                             resetWebSocket();
                         }
                     }, pingTimeoutMs, TimeUnit.MILLISECONDS);
@@ -260,7 +261,7 @@ public class Conductor implements AutoCloseable {
                             if (isShutdown.get()) {
                                 logger.info("Shutdown Conductor connection");
                             } else if (reconnectTimeout == null) {
-                                logger.warn("Connection to conductor lost. Reconnecting");
+                                logger.warn("onClose: Connection to conductor lost. Reconnecting");
                                 resetWebSocket();
                             }
                             return Listener.super.onClose(webSocket, statusCode, reason);
@@ -308,15 +309,15 @@ public class Conductor implements AutoCloseable {
     BaseResponse getResponse(BaseMessage message) {
         MessageType messageType = MessageType.fromValue(message.type);
         switch (messageType) {
-            case EXECUTOR_INFO: {
+            case EXECUTOR_INFO : {
                 // TODO: real implementation
                 return new ExecutorInfoResponse(message, new RuntimeException("not yet implemented"));
             }
-            case RECOVERY: {
+            case RECOVERY : {
                 // TODO: recoverPendingWorkflows
                 return new SuccessResponse(message, new RuntimeException("not yet implemented"));
             }
-            case CANCEL: {
+            case CANCEL : {
                 CancelRequest req = (CancelRequest) message;
                 try {
                     dbosExecutor.cancelWorkflow(req.workflow_id);
@@ -326,7 +327,7 @@ public class Conductor implements AutoCloseable {
                     return new SuccessResponse(message, e);
                 }
             }
-            case RESUME: {
+            case RESUME : {
                 ResumeRequest req = (ResumeRequest) message;
                 try {
                     dbosExecutor.resumeWorkflow(req.workflow_id);
@@ -336,7 +337,7 @@ public class Conductor implements AutoCloseable {
                     return new SuccessResponse(message, e);
                 }
             }
-            case RESTART: {
+            case RESTART : {
                 RestartRequest req = (RestartRequest) message;
                 try {
                     ForkOptions options = ForkOptions.builder().build();
@@ -348,7 +349,7 @@ public class Conductor implements AutoCloseable {
 
                 }
             }
-            case FORK_WORKFLOW: {
+            case FORK_WORKFLOW : {
                 ForkWorkflowRequest req = (ForkWorkflowRequest) message;
                 if (req.body.workflow_id == null || req.body.start_step == null) {
                     return new ForkWorkflowResponse(message, null, "Invalid Fork Workflow Request");
@@ -369,7 +370,7 @@ public class Conductor implements AutoCloseable {
                     return new ForkWorkflowResponse(message, e);
                 }
             }
-            case LIST_WORKFLOWS: {
+            case LIST_WORKFLOWS : {
                 ListWorkflowsRequest req = (ListWorkflowsRequest) message;
                 try {
                     ListWorkflowsInput input = req.getInput();
@@ -382,11 +383,11 @@ public class Conductor implements AutoCloseable {
                     return new WorkflowOutputsResponse(message, e);
                 }
             }
-            case LIST_QUEUED_WORKFLOWS: {
+            case LIST_QUEUED_WORKFLOWS : {
                 // TODO: implement dbosExec.listQueuedWorkflows
                 return new WorkflowOutputsResponse(message, Collections.emptyList());
             }
-            case GET_WORKFLOW: {
+            case GET_WORKFLOW : {
                 GetWorkflowRequest req = (GetWorkflowRequest) message;
                 try {
                     WorkflowStatus status = systemDatabase.getWorkflowStatus(req.workflow_id);
@@ -397,7 +398,7 @@ public class Conductor implements AutoCloseable {
                     return new GetWorkflowResponse(message, e);
                 }
             }
-            case EXIST_PENDING_WORKFLOWS: {
+            case EXIST_PENDING_WORKFLOWS : {
                 ExistPendingWorkflowsRequest req = (ExistPendingWorkflowsRequest) message;
                 try {
                     List<GetPendingWorkflowsOutput> pending = systemDatabase.getPendingWorkflows(req.executor_id,
@@ -408,7 +409,7 @@ public class Conductor implements AutoCloseable {
                     return new ExistPendingWorkflowsResponse(message, e);
                 }
             }
-            case LIST_STEPS: {
+            case LIST_STEPS : {
                 ListStepsRequest req = (ListStepsRequest) message;
                 try {
                     List<StepInfo> stepInfoList = systemDatabase.listWorkflowSteps(req.workflow_id);
@@ -420,12 +421,12 @@ public class Conductor implements AutoCloseable {
                     return new ListStepsResponse(message, e);
                 }
             }
-            case RETENTION: {
+            case RETENTION : {
                 // TODO: implement garbage collect and global timeout
                 return new SuccessResponse(message, new RuntimeException("not yet implemented"));
             }
 
-            default:
+            default :
                 logger.warn("Conductor unknown message type {}", message.type);
                 return new BaseResponse(message.type, message.request_id, "Unknown message type");
         }
