@@ -342,7 +342,7 @@ public class Conductor implements AutoCloseable {
                 RestartRequest req = (RestartRequest) message;
                 try {
                     ForkOptions options = ForkOptions.builder().build();
-                    dbosExecutor.forkWorkflow(req.request_id, 0, options);
+                    dbosExecutor.forkWorkflow(req.workflow_id, 0, options);
                     return new SuccessResponse(message, true);
                 } catch (Exception e) {
                     logger.error("Exception encountered when restarting workflow {}", req.workflow_id, e);

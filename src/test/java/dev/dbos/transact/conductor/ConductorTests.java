@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.conductor.protocol.BaseMessage;
 import dev.dbos.transact.conductor.protocol.CancelRequest;
+import dev.dbos.transact.conductor.protocol.RestartRequest;
 import dev.dbos.transact.conductor.protocol.ResumeRequest;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
 import dev.dbos.transact.database.SystemDatabase;
@@ -217,18 +218,19 @@ public class ConductorTests {
     public void canCancel() throws Exception {
         MessageListener listener = new MessageListener();
         testServer.setListener(listener);
+        String workflowId = "sample-wf-id";
 
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
             assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-            CancelRequest req = new CancelRequest("12345", "sample-wf-id");
+            CancelRequest req = new CancelRequest("12345", workflowId);
             listener.send(req);
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
             // Verify that resumeWorkflow was called with the correct argument
-            verify(mockExec).cancelWorkflow("sample-wf-id");
+            verify(mockExec).cancelWorkflow(workflowId);
 
             SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
             assertEquals("cancel", resp.type);
@@ -244,6 +246,7 @@ public class ConductorTests {
         testServer.setListener(listener);
 
         String errorMessage = "canCancelThrows error";
+        String workflowId = "sample-wf-id";
 
         doThrow(new RuntimeException(errorMessage)).when(mockExec).cancelWorkflow(anyString());
 
@@ -252,10 +255,10 @@ public class ConductorTests {
 
             assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-            CancelRequest req = new CancelRequest("12345", "sample-wf-id");
+            CancelRequest req = new CancelRequest("12345", workflowId);
             listener.send(req);
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-            verify(mockExec).cancelWorkflow("sample-wf-id");
+            verify(mockExec).cancelWorkflow(workflowId);
 
             SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
             assertEquals("cancel", resp.type);
@@ -269,16 +272,17 @@ public class ConductorTests {
     public void canResume() throws Exception {
         MessageListener listener = new MessageListener();
         testServer.setListener(listener);
+        String workflowId = "sample-wf-id";
 
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
             assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-            ResumeRequest req = new ResumeRequest("12345", "sample-wf-id");
+            ResumeRequest req = new ResumeRequest("12345", workflowId);
             listener.send(req);
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-            verify(mockExec).resumeWorkflow("sample-wf-id");
+            verify(mockExec).resumeWorkflow(workflowId);
 
             SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
             assertEquals("resume", resp.type);
@@ -294,18 +298,19 @@ public class ConductorTests {
         testServer.setListener(listener);
 
         String errorMessage = "canResumeThrows error";
+        String workflowId = "sample-wf-id";
 
-        doThrow(new RuntimeException(errorMessage)).when(mockExec).resumeWorkflow(anyString());
+        doThrow(new RuntimeException(errorMessage)).when(mockExec).resumeWorkflow(workflowId);
 
         try (Conductor conductor = builder.build()) {
             conductor.start();
 
             assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-            ResumeRequest req = new ResumeRequest("12345", "sample-wf-id");
+            ResumeRequest req = new ResumeRequest("12345", workflowId);
             listener.send(req);
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-            verify(mockExec).resumeWorkflow("sample-wf-id");
+            verify(mockExec).resumeWorkflow(workflowId);
 
             SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
             assertEquals("resume", resp.type);
@@ -314,4 +319,57 @@ public class ConductorTests {
             assertFalse(resp.success);
         }
     }
+
+    @Test
+    public void canRestart() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+        String workflowId = "sample-wf-id";
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            RestartRequest req = new RestartRequest("12345", workflowId);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+            verify(mockExec).forkWorkflow(eq(workflowId), eq(0), any());
+
+            SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
+            assertEquals("restart", resp.type);
+            assertEquals("12345", resp.request_id);
+            assertTrue(resp.success);
+            assertNull(resp.error_message);
+        }
+    }
+
+    @Test
+    public void canRestartThrows() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+
+        String errorMessage = "canRestartThrows error";
+        String workflowId = "sample-wf-id";
+
+        doThrow(new RuntimeException(errorMessage)).when(mockExec).forkWorkflow(anyString(), anyInt(), any());
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            RestartRequest req = new RestartRequest("12345", workflowId);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+            verify(mockExec).forkWorkflow(eq(workflowId), eq(0), any());
+
+            SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
+            assertEquals("restart", resp.type);
+            assertEquals("12345", resp.request_id);
+            assertEquals(errorMessage, resp.error_message);
+            assertFalse(resp.success);
+        }
+    }
+
 }
