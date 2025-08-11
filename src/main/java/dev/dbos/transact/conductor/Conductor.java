@@ -48,7 +48,6 @@ public class Conductor implements AutoCloseable {
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     private WebSocket webSocket;
-    private volatile boolean webSocketOpen = false;
     private ScheduledFuture<?> pingInterval;
     private ScheduledFuture<?> pingTimeout;
     private ScheduledFuture<?> reconnectTimeout;
@@ -158,25 +157,36 @@ public class Conductor implements AutoCloseable {
     }
 
     void setPingInterval() {
+        logger.info("setPingInterval");
+
         if (pingInterval != null) {
             pingInterval.cancel(false);
         }
         pingInterval = scheduler.scheduleAtFixedRate(() -> {
-            if (webSocketOpen) {
-                logger.debug("Sending ping to conductor");
-                webSocket.sendPing(ByteBuffer.allocate(0))
-                        .exceptionally(ex -> {
-                            logger.error("Error sending ping to conductor", ex);
-                            return null;
-                        })
-                        .join();
-                pingTimeout = scheduler.schedule(() -> {
-                    if (!isShutdown.get()) {
-                        logger.warn("Connection to conductor lost. Reconnecting.");
-                        webSocketOpen = false;
-                        resetWebSocket();
-                    }
-                }, pingTimeoutMs, TimeUnit.MILLISECONDS);
+            logger.info("setPingInterval::scheduleAtFixedRate");
+            try {
+                if (webSocket != null && !webSocket.isOutputClosed()) {
+                    logger.info("Sending ping to conductor");
+
+                    webSocket.sendPing(ByteBuffer.allocate(0))
+                            .exceptionally(ex -> {
+                                logger.error("Failed to send ping to conductor", ex);
+                                resetWebSocket();
+                                return null;
+                            });
+
+                    pingTimeout = scheduler.schedule(() -> {
+                        if (!isShutdown.get()) {
+                            logger.warn("Connection to conductor lost. Reconnecting.");
+                            resetWebSocket();
+                        }
+                    }, pingTimeoutMs, TimeUnit.MILLISECONDS);
+                } else {
+                    logger.info("NOT Sending ping to conductor");
+                }
+            } catch (Exception e) {
+                logger.error("setPingInterval::scheduleAtFixedRate catch", e);
+
             }
         }, 0, pingPeriodMs, TimeUnit.MILLISECONDS);
     }
@@ -197,7 +207,11 @@ public class Conductor implements AutoCloseable {
             webSocket = null;
         }
 
-        if (!isShutdown.get() && reconnectTimeout == null) {
+        if (isShutdown.get()) {
+            return;
+        }
+
+        if (reconnectTimeout == null) {
             reconnectTimeout = scheduler.schedule(() -> {
                 reconnectTimeout = null;
                 dispatchLoop();
@@ -225,7 +239,6 @@ public class Conductor implements AutoCloseable {
                     .buildAsync(URI.create(url), new WebSocket.Listener() {
                         @Override
                         public void onOpen(WebSocket webSocket) {
-                            webSocketOpen = true;
                             logger.debug("Opened connection to DBOS conductor");
                             webSocket.request(1);
                             setPingInterval();
@@ -244,7 +257,6 @@ public class Conductor implements AutoCloseable {
 
                         @Override
                         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-                            webSocketOpen = false;
                             if (isShutdown.get()) {
                                 logger.info("Shutdown Conductor connection");
                             } else if (reconnectTimeout == null) {
@@ -256,7 +268,6 @@ public class Conductor implements AutoCloseable {
 
                         @Override
                         public void onError(WebSocket webSocket, Throwable error) {
-                            webSocketOpen = false;
                             logger.warn("Unexpected exception in connection to conductor. Reconnecting", error);
                             resetWebSocket();
                         }
@@ -297,15 +308,15 @@ public class Conductor implements AutoCloseable {
     BaseResponse getResponse(BaseMessage message) {
         MessageType messageType = MessageType.fromValue(message.type);
         switch (messageType) {
-            case EXECUTOR_INFO : {
+            case EXECUTOR_INFO: {
                 // TODO: real implementation
                 return new ExecutorInfoResponse(message, new RuntimeException("not yet implemented"));
             }
-            case RECOVERY : {
+            case RECOVERY: {
                 // TODO: recoverPendingWorkflows
                 return new SuccessResponse(message, new RuntimeException("not yet implemented"));
             }
-            case CANCEL : {
+            case CANCEL: {
                 CancelRequest req = (CancelRequest) message;
                 try {
                     dbosExecutor.cancelWorkflow(req.workflow_id);
@@ -315,7 +326,7 @@ public class Conductor implements AutoCloseable {
                     return new SuccessResponse(message, e);
                 }
             }
-            case RESUME : {
+            case RESUME: {
                 ResumeRequest req = (ResumeRequest) message;
                 try {
                     dbosExecutor.resumeWorkflow(req.workflow_id);
@@ -325,7 +336,7 @@ public class Conductor implements AutoCloseable {
                     return new SuccessResponse(message, e);
                 }
             }
-            case RESTART : {
+            case RESTART: {
                 RestartRequest req = (RestartRequest) message;
                 try {
                     ForkOptions options = ForkOptions.builder().build();
@@ -337,7 +348,7 @@ public class Conductor implements AutoCloseable {
 
                 }
             }
-            case FORK_WORKFLOW : {
+            case FORK_WORKFLOW: {
                 ForkWorkflowRequest req = (ForkWorkflowRequest) message;
                 if (req.body.workflow_id == null || req.body.start_step == null) {
                     return new ForkWorkflowResponse(message, null, "Invalid Fork Workflow Request");
@@ -358,7 +369,7 @@ public class Conductor implements AutoCloseable {
                     return new ForkWorkflowResponse(message, e);
                 }
             }
-            case LIST_WORKFLOWS : {
+            case LIST_WORKFLOWS: {
                 ListWorkflowsRequest req = (ListWorkflowsRequest) message;
                 try {
                     ListWorkflowsInput input = req.getInput();
@@ -371,11 +382,11 @@ public class Conductor implements AutoCloseable {
                     return new WorkflowOutputsResponse(message, e);
                 }
             }
-            case LIST_QUEUED_WORKFLOWS : {
+            case LIST_QUEUED_WORKFLOWS: {
                 // TODO: implement dbosExec.listQueuedWorkflows
                 return new WorkflowOutputsResponse(message, Collections.emptyList());
             }
-            case GET_WORKFLOW : {
+            case GET_WORKFLOW: {
                 GetWorkflowRequest req = (GetWorkflowRequest) message;
                 try {
                     WorkflowStatus status = systemDatabase.getWorkflowStatus(req.workflow_id);
@@ -386,7 +397,7 @@ public class Conductor implements AutoCloseable {
                     return new GetWorkflowResponse(message, e);
                 }
             }
-            case EXIST_PENDING_WORKFLOWS : {
+            case EXIST_PENDING_WORKFLOWS: {
                 ExistPendingWorkflowsRequest req = (ExistPendingWorkflowsRequest) message;
                 try {
                     List<GetPendingWorkflowsOutput> pending = systemDatabase.getPendingWorkflows(req.executor_id,
@@ -397,7 +408,7 @@ public class Conductor implements AutoCloseable {
                     return new ExistPendingWorkflowsResponse(message, e);
                 }
             }
-            case LIST_STEPS : {
+            case LIST_STEPS: {
                 ListStepsRequest req = (ListStepsRequest) message;
                 try {
                     List<StepInfo> stepInfoList = systemDatabase.listWorkflowSteps(req.workflow_id);
@@ -409,12 +420,12 @@ public class Conductor implements AutoCloseable {
                     return new ListStepsResponse(message, e);
                 }
             }
-            case RETENTION : {
+            case RETENTION: {
                 // TODO: implement garbage collect and global timeout
                 return new SuccessResponse(message, new RuntimeException("not yet implemented"));
             }
 
-            default :
+            default:
                 logger.warn("Conductor unknown message type {}", message.type);
                 return new BaseResponse(message.type, message.request_id, "Unknown message type");
         }

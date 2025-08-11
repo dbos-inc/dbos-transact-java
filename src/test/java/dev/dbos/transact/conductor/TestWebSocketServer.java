@@ -17,6 +17,7 @@ class TestWebSocketServer extends WebSocketServer {
         }
 
         default void onPing(WebSocket conn, Framedata frame) {
+            TestWebSocketServer.logger.info("sending PongFrame");
             conn.sendFrame(new PongFrame((PingFrame) frame));
         }
 
@@ -33,7 +34,7 @@ class TestWebSocketServer extends WebSocketServer {
         }
     }
 
-    private Logger logger = LoggerFactory.getLogger(TestWebSocketServer.class);
+    private static Logger logger = LoggerFactory.getLogger(TestWebSocketServer.class);
     private WebSocketTestListener listener;
     private ManualResetEvent startEvent = new ManualResetEvent(false);
 
