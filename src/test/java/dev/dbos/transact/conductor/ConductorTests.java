@@ -10,8 +10,10 @@ import static org.mockito.Mockito.*;
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.conductor.protocol.BaseMessage;
 import dev.dbos.transact.conductor.protocol.CancelRequest;
+import dev.dbos.transact.conductor.protocol.ExistPendingWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.ForkWorkflowRequest;
 import dev.dbos.transact.conductor.protocol.GetWorkflowRequest;
+import dev.dbos.transact.conductor.protocol.ListStepsRequest;
 import dev.dbos.transact.conductor.protocol.ListWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.RestartRequest;
 import dev.dbos.transact.conductor.protocol.ResumeRequest;
@@ -20,8 +22,10 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -558,6 +562,101 @@ public class ConductorTests {
             assertNotNull(outputNode);
             assertTrue(outputNode.isObject());
             assertEquals("wf-1", outputNode.get("WorkflowUUID").asText());
+        }
+    }
+
+    @Test
+    public void canExistPendingWorkflows() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+        String executorId = "exec-id";
+        String appVersion = "app-version";
+
+        List<GetPendingWorkflowsOutput> outputs = new ArrayList<GetPendingWorkflowsOutput>();
+        outputs.add(new GetPendingWorkflowsOutput("wf-1", null));
+        outputs.add(new GetPendingWorkflowsOutput("wf-2", "queue"));
+
+        when(mockDB.getPendingWorkflows(executorId, appVersion)).thenReturn(outputs);
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            ExistPendingWorkflowsRequest req = new ExistPendingWorkflowsRequest("12345", executorId, appVersion);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+            verify(mockDB).getPendingWorkflows(executorId, appVersion);
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("exist_pending_workflows", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertTrue(jsonNode.get("exist").asBoolean());
+        }
+    }
+
+    @Test
+    public void canExistPendingWorkflowsFalse() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+        String executorId = "exec-id";
+        String appVersion = "app-version";
+
+        List<GetPendingWorkflowsOutput> outputs = new ArrayList<GetPendingWorkflowsOutput>();
+        when(mockDB.getPendingWorkflows(executorId, appVersion)).thenReturn(outputs);
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            ExistPendingWorkflowsRequest req = new ExistPendingWorkflowsRequest("12345", executorId, appVersion);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+            verify(mockDB).getPendingWorkflows(executorId, appVersion);
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("exist_pending_workflows", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertFalse(jsonNode.get("exist").asBoolean());
+        }
+    }
+
+    @Test
+    public void canListSteps() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+        String workflowId = "workflow-id-1";
+
+        List<StepInfo> steps = new ArrayList<StepInfo>();
+        steps.add(new StepInfo(0, "function1", null, null, null));
+        steps.add(new StepInfo(1, "function2", null, null, null));
+        steps.add(new StepInfo(2, "function3", null, null, null));
+        steps.add(new StepInfo(3, "function4", null, null, null));
+        steps.add(new StepInfo(4, "function5", null, null, null));
+
+        when(mockDB.listWorkflowSteps(workflowId)).thenReturn(steps);
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            ListStepsRequest req = new ListStepsRequest("12345", workflowId);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+            verify(mockDB).listWorkflowSteps(workflowId);
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("list_steps", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            JsonNode outputNode = jsonNode.get("output");
+            assertNotNull(outputNode);
+            assertTrue(outputNode.isArray());
+            assertEquals(5, outputNode.size());
         }
     }
 
