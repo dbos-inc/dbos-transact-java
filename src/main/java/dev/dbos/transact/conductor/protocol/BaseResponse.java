@@ -8,6 +8,9 @@ public class BaseResponse {
     public String request_id;
     public String error_message;
 
+    public BaseResponse() {
+    }
+
     public BaseResponse(String type, String requestId) {
         this.type = type;
         this.request_id = requestId;
