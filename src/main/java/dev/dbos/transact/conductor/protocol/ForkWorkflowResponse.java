@@ -3,7 +3,8 @@ package dev.dbos.transact.conductor.protocol;
 public class ForkWorkflowResponse extends BaseResponse {
     public String new_workflow_id; // optional
 
-    public ForkWorkflowResponse() {}
+    public ForkWorkflowResponse() {
+    }
 
     public ForkWorkflowResponse(BaseMessage message, String new_workflow_id, String errorMessage) {
         super(message.type, message.request_id, errorMessage);

@@ -374,7 +374,7 @@ public class Conductor implements AutoCloseable {
             case LIST_WORKFLOWS : {
                 ListWorkflowsRequest req = (ListWorkflowsRequest) message;
                 try {
-                    ListWorkflowsInput input = req.getInput();
+                    ListWorkflowsInput input = req.asInput();
                     List<WorkflowStatus> statuses = systemDatabase.listWorkflows(input);
                     List<WorkflowsOutput> output = statuses.stream().map(s -> new WorkflowsOutput(s))
                             .collect(Collectors.toList());

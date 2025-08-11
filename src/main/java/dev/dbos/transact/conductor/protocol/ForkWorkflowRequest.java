@@ -6,7 +6,8 @@ public class ForkWorkflowRequest extends BaseMessage {
     public ForkWorkflowRequest() {
     }
 
-    public ForkWorkflowRequest(String requestId, String workflowId, int startStep, String appVer, String newWorkflowId) {
+    public ForkWorkflowRequest(String requestId, String workflowId, int startStep, String appVer,
+            String newWorkflowId) {
         this.type = MessageType.FORK_WORKFLOW.getValue();
         this.request_id = requestId;
         this.body = new ForkWorkflowBody();
