@@ -111,6 +111,54 @@ class RecoveryServiceTest {
     }
 
     @Test
+    void recoverPendingWorkflows() throws Exception {
+
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
+                .build();
+
+        String wfid = "wf-123";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+            executingService.workflowMethod("test-item");
+        }
+        wfid = "wf-124";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+            executingService.workflowMethod("test-item");
+        }
+        wfid = "wf-125";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+            executingService.workflowMethod("test-item");
+        }
+        wfid = "wf-126";
+        WorkflowHandle<String> handle6 = null;
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+            handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+        }
+        handle6.getResult();
+
+        wfid = "wf-127";
+        WorkflowHandle<String> handle7 = null;
+        Queue q = new DBOS.QueueBuilder("q1").build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(q).build();
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+            handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+        }
+        assertEquals("q1", handle7.getStatus().getQueueName());
+        handle7.getResult();
+
+        setWorkflowStateToPending(dataSource);
+
+        List<WorkflowHandle<?>> pending = dbosExecutor.recoverPendingWorkflows(null);
+        assertEquals(5, pending.size());
+
+        for (WorkflowHandle<?> handle : pending) {
+            handle.getResult();
+            assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+        }
+    }
+
+
+    @Test
     public void recoveryThreadTest() throws SQLException {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
