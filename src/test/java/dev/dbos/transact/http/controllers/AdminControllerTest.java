@@ -78,6 +78,53 @@ class AdminControllerTest {
     }
 
     @Test
+    public void recovery() throws Exception {
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
+
+        // Needed to call the step
+        executingService.setExecutingService(executingService);
+
+        // Execute multiple workflows with different IDs and inputs
+        try (SetWorkflowID id1 = new SetWorkflowID("workflow-001")) {
+            executingService.workflowMethodWithStep("input-alpha");
+        }
+
+        try (SetWorkflowID id2 = new SetWorkflowID("workflow-002")) {
+            executingService.workflowMethodWithStep("input-beta");
+        }
+
+        try (SetWorkflowID id3 = new SetWorkflowID("workflow-003")) {
+            executingService.workflowMethodWithStep("input-gamma");
+        }
+
+        try (SetWorkflowID id4 = new SetWorkflowID("workflow-004")) {
+            simpleService.workWithString("input-delta");
+        }
+
+        DBUtils.setWorkflowStateToPending(dbosConfig);
+        given()
+                .port(3010)
+                .contentType("application/json")
+                .body("[\"local\"]")
+                .when()
+                .post("/dbos-workflow-recovery")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(4))
+                .body("[0]", equalTo("workflow-001"))
+                .body("[1]", equalTo("workflow-002"))
+                .body("[2]", equalTo("workflow-003"))
+                .body("[3]", equalTo("workflow-004"));
+    }
+
+    @Test
     public void queueMetadata() throws Exception {
         new DBOS.QueueBuilder("firstQueue")
                 .concurrency(1)

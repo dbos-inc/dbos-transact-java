@@ -1,6 +1,7 @@
 package dev.dbos.transact.utils;
 
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.*;
 import java.time.Instant;
@@ -91,6 +92,23 @@ public class DBUtils {
             String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
+        }
+    }
+
+    public static void setWorkflowStateToPending(DBOSConfig dbosConfig) throws SQLException {
+
+        String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? ;";
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, dbosConfig.getSysDbName());
+        try (Connection conn = DriverManager.getConnection(dbUrl,
+                dbosConfig.getDbUser(),
+                dbosConfig.getDbPassword());
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, WorkflowState.PENDING.name());
+            pstmt.setLong(2, Instant.now().toEpochMilli());
+            int rowsAffected = pstmt.executeUpdate();
+
+            logger.info("Number of workflows made pending " + rowsAffected);
         }
     }
 }
