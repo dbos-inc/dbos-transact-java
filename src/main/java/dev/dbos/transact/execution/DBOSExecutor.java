@@ -59,12 +59,6 @@ public class DBOSExecutor {
         return config.getName();
     }
 
-    // Unfortunetly, the GlobalParams statics can not be mocked effectively,
-    // making it nearly impossible to components that depend on them in isolation.
-    // I've added these mockable-methods here on DBOSExecutor to enable testing in
-    // isolation
-    // TODO: move actual global params to DBOSExecutor
-
     public String getExecutorId() {
         return GlobalParams.getInstance().getExecutorId();
     }
