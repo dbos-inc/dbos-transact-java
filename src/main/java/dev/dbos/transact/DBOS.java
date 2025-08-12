@@ -1,5 +1,6 @@
 package dev.dbos.transact;
 
+import dev.dbos.transact.conductor.Conductor;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -38,6 +39,7 @@ public class DBOS {
     private final QueueService queueService;
     private final SchedulerService schedulerService;
     private NotificationService notificationService;
+    private Conductor conductor;
     private HttpServer httpServer;
     private RecoveryService recoveryService;
 
@@ -222,6 +224,12 @@ public class DBOS {
             notificationService.start();
         }
 
+        String conductorKey = config.getConductorKey();
+        if (conductorKey != null) {
+            conductor = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey).build();
+            conductor.start();
+        }
+
         if (config.isHttp()) {
             httpServer = HttpServer.getInstance(config.getHttpPort(),
                     new AdminController(systemDatabase, dbosExecutor));
@@ -261,6 +269,10 @@ public class DBOS {
 
             if (notificationService != null) {
                 notificationService.stop();
+            }
+
+            if (conductor != null) {
+                conductor.stop();
             }
 
             if (config.isHttp()) {

@@ -47,4 +47,20 @@ public class JSONUtil {
         Object[] eArray = JSONUtil.deserializeToArray(json);
         return (SerializableException) eArray[0];
     }
+
+    public static String toJson(Object obj) {
+        try {
+            return mapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Serialization failed", e);
+        }
+    }
+
+    public static <T> T fromJson(String content, Class<T> valueType) {
+        try {
+            return mapper.readValue(content, valueType);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Deserialization failed", e);
+        }
+    }
 }

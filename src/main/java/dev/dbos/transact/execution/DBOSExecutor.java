@@ -55,6 +55,10 @@ public class DBOSExecutor {
         this.workflowRegistry = new WorkflowRegistry();
     }
 
+    public String getAppName() {
+        return config.getName();
+    }
+
     public void setQueueService(QueueService queueService) {
         this.queueService = queueService;
     }
