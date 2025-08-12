@@ -59,7 +59,7 @@ public class AdminController {
     public List<String> recovery(List<String> executorIds) {
         logger.info("Recovering workflows for executors {}", executorIds);
         List<WorkflowHandle<?>> handles = dbosExecutor.recoverPendingWorkflows(executorIds);
-        List<String> workflowIds = new ArrayList<String>();
+        List<String> workflowIds = new ArrayList<>();
         for (WorkflowHandle<?> handle : handles) {
             workflowIds.add(handle.getWorkflowId());
         }
