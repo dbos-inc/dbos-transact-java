@@ -131,7 +131,7 @@ public class DBOSExecutor {
                     executorId,
                     appVersion,
                     e);
-            return new ArrayList<GetPendingWorkflowsOutput>();
+            return new ArrayList<>();
         }
     }
 
