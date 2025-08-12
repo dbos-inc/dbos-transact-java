@@ -87,7 +87,7 @@ public class DBOSExecutor {
         Objects.requireNonNull(workflowId);
         String queue = output.getQueueName();
 
-        logger.info("Recovery executing workflow {}" + workflowId);
+        logger.info("Recovery executing workflow {}", workflowId);
 
         if (queue != null) {
             boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
