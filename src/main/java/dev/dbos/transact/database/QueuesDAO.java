@@ -388,7 +388,7 @@ public class QueuesDAO {
             stmt.setString(3, WorkflowState.PENDING.name());
 
             int affectedRows = stmt.executeUpdate();
-            return affectedRows > 1;
+            return affectedRows > 0;
         }
     }
 }
