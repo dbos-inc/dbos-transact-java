@@ -28,7 +28,6 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -99,7 +98,7 @@ public class DBOSExecutor {
         return executeWorkflowById(workflowId);
     }
 
-    public List<WorkflowHandle<?>> recoverPendingWorkflows(List<String> executorIDs) throws SQLException {
+    public List<WorkflowHandle<?>> recoverPendingWorkflows(List<String> executorIDs) {
         if (executorIDs == null) {
             executorIDs = new ArrayList<>(List.of("local"));
         }
@@ -107,12 +106,11 @@ public class DBOSExecutor {
         String appVersion = GlobalParams.getInstance().getAppVersion();
 
         List<WorkflowHandle<?>> handles = new ArrayList<>();
-        for (String executorID : executorIDs) {
-            List<GetPendingWorkflowsOutput> pendingWorkflows = systemDatabase.getPendingWorkflows(executorID,
-                    appVersion);
+        for (String executorId : executorIDs) {
+            List<GetPendingWorkflowsOutput> pendingWorkflows = getPendingWorkflows(executorId, appVersion);
             logger.info("Recovering {} workflow(s) for executor {} and application version {}",
                     pendingWorkflows.size(),
-                    executorID,
+                    executorId,
                     appVersion);
             for (GetPendingWorkflowsOutput output : pendingWorkflows) {
                 try {
@@ -123,6 +121,18 @@ public class DBOSExecutor {
             }
         }
         return handles;
+    }
+
+    private List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion) {
+        try {
+            return systemDatabase.getPendingWorkflows(executorId, appVersion);
+        } catch (Exception e) {
+            logger.error("Failed to get pending workflows for executor {} and application version {}",
+                    executorId,
+                    appVersion,
+                    e);
+            return new ArrayList<GetPendingWorkflowsOutput>();
+        }
     }
 
     public List<Queue> getAllQueuesSnapshot() {

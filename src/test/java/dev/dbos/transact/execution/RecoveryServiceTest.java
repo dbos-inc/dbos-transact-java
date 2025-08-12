@@ -157,7 +157,6 @@ class RecoveryServiceTest {
         }
     }
 
-
     @Test
     public void recoveryThreadTest() throws SQLException {
 
