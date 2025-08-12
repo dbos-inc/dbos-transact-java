@@ -4,6 +4,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.sql.*;
@@ -375,4 +376,19 @@ public class QueuesDAO {
         return workflowStatuses;
     }
 
+    public boolean clearQueueAssignment(String workflowId) throws SQLException {
+        String sqlTemplate = "UPDATE %s.workflow_status "
+                + "SET started_at_epoch_ms = NULL, status = ? "
+                + "WHERE workflow_uuid = ? AND queue_name is NOT NULL AND status = ?";
+        final String sql = String.format(sqlTemplate, Constants.DB_SCHEMA);
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, WorkflowState.ENQUEUED.name());
+            stmt.setString(2, workflowId);
+            stmt.setString(3, WorkflowState.PENDING.name());
+
+            int affectedRows = stmt.executeUpdate();
+            return affectedRows > 1;
+        }
+    }
 }

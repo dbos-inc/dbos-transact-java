@@ -87,11 +87,11 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
             body.start_time = this.start_time;
             body.end_time = this.end_time;
             body.status = this.status;
-            body.queue_name= this.queue_name;
-            body.limit= this.limit;
-            body.offset= this.offset;
-            body.sort_desc= this.sort_desc;
-            body.load_input= this.load_input;
+            body.queue_name = this.queue_name;
+            body.limit = this.limit;
+            body.offset = this.offset;
+            body.sort_desc = this.sort_desc;
+            body.load_input = this.load_input;
             request.body = body;
             return request;
         }

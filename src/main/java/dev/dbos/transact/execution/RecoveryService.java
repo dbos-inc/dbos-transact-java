@@ -3,7 +3,6 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
 import dev.dbos.transact.utils.GlobalParams;
-import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.sql.SQLException;
@@ -28,33 +27,10 @@ public class RecoveryService {
         this.dbosExecutor = dbosExecutor;
     }
 
-    public void recoverWorkflows() {
-
-        try {
-            List<GetPendingWorkflowsOutput> pendingWorkflowsOutputs = getPendingWorkflows();
-            recoverWorkflows(pendingWorkflowsOutputs);
-        } catch (SQLException e) {
-            logger.error("Recovery could not complete due to SQL error", e);
-        }
-    }
-
-    public List<WorkflowHandle> recoverWorkflows(
-            List<GetPendingWorkflowsOutput> pendingWorkflowsOutputs) {
-
-        List<WorkflowHandle> handles = new ArrayList<>();
-
-        for (GetPendingWorkflowsOutput pendingW : pendingWorkflowsOutputs) {
-            logger.info("Recovery executing workflow " + pendingW.getWorkflowUuid());
-            handles.add(dbosExecutor.executeWorkflowById(pendingW.getWorkflowUuid()));
-        }
-
-        return handles;
-    }
-
     public List<GetPendingWorkflowsOutput> getPendingWorkflows() throws SQLException {
-        return systemDatabase.getPendingWorkflows(GlobalParams.getInstance()
-                .getExecutorId(),
-                GlobalParams.getInstance().getAppVersion());
+        GlobalParams params = GlobalParams.getInstance();
+        return systemDatabase.getPendingWorkflows(params.getExecutorId(),
+                params.getAppVersion());
     }
 
     /**
@@ -127,7 +103,7 @@ public class RecoveryService {
                         if (stopRequested) {
                             break;
                         }
-                        recoverWorkflow(pendingWorkflow);
+                        dbosExecutor.recoverWorkflow(pendingWorkflow);
                         pendingWorkflows.remove(pendingWorkflow);
                     }
                 } catch (WorkflowFunctionNotFoundException e) {
@@ -156,16 +132,5 @@ public class RecoveryService {
         } finally {
             logger.info("Exiting recovery thread ");
         }
-    }
-
-    /**
-     * Recovers a single workflow.
-     *
-     * @param pendingWorkflow
-     *            the workflow to recover
-     */
-    private void recoverWorkflow(GetPendingWorkflowsOutput pendingWorkflow) {
-        logger.info("Recovery executing workflow " + pendingWorkflow.getWorkflowUuid());
-        dbosExecutor.executeWorkflowById(pendingWorkflow.getWorkflowUuid());
     }
 }

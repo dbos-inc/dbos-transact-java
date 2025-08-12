@@ -564,7 +564,8 @@ public class ConductorTests {
                     .build("12345");
             listener.send(req);
             assertTrue(listener.messageLatch.await(100000000, TimeUnit.SECONDS), "message latch timed out");
-            ArgumentCaptor<ListQueuedWorkflowsInput> inputCaptor = ArgumentCaptor.forClass(ListQueuedWorkflowsInput.class);
+            ArgumentCaptor<ListQueuedWorkflowsInput> inputCaptor = ArgumentCaptor
+                    .forClass(ListQueuedWorkflowsInput.class);
             verify(mockDB).getQueuedWorkflows(inputCaptor.capture(), eq(false));
             ListQueuedWorkflowsInput input = inputCaptor.getValue();
             assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.getStartTime());
@@ -584,7 +585,6 @@ public class ConductorTests {
             assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
         }
     }
-
 
     @Test
     public void canGetWorkflow() throws Exception {
