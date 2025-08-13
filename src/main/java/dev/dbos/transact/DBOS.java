@@ -18,7 +18,6 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
-import dev.dbos.transact.utils.GlobalParams;
 import dev.dbos.transact.workflow.*;
 
 import java.util.List;
@@ -208,9 +207,10 @@ public class DBOS {
     }
 
     public void launch() {
-        GlobalParams gp = GlobalParams.getInstance(dbosExecutor);
-        logger.info("Executor ID: {}", gp.getExecutorId());
-        logger.info("Application version: " + gp.getAppVersion());
+        dbosExecutor.start();
+
+        logger.info("Executor ID: {}", dbosExecutor.getExecutorId());
+        logger.info("Application version: {}", dbosExecutor.getAppVersion());
 
         queueService.start();
 
