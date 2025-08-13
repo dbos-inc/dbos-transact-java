@@ -2,6 +2,7 @@ package dev.dbos.transact.conductor;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.*;
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.conductor.protocol.BaseMessage;
 import dev.dbos.transact.conductor.protocol.CancelRequest;
+import dev.dbos.transact.conductor.protocol.ExecutorInfoRequest;
 import dev.dbos.transact.conductor.protocol.ExistPendingWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.ForkWorkflowRequest;
 import dev.dbos.transact.conductor.protocol.GetWorkflowRequest;
@@ -29,6 +31,7 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
+import java.net.InetAddress;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -234,6 +237,36 @@ public class ConductorTests {
         public void send(BaseMessage message) throws Exception {
             String json = ConductorTests.mapper.writeValueAsString(message);
             this.webSocket.send(json);
+        }
+    }
+
+    @Test
+    public void canExecutorInfo() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+
+        String hostname = InetAddress.getLocalHost().getHostName();
+
+        when(mockExec.getAppVersion()).thenReturn("test-app-version");
+        when(mockExec.getExecutorId()).thenReturn("test-executor-id");
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            ExecutorInfoRequest req = new ExecutorInfoRequest("12345");
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(1000000000, TimeUnit.SECONDS), "message latch timed out");
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("executor_info", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertEquals(hostname, jsonNode.get("hostname").asText());
+            assertEquals("test-app-version", jsonNode.get("application_version").asText());
+            assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
+            assertNull(jsonNode.get("error_message"));
+
         }
     }
 
