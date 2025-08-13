@@ -23,6 +23,7 @@ import dev.dbos.transact.conductor.protocol.ResumeRequest;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.RecoveryService;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -58,6 +59,7 @@ public class ConductorTests {
 
     SystemDatabase mockDB;
     DBOSExecutor mockExec;
+    RecoveryService mockRecSvc;
     Conductor.Builder builder;
     TestWebSocketServer testServer;
 
@@ -75,8 +77,9 @@ public class ConductorTests {
 
         mockDB = mock(SystemDatabase.class);
         mockExec = mock(DBOSExecutor.class);
+        mockRecSvc = mock(RecoveryService.class);
         when(mockExec.getAppName()).thenReturn("test-app-name");
-        builder = new Conductor.Builder(mockDB, mockExec, "conductor-key")
+        builder = new Conductor.Builder(mockDB, mockExec, mockRecSvc, "conductor-key")
                 .domain(domain);
     }
 
@@ -255,7 +258,7 @@ public class ConductorTests {
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
             // Verify that resumeWorkflow was called with the correct argument
-            verify(mockExec).recoverPendingWorkflows(executorIds);
+            verify(mockRecSvc).recoverPendingWorkflows(executorIds);
 
             JsonNode jsonNode = mapper.readTree(listener.message);
             assertNotNull(jsonNode);
@@ -273,7 +276,7 @@ public class ConductorTests {
         List<String> executorIds = List.of("exec1", "exec2", "exec3");
         String errorMessage = "canCancelThrows error";
 
-        doThrow(new RuntimeException(errorMessage)).when(mockExec).recoverPendingWorkflows(executorIds);
+        doThrow(new RuntimeException(errorMessage)).when(mockRecSvc).recoverPendingWorkflows(executorIds);
 
         try (Conductor conductor = builder.build()) {
             conductor.start();
@@ -285,7 +288,7 @@ public class ConductorTests {
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
             // Verify that resumeWorkflow was called with the correct argument
-            verify(mockExec).recoverPendingWorkflows(executorIds);
+            verify(mockRecSvc).recoverPendingWorkflows(executorIds);
 
             JsonNode jsonNode = mapper.readTree(listener.message);
             assertNotNull(jsonNode);

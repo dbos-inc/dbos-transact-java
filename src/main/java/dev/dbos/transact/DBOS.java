@@ -212,6 +212,9 @@ public class DBOS {
         logger.info("Executor ID: {}", gp.getExecutorId());
         logger.info("Application version: " + gp.getAppVersion());
 
+        recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
+        recoveryService.start();
+
         queueService.start();
 
         schedulerService.start();
@@ -226,13 +229,13 @@ public class DBOS {
 
         String conductorKey = config.getConductorKey();
         if (conductorKey != null) {
-            conductor = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey).build();
+            conductor = new Conductor.Builder(systemDatabase, dbosExecutor, recoveryService, conductorKey).build();
             conductor.start();
         }
 
         if (config.isHttp()) {
             httpServer = HttpServer.getInstance(config.getHttpPort(),
-                    new AdminController(systemDatabase, dbosExecutor));
+                    new AdminController(systemDatabase, dbosExecutor, recoveryService));
             if (config.isHttpAwaitOnStart()) {
                 Thread httpThread = new Thread(() -> {
                     logger.info("Start http in background thread");
@@ -244,10 +247,6 @@ public class DBOS {
                 httpServer.start();
             }
         }
-
-        recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
-        recoveryService.start();
-
     }
 
     public void shutdown() {

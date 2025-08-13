@@ -2,6 +2,7 @@ package dev.dbos.transact.http.controllers;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.RecoveryService;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueMetadata;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -24,11 +25,13 @@ public class AdminController {
 
     private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
+    private RecoveryService recoveryService;
     Logger logger = LoggerFactory.getLogger(AdminController.class);
 
-    public AdminController(SystemDatabase s, DBOSExecutor e) {
+    public AdminController(SystemDatabase s, DBOSExecutor e, RecoveryService r) {
         this.systemDatabase = s;
         this.dbosExecutor = e;
+        this.recoveryService = r;
     }
 
     @GET
@@ -58,7 +61,7 @@ public class AdminController {
     @Produces(MediaType.APPLICATION_JSON)
     public List<String> recovery(List<String> executorIds) {
         logger.info("Recovering workflows for executors {}", executorIds);
-        List<WorkflowHandle<?>> handles = dbosExecutor.recoverPendingWorkflows(executorIds);
+        List<WorkflowHandle<?>> handles = recoveryService.recoverPendingWorkflows(executorIds);
         List<String> workflowIds = new ArrayList<>();
         for (WorkflowHandle<?> handle : handles) {
             workflowIds.add(handle.getWorkflowId());

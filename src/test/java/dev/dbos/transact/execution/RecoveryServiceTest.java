@@ -104,7 +104,7 @@ class RecoveryServiceTest {
         assertEquals(5, pending.size());
 
         for (GetPendingWorkflowsOutput output : pending) {
-            WorkflowHandle<?> handle = dbosExecutor.recoverWorkflow(output);
+            WorkflowHandle<?> handle = recoveryService.recoverWorkflow(output);
             handle.getResult();
             assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
         }
@@ -148,7 +148,7 @@ class RecoveryServiceTest {
 
         setWorkflowStateToPending(dataSource);
 
-        List<WorkflowHandle<?>> pending = dbosExecutor.recoverPendingWorkflows(null);
+        List<WorkflowHandle<?>> pending = recoveryService.recoverPendingWorkflows(null);
         assertEquals(5, pending.size());
 
         for (WorkflowHandle<?> handle : pending) {
