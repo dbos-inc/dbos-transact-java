@@ -3,13 +3,11 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
 import dev.dbos.transact.utils.GlobalParams;
-import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.slf4j.Logger;
@@ -27,60 +25,6 @@ public class RecoveryService {
     public RecoveryService(DBOSExecutor dbosExecutor, SystemDatabase systemDatabase) {
         this.systemDatabase = systemDatabase;
         this.dbosExecutor = dbosExecutor;
-    }
-
-    WorkflowHandle<?> recoverWorkflow(GetPendingWorkflowsOutput output) throws Exception {
-        Objects.requireNonNull(output);
-        String workflowId = output.getWorkflowUuid();
-        Objects.requireNonNull(workflowId);
-        String queue = output.getQueueName();
-
-        logger.info("Recovery executing workflow {}", workflowId);
-
-        if (queue != null) {
-            boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
-            if (cleared) {
-                return dbosExecutor.retrieveWorkflow(workflowId);
-            }
-        }
-        return dbosExecutor.executeWorkflowById(workflowId);
-    }
-
-    public List<WorkflowHandle<?>> recoverPendingWorkflows(List<String> executorIDs) {
-        if (executorIDs == null) {
-            executorIDs = new ArrayList<>(List.of("local"));
-        }
-
-        String appVersion = GlobalParams.getInstance().getAppVersion();
-
-        List<WorkflowHandle<?>> handles = new ArrayList<>();
-        for (String executorId : executorIDs) {
-            List<GetPendingWorkflowsOutput> pendingWorkflows = getPendingWorkflows(executorId, appVersion);
-            logger.info("Recovering {} workflow(s) for executor {} and application version {}",
-                    pendingWorkflows.size(),
-                    executorId,
-                    appVersion);
-            for (GetPendingWorkflowsOutput output : pendingWorkflows) {
-                try {
-                    handles.add(recoverWorkflow(output));
-                } catch (Exception e) {
-                    logger.warn("Recovery of workflow {} failed", output.getWorkflowUuid(), e);
-                }
-            }
-        }
-        return handles;
-    }
-
-    private List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion) {
-        try {
-            return systemDatabase.getPendingWorkflows(executorId, appVersion);
-        } catch (Exception e) {
-            logger.error("Failed to get pending workflows for executor {} and application version {}",
-                    executorId,
-                    appVersion,
-                    e);
-            return new ArrayList<>();
-        }
     }
 
     public List<GetPendingWorkflowsOutput> getPendingWorkflows() throws SQLException {
@@ -159,7 +103,7 @@ public class RecoveryService {
                         if (stopRequested) {
                             break;
                         }
-                        recoverWorkflow(pendingWorkflow);
+                        dbosExecutor.recoverWorkflow(pendingWorkflow);
                         pendingWorkflows.remove(pendingWorkflow);
                     }
                 } catch (WorkflowFunctionNotFoundException e) {

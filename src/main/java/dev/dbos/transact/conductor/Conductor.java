@@ -3,7 +3,6 @@ package dev.dbos.transact.conductor;
 import dev.dbos.transact.conductor.protocol.*;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.RecoveryService;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -68,7 +67,6 @@ public class Conductor implements AutoCloseable {
     private final String url;
     private final SystemDatabase systemDatabase;
     private final DBOSExecutor dbosExecutor;
-    private final RecoveryService recoveryService;
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     private WebSocket webSocket;
@@ -79,12 +77,10 @@ public class Conductor implements AutoCloseable {
     private Conductor(Builder builder) {
         Objects.requireNonNull(builder.systemDatabase);
         Objects.requireNonNull(builder.dbosExecutor);
-        Objects.requireNonNull(builder.recoveryService);
         Objects.requireNonNull(builder.conductorKey);
 
         this.systemDatabase = builder.systemDatabase;
         this.dbosExecutor = builder.dbosExecutor;
-        this.recoveryService = builder.recoveryService;
 
         String appName = dbosExecutor.getAppName();
         Objects.requireNonNull(appName, "App Name must not be null to use Conductor");
@@ -110,7 +106,6 @@ public class Conductor implements AutoCloseable {
     public static class Builder {
         private SystemDatabase systemDatabase;
         private DBOSExecutor dbosExecutor;
-        private RecoveryService recoveryService;
         private String conductorKey;
         private String domain;
         private int pingPeriodMs = 20000;
@@ -118,10 +113,9 @@ public class Conductor implements AutoCloseable {
         private int reconnectDelayMs = 1000;
         private int connectTimeoutMs = 5000;
 
-        public Builder(SystemDatabase s, DBOSExecutor e, RecoveryService r, String key) {
+        public Builder(SystemDatabase s, DBOSExecutor e, String key) {
             systemDatabase = s;
             dbosExecutor = e;
-            recoveryService = r;
             conductorKey = key;
         }
 
@@ -355,7 +349,7 @@ public class Conductor implements AutoCloseable {
     static BaseResponse handleRecovery(Conductor conductor, BaseMessage message) {
         RecoveryRequest request = (RecoveryRequest) message;
         try {
-            conductor.recoveryService.recoverPendingWorkflows(request.executor_ids);
+            conductor.dbosExecutor.recoverPendingWorkflows(request.executor_ids);
             return new SuccessResponse(request, true);
         } catch (Exception e) {
             logger.error("Exception encountered when recovering pending workflows", e);
