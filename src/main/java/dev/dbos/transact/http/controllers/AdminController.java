@@ -63,16 +63,18 @@ public class AdminController {
 
     @POST
     @Path("/dbos-garbage-collect")
-    public Response garbageCollect() {
-        // TODO: implement systemDatabase.garbageCollect
-        return Response.serverError().build();
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response garbageCollect(GarbageCollectRequest request) {
+        systemDatabase.garbageCollect(request.cutoff_epoch_timestamp_ms, request.rows_threshold);
+        return Response.noContent().build();
     }
 
     @POST
     @Path("/dbos-global-timeout")
-    public Response globalTimeout() {
-        // TODO: implement globalTimeout
-        return Response.serverError().build();
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response globalTimeout(GlobalTimeoutRequest request) {
+        dbosExecutor.globalTimeout(request.cutoff_epoch_timestamp_ms);
+        return Response.noContent().build();
     }
 
     @GET
@@ -190,6 +192,21 @@ public class AdminController {
 
         public ForkWorkflowResponse(String workflowId) {
             this.workflowId = workflowId;
+        }
+    }
+
+    public static class GarbageCollectRequest {
+        public Long cutoff_epoch_timestamp_ms;
+        public Long rows_threshold;
+
+        public GarbageCollectRequest() {
+        }
+    }
+
+    public static class GlobalTimeoutRequest {
+        public Long cutoff_epoch_timestamp_ms;
+
+        public GlobalTimeoutRequest() {
         }
     }
 }
