@@ -39,7 +39,7 @@ public class ManualResetEvent {
                     condition.await();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    break;
+                    throw e;
                 }
             }
         } finally {
