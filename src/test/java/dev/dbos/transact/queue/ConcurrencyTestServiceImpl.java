@@ -1,5 +1,6 @@
 package dev.dbos.transact.queue;
 
+import dev.dbos.transact.utils.ManualResetEvent;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.util.List;

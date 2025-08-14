@@ -1,4 +1,4 @@
-package dev.dbos.transact.queue;
+package dev.dbos.transact.utils;
 
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -42,6 +42,27 @@ public class ManualResetEvent {
                     break;
                 }
             }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public boolean waitOne(long millis) {
+        lock.lock();
+        try {
+            long nanos = millis * 1_000_000L;
+            while (!signaled) {
+                if (nanos <= 0L) {
+                    return false;
+                }
+                try {
+                    nanos = condition.awaitNanos(nanos);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            return true;
         } finally {
             lock.unlock();
         }
