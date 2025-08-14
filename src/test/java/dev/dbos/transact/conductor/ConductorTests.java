@@ -18,6 +18,7 @@ import dev.dbos.transact.conductor.protocol.GetWorkflowRequest;
 import dev.dbos.transact.conductor.protocol.ListQueuedWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.ListStepsRequest;
 import dev.dbos.transact.conductor.protocol.ListWorkflowsRequest;
+import dev.dbos.transact.conductor.protocol.RecoveryRequest;
 import dev.dbos.transact.conductor.protocol.RestartRequest;
 import dev.dbos.transact.conductor.protocol.ResumeRequest;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
@@ -241,6 +242,62 @@ public class ConductorTests {
     }
 
     @Test
+    public void canRecover() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+        List<String> executorIds = List.of("exec1", "exec2", "exec3");
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            RecoveryRequest req = new RecoveryRequest("12345", executorIds);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+            // Verify that resumeWorkflow was called with the correct argument
+            verify(mockExec).recoverPendingWorkflows(executorIds);
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("recovery", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertNull(jsonNode.get("error_message"));
+            assertTrue(jsonNode.get("success").asBoolean());
+        }
+    }
+
+    @Test
+    public void canRecoverThrows() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+        List<String> executorIds = List.of("exec1", "exec2", "exec3");
+        String errorMessage = "canCancelThrows error";
+
+        doThrow(new RuntimeException(errorMessage)).when(mockExec).recoverPendingWorkflows(executorIds);
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            RecoveryRequest req = new RecoveryRequest("12345", executorIds);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+            // Verify that resumeWorkflow was called with the correct argument
+            verify(mockExec).recoverPendingWorkflows(executorIds);
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("recovery", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertEquals(errorMessage, jsonNode.get("error_message").asText());
+            assertFalse(jsonNode.get("success").asBoolean());
+        }
+    }
+
     public void canExecutorInfo() throws Exception {
         MessageListener listener = new MessageListener();
         testServer.setListener(listener);
@@ -266,7 +323,6 @@ public class ConductorTests {
             assertEquals("test-app-version", jsonNode.get("application_version").asText());
             assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
             assertNull(jsonNode.get("error_message"));
-
         }
     }
 

@@ -174,6 +174,10 @@ public class SystemDatabase {
         return workflowDAO.getPendingWorkflows(executorId, appVersion);
     }
 
+    public boolean clearQueueAssignment(String workflowId) throws SQLException {
+        return queuesDAO.clearQueueAssignment(workflowId);
+    }
+
     public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName)
             throws IllegalStateException, WorkflowCancelledException, UnExpectedStepException {
 

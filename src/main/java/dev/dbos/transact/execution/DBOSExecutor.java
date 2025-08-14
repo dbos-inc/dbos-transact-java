@@ -21,6 +21,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
@@ -31,7 +32,9 @@ import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -105,6 +108,57 @@ public class DBOSExecutor {
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
         return workflowRegistry.get(workflowName);
+    }
+
+    WorkflowHandle<?> recoverWorkflow(GetPendingWorkflowsOutput output) throws Exception {
+        Objects.requireNonNull(output);
+        String workflowId = output.getWorkflowUuid();
+        Objects.requireNonNull(workflowId);
+        String queue = output.getQueueName();
+
+        logger.info("Recovery executing workflow {}", workflowId);
+
+        if (queue != null) {
+            boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
+            if (cleared) {
+                return retrieveWorkflow(workflowId);
+            }
+        }
+        return executeWorkflowById(workflowId);
+    }
+
+    public List<WorkflowHandle<?>> recoverPendingWorkflows(List<String> executorIDs) {
+        if (executorIDs == null) {
+            executorIDs = new ArrayList<>(List.of("local"));
+        }
+
+        String appVersion = getAppVersion();
+
+        List<WorkflowHandle<?>> handles = new ArrayList<>();
+        for (String executorId : executorIDs) {
+            List<GetPendingWorkflowsOutput> pendingWorkflows;
+            try {
+                pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion);
+            } catch (Exception e) {
+                logger.error("Failed to get pending workflows for executor {} and application version {}",
+                        executorId,
+                        appVersion,
+                        e);
+                return new ArrayList<>();
+            }
+            logger.info("Recovering {} workflow(s) for executor {} and application version {}",
+                    pendingWorkflows.size(),
+                    executorId,
+                    appVersion);
+            for (GetPendingWorkflowsOutput output : pendingWorkflows) {
+                try {
+                    handles.add(recoverWorkflow(output));
+                } catch (Exception e) {
+                    logger.warn("Recovery of workflow {} failed", output.getWorkflowUuid(), e);
+                }
+            }
+        }
+        return handles;
     }
 
     public List<Queue> getAllQueuesSnapshot() {
