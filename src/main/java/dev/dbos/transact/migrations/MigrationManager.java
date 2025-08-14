@@ -63,7 +63,7 @@ public class MigrationManager {
     }
 
     public static void createDatabaseIfNotExists(DBOSConfig config, String dbName) {
-        DataSource adminDS = SystemDatabase.createDataSource(config, Constants.POSTGRES_DEFAULT_DB);
+        DataSource adminDS = SystemDatabase.createPostgresDataSource(config);
         try {
             try (Connection conn = adminDS.getConnection();
                     PreparedStatement ps = conn
