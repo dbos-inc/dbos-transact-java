@@ -21,7 +21,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.Instant;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -108,7 +111,15 @@ class AdminControllerTest {
             simpleService.workWithString("input-delta");
         }
 
-        DBUtils.setWorkflowStateToPending(dbosConfig);
+        String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? ;";
+        try (Connection conn = DBUtils.getConnection(dbosConfig);
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, WorkflowState.PENDING.name());
+            pstmt.setLong(2, Instant.now().toEpochMilli());
+            int rowsAffected = pstmt.executeUpdate();
+        }
+
         given()
                 .port(3010)
                 .contentType("application/json")

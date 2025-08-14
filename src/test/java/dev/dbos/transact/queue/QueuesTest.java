@@ -525,7 +525,7 @@ public class QueuesTest {
 
         String sql = "UPDATE dbos.workflow_status SET status = ?, executor_id = ? where workflow_uuid = ?;";
 
-        try (Connection connection = dataSource.getConnection();
+        try (Connection connection = DBUtils.getConnection(dbosConfig);
                 PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
             pstmt.setString(1, WorkflowState.PENDING.toString());
