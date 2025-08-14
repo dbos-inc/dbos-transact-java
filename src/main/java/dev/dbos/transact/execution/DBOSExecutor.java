@@ -132,7 +132,16 @@ public class DBOSExecutor {
 
         List<WorkflowHandle<?>> handles = new ArrayList<>();
         for (String executorId : executorIDs) {
-            List<GetPendingWorkflowsOutput> pendingWorkflows = getPendingWorkflows(executorId, appVersion);
+            List<GetPendingWorkflowsOutput> pendingWorkflows;
+            try {
+                pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion);
+            } catch (Exception e) {
+                logger.error("Failed to get pending workflows for executor {} and application version {}",
+                        executorId,
+                        appVersion,
+                        e);
+                return new ArrayList<>();
+            }
             logger.info("Recovering {} workflow(s) for executor {} and application version {}",
                     pendingWorkflows.size(),
                     executorId,
@@ -146,18 +155,6 @@ public class DBOSExecutor {
             }
         }
         return handles;
-    }
-
-    private List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion) {
-        try {
-            return systemDatabase.getPendingWorkflows(executorId, appVersion);
-        } catch (Exception e) {
-            logger.error("Failed to get pending workflows for executor {} and application version {}",
-                    executorId,
-                    appVersion,
-                    e);
-            return new ArrayList<>();
-        }
     }
 
     public List<Queue> getAllQueuesSnapshot() {

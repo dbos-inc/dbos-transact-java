@@ -2,7 +2,6 @@ package dev.dbos.transact.execution;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
-import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.sql.SQLException;
