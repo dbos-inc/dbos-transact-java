@@ -320,7 +320,6 @@ public class QueuesTest {
     }
 
     @Test
-    @Disabled
     public void testWorkerConcurrency() throws Exception {
         String executorId = dbosExecutor.getExecutorId();
         String appVersion = dbosExecutor.getAppVersion();
@@ -392,7 +391,6 @@ public class QueuesTest {
     }
 
     @Test
-    @Disabled
     public void testGlobalConcurrency() throws Exception {
         String executorId = dbosExecutor.getExecutorId();
         String appVersion = dbosExecutor.getAppVersion();
