@@ -114,10 +114,6 @@ class RecoveryServiceTest {
     @Test
     void recoverPendingWorkflows() throws Exception {
 
-        ExecutingService executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
-                .build();
-
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
             executingService.workflowMethod("test-item");
