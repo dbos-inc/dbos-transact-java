@@ -467,12 +467,10 @@ public class SystemDatabase {
 
         String dburl = config.getUrl();
 
-
         dburl = String.format("jdbc:postgresql://%s:%d/%s",
-                    config.getDbHost(),
-                    config.getDbPort(),
-                    Constants.POSTGRES_DEFAULT_DB);
-
+                config.getDbHost(),
+                config.getDbPort(),
+                Constants.POSTGRES_DEFAULT_DB);
 
         String dbUser = config.getDbUser();
         String dbPassword = config.getDbPassword();
