@@ -12,6 +12,7 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
@@ -341,9 +342,13 @@ public class Conductor implements AutoCloseable {
     }
 
     static BaseResponse handleExecutorInfo(Conductor conductor, BaseMessage message) {
-        // TODO: real implementation
-        ExecutorInfoRequest request = (ExecutorInfoRequest) message;
-        return new ExecutorInfoResponse(request, new RuntimeException("not yet implemented"));
+        try {
+            String hostname = InetAddress.getLocalHost().getHostName();
+            return new ExecutorInfoResponse(message, conductor.dbosExecutor.getExecutorId(),
+                    conductor.dbosExecutor.getAppVersion(), hostname);
+        } catch (Exception e) {
+            return new ExecutorInfoResponse(message, e);
+        }
     }
 
     static BaseResponse handleRecovery(Conductor conductor, BaseMessage message) {

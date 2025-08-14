@@ -59,6 +59,14 @@ public class DBOSExecutor {
         return config.getName();
     }
 
+    public String getExecutorId() {
+        return GlobalParams.getInstance().getExecutorId();
+    }
+
+    public String getAppVersion() {
+        return GlobalParams.getInstance().getAppVersion();
+    }
+
     public void setQueueService(QueueService queueService) {
         this.queueService = queueService;
     }
