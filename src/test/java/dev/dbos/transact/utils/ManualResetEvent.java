@@ -1,4 +1,4 @@
-package dev.dbos.transact.queue;
+package dev.dbos.transact.utils;
 
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;

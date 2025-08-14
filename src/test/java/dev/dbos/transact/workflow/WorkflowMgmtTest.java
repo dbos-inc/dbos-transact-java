@@ -450,4 +450,23 @@ public class WorkflowMgmtTest {
         assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
         assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
     }
+
+    
+    @Test
+    void garbageCollection() throws Exception {
+        int numWorkflows = 10;
+
+        GCServiceImpl impl = new GCServiceImpl();
+        GCService gcService = dbos.<GCService>Workflow().interfaceClass(GCService.class)
+                .implementation(impl).build();
+        gcService.setGCService(gcService);
+
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> gcService.blockedWorkflow());
+        for (int i = 0; i < numWorkflows; i++) {
+            int result = gcService.testWorkflow(i);
+            assertEquals(i, result);
+        }
+
+
+    }
 }
