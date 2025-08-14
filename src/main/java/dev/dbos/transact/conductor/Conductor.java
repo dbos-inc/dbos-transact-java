@@ -481,6 +481,23 @@ public class Conductor implements AutoCloseable {
 
     static BaseResponse handleRetention(Conductor conductor, BaseMessage message) {
         RetentionRequest request = (RetentionRequest) message;
-        return new SuccessResponse(request, new RuntimeException("not yet implemented"));
+
+        try {
+            conductor.systemDatabase.garbageCollect(request.body.gc_cutoff_epoch_ms, request.body.gc_rows_threshold);
+        } catch (Exception e) {
+            logger.error("Exception encountered garbage collecting system database", e);
+            return new SuccessResponse(request, e);
+        }
+
+        try {
+            if (request.body.timeout_cutoff_epoch_ms != null) {
+                conductor.dbosExecutor.globalTimeout(request.body.timeout_cutoff_epoch_ms);
+            }
+        } catch (Exception e) {
+            logger.error("Exception encountered setting global timeout", e);
+            return new SuccessResponse(request, e);
+        }
+
+        return new SuccessResponse(request, true);
     }
 }
