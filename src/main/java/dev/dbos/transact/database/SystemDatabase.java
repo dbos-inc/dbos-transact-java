@@ -462,7 +462,7 @@ public class SystemDatabase {
         return new HikariDataSource(hikariConfig);
     }
 
-    public static DataSource createPortgresDataSource(DBOSConfig config) {
+    public static DataSource createPostgresDataSource(DBOSConfig config) {
         HikariConfig hikariConfig = new HikariConfig();
 
         String dburl = config.getUrl();
