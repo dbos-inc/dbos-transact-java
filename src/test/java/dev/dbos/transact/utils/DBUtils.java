@@ -19,7 +19,7 @@ public class DBUtils {
 
         try (Connection connection = ds.getConnection()) {
             deleteOperations(connection);
-            deleteWorkflowsTestHelper(connection);;
+            deleteWorkflowsTestHelper(connection);
         } catch (Exception e) {
             logger.info("Error clearing tables" + e.getMessage());
             throw e;
@@ -74,6 +74,31 @@ public class DBUtils {
         }
     }
 
+    public static boolean queueEntriesAreCleanedUp(DataSource ds) throws SQLException {
+        String sql = "SELECT count(*) FROM dbos.workflow_status WHERE queue_name IS NOT NULL AND status IN ('ENQUEUED', 'PENDING');";
+
+        for (int i = 0; i < 10; i++) {
+            try (Connection connection = ds.getConnection();
+                    Statement stmt = connection.createStatement();
+                    ResultSet rs = stmt.executeQuery(sql)) {
+                if (rs.next()) {
+                    int count = rs.getInt(1);
+                    if (count == 0) {
+                        return true;
+                    }
+                }
+            }
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        return false;
+    }
+
     public void closeDS(HikariDataSource ds) {
         ds.close();
     }
@@ -87,10 +112,17 @@ public class DBUtils {
                 dbosConfig.getDbUser(),
                 dbosConfig.getDbPassword()); Statement stmt = conn.createStatement()) {
 
-            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
+            String dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", sysDb);
             String createDbSql = String.format("CREATE DATABASE %s", sysDb);
             stmt.execute(dropDbSql);
             stmt.execute(createDbSql);
         }
+    }
+
+    public static Connection getConnection(DBOSConfig dbosConfig) throws SQLException {
+        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, dbosConfig.getSysDbName());
+        return DriverManager.getConnection(dbUrl,
+                dbosConfig.getDbUser(),
+                dbosConfig.getDbPassword());
     }
 }

@@ -21,7 +21,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.Instant;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -75,6 +78,61 @@ class AdminControllerTest {
 
         assertEquals(200, response.statusCode());
         assertEquals("healthy", response.body());
+    }
+
+    @Test
+    public void recovery() throws Exception {
+        ExecutingService executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class)
+                .implementation(new ExecutingServiceImpl())
+                .build();
+
+        SimpleService simpleService = dbos.<SimpleService>Workflow()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .build();
+
+        // Needed to call the step
+        executingService.setExecutingService(executingService);
+
+        // Execute multiple workflows with different IDs and inputs
+        try (SetWorkflowID id1 = new SetWorkflowID("workflow-001")) {
+            executingService.workflowMethodWithStep("input-alpha");
+        }
+
+        try (SetWorkflowID id2 = new SetWorkflowID("workflow-002")) {
+            executingService.workflowMethodWithStep("input-beta");
+        }
+
+        try (SetWorkflowID id3 = new SetWorkflowID("workflow-003")) {
+            executingService.workflowMethodWithStep("input-gamma");
+        }
+
+        try (SetWorkflowID id4 = new SetWorkflowID("workflow-004")) {
+            simpleService.workWithString("input-delta");
+        }
+
+        String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? ;";
+        try (Connection conn = DBUtils.getConnection(dbosConfig);
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, WorkflowState.PENDING.name());
+            pstmt.setLong(2, Instant.now().toEpochMilli());
+            int rowsAffected = pstmt.executeUpdate();
+        }
+
+        given()
+                .port(3010)
+                .contentType("application/json")
+                .body("[\"local\"]")
+                .when()
+                .post("/dbos-workflow-recovery")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(4))
+                .body("[0]", equalTo("workflow-001"))
+                .body("[1]", equalTo("workflow-002"))
+                .body("[2]", equalTo("workflow-003"))
+                .body("[3]", equalTo("workflow-004"));
     }
 
     @Test

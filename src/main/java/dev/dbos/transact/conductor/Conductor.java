@@ -352,9 +352,14 @@ public class Conductor implements AutoCloseable {
     }
 
     static BaseResponse handleRecovery(Conductor conductor, BaseMessage message) {
-        // TODO: recoverPendingWorkflows
         RecoveryRequest request = (RecoveryRequest) message;
-        return new SuccessResponse(request, new RuntimeException("not yet implemented"));
+        try {
+            conductor.dbosExecutor.recoverPendingWorkflows(request.executor_ids);
+            return new SuccessResponse(request, true);
+        } catch (Exception e) {
+            logger.error("Exception encountered when recovering pending workflows", e);
+            return new SuccessResponse(request, e);
+        }
     }
 
     static BaseResponse handleCancel(Conductor conductor, BaseMessage message) {

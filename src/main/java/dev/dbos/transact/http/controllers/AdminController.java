@@ -56,9 +56,14 @@ public class AdminController {
     @Path("/dbos-workflow-recovery")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public Response recovery(List<String> executorIds) {
-        // TODO: implement dbosExec.recoverPendingWorkflows
-        return Response.serverError().build();
+    public List<String> recovery(List<String> executorIds) {
+        logger.info("Recovering workflows for executors {}", executorIds);
+        List<WorkflowHandle<?>> handles = dbosExecutor.recoverPendingWorkflows(executorIds);
+        List<String> workflowIds = new ArrayList<>();
+        for (WorkflowHandle<?> handle : handles) {
+            workflowIds.add(handle.getWorkflowId());
+        }
+        return workflowIds;
     }
 
     @POST
