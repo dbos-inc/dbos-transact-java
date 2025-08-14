@@ -3,6 +3,7 @@ package dev.dbos.transact.queue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
@@ -14,7 +15,10 @@ import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
+import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
@@ -318,146 +322,146 @@ public class QueuesTest {
     @Test
     @Disabled
     public void testWorkerConcurrency() throws Exception {
+        String executorId = dbosExecutor.getExecutorId();
+        String appVersion = dbosExecutor.getAppVersion();
 
-        // queueService.stop();
-        // while (!queueService.isStopped()) {
-        // Thread.sleep(2000);
-        // logger.info("Waiting for queueService to stop");
-        // }
+        queueService.stop();
+        while (!queueService.isStopped()) {
+            Thread.sleep(2000);
+            logger.info("Waiting for queueService to stop");
+        }
 
-        // Queue qwithWCLimit = new DBOS.QueueBuilder("QwithWCLimit").concurrency(1)
-        // .workerConcurrency(2).concurrency(3).build();
+        Queue qwithWCLimit = new DBOS.QueueBuilder("QwithWCLimit").concurrency(1)
+                .workerConcurrency(2).concurrency(3).build();
 
-        // WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal("xxx",
-        // WorkflowState.SUCCESS, "OrderProcessingWorkflow",
-        // "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
-        // "admin", "admin,operator", "{\"result\":\"success\"}", null,
-        // System.currentTimeMillis() - 3600000, System.currentTimeMillis(),
-        // "QwithWCLimit",
-        // GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
-        // .getAppVersion(),
-        // "order-app-123", 0,
-        // 300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
-        // "{\"orderId\":\"ORD-12345\"}");
+        WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal("xxx",
+                WorkflowState.SUCCESS, "OrderProcessingWorkflow",
+                "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
+                "admin", "admin,operator", "{\"result\":\"success\"}", null,
+                System.currentTimeMillis() - 3600000, System.currentTimeMillis(),
+                "QwithWCLimit",
+                executorId, appVersion,
+                "order-app-123", 0,
+                300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
+                "{\"orderId\":\"ORD-12345\"}");
 
-        // for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 4; i++) {
 
-        // try (Connection conn = dataSource.getConnection()) {
+            try (Connection conn = dataSource.getConnection()) {
 
-        // String wfid = "id" + i;
-        // wfStatusInternal.setWorkflowUUID(wfid);
-        // wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
-        // wfStatusInternal.setDeduplicationId("dedup" + i);
-        // InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn,
-        // wfStatusInternal);
-        // }
-        // }
+                String wfid = "id" + i;
+                wfStatusInternal.setWorkflowUUID(wfid);
+                wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
+                wfStatusInternal.setDeduplicationId("dedup" + i);
+                InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn,
+                        wfStatusInternal);
+            }
+        }
 
-        // List<String> idsToRun =
-        // systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-        // GlobalParams.getInstance().getExecutorId(),
-        // GlobalParams.getInstance().getAppVersion());
+        List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
+                executorId,
+                appVersion);
 
-        // assertEquals(2, idsToRun.size());
+        assertEquals(2, idsToRun.size());
 
-        // // run the same above 2 are in Pending.
-        // // So no de queueing
-        // idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-        // GlobalParams.getInstance().getExecutorId(),
-        // GlobalParams.getInstance().getAppVersion());
-        // assertEquals(0, idsToRun.size());
+        // run the same above 2 are in Pending.
+        // So no de queueing
+        idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
+                executorId,
+                appVersion);
+        assertEquals(0, idsToRun.size());
 
-        // // mark the first 2 as success
-        // DBUtils.updateWorkflowState(dataSource,
-        // WorkflowState.PENDING.name(),
-        // WorkflowState.SUCCESS.name());
+        // mark the first 2 as success
+        DBUtils.updateWorkflowState(dataSource,
+                WorkflowState.PENDING.name(),
+                WorkflowState.SUCCESS.name());
 
-        // // next 2 get dequeued
-        // idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-        // GlobalParams.getInstance().getExecutorId(),
-        // GlobalParams.getInstance().getAppVersion());
-        // assertEquals(2, idsToRun.size());
+        // next 2 get dequeued
+        idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
+                executorId,
+                appVersion);
+        assertEquals(2, idsToRun.size());
 
-        // DBUtils.updateWorkflowState(dataSource,
-        // WorkflowState.PENDING.name(),
-        // WorkflowState.SUCCESS.name());
-        // idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-        // Constants.DEFAULT_EXECUTORID,
-        // Constants.DEFAULT_APP_VERSION);
-        // assertEquals(0, idsToRun.size());
+        DBUtils.updateWorkflowState(dataSource,
+                WorkflowState.PENDING.name(),
+                WorkflowState.SUCCESS.name());
+        idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
+                Constants.DEFAULT_EXECUTORID,
+                Constants.DEFAULT_APP_VERSION);
+        assertEquals(0, idsToRun.size());
     }
 
     @Test
     @Disabled
     public void testGlobalConcurrency() throws Exception {
+        String executorId = dbosExecutor.getExecutorId();
+        String appVersion = dbosExecutor.getAppVersion();
 
-        // queueService.stop();
-        // while (!queueService.isStopped()) {
-        // Thread.sleep(2000);
-        // logger.info("Waiting for queueService to stop");
-        // }
+        queueService.stop();
+        while (!queueService.isStopped()) {
+            Thread.sleep(2000);
+            logger.info("Waiting for queueService to stop");
+        }
 
-        // Queue qwithWCLimit = new DBOS.QueueBuilder("QwithWCLimit").concurrency(1)
-        // .workerConcurrency(2).concurrency(3).build();
+        Queue qwithWCLimit = new DBOS.QueueBuilder("QwithWCLimit").concurrency(1)
+                .workerConcurrency(2).concurrency(3).build();
 
-        // WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal("xxx",
-        // WorkflowState.SUCCESS, "OrderProcessingWorkflow",
-        // "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
-        // "admin", "admin,operator", "{\"result\":\"success\"}", null,
-        // System.currentTimeMillis() - 3600000, System.currentTimeMillis(),
-        // "QwithWCLimit",
-        // GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
-        // .getAppVersion(),
-        // "order-app-123", 0,
-        // 300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
-        // "{\"orderId\":\"ORD-12345\"}");
+        WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal("xxx",
+                WorkflowState.SUCCESS, "OrderProcessingWorkflow",
+                "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
+                "admin", "admin,operator", "{\"result\":\"success\"}", null,
+                System.currentTimeMillis() - 3600000, System.currentTimeMillis(),
+                "QwithWCLimit",
+                executorId, appVersion,
+                "order-app-123", 0,
+                300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
+                "{\"orderId\":\"ORD-12345\"}");
 
-        // // executor1
-        // for (int i = 0; i < 2; i++) {
+        // executor1
+        for (int i = 0; i < 2; i++) {
 
-        // try (Connection conn = dataSource.getConnection()) {
+            try (Connection conn = dataSource.getConnection()) {
 
-        // String wfid = "id" + i;
-        // wfStatusInternal.setWorkflowUUID(wfid);
-        // wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
-        // wfStatusInternal.setDeduplicationId("dedup" + i);
-        // InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn,
-        // wfStatusInternal);
-        // }
-        // }
+                String wfid = "id" + i;
+                wfStatusInternal.setWorkflowUUID(wfid);
+                wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
+                wfStatusInternal.setDeduplicationId("dedup" + i);
+                InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn,
+                        wfStatusInternal);
+            }
+        }
 
-        // // executor2
+        // executor2
 
-        // String executor2 = "remote";
-        // for (int i = 2; i < 5; i++) {
+        String executor2 = "remote";
+        for (int i = 2; i < 5; i++) {
 
-        // try (Connection conn = dataSource.getConnection()) {
+            try (Connection conn = dataSource.getConnection()) {
 
-        // String wfid = "id" + i;
-        // wfStatusInternal.setWorkflowUUID(wfid);
-        // wfStatusInternal.setStatus(WorkflowState.PENDING);
-        // wfStatusInternal.setDeduplicationId("dedup" + i);
-        // wfStatusInternal.setExecutorId(executor2);
-        // InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn,
-        // wfStatusInternal);
-        // }
-        // }
+                String wfid = "id" + i;
+                wfStatusInternal.setWorkflowUUID(wfid);
+                wfStatusInternal.setStatus(WorkflowState.PENDING);
+                wfStatusInternal.setDeduplicationId("dedup" + i);
+                wfStatusInternal.setExecutorId(executor2);
+                InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn,
+                        wfStatusInternal);
+            }
+        }
 
-        // List<String> idsToRun =
-        // systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-        // GlobalParams.getInstance().getExecutorId(),
-        // GlobalParams.getInstance().getAppVersion());
-        // // 0 because global concurrency limit is reached
-        // assertEquals(0, idsToRun.size());
+        List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
+                executorId,
+                appVersion);
+        // 0 because global concurrency limit is reached
+        assertEquals(0, idsToRun.size());
 
-        // DBUtils.updateWorkflowState(dataSource,
-        // WorkflowState.PENDING.name(),
-        // WorkflowState.SUCCESS.name());
-        // idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-        // // GlobalParams.getInstance().getExecutorId(),
-        // executor2,
-        // GlobalParams.getInstance().getAppVersion());
-        // assertEquals(2, idsToRun.size());
+        DBUtils.updateWorkflowState(dataSource,
+                WorkflowState.PENDING.name(),
+                WorkflowState.SUCCESS.name());
+        idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
+                // executorId,
+                executor2,
+                appVersion);
+        assertEquals(2, idsToRun.size());
     }
 
     @Test

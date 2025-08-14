@@ -55,10 +55,9 @@ class RecoveryServiceTest {
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
-                executingService = dbos.<ExecutingService>Workflow()
+        executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
-
 
         dbos.launch();
     }
