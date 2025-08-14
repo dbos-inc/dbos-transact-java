@@ -26,11 +26,6 @@ public class RecoveryService {
         this.dbosExecutor = dbosExecutor;
     }
 
-    public List<GetPendingWorkflowsOutput> getPendingWorkflows() throws SQLException {
-        return systemDatabase.getPendingWorkflows(dbosExecutor.getExecutorId(),
-                dbosExecutor.getAppVersion());
-    }
-
     /**
      * Starts the background recovery thread for startup workflow recovery. This
      * method will attempt to recover pending workflows in a separate thread.
@@ -44,7 +39,7 @@ public class RecoveryService {
         List<GetPendingWorkflowsOutput> workflows = new ArrayList<>();
 
         try {
-            workflows = getPendingWorkflows();
+            workflows = systemDatabase.getPendingWorkflows(dbosExecutor.getExecutorId(), dbosExecutor.getAppVersion());
         } catch (SQLException e) {
             logger.error("Error getting pending workflows", e.getMessage());
         }
