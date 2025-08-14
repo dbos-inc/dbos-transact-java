@@ -882,4 +882,43 @@ public class WorkflowDAO {
             stmt.executeUpdate();
         }
     }
+
+    private Long getRowsCutoff(Connection connection, long rowsThreshold) throws SQLException {
+        String sql = "SELECT created_at FROM dbos.workflow_status ORDER BY created_at DESC OFFSET $1 LIMIT 1";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setLong(1, rowsThreshold - 1);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong("created_at");
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            if (rowsThreshold != null) {
+                Long rowsCutoff = getRowsCutoff(connection, rowsThreshold);
+                if (rowsCutoff != null) {
+                    if (cutoffEpochTimestampMs == null || rowsCutoff > cutoffEpochTimestampMs) {
+                        cutoffEpochTimestampMs = rowsCutoff;
+                    }
+                }
+            }
+
+            if (cutoffEpochTimestampMs != null) {
+                String sql = "DELETE FROM dbos.workflow_status WHERE created_at < $1 AND status NOT IN ($2, $3)";
+                try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+                    stmt.setLong(1, cutoffEpochTimestampMs);
+                    stmt.setString(2, WorkflowState.PENDING.toString());
+                    stmt.setString(3, WorkflowState.ENQUEUED.toString());
+
+                    stmt.executeUpdate();
+                }
+            }
+        }
+    }
+
 }
