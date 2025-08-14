@@ -59,7 +59,7 @@ public class ManualResetEvent {
                     nanos = condition.awaitNanos(nanos);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    break;
+                    return false;
                 }
             }
             return true;
