@@ -11,6 +11,7 @@ import static org.mockito.Mockito.*;
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.conductor.protocol.BaseMessage;
 import dev.dbos.transact.conductor.protocol.CancelRequest;
+import dev.dbos.transact.conductor.protocol.ExecutorInfoRequest;
 import dev.dbos.transact.conductor.protocol.ExistPendingWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.ForkWorkflowRequest;
 import dev.dbos.transact.conductor.protocol.GetWorkflowRequest;
@@ -31,6 +32,7 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
+import java.net.InetAddress;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -293,6 +295,34 @@ public class ConductorTests {
             assertEquals("12345", jsonNode.get("request_id").asText());
             assertEquals(errorMessage, jsonNode.get("error_message").asText());
             assertFalse(jsonNode.get("success").asBoolean());
+        }
+    }
+
+    public void canExecutorInfo() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+
+        String hostname = InetAddress.getLocalHost().getHostName();
+
+        when(mockExec.getAppVersion()).thenReturn("test-app-version");
+        when(mockExec.getExecutorId()).thenReturn("test-executor-id");
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            ExecutorInfoRequest req = new ExecutorInfoRequest("12345");
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(1000000000, TimeUnit.SECONDS), "message latch timed out");
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("executor_info", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertEquals(hostname, jsonNode.get("hostname").asText());
+            assertEquals("test-app-version", jsonNode.get("application_version").asText());
+            assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
+            assertNull(jsonNode.get("error_message"));
         }
     }
 

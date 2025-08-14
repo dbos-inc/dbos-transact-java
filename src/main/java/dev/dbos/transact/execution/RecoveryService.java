@@ -2,7 +2,7 @@ package dev.dbos.transact.execution;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
-import dev.dbos.transact.utils.GlobalParams;
+import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.sql.SQLException;
@@ -28,9 +28,8 @@ public class RecoveryService {
     }
 
     public List<GetPendingWorkflowsOutput> getPendingWorkflows() throws SQLException {
-        GlobalParams params = GlobalParams.getInstance();
-        return systemDatabase.getPendingWorkflows(params.getExecutorId(),
-                params.getAppVersion());
+        return systemDatabase.getPendingWorkflows(dbosExecutor.getExecutorId(),
+                dbosExecutor.getAppVersion());
     }
 
     /**

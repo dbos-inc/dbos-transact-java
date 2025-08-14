@@ -466,6 +466,26 @@ public class SystemDatabase {
         return new HikariDataSource(hikariConfig);
     }
 
+    public static DataSource createPostgresDataSource(DBOSConfig config) {
+        HikariConfig hikariConfig = new HikariConfig();
+
+        String dburl = config.getUrl();
+
+        dburl = String.format("jdbc:postgresql://%s:%d/%s",
+                config.getDbHost(),
+                config.getDbPort(),
+                Constants.POSTGRES_DEFAULT_DB);
+
+        String dbUser = config.getDbUser();
+        String dbPassword = config.getDbPassword();
+        hikariConfig.setJdbcUrl(dburl);
+        hikariConfig.setUsername(dbUser);
+        hikariConfig.setPassword(dbPassword);
+
+        hikariConfig.setMaximumPoolSize(2);
+        return new HikariDataSource(hikariConfig);
+    }
+
     public static DataSource createDataSource(DBOSConfig config) {
         return createDataSource(config, null);
     }

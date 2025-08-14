@@ -12,7 +12,6 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
-import dev.dbos.transact.utils.GlobalParams;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -323,6 +322,8 @@ public class QueuesTest {
 
     @Test
     public void testWorkerConcurrency() throws Exception {
+        String executorId = dbosExecutor.getExecutorId();
+        String appVersion = dbosExecutor.getAppVersion();
 
         queueService.stop();
         while (!queueService.isStopped()) {
@@ -337,9 +338,9 @@ public class QueuesTest {
                 WorkflowState.SUCCESS, "OrderProcessingWorkflow",
                 "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
                 "admin", "admin,operator", "{\"result\":\"success\"}", null,
-                System.currentTimeMillis() - 3600000, System.currentTimeMillis(), "QwithWCLimit",
-                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
-                        .getAppVersion(),
+                System.currentTimeMillis() - 3600000, System.currentTimeMillis(),
+                "QwithWCLimit",
+                executorId, appVersion,
                 "order-app-123", 0,
                 300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
                 "{\"orderId\":\"ORD-12345\"}");
@@ -358,16 +359,16 @@ public class QueuesTest {
         }
 
         List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                GlobalParams.getInstance().getExecutorId(),
-                GlobalParams.getInstance().getAppVersion());
+                executorId,
+                appVersion);
 
         assertEquals(2, idsToRun.size());
 
         // run the same above 2 are in Pending.
         // So no de queueing
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                GlobalParams.getInstance().getExecutorId(),
-                GlobalParams.getInstance().getAppVersion());
+                executorId,
+                appVersion);
         assertEquals(0, idsToRun.size());
 
         // mark the first 2 as success
@@ -377,8 +378,8 @@ public class QueuesTest {
 
         // next 2 get dequeued
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                GlobalParams.getInstance().getExecutorId(),
-                GlobalParams.getInstance().getAppVersion());
+                executorId,
+                appVersion);
         assertEquals(2, idsToRun.size());
 
         DBUtils.updateWorkflowState(dataSource,
@@ -392,6 +393,8 @@ public class QueuesTest {
 
     @Test
     public void testGlobalConcurrency() throws Exception {
+        String executorId = dbosExecutor.getExecutorId();
+        String appVersion = dbosExecutor.getAppVersion();
 
         queueService.stop();
         while (!queueService.isStopped()) {
@@ -406,9 +409,9 @@ public class QueuesTest {
                 WorkflowState.SUCCESS, "OrderProcessingWorkflow",
                 "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
                 "admin", "admin,operator", "{\"result\":\"success\"}", null,
-                System.currentTimeMillis() - 3600000, System.currentTimeMillis(), "QwithWCLimit",
-                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
-                        .getAppVersion(),
+                System.currentTimeMillis() - 3600000, System.currentTimeMillis(),
+                "QwithWCLimit",
+                executorId, appVersion,
                 "order-app-123", 0,
                 300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
                 "{\"orderId\":\"ORD-12345\"}");
@@ -445,8 +448,8 @@ public class QueuesTest {
         }
 
         List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                GlobalParams.getInstance().getExecutorId(),
-                GlobalParams.getInstance().getAppVersion());
+                executorId,
+                appVersion);
         // 0 because global concurrency limit is reached
         assertEquals(0, idsToRun.size());
 
@@ -454,9 +457,9 @@ public class QueuesTest {
                 WorkflowState.PENDING.name(),
                 WorkflowState.SUCCESS.name());
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                // GlobalParams.getInstance().getExecutorId(),
+                // executorId,
                 executor2,
-                GlobalParams.getInstance().getAppVersion());
+                appVersion);
         assertEquals(2, idsToRun.size());
     }
 
