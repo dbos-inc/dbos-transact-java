@@ -36,6 +36,7 @@ class RecoveryServiceTest {
     private static SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
     private RecoveryService recoveryService;
+    private ExecutingService executingService;
     Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
     @BeforeAll
@@ -54,6 +55,10 @@ class RecoveryServiceTest {
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
+        executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
+                .build();
+
         dbos.launch();
     }
 
@@ -64,10 +69,6 @@ class RecoveryServiceTest {
 
     @Test
     void recoverWorkflows() throws Exception {
-
-        ExecutingService executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
-                .build();
 
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
@@ -118,10 +119,6 @@ class RecoveryServiceTest {
 
     @Test
     public void recoveryThreadTest() throws SQLException {
-
-        ExecutingService executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
-                .build();
 
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {

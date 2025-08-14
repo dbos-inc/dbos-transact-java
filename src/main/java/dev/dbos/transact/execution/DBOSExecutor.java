@@ -15,7 +15,7 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
-import dev.dbos.transact.utils.GlobalParams;
+import dev.dbos.transact.utils.AppVersionComputer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -40,6 +40,9 @@ import org.slf4j.LoggerFactory;
 public class DBOSExecutor {
 
     private final DBOSConfig config;
+    private String appVersion;
+    private String executorId;
+
     private SystemDatabase systemDatabase;
     private ExecutorService executorService;
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
@@ -60,15 +63,29 @@ public class DBOSExecutor {
     }
 
     public String getExecutorId() {
-        return GlobalParams.getInstance().getExecutorId();
+        return this.executorId;
     }
 
     public String getAppVersion() {
-        return GlobalParams.getInstance().getAppVersion();
+        return this.appVersion;
     }
 
     public void setQueueService(QueueService queueService) {
         this.queueService = queueService;
+    }
+
+    public void start() {
+
+        this.executorId = System.getenv("DBOS__VMID");
+        if (this.executorId == null) {
+            this.executorId = "local";
+        }
+
+        this.appVersion = System.getenv("DBOS__APPVERSION");
+        if (this.appVersion == null) {
+            Set<Class<?>> registeredClasses = this.getRegisteredClasses();
+            this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
+        }
     }
 
     public void shutdown() {
@@ -111,8 +128,7 @@ public class DBOSExecutor {
         WorkflowStatusInternal workflowStatusInternal = new WorkflowStatusInternal(workflowId,
                 status, workflowName, className, null, null, null, null, null, null, null, null,
                 queueName,
-                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
-                        .getAppVersion(),
+                this.getExecutorId(), this.getAppVersion(),
                 null, 0,
                 workflowTimeoutMs, workflowDeadlineEpoch, null, 1, inputString);
 
