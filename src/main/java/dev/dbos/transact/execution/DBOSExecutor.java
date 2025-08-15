@@ -596,7 +596,7 @@ public class DBOSExecutor {
         }
 
         if (newCtx.getQueue() == null) {
-            newCtx = oldctx.copyWithAsync();
+            newCtx = newCtx.copyWithAsync();
         }
 
         try {
