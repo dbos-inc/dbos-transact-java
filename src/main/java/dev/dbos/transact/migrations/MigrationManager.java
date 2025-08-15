@@ -44,7 +44,7 @@ public class MigrationManager {
         } else {
             dbName = dbconfig.getName() + Constants.SYS_DB_SUFFIX;
         }
-        
+
         createDatabaseIfNotExists(dbconfig, dbName);
 
         DataSource dataSource = SystemDatabase.createDataSource(dbconfig, dbName);
