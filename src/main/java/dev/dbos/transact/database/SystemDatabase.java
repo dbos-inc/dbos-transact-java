@@ -462,11 +462,64 @@ public class SystemDatabase {
         return new HikariDataSource(hikariConfig);
     }
 
+    public static DataSource createPostgresDataSource(DBOSConfig config) {
+        HikariConfig hikariConfig = new HikariConfig();
+
+        String dburl = config.getUrl();
+
+        if (dburl != null) {
+            dburl = createPostgresConnectionUrl(dburl);
+        } else {
+
+            dburl = String.format("jdbc:postgresql://%s:%d/%s",
+                    config.getDbHost(),
+                    config.getDbPort(),
+                    Constants.POSTGRES_DEFAULT_DB);
+        }
+
+        String dbUser = config.getDbUser();
+        String dbPassword = config.getDbPassword();
+        hikariConfig.setJdbcUrl(dburl);
+        hikariConfig.setUsername(dbUser);
+        hikariConfig.setPassword(dbPassword);
+
+        hikariConfig.setMaximumPoolSize(2);
+        return new HikariDataSource(hikariConfig);
+    }
+
+
     public static DataSource createDataSource(DBOSConfig config) {
         return createDataSource(config, null);
     }
 
     Connection getSysDBConnection() throws SQLException {
         return dataSource.getConnection();
+    }
+
+    public static String createPostgresConnectionUrl(String originalUrl) {
+        if (originalUrl == null || !originalUrl.startsWith("jdbc:postgresql://")) {
+            throw new IllegalArgumentException("Invalid PostgreSQL JDBC URL: " + originalUrl);
+        }
+
+        String urlWithoutPrefix = originalUrl.substring("jdbc:postgresql://".length());
+
+        // Find the database name part (after the last '/' and before '?' if it exists)
+        int slashIndex = urlWithoutPrefix.lastIndexOf('/');
+        if (slashIndex == -1) {
+            throw new IllegalArgumentException("Invalid JDBC URL format - missing database name: " + originalUrl);
+        }
+
+        String hostAndPort = urlWithoutPrefix.substring(0, slashIndex);
+        String databaseAndParams = urlWithoutPrefix.substring(slashIndex + 1);
+
+        // Split database name from query parameters
+        String queryParams = "";
+        int questionMarkIndex = databaseAndParams.indexOf('?');
+        if (questionMarkIndex != -1) {
+            queryParams = databaseAndParams.substring(questionMarkIndex);
+        }
+
+        // Build new URL with 'postgres' database
+        return "jdbc:postgresql://" + hostAndPort + "/postgres" + queryParams;
     }
 }
