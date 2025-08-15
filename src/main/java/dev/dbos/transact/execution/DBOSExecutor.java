@@ -17,6 +17,7 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.utils.AppVersionComputer;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -28,6 +29,9 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -592,7 +596,7 @@ public class DBOSExecutor {
         }
 
         if (newCtx.getQueue() == null) {
-            newCtx = oldctx.copyWithAsync();
+            newCtx = newCtx.copyWithAsync();
         }
 
         try {
@@ -628,5 +632,24 @@ public class DBOSExecutor {
 
     public Set<Class<?>> getRegisteredClasses() {
         return workflowRegistry.getClasses();
+    }
+
+    public void globalTimeout(Long cutoff) {
+        OffsetDateTime endTime = Instant.ofEpochMilli(cutoff).atOffset(ZoneOffset.UTC);
+        globalTimeout(endTime);
+    }
+
+    public void globalTimeout(OffsetDateTime endTime) {
+        ListWorkflowsInput pendingInput = new ListWorkflowsInput.Builder().status(WorkflowState.PENDING)
+                .endTime(endTime).build();
+        for (WorkflowStatus status : systemDatabase.listWorkflows(pendingInput)) {
+            cancelWorkflow(status.getWorkflowId());
+        }
+
+        ListWorkflowsInput enqueuedInput = new ListWorkflowsInput.Builder().status(WorkflowState.ENQUEUED)
+                .endTime(endTime).build();
+        for (WorkflowStatus status : systemDatabase.listWorkflows(enqueuedInput)) {
+            cancelWorkflow(status.getWorkflowId());
+        }
     }
 }

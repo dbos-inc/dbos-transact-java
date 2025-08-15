@@ -410,6 +410,15 @@ public class SystemDatabase {
         return functionResult;
     }
 
+    public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) {
+        try {
+            workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold);
+        } catch (SQLException sq) {
+            logger.error("Unexpected SQL exception", sq);
+            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private <T> T handleExistingResult(StepResult result, String functionName) {
         if (result.getOutput() != null) {

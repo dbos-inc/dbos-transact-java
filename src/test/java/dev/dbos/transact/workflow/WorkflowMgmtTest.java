@@ -14,6 +14,7 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -449,5 +450,91 @@ public class WorkflowMgmtTest {
 
         assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
         assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+    }
+
+    @Test
+    void garbageCollection() throws Exception {
+        int numWorkflows = 10;
+
+        GCServiceImpl impl = new GCServiceImpl();
+        GCService gcService = dbos.<GCService>Workflow().interfaceClass(GCService.class)
+                .implementation(impl).build();
+        gcService.setGCService(gcService);
+
+        // Start one blocked workflow and 10 normal workflows
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> gcService.gcBlockedWorkflow());
+        for (int i = 0; i < numWorkflows; i++) {
+            int result = gcService.testWorkflow(i);
+            assertEquals(i, result);
+        }
+
+        // Garbage collect all but one completed workflow
+        List<WorkflowStatus> statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(11, statusList.size());
+        systemDatabase.garbageCollect(null, 1L);
+        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(2, statusList.size());
+        assertEquals(handle.getWorkflowId(), statusList.get(0).getWorkflowId());
+
+        // Garbage collect all completed workflows
+        systemDatabase.garbageCollect(System.currentTimeMillis(), null);
+        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(1, statusList.size());
+        assertEquals(handle.getWorkflowId(), statusList.get(0).getWorkflowId());
+
+        // Finish the blocked workflow, garbage collect everything
+        impl.gcLatch.countDown();
+        assertEquals(handle.getWorkflowId(), handle.getResult());
+        systemDatabase.garbageCollect(System.currentTimeMillis(), null);
+        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(0, statusList.size());
+
+        // Verify GC runs without errors on an empty table
+        systemDatabase.garbageCollect(null, 1L);
+
+        // Run workflows, wait, run them again
+        for (int i = 0; i < numWorkflows; i++) {
+            int result = gcService.testWorkflow(i);
+            assertEquals(i, result);
+        }
+
+        Thread.sleep(1000L);
+
+        for (int i = 0; i < numWorkflows; i++) {
+            int result = gcService.testWorkflow(i);
+            assertEquals(i, result);
+        }
+
+        // GC the first half, verify only half were GC'ed
+        systemDatabase.garbageCollect(System.currentTimeMillis() - 1000, null);
+        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(numWorkflows, statusList.size());
+    }
+
+    @Test
+    void globalTimeout() throws Exception {
+        int numWorkflows = 10;
+
+        GCServiceImpl impl = new GCServiceImpl();
+        GCService gcService = dbos.<GCService>Workflow().interfaceClass(GCService.class)
+                .implementation(impl).build();
+        gcService.setGCService(gcService);
+
+        List<WorkflowHandle<String>> handles = new ArrayList<>();
+        for (int i = 0; i < numWorkflows; i++) {
+            handles.add(dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow()));
+        }
+
+        Thread.sleep(1000L);
+
+        // Wait one second, start one final workflow, then timeout all workflows started more than one second ago
+        WorkflowHandle<String> finalHandle = dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow());
+
+        dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);
+        for (WorkflowHandle<?> handle : handles) {
+            assertEquals(WorkflowState.CANCELLED.toString(), handle.getStatus().getStatus());
+        }
+        impl.timeoutLatch.countDown();
+        assertEquals(finalHandle.getWorkflowId(), finalHandle.getResult());
     }
 }
