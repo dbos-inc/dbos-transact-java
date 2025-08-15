@@ -54,9 +54,9 @@ import org.mockito.ArgumentCaptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ConductorTests {
+public class ConductorTest {
 
-    static Logger logger = LoggerFactory.getLogger(ConductorTests.class);
+    static Logger logger = LoggerFactory.getLogger(ConductorTest.class);
 
     SystemDatabase mockDB;
     DBOSExecutor mockExec;
@@ -236,7 +236,7 @@ public class ConductorTests {
         }
 
         public void send(BaseMessage message) throws Exception {
-            String json = ConductorTests.mapper.writeValueAsString(message);
+            String json = ConductorTest.mapper.writeValueAsString(message);
             this.webSocket.send(json);
         }
     }

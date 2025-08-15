@@ -31,6 +31,9 @@ public class ManualResetEvent {
         }
     }
 
+    // Note, it's a little suspect to wrap a checked exception in an unchecked exception in the two waitOne overloads. 
+    // However, this is test code so a thrown exception should just fail the test.
+
     public void waitOne() {
         lock.lock();
         try {
@@ -39,9 +42,30 @@ public class ManualResetEvent {
                     condition.await();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    break;
+                    throw new RuntimeException(e);
                 }
             }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public boolean waitOne(long millis) {
+        lock.lock();
+        try {
+            long nanos = millis * 1_000_000L;
+            while (!signaled) {
+                if (nanos <= 0L) {
+                    return false;
+                }
+                try {
+                    nanos = condition.awaitNanos(nanos);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
+            }
+            return true;
         } finally {
             lock.unlock();
         }

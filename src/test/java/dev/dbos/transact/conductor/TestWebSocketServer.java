@@ -11,6 +11,8 @@ import org.java_websocket.server.WebSocketServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import dev.dbos.transact.utils.ManualResetEvent;
+
 class TestWebSocketServer extends WebSocketServer {
     public interface WebSocketTestListener {
         default void onStart() {
