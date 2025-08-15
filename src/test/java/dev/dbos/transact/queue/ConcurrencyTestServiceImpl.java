@@ -17,7 +17,7 @@ public class ConcurrencyTestServiceImpl implements ConcurrencyTestService {
     }
 
     @Workflow(name = "blockedWorkflow")
-    public int blockedWorkflow(int i) throws InterruptedException {
+    public int blockedWorkflow(int i) {
         wfEvents.get(i).set();
         counter++;
         event.waitOne();
