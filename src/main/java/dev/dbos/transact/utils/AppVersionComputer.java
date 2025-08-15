@@ -1,7 +1,5 @@
 package dev.dbos.transact.utils;
 
-import dev.dbos.transact.execution.DBOSExecutor;
-
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.*;
@@ -10,67 +8,13 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class GlobalParams {
+public class AppVersionComputer {
 
-    static Logger logger = LoggerFactory.getLogger(GlobalParams.class);
+    static Logger logger = LoggerFactory.getLogger(AppVersionComputer.class);
 
-    private String appVersion;
-    private String executorId;
-
-    private DBOSExecutor dbosExecutor;
-    private static GlobalParams instance;
-
-    private GlobalParams(DBOSExecutor de) {
-        this.dbosExecutor = de;
-        appVersion = System.getenv("DBOS__APPVERSION") == null
-                ? generateAppVersion()
-                : System.getenv("DBOS__APPVERSION");
-        executorId = System.getenv("DBOS__VMID") == null
-                ? "local"
-                : System.getenv("DBOS__VMID");
-    }
-
-    public static synchronized GlobalParams getInstance(DBOSExecutor de) {
-        if (instance != null) {
-            return instance;
-        }
-        instance = new GlobalParams(de);
-        return instance;
-    }
-
-    public static synchronized GlobalParams getInstance() {
-        if (instance != null) {
-            return instance;
-        } else {
-            throw new RuntimeException("Run dbos launch first.");
-        }
-
-    }
-
-    public String getAppVersion() {
-        return appVersion;
-    }
-
-    public String getExecutorId() {
-        return executorId;
-    }
-
-    private String generateAppVersion() {
-        // return "DEFAULT_APP_VERSION";
-        return computeAppVersionSimplified();
-    }
-
-    private String computeAppVersionSimplified() {
-        String manualVersion = System.getenv("DBOS__APPVERSION");
-        if (manualVersion != null && !manualVersion.trim().isEmpty()) {
-            return manualVersion.trim();
-        }
-
+    public static String computeAppVersion(Set<Class<?>> registeredClasses) {
         try {
             MessageDigest hasher = MessageDigest.getInstance("SHA-256");
-
-            // Get unique target classes
-            Set<Class<?>> uniqueClasses = dbosExecutor.getRegisteredClasses();
 
             /*
              * registry.values().stream() .map(wrapper -> wrapper.target.getClass())
@@ -78,7 +22,7 @@ public class GlobalParams {
              */
 
             // Sort by class name for deterministic ordering
-            List<Class<?>> sortedClasses = uniqueClasses.stream()
+            List<Class<?>> sortedClasses = registeredClasses.stream()
                     .sorted(Comparator.comparing(Class::getName))
                     .collect(Collectors.toList());
 
@@ -102,7 +46,7 @@ public class GlobalParams {
     /**
      * Gets a hash of the class bytecode.
      */
-    private String getClassBytecodeHash(Class<?> clazz) {
+    private static String getClassBytecodeHash(Class<?> clazz) {
         try {
             // Get the class file as a resource
             String className = clazz.getName().replace('.', '/') + ".class";
@@ -137,7 +81,7 @@ public class GlobalParams {
         }
     }
 
-    private String bytesToHex(byte[] bytes) {
+    private static String bytesToHex(byte[] bytes) {
         StringBuilder hexString = new StringBuilder();
         for (byte b : bytes) {
             String hex = Integer.toHexString(0xff & b);
@@ -149,7 +93,7 @@ public class GlobalParams {
         return hexString.toString();
     }
 
-    private String getFallbackVersion() {
+    private static String getFallbackVersion() {
         return "unknown-" + System.currentTimeMillis();
     }
 }

@@ -12,7 +12,7 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
-import dev.dbos.transact.utils.GlobalParams;
+import dev.dbos.transact.utils.ManualResetEvent;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -20,6 +20,7 @@ import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
@@ -322,6 +323,8 @@ public class QueuesTest {
 
     @Test
     public void testWorkerConcurrency() throws Exception {
+        String executorId = dbosExecutor.getExecutorId();
+        String appVersion = dbosExecutor.getAppVersion();
 
         queueService.stop();
         while (!queueService.isStopped()) {
@@ -336,9 +339,9 @@ public class QueuesTest {
                 WorkflowState.SUCCESS, "OrderProcessingWorkflow",
                 "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
                 "admin", "admin,operator", "{\"result\":\"success\"}", null,
-                System.currentTimeMillis() - 3600000, System.currentTimeMillis(), "QwithWCLimit",
-                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
-                        .getAppVersion(),
+                System.currentTimeMillis() - 3600000, System.currentTimeMillis(),
+                "QwithWCLimit",
+                executorId, appVersion,
                 "order-app-123", 0,
                 300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
                 "{\"orderId\":\"ORD-12345\"}");
@@ -357,16 +360,16 @@ public class QueuesTest {
         }
 
         List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                GlobalParams.getInstance().getExecutorId(),
-                GlobalParams.getInstance().getAppVersion());
+                executorId,
+                appVersion);
 
         assertEquals(2, idsToRun.size());
 
         // run the same above 2 are in Pending.
         // So no de queueing
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                GlobalParams.getInstance().getExecutorId(),
-                GlobalParams.getInstance().getAppVersion());
+                executorId,
+                appVersion);
         assertEquals(0, idsToRun.size());
 
         // mark the first 2 as success
@@ -376,8 +379,8 @@ public class QueuesTest {
 
         // next 2 get dequeued
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                GlobalParams.getInstance().getExecutorId(),
-                GlobalParams.getInstance().getAppVersion());
+                executorId,
+                appVersion);
         assertEquals(2, idsToRun.size());
 
         DBUtils.updateWorkflowState(dataSource,
@@ -391,6 +394,8 @@ public class QueuesTest {
 
     @Test
     public void testGlobalConcurrency() throws Exception {
+        String executorId = dbosExecutor.getExecutorId();
+        String appVersion = dbosExecutor.getAppVersion();
 
         queueService.stop();
         while (!queueService.isStopped()) {
@@ -405,9 +410,9 @@ public class QueuesTest {
                 WorkflowState.SUCCESS, "OrderProcessingWorkflow",
                 "com.example.workflows.OrderWorkflow", "prod-config", "user123@example.com",
                 "admin", "admin,operator", "{\"result\":\"success\"}", null,
-                System.currentTimeMillis() - 3600000, System.currentTimeMillis(), "QwithWCLimit",
-                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
-                        .getAppVersion(),
+                System.currentTimeMillis() - 3600000, System.currentTimeMillis(),
+                "QwithWCLimit",
+                executorId, appVersion,
                 "order-app-123", 0,
                 300000l, System.currentTimeMillis() + 2400000, "dedup-112233", 1,
                 "{\"orderId\":\"ORD-12345\"}");
@@ -444,8 +449,8 @@ public class QueuesTest {
         }
 
         List<String> idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                GlobalParams.getInstance().getExecutorId(),
-                GlobalParams.getInstance().getAppVersion());
+                executorId,
+                appVersion);
         // 0 because global concurrency limit is reached
         assertEquals(0, idsToRun.size());
 
@@ -453,9 +458,9 @@ public class QueuesTest {
                 WorkflowState.PENDING.name(),
                 WorkflowState.SUCCESS.name());
         idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit,
-                // GlobalParams.getInstance().getExecutorId(),
+                // executorId,
                 executor2,
-                GlobalParams.getInstance().getAppVersion());
+                appVersion);
         assertEquals(2, idsToRun.size());
     }
 
@@ -478,5 +483,90 @@ public class QueuesTest {
         assertEquals(id, handle.getWorkflowId());
         String result = handle.getResult();
         assertEquals("inputqinputq", result);
+    }
+
+    @Test
+    public void testQueueConcurrencyUnderRecovery() throws Exception {
+
+        Queue queue = new DBOS.QueueBuilder("test_queue").concurrency(2).build();
+
+        ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+        ConcurrencyTestService service = new DBOS.WorkflowBuilder<ConcurrencyTestService>()
+                .interfaceClass(ConcurrencyTestService.class)
+                .implementation(impl).build();
+
+        WorkflowHandle<Integer> handle1;
+        WorkflowHandle<Integer> handle2;
+        WorkflowHandle<Integer> handle3;
+
+        WorkflowOptions opt1 = new WorkflowOptions.Builder("wf1").queue(queue).build();
+        try (SetWorkflowOptions o = new SetWorkflowOptions(opt1)) {
+            handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0));
+        }
+
+        WorkflowOptions opt2 = new WorkflowOptions.Builder("wf2").queue(queue).build();
+        try (SetWorkflowOptions o = new SetWorkflowOptions(opt2)) {
+            handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1));
+        }
+
+        WorkflowOptions opt3 = new WorkflowOptions.Builder("wf3").queue(queue).build();
+        try (SetWorkflowOptions o = new SetWorkflowOptions(opt3)) {
+            handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2));
+        }
+
+        for (ManualResetEvent e : impl.wfEvents) {
+            e.waitOne();
+            e.reset();
+        }
+
+        assertEquals(2, impl.counter);
+        assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
+        assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
+
+        String sql = "UPDATE dbos.workflow_status SET status = ?, executor_id = ? where workflow_uuid = ?;";
+
+        try (Connection connection = DBUtils.getConnection(dbosConfig);
+                PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+            pstmt.setString(1, WorkflowState.PENDING.toString());
+            pstmt.setString(2, "other");
+            pstmt.setString(3, opt3.getWorkflowId());
+
+            // Execute the update and get the number of rows affected
+            int rowsAffected = pstmt.executeUpdate();
+            assertEquals(1, rowsAffected);
+        }
+
+        List<WorkflowHandle<?>> otherHandles = dbosExecutor.recoverPendingWorkflows(List.of("other"));
+        assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
+        assertEquals(1, otherHandles.size());
+        assertEquals(otherHandles.get(0).getWorkflowId(), handle3.getWorkflowId());
+        assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
+
+        List<WorkflowHandle<?>> localHandles = dbosExecutor.recoverPendingWorkflows(List.of("local"));
+        assertEquals(2, localHandles.size());
+        List<String> expectedWorkflowIds = List.of(handle1.getWorkflowId(), handle2.getWorkflowId());
+        assertTrue(expectedWorkflowIds.contains(localHandles.get(0).getWorkflowId()));
+        assertTrue(expectedWorkflowIds.contains(localHandles.get(1).getWorkflowId()));
+
+        for (ManualResetEvent e : impl.wfEvents) {
+            e.waitOne();
+        }
+
+        assertEquals(4, impl.counter);
+        assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
+        assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
+        assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
+
+        impl.event.set();
+        assertEquals(0, handle1.getResult());
+        assertEquals(1, handle2.getResult());
+        assertEquals(2, handle3.getResult());
+        assertEquals("local", handle3.getStatus().getExecutorId());
+
+        assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+
     }
 }

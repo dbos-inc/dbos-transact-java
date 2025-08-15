@@ -15,11 +15,12 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
-import dev.dbos.transact.utils.GlobalParams;
+import dev.dbos.transact.utils.AppVersionComputer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
@@ -27,7 +28,9 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -40,6 +43,9 @@ import org.slf4j.LoggerFactory;
 public class DBOSExecutor {
 
     private final DBOSConfig config;
+    private String appVersion;
+    private String executorId;
+
     private SystemDatabase systemDatabase;
     private ExecutorService executorService;
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
@@ -60,15 +66,29 @@ public class DBOSExecutor {
     }
 
     public String getExecutorId() {
-        return GlobalParams.getInstance().getExecutorId();
+        return this.executorId;
     }
 
     public String getAppVersion() {
-        return GlobalParams.getInstance().getAppVersion();
+        return this.appVersion;
     }
 
     public void setQueueService(QueueService queueService) {
         this.queueService = queueService;
+    }
+
+    public void start() {
+
+        this.executorId = System.getenv("DBOS__VMID");
+        if (this.executorId == null) {
+            this.executorId = "local";
+        }
+
+        this.appVersion = System.getenv("DBOS__APPVERSION");
+        if (this.appVersion == null) {
+            Set<Class<?>> registeredClasses = this.getRegisteredClasses();
+            this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
+        }
     }
 
     public void shutdown() {
@@ -84,6 +104,57 @@ public class DBOSExecutor {
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
         return workflowRegistry.get(workflowName);
+    }
+
+    WorkflowHandle<?> recoverWorkflow(GetPendingWorkflowsOutput output) throws Exception {
+        Objects.requireNonNull(output);
+        String workflowId = output.getWorkflowUuid();
+        Objects.requireNonNull(workflowId);
+        String queue = output.getQueueName();
+
+        logger.info("Recovery executing workflow {}", workflowId);
+
+        if (queue != null) {
+            boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
+            if (cleared) {
+                return retrieveWorkflow(workflowId);
+            }
+        }
+        return executeWorkflowById(workflowId);
+    }
+
+    public List<WorkflowHandle<?>> recoverPendingWorkflows(List<String> executorIDs) {
+        if (executorIDs == null) {
+            executorIDs = new ArrayList<>(List.of("local"));
+        }
+
+        String appVersion = getAppVersion();
+
+        List<WorkflowHandle<?>> handles = new ArrayList<>();
+        for (String executorId : executorIDs) {
+            List<GetPendingWorkflowsOutput> pendingWorkflows;
+            try {
+                pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion);
+            } catch (Exception e) {
+                logger.error("Failed to get pending workflows for executor {} and application version {}",
+                        executorId,
+                        appVersion,
+                        e);
+                return new ArrayList<>();
+            }
+            logger.info("Recovering {} workflow(s) for executor {} and application version {}",
+                    pendingWorkflows.size(),
+                    executorId,
+                    appVersion);
+            for (GetPendingWorkflowsOutput output : pendingWorkflows) {
+                try {
+                    handles.add(recoverWorkflow(output));
+                } catch (Exception e) {
+                    logger.warn("Recovery of workflow {} failed", output.getWorkflowUuid(), e);
+                }
+            }
+        }
+        return handles;
     }
 
     public List<Queue> getAllQueuesSnapshot() {
@@ -111,8 +182,7 @@ public class DBOSExecutor {
         WorkflowStatusInternal workflowStatusInternal = new WorkflowStatusInternal(workflowId,
                 status, workflowName, className, null, null, null, null, null, null, null, null,
                 queueName,
-                GlobalParams.getInstance().getExecutorId(), GlobalParams.getInstance()
-                        .getAppVersion(),
+                this.getExecutorId(), this.getAppVersion(),
                 null, 0,
                 workflowTimeoutMs, workflowDeadlineEpoch, null, 1, inputString);
 

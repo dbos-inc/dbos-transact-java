@@ -1,5 +1,7 @@
 package dev.dbos.transact.conductor;
 
+import dev.dbos.transact.utils.ManualResetEvent;
+
 import java.net.InetSocketAddress;
 
 import org.java_websocket.WebSocket;

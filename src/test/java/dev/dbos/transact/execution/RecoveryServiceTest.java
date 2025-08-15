@@ -36,6 +36,7 @@ class RecoveryServiceTest {
     private static SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
     private RecoveryService recoveryService;
+    private ExecutingService executingService;
     Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
     @BeforeAll
@@ -54,6 +55,10 @@ class RecoveryServiceTest {
         dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
+        executingService = dbos.<ExecutingService>Workflow()
+                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
+                .build();
+
         dbos.launch();
     }
 
@@ -64,10 +69,6 @@ class RecoveryServiceTest {
 
     @Test
     void recoverWorkflows() throws Exception {
-
-        ExecutingService executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
-                .build();
 
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
@@ -100,28 +101,63 @@ class RecoveryServiceTest {
 
         setWorkflowStateToPending(dataSource);
 
-        List<GetPendingWorkflowsOutput> pending = recoveryService.getPendingWorkflows();
+        List<GetPendingWorkflowsOutput> pending = systemDatabase.getPendingWorkflows(dbosExecutor.getExecutorId(),
+                dbosExecutor.getAppVersion());
+
         assertEquals(5, pending.size());
 
-        List<WorkflowHandle> recoveredHandles = recoveryService.recoverWorkflows(pending);
-        assertEquals(5, recoveredHandles.size());
+        for (GetPendingWorkflowsOutput output : pending) {
+            WorkflowHandle<?> handle = dbosExecutor.recoverWorkflow(output);
+            handle.getResult();
+            assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+        }
+    }
 
-        recoveredHandles.forEach((handle) -> {
-            try {
-                handle.getResult();
-                assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
-            } catch (Exception e) {
-                assertTrue(false); // fail the test
-            }
-        });
+    @Test
+    void recoverPendingWorkflows() throws Exception {
+
+        String wfid = "wf-123";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+            executingService.workflowMethod("test-item");
+        }
+        wfid = "wf-124";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+            executingService.workflowMethod("test-item");
+        }
+        wfid = "wf-125";
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+            executingService.workflowMethod("test-item");
+        }
+        wfid = "wf-126";
+        WorkflowHandle<String> handle6 = null;
+        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+            handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+        }
+        handle6.getResult();
+
+        wfid = "wf-127";
+        WorkflowHandle<String> handle7 = null;
+        Queue q = new DBOS.QueueBuilder("q1").build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(q).build();
+        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+            handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+        }
+        assertEquals("q1", handle7.getStatus().getQueueName());
+        handle7.getResult();
+
+        setWorkflowStateToPending(dataSource);
+
+        List<WorkflowHandle<?>> pending = dbosExecutor.recoverPendingWorkflows(null);
+        assertEquals(5, pending.size());
+
+        for (WorkflowHandle<?> handle : pending) {
+            handle.getResult();
+            assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+        }
     }
 
     @Test
     public void recoveryThreadTest() throws SQLException {
-
-        ExecutingService executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
-                .build();
 
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
