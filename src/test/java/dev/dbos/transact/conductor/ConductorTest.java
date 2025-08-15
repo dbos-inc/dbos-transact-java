@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -21,6 +22,7 @@ import dev.dbos.transact.conductor.protocol.ListWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.RecoveryRequest;
 import dev.dbos.transact.conductor.protocol.RestartRequest;
 import dev.dbos.transact.conductor.protocol.ResumeRequest;
+import dev.dbos.transact.conductor.protocol.RetentionRequest;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -804,6 +806,116 @@ public class ConductorTest {
             assertTrue(outputNode.isArray());
             assertEquals(5, outputNode.size());
         }
+    }
+
+    @Test
+    public void canRetention() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            RetentionRequest req = new RetentionRequest("12345", 1L, 2L, 3L);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+            verify(mockDB).garbageCollect(1L, 2L);
+            verify(mockExec).globalTimeout(3L);
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("retention", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertNull(jsonNode.get("error_message"));
+            assertTrue(jsonNode.get("success").asBoolean());
+        }
+
+    }
+
+    @Test
+    public void canRetentionTimeoutNotSet() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            RetentionRequest req = new RetentionRequest("12345", 1L, 2L, null);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+            verify(mockDB).garbageCollect(1L, 2L);
+            verify(mockExec, never()).globalTimeout(anyLong());
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("retention", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertNull(jsonNode.get("error_message"));
+            assertTrue(jsonNode.get("success").asBoolean());
+        }
+
+    }
+
+    @Test
+    public void canRetentionGcThrows() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+
+        String errorMessage = "canRetentionGcThrows error";
+        doThrow(new RuntimeException(errorMessage)).when(mockDB).garbageCollect(anyLong(), anyLong());
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            RetentionRequest req = new RetentionRequest("12345", 1L, 2L, 3L);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+            verify(mockDB).garbageCollect(1L, 2L);
+            verify(mockExec, never()).globalTimeout(anyLong());
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("retention", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertEquals(errorMessage, jsonNode.get("error_message").asText());
+            assertFalse(jsonNode.get("success").asBoolean());
+        }
+
+    }
+
+    @Test
+    public void canRetentionTimeoutThrows() throws Exception {
+        MessageListener listener = new MessageListener();
+        testServer.setListener(listener);
+
+        String errorMessage = "canRetentionTimeoutThrows error";
+        doThrow(new RuntimeException(errorMessage)).when(mockExec).globalTimeout(anyLong());
+
+        try (Conductor conductor = builder.build()) {
+            conductor.start();
+
+            assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+            RetentionRequest req = new RetentionRequest("12345", 1L, 2L, 3L);
+            listener.send(req);
+            assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+            verify(mockDB).garbageCollect(1L, 2L);
+            verify(mockExec).globalTimeout(3L);
+
+            JsonNode jsonNode = mapper.readTree(listener.message);
+            assertNotNull(jsonNode);
+            assertEquals("retention", jsonNode.get("type").asText());
+            assertEquals("12345", jsonNode.get("request_id").asText());
+            assertEquals(errorMessage, jsonNode.get("error_message").asText());
+            assertFalse(jsonNode.get("success").asBoolean());
+        }
+
     }
 
 }
