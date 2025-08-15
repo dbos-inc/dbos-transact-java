@@ -73,4 +73,14 @@ class SystemDatabaseTest {
                     result.getWorkflowDeadlineEpochMs());
         }
     }
+
+    @Test
+    public void testBasicUrlWithoutParameters() {
+        String originalUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
+        String expectedUrl = "jdbc:postgresql://localhost:5432/postgres";
+
+        String result = SystemDatabase.createPostgresConnectionUrl(originalUrl);
+
+        assertEquals(expectedUrl, result);
+    }
 }

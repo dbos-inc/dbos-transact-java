@@ -45,6 +45,8 @@ public class MigrationManager {
             dbName = dbconfig.getName() + Constants.SYS_DB_SUFFIX;
         }
 
+        logger.info("dbName from config " + dbName);
+
         createDatabaseIfNotExists(dbconfig, dbName);
 
         DataSource dataSource = SystemDatabase.createDataSource(dbconfig, dbName);
@@ -64,6 +66,7 @@ public class MigrationManager {
 
     public static void createDatabaseIfNotExists(DBOSConfig config, String dbName) {
         DataSource adminDS = SystemDatabase.createPostgresDataSource(config);
+        logger.info("create Database dbname is " + dbName);
         try {
             try (Connection conn = adminDS.getConnection();
                     PreparedStatement ps = conn
