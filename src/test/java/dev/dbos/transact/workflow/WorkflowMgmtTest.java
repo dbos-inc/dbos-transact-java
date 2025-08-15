@@ -451,7 +451,6 @@ public class WorkflowMgmtTest {
         assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
     }
 
-    
     @Test
     void garbageCollection() throws Exception {
         int numWorkflows = 10;
@@ -461,12 +460,53 @@ public class WorkflowMgmtTest {
                 .implementation(impl).build();
         gcService.setGCService(gcService);
 
+        // Start one blocked workflow and 10 normal workflows
         WorkflowHandle<String> handle = dbos.startWorkflow(() -> gcService.blockedWorkflow());
         for (int i = 0; i < numWorkflows; i++) {
             int result = gcService.testWorkflow(i);
             assertEquals(i, result);
         }
 
+        // Garbage collect all but one completed workflow
+        List<WorkflowStatus> statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(11, statusList.size());
+        systemDatabase.garbageCollect(null, 1L);
+        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(2, statusList.size());
+        assertEquals(handle.getWorkflowId(), statusList.get(0).getWorkflowId());
 
+        // Garbage collect all completed workflows
+        systemDatabase.garbageCollect(System.currentTimeMillis(), null);
+        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(1, statusList.size());
+        assertEquals(handle.getWorkflowId(), statusList.get(0).getWorkflowId());
+
+        // Finish the blocked workflow, garbage collect everything
+        impl.event.set();
+        assertEquals(handle.getWorkflowId(), handle.getResult());
+        systemDatabase.garbageCollect(System.currentTimeMillis(), null);
+        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(0, statusList.size());
+
+        // Verify GC runs without errors on an empty table
+        systemDatabase.garbageCollect(null, 1L);
+
+        // Run workflows, wait, run them again
+        for (int i = 0; i < numWorkflows; i++) {
+            int result = gcService.testWorkflow(i);
+            assertEquals(i, result);
+        }
+
+        Thread.sleep(1000L);
+
+        for (int i = 0; i < numWorkflows; i++) {
+            int result = gcService.testWorkflow(i);
+            assertEquals(i, result);
+        }
+
+        // GC the first half, verify only half were GC'ed
+        systemDatabase.garbageCollect(System.currentTimeMillis() - 1000, null);
+        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+        assertEquals(numWorkflows, statusList.size());
     }
 }

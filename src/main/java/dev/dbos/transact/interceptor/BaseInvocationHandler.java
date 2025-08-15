@@ -87,7 +87,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
                 // If workflowID is null, we assume that the existing context is not valid
                 // so we generate a UUID and generate a new context to submit the workflow in.
-                
+
                 String workflowId = UUID.randomUUID().toString();
                 try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
                     DBOSContextHolder.get().setInWorkflow(true);
@@ -95,11 +95,14 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                 }
             } else {
 
-                // If workflow is not null, we assume the context is valid and submit the workflow in that context.
+                // If workflow is not null, we assume the context is valid and submit the
+                // workflow in that context.
                 // Code that configures a context for the workflow *MUST* set the workflow ID.
-                // For example, DBOSExecutor.submitWorkflow because configures an async context for non-queued workflows,
-                // it must also set the workflow ID in order to signal to handleWorkflow the context is valid
-                
+                // For example, DBOSExecutor.submitWorkflow because configures an async context
+                // for non-queued workflows,
+                // it must also set the workflow ID in order to signal to handleWorkflow the
+                // context is valid
+
                 DBOSContextHolder.get().setInWorkflow(true);
                 result = submitWorkflow(workflowName, targetClassName, wrapper, args);
             }

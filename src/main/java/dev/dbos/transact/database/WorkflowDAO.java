@@ -884,7 +884,7 @@ public class WorkflowDAO {
     }
 
     private Long getRowsCutoff(Connection connection, long rowsThreshold) throws SQLException {
-        String sql = "SELECT created_at FROM dbos.workflow_status ORDER BY created_at DESC OFFSET $1 LIMIT 1";
+        String sql = "SELECT created_at FROM dbos.workflow_status ORDER BY created_at DESC OFFSET ? LIMIT 1";
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setLong(1, rowsThreshold - 1);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -909,7 +909,7 @@ public class WorkflowDAO {
             }
 
             if (cutoffEpochTimestampMs != null) {
-                String sql = "DELETE FROM dbos.workflow_status WHERE created_at < $1 AND status NOT IN ($2, $3)";
+                String sql = "DELETE FROM dbos.workflow_status WHERE created_at < ? AND status NOT IN (?, ?)";
                 try (PreparedStatement stmt = connection.prepareStatement(sql)) {
                     stmt.setLong(1, cutoffEpochTimestampMs);
                     stmt.setString(2, WorkflowState.PENDING.toString());
