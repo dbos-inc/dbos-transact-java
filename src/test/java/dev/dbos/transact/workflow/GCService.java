@@ -6,7 +6,9 @@ public interface GCService {
 
     int testWorkflow(int x);
 
-    String blockedWorkflow();
+    String gcBlockedWorkflow();
+
+    String timeoutBlockedWorkflow();
 
     void setGCService(GCService service);
 }

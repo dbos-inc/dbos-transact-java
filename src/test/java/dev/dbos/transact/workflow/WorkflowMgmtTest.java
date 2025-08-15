@@ -14,6 +14,7 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -461,7 +462,7 @@ public class WorkflowMgmtTest {
         gcService.setGCService(gcService);
 
         // Start one blocked workflow and 10 normal workflows
-        WorkflowHandle<String> handle = dbos.startWorkflow(() -> gcService.blockedWorkflow());
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> gcService.gcBlockedWorkflow());
         for (int i = 0; i < numWorkflows; i++) {
             int result = gcService.testWorkflow(i);
             assertEquals(i, result);
@@ -482,7 +483,7 @@ public class WorkflowMgmtTest {
         assertEquals(handle.getWorkflowId(), statusList.get(0).getWorkflowId());
 
         // Finish the blocked workflow, garbage collect everything
-        impl.event.set();
+        impl.gcLatch.countDown();
         assertEquals(handle.getWorkflowId(), handle.getResult());
         systemDatabase.garbageCollect(System.currentTimeMillis(), null);
         statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
@@ -508,5 +509,32 @@ public class WorkflowMgmtTest {
         systemDatabase.garbageCollect(System.currentTimeMillis() - 1000, null);
         statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(numWorkflows, statusList.size());
+    }
+
+    @Test
+    void globalTimeout() throws Exception {
+        int numWorkflows = 10;
+
+        GCServiceImpl impl = new GCServiceImpl();
+        GCService gcService = dbos.<GCService>Workflow().interfaceClass(GCService.class)
+                .implementation(impl).build();
+        gcService.setGCService(gcService);
+
+        List<WorkflowHandle<String>> handles = new ArrayList<>();
+        for (int i = 0; i < numWorkflows; i++) {
+            handles.add(dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow()));
+        }
+
+        Thread.sleep(1000L);
+
+        // Wait one second, start one final workflow, then timeout all workflows started more than one second ago
+        WorkflowHandle<String> finalHandle = dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow());
+
+        dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);
+        for (WorkflowHandle<?> handle : handles) {
+            assertEquals(WorkflowState.CANCELLED.toString(), handle.getStatus().getStatus());
+        }
+        impl.timeoutLatch.countDown();
+        assertEquals(finalHandle.getWorkflowId(), finalHandle.getResult());
     }
 }
