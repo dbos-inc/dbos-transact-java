@@ -445,8 +445,6 @@ public class SystemDatabase {
                     dbName);
         }
 
-        logger.info("mjjjjj connecting to url " + dburl);
-
         String dbUser = config.getDbUser();
         String dbPassword = config.getDbPassword();
         hikariConfig.setJdbcUrl(dburl);
