@@ -22,12 +22,19 @@ val commitCount: String by lazy {
 
 // Get the current branch name
 val branchName: String by lazy {
-    ByteArrayOutputStream().also { stdout ->
-        exec {
-            commandLine = listOf("git", "rev-parse", "--abbrev-ref", "HEAD")
-            standardOutput = stdout
-        }
-    }.toString().trim()
+    // First, try GitHub Actions environment variable
+    val githubBranch = System.getenv("GITHUB_REF_NAME")
+    if (!githubBranch.isNullOrBlank()) githubBranch
+
+    // Fallback to local git command
+    else {
+        ByteArrayOutputStream().also { stdout ->
+            exec {
+                commandLine = listOf("git", "rev-parse", "--abbrev-ref", "HEAD")
+                standardOutput = stdout
+            }
+        }.toString().trim()
+    }
 }
 
 // Note, this versioning scheme is fine for preview releases

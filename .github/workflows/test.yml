@@ -28,8 +28,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # needed to rerieve correct version into
+
+      # TODO: remove the steps below before committing PR
+      - name: Echo secrets
+        env:
+          USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
+          GH_MAVEN_USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
+        run: |
+          echo "USERNAME = $USERNAME"
+          echo "GH_MAVEN_USERNAME = $GH_MAVEN_USERNAME"
 
       - name: Set up OpenJDK 21
         uses: actions/setup-java@v4
@@ -67,14 +74,6 @@ jobs:
       #       build/test-results/
 
       # TODO: remove the steps below before committing PR
-      - name: Echo secrets
-        env:
-          USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
-          GH_MAVEN_USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
-        run: |
-          echo "USERNAME = $USERNAME"
-          echo "GH_MAVEN_USERNAME = $GH_MAVEN_USERNAME"
-
       - name: Build & publish
         env:
           USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
