@@ -48,10 +48,10 @@ jobs:
             echo "USERNAME_MAVEN is set to '$USERNAME_MAVEN'"
           fi
 
-          if [ -z "$GH_MAVEN_TOKEN" ]; then
-            echo "GH_MAVEN_TOKEN secret is NOT set"
+          if [ -z "$TOKEN_MAVEN" ]; then
+            echo "TOKEN_MAVEN secret is NOT set"
           else
-            echo "GH_MAVEN_TOKEN is set"
+            echo "TOKEN_MAVEN is set"
           fi
 
       - name: Set up OpenJDK 21
@@ -93,10 +93,10 @@ jobs:
       #       build/test-results/
 
       # TODO: remove the steps below before committing PR
-      - name: Build & publish
+      - name: Publish
         uses: gradle/gradle-build-action@v2
         with:
-          arguments: build publish
+          arguments: publish
         env:
           USERNAME: ${{ secrets.USERNAME_MAVEN }}
-          GH_MAVEN_TOKEN: ${{ secrets.GH_MAVEN_TOKEN }}        
+          TOKEN: ${{ secrets.TOKEN_MAVEN }}
