@@ -486,7 +486,6 @@ public class QueuesTest {
     }
 
     @Test
-    @Disabled
     public void testQueueConcurrencyUnderRecovery() throws Exception {
 
         Queue queue = new DBOS.QueueBuilder("test_queue").concurrency(2).build();
