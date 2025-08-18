@@ -1,5 +1,7 @@
 package dev.dbos.transact.conductor;
 
+import dev.dbos.transact.utils.ManualResetEvent;
+
 import java.net.InetSocketAddress;
 
 import org.java_websocket.WebSocket;
@@ -10,8 +12,6 @@ import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import dev.dbos.transact.utils.ManualResetEvent;
 
 class TestWebSocketServer extends WebSocketServer {
     public interface WebSocketTestListener {

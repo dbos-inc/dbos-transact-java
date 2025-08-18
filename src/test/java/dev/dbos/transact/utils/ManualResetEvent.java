@@ -31,7 +31,8 @@ public class ManualResetEvent {
         }
     }
 
-    // Note, it's a little suspect to wrap a checked exception in an unchecked exception in the two waitOne overloads. 
+    // Note, it's a little suspect to wrap a checked exception in an unchecked
+    // exception in the two waitOne overloads.
     // However, this is test code so a thrown exception should just fail the test.
 
     public void waitOne() {
