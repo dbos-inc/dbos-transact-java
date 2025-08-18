@@ -53,7 +53,6 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           arguments: clean test
-          cache-dependencies: true
         env:
           PGPASSWORD: dbos
 
