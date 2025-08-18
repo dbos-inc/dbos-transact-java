@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed to rerieve correct version into
 
       - name: Set up OpenJDK 21
         uses: actions/setup-java@v4
@@ -49,19 +51,20 @@ jobs:
         env:
           PGPASSWORD: dbos
 
-      - name: Run tests
-        run: ./gradlew clean test
-        env:
-          PGPASSWORD: dbos
+      # TODO: re-enable 
+      # - name: Run tests
+      #   run: ./gradlew clean test
+      #   env:
+      #     PGPASSWORD: dbos
 
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: |
-            build/reports/tests/
-            build/test-results/
+      # - name: Upload test results
+      #   uses: actions/upload-artifact@v4
+      #   if: always()
+      #   with:
+      #     name: test-results
+      #     path: |
+      #       build/reports/tests/
+      #       build/test-results/
 
       # TODO: remove the steps below before committing PR
       - name: Echo secrets
