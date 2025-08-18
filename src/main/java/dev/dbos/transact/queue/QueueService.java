@@ -98,7 +98,7 @@ public class QueueService {
 
         } finally {
             shutdownLatch.countDown();
-            logger.info("QueuesPolThread has ended. Exiting " + Thread.currentThread().getId());
+            logger.info("QueuesPollThread has ended. Exiting " + Thread.currentThread().getId());
         }
     }
 
