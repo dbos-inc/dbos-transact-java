@@ -62,3 +62,10 @@ jobs:
           path: |
             build/reports/tests/
             build/test-results/
+
+      # TODO: remove this step from test action
+      - name: Build & publish
+        env:
+          USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
+          TOKEN: ${{ secrets.GH_MAVEN_TOKEN }}
+        run: ./gradlew publish
