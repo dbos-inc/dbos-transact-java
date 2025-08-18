@@ -63,7 +63,13 @@ jobs:
             build/reports/tests/
             build/test-results/
 
-      # TODO: remove this step from test action
+      # TODO: remove the steps below before committing PR
+      - name: Echo secrets
+        env:
+          USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
+        run: |
+          echo "USERNAME = $USERNAME"
+
       - name: Build & publish
         env:
           USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
