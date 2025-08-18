@@ -13,4 +13,4 @@ jobs:
     uses: ./.github/workflows/publish.yml
     secrets:
       USERNAME_MAVEN: ${{ secrets.USERNAME_MAVEN }}
-      TOKEN_MAVEN: ${{ secrets.TOKEN_MAVEN }}        
+      TOKEN_MAVEN: ${{ secrets.TOKEN_MAVEN }}
