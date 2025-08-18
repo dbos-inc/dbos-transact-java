@@ -125,15 +125,23 @@ publishing {
 
     publications {
         create<MavenPublication>("mavenJava") {
-
-            // change in
-            artifactId = "transact"
-
             from(components["java"])
-
+            artifactId = "transact"
+            groupId = project.group.toString()
+            version = project.version.toString()
         }
     }
     repositories {
         mavenLocal()
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/dbos-inc/dbos-transact-java") // replace OWNER/REPO
+            credentials {
+                username = project.findProperty("gpr.user")?.toString()
+                    ?: System.getenv("GH_MAVEN_USERNAME")
+                password = project.findProperty("gpr.token")?.toString()
+                    ?: System.getenv("GH_MAVEN_TOKEN")
+            }
+        }
     }
 }
