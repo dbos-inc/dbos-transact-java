@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 
 public class ConcurrencyTestServiceImpl implements ConcurrencyTestService {
 
-    Logger logger = LoggerFactory.getLogger(ConcurrencyTestServiceImpl.class);
+    private static final Logger logger = LoggerFactory.getLogger(ConcurrencyTestServiceImpl.class);
 
     public CountDownLatch latch = new CountDownLatch(1);
     public List<Semaphore> wfSemaphores = List.of(new Semaphore(0), new Semaphore(0));
