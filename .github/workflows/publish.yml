@@ -25,7 +25,6 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           arguments: publish
-          cache-dependencies: true
         env:
           # GitHub Packages credentials stored as repository secrets
           USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
