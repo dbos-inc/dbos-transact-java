@@ -71,7 +71,10 @@ jobs:
       #     PGPASSWORD: dbos
 
       # - name: Run tests
-      #   run: ./gradlew clean test
+      #   uses: gradle/gradle-build-action@v2
+      #   with:
+      #     arguments: clean test
+      #     cache-dependencies: true
       #   env:
       #     PGPASSWORD: dbos
 
