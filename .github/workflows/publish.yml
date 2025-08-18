@@ -6,11 +6,7 @@ on:
     USERNAME_MAVEN:
       required: true
     TOKEN_MAVEN:
-    secrets:
-      USERNAME_MAVEN:
-        required: true
-      TOKEN_MAVEN:
-        required: true
+      required: true
 
 jobs:
   build:
