@@ -2,6 +2,11 @@ name: Test
 
 on:
   workflow_call:
+   secrets:
+      USERNAME_MAVEN:
+        required: true
+      TOKEN_MAVEN:
+        required: true
   workflow_dispatch:
   push:
     branches:
@@ -35,15 +40,8 @@ jobs:
       - name: Check Maven secrets
         env:
           USERNAME_MAVEN: ${{ secrets.USERNAME_MAVEN }}
-          GH_MAVEN_TOKEN: ${{ secrets.GH_MAVEN_TOKEN }}
-          THE_ANSWER: ${{ secrets.THE_ANSWER }}
+          TOKEN_MAVEN: ${{ secrets.TOKEN_MAVEN }}
         run: |
-          if [ -z "$THE_ANSWER" ]; then
-            echo "THE_ANSWER secret is NOT set"
-          else
-            echo "THE_ANSWER is set to '$THE_ANSWER'"
-          fi
-
           if [ -z "$USERNAME_MAVEN" ]; then
             echo "USERNAME_MAVEN secret is NOT set"
           else
@@ -55,8 +53,6 @@ jobs:
           else
             echo "GH_MAVEN_TOKEN is set"
           fi
-
-
 
       - name: Set up OpenJDK 21
         uses: actions/setup-java@v4

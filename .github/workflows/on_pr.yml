@@ -14,3 +14,6 @@ on:
 jobs:
   test:
     uses: ./.github/workflows/test.yml
+    secrets:
+      USERNAME_MAVEN: ${{ secrets.USERNAME_MAVEN }}
+      TOKEN_MAVEN: ${{ secrets.TOKEN_MAVEN }}        

@@ -1,10 +1,12 @@
 name: Publish
 
 on:
-  push:
-    branches:
-      - main
-      - 'feature/**'
+  workflow_call:
+   secrets:
+    USERNAME_MAVEN:
+      required: true
+    TOKEN_MAVEN:
+      required: true
 
 jobs:
   build:
@@ -27,5 +29,5 @@ jobs:
           arguments: publish
         env:
           # GitHub Packages credentials stored as repository secrets
-          USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
-          TOKEN: ${{ secrets.GH_MAVEN_TOKEN }}
+          USERNAME: ${{ secrets.USERNAME_MAVEN }}
+          TOKEN: ${{ secrets.TOKEN_MAVEN }}
