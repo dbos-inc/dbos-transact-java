@@ -35,7 +35,7 @@ val branchName: String by lazy {
 // the major or minor version number
 val baseVersion = System.getenv("BASE_VERSION") ?: "0.5"
 val safeBranchName = if (branchName == "main" || branchName == "HEAD") "" else ".${branchName.replace("/", "-")}"
-version = "$baseVersion.$commitCount+g$gitHash$safeBranchName"
+version = "$baseVersion.$commitCount-preview+g$gitHash$safeBranchName"
 
 println("Project version: $version") // prints when Gradle evaluates the build
 
