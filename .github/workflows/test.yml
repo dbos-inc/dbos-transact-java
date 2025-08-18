@@ -30,13 +30,22 @@ jobs:
         uses: actions/checkout@v4
 
       # TODO: remove the steps below before committing PR
-      - name: Echo secrets
+      - name: Check Maven secrets
         env:
-          USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
           GH_MAVEN_USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
+          GH_MAVEN_TOKEN: ${{ secrets.GH_MAVEN_TOKEN }}
         run: |
-          echo "USERNAME = $USERNAME"
-          echo "GH_MAVEN_USERNAME = $GH_MAVEN_USERNAME"
+          if [ -z "$GH_MAVEN_USERNAME" ]; then
+            echo "GH_MAVEN_USERNAME secret is NOT set"
+          else
+            echo "GH_MAVEN_USERNAME is set to '$GH_MAVEN_USERNAME'"
+          fi
+
+          if [ -z "$GH_MAVEN_TOKEN" ]; then
+            echo "GH_MAVEN_TOKEN secret is NOT set"
+          else
+            echo "GH_MAVEN_TOKEN is set"
+          fi
 
       - name: Set up OpenJDK 21
         uses: actions/setup-java@v4
@@ -49,16 +58,16 @@ jobs:
         with:
           gradle-version: wrapper
 
-      - name: Wait for PostgreSQL
-        run: |
-          until pg_isready -h localhost -p 5432 -U postgres; do
-            echo "Waiting for PostgreSQL..."
-            sleep 2
-          done
-        env:
-          PGPASSWORD: dbos
-
       # TODO: re-enable 
+      # - name: Wait for PostgreSQL
+      #   run: |
+      #     until pg_isready -h localhost -p 5432 -U postgres; do
+      #       echo "Waiting for PostgreSQL..."
+      #       sleep 2
+      #     done
+      #   env:
+      #     PGPASSWORD: dbos
+
       # - name: Run tests
       #   run: ./gradlew clean test
       #   env:
@@ -75,7 +84,10 @@ jobs:
 
       # TODO: remove the steps below before committing PR
       - name: Build & publish
+        uses: gradle/gradle-build-action@v2
+        with:
+          arguments: build publish
+          cache-dependencies: true
         env:
-          USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
-          TOKEN: ${{ secrets.GH_MAVEN_TOKEN }}
-        run: ./gradlew publish
+          GH_MAVEN_USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
+          GH_MAVEN_TOKEN: ${{ secrets.GH_MAVEN_TOKEN }}        
