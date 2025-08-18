@@ -34,18 +34,10 @@ val branchName: String by lazy {
 // but we'll want something more robust once we want to bump
 // the major or minor version number
 val baseVersion = System.getenv("BASE_VERSION") ?: "0.5"
-version = buildString {
-    append(baseVersion)
-    append(".")
-    append(commitCount)
-    append("-preview")
-    append("+g")
-    append(gitHash)
-    if (branchName != "main") {
-        append(".")
-        append(branchName.replace("/", "-")) // sanitize branch name
-    }
-}
+val safeBranchName = if (branchName == "main" || branchName == "HEAD") "" else ".${branchName.replace("/", "-")}"
+version = "$baseVersion.$commitCount+g$gitHash$safeBranchName"
+
+println("Project version: $version") // prints when Gradle evaluates the build
 
 plugins {
     id("java")
@@ -59,12 +51,6 @@ group = "dev.dbos"
 tasks.withType<JavaCompile> {
     options.release.set(11) // Targets Java 11 bytecode (RECOMMENDED)
     // (Alternative: sourceCompatibility = "11"; targetCompatibility = "11")
-}
-
-tasks.register("printVersion") {
-    doLast {
-        println("Current project version: $version")
-    }
 }
 
 spotless {
