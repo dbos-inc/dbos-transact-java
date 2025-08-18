@@ -70,8 +70,10 @@ jobs:
       - name: Echo secrets
         env:
           USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
+          GH_MAVEN_USERNAME: ${{ secrets.GH_MAVEN_USERNAME }}
         run: |
           echo "USERNAME = $USERNAME"
+          echo "GH_MAVEN_USERNAME = $GH_MAVEN_USERNAME"
 
       - name: Build & publish
         env:
