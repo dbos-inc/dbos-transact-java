@@ -1,3 +1,52 @@
+import java.io.ByteArrayOutputStream
+
+// Get the short Git hash
+val gitHash: String by lazy {
+    ByteArrayOutputStream().also { stdout ->
+        exec {
+            commandLine = listOf("git", "rev-parse", "--short", "HEAD")
+            standardOutput = stdout
+        }
+    }.toString().trim()
+}
+
+// Get the commit count
+val commitCount: String by lazy {
+    ByteArrayOutputStream().also { stdout ->
+        exec {
+            commandLine = listOf("git", "rev-list", "--count", "HEAD")
+            standardOutput = stdout
+        }
+    }.toString().trim()
+}
+
+// Get the current branch name
+val branchName: String by lazy {
+    ByteArrayOutputStream().also { stdout ->
+        exec {
+            commandLine = listOf("git", "rev-parse", "--abbrev-ref", "HEAD")
+            standardOutput = stdout
+        }
+    }.toString().trim()
+}
+
+// Note, this versioning scheme is fine for preview releases
+// but we'll want something more robust once we want to bump
+// the major or minor version number
+val baseVersion = System.getenv("BASE_VERSION") ?: "0.5"
+version = buildString {
+    append(baseVersion)
+    append(".")
+    append(commitCount)
+    append("-preview")
+    append("+g")
+    append(gitHash)
+    if (branchName != "main") {
+        append(".")
+        append(branchName.replace("/", "-")) // sanitize branch name
+    }
+}
+
 plugins {
     id("java")
     id("java-library")
@@ -6,11 +55,16 @@ plugins {
 }
 
 group = "dev.dbos"
-version = "1.0-SNAPSHOT"
 
 tasks.withType<JavaCompile> {
     options.release.set(11) // Targets Java 11 bytecode (RECOMMENDED)
     // (Alternative: sourceCompatibility = "11"; targetCompatibility = "11")
+}
+
+tasks.register("printVersion") {
+    doLast {
+        println("Current project version: $version")
+    }
 }
 
 spotless {
