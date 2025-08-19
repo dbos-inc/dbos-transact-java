@@ -20,7 +20,6 @@ import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
 import dev.dbos.transact.workflow.*;
 
-import java.net.URI;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -234,7 +233,8 @@ public class DBOS {
         }
 
         if (conductorKey != null) {
-            conductor = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey).domain(conductorDomain).build();
+            conductor = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey).domain(conductorDomain)
+                    .build();
             conductor.start();
         }
 
