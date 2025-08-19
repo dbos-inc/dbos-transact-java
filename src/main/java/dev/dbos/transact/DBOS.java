@@ -251,6 +251,7 @@ public class DBOS {
     }
 
     public void shutdown() {
+        logger.debug("shutdown() called");
 
         if (isShutdown.compareAndSet(false, true)) {
 

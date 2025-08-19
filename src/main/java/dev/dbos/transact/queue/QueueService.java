@@ -117,6 +117,7 @@ public class QueueService {
     }
 
     public synchronized void stop() {
+        logger.debug("stop() called");
 
         if (!running) {
             logger.info("QueuesPollThread is not running.");
