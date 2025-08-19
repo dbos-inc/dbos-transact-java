@@ -50,7 +50,9 @@ jobs:
           PGPASSWORD: dbos
 
       - name: Run tests
-        run: ./gradlew clean test
+        uses: gradle/gradle-build-action@v2
+        with:
+          arguments: clean test
         env:
           PGPASSWORD: dbos
 

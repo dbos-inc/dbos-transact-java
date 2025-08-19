@@ -527,7 +527,8 @@ public class WorkflowMgmtTest {
 
         Thread.sleep(1000L);
 
-        // Wait one second, start one final workflow, then timeout all workflows started more than one second ago
+        // Wait one second, start one final workflow, then timeout all workflows started
+        // more than one second ago
         WorkflowHandle<String> finalHandle = dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow());
 
         dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);

@@ -1,3 +1,51 @@
+import java.io.ByteArrayOutputStream
+
+// Get the short Git hash
+val gitHash: String by lazy {
+    ByteArrayOutputStream().also { stdout ->
+        exec {
+            commandLine = listOf("git", "rev-parse", "--short", "HEAD")
+            standardOutput = stdout
+        }
+    }.toString().trim()
+}
+
+// Get the commit count
+val commitCount: String by lazy {
+    ByteArrayOutputStream().also { stdout ->
+        exec {
+            commandLine = listOf("git", "rev-list", "--count", "HEAD")
+            standardOutput = stdout
+        }
+    }.toString().trim()
+}
+
+// Get the current branch name
+val branchName: String by lazy {
+    // First, try GitHub Actions environment variable
+    val githubBranch = System.getenv("GITHUB_REF_NAME")
+    if (!githubBranch.isNullOrBlank()) githubBranch
+
+    // Fallback to local git command
+    else {
+        ByteArrayOutputStream().also { stdout ->
+            exec {
+                commandLine = listOf("git", "rev-parse", "--abbrev-ref", "HEAD")
+                standardOutput = stdout
+            }
+        }.toString().trim()
+    }
+}
+
+// Note, this versioning scheme is fine for preview releases
+// but we'll want something more robust once we want to bump
+// the major or minor version number
+val baseVersion = System.getenv("BASE_VERSION") ?: "0.5"
+val safeBranchName = if (branchName == "main" || branchName == "HEAD") "" else ".${branchName.replace("/", "-")}"
+version = "$baseVersion.$commitCount-preview+g$gitHash$safeBranchName"
+
+println("Project version: $version") // prints when Gradle evaluates the build
+
 plugins {
     id("java")
     id("java-library")
@@ -6,7 +54,6 @@ plugins {
 }
 
 group = "dev.dbos"
-version = "1.0-SNAPSHOT"
 
 tasks.withType<JavaCompile> {
     options.release.set(11) // Targets Java 11 bytecode (RECOMMENDED)
@@ -85,15 +132,23 @@ publishing {
 
     publications {
         create<MavenPublication>("mavenJava") {
-
-            // change in
-            artifactId = "transact"
-
             from(components["java"])
-
+            artifactId = "transact"
+            groupId = project.group.toString()
+            version = project.version.toString()
         }
     }
     repositories {
         mavenLocal()
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/dbos-inc/dbos-transact-java") // replace OWNER/REPO
+            credentials {
+                username = project.findProperty("gpr.user")?.toString()
+                    ?: System.getenv("USERNAME")
+                password = project.findProperty("gpr.token")?.toString()
+                    ?: System.getenv("TOKEN")
+            }
+        }
     }
 }

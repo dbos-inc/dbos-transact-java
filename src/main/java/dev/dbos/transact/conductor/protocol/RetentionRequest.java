@@ -9,7 +9,8 @@ public class RetentionRequest extends BaseMessage {
         public Long timeout_cutoff_epoch_ms;
     }
 
-    public RetentionRequest() {}
+    public RetentionRequest() {
+    }
 
     public RetentionRequest(String requestId, Long gcCutoff, Long gcRowsThreshold, Long timeoutCutoff) {
         this.type = MessageType.RETENTION.getValue();

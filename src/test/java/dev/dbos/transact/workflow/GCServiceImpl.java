@@ -1,9 +1,9 @@
 package dev.dbos.transact.workflow;
 
-import java.util.concurrent.CountDownLatch;
-
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSContextHolder;
+
+import java.util.concurrent.CountDownLatch;
 
 public class GCServiceImpl implements GCService {
 
