@@ -12,7 +12,6 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
-import dev.dbos.transact.utils.ManualResetEvent;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -26,6 +25,7 @@ import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Semaphore;
 
 import javax.sql.DataSource;
 
@@ -514,9 +514,9 @@ public class QueuesTest {
             handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2));
         }
 
-        for (ManualResetEvent e : impl.wfEvents) {
-            e.waitOne();
-            e.reset();
+        for (Semaphore e : impl.wfSemaphores) {
+            e.acquire();
+            e.drainPermits();
         }
 
         assertEquals(2, impl.counter);
@@ -551,8 +551,9 @@ public class QueuesTest {
         assertTrue(expectedWorkflowIds.contains(localHandles.get(0).getWorkflowId()));
         assertTrue(expectedWorkflowIds.contains(localHandles.get(1).getWorkflowId()));
 
-        for (ManualResetEvent e : impl.wfEvents) {
-            e.waitOne();
+        for (int i = 0; i < impl.wfSemaphores.size(); i++) {
+            logger.info("acquire {} semaphore", i);
+            impl.wfSemaphores.get(i).acquire();
         }
 
         assertEquals(4, impl.counter);
@@ -560,13 +561,12 @@ public class QueuesTest {
         assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
         assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
 
-        impl.event.set();
+        impl.latch.countDown();
         assertEquals(0, handle1.getResult());
         assertEquals(1, handle2.getResult());
         assertEquals(2, handle3.getResult());
         assertEquals("local", handle3.getStatus().getExecutorId());
 
         assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
-
     }
 }

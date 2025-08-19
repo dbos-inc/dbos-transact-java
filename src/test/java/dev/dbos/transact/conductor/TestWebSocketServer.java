@@ -1,8 +1,8 @@
 package dev.dbos.transact.conductor;
 
-import dev.dbos.transact.utils.ManualResetEvent;
-
 import java.net.InetSocketAddress;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 import org.java_websocket.WebSocket;
 import org.java_websocket.framing.Framedata;
@@ -38,7 +38,7 @@ class TestWebSocketServer extends WebSocketServer {
 
     private static Logger logger = LoggerFactory.getLogger(TestWebSocketServer.class);
     private WebSocketTestListener listener;
-    private ManualResetEvent startEvent = new ManualResetEvent(false);
+    private Semaphore startEvent = new Semaphore(0);
 
     public TestWebSocketServer(int port) {
         super(new InetSocketAddress(port));
@@ -48,12 +48,8 @@ class TestWebSocketServer extends WebSocketServer {
         this.listener = listener;
     }
 
-    public void waitStart() throws InterruptedException {
-        startEvent.waitOne();
-    }
-
     public boolean waitStart(long millis) throws InterruptedException {
-        return startEvent.waitOne(millis);
+        return startEvent.tryAcquire(millis, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -66,7 +62,7 @@ class TestWebSocketServer extends WebSocketServer {
 
     @Override
     public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-        startEvent.reset();
+        startEvent.drainPermits();
         logger.info("onClose");
         if (listener != null) {
             listener.onClose(conn, code, reason, remote);
@@ -91,7 +87,7 @@ class TestWebSocketServer extends WebSocketServer {
 
     @Override
     public void onError(WebSocket conn, Exception ex) {
-        startEvent.reset();
+        startEvent.drainPermits();
         logger.error("onError", ex);
         if (listener != null) {
             listener.onError(conn, ex);
@@ -100,7 +96,7 @@ class TestWebSocketServer extends WebSocketServer {
 
     @Override
     public void onStart() {
-        startEvent.set();
+        startEvent.release();
         logger.info("onStart {}", getPort());
         if (listener != null) {
             listener.onStart();

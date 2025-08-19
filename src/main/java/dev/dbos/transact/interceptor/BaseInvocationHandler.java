@@ -50,7 +50,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
         String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
 
-        String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)%n",
+        String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)",
                 workflowName,
                 workflow.timeout());
 
