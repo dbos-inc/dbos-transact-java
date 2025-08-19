@@ -58,6 +58,8 @@ public class RecoveryService {
      * stop and wait for it to complete.
      */
     public void stop() {
+        logger.debug("stop() called");
+
         stopRequested = true;
         if (recoveryThread != null) {
             try {

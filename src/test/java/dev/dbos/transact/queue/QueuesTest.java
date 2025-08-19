@@ -487,86 +487,90 @@ public class QueuesTest {
 
     @Test
     public void testQueueConcurrencyUnderRecovery() throws Exception {
+        try {
+            Queue queue = new DBOS.QueueBuilder("test_queue").concurrency(2).build();
 
-        Queue queue = new DBOS.QueueBuilder("test_queue").concurrency(2).build();
+            ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
+            ConcurrencyTestService service = new DBOS.WorkflowBuilder<ConcurrencyTestService>()
+                    .interfaceClass(ConcurrencyTestService.class)
+                    .implementation(impl).build();
 
-        ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
-        ConcurrencyTestService service = new DBOS.WorkflowBuilder<ConcurrencyTestService>()
-                .interfaceClass(ConcurrencyTestService.class)
-                .implementation(impl).build();
+            WorkflowHandle<Integer> handle1;
+            WorkflowHandle<Integer> handle2;
+            WorkflowHandle<Integer> handle3;
 
-        WorkflowHandle<Integer> handle1;
-        WorkflowHandle<Integer> handle2;
-        WorkflowHandle<Integer> handle3;
+            WorkflowOptions opt1 = new WorkflowOptions.Builder("wf1").queue(queue).build();
+            try (SetWorkflowOptions o = new SetWorkflowOptions(opt1)) {
+                handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0));
+            }
 
-        WorkflowOptions opt1 = new WorkflowOptions.Builder("wf1").queue(queue).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(opt1)) {
-            handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0));
+            WorkflowOptions opt2 = new WorkflowOptions.Builder("wf2").queue(queue).build();
+            try (SetWorkflowOptions o = new SetWorkflowOptions(opt2)) {
+                handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1));
+            }
+
+            WorkflowOptions opt3 = new WorkflowOptions.Builder("wf3").queue(queue).build();
+            try (SetWorkflowOptions o = new SetWorkflowOptions(opt3)) {
+                handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2));
+            }
+
+            for (Semaphore e : impl.wfSemaphores) {
+                e.acquire();
+                e.drainPermits();
+            }
+
+            assertEquals(2, impl.counter);
+            assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
+            assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
+            assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
+
+            String sql = "UPDATE dbos.workflow_status SET status = ?, executor_id = ? where workflow_uuid = ?;";
+
+            try (Connection connection = DBUtils.getConnection(dbosConfig);
+                    PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+                pstmt.setString(1, WorkflowState.PENDING.toString());
+                pstmt.setString(2, "other");
+                pstmt.setString(3, opt3.getWorkflowId());
+
+                // Execute the update and get the number of rows affected
+                int rowsAffected = pstmt.executeUpdate();
+                assertEquals(1, rowsAffected);
+            }
+
+            List<WorkflowHandle<?>> otherHandles = dbosExecutor.recoverPendingWorkflows(List.of("other"));
+            assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
+            assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
+            assertEquals(1, otherHandles.size());
+            assertEquals(otherHandles.get(0).getWorkflowId(), handle3.getWorkflowId());
+            assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
+
+            List<WorkflowHandle<?>> localHandles = dbosExecutor.recoverPendingWorkflows(List.of("local"));
+            assertEquals(2, localHandles.size());
+            List<String> expectedWorkflowIds = List.of(handle1.getWorkflowId(), handle2.getWorkflowId());
+            assertTrue(expectedWorkflowIds.contains(localHandles.get(0).getWorkflowId()));
+            assertTrue(expectedWorkflowIds.contains(localHandles.get(1).getWorkflowId()));
+
+            for (int i = 0; i < impl.wfSemaphores.size(); i++) {
+                logger.info("acquire {} semaphore", i);
+                impl.wfSemaphores.get(i).acquire();
+            }
+
+            assertEquals(4, impl.counter);
+            assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
+            assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
+            assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
+
+            impl.latch.countDown();
+            assertEquals(0, handle1.getResult());
+            assertEquals(1, handle2.getResult());
+            assertEquals(2, handle3.getResult());
+            assertEquals("local", handle3.getStatus().getExecutorId());
+
+            assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+        } catch (Exception e) {
+            logger.error("testQueueConcurrencyUnderRecovery exception", e);
+            throw e;
         }
-
-        WorkflowOptions opt2 = new WorkflowOptions.Builder("wf2").queue(queue).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(opt2)) {
-            handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1));
-        }
-
-        WorkflowOptions opt3 = new WorkflowOptions.Builder("wf3").queue(queue).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(opt3)) {
-            handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2));
-        }
-
-        for (Semaphore e : impl.wfSemaphores) {
-            e.acquire();
-            e.drainPermits();
-        }
-
-        assertEquals(2, impl.counter);
-        assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
-        assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
-        assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
-
-        String sql = "UPDATE dbos.workflow_status SET status = ?, executor_id = ? where workflow_uuid = ?;";
-
-        try (Connection connection = DBUtils.getConnection(dbosConfig);
-                PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-            pstmt.setString(1, WorkflowState.PENDING.toString());
-            pstmt.setString(2, "other");
-            pstmt.setString(3, opt3.getWorkflowId());
-
-            // Execute the update and get the number of rows affected
-            int rowsAffected = pstmt.executeUpdate();
-            assertEquals(1, rowsAffected);
-        }
-
-        List<WorkflowHandle<?>> otherHandles = dbosExecutor.recoverPendingWorkflows(List.of("other"));
-        assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
-        assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
-        assertEquals(1, otherHandles.size());
-        assertEquals(otherHandles.get(0).getWorkflowId(), handle3.getWorkflowId());
-        assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
-
-        List<WorkflowHandle<?>> localHandles = dbosExecutor.recoverPendingWorkflows(List.of("local"));
-        assertEquals(2, localHandles.size());
-        List<String> expectedWorkflowIds = List.of(handle1.getWorkflowId(), handle2.getWorkflowId());
-        assertTrue(expectedWorkflowIds.contains(localHandles.get(0).getWorkflowId()));
-        assertTrue(expectedWorkflowIds.contains(localHandles.get(1).getWorkflowId()));
-
-        for (int i = 0; i < impl.wfSemaphores.size(); i++) {
-            logger.info("acquire {} semaphore", i);
-            impl.wfSemaphores.get(i).acquire();
-        }
-
-        assertEquals(4, impl.counter);
-        assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
-        assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
-        assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
-
-        impl.latch.countDown();
-        assertEquals(0, handle1.getResult());
-        assertEquals(1, handle2.getResult());
-        assertEquals(2, handle3.getResult());
-        assertEquals("local", handle3.getStatus().getExecutorId());
-
-        assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
     }
 }
