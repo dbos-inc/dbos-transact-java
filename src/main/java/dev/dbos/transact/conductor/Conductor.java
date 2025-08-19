@@ -78,7 +78,7 @@ public class Conductor implements AutoCloseable {
     private Conductor(Builder builder) {
         Objects.requireNonNull(builder.systemDatabase);
         Objects.requireNonNull(builder.dbosExecutor);
-        Objects.requireNonNull(builder.conductorKey);
+        Objects.requireNonNull(builder.key);
 
         this.systemDatabase = builder.systemDatabase;
         this.dbosExecutor = builder.dbosExecutor;
@@ -96,7 +96,7 @@ public class Conductor implements AutoCloseable {
             }
         }
 
-        this.url = domain + "/conductor/v1alpha1/websocket/" + appName + "/" + builder.conductorKey;
+        this.url = domain + "/conductor/v1alpha1/websocket/" + appName + "/" + builder.key;
 
         this.pingPeriodMs = builder.pingPeriodMs;
         this.pingTimeoutMs = builder.pingTimeoutMs;
@@ -107,7 +107,7 @@ public class Conductor implements AutoCloseable {
     public static class Builder {
         private SystemDatabase systemDatabase;
         private DBOSExecutor dbosExecutor;
-        private String conductorKey;
+        private String key;
         private String domain;
         private int pingPeriodMs = 20000;
         private int pingTimeoutMs = 15000;
@@ -117,7 +117,7 @@ public class Conductor implements AutoCloseable {
         public Builder(SystemDatabase s, DBOSExecutor e, String key) {
             systemDatabase = s;
             dbosExecutor = e;
-            conductorKey = key;
+            this.key = key;
         }
 
         public Builder domain(String domain) {
