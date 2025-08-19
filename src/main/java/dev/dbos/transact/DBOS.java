@@ -226,7 +226,12 @@ public class DBOS {
 
         String conductorKey = config.getConductorKey();
         if (conductorKey != null) {
-            conductor = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey).build();
+            Conductor.Builder builder = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey);
+            String domain = config.getConductorDomain();
+            if (domain != null && !domain.trim().isEmpty()) {
+                builder.domain(domain);
+            }
+            conductor = builder.build();
             conductor.start();
         }
 
