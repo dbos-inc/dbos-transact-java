@@ -20,6 +20,7 @@ public class DBOSConfig {
     private final int httpPort;
     private final boolean httpAwaitOnStart;
     private final boolean migrate;
+    private final String conductorKey;
 
     static Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
 
@@ -38,6 +39,7 @@ public class DBOSConfig {
         this.httpPort = builder.httpPort;
         this.httpAwaitOnStart = builder.httpAwaitOnStart;
         this.migrate = builder.migrate;
+        this.conductorKey = builder.conductorKey;
     }
 
     public static class Builder {
@@ -55,6 +57,7 @@ public class DBOSConfig {
         private int httpPort;
         private boolean httpAwaitOnStart = true;
         private boolean migrate = true;
+        private String conductorKey;
 
         public Builder name(String name) {
             this.name = name;
@@ -123,6 +126,11 @@ public class DBOSConfig {
 
         public Builder migration(boolean migrate) {
             this.migrate = migrate;
+            return this;
+        }
+
+        public Builder conductorKey(String key) {
+            this.conductorKey = key;
             return this;
         }
 
@@ -204,6 +212,10 @@ public class DBOSConfig {
 
     public boolean migration() {
         return migrate;
+    }
+
+    public String getConductorKey() {
+        return conductorKey;
     }
 
     @Override

@@ -20,7 +20,6 @@ import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
 import dev.dbos.transact.workflow.*;
 
-import java.net.URI;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -208,14 +207,6 @@ public class DBOS {
     }
 
     public void launch() {
-        launch(null, null);
-    }
-
-    public void launch(String conductorKey) {
-        launch(conductorKey, null);
-    }
-
-    public void launch(String conductorKey, String conductorDomain) {
         dbosExecutor.start();
 
         logger.info("Executor ID: {}", dbosExecutor.getExecutorId());
@@ -233,8 +224,9 @@ public class DBOS {
             notificationService.start();
         }
 
+        String conductorKey = config.getConductorKey();
         if (conductorKey != null) {
-            conductor = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey).domain(conductorDomain).build();
+            conductor = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey).build();
             conductor.start();
         }
 
