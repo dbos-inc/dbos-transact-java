@@ -31,7 +31,7 @@ class MigrationManagerTest {
     static void setup() throws Exception {
 
         MigrationManagerTest.dbosConfig = new DBOSConfig.Builder().name("migrationtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
+                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys_mm_test")
                 .maximumPoolSize(3).build();
 
         String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",
