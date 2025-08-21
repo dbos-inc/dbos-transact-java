@@ -96,6 +96,7 @@ public class DBOSExecutor {
     }
 
     public void shutdown() {
+        // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/51
         // workflowRegistry = null;
         // executorService.shutdownNow();
         // systemDatabase.destroy();

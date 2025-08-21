@@ -285,6 +285,7 @@ public class DBOS {
                 httpServer.stop();
             }
 
+            // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/51
             // systemDatabase.destroy();
 
             instance = null;
