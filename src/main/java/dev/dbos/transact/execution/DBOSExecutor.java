@@ -96,6 +96,7 @@ public class DBOSExecutor {
     }
 
     public void shutdown() {
+        workflowRegistry = null;
         executorService.shutdownNow();
         systemDatabase.destroy();
     }
