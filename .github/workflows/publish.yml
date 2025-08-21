@@ -24,9 +24,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Publish
-        uses: gradle/gradle-build-action@v2
-        with:
-          arguments: publish
+        run: ./gradlew clean test
         env:
           # GitHub Packages credentials stored as repository secrets
           USERNAME: ${{ secrets.USERNAME_MAVEN }}

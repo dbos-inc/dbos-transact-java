@@ -32,9 +32,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: wrapper
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Wait for PostgreSQL
         run: |
@@ -46,9 +44,7 @@ jobs:
           PGPASSWORD: dbos
 
       - name: Run tests
-        uses: gradle/gradle-build-action@v2
-        with:
-          arguments: clean test
+        run: ./gradlew clean test
         env:
           PGPASSWORD: dbos
 
