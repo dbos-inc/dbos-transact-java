@@ -172,6 +172,8 @@ public class Conductor implements AutoCloseable {
                 reconnectTimeout.cancel(true);
             }
 
+            scheduler.shutdownNow();
+
             if (webSocket != null) {
                 webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "");
                 webSocket = null;
@@ -186,6 +188,7 @@ public class Conductor implements AutoCloseable {
             pingInterval.cancel(false);
         }
         pingInterval = scheduler.scheduleAtFixedRate(() -> {
+            if (this.isShutdown.get()) 
             try {
                 logger.info("setPingInterval::scheduleAtFixedRate");
                 // Note, checking for null because websocket can connect before websocket
