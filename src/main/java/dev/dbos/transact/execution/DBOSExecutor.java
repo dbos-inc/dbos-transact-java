@@ -96,9 +96,9 @@ public class DBOSExecutor {
     }
 
     public void shutdown() {
-        workflowRegistry = null;
-        executorService.shutdownNow();
-        systemDatabase.destroy();
+        // workflowRegistry = null;
+        // executorService.shutdownNow();
+        // systemDatabase.destroy();
     }
 
     public void registerWorkflow(String workflowName, Object target, String targetClassName,
@@ -608,10 +608,6 @@ public class DBOSExecutor {
         } finally {
             DBOSContextHolder.set(oldctx);
         }
-    }
-
-    public InternalWorkflowsService getInternalWorkflowsService() {
-        return internalWorkflowsService;
     }
 
     public InternalWorkflowsService createInternalWorkflowsService(DBOS dbos) {
