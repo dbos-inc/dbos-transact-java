@@ -39,7 +39,6 @@ import org.slf4j.LoggerFactory;
 public class Conductor implements AutoCloseable {
 
     private static Logger logger = LoggerFactory.getLogger(Conductor.class);
-    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private static final Map<MessageType, BiFunction<Conductor, BaseMessage, BaseResponse>> dispatchMap;
 
     static {
@@ -68,6 +67,7 @@ public class Conductor implements AutoCloseable {
     private final String url;
     private final SystemDatabase systemDatabase;
     private final DBOSExecutor dbosExecutor;
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     private WebSocket webSocket;
@@ -172,6 +172,8 @@ public class Conductor implements AutoCloseable {
                 reconnectTimeout.cancel(true);
             }
 
+            scheduler.shutdownNow();
+
             if (webSocket != null) {
                 webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "");
                 webSocket = null;
@@ -186,6 +188,7 @@ public class Conductor implements AutoCloseable {
             pingInterval.cancel(false);
         }
         pingInterval = scheduler.scheduleAtFixedRate(() -> {
+            if (this.isShutdown.get()) { return; }
             try {
                 logger.info("setPingInterval::scheduleAtFixedRate");
                 // Note, checking for null because websocket can connect before websocket

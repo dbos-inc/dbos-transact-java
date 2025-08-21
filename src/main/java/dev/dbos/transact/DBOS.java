@@ -38,9 +38,9 @@ public class DBOS {
     private final QueueService queueService;
     private final SchedulerService schedulerService;
     private NotificationService notificationService;
-    private Conductor conductor;
-    private HttpServer httpServer;
     private RecoveryService recoveryService;
+    private HttpServer httpServer;
+    private Conductor conductor;
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
@@ -285,7 +285,8 @@ public class DBOS {
                 httpServer.stop();
             }
 
-            systemDatabase.destroy();
+            // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/51
+            // systemDatabase.destroy();
 
             instance = null;
         }
