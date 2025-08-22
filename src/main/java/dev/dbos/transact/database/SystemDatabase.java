@@ -49,7 +49,7 @@ public class SystemDatabase {
         stepsDAO = new StepsDAO(dataSource);
         workflowDAO = new WorkflowDAO(dataSource);
         queuesDAO = new QueuesDAO(dataSource);
-        notificationService = new NotificationService(dataSource, this);
+        notificationService = new NotificationService(dataSource);
         notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService);
     }
 
@@ -58,7 +58,7 @@ public class SystemDatabase {
         workflowDAO = new WorkflowDAO(dataSource);
         stepsDAO = new StepsDAO(dataSource);
         queuesDAO = new QueuesDAO(dataSource);
-        notificationService = new NotificationService(dataSource, this);
+        notificationService = new NotificationService(dataSource);
         notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService);
     }
 

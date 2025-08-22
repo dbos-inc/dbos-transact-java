@@ -2,6 +2,8 @@ package dev.dbos.transact;
 
 import dev.dbos.transact.conductor.Conductor;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RecoveryService;
@@ -12,6 +14,7 @@ import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
 import dev.dbos.transact.migrations.MigrationManager;
+import dev.dbos.transact.notifications.GetWorkflowEventContext;
 import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
@@ -222,7 +225,6 @@ public class DBOS {
 
         if (notificationService == null) {
             notificationService = systemDatabase.getNotificationService();
-            notificationService.setInternalWorkflowsService(createInternalWorkflowsService());
             notificationService.start();
         } else {
             notificationService.start();
@@ -337,7 +339,15 @@ public class DBOS {
      *            topic to which the message is send
      */
     public void send(String destinationId, Object message, String topic) {
-        notificationService.send(destinationId, message, topic);
+        // temporarily locating this code her to get it out of
+        DBOSContext ctx = DBOSContextHolder.get();
+        if (!ctx.isInWorkflow()) {
+            this.internalWorkflowsService.sendWorkflow(destinationId, message, topic);
+            return;
+        }
+        int stepFunctionId = ctx.getAndIncrementFunctionId();
+
+        systemDatabase.send(ctx.getWorkflowId(), stepFunctionId, destinationId, message, topic);
     }
 
     /**
@@ -350,7 +360,18 @@ public class DBOS {
      * @return the message if there is one or else null
      */
     public Object recv(String topic, float timeoutSeconds) {
-        return notificationService.recv(topic, timeoutSeconds);
+        DBOSContext ctx = DBOSContextHolder.get();
+        if (!ctx.isInWorkflow()) {
+            throw new IllegalArgumentException("recv() must be called from a workflow.");
+        }
+        int stepFunctionId = ctx.getAndIncrementFunctionId();
+        int timeoutFunctionId = ctx.getAndIncrementFunctionId();
+
+        return systemDatabase.recv(ctx.getWorkflowId(),
+                stepFunctionId,
+                timeoutFunctionId,
+                topic,
+                timeoutSeconds);
     }
 
     /**
@@ -362,7 +383,15 @@ public class DBOS {
      *            data that is published
      */
     public void setEvent(String key, Object value) {
-        notificationService.setEvent(key, value);
+        logger.info("Received setEvent for key " + key);
+
+        DBOSContext ctx = DBOSContextHolder.get();
+        if (!ctx.isInWorkflow()) {
+            throw new IllegalArgumentException("send must be called from a workflow.");
+        }
+        int stepFunctionId = ctx.getAndIncrementFunctionId();
+
+        systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
     }
 
     /**
@@ -377,7 +406,19 @@ public class DBOS {
      * @return the published value or null
      */
     public Object getEvent(String workflowId, String key, float timeOut) {
-        return notificationService.getEvent(workflowId, key, timeOut);
+        logger.info("Received getEvent for " + workflowId + " " + key);
+
+        DBOSContext ctx = DBOSContextHolder.get();
+
+        if (ctx.isInWorkflow()) {
+            int stepFunctionId = ctx.getAndIncrementFunctionId();
+            int timeoutFunctionId = ctx.getAndIncrementFunctionId();
+            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(ctx.getWorkflowId(),
+                    stepFunctionId, timeoutFunctionId);
+            return systemDatabase.getEvent(workflowId, key, timeOut, callerCtx);
+        }
+
+        return systemDatabase.getEvent(workflowId, key, timeOut, null);
     }
 
     /**
