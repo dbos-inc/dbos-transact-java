@@ -223,6 +223,11 @@ public class DBOS {
 
         schedulerService.start();
 
+        internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
+                .interfaceClass(InternalWorkflowsService.class)
+                .implementation(new InternalWorkflowsServiceImpl())
+                .build();
+
         if (notificationService == null) {
             notificationService = systemDatabase.getNotificationService();
             notificationService.start();
@@ -296,21 +301,6 @@ public class DBOS {
 
             instance = null;
         }
-    }
-
-    private InternalWorkflowsService createInternalWorkflowsService() {
-
-        if (internalWorkflowsService != null) {
-            logger.warn("InternalWorkflowsService already created.");
-            return internalWorkflowsService;
-        }
-
-        internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
-                .interfaceClass(InternalWorkflowsService.class)
-                .implementation(new InternalWorkflowsServiceImpl())
-                .build();
-
-        return internalWorkflowsService;
     }
 
     public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
