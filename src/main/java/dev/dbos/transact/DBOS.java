@@ -18,6 +18,8 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
+import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
+import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;
 
 import java.util.List;
@@ -41,6 +43,8 @@ public class DBOS {
     private RecoveryService recoveryService;
     private HttpServer httpServer;
     private Conductor conductor;
+
+    private InternalWorkflowsService internalWorkflowsService;
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
@@ -218,7 +222,7 @@ public class DBOS {
 
         if (notificationService == null) {
             notificationService = systemDatabase.getNotificationService();
-            notificationService.setInternalWorkflowsService(dbosExecutor.createInternalWorkflowsService(this));
+            notificationService.setInternalWorkflowsService(createInternalWorkflowsService());
             notificationService.start();
         } else {
             notificationService.start();
@@ -290,6 +294,21 @@ public class DBOS {
 
             instance = null;
         }
+    }
+
+    private InternalWorkflowsService createInternalWorkflowsService() {
+
+        if (internalWorkflowsService != null) {
+            logger.warn("InternalWorkflowsService already created.");
+            return internalWorkflowsService;
+        }
+
+        internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
+                .interfaceClass(InternalWorkflowsService.class)
+                .implementation(new InternalWorkflowsServiceImpl())
+                .build();
+
+        return internalWorkflowsService;
     }
 
     public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {

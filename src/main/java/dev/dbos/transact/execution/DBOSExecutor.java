@@ -2,7 +2,6 @@ package dev.dbos.transact.execution;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -13,8 +12,6 @@ import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.utils.AppVersionComputer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -55,7 +52,6 @@ public class DBOSExecutor {
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
     private WorkflowRegistry workflowRegistry;
     private QueueService queueService;
-    private InternalWorkflowsService internalWorkflowsService;
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
     public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
@@ -609,22 +605,6 @@ public class DBOSExecutor {
         } finally {
             DBOSContextHolder.set(oldctx);
         }
-    }
-
-    public InternalWorkflowsService createInternalWorkflowsService(DBOS dbos) {
-
-        if (internalWorkflowsService != null) {
-            logger.warn("InternalWorkflowsService already created.");
-            return internalWorkflowsService;
-        }
-
-        internalWorkflowsService = dbos.<InternalWorkflowsService>Workflow()
-                .interfaceClass(InternalWorkflowsService.class)
-                .implementation(new InternalWorkflowsServiceImpl())
-                .build();
-
-        return internalWorkflowsService;
-
     }
 
     public Set<Class<?>> getRegisteredClasses() {
