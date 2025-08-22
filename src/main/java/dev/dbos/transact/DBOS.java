@@ -4,6 +4,8 @@ import dev.dbos.transact.conductor.Conductor;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.database.GetWorkflowEventContext;
+import dev.dbos.transact.database.NotificationService;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RecoveryService;
@@ -14,8 +16,6 @@ import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
 import dev.dbos.transact.migrations.MigrationManager;
-import dev.dbos.transact.notifications.GetWorkflowEventContext;
-import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
@@ -329,7 +329,6 @@ public class DBOS {
      *            topic to which the message is send
      */
     public void send(String destinationId, Object message, String topic) {
-        // temporarily locating this code her to get it out of
         DBOSContext ctx = DBOSContextHolder.get();
         if (!ctx.isInWorkflow()) {
             this.internalWorkflowsService.sendWorkflow(destinationId, message, topic);

@@ -8,8 +8,6 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
-import dev.dbos.transact.notifications.GetWorkflowEventContext;
-import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.ForkOptions;

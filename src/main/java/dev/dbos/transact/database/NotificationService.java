@@ -1,4 +1,4 @@
-package dev.dbos.transact.notifications;
+package dev.dbos.transact.database;
 
 import java.sql.Connection;
 import java.sql.SQLException;

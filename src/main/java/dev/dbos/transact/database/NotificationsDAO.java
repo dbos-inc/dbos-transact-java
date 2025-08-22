@@ -4,8 +4,6 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.json.JSONUtil;
-import dev.dbos.transact.notifications.GetWorkflowEventContext;
-import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
