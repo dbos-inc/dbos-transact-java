@@ -189,7 +189,7 @@ public class Conductor implements AutoCloseable {
         }
         pingInterval = scheduler.scheduleAtFixedRate(() -> {
             if (this.isShutdown.get()) {
-                return; 
+                return;
             }
             try {
                 logger.info("setPingInterval::scheduleAtFixedRate");
