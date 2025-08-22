@@ -84,12 +84,12 @@ public class DBOSExecutor {
     public void start() {
 
         this.executorId = System.getenv("DBOS__VMID");
-        if (this.executorId == null) {
+        if (this.executorId == null || this.appVersion.isEmpty()) {
             this.executorId = "local";
         }
 
         this.appVersion = System.getenv("DBOS__APPVERSION");
-        if (this.appVersion == null) {
+        if (this.appVersion == null || this.appVersion.isEmpty()) {
             Set<Class<?>> registeredClasses = this.getRegisteredClasses();
             this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
         }

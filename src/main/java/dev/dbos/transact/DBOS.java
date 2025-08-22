@@ -227,8 +227,8 @@ public class DBOS {
         String conductorKey = config.getConductorKey();
         if (conductorKey != null) {
             Conductor.Builder builder = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey);
-            String domain = config.getConductorDomain();
-            if (domain != null && !domain.trim().isEmpty()) {
+            String domain = config.getConductorDomain().trim();
+            if (domain != null && !domain.isEmpty()) {
                 builder.domain(domain);
             }
             conductor = builder.build();

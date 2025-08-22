@@ -94,9 +94,12 @@ public class Conductor implements AutoCloseable {
             } else {
                 domain = "wss://" + dbosDomain.trim();
             }
+            domain += "/conductor/v1alpha1";
+        } else {
+            domain = domain.replaceAll("/$", "");
         }
 
-        this.url = domain + "/conductor/v1alpha1/websocket/" + appName + "/" + builder.conductorKey;
+        this.url = domain + "/websocket/" + appName + "/" + builder.conductorKey;
 
         this.pingPeriodMs = builder.pingPeriodMs;
         this.pingTimeoutMs = builder.pingTimeoutMs;
@@ -157,10 +160,12 @@ public class Conductor implements AutoCloseable {
     }
 
     public void start() {
+        logger.debug("start");
         dispatchLoop();
     }
 
     public void stop() {
+        logger.debug("stop");
         if (isShutdown.compareAndSet(false, true)) {
             if (pingInterval != null) {
                 pingInterval.cancel(true);
@@ -334,6 +339,7 @@ public class Conductor implements AutoCloseable {
     }
 
     BaseResponse getResponse(BaseMessage message) {
+        logger.debug("getResponse {}", message.type);
         MessageType messageType = MessageType.fromValue(message.type);
         BiFunction<Conductor, BaseMessage, BaseResponse> func = dispatchMap.get(messageType);
         if (func != null) {
