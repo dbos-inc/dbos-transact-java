@@ -48,6 +48,13 @@ jobs:
         env:
           PGPASSWORD: dbos
 
+      - name: Test Summary
+        uses: test-summary/action@v2
+        with:
+          paths: "build/test-results/test/TEST-*.xml"
+          show: "fail, skip"
+        if: always()
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
