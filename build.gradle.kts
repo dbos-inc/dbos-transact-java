@@ -150,9 +150,9 @@ publishing {
             url = uri("https://maven.pkg.github.com/dbos-inc/dbos-transact-java") // replace OWNER/REPO
             credentials {
                 username = project.findProperty("gpr.user")?.toString()
-                    ?: System.getenv("GH_PACKAGES_USER")
+                    ?: System.getenv("USERNAME_MAVEN")
                 password = project.findProperty("gpr.token")?.toString()
-                    ?: System.getenv("GH_PACKAGES_TOKEN")
+                    ?: System.getenv("TOKEN_MAVEN")
             }
         }
     }
