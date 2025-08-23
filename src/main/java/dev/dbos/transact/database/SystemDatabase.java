@@ -8,8 +8,6 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
-import dev.dbos.transact.notifications.GetWorkflowEventContext;
-import dev.dbos.transact.notifications.NotificationService;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -49,7 +47,7 @@ public class SystemDatabase {
         stepsDAO = new StepsDAO(dataSource);
         workflowDAO = new WorkflowDAO(dataSource);
         queuesDAO = new QueuesDAO(dataSource);
-        notificationService = new NotificationService(dataSource, this);
+        notificationService = new NotificationService(dataSource);
         notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService);
     }
 
@@ -58,7 +56,7 @@ public class SystemDatabase {
         workflowDAO = new WorkflowDAO(dataSource);
         stepsDAO = new StepsDAO(dataSource);
         queuesDAO = new QueuesDAO(dataSource);
-        notificationService = new NotificationService(dataSource, this);
+        notificationService = new NotificationService(dataSource);
         notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService);
     }
 

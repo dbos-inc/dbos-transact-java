@@ -1,9 +1,4 @@
-package dev.dbos.transact.notifications;
-
-import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
-import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
+package dev.dbos.transact.database;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -33,16 +28,9 @@ public class NotificationService {
     private volatile boolean running = false;
     private Thread notificationListenerThread;
     private final DataSource dataSource;
-    private final SystemDatabase systemDatabase;
-    private InternalWorkflowsService internalWorkflowsService;
 
-    public NotificationService(DataSource dataSource, SystemDatabase sdb) {
+    public NotificationService(DataSource dataSource) {
         this.dataSource = dataSource;
-        this.systemDatabase = sdb;
-    }
-
-    public void setInternalWorkflowsService(InternalWorkflowsService service) {
-        this.internalWorkflowsService = service;
     }
 
     public boolean registerNotificationCondition(String key, LockConditionPair pair) {
@@ -81,64 +69,6 @@ public class NotificationService {
 
         notificationsMap.clear();
         logger.info("Notification listener stopped");
-    }
-
-    public void send(String destinationId, Object message, String topic) {
-
-        DBOSContext ctx = DBOSContextHolder.get();
-        if (!ctx.isInWorkflow()) {
-            this.internalWorkflowsService.sendWorkflow(destinationId, message, topic);
-            return;
-        }
-        int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-        systemDatabase.send(ctx.getWorkflowId(), stepFunctionId, destinationId, message, topic);
-    }
-
-    public Object recv(String topic, float timeoutSeconds) {
-
-        DBOSContext ctx = DBOSContextHolder.get();
-        if (!ctx.isInWorkflow()) {
-            throw new IllegalArgumentException("recv() must be called from a workflow.");
-        }
-        int stepFunctionId = ctx.getAndIncrementFunctionId();
-        int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-
-        return systemDatabase.recv(ctx.getWorkflowId(),
-                stepFunctionId,
-                timeoutFunctionId,
-                topic,
-                timeoutSeconds);
-    }
-
-    public void setEvent(String key, Object value) {
-
-        logger.info("Received setEvent for key " + key);
-
-        DBOSContext ctx = DBOSContextHolder.get();
-        if (!ctx.isInWorkflow()) {
-            throw new IllegalArgumentException("send must be called from a workflow.");
-        }
-        int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-        systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
-    }
-
-    public Object getEvent(String workflowId, String key, float timeOut) {
-
-        logger.info("Received getEvent for " + workflowId + " " + key);
-
-        DBOSContext ctx = DBOSContextHolder.get();
-
-        if (ctx.isInWorkflow()) {
-            int stepFunctionId = ctx.getAndIncrementFunctionId();
-            int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(ctx.getWorkflowId(),
-                    stepFunctionId, timeoutFunctionId);
-            return systemDatabase.getEvent(workflowId, key, timeOut, callerCtx);
-        }
-
-        return systemDatabase.getEvent(workflowId, key, timeOut, null);
     }
 
     private void notificationListener() {
