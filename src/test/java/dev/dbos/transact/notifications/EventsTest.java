@@ -32,7 +32,6 @@ public class EventsTest {
     private DBOS dbos;
     private static SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
-    private NotificationService notificationService;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {

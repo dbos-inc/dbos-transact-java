@@ -2,19 +2,17 @@ package dev.dbos.transact.execution;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.database.NotificationService;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.utils.AppVersionComputer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -55,7 +53,8 @@ public class DBOSExecutor {
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
     private WorkflowRegistry workflowRegistry;
     private QueueService queueService;
-    private InternalWorkflowsService internalWorkflowsService;
+    private NotificationService notificationService;
+
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
     public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
@@ -93,6 +92,11 @@ public class DBOSExecutor {
             Set<Class<?>> registeredClasses = this.getRegisteredClasses();
             this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
         }
+
+        if (notificationService == null) {
+            notificationService = systemDatabase.getNotificationService();
+        }
+        notificationService.start();
     }
 
     public void shutdown() {
@@ -100,6 +104,10 @@ public class DBOSExecutor {
         // workflowRegistry = null;
         // executorService.shutdownNow();
         // systemDatabase.destroy();
+
+        if (notificationService != null) {
+            notificationService.stop();
+        }
     }
 
     public void registerWorkflow(String workflowName, Object target, String targetClassName,
@@ -609,22 +617,6 @@ public class DBOSExecutor {
         } finally {
             DBOSContextHolder.set(oldctx);
         }
-    }
-
-    public InternalWorkflowsService createInternalWorkflowsService(DBOS dbos) {
-
-        if (internalWorkflowsService != null) {
-            logger.warn("InternalWorkflowsService already created.");
-            return internalWorkflowsService;
-        }
-
-        internalWorkflowsService = dbos.<InternalWorkflowsService>Workflow()
-                .interfaceClass(InternalWorkflowsService.class)
-                .implementation(new InternalWorkflowsServiceImpl())
-                .build();
-
-        return internalWorkflowsService;
-
     }
 
     public Set<Class<?>> getRegisteredClasses() {
