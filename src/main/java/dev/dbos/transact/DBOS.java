@@ -5,7 +5,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.GetWorkflowEventContext;
-import dev.dbos.transact.database.NotificationService;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RecoveryService;
@@ -42,7 +41,6 @@ public class DBOS {
     private final DBOSExecutor dbosExecutor;
     private final QueueService queueService;
     private final SchedulerService schedulerService;
-    private NotificationService notificationService;
     private RecoveryService recoveryService;
     private HttpServer httpServer;
     private Conductor conductor;
@@ -228,13 +226,6 @@ public class DBOS {
                 .implementation(new InternalWorkflowsServiceImpl())
                 .build();
 
-        if (notificationService == null) {
-            notificationService = systemDatabase.getNotificationService();
-            notificationService.start();
-        } else {
-            notificationService.start();
-        }
-
         String conductorKey = config.getConductorKey();
         if (conductorKey != null) {
             Conductor.Builder builder = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey);
@@ -282,10 +273,6 @@ public class DBOS {
 
             if (schedulerService != null) {
                 schedulerService.stop();
-            }
-
-            if (notificationService != null) {
-                notificationService.stop();
             }
 
             if (conductor != null) {

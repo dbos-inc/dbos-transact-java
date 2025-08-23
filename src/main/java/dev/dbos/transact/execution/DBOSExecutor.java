@@ -6,6 +6,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.database.NotificationService;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
@@ -52,6 +53,8 @@ public class DBOSExecutor {
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
     private WorkflowRegistry workflowRegistry;
     private QueueService queueService;
+    private NotificationService notificationService;
+
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
     public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
@@ -89,6 +92,11 @@ public class DBOSExecutor {
             Set<Class<?>> registeredClasses = this.getRegisteredClasses();
             this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
         }
+
+        if (notificationService == null) {
+            notificationService = systemDatabase.getNotificationService();
+        }
+        notificationService.start();
     }
 
     public void shutdown() {
@@ -96,6 +104,10 @@ public class DBOSExecutor {
         // workflowRegistry = null;
         // executorService.shutdownNow();
         // systemDatabase.destroy();
+
+        if (notificationService != null) {
+            notificationService.stop();
+        }
     }
 
     public void registerWorkflow(String workflowName, Object target, String targetClassName,
