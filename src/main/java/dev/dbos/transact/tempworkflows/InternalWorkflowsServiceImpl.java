@@ -5,8 +5,14 @@ import dev.dbos.transact.workflow.Workflow;
 
 public class InternalWorkflowsServiceImpl implements InternalWorkflowsService {
 
+    private final DBOS dbos;
+
+    public InternalWorkflowsServiceImpl(DBOS dbos) {
+        this.dbos = dbos;
+    }
+
     @Workflow(name = "internalSendWorkflow")
     public void sendWorkflow(String destinationId, Object message, String topic) {
-        DBOS.getInstance().send(destinationId, message, topic);
+        dbos.send(destinationId, message, topic);
     }
 }

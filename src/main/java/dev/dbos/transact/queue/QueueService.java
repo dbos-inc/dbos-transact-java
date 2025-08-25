@@ -46,8 +46,6 @@ public class QueueService {
     private void pollForWorkflows() {
         logger.info("PollQueuesThread started ...." + Thread.currentThread().getId());
 
-        internalQueue = new DBOS.QueueBuilder(Constants.DBOS_INTERNAL_QUEUE).build();
-
         double pollingInterval = 1.0;
         double minPollingInterval = 1.0;
         double maxPollingInterval = 120.0;
@@ -102,12 +100,15 @@ public class QueueService {
         }
     }
 
-    public synchronized void start() {
+    public synchronized void start(DBOS dbos) {
 
         if (running) {
             logger.info("QueuesPollThread is already running.");
             return;
         }
+
+        internalQueue = dbos.Queue(Constants.DBOS_INTERNAL_QUEUE).build();
+
         running = true;
         shutdownLatch = new CountDownLatch(1);
         workerThread = new Thread(this::pollForWorkflows, "QueuesPollThread");

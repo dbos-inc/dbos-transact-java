@@ -130,8 +130,8 @@ public class SchedulerService {
         logger.info("Shutting down scheduler service. Tasks not run :" + notRun.size());
     }
 
-    public void start() {
-        schedulerQueue = new DBOS.QueueBuilder("schedulerQueue").build();
+    public void start(DBOS dbos) {
+        schedulerQueue = dbos.Queue("schedulerQueue").build();
         stop = false;
     }
 }
