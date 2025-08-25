@@ -65,7 +65,7 @@ public class TimeoutTest {
     public void async() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 
@@ -92,7 +92,7 @@ public class TimeoutTest {
     public void asyncTimedOut() {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 
@@ -123,7 +123,7 @@ public class TimeoutTest {
     public void queued() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 
@@ -132,7 +132,7 @@ public class TimeoutTest {
         String wfid1 = "wf-126";
         String result;
 
-        Queue simpleQ = new DBOS.QueueBuilder("simpleQ").build();
+        Queue simpleQ = dbos.Queue("simpleQ").build();
 
         WorkflowOptions options = new WorkflowOptions.Builder(wfid1).queue(simpleQ).timeout(3).build();
         WorkflowHandle<String> handle = null;
@@ -152,7 +152,7 @@ public class TimeoutTest {
     public void queuedTimedOut() {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 
@@ -160,7 +160,7 @@ public class TimeoutTest {
         String wfid1 = "wf-127";
         String result;
 
-        Queue simpleQ = new DBOS.QueueBuilder("simpleQ").build();
+        Queue simpleQ = dbos.Queue("simpleQ").build();
 
         WorkflowOptions options = new WorkflowOptions.Builder(wfid1).queue(simpleQ).timeout(1).build();
         WorkflowHandle<String> handle = null;
@@ -186,7 +186,7 @@ public class TimeoutTest {
     public void sync() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 
@@ -210,7 +210,7 @@ public class TimeoutTest {
     public void syncTimeout() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 
@@ -238,7 +238,7 @@ public class TimeoutTest {
     public void recovery() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
         simpleService.setSimpleService(simpleService);
 

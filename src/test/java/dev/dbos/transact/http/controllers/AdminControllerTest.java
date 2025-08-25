@@ -88,7 +88,7 @@ class AdminControllerTest {
                 .build();
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         // Needed to call the step
@@ -137,12 +137,12 @@ class AdminControllerTest {
 
     @Test
     public void queueMetadata() throws Exception {
-        new DBOS.QueueBuilder("firstQueue")
+        dbos.Queue("firstQueue")
                 .concurrency(1)
                 .workerConcurrency(1)
                 .build();
 
-        new DBOS.QueueBuilder("secondQueue")
+        dbos.Queue("secondQueue")
                 .limit(2, 4.5)
                 .priorityEnabled(true)
                 .build();
@@ -239,7 +239,7 @@ class AdminControllerTest {
                 .build();
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         // Needed to call the step
@@ -337,7 +337,7 @@ class AdminControllerTest {
             assertEquals("hellohello", result);
         }
 
-        WorkflowHandle<String> handle = DBOS.getInstance().retrieveWorkflow(workflowId);
+        WorkflowHandle<String> handle = dbos.retrieveWorkflow(workflowId);
         assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
         assertEquals(1, impl.step1Count);
@@ -358,7 +358,7 @@ class AdminControllerTest {
                 .extract()
                 .path("workflowId");
 
-        WorkflowHandle<String> newHandle = DBOS.getInstance().retrieveWorkflow(newWorkflowId);
+        WorkflowHandle<String> newHandle = dbos.retrieveWorkflow(newWorkflowId);
         assertEquals("hellohello", newHandle.getResult());
 
         assertEquals(1, impl.step1Count);

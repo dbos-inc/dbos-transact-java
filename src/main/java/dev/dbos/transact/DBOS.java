@@ -34,8 +34,6 @@ public class DBOS {
 
     static Logger logger = LoggerFactory.getLogger(DBOS.class);
 
-    private static DBOS instance;
-
     private final DBOSConfig config;
     private final SystemDatabase systemDatabase;
     private final DBOSExecutor dbosExecutor;
@@ -46,6 +44,8 @@ public class DBOS {
     private Conductor conductor;
 
     private InternalWorkflowsService internalWorkflowsService;
+    private Queue internalQueue;
+    private Queue schedulerQueue;
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
@@ -63,13 +63,11 @@ public class DBOS {
      * during app startup. @DBOSConfig config dbos configuration
      */
     public static synchronized DBOS initialize(DBOSConfig config) {
-        if (instance != null) {
-            throw new IllegalStateException("DBOS has already been initialized.");
-        }
         if (config.migration()) {
             MigrationManager.runMigrations(config);
         }
-        instance = new DBOS(config);
+        var instance = new DBOS(config);
+        instance.registerInternals();
         return instance;
     }
 
@@ -90,28 +88,25 @@ public class DBOS {
         return schedulerService;
     }
 
-    /**
-     * Gets the singleton instance of DBOS. Throws if accessed before
-     * initialization.
-     */
-    public static DBOS getInstance() {
-        if (instance == null) {
-            throw new IllegalStateException(
-                    "DBOS has not been initialized. Call DBOS.initialize() first.");
-        }
-        return instance;
+    public <T> WorkflowBuilder<T> Workflow() {
+        return new WorkflowBuilder<>(this);
     }
 
-    public <T> WorkflowBuilder<T> Workflow() {
-        return new WorkflowBuilder<>();
+    public QueueBuilder Queue(String name) {
+        return new QueueBuilder(this, name);
     }
 
     // inner builder class for workflows
     public static class WorkflowBuilder<T> {
+        private final DBOS dbos;
         private Class<T> interfaceClass;
         private Object implementation;
         private boolean async;
         private Queue queue;
+
+        WorkflowBuilder(DBOS dbos) {
+            this.dbos = dbos;
+        }
 
         public WorkflowBuilder<T> interfaceClass(Class<T> iface) {
             this.interfaceClass = iface;
@@ -141,22 +136,23 @@ public class DBOS {
             if (async) {
                 return AsyncInvocationHandler.createProxy(interfaceClass,
                         implementation,
-                        DBOS.getInstance().dbosExecutor);
+                        dbos.dbosExecutor);
             } else if (queue != null) {
                 return QueueInvocationHandler.createProxy(interfaceClass,
                         implementation,
                         queue,
-                        DBOS.getInstance().dbosExecutor);
+                        dbos.dbosExecutor);
             } else {
                 return UnifiedInvocationHandler.createProxy(interfaceClass,
                         implementation,
-                        DBOS.getInstance().dbosExecutor);
+                        dbos.dbosExecutor);
             }
         }
     }
 
     public static class QueueBuilder {
 
+        private final DBOS dbos;
         private final String name;
 
         private int concurrency;
@@ -170,7 +166,8 @@ public class DBOS {
          * @param name
          *            The name of the queue.
          */
-        public QueueBuilder(String name) {
+        QueueBuilder(DBOS dbos, String name) {
+            this.dbos = dbos;
             this.name = name;
         }
 
@@ -195,11 +192,22 @@ public class DBOS {
         }
 
         public Queue build() {
-
             Queue q = Queue.createQueue(name, concurrency, workerConcurrency, limit, priorityEnabled);
-            DBOS.getInstance().queueService.register(q);
+            dbos.queueService.register(q);
             return q;
         }
+    }
+
+    private void registerInternals() {
+        internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
+                .interfaceClass(InternalWorkflowsService.class)
+                .implementation(new InternalWorkflowsServiceImpl(this))
+                .build();
+
+        internalQueue = this.Queue(Constants.DBOS_INTERNAL_QUEUE).build();
+        this.queueService.setInternalQueue(internalQueue);
+        schedulerQueue = this.Queue("schedulerQueue").build();
+        this.schedulerService.setSchedulerQueue(schedulerQueue);
     }
 
     public void launch() {
@@ -211,11 +219,6 @@ public class DBOS {
         queueService.start();
 
         schedulerService.start();
-
-        internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
-                .interfaceClass(InternalWorkflowsService.class)
-                .implementation(new InternalWorkflowsServiceImpl())
-                .build();
 
         String conductorKey = config.getConductorKey();
         if (conductorKey != null) {
@@ -276,13 +279,11 @@ public class DBOS {
 
             // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/51
             // systemDatabase.destroy();
-
-            instance = null;
         }
     }
 
     public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
-        return DBOS.getInstance().dbosExecutor.retrieveWorkflow(workflowId);
+        return this.dbosExecutor.retrieveWorkflow(workflowId);
     }
 
     /**

@@ -1,6 +1,5 @@
 package dev.dbos.transact.scheduled;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
@@ -40,6 +39,10 @@ public class SchedulerService {
         this.dbosExecutor = dbosExecutor;
         this.cronParser = new CronParser(
                 CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
+    }
+
+    public void setSchedulerQueue(Queue schedulerQueue) {
+        this.schedulerQueue = schedulerQueue;
     }
 
     public void scanAndSchedule(Object implementation) {
@@ -131,7 +134,6 @@ public class SchedulerService {
     }
 
     public void start() {
-        schedulerQueue = new DBOS.QueueBuilder("schedulerQueue").build();
         stop = false;
     }
 }

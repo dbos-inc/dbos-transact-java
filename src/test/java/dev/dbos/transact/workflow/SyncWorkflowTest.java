@@ -50,7 +50,7 @@ public class SyncWorkflowTest {
     public void workflowWithOneInput() throws SQLException {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         String result = simpleService.workWithString("test-item");
@@ -68,7 +68,7 @@ public class SyncWorkflowTest {
     public void workflowWithError() throws SQLException {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         try {
@@ -87,7 +87,7 @@ public class SyncWorkflowTest {
     public void setWorkflowId() throws SQLException {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         String result = null;
@@ -108,7 +108,7 @@ public class SyncWorkflowTest {
     public void sameWorkflowId() throws SQLException {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         String result = null;
@@ -149,7 +149,7 @@ public class SyncWorkflowTest {
     public void childWorkflowWithoutSet() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         simpleService.setSimpleService(simpleService);
@@ -182,7 +182,7 @@ public class SyncWorkflowTest {
     public void multipleChildren() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         simpleService.setSimpleService(simpleService);
@@ -230,7 +230,7 @@ public class SyncWorkflowTest {
     public void nestedChildren() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         simpleService.setSimpleService(simpleService);

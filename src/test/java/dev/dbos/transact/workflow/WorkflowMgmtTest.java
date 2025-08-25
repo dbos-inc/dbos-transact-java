@@ -118,7 +118,7 @@ public class WorkflowMgmtTest {
                 .implementation(new MgmtServiceImpl(mainLatch, workLatch)).build();
         mgmtService.setMgmtService(mgmtService);
 
-        Queue myqueue = new DBOS.QueueBuilder("myqueue").build();
+        Queue myqueue = dbos.Queue("myqueue").build();
 
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).queue(myqueue).build();
@@ -455,7 +455,7 @@ public class WorkflowMgmtTest {
     void garbageCollection() throws Exception {
         int numWorkflows = 10;
 
-        GCServiceImpl impl = new GCServiceImpl();
+        GCServiceImpl impl = new GCServiceImpl(dbos);
         GCService gcService = dbos.<GCService>Workflow().interfaceClass(GCService.class)
                 .implementation(impl).build();
         gcService.setGCService(gcService);
@@ -514,7 +514,7 @@ public class WorkflowMgmtTest {
     void globalTimeout() throws Exception {
         int numWorkflows = 10;
 
-        GCServiceImpl impl = new GCServiceImpl();
+        GCServiceImpl impl = new GCServiceImpl(dbos);
         GCService gcService = dbos.<GCService>Workflow().interfaceClass(GCService.class)
                 .implementation(impl).build();
         gcService.setGCService(gcService);

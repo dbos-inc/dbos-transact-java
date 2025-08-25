@@ -58,10 +58,10 @@ public class QueueChildWorkflowTest {
     @Test
     public void multipleChildren() throws Exception {
 
-        Queue childQ = new DBOS.QueueBuilder("childQ").concurrency(5).workerConcurrency(5).build();
+        Queue childQ = dbos.Queue("childQ").concurrency(5).workerConcurrency(5).build();
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .queue(childQ).build();
 
         simpleService.setSimpleService(simpleService);
@@ -106,10 +106,10 @@ public class QueueChildWorkflowTest {
     @Test
     public void nestedChildren() throws Exception {
 
-        Queue childQ = new DBOS.QueueBuilder("childQ").concurrency(5).workerConcurrency(5).build();
+        Queue childQ = dbos.Queue("childQ").concurrency(5).workerConcurrency(5).build();
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .queue(childQ).build();
 
         simpleService.setSimpleService(simpleService);
