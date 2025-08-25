@@ -109,7 +109,7 @@ public class EventsTest {
             eventService.getEventWorkflow("id1", "key1", 3);
         }
 
-        String event = (String) DBOS.getInstance().retrieveWorkflow("id2").getResult();
+        String event = (String) dbos.retrieveWorkflow("id2").getResult();
         assertEquals("value1", event);
     }
 

@@ -41,6 +41,10 @@ public class SchedulerService {
                 CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
     }
 
+    public void setSchedulerQueue(Queue schedulerQueue) {
+        this.schedulerQueue = schedulerQueue;
+    }
+
     public void scanAndSchedule(Object implementation) {
         for (Method method : implementation.getClass().getDeclaredMethods()) {
             if (method.isAnnotationPresent(Workflow.class)
@@ -129,8 +133,7 @@ public class SchedulerService {
         logger.info("Shutting down scheduler service. Tasks not run :" + notRun.size());
     }
 
-    public void start(Queue schedulerQueue) {
-        this.schedulerQueue = schedulerQueue;
+    public void start() {
         stop = false;
     }
 }

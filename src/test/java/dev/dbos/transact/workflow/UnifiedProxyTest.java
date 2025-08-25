@@ -57,7 +57,7 @@ public class UnifiedProxyTest {
     public void optionsWithCall() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         // synchronous
@@ -85,7 +85,7 @@ public class UnifiedProxyTest {
 
         // Queued
         String wfid3 = "wf-125";
-        Queue q = new DBOS.QueueBuilder("simpleQ").build();
+        Queue q = dbos.Queue("simpleQ").build();
         options = new WorkflowOptions.Builder(wfid3).queue(q).build();
         try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             result = simpleService.workWithString("test-item-q");
@@ -108,7 +108,7 @@ public class UnifiedProxyTest {
     public void syncParentWithQueuedChildren() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
                 .build();
 
         simpleService.setSimpleService(simpleService);

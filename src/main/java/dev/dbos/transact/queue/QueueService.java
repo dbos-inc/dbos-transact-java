@@ -37,6 +37,10 @@ public class QueueService {
         dbosExecutor.setQueueService(this);
     }
 
+    public void setInternalQueue(Queue internalQueue) {
+        this.internalQueue = internalQueue;
+    }
+
     public void register(Queue queue) {
         queueRegistry.register(queue.getName(), queue);
     }
@@ -98,7 +102,7 @@ public class QueueService {
         }
     }
 
-    public synchronized void start(Queue internalQueue) {
+    public synchronized void start() {
 
         if (running) {
             logger.info("QueuesPollThread is already running.");
@@ -106,7 +110,6 @@ public class QueueService {
         }
 
         running = true;
-        this.internalQueue = internalQueue;
         shutdownLatch = new CountDownLatch(1);
         workerThread = new Thread(this::pollForWorkflows, "QueuesPollThread");
         workerThread.setDaemon(true);

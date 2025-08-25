@@ -92,7 +92,7 @@ class RecoveryServiceTest {
 
         wfid = "wf-127";
         WorkflowHandle<String> handle7 = null;
-        Queue q = new DBOS.QueueBuilder("q1").build();
+        Queue q = dbos.Queue("q1").build();
         WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(q).build();
         try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
@@ -138,7 +138,7 @@ class RecoveryServiceTest {
 
         wfid = "wf-127";
         WorkflowHandle<String> handle7 = null;
-        Queue q = new DBOS.QueueBuilder("q1").build();
+        Queue q = dbos.Queue("q1").build();
         WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(q).build();
         try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
@@ -187,7 +187,7 @@ class RecoveryServiceTest {
 
         dbos.launch();
 
-        WorkflowHandle h = DBOS.getInstance().retrieveWorkflow("wf-123");
+        WorkflowHandle h = dbos.retrieveWorkflow("wf-123");
         h.getResult();
         assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
 

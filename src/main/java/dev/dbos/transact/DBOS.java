@@ -205,8 +205,9 @@ public class DBOS {
                 .build();
 
         internalQueue = this.Queue(Constants.DBOS_INTERNAL_QUEUE).build();
+        this.queueService.setInternalQueue(internalQueue);
         schedulerQueue = this.Queue("schedulerQueue").build();
-
+        this.schedulerService.setSchedulerQueue(schedulerQueue);
     }
 
     public void launch() {
@@ -215,9 +216,9 @@ public class DBOS {
         logger.info("Executor ID: {}", dbosExecutor.getExecutorId());
         logger.info("Application version: {}", dbosExecutor.getAppVersion());
 
-        queueService.start(internalQueue);
+        queueService.start();
 
-        schedulerService.start(schedulerQueue);
+        schedulerService.start();
 
         String conductorKey = config.getConductorKey();
         if (conductorKey != null) {

@@ -12,6 +12,7 @@ import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -74,10 +75,10 @@ public class QueuesTest {
     @Test
     public void testQueuedWorkflow() throws Exception {
 
-        Queue firstQ = new DBOS.QueueBuilder("firstQueue").concurrency(1).workerConcurrency(1)
+        Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
                 .build();
 
-        ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>().interfaceClass(ServiceQ.class)
+        ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl()).queue(firstQ).build();
 
         String id = "q1234";
@@ -101,10 +102,10 @@ public class QueuesTest {
             logger.info("Waiting for queueService to stop");
         }
 
-        Queue firstQ = new DBOS.QueueBuilder("firstQueue").concurrency(1).workerConcurrency(1)
+        Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
                 .build();
 
-        ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>().interfaceClass(ServiceQ.class)
+        ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl()).queue(firstQ).build();
 
         for (int i = 0; i < 5; i++) {
@@ -146,10 +147,10 @@ public class QueuesTest {
             logger.info("Waiting for queueService to stop");
         }
 
-        Queue firstQ = new DBOS.QueueBuilder("firstQueue").concurrency(1).workerConcurrency(1)
+        Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
                 .build();
 
-        ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>().interfaceClass(ServiceQ.class)
+        ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl()).build();
 
         for (int i = 0; i < 5; i++) {
@@ -209,16 +210,16 @@ public class QueuesTest {
     @Test
     public void multipleQueues() throws Exception {
 
-        Queue firstQ = new DBOS.QueueBuilder("firstQueue").concurrency(1).workerConcurrency(1)
+        Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
                 .build();
 
-        ServiceQ serviceQ1 = new DBOS.WorkflowBuilder<ServiceQ>().interfaceClass(ServiceQ.class)
+        ServiceQ serviceQ1 = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl()).build();
 
-        Queue secondQ = new DBOS.QueueBuilder("secondQueue").concurrency(1).workerConcurrency(1)
+        Queue secondQ = dbos.Queue("secondQueue").concurrency(1).workerConcurrency(1)
                 .build();
 
-        ServiceI serviceI = new DBOS.WorkflowBuilder<ServiceI>().interfaceClass(ServiceI.class)
+        ServiceI serviceI = dbos.<ServiceI>Workflow().interfaceClass(ServiceI.class)
                 .implementation(new ServiceIImpl()).build();
 
         String id1 = "firstQ1234";
@@ -255,10 +256,10 @@ public class QueuesTest {
         int limit = 5;
         double period = 1.8; //
 
-        Queue limitQ = new DBOS.QueueBuilder("limitQueue").limit(limit, period).concurrency(1)
+        Queue limitQ = dbos.Queue("limitQueue").limit(limit, period).concurrency(1)
                 .workerConcurrency(1).build();
 
-        ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>().interfaceClass(ServiceQ.class)
+        ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl()).build();
 
         int numWaves = 3;
@@ -335,7 +336,7 @@ public class QueuesTest {
             logger.info("Waiting for queueService to stop");
         }
 
-        Queue qwithWCLimit = new DBOS.QueueBuilder("QwithWCLimit").concurrency(1)
+        Queue qwithWCLimit = dbos.Queue("QwithWCLimit").concurrency(1)
                 .workerConcurrency(2).concurrency(3).build();
 
         WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal("xxx",
@@ -406,7 +407,7 @@ public class QueuesTest {
             logger.info("Waiting for queueService to stop");
         }
 
-        Queue qwithWCLimit = new DBOS.QueueBuilder("QwithWCLimit").concurrency(1)
+        Queue qwithWCLimit = dbos.Queue("QwithWCLimit").concurrency(1)
                 .workerConcurrency(2).concurrency(3).build();
 
         WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal("xxx",
@@ -470,9 +471,9 @@ public class QueuesTest {
     @Test
     public void testenQueueWF() throws Exception {
 
-        Queue firstQ = new DBOS.QueueBuilder("firstQueue").build();
+        Queue firstQ = dbos.Queue("firstQueue").build();
 
-        ServiceQ serviceQ = new DBOS.WorkflowBuilder<ServiceQ>().interfaceClass(ServiceQ.class)
+        ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl()).build();
 
         String id = "q1234";
@@ -492,10 +493,10 @@ public class QueuesTest {
     @Disabled(value = "temporarily disabled during refactoring")
     public void testQueueConcurrencyUnderRecovery() throws Exception {
         try {
-            Queue queue = new DBOS.QueueBuilder("test_queue").concurrency(2).build();
+            Queue queue = dbos.Queue("test_queue").concurrency(2).build();
 
             ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
-            ConcurrencyTestService service = new DBOS.WorkflowBuilder<ConcurrencyTestService>()
+            ConcurrencyTestService service = dbos.<ConcurrencyTestService>Workflow()
                     .interfaceClass(ConcurrencyTestService.class)
                     .implementation(impl).build();
 

@@ -290,8 +290,8 @@ class NotificationServiceTest {
             notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
         }
 
-        WorkflowHandle<?> handle1 = DBOS.getInstance().retrieveWorkflow(wfid1);
-        WorkflowHandle<?> handle2 = DBOS.getInstance().retrieveWorkflow(wfid2);
+        WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
+        WorkflowHandle<?> handle2 = dbos.retrieveWorkflow(wfid2);
 
         String result = (String) handle1.getResult();
         assertEquals("HelloDBOS", result);
