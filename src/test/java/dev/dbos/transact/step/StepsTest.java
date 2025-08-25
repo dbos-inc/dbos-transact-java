@@ -3,7 +3,7 @@ package dev.dbos.transact.step;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSUtils;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
@@ -36,8 +36,8 @@ public class StepsTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSUtils.getSystemDatabase(dbos);
-        dbosExecutor = DBOSUtils.getDbosExecutor(dbos);
+        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         dbos.launch();
     }

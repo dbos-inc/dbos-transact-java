@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSUtils;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
@@ -59,9 +59,9 @@ public class QueuesTest {
         dataSource = SystemDatabase.createDataSource(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSUtils.getSystemDatabase(dbos);
-        dbosExecutor = DBOSUtils.getDbosExecutor(dbos);
-        queueService = DBOSUtils.getQueueService(dbos);
+        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        queueService = DBOSTestAccess.getQueueService(dbos);
 
         dbos.launch();
     }

@@ -3,7 +3,7 @@ package dev.dbos.transact.notifications;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSUtils;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
@@ -44,7 +44,7 @@ class NotificationServiceTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSUtils.getSystemDatabase(dbos);
+        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         dbos.launch();
     }

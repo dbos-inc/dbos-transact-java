@@ -6,7 +6,7 @@ import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.scheduled.SchedulerService;
 
 // Helper class to retrieve DBOS internals via package private methods
-public class DBOSUtils {
+public class DBOSTestAccess {
     public static SystemDatabase getSystemDatabase(DBOS dbos) {
         return dbos.getSystemDatabase();
     }

@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSUtils;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
@@ -40,8 +40,8 @@ public class AsyncWorkflowTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSUtils.getSystemDatabase(dbos);
-        dbosExecutor = DBOSUtils.getDbosExecutor(dbos);
+        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         dbos.launch();
     }
