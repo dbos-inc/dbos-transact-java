@@ -121,7 +121,7 @@ class DBOSExecutorTest {
     }
 
     @Test
-    @Disabled(value="disabled while we refactor DBOS internals related to workflow registration")
+    @Disabled(value = "disabled while we refactor DBOS internals related to workflow registration")
     void workflowFunctionNotfound() throws Exception {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
