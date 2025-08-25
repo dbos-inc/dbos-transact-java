@@ -9,14 +9,11 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.QueuesTest;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
 import java.util.List;
-
-import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;

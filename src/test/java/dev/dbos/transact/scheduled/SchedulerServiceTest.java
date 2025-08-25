@@ -6,8 +6,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSUtils;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 
@@ -15,8 +13,6 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-
-import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;

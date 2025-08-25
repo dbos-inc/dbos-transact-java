@@ -8,7 +8,6 @@ import dev.dbos.transact.DBOSUtils;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.StepInfo;
 
@@ -18,8 +17,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,7 +28,7 @@ public class EventsTest {
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
     private SystemDatabase systemDatabase;
- 
+
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
@@ -46,7 +43,7 @@ public class EventsTest {
 
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSUtils.getSystemDatabase(dbos);
- 
+
         dbos.launch();
     }
 

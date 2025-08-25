@@ -72,7 +72,7 @@ public class DBOS {
         instance = new DBOS(config);
         return instance;
     }
-    
+
     // package private methods for test purposes
     SystemDatabase getSystemDatabase() {
         return systemDatabase;

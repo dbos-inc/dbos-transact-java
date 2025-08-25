@@ -13,8 +13,6 @@ import dev.dbos.transact.utils.DBUtils;
 import java.sql.SQLException;
 import java.util.List;
 
-import javax.sql.DataSource;
-
 import org.junit.jupiter.api.*;
 
 public class SyncWorkflowTest {

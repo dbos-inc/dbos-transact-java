@@ -50,6 +50,8 @@ class RecoveryServiceTest {
     @BeforeEach
     void setUp() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
+        RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSUtils.getSystemDatabase(dbos);
         dbosExecutor = DBOSUtils.getDbosExecutor(dbos);
