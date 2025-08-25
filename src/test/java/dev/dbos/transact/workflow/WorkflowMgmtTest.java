@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -20,8 +21,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import javax.sql.DataSource;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,9 +33,8 @@ public class WorkflowMgmtTest {
     Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
 
     private static DBOSConfig dbosConfig;
-    private static DataSource dataSource;
     private DBOS dbos;
-    private static SystemDatabase systemDatabase;
+    private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
 
     @BeforeAll
@@ -52,10 +50,11 @@ public class WorkflowMgmtTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        WorkflowMgmtTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
-        systemDatabase = new SystemDatabase(dataSource);
-        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
+
+        dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
         dbos.launch();
     }
 

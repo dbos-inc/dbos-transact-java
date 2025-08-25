@@ -3,19 +3,17 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.QueuesTest;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
 import java.util.List;
-
-import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -29,11 +27,9 @@ public class QueueChildWorkflowTest {
     Logger logger = LoggerFactory.getLogger(QueuesTest.class);
 
     private static DBOSConfig dbosConfig;
-    private static DataSource dataSource;
-    private static DBOS dbos;
-    private static SystemDatabase systemDatabase;
-    private static DBOSExecutor dbosExecutor;
-    private static QueueService queueService;
+    private DBOS dbos;
+    private SystemDatabase systemDatabase;
+    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -46,12 +42,11 @@ public class QueueChildWorkflowTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        dataSource = SystemDatabase.createDataSource(dbosConfig);
-        systemDatabase = new SystemDatabase(dataSource);
-        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        queueService = new QueueService(systemDatabase, dbosExecutor);
 
-        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, queueService, null);
+        dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
         dbos.launch();
     }
 

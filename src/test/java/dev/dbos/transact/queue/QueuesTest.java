@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
@@ -39,10 +40,10 @@ public class QueuesTest {
 
     private static DBOSConfig dbosConfig;
     private static DataSource dataSource;
-    private static DBOS dbos;
-    private static SystemDatabase systemDatabase;
-    private static DBOSExecutor dbosExecutor;
-    private static QueueService queueService;
+    private DBOS dbos;
+    private SystemDatabase systemDatabase;
+    private DBOSExecutor dbosExecutor;
+    private QueueService queueService;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -56,10 +57,12 @@ public class QueuesTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         dataSource = SystemDatabase.createDataSource(dbosConfig);
-        systemDatabase = new SystemDatabase(dataSource);
-        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        queueService = new QueueService(systemDatabase, dbosExecutor);
-        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, queueService, null);
+
+        dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        queueService = DBOSTestAccess.getQueueService(dbos);
+
         dbos.launch();
     }
 
@@ -486,7 +489,7 @@ public class QueuesTest {
     }
 
     @Test
-    @Disabled( value = "temporarily disabled during refactoring")
+    @Disabled(value = "temporarily disabled during refactoring")
     public void testQueueConcurrencyUnderRecovery() throws Exception {
         try {
             Queue queue = new DBOS.QueueBuilder("test_queue").concurrency(2).build();

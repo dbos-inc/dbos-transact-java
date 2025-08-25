@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -27,7 +28,7 @@ public class TimeoutTest {
     private static DBOSConfig dbosConfig;
     private static DataSource dataSource;
     private DBOS dbos;
-    private static SystemDatabase systemDatabase;
+    private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
 
     @BeforeAll
@@ -47,9 +48,11 @@ public class TimeoutTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         TimeoutTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
-        systemDatabase = new SystemDatabase(dataSource);
-        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
+
+        dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
         dbos.launch();
     }
 

@@ -3,6 +3,7 @@ package dev.dbos.transact.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
@@ -33,9 +34,8 @@ class RecoveryServiceTest {
     private static DBOSConfig dbosConfig;
     private static DataSource dataSource;
     private DBOS dbos;
-    private static SystemDatabase systemDatabase;
+    private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
-    private RecoveryService recoveryService;
     private ExecutingService executingService;
     Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
@@ -51,10 +51,11 @@ class RecoveryServiceTest {
     void setUp() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
-        systemDatabase = new SystemDatabase(dataSource);
-        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
-        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
+
+        dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
         executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();

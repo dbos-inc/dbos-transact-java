@@ -58,15 +58,6 @@ public class DBOS {
         schedulerService = new SchedulerService(dbosExecutor);
     }
 
-    private DBOS(DBOSConfig config, SystemDatabase sd, DBOSExecutor de, QueueService q,
-            SchedulerService s) {
-        this.config = config;
-        this.systemDatabase = sd;
-        this.dbosExecutor = de;
-        this.queueService = q == null ? new QueueService(sd, dbosExecutor) : q;
-        this.schedulerService = s == null ? new SchedulerService(de) : s;
-    }
-
     /**
      * Initializes the singleton instance of DBOS with config. Should be called once
      * during app startup. @DBOSConfig config dbos configuration
@@ -82,21 +73,21 @@ public class DBOS {
         return instance;
     }
 
-    public static synchronized DBOS initialize(DBOSConfig config, SystemDatabase sd,
-            DBOSExecutor de, QueueService q, SchedulerService ss) {
-        if (instance != null) {
-            throw new IllegalStateException("DBOS has already been initialized.");
-        }
+    // package private methods for test purposes
+    SystemDatabase getSystemDatabase() {
+        return systemDatabase;
+    }
 
-        if (config == null || sd == null || de == null) {
-            throw new IllegalArgumentException("Config, systemdb, dbosexecutor cannot be null");
-        }
+    DBOSExecutor getDbosExecutor() {
+        return dbosExecutor;
+    }
 
-        if (config.migration()) {
-            MigrationManager.runMigrations(config);
-        }
-        instance = new DBOS(config, sd, de, q, ss);
-        return instance;
+    QueueService getQueueService() {
+        return queueService;
+    }
+
+    SchedulerService getSchedulerService() {
+        return schedulerService;
     }
 
     /**
