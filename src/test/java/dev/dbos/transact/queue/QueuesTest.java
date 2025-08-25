@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSUtils;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
@@ -39,10 +40,10 @@ public class QueuesTest {
 
     private static DBOSConfig dbosConfig;
     private static DataSource dataSource;
-    private static DBOS dbos;
-    private static SystemDatabase systemDatabase;
-    private static DBOSExecutor dbosExecutor;
-    private static QueueService queueService;
+    private DBOS dbos;
+    private SystemDatabase systemDatabase;
+    private DBOSExecutor dbosExecutor;
+    private QueueService queueService;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -55,7 +56,13 @@ public class QueuesTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
+        dataSource = SystemDatabase.createDataSource(dbosConfig);
+
         dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSUtils.getSystemDatabase(dbos);
+        dbosExecutor = DBOSUtils.getDbosExecutor(dbos);
+        queueService = DBOSUtils.getQueueService(dbos);
+
         dbos.launch();
     }
 

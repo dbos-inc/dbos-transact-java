@@ -3,6 +3,7 @@ package dev.dbos.transact.step;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSUtils;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
@@ -20,10 +21,9 @@ import org.junit.jupiter.api.*;
 public class StepsTest {
 
     private static DBOSConfig dbosConfig;
-    private static DataSource dataSource;
-    private static DBOS dbos;
-    private static SystemDatabase systemDatabase;
-    private static DBOSExecutor dbosExecutor;
+    private DBOS dbos;
+    private SystemDatabase systemDatabase;
+    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -36,7 +36,11 @@ public class StepsTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
+
         dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSUtils.getSystemDatabase(dbos);
+        dbosExecutor = DBOSUtils.getDbosExecutor(dbos);
+
         dbos.launch();
     }
 

@@ -3,6 +3,7 @@ package dev.dbos.transact.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSUtils;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
@@ -28,14 +29,13 @@ import org.junit.jupiter.api.Test;
 class DBOSExecutorTest {
 
     private static DBOSConfig dbosConfig;
-    private static DataSource dataSource;
     private DBOS dbos;
-    private static SystemDatabase systemDatabase;
+    private static DataSource dataSource;
+    private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     public static void onetimeBefore() throws SQLException {
-
         DBOSExecutorTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
                 .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
                 .maximumPoolSize(2).build();
@@ -44,7 +44,11 @@ class DBOSExecutorTest {
     @BeforeEach
     void setUp() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
+        DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+
         dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSUtils.getSystemDatabase(dbos);
+        dbosExecutor = DBOSUtils.getDbosExecutor(dbos);
         dbos.launch();
     }
 

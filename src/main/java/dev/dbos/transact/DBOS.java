@@ -72,6 +72,23 @@ public class DBOS {
         instance = new DBOS(config);
         return instance;
     }
+    
+    // package private methods for test purposes
+    SystemDatabase getSystemDatabase() {
+        return systemDatabase;
+    }
+
+    DBOSExecutor getDbosExecutor() {
+        return dbosExecutor;
+    }
+
+    QueueService getQueueService() {
+        return queueService;
+    }
+
+    SchedulerService getSchedulerService() {
+        return schedulerService;
+    }
 
     /**
      * Gets the singleton instance of DBOS. Throws if accessed before

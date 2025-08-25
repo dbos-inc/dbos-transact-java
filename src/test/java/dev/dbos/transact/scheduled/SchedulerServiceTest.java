@@ -3,6 +3,7 @@ package dev.dbos.transact.scheduled;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSUtils;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -25,30 +26,24 @@ import org.junit.jupiter.api.Test;
 class SchedulerServiceTest {
 
     private static DBOSConfig dbosConfig;
-    private static DataSource dataSource;
     private DBOS dbos;
-    private static SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
+    private SystemDatabase systemDatabase;
     private SchedulerService schedulerService;
-    private static QueueService queueService;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
-
         SchedulerServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
                 .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
                 .maximumPoolSize(2).build();
-
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",
-                dbosConfig.getDbHost(),
-                dbosConfig.getDbPort(),
-                "postgres");
     }
 
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSUtils.getSystemDatabase(dbos);
+        schedulerService = DBOSUtils.getSchedulerService(dbos);
+
         dbos.launch();
     }
 

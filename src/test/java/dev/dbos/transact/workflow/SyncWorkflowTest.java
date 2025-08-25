@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSUtils;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
@@ -19,9 +20,8 @@ import org.junit.jupiter.api.*;
 public class SyncWorkflowTest {
 
     private static DBOSConfig dbosConfig;
-    private static DataSource dataSource;
     private DBOS dbos;
-    private static SystemDatabase systemDatabase;
+    private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
 
     @BeforeAll
@@ -35,7 +35,11 @@ public class SyncWorkflowTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
+
         dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSUtils.getSystemDatabase(dbos);
+        dbosExecutor = DBOSUtils.getDbosExecutor(dbos);
+
         dbos.launch();
     }
 

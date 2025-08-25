@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSUtils;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.SystemDatabase;
@@ -28,11 +29,9 @@ import org.junit.jupiter.api.Test;
 public class EventsTest {
 
     private static DBOSConfig dbosConfig;
-    private static DataSource dataSource;
     private DBOS dbos;
-    private static SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
-
+    private SystemDatabase systemDatabase;
+ 
     @BeforeAll
     static void onetimeSetup() throws Exception {
 
@@ -44,7 +43,10 @@ public class EventsTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
+
         dbos = DBOS.initialize(dbosConfig);
+        systemDatabase = DBOSUtils.getSystemDatabase(dbos);
+ 
         dbos.launch();
     }
 
