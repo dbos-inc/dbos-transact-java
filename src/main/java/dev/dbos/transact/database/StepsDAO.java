@@ -91,7 +91,7 @@ public class StepsDAO {
      *             If the workflow does not exist in the status table.
      * @throws WorkflowCancelledException
      *             If the workflow is in a cancelled status.
-     * @throws UnExpectedStepException
+     * @throws UnexpectedStepException
      *             If the recorded function name for the operation does not match
      *             the provided name.
      * @throws SQLException
@@ -99,7 +99,7 @@ public class StepsDAO {
      */
     public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName,
             Connection connection) throws SQLException, IllegalStateException,
-            WorkflowCancelledException, UnExpectedStepException {
+            WorkflowCancelledException, UnexpectedStepException {
 
         String workflowStatusSql = String.format(
                 "SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?",
@@ -151,7 +151,7 @@ public class StepsDAO {
         }
 
         if (!Objects.equals(functionName, recordedFunctionName)) {
-            throw new UnExpectedStepException(workflowId, functionId, functionName,
+            throw new UnexpectedStepException(workflowId, functionId, functionName,
                     recordedFunctionName);
         }
 

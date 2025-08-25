@@ -177,7 +177,7 @@ public class SystemDatabase {
     }
 
     public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName)
-            throws IllegalStateException, WorkflowCancelledException, UnExpectedStepException {
+            throws IllegalStateException, WorkflowCancelledException, UnexpectedStepException {
 
         try {
             try (Connection connection = dataSource.getConnection()) {
