@@ -48,11 +48,7 @@ class SchedulerServiceTest {
     @BeforeEach
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        SchedulerServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
-        systemDatabase = new SystemDatabase(dataSource);
-        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        schedulerService = new SchedulerService(dbosExecutor);
-        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, schedulerService);
+        dbos = DBOS.initialize(dbosConfig);
         dbos.launch();
     }
 

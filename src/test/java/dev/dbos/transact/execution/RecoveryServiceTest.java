@@ -50,11 +50,7 @@ class RecoveryServiceTest {
     @BeforeEach
     void setUp() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
-        RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
-        systemDatabase = new SystemDatabase(dataSource);
-        dbosExecutor = new DBOSExecutor(dbosConfig, systemDatabase);
-        recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
-        dbos = DBOS.initialize(dbosConfig, systemDatabase, dbosExecutor, null, null);
+        dbos = DBOS.initialize(dbosConfig);
         executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
