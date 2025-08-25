@@ -3,8 +3,6 @@ package dev.dbos.transact.queue;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
-import dev.dbos.transact.Constants;
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 
@@ -100,16 +98,15 @@ public class QueueService {
         }
     }
 
-    public synchronized void start(DBOS dbos) {
+    public synchronized void start(Queue internalQueue) {
 
         if (running) {
             logger.info("QueuesPollThread is already running.");
             return;
         }
 
-        internalQueue = dbos.Queue(Constants.DBOS_INTERNAL_QUEUE).build();
-
         running = true;
+        this.internalQueue = internalQueue;
         shutdownLatch = new CountDownLatch(1);
         workerThread = new Thread(this::pollForWorkflows, "QueuesPollThread");
         workerThread.setDaemon(true);

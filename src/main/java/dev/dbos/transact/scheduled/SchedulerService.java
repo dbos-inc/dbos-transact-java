@@ -1,6 +1,5 @@
 package dev.dbos.transact.scheduled;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
@@ -130,8 +129,8 @@ public class SchedulerService {
         logger.info("Shutting down scheduler service. Tasks not run :" + notRun.size());
     }
 
-    public void start(DBOS dbos) {
-        schedulerQueue = dbos.Queue("schedulerQueue").build();
+    public void start(Queue schedulerQueue) {
+        this.schedulerQueue = schedulerQueue;
         stop = false;
     }
 }

@@ -44,6 +44,8 @@ public class DBOS {
     private Conductor conductor;
 
     private InternalWorkflowsService internalWorkflowsService;
+    private Queue internalQueue;
+    private Queue schedulerQueue;
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
@@ -65,6 +67,7 @@ public class DBOS {
             MigrationManager.runMigrations(config);
         }
         var instance = new DBOS(config);
+        instance.registerInternals();
         return instance;
     }
 
@@ -195,20 +198,26 @@ public class DBOS {
         }
     }
 
+    private void registerInternals() {
+        internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
+                .interfaceClass(InternalWorkflowsService.class)
+                .implementation(new InternalWorkflowsServiceImpl(this))
+                .build();
+
+        internalQueue = this.Queue(Constants.DBOS_INTERNAL_QUEUE).build();
+        schedulerQueue = this.Queue("schedulerQueue").build();
+
+    }
+
     public void launch() {
         dbosExecutor.start();
 
         logger.info("Executor ID: {}", dbosExecutor.getExecutorId());
         logger.info("Application version: {}", dbosExecutor.getAppVersion());
 
-        queueService.start(this);
+        queueService.start(internalQueue);
 
-        schedulerService.start(this);
-
-        internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
-                .interfaceClass(InternalWorkflowsService.class)
-                .implementation(new InternalWorkflowsServiceImpl(this))
-                .build();
+        schedulerService.start(schedulerQueue);
 
         String conductorKey = config.getConductorKey();
         if (conductorKey != null) {
