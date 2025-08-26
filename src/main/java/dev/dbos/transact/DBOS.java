@@ -138,18 +138,15 @@ public class DBOS {
             if (async) {
                 return AsyncInvocationHandler.createProxy(interfaceClass,
                         implementation,
-                        dbos,
                         dbos.dbosExecutor);
             } else if (queue != null) {
                 return QueueInvocationHandler.createProxy(interfaceClass,
                         implementation,
                         queue,
-                        dbos,
                         dbos.dbosExecutor);
             } else {
                 return UnifiedInvocationHandler.createProxy(interfaceClass,
                         implementation,
-                        dbos,
                         dbos.dbosExecutor);
             }
         }

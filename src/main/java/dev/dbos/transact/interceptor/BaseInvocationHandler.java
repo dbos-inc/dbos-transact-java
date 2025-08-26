@@ -1,6 +1,5 @@
 package dev.dbos.transact.interceptor;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
@@ -22,13 +21,11 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
     private final Object target;
     private final String targetClassName;
-    protected final DBOS dbos;
     protected final DBOSExecutor dbosExecutor;
 
-    public BaseInvocationHandler(Object target, DBOS dbos, DBOSExecutor dbosExecutor) {
+    public BaseInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
         this.target = target;
         this.targetClassName = target.getClass().getName();
-        this.dbos = dbos;
         this.dbosExecutor = dbosExecutor;
     }
 
@@ -65,7 +62,6 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
         }
 
         DBOSContext ctx = DBOSContextHolder.get();
-        ctx.setDbos(dbos);
 
         Object result;
 

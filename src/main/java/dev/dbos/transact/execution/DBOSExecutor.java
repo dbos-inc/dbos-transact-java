@@ -214,6 +214,7 @@ public class DBOSExecutor {
         }
 
         DBOSContext ctx = DBOSContextHolder.get();
+        ctx.setDbos(dbos);
         if (ctx.hasParent()) {
             systemDatabase.recordChildWorkflow(ctx.getParentWorkflowId(),
                     ctx.getWorkflowId(),
@@ -246,6 +247,7 @@ public class DBOSExecutor {
         WorkflowInitResult initResult = null;
 
         DBOSContext ctx = DBOSContextHolder.get();
+        ctx.setDbos(dbos);
         if (ctx.hasParent()) {
             Optional<String> childId = systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(),
                     ctx.getParentFunctionId());
@@ -331,6 +333,8 @@ public class DBOSExecutor {
             Object target, Object[] args, WorkflowFunctionReflect function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
+        ctx.setDbos(dbos);
+        
         String workflowId = ctx.getWorkflowId();
 
         final String wfId = workflowId;
@@ -362,7 +366,9 @@ public class DBOSExecutor {
             T result = null;
 
             // Doing this on purpose to ensure that we have the correct context
-            String id = DBOSContextHolder.get().getWorkflowId();
+            var context = DBOSContextHolder.get();
+            context.setDbos(dbos);
+            String id = context.getWorkflowId();
 
             try {
 
@@ -409,6 +415,7 @@ public class DBOSExecutor {
             WorkflowFunctionWrapper wrapper, Object[] args, Queue queue) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
+        ctx.setDbos(dbos);
         String wfid = ctx.getWorkflowId();
 
         if (wfid == null) {
@@ -434,6 +441,7 @@ public class DBOSExecutor {
             float backOffRate, Object[] args, WorkflowFunction<T> function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
+        ctx.setDbos(dbos);
         String workflowId = ctx.getWorkflowId();
 
         if (workflowId == null) {
@@ -557,6 +565,7 @@ public class DBOSExecutor {
     public void sleep(float seconds) {
 
         DBOSContext context = DBOSContextHolder.get();
+        context.setDbos(dbos);
 
         if (context.getWorkflowId() == null) {
             throw new DBOSException(ErrorCode.SLEEP_NOT_IN_WORKFLOW.getCode(),
@@ -607,6 +616,7 @@ public class DBOSExecutor {
 
     public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
         DBOSContext oldctx = DBOSContextHolder.get();
+        oldctx.setDbos(dbos);
         DBOSContext newCtx = oldctx;
 
         if (newCtx.getWorkflowId() == null) {

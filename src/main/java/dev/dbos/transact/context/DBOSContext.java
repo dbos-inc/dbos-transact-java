@@ -161,6 +161,9 @@ public class DBOSContext {
     }
 
     public DBOSContext copy() {
+        if (dbos.get() == null) {
+            throw new IllegalStateException("DBOS instance null in context to copy");
+        }
         return new DBOSContext(dbos.get(), workflowId, functionId, parentWorkflowId, parentFunctionId,
                 inWorkflow, async, queue, workflowTimeoutMs);
     }
