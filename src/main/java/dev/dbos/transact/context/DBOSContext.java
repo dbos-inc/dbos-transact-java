@@ -113,7 +113,9 @@ public class DBOSContext {
         Objects.requireNonNull(dbos);
         if (!this.dbos.compareAndSet(null, dbos)) {
             if (this.dbos.get() != dbos) {
-                logger.error("setDbos collision {} {}", System.identityHashCode(this.dbos.get()), System.identityHashCode(dbos));
+                logger.error("setDbos collision {} {}",
+                        System.identityHashCode(this.dbos.get()),
+                        System.identityHashCode(dbos));
                 throw new IllegalStateException("DBOS instance already set and does not match the provided instance.");
             }
         }

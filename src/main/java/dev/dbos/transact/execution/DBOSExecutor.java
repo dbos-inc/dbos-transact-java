@@ -334,7 +334,7 @@ public class DBOSExecutor {
 
         DBOSContext ctx = DBOSContextHolder.get();
         ctx.setDbos(dbos);
-        
+
         String workflowId = ctx.getWorkflowId();
 
         final String wfId = workflowId;
@@ -540,7 +540,7 @@ public class DBOSExecutor {
             var ctx = DBOSContextHolder.get();
             ctx.setInWorkflow(true);
             ctx.setDbos(dbos);
-            
+
             try {
                 handle = submitWorkflow(status.getName(),
                         functionWrapper.targetClassName,
