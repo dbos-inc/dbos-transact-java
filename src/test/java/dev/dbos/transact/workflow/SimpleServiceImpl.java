@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
@@ -17,12 +18,6 @@ public class SimpleServiceImpl implements SimpleService {
     private SimpleService simpleService;
 
     public static int executionCount = 0;
-
-    private DBOS dbos;
-
-    public SimpleServiceImpl(DBOS d) {
-        dbos = d;
-    }
 
     @Workflow(name = "workWithString")
     public String workWithString(String input) {
@@ -56,6 +51,7 @@ public class SimpleServiceImpl implements SimpleService {
 
     @Workflow(name = "WorkflowWithMultipleChildren")
     public String WorkflowWithMultipleChildren(String input) throws Exception {
+        var dbos = DBOSContext.dbosInstance().get();
         String result = input;
 
         try (SetWorkflowID id = new SetWorkflowID("child1")) {
@@ -92,7 +88,7 @@ public class SimpleServiceImpl implements SimpleService {
         try (SetWorkflowID id = new SetWorkflowID("child5")) {
             simpleService.grandchildWorkflow(input);
         }
-        result = "c-" + dbos.retrieveWorkflow("child5").getResult();
+        result = "c-" + DBOSContext.dbosInstance().get().retrieveWorkflow("child5").getResult();
         return result;
     }
 
@@ -107,7 +103,7 @@ public class SimpleServiceImpl implements SimpleService {
         try (SetWorkflowID id = new SetWorkflowID("child4")) {
             simpleService.childWorkflow4(input);
         }
-        result = "p-" + dbos.retrieveWorkflow("child4").getResult();
+        result = "p-" + DBOSContext.dbosInstance().get().retrieveWorkflow("child4").getResult();
         return result;
     }
 
@@ -116,7 +112,8 @@ public class SimpleServiceImpl implements SimpleService {
 
         System.out.println("In syncWithQueued " + DBOSContextHolder.get().getWorkflowId());
 
-        Queue q = dbos.Queue("childQ").build();
+        // TODO: when we require WF/Q registration to happen before launch, this will break
+        Queue q = DBOSContext.dbosInstance().get().Queue("childQ").build();
         for (int i = 0; i < 3; i++) {
 
             String wid = "child" + i;
@@ -169,7 +166,7 @@ public class SimpleServiceImpl implements SimpleService {
 
         WorkflowHandle<String> handle = null;
         try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-            handle = dbos
+            handle = DBOSContext.dbosInstance().get()
                     .startWorkflow(() -> simpleService.childWorkflowWithSleep(input, sleepSeconds));
         }
 

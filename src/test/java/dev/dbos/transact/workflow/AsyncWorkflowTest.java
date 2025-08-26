@@ -55,7 +55,7 @@ public class AsyncWorkflowTest {
     public void setWorkflowId() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos)).async()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl()).async()
                 .build();
 
         String wfid = "wf-123";
@@ -79,7 +79,7 @@ public class AsyncWorkflowTest {
     public void sameWorkflowId() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos)).async()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl()).async()
                 .build();
 
         SimpleServiceImpl.executionCount = 0;
@@ -131,7 +131,7 @@ public class AsyncWorkflowTest {
     public void workflowWithError() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         WorkflowHandle<Void> handle = null;
@@ -162,7 +162,7 @@ public class AsyncWorkflowTest {
     public void childWorkflowWithoutSet() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         simpleService.setSimpleService(simpleService);
@@ -195,7 +195,7 @@ public class AsyncWorkflowTest {
     public void multipleChildren() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         simpleService.setSimpleService(simpleService);
@@ -243,7 +243,7 @@ public class AsyncWorkflowTest {
     public void nestedChildren() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         simpleService.setSimpleService(simpleService);
@@ -285,7 +285,7 @@ public class AsyncWorkflowTest {
     public void startWorkflowClosure() {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         String wfid = "wf-123";

@@ -250,7 +250,7 @@ class DBOSExecutorTest {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl(dbos)).build();
+                .implementation(new ExecutingServiceImpl()).build();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -278,7 +278,7 @@ class DBOSExecutorTest {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl(dbos)).build();
+                .implementation(new ExecutingServiceImpl()).build();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);

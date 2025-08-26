@@ -56,7 +56,7 @@ public class EventsTest {
     public void basic_set_get() throws Exception {
 
         EventsService eventService = dbos.<EventsService>Workflow()
-                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl(dbos))
+                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .build();
 
         try (SetWorkflowID id = new SetWorkflowID("id1")) {
@@ -77,7 +77,7 @@ public class EventsTest {
     public void multipleEvents() throws Exception {
 
         EventsService eventService = dbos.<EventsService>Workflow()
-                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl(dbos))
+                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .build();
 
         try (SetWorkflowID id = new SetWorkflowID("id1")) {
@@ -98,7 +98,7 @@ public class EventsTest {
     public void async_set_get() throws Exception {
 
         EventsService eventService = dbos.<EventsService>Workflow()
-                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl(dbos))
+                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .async().build();
 
         try (SetWorkflowID id = new SetWorkflowID("id1")) {
@@ -117,7 +117,7 @@ public class EventsTest {
     public void notification() throws Exception {
 
         EventsService eventService = dbos.<EventsService>Workflow()
-                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl(dbos))
+                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .async().build();
 
         try (SetWorkflowID id = new SetWorkflowID("id2")) {
@@ -154,7 +154,7 @@ public class EventsTest {
     public void concurrency() throws Exception {
 
         EventsService eventService = dbos.<EventsService>Workflow()
-                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl(dbos))
+                .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .build();
 
         ExecutorService executor = Executors.newFixedThreadPool(2);

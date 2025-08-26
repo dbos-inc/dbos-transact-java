@@ -58,7 +58,7 @@ class NotificationServiceTest {
     public void basic_send_recv() throws Exception {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).async().build();
+                .implementation(new NotServiceImpl()).async().build();
 
         String wfid1 = "recvwf1";
 
@@ -95,7 +95,7 @@ class NotificationServiceTest {
     public void multiple_send_recv() throws Exception {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).async().build();
+                .implementation(new NotServiceImpl()).async().build();
 
         String wfid1 = "recvwf1";
 
@@ -130,7 +130,7 @@ class NotificationServiceTest {
     public void notopic() throws Exception {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).async().build();
+                .implementation(new NotServiceImpl()).async().build();
 
         String wfid1 = "recvwf1";
 
@@ -168,7 +168,7 @@ class NotificationServiceTest {
     public void sendNotexistingID() throws Exception {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).build();
+                .implementation(new NotServiceImpl()).build();
 
         // just to open the latch
         try (SetWorkflowID id = new SetWorkflowID("abc")) {
@@ -189,7 +189,7 @@ class NotificationServiceTest {
     public void sendNull() throws Exception {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).async().build();
+                .implementation(new NotServiceImpl()).async().build();
 
         String wfid1 = "recvwf1";
 
@@ -217,7 +217,7 @@ class NotificationServiceTest {
     public void timeout() {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).build();
+                .implementation(new NotServiceImpl()).build();
 
         String wfid1 = "recvwf1";
 
@@ -237,7 +237,7 @@ class NotificationServiceTest {
         String topic = "test_topic";
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).build();
+                .implementation(new NotServiceImpl()).build();
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
@@ -273,7 +273,7 @@ class NotificationServiceTest {
     public void recv_sleep() throws Exception {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).async().build();
+                .implementation(new NotServiceImpl()).async().build();
 
         String wfid1 = "recvwf1";
 
@@ -314,7 +314,7 @@ class NotificationServiceTest {
     public void sendOutsideWFTest() throws Exception {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl(dbos)).build();
+                .implementation(new NotServiceImpl()).build();
 
         String wfid1 = "recvwf1";
 

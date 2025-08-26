@@ -12,7 +12,6 @@ import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
