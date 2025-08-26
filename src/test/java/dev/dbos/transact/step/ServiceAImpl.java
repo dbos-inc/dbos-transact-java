@@ -19,8 +19,7 @@ public class ServiceAImpl implements ServiceA {
     @Workflow(name = "workflowWithSteps")
     public String workflowWithSteps(String input) {
 
-        DBOSContext ctx = DBOSContextHolder.get();
-        String wfid = ctx.getWorkflowId();
+        String wfid = DBOSContext.workflowId().get();
 
         serviceBproxy.step1("one");
         serviceBproxy.step2("two");

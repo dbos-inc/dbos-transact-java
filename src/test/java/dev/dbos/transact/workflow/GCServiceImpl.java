@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 
 import java.util.concurrent.CountDownLatch;
@@ -40,10 +41,7 @@ public class GCServiceImpl implements GCService {
             throw new RuntimeException(e);
         }
 
-        // TODO: should we be retrieving this directly from DBOS Context in Java?
-        // in TS & Python there is workflowID getter off the DBOS global static
-        // not sure what the plan is for Java
-        return DBOSContextHolder.get().getWorkflowId();
+        return DBOSContext.workflowId().get();
     }
 
     @Workflow
@@ -51,7 +49,7 @@ public class GCServiceImpl implements GCService {
         while (timeoutLatch.getCount() > 0) {
             dbos.sleep(0.1f);
         }
-        return DBOSContextHolder.get().getWorkflowId();
+        return DBOSContext.workflowId().get();
     }
 
 }

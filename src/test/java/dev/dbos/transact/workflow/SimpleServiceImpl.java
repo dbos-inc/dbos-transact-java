@@ -110,7 +110,7 @@ public class SimpleServiceImpl implements SimpleService {
     @Workflow(name = "syncWithQueued")
     public String syncWithQueued() {
 
-        System.out.println("In syncWithQueued " + DBOSContextHolder.get().getWorkflowId());
+        System.out.println("In syncWithQueued " + DBOSContext.workflowId().get());
 
         // TODO: when we require WF/Q registration to happen before launch, this will break
         Queue q = DBOSContext.dbosInstance().get().Queue("childQ").build();

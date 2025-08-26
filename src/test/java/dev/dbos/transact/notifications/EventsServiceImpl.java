@@ -35,7 +35,7 @@ public class EventsServiceImpl implements EventsService {
     @Workflow(name = "setWithLatch")
     public void setWithLatch(String key, String value) {
         try {
-            System.out.println("workflowId is" + DBOSContextHolder.get().getWorkflowId() + " "
+            System.out.println("workflowId is" + DBOSContext.workflowId().get() + " "
                     + DBOSContextHolder.get().isInWorkflow());
             getReadyLatch.await();
             Thread.sleep(1000); // delay so that get goes and awaits notification
