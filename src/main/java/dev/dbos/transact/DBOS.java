@@ -56,6 +56,8 @@ public class DBOS {
         queueService = new QueueService(systemDatabase, dbosExecutor);
         queueService.setDbosExecutor(dbosExecutor);
         schedulerService = new SchedulerService(dbosExecutor);
+
+        DBOSContextHolder.clear();
     }
 
     /**
