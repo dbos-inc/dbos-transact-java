@@ -37,14 +37,12 @@ val branchName: String by lazy {
     }
 }
 
-val isLocalPublish = gradle.startParameter.taskNames.any { it.endsWith("ToMavenLocal") }
-
 // Note, this versioning scheme is fine for preview releases
 // but we'll want something more robust once we want to bump
 // the major or minor version number
 val baseVersion = System.getenv("BASE_VERSION") ?: "0.5"
 val safeBranchName = if (branchName == "main" || branchName == "HEAD") "" else ".${branchName.replace("/", "-")}"
-version = if (isLocalPublish) "$baseVersion-SNAPSHOT" else "$baseVersion.$commitCount-preview+g$gitHash$safeBranchName"
+version = "$baseVersion.$commitCount-preview+g$gitHash$safeBranchName"
 
 println("Project version: $version") // prints when Gradle evaluates the build
 
@@ -58,8 +56,7 @@ plugins {
 group = "dev.dbos"
 
 tasks.withType<JavaCompile> {
-    options.release.set(11) // Targets Java 11 bytecode (RECOMMENDED)
-    // (Alternative: sourceCompatibility = "11"; targetCompatibility = "11")
+    options.release.set(17) // Targets Java 17 bytecode
 }
 
 java {
