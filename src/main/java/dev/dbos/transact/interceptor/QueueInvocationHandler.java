@@ -1,5 +1,6 @@
 package dev.dbos.transact.interceptor;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.queue.Queue;
@@ -17,7 +18,7 @@ public class QueueInvocationHandler extends BaseInvocationHandler {
     private final Queue queue;
 
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation, Queue queue,
-            DBOSExecutor executor) {
+            DBOS dbos, DBOSExecutor executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
@@ -41,13 +42,13 @@ public class QueueInvocationHandler extends BaseInvocationHandler {
 
         T proxy = (T) Proxy.newProxyInstance(interfaceClass.getClassLoader(),
                 new Class<?>[]{interfaceClass},
-                new QueueInvocationHandler(implementation, queue, executor));
+                new QueueInvocationHandler(implementation, queue, dbos, executor));
 
         return proxy;
     }
 
-    public QueueInvocationHandler(Object target, Queue queue, DBOSExecutor dbosExecutor) {
-        super(target, dbosExecutor);
+    public QueueInvocationHandler(Object target, Queue queue, DBOS dbos, DBOSExecutor dbosExecutor) {
+        super(target, dbos, dbosExecutor);
         this.queue = queue;
     }
 

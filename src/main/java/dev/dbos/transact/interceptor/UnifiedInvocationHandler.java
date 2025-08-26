@@ -1,5 +1,6 @@
 package dev.dbos.transact.interceptor;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -18,7 +19,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
     @SuppressWarnings("unchecked")
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation,
-            DBOSExecutor executor) {
+            DBOS dbos, DBOSExecutor executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
@@ -42,13 +43,13 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
         T proxy = (T) Proxy.newProxyInstance(interfaceClass.getClassLoader(),
                 new Class<?>[]{interfaceClass},
-                new UnifiedInvocationHandler(implementation, executor));
+                new UnifiedInvocationHandler(implementation, dbos, executor));
 
         return proxy;
     }
 
-    protected UnifiedInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
-        super(target, dbosExecutor);
+    protected UnifiedInvocationHandler(Object target, DBOS dbos, DBOSExecutor dbosExecutor) {
+        super(target, dbos, dbosExecutor);
     }
 
     protected Object submitWorkflow(String workflowName, String targetClassName,
