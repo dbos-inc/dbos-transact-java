@@ -1,8 +1,6 @@
 package dev.dbos.transact.notifications;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.util.concurrent.CountDownLatch;
@@ -35,8 +33,7 @@ public class EventsServiceImpl implements EventsService {
     @Workflow(name = "setWithLatch")
     public void setWithLatch(String key, String value) {
         try {
-            System.out.println("workflowId is" + DBOSContext.workflowId().get() + " "
-                    + DBOSContextHolder.get().isInWorkflow());
+            System.out.printf("workflowId is %s %b%n", DBOSContext.workflowId().get(), DBOSContext.inWorkflow());
             getReadyLatch.await();
             Thread.sleep(1000); // delay so that get goes and awaits notification
             DBOSContext.dbosInstance().get().setEvent(key, value);

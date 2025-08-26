@@ -1,8 +1,6 @@
 package dev.dbos.transact.workflow;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -112,7 +110,8 @@ public class SimpleServiceImpl implements SimpleService {
 
         System.out.println("In syncWithQueued " + DBOSContext.workflowId().get());
 
-        // TODO: when we require WF/Q registration to happen before launch, this will break
+        // TODO: when we require WF/Q registration to happen before launch, this will
+        // break
         Queue q = DBOSContext.dbosInstance().get().Queue("childQ").build();
         for (int i = 0; i < 3; i++) {
 

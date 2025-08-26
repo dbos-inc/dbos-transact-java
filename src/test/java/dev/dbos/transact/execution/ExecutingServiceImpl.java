@@ -1,6 +1,5 @@
 package dev.dbos.transact.execution;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;

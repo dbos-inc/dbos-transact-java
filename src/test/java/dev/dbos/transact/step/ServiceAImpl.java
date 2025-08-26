@@ -1,7 +1,6 @@
 package dev.dbos.transact.step;
 
 import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.workflow.Workflow;
 
 public class ServiceAImpl implements ServiceA {

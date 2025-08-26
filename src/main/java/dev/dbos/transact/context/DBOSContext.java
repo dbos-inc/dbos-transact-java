@@ -61,7 +61,6 @@ public class DBOSContext {
 
     private DBOSContext(DBOS dbos, String workflowId, int functionId, String parentWorkflowId,
             int parentFunctionId, boolean inWorkflow, boolean async, Queue q, long timeout) {
-        Objects.requireNonNull(dbos);
         this.dbos = dbos;
         this.workflowId = workflowId;
         this.functionId = functionId;
@@ -75,7 +74,6 @@ public class DBOSContext {
 
     private DBOSContext(DBOS dbos, String childWorkflowId, String parentWorkflowId, int parentFunctionId,
             boolean async, Queue queue, long workflowTimeout) {
-        Objects.requireNonNull(dbos);
         this.dbos = dbos;
         this.workflowId = childWorkflowId;
         this.parentWorkflowId = parentWorkflowId;
@@ -88,7 +86,6 @@ public class DBOSContext {
 
     private DBOSContext(DBOS dbos, WorkflowOptions options, String parentWorkflowId, int parentFunctionId,
             long parentTimeout) {
-        Objects.requireNonNull(dbos);
         this.dbos = dbos;
         this.workflowId = options.getWorkflowId();
         this.parentWorkflowId = parentWorkflowId;
@@ -216,5 +213,10 @@ public class DBOSContext {
     public static Optional<DBOS> dbosInstance() {
         var holder = DBOSContextHolder.get();
         return holder == null ? Optional.empty() : Optional.ofNullable(holder.dbos);
+    }
+
+    public static boolean inWorkflow() {
+        var holder = DBOSContextHolder.get();
+        return holder == null ? false : holder.inWorkflow;
     }
 }
