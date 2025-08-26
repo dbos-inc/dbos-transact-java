@@ -216,7 +216,7 @@ public class DBOS {
     }
 
     public void launch() {
-        dbosExecutor.start();
+        dbosExecutor.start(this);
 
         logger.info("Executor ID: {}", dbosExecutor.getExecutorId());
         logger.info("Application version: {}", dbosExecutor.getAppVersion());

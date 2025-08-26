@@ -2,6 +2,7 @@ package dev.dbos.transact.execution;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -48,6 +49,7 @@ public class DBOSExecutor {
     private String appVersion;
     private String executorId;
 
+    private DBOS dbos;
     private SystemDatabase systemDatabase;
     private ExecutorService executorService;
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
@@ -80,7 +82,9 @@ public class DBOSExecutor {
         this.queueService = queueService;
     }
 
-    public void start() {
+    public void start(DBOS dbos) {
+
+        this.dbos = dbos;
 
         this.executorId = System.getenv("DBOS__VMID");
         if (this.executorId == null) {
@@ -104,6 +108,8 @@ public class DBOSExecutor {
         // workflowRegistry = null;
         // executorService.shutdownNow();
         // systemDatabase.destroy();
+
+        this.dbos = null;
 
         if (notificationService != null) {
             notificationService.stop();
@@ -523,7 +529,10 @@ public class DBOSExecutor {
 
         WorkflowHandle<?> handle = null;
         try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
-            DBOSContextHolder.get().setInWorkflow(true);
+            var ctx = DBOSContextHolder.get();
+            ctx.setInWorkflow(true);
+            ctx.setDbos(dbos);
+            
             try {
                 handle = submitWorkflow(status.getName(),
                         functionWrapper.targetClassName,
