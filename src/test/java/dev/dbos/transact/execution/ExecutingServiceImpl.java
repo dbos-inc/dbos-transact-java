@@ -1,6 +1,6 @@
 package dev.dbos.transact.execution;
 
-import dev.dbos.transact.DBOS;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 
@@ -9,14 +9,8 @@ public class ExecutingServiceImpl implements ExecutingService {
     private ExecutingService executingService;
     public static int step1Count = 0;
     public static int step2Count = 0;
-    public final DBOS dbos;
-
-    public ExecutingServiceImpl(DBOS dbos) {
-        this.dbos = dbos;
-    }
 
     public ExecutingServiceImpl() {
-        dbos = null;
     }
 
     public void setExecutingService(ExecutingService service) {
@@ -49,6 +43,6 @@ public class ExecutingServiceImpl implements ExecutingService {
 
     @Workflow(name = "sleepingWorkflow")
     public void sleepingWorkflow(float seconds) {
-        dbos.sleep(seconds);
+        DBOSContext.dbosInstance().get().sleep(seconds);
     }
 }

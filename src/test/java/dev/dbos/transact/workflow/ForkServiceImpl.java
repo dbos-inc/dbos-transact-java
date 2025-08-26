@@ -1,13 +1,12 @@
 package dev.dbos.transact.workflow;
 
-import dev.dbos.transact.DBOS;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 
 public class ForkServiceImpl implements ForkService {
 
     private ForkService forkService;
-    private DBOS dbos;
 
     public int step1Count;
     public int step2Count;
@@ -16,10 +15,6 @@ public class ForkServiceImpl implements ForkService {
     public int step5Count;
     public int child1Count;
     public int child2Count;
-
-    public ForkServiceImpl(DBOS d) {
-        this.dbos = d;
-    }
 
     public void setForkService(ForkService s) {
         this.forkService = s;
@@ -56,6 +51,7 @@ public class ForkServiceImpl implements ForkService {
 
     @Workflow(name = "parentasync")
     public String parentChildAsync(String input) {
+        var dbos = DBOSContext.dbosInstance().get();
 
         forkService.stepOne("one");
         forkService.stepTwo(2);

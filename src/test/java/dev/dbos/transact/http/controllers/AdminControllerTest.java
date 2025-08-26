@@ -88,7 +88,7 @@ class AdminControllerTest {
                 .build();
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         // Needed to call the step
@@ -239,7 +239,7 @@ class AdminControllerTest {
                 .build();
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         // Needed to call the step
@@ -325,7 +325,7 @@ class AdminControllerTest {
     @Test
     public void fork() throws Exception {
 
-        ForkServiceImpl impl = new ForkServiceImpl(dbos);
+        ForkServiceImpl impl = new ForkServiceImpl();
 
         ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
                 .implementation(impl).build();

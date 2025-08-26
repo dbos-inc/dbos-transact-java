@@ -57,7 +57,7 @@ public class UnifiedProxyTest {
     public void optionsWithCall() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         // synchronous
@@ -108,7 +108,7 @@ public class UnifiedProxyTest {
     public void syncParentWithQueuedChildren() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl(dbos))
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         simpleService.setSimpleService(simpleService);

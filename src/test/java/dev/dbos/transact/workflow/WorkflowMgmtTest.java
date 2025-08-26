@@ -231,7 +231,7 @@ public class WorkflowMgmtTest {
     @Test
     public void testFork() {
 
-        ForkServiceImpl impl = new ForkServiceImpl(dbos);
+        ForkServiceImpl impl = new ForkServiceImpl();
 
         ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
                 .implementation(impl).build();
@@ -304,7 +304,7 @@ public class WorkflowMgmtTest {
     @Test
     public void testParentChildFork() {
 
-        ForkServiceImpl impl = new ForkServiceImpl(dbos);
+        ForkServiceImpl impl = new ForkServiceImpl();
 
         ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
                 .implementation(impl).build();
@@ -401,7 +401,7 @@ public class WorkflowMgmtTest {
     @Test
     public void testParentChildAsyncFork() {
 
-        ForkServiceImpl impl = new ForkServiceImpl(dbos);
+        ForkServiceImpl impl = new ForkServiceImpl();
 
         ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
                 .implementation(impl).build();

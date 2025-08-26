@@ -56,6 +56,8 @@ public class DBOS {
         queueService = new QueueService(systemDatabase, dbosExecutor);
         queueService.setDbosExecutor(dbosExecutor);
         schedulerService = new SchedulerService(dbosExecutor);
+
+        DBOSContextHolder.clear();
     }
 
     /**
@@ -211,7 +213,7 @@ public class DBOS {
     }
 
     public void launch() {
-        dbosExecutor.start();
+        dbosExecutor.start(this);
 
         logger.info("Executor ID: {}", dbosExecutor.getExecutorId());
         logger.info("Application version: {}", dbosExecutor.getAppVersion());

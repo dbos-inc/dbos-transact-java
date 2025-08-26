@@ -1,6 +1,6 @@
 package dev.dbos.transact.notifications;
 
-import dev.dbos.transact.DBOS;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.util.concurrent.CountDownLatch;
@@ -10,16 +10,10 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class NotServiceImpl {
 
-    private final DBOS dbos;
-
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition condition = lock.newCondition();
     private final AtomicInteger counter = new AtomicInteger(0);
     private final CountDownLatch recvReadyLatch = new CountDownLatch(1);
-
-    public NotServiceImpl(DBOS dbos) {
-        this.dbos = dbos;
-    }
 
     @Workflow(name = "sendWorkflow")
     public void sendWorkflow(String target, String topic, String msg) {
@@ -27,7 +21,7 @@ public class NotServiceImpl {
             // Wait for recv to signal that it's ready
             recvReadyLatch.await();
             // Now proceed with sending
-            dbos.send(target, msg, topic);
+            DBOSContext.dbosInstance().get().send(target, msg, topic);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while waiting for recv signal", e);
@@ -38,13 +32,14 @@ public class NotServiceImpl {
     @Workflow(name = "recvWorkflow")
     public String recvWorkflow(String topic, float timeoutSecond) {
         recvReadyLatch.countDown();
-        String msg = (String) dbos.recv(topic, timeoutSecond);
+        String msg = (String) DBOSContext.dbosInstance().get().recv(topic, timeoutSecond);
         return msg;
     }
 
     @Workflow(name = "recvMultiple")
     public String recvMultiple(String topic) {
         recvReadyLatch.countDown();
+        var dbos = DBOSContext.dbosInstance().get();
         String msg1 = (String) dbos.recv(topic, 5);
         String msg2 = (String) dbos.recv(topic, 5);
         String msg3 = (String) dbos.recv(topic, 5);
@@ -67,7 +62,7 @@ public class NotServiceImpl {
                 }
             } else {
                 // Notify the other one
-                String message = (String) dbos.recv(topic, 5);
+                String message = (String) DBOSContext.dbosInstance().get().recv(topic, 5);
                 condition.signalAll();
                 return message;
             }
@@ -75,7 +70,7 @@ public class NotServiceImpl {
             lock.unlock();
         }
 
-        String message = (String) dbos.recv(topic, 5);
+        String message = (String) DBOSContext.dbosInstance().get().recv(topic, 5);
         return message;
     }
 }
