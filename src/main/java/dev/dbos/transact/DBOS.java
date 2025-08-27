@@ -9,11 +9,14 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RecoveryService;
 import dev.dbos.transact.execution.WorkflowFunction;
+import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.http.HttpServer;
 import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
+import dev.dbos.transact.internal.QueueRegistry;
+import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
@@ -24,6 +27,7 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;
 
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -33,6 +37,11 @@ import org.slf4j.LoggerFactory;
 public class DBOS {
 
     static Logger logger = LoggerFactory.getLogger(DBOS.class);
+
+    private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
+    private final QueueRegistry queueRegistry = new QueueRegistry();
+
+
 
     private final DBOSConfig config;
     private final SystemDatabase systemDatabase;
@@ -54,7 +63,6 @@ public class DBOS {
         systemDatabase = new SystemDatabase(config);
         dbosExecutor = new DBOSExecutor(config, systemDatabase);
         queueService = new QueueService(systemDatabase, dbosExecutor);
-        queueService.setDbosExecutor(dbosExecutor);
         schedulerService = new SchedulerService(dbosExecutor);
 
         DBOSContextHolder.clear();
@@ -88,6 +96,24 @@ public class DBOS {
 
     SchedulerService getSchedulerService() {
         return schedulerService;
+    }
+
+    void clearRegistry() {
+        workflowRegistry.clear();
+        queueRegistry.clear();
+    }
+
+
+    public void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
+        workflowRegistry.register(workflowName, target, targetClassName, method);
+    }
+
+    public WorkflowFunctionWrapper getWorkflow(String workflowName) {
+        return workflowRegistry.get(workflowName);
+    }
+
+    public void register(Queue queue) {
+        queueRegistry.register(queue);
     }
 
     public <T> WorkflowBuilder<T> Workflow() {
@@ -194,9 +220,9 @@ public class DBOS {
         }
 
         public Queue build() {
-            Queue q = Queue.createQueue(name, concurrency, workerConcurrency, limit, priorityEnabled);
-            dbos.queueService.register(q);
-            return q;
+            Queue queue = Queue.createQueue(name, concurrency, workerConcurrency, limit, priorityEnabled);
+            dbos.queueRegistry.register(queue);
+            return queue;
         }
     }
 

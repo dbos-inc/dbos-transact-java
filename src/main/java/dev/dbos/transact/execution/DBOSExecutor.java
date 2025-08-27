@@ -53,8 +53,6 @@ public class DBOSExecutor {
     private SystemDatabase systemDatabase;
     private ExecutorService executorService;
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
-    private WorkflowRegistry workflowRegistry;
-    private QueueService queueService;
     private NotificationService notificationService;
 
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
@@ -63,7 +61,6 @@ public class DBOSExecutor {
         this.config = config;
         this.systemDatabase = sysdb;
         this.executorService = Executors.newCachedThreadPool();
-        this.workflowRegistry = new WorkflowRegistry();
     }
 
     public String getAppName() {
@@ -78,10 +75,6 @@ public class DBOSExecutor {
         return this.appVersion;
     }
 
-    public void setQueueService(QueueService queueService) {
-        this.queueService = queueService;
-    }
-
     public void start(DBOS dbos) {
 
         this.dbos = dbos;
@@ -92,10 +85,10 @@ public class DBOSExecutor {
         }
 
         this.appVersion = System.getenv("DBOS__APPVERSION");
-        if (this.appVersion == null) {
-            Set<Class<?>> registeredClasses = this.getRegisteredClasses();
-            this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
-        }
+        // if (this.appVersion == null) {
+        //     Set<Class<?>> registeredClasses = this.getRegisteredClasses();
+        //     this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
+        // }
 
         if (notificationService == null) {
             notificationService = systemDatabase.getNotificationService();
@@ -114,15 +107,6 @@ public class DBOSExecutor {
         if (notificationService != null) {
             notificationService.stop();
         }
-    }
-
-    public void registerWorkflow(String workflowName, Object target, String targetClassName,
-            Method method) {
-        workflowRegistry.register(workflowName, target, targetClassName, method);
-    }
-
-    public WorkflowFunctionWrapper getWorkflow(String workflowName) {
-        return workflowRegistry.get(workflowName);
     }
 
     WorkflowHandle<?> recoverWorkflow(GetPendingWorkflowsOutput output) throws Exception {
@@ -176,12 +160,12 @@ public class DBOSExecutor {
         return handles;
     }
 
-    public List<Queue> getAllQueuesSnapshot() {
-        if (queueService == null) {
-            throw new IllegalStateException("QueueService not set in DBOSExecutor");
-        }
-        return queueService.getAllQueuesSnapshot();
-    }
+    // public List<Queue> getAllQueuesSnapshot() {
+    //     if (queueService == null) {
+    //         throw new IllegalStateException("QueueService not set in DBOSExecutor");
+    //     }
+    //     return queueService.getAllQueuesSnapshot();
+    // }
 
     public WorkflowInitResult preInvokeWorkflow(String workflowName, String className,
             Object[] inputs, String workflowId, String queueName) {
@@ -529,7 +513,7 @@ public class DBOSExecutor {
         }
 
         Object[] inputs = status.getInput();
-        WorkflowFunctionWrapper functionWrapper = workflowRegistry.get(status.getName());
+        WorkflowFunctionWrapper functionWrapper = null; //workflowRegistry.get(status.getName());
 
         if (functionWrapper == null) {
             throw new WorkflowFunctionNotFoundException(workflowId);
@@ -638,9 +622,9 @@ public class DBOSExecutor {
         }
     }
 
-    public Set<Class<?>> getRegisteredClasses() {
-        return workflowRegistry.getClasses();
-    }
+    // public Set<Class<?>> getRegisteredClasses() {
+    //     return workflowRegistry.getClasses();
+    // }
 
     public void globalTimeout(Long cutoff) {
         OffsetDateTime endTime = Instant.ofEpochMilli(cutoff).atOffset(ZoneOffset.UTC);

@@ -32,10 +32,10 @@ public class QueueInvocationHandler extends BaseInvocationHandler {
                         : wfAnnotation.name();
                 method.setAccessible(true); // In case it's not public
 
-                executor.registerWorkflow(workflowName,
-                        implementation,
-                        implementation.getClass().getName(),
-                        method);
+                // executor.registerWorkflow(workflowName,
+                //         implementation,
+                //         implementation.getClass().getName(),
+                //         method);
             }
         }
 

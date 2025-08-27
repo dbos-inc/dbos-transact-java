@@ -62,10 +62,10 @@ public class SchedulerService {
                         ? method.getName()
                         : wfAnnotation.name();
                 // register with dbosExecutor for recovery
-                dbosExecutor.registerWorkflow(workflowName,
-                        implementation,
-                        implementation.getClass().getName(),
-                        method);
+                // dbosExecutor.registerWorkflow(workflowName,
+                //         implementation,
+                //         implementation.getClass().getName(),
+                //         method);
                 String cron = scheduled.cron();
                 scheduleRecurringWorkflow(workflowName, implementation, method, cron);
             }
@@ -79,7 +79,7 @@ public class SchedulerService {
         Cron cron = cronParser.parse(cronExpr);
         ExecutionTime executionTime = ExecutionTime.forCron(cron);
 
-        WorkflowFunctionWrapper wrapper = dbosExecutor.getWorkflow(workflowName);
+        WorkflowFunctionWrapper wrapper = null; //dbosExecutor.getWorkflow(workflowName);
         if (wrapper == null) {
             throw new IllegalStateException("Workflow not registered: " + workflowName);
         }

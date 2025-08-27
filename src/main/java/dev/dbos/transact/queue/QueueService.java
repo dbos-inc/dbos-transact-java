@@ -21,28 +21,17 @@ public class QueueService {
     private DBOSExecutor dbosExecutor;
     private volatile boolean running = false;
     private Thread workerThread;
-    private QueueRegistry queueRegistry;
     private CountDownLatch shutdownLatch;
 
     private Queue internalQueue;
 
     public QueueService(SystemDatabase systemDatabase, DBOSExecutor dbosExecutor) {
         this.systemDatabase = systemDatabase;
-        queueRegistry = new QueueRegistry();
         this.dbosExecutor = dbosExecutor;
-    }
-
-    public void setDbosExecutor(DBOSExecutor dbosExecutor) {
-        this.dbosExecutor = dbosExecutor;
-        dbosExecutor.setQueueService(this);
     }
 
     public void setInternalQueue(Queue internalQueue) {
         this.internalQueue = internalQueue;
-    }
-
-    public void register(Queue queue) {
-        queueRegistry.register(queue.getName(), queue);
     }
 
     private void pollForWorkflows() {
@@ -72,7 +61,7 @@ public class QueueService {
                     break;
                 }
 
-                List<Queue> queuesList = queueRegistry.getAllQueuesSnapshot();
+                List<Queue> queuesList = null; //queueRegistry.getAllQueuesSnapshot();
 
                 for (Queue queue : queuesList) {
 
@@ -160,7 +149,7 @@ public class QueueService {
         return shutdownLatch != null && shutdownLatch.getCount() == 0 && !workerThread.isAlive();
     }
 
-    public List<Queue> getAllQueuesSnapshot() {
-        return queueRegistry.getAllQueuesSnapshot();
-    }
+    // public List<Queue> getAllQueuesSnapshot() {
+    //     return queueRegistry.getAllQueuesSnapshot();
+    // }
 }
