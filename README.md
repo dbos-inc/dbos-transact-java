@@ -90,8 +90,7 @@ public class Demo {
                 .build() ;
         // Remember to export the DB password to the env variable PGPASSWORD
 
-        DBOS.initialize(dbosConfig);
-        DBOS dbos = DBOS.getInstance();
+        DBOS dbos = DBOS.initialize(dbosConfig);
         dbos.launch();
         
         WorkflowService syncExample = dbos.<WorkflowService>Workflow()
@@ -142,7 +141,7 @@ They don't require a separate queueing service or message broker&mdash;just Post
 
 
  public void queuedTasks() {
-     Queue q = new DBOS.QueueBuilder("childQ").build();
+     Queue q = dbos.Queue("childQ").build();
 
      for (int i = 0; i < 3; i++) {
 
@@ -216,16 +215,6 @@ Schedule workflows using cron syntax, or use durable sleep to pause workflows fo
 
 You can schedule a workflow using a single annotation:
 
-```python
-@DBOS.scheduled('* * * * *') # crontab syntax to run once every minute
-@DBOS.workflow()
-def example_scheduled_workflow(scheduled_time: datetime, actual_time: datetime):
-    DBOS.logger.info("I am a workflow scheduled to run once a minute.")
-```
-
-You can add a durable sleep to any workflow with a single line of code.
-It stores its wakeup time in Postgres so the workflow sleeps through any interruption or restart, then always resumes on schedule.
-
 ```java
 
 public class SchedulerImpl {
@@ -258,6 +247,9 @@ For example, build a reliable billing workflow that durably waits for a notifica
 ```java
 @workflow(name = "billing")
 public void billingWorkflow() {
+    // retrieve DBOS instance from context
+    var dbos = DBOSContext.dbosInstance().get();
+
     // Calculate the charge, then submit the bill to a payments service
     String payment_status = (String) dbos.recv(PAYMENT_STATUS, timeout = payment_service_timeout);
     if (payment_status.equals("paid")) {
@@ -269,6 +261,7 @@ public void billingWorkflow() {
 
 @workflow(name = "payment") 
 public void payment() {
+    var dbos = DBOSContext.dbosInstance().get();
     dbos.send(targetWorkflowId, PAYMENT_STATUS, "paid") ;
 }
       
