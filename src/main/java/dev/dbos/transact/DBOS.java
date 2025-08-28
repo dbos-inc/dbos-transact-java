@@ -29,6 +29,7 @@ import dev.dbos.transact.workflow.*;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
@@ -162,6 +163,8 @@ public class DBOS {
                 throw new IllegalStateException("Interface and implementation must be set");
             }
 
+            dbos.registerWorkflow(interfaceClass, implementation);
+
             if (async) {
                 return AsyncInvocationHandler.createProxy(interfaceClass,
                         implementation,
@@ -226,6 +229,29 @@ public class DBOS {
             return queue;
         }
     }
+
+    private void registerWorkflow(Class<?> interfaceClass, Object implementation) {
+        Objects.nonNull(interfaceClass);
+        if (!interfaceClass.isInterface()) {
+            throw new IllegalArgumentException("interfaceClass must be an interface");
+        }
+        Objects.nonNull(implementation);
+
+        Method[] methods = implementation.getClass().getDeclaredMethods();
+        for (Method method : methods) {
+            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
+            if (wfAnnotation != null) {
+                String workflowName = wfAnnotation.name().isEmpty()
+                        ? method.getName()
+                        : wfAnnotation.name();
+                method.setAccessible(true); // In case it's not public
+
+                registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
+            }
+        }
+
+    }
+
 
     private void registerInternals() {
         internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
