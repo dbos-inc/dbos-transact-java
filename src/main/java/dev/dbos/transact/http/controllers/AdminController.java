@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
 @Path("/")
 public class AdminController {
 
-
     private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
 
     private final SystemDatabase systemDatabase;

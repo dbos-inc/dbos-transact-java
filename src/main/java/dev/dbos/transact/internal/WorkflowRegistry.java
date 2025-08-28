@@ -1,11 +1,11 @@
 package dev.dbos.transact.internal;
 
+import dev.dbos.transact.execution.WorkflowFunctionReflect;
+import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
-import dev.dbos.transact.execution.WorkflowFunctionReflect;
-import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 
 public class WorkflowRegistry {
     private final ConcurrentHashMap<String, WorkflowFunctionWrapper> registry = new ConcurrentHashMap<>();
@@ -13,7 +13,8 @@ public class WorkflowRegistry {
     public void register(String workflowName, Object target, String targetClassName, Method method) {
 
         WorkflowFunctionReflect function = (t, args) -> method.invoke(t, args);
-        var previous = registry.putIfAbsent(workflowName, new WorkflowFunctionWrapper(target, targetClassName, function));
+        var previous = registry.putIfAbsent(workflowName,
+                new WorkflowFunctionWrapper(target, targetClassName, function));
 
         if (previous != null) {
             throw new IllegalStateException(
