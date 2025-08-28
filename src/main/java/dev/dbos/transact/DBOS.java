@@ -238,8 +238,8 @@ public class DBOS {
     }
 
     private void registerWorkflow(Class<?> interfaceClass, Object implementation) {
-        Objects.nonNull(interfaceClass);
-        Objects.nonNull(implementation);
+        Objects.requireNonNull(interfaceClass);
+        Objects.requireNonNull(implementation);
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
