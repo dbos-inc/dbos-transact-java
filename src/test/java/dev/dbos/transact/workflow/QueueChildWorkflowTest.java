@@ -46,8 +46,6 @@ public class QueueChildWorkflowTest {
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-        dbos.launch();
     }
 
     @AfterEach
@@ -65,6 +63,8 @@ public class QueueChildWorkflowTest {
                 .queue(childQ).build();
 
         simpleService.setSimpleService(simpleService);
+
+        dbos.launch();
 
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
             simpleService.WorkflowWithMultipleChildren("123");
@@ -113,6 +113,8 @@ public class QueueChildWorkflowTest {
                 .queue(childQ).build();
 
         simpleService.setSimpleService(simpleService);
+
+        dbos.launch();
 
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
             simpleService.grandParent("123");

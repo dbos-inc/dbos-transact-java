@@ -40,7 +40,6 @@ class SchedulerServiceTest {
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
-        dbos.launch();
     }
 
     @AfterEach
@@ -55,6 +54,8 @@ class SchedulerServiceTest {
 
         EverySecWorkflow swf = new EverySecWorkflow();
         dbos.scheduleWorkflow(swf);
+        dbos.launch();
+
         Thread.sleep(5000);
         schedulerService.stop();
         Thread.sleep(1000);
@@ -69,6 +70,8 @@ class SchedulerServiceTest {
 
         EveryThirdSec swf = new EveryThirdSec();
         dbos.scheduleWorkflow(swf);
+        dbos.launch();
+
         Thread.sleep(5000);
         schedulerService.stop();
         Thread.sleep(1000);
@@ -83,6 +86,8 @@ class SchedulerServiceTest {
 
         MultipleWorkflows swf = new MultipleWorkflows();
         dbos.scheduleWorkflow(swf);
+        dbos.launch();
+
         Thread.sleep(5000);
         schedulerService.stop();
         Thread.sleep(1000);
@@ -100,6 +105,8 @@ class SchedulerServiceTest {
 
         TimedWorkflow swf = new TimedWorkflow();
         dbos.scheduleWorkflow(swf);
+        dbos.launch();
+
         Thread.sleep(5000);
         schedulerService.stop();
         Thread.sleep(1000);
@@ -149,6 +156,8 @@ class SchedulerServiceTest {
 
         WorkflowWithSteps swf = new WorkflowWithSteps(steps);
         dbos.scheduleWorkflow(swf);
+        dbos.launch();
+
         Thread.sleep(5000);
         schedulerService.stop();
         Thread.sleep(1000);

@@ -42,8 +42,6 @@ public class AsyncWorkflowTest {
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-        dbos.launch();
     }
 
     @AfterEach
@@ -57,6 +55,8 @@ public class AsyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl()).async()
                 .build();
+
+        dbos.launch();
 
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
@@ -81,6 +81,8 @@ public class AsyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl()).async()
                 .build();
+
+        dbos.launch();
 
         SimpleServiceImpl.executionCount = 0;
 
@@ -134,6 +136,8 @@ public class AsyncWorkflowTest {
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
+        dbos.launch();
+
         WorkflowHandle<Void> handle = null;
         String wfid = "abc";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
@@ -164,6 +168,8 @@ public class AsyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+
+        dbos.launch();
 
         simpleService.setSimpleService(simpleService);
 
@@ -197,6 +203,8 @@ public class AsyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+
+        dbos.launch();
 
         simpleService.setSimpleService(simpleService);
 
@@ -246,6 +254,8 @@ public class AsyncWorkflowTest {
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
+        dbos.launch();
+
         simpleService.setSimpleService(simpleService);
 
         WorkflowOptions options = new WorkflowOptions.Builder("wf-123456").build();
@@ -287,6 +297,8 @@ public class AsyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+
+        dbos.launch();
 
         String wfid = "wf-123";
         WorkflowHandle<String> handle = null;

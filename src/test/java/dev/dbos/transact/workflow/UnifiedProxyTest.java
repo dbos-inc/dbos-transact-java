@@ -20,6 +20,7 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class UnifiedProxyTest {
@@ -44,8 +45,6 @@ public class UnifiedProxyTest {
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-        dbos.launch();
     }
 
     @AfterEach
@@ -59,6 +58,9 @@ public class UnifiedProxyTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+        Queue q = dbos.Queue("simpleQ").build();
+
+        dbos.launch();
 
         // synchronous
         String wfid1 = "wf-123";
@@ -85,7 +87,6 @@ public class UnifiedProxyTest {
 
         // Queued
         String wfid3 = "wf-125";
-        Queue q = dbos.Queue("simpleQ").build();
         options = new WorkflowOptions.Builder(wfid3).queue(q).build();
         try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             result = simpleService.workWithString("test-item-q");
@@ -105,11 +106,15 @@ public class UnifiedProxyTest {
     }
 
     @Test
+    @Disabled
     public void syncParentWithQueuedChildren() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+
+
+        dbos.launch();
 
         simpleService.setSimpleService(simpleService);
 

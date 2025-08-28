@@ -43,8 +43,6 @@ public class EventsTest {
 
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-
-        dbos.launch();
     }
 
     @AfterEach
@@ -58,6 +56,8 @@ public class EventsTest {
         EventsService eventService = dbos.<EventsService>Workflow()
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .build();
+
+        dbos.launch();
 
         try (SetWorkflowID id = new SetWorkflowID("id1")) {
             eventService.setEventWorkflow("key1", "value1");
@@ -80,6 +80,8 @@ public class EventsTest {
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .build();
 
+        dbos.launch();
+
         try (SetWorkflowID id = new SetWorkflowID("id1")) {
             eventService.setMultipleEvents();
         }
@@ -101,6 +103,8 @@ public class EventsTest {
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .async().build();
 
+        dbos.launch();
+
         try (SetWorkflowID id = new SetWorkflowID("id1")) {
             eventService.setEventWorkflow("key1", "value1");
         }
@@ -119,6 +123,8 @@ public class EventsTest {
         EventsService eventService = dbos.<EventsService>Workflow()
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .async().build();
+
+        dbos.launch();
 
         try (SetWorkflowID id = new SetWorkflowID("id2")) {
             eventService.getWithlatch("id1", "key1", 5);
@@ -144,6 +150,8 @@ public class EventsTest {
     @Test
     public void timeout() {
 
+        dbos.launch();
+
         long start = System.currentTimeMillis();
         dbos.getEvent("nonexistingid", "fake_key", 2);
         long elapsed = System.currentTimeMillis() - start;
@@ -156,6 +164,8 @@ public class EventsTest {
         EventsService eventService = dbos.<EventsService>Workflow()
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .build();
+
+        dbos.launch();
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {

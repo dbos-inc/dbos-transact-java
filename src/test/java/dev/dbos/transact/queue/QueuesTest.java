@@ -62,8 +62,6 @@ public class QueuesTest {
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
         queueService = DBOSTestAccess.getQueueService(dbos);
-
-        dbos.launch();
     }
 
     @AfterEach
@@ -79,6 +77,8 @@ public class QueuesTest {
 
         ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl()).queue(firstQ).build();
+
+        dbos.launch();
 
         String id = "q1234";
 
@@ -141,17 +141,18 @@ public class QueuesTest {
     @Test
     void testListQueuedWorkflow() throws Exception {
 
+            Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
+            .build();
+
+        ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
+                .implementation(new ServiceQImpl()).build();
+        dbos.launch();
+
         queueService.stop();
         while (!queueService.isStopped()) {
             Thread.sleep(2000);
             logger.info("Waiting for queueService to stop");
         }
-
-        Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
-                .build();
-
-        ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
-                .implementation(new ServiceQImpl()).build();
 
         for (int i = 0; i < 5; i++) {
             String id = "wfid" + i;
@@ -222,6 +223,8 @@ public class QueuesTest {
         ServiceI serviceI = dbos.<ServiceI>Workflow().interfaceClass(ServiceI.class)
                 .implementation(new ServiceIImpl()).build();
 
+        dbos.launch();
+
         String id1 = "firstQ1234";
         String id2 = "second1234";
 
@@ -261,6 +264,8 @@ public class QueuesTest {
 
         ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl()).build();
+
+        dbos.launch();
 
         int numWaves = 3;
         int numTasks = numWaves * limit;
@@ -327,6 +332,12 @@ public class QueuesTest {
 
     @Test
     public void testWorkerConcurrency() throws Exception {
+
+                Queue qwithWCLimit = dbos.Queue("QwithWCLimit").concurrency(1)
+                .workerConcurrency(2).concurrency(3).build();
+
+                dbos.launch();
+
         String executorId = dbosExecutor.getExecutorId();
         String appVersion = dbosExecutor.getAppVersion();
 
@@ -335,9 +346,6 @@ public class QueuesTest {
             Thread.sleep(2000);
             logger.info("Waiting for queueService to stop");
         }
-
-        Queue qwithWCLimit = dbos.Queue("QwithWCLimit").concurrency(1)
-                .workerConcurrency(2).concurrency(3).build();
 
         WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal("xxx",
                 WorkflowState.SUCCESS, "OrderProcessingWorkflow",
@@ -398,6 +406,11 @@ public class QueuesTest {
 
     @Test
     public void testGlobalConcurrency() throws Exception {
+
+        Queue qwithWCLimit = dbos.Queue("QwithWCLimit").concurrency(1)
+                .workerConcurrency(2).concurrency(3).build();
+        dbos.launch();
+
         String executorId = dbosExecutor.getExecutorId();
         String appVersion = dbosExecutor.getAppVersion();
 
@@ -407,8 +420,6 @@ public class QueuesTest {
             logger.info("Waiting for queueService to stop");
         }
 
-        Queue qwithWCLimit = dbos.Queue("QwithWCLimit").concurrency(1)
-                .workerConcurrency(2).concurrency(3).build();
 
         WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal("xxx",
                 WorkflowState.SUCCESS, "OrderProcessingWorkflow",
@@ -475,6 +486,8 @@ public class QueuesTest {
 
         ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl()).build();
+
+        dbos.launch();
 
         String id = "q1234";
 

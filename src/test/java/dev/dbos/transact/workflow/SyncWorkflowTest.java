@@ -37,8 +37,6 @@ public class SyncWorkflowTest {
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-        dbos.launch();
     }
 
     @AfterEach
@@ -52,6 +50,8 @@ public class SyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+
+        dbos.launch();
 
         String result = simpleService.workWithString("test-item");
         assertEquals("Processed: test-item", result);
@@ -71,6 +71,8 @@ public class SyncWorkflowTest {
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
+        dbos.launch();
+
         try {
             simpleService.workWithError();
         } catch (Exception e) {
@@ -89,6 +91,8 @@ public class SyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+
+        dbos.launch();
 
         String result = null;
 
@@ -110,6 +114,8 @@ public class SyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+
+        dbos.launch();
 
         String result = null;
         SimpleServiceImpl.executionCount = 0;
@@ -152,6 +158,8 @@ public class SyncWorkflowTest {
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
+        dbos.launch();
+
         simpleService.setSimpleService(simpleService);
 
         String result = null;
@@ -184,6 +192,8 @@ public class SyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+
+        dbos.launch();
 
         simpleService.setSimpleService(simpleService);
 
@@ -232,6 +242,8 @@ public class SyncWorkflowTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+
+        dbos.launch();
 
         simpleService.setSimpleService(simpleService);
 
