@@ -60,10 +60,11 @@ public class DBOS {
 
     private DBOS(DBOSConfig config) {
         this.config = config;
+        var workflowMap = workflowRegistry.getSnapshot();
         systemDatabase = new SystemDatabase(config);
-        dbosExecutor = new DBOSExecutor(config, workflowRegistry.getSnapshot(), systemDatabase);
+        dbosExecutor = new DBOSExecutor(config, workflowMap, systemDatabase);
         queueService = new QueueService(queueRegistry.getSnapshot(), systemDatabase, dbosExecutor);
-        schedulerService = new SchedulerService(dbosExecutor);
+        schedulerService = new SchedulerService(workflowMap, dbosExecutor);
 
         DBOSContextHolder.clear();
     }

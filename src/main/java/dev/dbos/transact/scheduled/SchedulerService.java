@@ -14,6 +14,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -29,13 +30,16 @@ import org.slf4j.LoggerFactory;
 public class SchedulerService {
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
+    private final Map<String, WorkflowFunctionWrapper> workflowMap;
+
     private final DBOSExecutor dbosExecutor;
     private final CronParser cronParser;
     Logger logger = LoggerFactory.getLogger(SchedulerService.class);
     private volatile boolean stop = false;
     private Queue schedulerQueue;
 
-    public SchedulerService(DBOSExecutor dbosExecutor) {
+    public SchedulerService(Map<String, WorkflowFunctionWrapper> workflowMap, DBOSExecutor dbosExecutor) {
+        this.workflowMap = workflowMap;
         this.dbosExecutor = dbosExecutor;
         this.cronParser = new CronParser(
                 CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
@@ -79,7 +83,7 @@ public class SchedulerService {
         Cron cron = cronParser.parse(cronExpr);
         ExecutionTime executionTime = ExecutionTime.forCron(cron);
 
-        WorkflowFunctionWrapper wrapper = null; //dbosExecutor.getWorkflow(workflowName);
+        WorkflowFunctionWrapper wrapper = workflowMap.get(workflowName);
         if (wrapper == null) {
             throw new IllegalStateException("Workflow not registered: " + workflowName);
         }
