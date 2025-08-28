@@ -58,6 +58,7 @@ public class DBOS {
     private Queue schedulerQueue;
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
+    private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
     private DBOS(DBOSConfig config) {
         this.config = config;
@@ -104,7 +105,11 @@ public class DBOS {
         queueRegistry.clear();
     }
 
-    public void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
+    void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
+        if (isRunning.get()) {
+            throw new IllegalStateException("Cannot build a queue after DBOS is launched");
+        }
+
         workflowRegistry.register(workflowName, target, targetClassName, method);
     }
 
@@ -112,7 +117,11 @@ public class DBOS {
         return workflowRegistry.get(workflowName);
     }
 
-    public void register(Queue queue) {
+    void registerQueue(Queue queue) {
+        if (this.isRunning.get()) {
+            throw new IllegalStateException("Cannot build a queue after DBOS is launched");
+        }
+
         queueRegistry.register(queue);
     }
 
@@ -223,17 +232,20 @@ public class DBOS {
 
         public Queue build() {
             Queue queue = Queue.createQueue(name, concurrency, workerConcurrency, limit, priorityEnabled);
-            dbos.queueRegistry.register(queue);
+            dbos.registerQueue(queue);
             return queue;
         }
     }
 
     private void registerWorkflow(Class<?> interfaceClass, Object implementation) {
         Objects.nonNull(interfaceClass);
+        Objects.nonNull(implementation);
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
-        Objects.nonNull(implementation);
+        if (isRunning.get()) {
+            throw new IllegalStateException("Cannot build a queue after DBOS is launched");
+        }
 
         Method[] methods = implementation.getClass().getDeclaredMethods();
         for (Method method : methods) {
@@ -247,7 +259,6 @@ public class DBOS {
                 registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
             }
         }
-
     }
 
     private void registerInternals() {
@@ -302,14 +313,24 @@ public class DBOS {
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         recoveryService.start();
 
+        if (!isRunning.compareAndSet(false, true)) {
+            throw new RuntimeException("isRunning was already true");
+        }
+
     }
 
     public void shutdown() {
         logger.debug("shutdown() called");
 
+        if (!isRunning.compareAndSet(true, false)) {
+            logger.warn("isRunning was already false");
+        }
+
         if (isShutdown.compareAndSet(false, true)) {
 
-            recoveryService.stop();
+            if (recoveryService != null) {
+                recoveryService.stop();
+            }
 
             if (queueService != null) {
                 queueService.stop();
@@ -365,10 +386,10 @@ public class DBOS {
 
             Workflow wfAnnotation = method.getAnnotation(Workflow.class);
             String workflowName = wfAnnotation.name().isEmpty() ? method.getName() : wfAnnotation.name();
-            workflowRegistry.register(workflowName, implementation, implementation.getClass().getName(), method);
+            registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
 
             Scheduled scheduled = method.getAnnotation(Scheduled.class);
-            schedulerService.scheduleRecurringWorkflow(workflowName, implementation, method, scheduled.cron());
+            schedulerService.scheduleWorkflow(workflowName, implementation, scheduled.cron());
         }
     }
 
