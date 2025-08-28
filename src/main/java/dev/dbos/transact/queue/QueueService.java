@@ -17,7 +17,7 @@ public class QueueService {
 
     Logger logger = LoggerFactory.getLogger(QueueService.class);
 
-    private final List<Queue> queues;
+    private List<Queue> queues;
 
     private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
@@ -27,8 +27,7 @@ public class QueueService {
 
     private Queue internalQueue;
 
-    public QueueService(List<Queue> queues, SystemDatabase systemDatabase, DBOSExecutor dbosExecutor) {
-        this.queues = queues;
+    public QueueService(SystemDatabase systemDatabase, DBOSExecutor dbosExecutor) {
         this.systemDatabase = systemDatabase;
         this.dbosExecutor = dbosExecutor;
     }
@@ -92,7 +91,9 @@ public class QueueService {
         }
     }
 
-    public synchronized void start() {
+    public synchronized void start(List<Queue> queues) {
+
+        this.queues = queues;
 
         if (running) {
             logger.info("QueuesPollThread is already running.");
@@ -133,6 +134,8 @@ public class QueueService {
                 workerThread = null;
             }
         }
+
+        this.queues = null;
         logger.info("QueuePollThread stopped.");
     }
 

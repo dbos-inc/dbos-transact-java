@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 public class SchedulerService {
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
-    private final Map<String, WorkflowFunctionWrapper> workflowMap;
+    private Map<String, WorkflowFunctionWrapper> workflowMap;
 
     private final DBOSExecutor dbosExecutor;
     private final CronParser cronParser;
@@ -38,8 +38,7 @@ public class SchedulerService {
     private volatile boolean stop = false;
     private Queue schedulerQueue;
 
-    public SchedulerService(Map<String, WorkflowFunctionWrapper> workflowMap, DBOSExecutor dbosExecutor) {
-        this.workflowMap = workflowMap;
+    public SchedulerService(DBOSExecutor dbosExecutor) {
         this.dbosExecutor = dbosExecutor;
         this.cronParser = new CronParser(
                 CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
@@ -133,11 +132,13 @@ public class SchedulerService {
 
     public void stop() {
         stop = true;
+        this.workflowMap = null;
         List<Runnable> notRun = scheduler.shutdownNow();
         logger.info("Shutting down scheduler service. Tasks not run :" + notRun.size());
     }
 
-    public void start() {
+    public void start(Map<String, WorkflowFunctionWrapper> workflowMap) {
+        this.workflowMap = workflowMap;
         stop = false;
     }
 }

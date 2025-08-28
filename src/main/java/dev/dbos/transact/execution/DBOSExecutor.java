@@ -54,13 +54,12 @@ public class DBOSExecutor {
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
     private NotificationService notificationService;
 
-    private final Map<String, WorkflowFunctionWrapper> workflowMap;
+    private Map<String, WorkflowFunctionWrapper> workflowMap;
 
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
-    public DBOSExecutor(DBOSConfig config, Map<String, WorkflowFunctionWrapper> workflowMap, SystemDatabase sysdb) {
+    public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
         this.config = config;
-        this.workflowMap = workflowMap;
 
         this.systemDatabase = sysdb;
         this.executorService = Executors.newCachedThreadPool();
@@ -78,9 +77,10 @@ public class DBOSExecutor {
         return this.appVersion;
     }
 
-    public void start(DBOS dbos) {
+    public void start(DBOS dbos, Map<String, WorkflowFunctionWrapper> workflowMap) {
 
         this.dbos = dbos;
+        this.workflowMap = workflowMap;
 
         this.executorId = System.getenv("DBOS__VMID");
         if (this.executorId == null) {
@@ -107,6 +107,7 @@ public class DBOSExecutor {
         // executorService.shutdownNow();
         // systemDatabase.destroy();
 
+        this.workflowMap = null;
         this.dbos = null;
 
         if (notificationService != null) {

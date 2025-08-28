@@ -61,11 +61,10 @@ public class DBOS {
 
     private DBOS(DBOSConfig config) {
         this.config = config;
-        var workflowMap = workflowRegistry.getSnapshot();
         systemDatabase = new SystemDatabase(config);
-        dbosExecutor = new DBOSExecutor(config, workflowMap, systemDatabase);
-        queueService = new QueueService(queueRegistry.getSnapshot(), systemDatabase, dbosExecutor);
-        schedulerService = new SchedulerService(workflowMap, dbosExecutor);
+        dbosExecutor = new DBOSExecutor(config, systemDatabase);
+        queueService = new QueueService(systemDatabase, dbosExecutor);
+        schedulerService = new SchedulerService(dbosExecutor);
 
         DBOSContextHolder.clear();
     }
@@ -266,14 +265,15 @@ public class DBOS {
     }
 
     public void launch() {
-        dbosExecutor.start(this);
+        var workflowMap = workflowRegistry.getSnapshot();
+        dbosExecutor.start(this, workflowMap);
 
         logger.info("Executor ID: {}", dbosExecutor.getExecutorId());
         logger.info("Application version: {}", dbosExecutor.getAppVersion());
 
-        queueService.start();
+        queueService.start(queueRegistry.getSnapshot());
 
-        schedulerService.start();
+        schedulerService.start(workflowMap);
 
         String conductorKey = config.getConductorKey();
         if (conductorKey != null) {
