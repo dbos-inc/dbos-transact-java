@@ -138,7 +138,6 @@ public class TimeoutTest {
         String wfid1 = "wf-126";
         String result;
 
-
         WorkflowOptions options = new WorkflowOptions.Builder(wfid1).queue(simpleQ).timeout(3).build();
         WorkflowHandle<String> handle = null;
         try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
@@ -167,7 +166,6 @@ public class TimeoutTest {
         // make it timeout
         String wfid1 = "wf-127";
         String result;
-
 
         WorkflowOptions options = new WorkflowOptions.Builder(wfid1).queue(simpleQ).timeout(1).build();
         WorkflowHandle<String> handle = null;

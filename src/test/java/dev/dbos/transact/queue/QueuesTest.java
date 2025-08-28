@@ -141,8 +141,8 @@ public class QueuesTest {
     @Test
     void testListQueuedWorkflow() throws Exception {
 
-            Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
-            .build();
+        Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
+                .build();
 
         ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
                 .implementation(new ServiceQImpl()).build();
@@ -333,10 +333,10 @@ public class QueuesTest {
     @Test
     public void testWorkerConcurrency() throws Exception {
 
-                Queue qwithWCLimit = dbos.Queue("QwithWCLimit").concurrency(1)
+        Queue qwithWCLimit = dbos.Queue("QwithWCLimit").concurrency(1)
                 .workerConcurrency(2).concurrency(3).build();
 
-                dbos.launch();
+        dbos.launch();
 
         String executorId = dbosExecutor.getExecutorId();
         String appVersion = dbosExecutor.getAppVersion();
@@ -419,7 +419,6 @@ public class QueuesTest {
             Thread.sleep(2000);
             logger.info("Waiting for queueService to stop");
         }
-
 
         WorkflowStatusInternal wfStatusInternal = new WorkflowStatusInternal("xxx",
                 WorkflowState.SUCCESS, "OrderProcessingWorkflow",

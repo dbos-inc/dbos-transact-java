@@ -113,7 +113,6 @@ public class UnifiedProxyTest {
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
-
         dbos.launch();
 
         simpleService.setSimpleService(simpleService);

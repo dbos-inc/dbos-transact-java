@@ -4,7 +4,6 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.queue.Queue;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -114,11 +113,12 @@ public class SimpleServiceImpl implements SimpleService {
 
         // for (int i = 0; i < 3; i++) {
 
-        //     String wid = "child" + i;
-        //     WorkflowOptions options = new WorkflowOptions.Builder(wid).queue(testQueue).build();
-        //     try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-        //         simpleService.childWorkflow(wid);
-        //     }
+        // String wid = "child" + i;
+        // WorkflowOptions options = new
+        // WorkflowOptions.Builder(wid).queue(testQueue).build();
+        // try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+        // simpleService.childWorkflow(wid);
+        // }
         // }
 
         // return "QueuedChildren";
