@@ -54,13 +54,13 @@ public class DBOSExecutor {
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
     private NotificationService notificationService;
 
-    private final Map<String, WorkflowFunctionWrapper> workflowRegistry;
+    private final Map<String, WorkflowFunctionWrapper> workflowMap;
 
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
-    public DBOSExecutor(DBOSConfig config, Map<String, WorkflowFunctionWrapper> workflowRegistry, SystemDatabase sysdb) {
+    public DBOSExecutor(DBOSConfig config, Map<String, WorkflowFunctionWrapper> workflowMap, SystemDatabase sysdb) {
         this.config = config;
-        this.workflowRegistry = workflowRegistry;
+        this.workflowMap = workflowMap;
 
         this.systemDatabase = sysdb;
         this.executorService = Executors.newCachedThreadPool();
@@ -89,7 +89,7 @@ public class DBOSExecutor {
 
         this.appVersion = System.getenv("DBOS__APPVERSION");
         if (this.appVersion == null) {
-            List<Class<?>> registeredClasses = workflowRegistry.values().stream()
+            List<Class<?>> registeredClasses = workflowMap.values().stream()
                     .map(wrapper -> wrapper.target.getClass())
                     .collect(Collectors.toList());
             this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
@@ -511,7 +511,7 @@ public class DBOSExecutor {
         }
 
         Object[] inputs = status.getInput();
-        WorkflowFunctionWrapper functionWrapper = workflowRegistry.get(status.getName());
+        WorkflowFunctionWrapper functionWrapper = workflowMap.get(status.getName());
 
         if (functionWrapper == null) {
             throw new WorkflowFunctionNotFoundException(workflowId);
