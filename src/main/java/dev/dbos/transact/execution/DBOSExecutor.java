@@ -11,10 +11,9 @@ import dev.dbos.transact.database.NotificationService;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.QueueService;
-import dev.dbos.transact.utils.AppVersionComputer;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -27,18 +26,18 @@ import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,10 +54,14 @@ public class DBOSExecutor {
     private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
     private NotificationService notificationService;
 
+    private final Map<String, WorkflowFunctionWrapper> workflowRegistry;
+
     Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
-    public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
+    public DBOSExecutor(DBOSConfig config, Map<String, WorkflowFunctionWrapper> workflowRegistry, SystemDatabase sysdb) {
         this.config = config;
+        this.workflowRegistry = workflowRegistry;
+
         this.systemDatabase = sysdb;
         this.executorService = Executors.newCachedThreadPool();
     }
@@ -85,10 +88,12 @@ public class DBOSExecutor {
         }
 
         this.appVersion = System.getenv("DBOS__APPVERSION");
-        // if (this.appVersion == null) {
-        //     Set<Class<?>> registeredClasses = this.getRegisteredClasses();
-        //     this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
-        // }
+        if (this.appVersion == null) {
+            List<Class<?>> registeredClasses = workflowRegistry.values().stream()
+                    .map(wrapper -> wrapper.target.getClass())
+                    .collect(Collectors.toList());
+            this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
+        }
 
         if (notificationService == null) {
             notificationService = systemDatabase.getNotificationService();
@@ -159,13 +164,6 @@ public class DBOSExecutor {
         }
         return handles;
     }
-
-    // public List<Queue> getAllQueuesSnapshot() {
-    //     if (queueService == null) {
-    //         throw new IllegalStateException("QueueService not set in DBOSExecutor");
-    //     }
-    //     return queueService.getAllQueuesSnapshot();
-    // }
 
     public WorkflowInitResult preInvokeWorkflow(String workflowName, String className,
             Object[] inputs, String workflowId, String queueName) {
@@ -513,7 +511,7 @@ public class DBOSExecutor {
         }
 
         Object[] inputs = status.getInput();
-        WorkflowFunctionWrapper functionWrapper = null; //workflowRegistry.get(status.getName());
+        WorkflowFunctionWrapper functionWrapper = workflowRegistry.get(status.getName());
 
         if (functionWrapper == null) {
             throw new WorkflowFunctionNotFoundException(workflowId);
@@ -621,10 +619,6 @@ public class DBOSExecutor {
             DBOSContextHolder.set(oldctx);
         }
     }
-
-    // public Set<Class<?>> getRegisteredClasses() {
-    //     return workflowRegistry.getClasses();
-    // }
 
     public void globalTimeout(Long cutoff) {
         OffsetDateTime endTime = Instant.ofEpochMilli(cutoff).atOffset(ZoneOffset.UTC);

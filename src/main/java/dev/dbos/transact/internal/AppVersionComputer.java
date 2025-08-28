@@ -1,4 +1,4 @@
-package dev.dbos.transact.utils;
+package dev.dbos.transact.internal;
 
 import java.io.InputStream;
 import java.security.MessageDigest;
@@ -12,17 +12,13 @@ public class AppVersionComputer {
 
     static Logger logger = LoggerFactory.getLogger(AppVersionComputer.class);
 
-    public static String computeAppVersion(Set<Class<?>> registeredClasses) {
+    public static String computeAppVersion(List<Class<?>> registeredClasses) {
         try {
             MessageDigest hasher = MessageDigest.getInstance("SHA-256");
 
-            /*
-             * registry.values().stream() .map(wrapper -> wrapper.target.getClass())
-             * .collect(Collectors.toSet());
-             */
-
             // Sort by class name for deterministic ordering
             List<Class<?>> sortedClasses = registeredClasses.stream()
+                    .distinct()
                     .sorted(Comparator.comparing(Class::getName))
                     .collect(Collectors.toList());
 

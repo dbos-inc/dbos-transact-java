@@ -17,6 +17,8 @@ public class QueueService {
 
     Logger logger = LoggerFactory.getLogger(QueueService.class);
 
+    private final List<Queue> queues;
+
     private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
     private volatile boolean running = false;
@@ -25,7 +27,8 @@ public class QueueService {
 
     private Queue internalQueue;
 
-    public QueueService(SystemDatabase systemDatabase, DBOSExecutor dbosExecutor) {
+    public QueueService(List<Queue> queues, SystemDatabase systemDatabase, DBOSExecutor dbosExecutor) {
+        this.queues = queues;
         this.systemDatabase = systemDatabase;
         this.dbosExecutor = dbosExecutor;
     }
@@ -61,9 +64,7 @@ public class QueueService {
                     break;
                 }
 
-                List<Queue> queuesList = null; //queueRegistry.getAllQueuesSnapshot();
-
-                for (Queue queue : queuesList) {
+                for (Queue queue : queues) {
 
                     try {
 
@@ -148,8 +149,4 @@ public class QueueService {
         // We also check !workerThread.isAlive() as a final confirmation.
         return shutdownLatch != null && shutdownLatch.getCount() == 0 && !workerThread.isAlive();
     }
-
-    // public List<Queue> getAllQueuesSnapshot() {
-    //     return queueRegistry.getAllQueuesSnapshot();
-    // }
 }

@@ -1,9 +1,8 @@
 package dev.dbos.transact.internal;
 
 import java.lang.reflect.Method;
-import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import dev.dbos.transact.execution.WorkflowFunctionReflect;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
@@ -22,17 +21,15 @@ public class WorkflowRegistry {
         }
     }
 
+    public void clear() {
+        registry.clear();
+    }
+
     public WorkflowFunctionWrapper get(String workflowName) {
         return registry.get(workflowName);
     }
 
-    public Set<Class<?>> getClasses() {
-        return registry.values().stream()
-                .map(wrapper -> wrapper.target.getClass())
-                .collect(Collectors.toSet());
-    }
-
-    public void clear() {
-        registry.clear();
+    public Map<String, WorkflowFunctionWrapper> getSnapshot() {
+        return Map.copyOf(registry);
     }
 }

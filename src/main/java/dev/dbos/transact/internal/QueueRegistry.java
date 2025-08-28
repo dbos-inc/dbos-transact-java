@@ -30,7 +30,7 @@ public class QueueRegistry {
         registry.clear();
     }
 
-    public List<Queue> getQueues() {
+    public List<Queue> getSnapshot() {
         return List.copyOf(registry.values());
     }
 
