@@ -56,7 +56,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
         logger.info(msg);
 
-        WorkflowFunctionWrapper wrapper = null; //dbosExecutor.getWorkflow(workflowName);
+        WorkflowFunctionWrapper wrapper = dbosExecutor.getWorkflow(workflowName);
         if (wrapper == null) {
             throw new IllegalStateException("Workflow not registered: " + workflowName);
         }

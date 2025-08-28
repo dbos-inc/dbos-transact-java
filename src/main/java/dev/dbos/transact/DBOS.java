@@ -28,6 +28,8 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;
 
 import java.lang.reflect.Method;
+import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -41,8 +43,6 @@ public class DBOS {
 
     private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
     private final QueueRegistry queueRegistry = new QueueRegistry();
-
-
 
     private final DBOSConfig config;
     private final SystemDatabase systemDatabase;
@@ -103,7 +103,6 @@ public class DBOS {
         workflowRegistry.clear();
         queueRegistry.clear();
     }
-
 
     public void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
         workflowRegistry.register(workflowName, target, targetClassName, method);
@@ -251,7 +250,6 @@ public class DBOS {
 
     }
 
-
     private void registerInternals() {
         internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
                 .interfaceClass(InternalWorkflowsService.class)
@@ -273,7 +271,7 @@ public class DBOS {
 
         queueService.start(queueRegistry.getSnapshot());
 
-        schedulerService.start(workflowMap);
+        schedulerService.start();
 
         String conductorKey = config.getConductorKey();
         if (conductorKey != null) {
@@ -349,7 +347,29 @@ public class DBOS {
      *            instance of a class
      */
     public void scheduleWorkflow(Object implementation) {
-        schedulerService.scanAndSchedule(implementation);
+        var expectedParams = new Class<?>[]{Instant.class, Instant.class};
+
+        for (Method method : implementation.getClass().getDeclaredMethods()) {
+            if (!method.isAnnotationPresent(Workflow.class)) {
+                continue;
+            }
+            if (!method.isAnnotationPresent(Scheduled.class)) {
+                continue;
+            }
+
+            var paramTypes = method.getParameterTypes();
+            if (!Arrays.equals(paramTypes, expectedParams)) {
+                throw new IllegalArgumentException(
+                        "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)");
+            }
+
+            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
+            String workflowName = wfAnnotation.name().isEmpty() ? method.getName() : wfAnnotation.name();
+            workflowRegistry.register(workflowName, implementation, implementation.getClass().getName(), method);
+
+            Scheduled scheduled = method.getAnnotation(Scheduled.class);
+            schedulerService.scheduleRecurringWorkflow(workflowName, implementation, method, scheduled.cron());
+        }
     }
 
     /**

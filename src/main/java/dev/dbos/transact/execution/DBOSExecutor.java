@@ -103,7 +103,6 @@ public class DBOSExecutor {
 
     public void shutdown() {
         // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/51
-        // workflowRegistry = null;
         // executorService.shutdownNow();
         // systemDatabase.destroy();
 
@@ -113,6 +112,14 @@ public class DBOSExecutor {
         if (notificationService != null) {
             notificationService.stop();
         }
+    }
+
+    public WorkflowFunctionWrapper getWorkflow(String workflowName) {
+        if (workflowMap == null) {
+            throw new IllegalStateException("attempted to retrieve workflow from executor when DBOS not launched");
+        }
+
+        return workflowMap.get(workflowName);
     }
 
     WorkflowHandle<?> recoverWorkflow(GetPendingWorkflowsOutput output) throws Exception {

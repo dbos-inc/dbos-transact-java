@@ -4,17 +4,12 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.workflow.Scheduled;
-import dev.dbos.transact.workflow.Workflow;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -30,7 +25,6 @@ import org.slf4j.LoggerFactory;
 public class SchedulerService {
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
-    private Map<String, WorkflowFunctionWrapper> workflowMap;
 
     private final DBOSExecutor dbosExecutor;
     private final CronParser cronParser;
@@ -48,41 +42,14 @@ public class SchedulerService {
         this.schedulerQueue = schedulerQueue;
     }
 
-    public void scanAndSchedule(Object implementation) {
-        for (Method method : implementation.getClass().getDeclaredMethods()) {
-            if (method.isAnnotationPresent(Workflow.class)
-                    && method.isAnnotationPresent(Scheduled.class)) {
-
-                if (!Arrays.equals(method.getParameterTypes(),
-                        new Class<?>[]{Instant.class, Instant.class})) {
-                    throw new IllegalArgumentException(
-                            "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)");
-                }
-
-                Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-                Scheduled scheduled = method.getAnnotation(Scheduled.class);
-                String workflowName = wfAnnotation.name().isEmpty()
-                        ? method.getName()
-                        : wfAnnotation.name();
-                // register with dbosExecutor for recovery
-                // dbosExecutor.registerWorkflow(workflowName,
-                //         implementation,
-                //         implementation.getClass().getName(),
-                //         method);
-                String cron = scheduled.cron();
-                scheduleRecurringWorkflow(workflowName, implementation, method, cron);
-            }
-        }
-    }
-
-    private void scheduleRecurringWorkflow(String workflowName, Object instance, Method method,
+    public void scheduleRecurringWorkflow(String workflowName, Object instance, Method method,
             String cronExpr) {
 
         logger.info("Scheduling wf " + workflowName);
         Cron cron = cronParser.parse(cronExpr);
         ExecutionTime executionTime = ExecutionTime.forCron(cron);
 
-        WorkflowFunctionWrapper wrapper = workflowMap.get(workflowName);
+        WorkflowFunctionWrapper wrapper = dbosExecutor.getWorkflow(workflowName);
         if (wrapper == null) {
             throw new IllegalStateException("Workflow not registered: " + workflowName);
         }
@@ -132,13 +99,11 @@ public class SchedulerService {
 
     public void stop() {
         stop = true;
-        this.workflowMap = null;
         List<Runnable> notRun = scheduler.shutdownNow();
         logger.info("Shutting down scheduler service. Tasks not run :" + notRun.size());
     }
 
-    public void start(Map<String, WorkflowFunctionWrapper> workflowMap) {
-        this.workflowMap = workflowMap;
+    public void start() {
         stop = false;
     }
 }
