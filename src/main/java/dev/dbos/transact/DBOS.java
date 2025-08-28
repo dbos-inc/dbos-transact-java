@@ -262,7 +262,7 @@ public class DBOS {
 
         if (config.isHttp()) {
             httpServer = HttpServer.getInstance(config.getHttpPort(),
-                    new AdminController(systemDatabase, dbosExecutor));
+                    new AdminController(systemDatabase, dbosExecutor, queueRegistry.getSnapshot()));
             if (config.isHttpAwaitOnStart()) {
                 Thread httpThread = new Thread(() -> {
                     logger.info("Start http in background thread");
