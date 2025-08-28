@@ -244,7 +244,7 @@ public class DBOS {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
         if (isRunning.get()) {
-            throw new IllegalStateException("Cannot build a queue after DBOS is launched");
+            throw new IllegalStateException("Cannot register workflow after DBOS is launched");
         }
 
         Method[] methods = implementation.getClass().getDeclaredMethods();
