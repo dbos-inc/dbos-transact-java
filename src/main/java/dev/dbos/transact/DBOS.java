@@ -107,7 +107,7 @@ public class DBOS {
 
     void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
         if (isRunning.get()) {
-            throw new IllegalStateException("Cannot build a queue after DBOS is launched");
+            throw new IllegalStateException("Cannot register workflow after DBOS is launched");
         }
 
         workflowRegistry.register(workflowName, target, targetClassName, method);
