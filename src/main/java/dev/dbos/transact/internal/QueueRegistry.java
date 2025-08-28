@@ -18,7 +18,7 @@ public class QueueRegistry {
         var previous = registry.putIfAbsent(queueName, queue);
 
         if (previous != null) {
-            logger.warn("Queue {}} has already been registered.", queueName);
+            logger.warn("Queue {} has already been registered.", queueName);
         }
     }
 
