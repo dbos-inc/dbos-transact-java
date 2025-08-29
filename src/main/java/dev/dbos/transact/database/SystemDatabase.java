@@ -34,7 +34,7 @@ public class SystemDatabase implements AutoCloseable {
 
     private static Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
     private final HikariDataSource dataSource;
-    
+
     private final WorkflowDAO workflowDAO;
     private final StepsDAO stepsDAO;
     private final QueuesDAO queuesDAO;
@@ -62,7 +62,6 @@ public class SystemDatabase implements AutoCloseable {
     public void stop() {
         notificationService.stop();
     }
-
 
     /**
      * Get workflow result by workflow ID

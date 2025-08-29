@@ -12,11 +12,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
 
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.zaxxer.hikari.HikariDataSource;
 
 public class NotificationsDAO {
 
@@ -174,7 +172,8 @@ public class NotificationsDAO {
             if (!hasExistingNotification) {
                 // Wait for the notification
                 // Support OAOO sleep
-                double actualTimeout = StepsDAO.sleep(dataSource, workflowUuid,
+                double actualTimeout = StepsDAO.sleep(dataSource,
+                        workflowUuid,
                         timeoutFunctionId,
                         timeoutSeconds,
                         true);
@@ -375,7 +374,8 @@ public class NotificationsDAO {
                 double actualTimeout = timeoutSeconds;
                 if (callerCtx != null) {
                     // Support OAOO sleep for workflows
-                    actualTimeout = StepsDAO.sleep(dataSource, callerCtx.getWorkflowId(),
+                    actualTimeout = StepsDAO.sleep(dataSource,
+                            callerCtx.getWorkflowId(),
                             callerCtx.getTimeoutFunctionId(),
                             timeoutSeconds,
                             true // skip_sleep

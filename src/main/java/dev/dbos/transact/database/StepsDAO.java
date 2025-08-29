@@ -12,10 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.zaxxer.hikari.HikariDataSource;
 
 public class StepsDAO {
 
@@ -86,28 +85,25 @@ public class StepsDAO {
      * '_check_operation_execution_txn'.
      *
      * @param workflowId
-     *                     The UUID of the workflow.
+     *            The UUID of the workflow.
      * @param functionId
-     *                     The ID of the function/operation.
+     *            The ID of the function/operation.
      * @param functionName
-     *                     The expected name of the function/operation.
+     *            The expected name of the function/operation.
      * @param connection
-     *                     The active JDBC connection (corresponding to Python's
-     *                     'conn:
-     *                     sa.Connection').
+     *            The active JDBC connection (corresponding to Python's 'conn:
+     *            sa.Connection').
      * @return A {@link StepResult} object if the operation has completed, otherwise
      *         {@code null}.
      * @throws IllegalStateException
-     *                                    If the workflow does not exist in the
-     *                                    status table.
+     *             If the workflow does not exist in the status table.
      * @throws WorkflowCancelledException
-     *                                    If the workflow is in a cancelled status.
+     *             If the workflow is in a cancelled status.
      * @throws UnexpectedStepException
-     *                                    If the recorded function name for the
-     *                                    operation does not match
-     *                                    the provided name.
+     *             If the recorded function name for the operation does not match
+     *             the provided name.
      * @throws SQLException
-     *                                    For other database access errors.
+     *             For other database access errors.
      */
     public static StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName,
             Connection connection) throws SQLException, IllegalStateException,

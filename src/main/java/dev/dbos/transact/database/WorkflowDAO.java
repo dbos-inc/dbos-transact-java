@@ -17,10 +17,9 @@ import java.sql.*;
 import java.time.Instant;
 import java.util.*;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.zaxxer.hikari.HikariDataSource;
 
 public class WorkflowDAO {
 
