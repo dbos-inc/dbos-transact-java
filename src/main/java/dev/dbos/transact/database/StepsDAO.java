@@ -12,28 +12,32 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class StepsDAO {
 
-    private Logger logger = LoggerFactory.getLogger(StepsDAO.class);
-    private DataSource dataSource;
+    private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
+    private HikariDataSource dataSource;
 
-    StepsDAO(DataSource dataSource) {
+    StepsDAO(HikariDataSource dataSource) {
         this.dataSource = dataSource;
     }
 
-    public void recordStepResultTxn(StepResult result) throws SQLException {
+    public static void recordStepResultTxn(HikariDataSource dataSource, StepResult result) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         try (Connection connection = dataSource.getConnection();) {
             recordStepResultTxn(result, connection);
         }
+
     }
 
-    public void recordStepResultTxn(StepResult result, Connection connection) throws SQLException {
+    public static void recordStepResultTxn(StepResult result, Connection connection) throws SQLException {
+
         String sql = String.format(
                 "INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, output, error) "
                         + "VALUES (?, ?, ?, ?, ?)",
@@ -97,7 +101,7 @@ public class StepsDAO {
      * @throws SQLException
      *             For other database access errors.
      */
-    public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName,
+    public static StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName,
             Connection connection) throws SQLException, IllegalStateException,
             WorkflowCancelledException, UnexpectedStepException {
 
@@ -159,6 +163,11 @@ public class StepsDAO {
     }
 
     public List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
+
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
+
         String sqlTemplate = "SELECT function_id, function_name, output, error, child_workflow_id "
                 + "FROM %s.operation_outputs " + "WHERE workflow_uuid = ? "
                 + "ORDER BY function_id;";
@@ -220,6 +229,17 @@ public class StepsDAO {
 
     public double sleep(String workflowUuid, int functionId, double seconds, boolean skipSleep)
             throws SQLException {
+        return StepsDAO.sleep(dataSource, workflowUuid, functionId, seconds, skipSleep);
+    }
+
+    public static double sleep(HikariDataSource dataSource, String workflowUuid, int functionId, double seconds,
+            boolean skipSleep)
+            throws SQLException {
+
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
+
         String functionName = "DBOS.sleep";
 
         StepResult recordedOutput;
@@ -250,7 +270,7 @@ public class StepsDAO {
                 output.setOutput(JSONUtil.serialize(endTime));
                 output.setError(null);
 
-                recordStepResultTxn(output);
+                recordStepResultTxn(dataSource, output);
             } catch (DBOSWorkflowConflictException e) {
                 logger.error("Error recording sleep", e.getMessage());
             }

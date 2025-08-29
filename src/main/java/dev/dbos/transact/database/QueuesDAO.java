@@ -13,16 +13,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class QueuesDAO {
     Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
-    private DataSource dataSource;
+    private HikariDataSource dataSource;
 
-    QueuesDAO(DataSource ds) {
+    QueuesDAO(HikariDataSource ds) {
         dataSource = ds;
     }
 
@@ -39,6 +38,9 @@ public class QueuesDAO {
      */
     public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId,
             String appVersion) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         long startTimeMs = System.currentTimeMillis();
         Long limiterPeriodMs = null;
@@ -217,6 +219,7 @@ public class QueuesDAO {
                     updatePs.addBatch();
                     retIds.add(id);
                 }
+                // TODO: should we be checking updateCounts?
                 int[] updateCounts = updatePs.executeBatch();
             }
 
@@ -231,6 +234,10 @@ public class QueuesDAO {
 
     public List<WorkflowStatus> getQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput)
             throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
+
         StringBuilder queryBuilder = new StringBuilder();
         List<Object> parameters = new ArrayList<>();
 
@@ -377,6 +384,10 @@ public class QueuesDAO {
     }
 
     public boolean clearQueueAssignment(String workflowId) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
+
         String sqlTemplate = "UPDATE %s.workflow_status "
                 + "SET started_at_epoch_ms = NULL, status = ? "
                 + "WHERE workflow_uuid = ? AND queue_name is NOT NULL AND status = ?";

@@ -32,8 +32,8 @@ class SystemDatabaseTest {
     }
 
     @AfterAll
-    static void onetimeTearDown() {
-        systemDatabase.destroy();
+    static void onetimeTearDown() throws Exception {
+        systemDatabase.close();
     }
 
     @BeforeEach

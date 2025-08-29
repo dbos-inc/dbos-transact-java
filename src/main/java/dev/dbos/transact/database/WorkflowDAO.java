@@ -17,21 +17,24 @@ import java.sql.*;
 import java.time.Instant;
 import java.util.*;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class WorkflowDAO {
 
-    private final DataSource dataSource;
+    private final HikariDataSource dataSource;
     private final Logger logger = LoggerFactory.getLogger(WorkflowDAO.class);
 
-    WorkflowDAO(DataSource ds) {
+    WorkflowDAO(HikariDataSource ds) {
         dataSource = ds;
     }
 
     public Optional<String> getWorkflowResult(String workflowId) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
+
         final String sql = "SELECT status, output, error " + "FROM dbos.workflow_status "
                 + "WHERE workflow_uuid = ?;";
 
@@ -69,6 +72,9 @@ public class WorkflowDAO {
 
     public WorkflowInitResult initWorkflowStatus(WorkflowStatusInternal initStatus,
             Integer maxRetries) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         try (Connection connection = dataSource.getConnection()) {
 
@@ -149,6 +155,9 @@ public class WorkflowDAO {
      */
     public InsertWorkflowResult insertWorkflowStatus(Connection connection,
             WorkflowStatusInternal status) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         String insertSQL = "INSERT INTO dbos.workflow_status ("
                 + "workflow_uuid, status, name, class_name, config_name, "
@@ -214,6 +223,9 @@ public class WorkflowDAO {
 
     public void updateWorkflowStatus(Connection connection, String workflowID, String status,
             UpdateWorkflowOptions options) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         StringBuilder setClauseBuilder = new StringBuilder("SET status = ?, updated_at = ?");
         StringBuilder whereClauseBuilder = new StringBuilder("WHERE workflow_uuid = ?");
@@ -309,6 +321,9 @@ public class WorkflowDAO {
      *            output serialized as json
      */
     public void recordWorkflowOutput(String workflowId, String result) {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         try {
             try (Connection connection = dataSource.getConnection()) {
@@ -336,6 +351,9 @@ public class WorkflowDAO {
      *            output serialized as json
      */
     public void recordWorkflowError(String workflowId, String error) {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         try {
             try (Connection connection = dataSource.getConnection()) {
@@ -352,6 +370,9 @@ public class WorkflowDAO {
     }
 
     public WorkflowStatus getWorkflowStatus(String workflowId) {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         try {
             ListWorkflowsInput input = new ListWorkflowsInput();
@@ -368,6 +389,9 @@ public class WorkflowDAO {
     }
 
     public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         List<WorkflowStatus> workflows = new ArrayList<>();
 
@@ -532,6 +556,9 @@ public class WorkflowDAO {
 
     public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
             throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         String sqlTemplate = "SELECT workflow_uuid, queue_name " + "FROM %s.workflow_status "
                 + "WHERE status = ? " + "AND executor_id = ? " + "AND application_version = ?";
@@ -559,6 +586,9 @@ public class WorkflowDAO {
     }
 
     public Object awaitWorkflowResult(String workflowId) {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         final String sql = "SELECT status, output, error " + "FROM dbos.workflow_status "
                 + "WHERE workflow_uuid = ?";
@@ -614,6 +644,9 @@ public class WorkflowDAO {
                                                                      // child
             int functionId, // func id in the parent
             String functionName) {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         String sql = String.format(
                 "INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, child_workflow_id) "
@@ -645,6 +678,9 @@ public class WorkflowDAO {
 
     public Optional<String> checkChildWorkflow(String workflowUuid, int functionId)
             throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
         String sql = "SELECT child_workflow_id " + " FROM dbos.operation_outputs "
                 + "WHERE workflow_uuid = ? AND function_id = ? ";
 
@@ -667,6 +703,9 @@ public class WorkflowDAO {
     }
 
     public void cancelWorkflow(String workflowId) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         try (Connection conn = dataSource.getConnection()) {
 
@@ -707,6 +746,9 @@ public class WorkflowDAO {
     }
 
     public void resumeWorkflow(String workflowId) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
@@ -741,6 +783,9 @@ public class WorkflowDAO {
 
     public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options)
             throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         String forkedWorkflowId = options.getForkedWorkflowId() == null
                 ? UUID.randomUUID().toString()
@@ -786,7 +831,7 @@ public class WorkflowDAO {
         }
     }
 
-    private void insertForkedWorkflowStatus(Connection connection, String forkedWorkflowId,
+    private static void insertForkedWorkflowStatus(Connection connection, String forkedWorkflowId,
             WorkflowStatus originalStatus, String applicationVersion, long timeoutMs)
             throws SQLException {
 
@@ -826,7 +871,7 @@ public class WorkflowDAO {
         }
     }
 
-    private void copyOperationOutputs(Connection connection, String originalWorkflowId,
+    private static void copyOperationOutputs(Connection connection, String originalWorkflowId,
             String forkedWorkflowId, int startStep) throws SQLException {
 
         String sql = "INSERT INTO dbos.operation_outputs ( "
@@ -851,7 +896,7 @@ public class WorkflowDAO {
      * forkWorkflow(originalWorkflowId, forkedWorkflowId, startStep, null); }
      */
 
-    private String getWorkflowStatus(Connection connection, String workflowId) throws SQLException {
+    private static String getWorkflowStatus(Connection connection, String workflowId) throws SQLException {
         String sql = "SELECT status FROM dbos.workflow_status WHERE workflow_uuid = ?";
 
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -866,7 +911,7 @@ public class WorkflowDAO {
         }
     }
 
-    private void updateWorkflowToEnqueued(Connection connection, String workflowId)
+    private static void updateWorkflowToEnqueued(Connection connection, String workflowId)
             throws SQLException {
         String sql = "UPDATE dbos.workflow_status " + " SET status = ?, " + " queue_name = ?, "
                 + " recovery_attempts = ?, " + " workflow_deadline_epoch_ms = 0, "
@@ -883,7 +928,7 @@ public class WorkflowDAO {
         }
     }
 
-    private Long getRowsCutoff(Connection connection, long rowsThreshold) throws SQLException {
+    private static Long getRowsCutoff(Connection connection, long rowsThreshold) throws SQLException {
         String sql = "SELECT created_at FROM dbos.workflow_status ORDER BY created_at DESC OFFSET ? LIMIT 1";
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setLong(1, rowsThreshold - 1);
@@ -898,6 +943,10 @@ public class WorkflowDAO {
     }
 
     public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
+
         try (Connection connection = dataSource.getConnection()) {
             if (rowsThreshold != null) {
                 Long rowsCutoff = getRowsCutoff(connection, rowsThreshold);
