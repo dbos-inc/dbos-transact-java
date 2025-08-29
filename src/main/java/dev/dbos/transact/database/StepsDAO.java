@@ -25,10 +25,6 @@ public class StepsDAO {
         this.dataSource = dataSource;
     }
 
-    public void recordStepResultTxn(StepResult result) throws SQLException {
-        StepsDAO.recordStepResultTxn(dataSource, result);
-    }
-
     public static void recordStepResultTxn(HikariDataSource dataSource, StepResult result) throws SQLException {
         if (dataSource.isClosed()) {
             throw new IllegalStateException("Database is closed!");

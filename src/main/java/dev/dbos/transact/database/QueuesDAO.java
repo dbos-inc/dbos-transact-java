@@ -219,7 +219,8 @@ public class QueuesDAO {
                     updatePs.addBatch();
                     retIds.add(id);
                 }
-                updatePs.executeBatch();
+                // TODO: should we be checking updateCounts?
+                int[] updateCounts = updatePs.executeBatch();
             }
 
             connection.commit();

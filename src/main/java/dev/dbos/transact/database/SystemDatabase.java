@@ -185,7 +185,7 @@ public class SystemDatabase implements AutoCloseable {
     public void recordStepResultTxn(StepResult result) {
 
         try {
-            stepsDAO.recordStepResultTxn(result);
+            StepsDAO.recordStepResultTxn(dataSource, result);
         } catch (SQLException sq) {
             logger.error("Unexpected SQL exception", sq);
             throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
@@ -372,7 +372,7 @@ public class SystemDatabase implements AutoCloseable {
                     String jsonError = JSONUtil.serializeError(e);
                     StepResult r = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
                             null, jsonError);
-                    stepsDAO.recordStepResultTxn(r);
+                    StepsDAO.recordStepResultTxn(dataSource, r);
                 }
 
                 if (e instanceof NonExistentWorkflowException) {
@@ -388,7 +388,7 @@ public class SystemDatabase implements AutoCloseable {
                 String jsonOutput = JSONUtil.serialize(functionResult);
                 StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
                         jsonOutput, null);
-                stepsDAO.recordStepResultTxn(o);
+                StepsDAO.recordStepResultTxn(dataSource, o);
             }
         } catch (SQLException sq) {
             throw new DBOSException(UNEXPECTED.getCode(),
