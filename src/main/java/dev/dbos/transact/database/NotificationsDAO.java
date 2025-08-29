@@ -12,26 +12,29 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
 
-import javax.sql.DataSource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.zaxxer.hikari.HikariDataSource;
+
 public class NotificationsDAO {
 
     Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
-    private DataSource dataSource;
-    private StepsDAO stepsDAO;
+    private HikariDataSource dataSource;
     private NotificationService notificationService;
 
-    NotificationsDAO(DataSource ds, StepsDAO stepsDAO, NotificationService nService) {
+    NotificationsDAO(HikariDataSource ds, NotificationService nService) {
         this.dataSource = ds;
-        this.stepsDAO = stepsDAO;
         this.notificationService = nService;
     }
 
     public void send(String workflowUuid, int functionId, String destinationUuid, Object message,
             String topic) throws SQLException {
+
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
 
         String functionName = "DBOS.send";
         String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
@@ -41,7 +44,7 @@ public class NotificationsDAO {
 
             try {
                 // Check if operation was already executed
-                StepResult recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid,
+                StepResult recordedOutput = StepsDAO.checkStepExecutionTxn(workflowUuid,
                         functionId,
                         functionName,
                         conn);
@@ -91,7 +94,7 @@ public class NotificationsDAO {
                 output.setOutput(null);
                 output.setError(null);
 
-                stepsDAO.recordStepResultTxn(output, conn);
+                StepsDAO.recordStepResultTxn(output, conn);
 
                 conn.commit();
 
@@ -109,6 +112,10 @@ public class NotificationsDAO {
     public Object recv(String workflowUuid, int functionId, int timeoutFunctionId, String topic,
             double timeoutSeconds) throws SQLException, InterruptedException {
 
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
+
         String functionName = "DBOS.recv";
         String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
 
@@ -116,7 +123,7 @@ public class NotificationsDAO {
         StepResult recordedOutput = null;
 
         try (Connection c = dataSource.getConnection()) {
-            recordedOutput = stepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c);
+            recordedOutput = StepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c);
         }
 
         if (recordedOutput != null) {
@@ -167,7 +174,7 @@ public class NotificationsDAO {
             if (!hasExistingNotification) {
                 // Wait for the notification
                 // Support OAOO sleep
-                double actualTimeout = stepsDAO.sleep(workflowUuid,
+                double actualTimeout = StepsDAO.sleep(dataSource, workflowUuid,
                         timeoutFunctionId,
                         timeoutSeconds,
                         true);
@@ -224,7 +231,7 @@ public class NotificationsDAO {
                 output.setOutput(JSONUtil.serialize(toSave));
                 output.setError(null);
 
-                stepsDAO.recordStepResultTxn(output, conn);
+                StepsDAO.recordStepResultTxn(output, conn);
 
                 conn.commit();
                 return toSave;
@@ -238,6 +245,10 @@ public class NotificationsDAO {
 
     public void setEvent(String workflowId, int functionId, String key, Object message)
             throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
+
         String functionName = "DBOS.setEvent";
 
         try (Connection conn = dataSource.getConnection()) {
@@ -245,7 +256,7 @@ public class NotificationsDAO {
 
             try {
                 // Check if operation was already executed
-                StepResult recordedOutput = stepsDAO.checkStepExecutionTxn(workflowId,
+                StepResult recordedOutput = StepsDAO.checkStepExecutionTxn(workflowId,
                         functionId,
                         functionName,
                         conn);
@@ -284,7 +295,7 @@ public class NotificationsDAO {
                 output.setError(null);
 
                 // Record the operation result
-                stepsDAO.recordStepResultTxn(output, conn);
+                StepsDAO.recordStepResultTxn(output, conn);
 
                 conn.commit();
 
@@ -297,6 +308,9 @@ public class NotificationsDAO {
 
     public Object getEvent(String targetUuid, String key, double timeoutSeconds,
             GetWorkflowEventContext callerCtx) throws SQLException {
+        if (dataSource.isClosed()) {
+            throw new IllegalStateException("Database is closed!");
+        }
         String functionName = "DBOS.getEvent";
 
         // Check for previous executions only if it's in a workflow
@@ -305,7 +319,7 @@ public class NotificationsDAO {
             StepResult recordedOutput = null;
 
             try (Connection conn = dataSource.getConnection()) {
-                recordedOutput = stepsDAO.checkStepExecutionTxn(callerCtx.getWorkflowId(),
+                recordedOutput = StepsDAO.checkStepExecutionTxn(callerCtx.getWorkflowId(),
                         callerCtx.getFunctionId(),
                         functionName,
                         conn);
@@ -361,7 +375,7 @@ public class NotificationsDAO {
                 double actualTimeout = timeoutSeconds;
                 if (callerCtx != null) {
                     // Support OAOO sleep for workflows
-                    actualTimeout = stepsDAO.sleep(callerCtx.getWorkflowId(),
+                    actualTimeout = StepsDAO.sleep(dataSource, callerCtx.getWorkflowId(),
                             callerCtx.getTimeoutFunctionId(),
                             timeoutSeconds,
                             true // skip_sleep
@@ -408,7 +422,7 @@ public class NotificationsDAO {
                                                              // 'null'
                 output.setError(null);
 
-                stepsDAO.recordStepResultTxn(output);
+                StepsDAO.recordStepResultTxn(dataSource, output);
             }
 
             return value;

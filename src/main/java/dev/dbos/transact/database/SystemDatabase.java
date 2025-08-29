@@ -30,48 +30,39 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SystemDatabase {
+public class SystemDatabase implements AutoCloseable {
 
     private static Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
-    private DBOSConfig config;
-    private DataSource dataSource;
-    private WorkflowDAO workflowDAO;
-    private StepsDAO stepsDAO;
-    private QueuesDAO queuesDAO;
-    private NotificationService notificationService;
-    private NotificationsDAO notificationsDAO;
+    private final HikariDataSource dataSource;
+    
+    private final WorkflowDAO workflowDAO;
+    private final StepsDAO stepsDAO;
+    private final QueuesDAO queuesDAO;
+    private final NotificationsDAO notificationsDAO;
+    private final NotificationService notificationService;
 
-    public SystemDatabase(DBOSConfig cfg) {
-        config = cfg;
+    public SystemDatabase(DBOSConfig config) {
         dataSource = SystemDatabase.createDataSource(config, null);
         stepsDAO = new StepsDAO(dataSource);
         workflowDAO = new WorkflowDAO(dataSource);
         queuesDAO = new QueuesDAO(dataSource);
         notificationService = new NotificationService(dataSource);
-        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService);
+        notificationsDAO = new NotificationsDAO(dataSource, notificationService);
     }
 
-    public SystemDatabase(DataSource ds) {
-        this.dataSource = ds;
-        workflowDAO = new WorkflowDAO(dataSource);
-        stepsDAO = new StepsDAO(dataSource);
-        queuesDAO = new QueuesDAO(dataSource);
-        notificationService = new NotificationService(dataSource);
-        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, notificationService);
+    @Override
+    public void close() throws Exception {
+        dataSource.close();
     }
 
-    public synchronized void destroy() {
-        ((HikariDataSource) dataSource).close();
+    public void start() {
+        notificationService.start();
     }
 
-    public void setNotificationService(NotificationService service) {
-        notificationService = service;
-        notificationsDAO = new NotificationsDAO(dataSource, stepsDAO, service);
+    public void stop() {
+        notificationService.stop();
     }
 
-    public NotificationService getNotificationService() {
-        return notificationService;
-    }
 
     /**
      * Get workflow result by workflow ID
@@ -181,7 +172,7 @@ public class SystemDatabase {
 
         try {
             try (Connection connection = dataSource.getConnection()) {
-                return stepsDAO.checkStepExecutionTxn(workflowId,
+                return StepsDAO.checkStepExecutionTxn(workflowId,
                         functionId,
                         functionName,
                         connection);
@@ -358,7 +349,7 @@ public class SystemDatabase {
             StepResult result = null;
 
             try (Connection connection = dataSource.getConnection()) {
-                result = stepsDAO.checkStepExecutionTxn(ctx.getWorkflowId(),
+                result = StepsDAO.checkStepExecutionTxn(ctx.getWorkflowId(),
                         nextFuncId,
                         functionName,
                         connection);
@@ -432,7 +423,7 @@ public class SystemDatabase {
         }
     }
 
-    public static DataSource createDataSource(DBOSConfig config, String dbName) {
+    public static HikariDataSource createDataSource(DBOSConfig config, String dbName) {
         HikariConfig hikariConfig = new HikariConfig();
 
         if (dbName == null) {
@@ -473,7 +464,7 @@ public class SystemDatabase {
         return new HikariDataSource(hikariConfig);
     }
 
-    public static DataSource createPostgresDataSource(DBOSConfig config) {
+    public static HikariDataSource createPostgresDataSource(DBOSConfig config) {
         HikariConfig hikariConfig = new HikariConfig();
 
         String dburl = config.getUrl();

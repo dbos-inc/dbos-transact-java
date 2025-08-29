@@ -95,10 +95,7 @@ public class DBOSExecutor {
             this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
         }
 
-        if (notificationService == null) {
-            notificationService = systemDatabase.getNotificationService();
-        }
-        notificationService.start();
+        systemDatabase.start();
     }
 
     public void shutdown() {
@@ -106,12 +103,10 @@ public class DBOSExecutor {
         // executorService.shutdownNow();
         // systemDatabase.destroy();
 
+        systemDatabase.stop();
+
         this.workflowMap = null;
         this.dbos = null;
-
-        if (notificationService != null) {
-            notificationService.stop();
-        }
     }
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
