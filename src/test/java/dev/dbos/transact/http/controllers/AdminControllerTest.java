@@ -56,7 +56,6 @@ class AdminControllerTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         dbos = DBOS.initialize(dbosConfig);
-        dbos.launch();
     }
 
     @AfterEach
@@ -67,6 +66,7 @@ class AdminControllerTest {
     @Test
     public void health() throws Exception {
 
+        dbos.launch();
         HttpClient client = HttpClient.newHttpClient();
 
         HttpRequest request = HttpRequest.newBuilder()
@@ -90,6 +90,8 @@ class AdminControllerTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+
+        dbos.launch();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -147,6 +149,8 @@ class AdminControllerTest {
                 .priorityEnabled(true)
                 .build();
 
+        dbos.launch();
+
         given()
                 .port(3010)
                 .when()
@@ -172,6 +176,7 @@ class AdminControllerTest {
                 .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl())
                 .build();
+        dbos.launch();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -206,6 +211,7 @@ class AdminControllerTest {
                 .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl())
                 .build();
+        dbos.launch();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -241,6 +247,7 @@ class AdminControllerTest {
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
+        dbos.launch();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -330,6 +337,7 @@ class AdminControllerTest {
         ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
                 .implementation(impl).build();
         forkService.setForkService(forkService);
+        dbos.launch();
 
         String workflowId = "wfid1";
         try (SetWorkflowID id = new SetWorkflowID(workflowId)) {

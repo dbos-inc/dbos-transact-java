@@ -50,7 +50,6 @@ class DBOSExecutorTest {
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-        dbos.launch();
     }
 
     @AfterEach
@@ -64,6 +63,8 @@ class DBOSExecutorTest {
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
+
+        dbos.launch();
 
         String result = null;
 
@@ -96,6 +97,8 @@ class DBOSExecutorTest {
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
 
+        dbos.launch();
+
         String result = null;
 
         String wfid = "wf-123";
@@ -127,7 +130,7 @@ class DBOSExecutorTest {
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
-
+        dbos.launch();
         String result = null;
 
         String wfid = "wf-123";
@@ -162,6 +165,7 @@ class DBOSExecutorTest {
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
+        dbos.launch();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -204,6 +208,7 @@ class DBOSExecutorTest {
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
+        dbos.launch();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -251,6 +256,7 @@ class DBOSExecutorTest {
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl()).build();
+        dbos.launch();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -279,6 +285,7 @@ class DBOSExecutorTest {
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl()).build();
+        dbos.launch();
 
         // Needed to call the step
         executingService.setExecutingService(executingService);

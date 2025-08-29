@@ -22,13 +22,16 @@ import org.slf4j.LoggerFactory;
 @Path("/")
 public class AdminController {
 
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
-    Logger logger = LoggerFactory.getLogger(AdminController.class);
+    private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
 
-    public AdminController(SystemDatabase s, DBOSExecutor e) {
-        this.systemDatabase = s;
-        this.dbosExecutor = e;
+    private final SystemDatabase systemDatabase;
+    private final DBOSExecutor dbosExecutor;
+    private final List<Queue> queues;
+
+    public AdminController(SystemDatabase sysDb, DBOSExecutor exec, List<Queue> queues) {
+        this.systemDatabase = sysDb;
+        this.dbosExecutor = exec;
+        this.queues = queues;
     }
 
     @GET
@@ -86,7 +89,6 @@ public class AdminController {
     @Path("/dbos-workflow-queues-metadata")
     @Produces(MediaType.APPLICATION_JSON)
     public List<QueueMetadata> workflowQueuesMetadata() {
-        List<Queue> queues = dbosExecutor.getAllQueuesSnapshot();
         List<QueueMetadata> metadataList = new ArrayList<QueueMetadata>();
         for (Queue queue : queues) {
             metadataList.add(new QueueMetadata(queue));

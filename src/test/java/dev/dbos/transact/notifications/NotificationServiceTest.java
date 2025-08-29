@@ -45,8 +45,6 @@ class NotificationServiceTest {
         DBUtils.recreateDB(dbosConfig);
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-
-        dbos.launch();
     }
 
     @AfterEach
@@ -59,6 +57,8 @@ class NotificationServiceTest {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
                 .implementation(new NotServiceImpl()).async().build();
+
+        dbos.launch();
 
         String wfid1 = "recvwf1";
 
@@ -97,6 +97,8 @@ class NotificationServiceTest {
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
                 .implementation(new NotServiceImpl()).async().build();
 
+        dbos.launch();
+
         String wfid1 = "recvwf1";
 
         try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
@@ -132,6 +134,8 @@ class NotificationServiceTest {
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
                 .implementation(new NotServiceImpl()).async().build();
 
+        dbos.launch();
+
         String wfid1 = "recvwf1";
 
         try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
@@ -156,6 +160,8 @@ class NotificationServiceTest {
 
     @Test
     public void noWorkflowRecv() {
+
+        dbos.launch();
         try {
             dbos.recv("someTopic", 5);
             assertTrue(false);
@@ -169,6 +175,8 @@ class NotificationServiceTest {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
                 .implementation(new NotServiceImpl()).build();
+
+        dbos.launch();
 
         // just to open the latch
         try (SetWorkflowID id = new SetWorkflowID("abc")) {
@@ -190,6 +198,8 @@ class NotificationServiceTest {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
                 .implementation(new NotServiceImpl()).async().build();
+
+        dbos.launch();
 
         String wfid1 = "recvwf1";
 
@@ -219,6 +229,8 @@ class NotificationServiceTest {
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
                 .implementation(new NotServiceImpl()).build();
 
+        dbos.launch();
+
         String wfid1 = "recvwf1";
 
         long start = System.currentTimeMillis();
@@ -238,6 +250,8 @@ class NotificationServiceTest {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
                 .implementation(new NotServiceImpl()).build();
+
+        dbos.launch();
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
@@ -274,6 +288,8 @@ class NotificationServiceTest {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
                 .implementation(new NotServiceImpl()).async().build();
+
+        dbos.launch();
 
         String wfid1 = "recvwf1";
 
@@ -315,6 +331,8 @@ class NotificationServiceTest {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
                 .implementation(new NotServiceImpl()).build();
+
+        dbos.launch();
 
         String wfid1 = "recvwf1";
 

@@ -9,11 +9,14 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RecoveryService;
 import dev.dbos.transact.execution.WorkflowFunction;
+import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.http.HttpServer;
 import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
+import dev.dbos.transact.internal.QueueRegistry;
+import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
@@ -24,7 +27,11 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;
 
+import java.lang.reflect.Method;
+import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
@@ -33,6 +40,9 @@ import org.slf4j.LoggerFactory;
 public class DBOS {
 
     static Logger logger = LoggerFactory.getLogger(DBOS.class);
+
+    private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
+    private final QueueRegistry queueRegistry = new QueueRegistry();
 
     private final DBOSConfig config;
     private final SystemDatabase systemDatabase;
@@ -48,13 +58,13 @@ public class DBOS {
     private Queue schedulerQueue;
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
+    private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
     private DBOS(DBOSConfig config) {
         this.config = config;
         systemDatabase = new SystemDatabase(config);
         dbosExecutor = new DBOSExecutor(config, systemDatabase);
         queueService = new QueueService(systemDatabase, dbosExecutor);
-        queueService.setDbosExecutor(dbosExecutor);
         schedulerService = new SchedulerService(dbosExecutor);
 
         DBOSContextHolder.clear();
@@ -88,6 +98,31 @@ public class DBOS {
 
     SchedulerService getSchedulerService() {
         return schedulerService;
+    }
+
+    void clearRegistry() {
+        workflowRegistry.clear();
+        queueRegistry.clear();
+    }
+
+    void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
+        if (isRunning.get()) {
+            throw new IllegalStateException("Cannot register workflow after DBOS is launched");
+        }
+
+        workflowRegistry.register(workflowName, target, targetClassName, method);
+    }
+
+    public WorkflowFunctionWrapper getWorkflow(String workflowName) {
+        return workflowRegistry.get(workflowName);
+    }
+
+    void registerQueue(Queue queue) {
+        if (this.isRunning.get()) {
+            throw new IllegalStateException("Cannot build a queue after DBOS is launched");
+        }
+
+        queueRegistry.register(queue);
     }
 
     public <T> WorkflowBuilder<T> Workflow() {
@@ -134,6 +169,8 @@ public class DBOS {
             if (interfaceClass == null || implementation == null) {
                 throw new IllegalStateException("Interface and implementation must be set");
             }
+
+            dbos.registerWorkflow(interfaceClass, implementation);
 
             if (async) {
                 return AsyncInvocationHandler.createProxy(interfaceClass,
@@ -194,9 +231,33 @@ public class DBOS {
         }
 
         public Queue build() {
-            Queue q = Queue.createQueue(name, concurrency, workerConcurrency, limit, priorityEnabled);
-            dbos.queueService.register(q);
-            return q;
+            Queue queue = Queue.createQueue(name, concurrency, workerConcurrency, limit, priorityEnabled);
+            dbos.registerQueue(queue);
+            return queue;
+        }
+    }
+
+    private void registerWorkflow(Class<?> interfaceClass, Object implementation) {
+        Objects.requireNonNull(interfaceClass);
+        Objects.requireNonNull(implementation);
+        if (!interfaceClass.isInterface()) {
+            throw new IllegalArgumentException("interfaceClass must be an interface");
+        }
+        if (isRunning.get()) {
+            throw new IllegalStateException("Cannot register workflow after DBOS is launched");
+        }
+
+        Method[] methods = implementation.getClass().getDeclaredMethods();
+        for (Method method : methods) {
+            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
+            if (wfAnnotation != null) {
+                String workflowName = wfAnnotation.name().isEmpty()
+                        ? method.getName()
+                        : wfAnnotation.name();
+                method.setAccessible(true); // In case it's not public
+
+                registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
+            }
         }
     }
 
@@ -213,12 +274,13 @@ public class DBOS {
     }
 
     public void launch() {
-        dbosExecutor.start(this);
+        var workflowMap = workflowRegistry.getSnapshot();
+        dbosExecutor.start(this, workflowMap);
 
         logger.info("Executor ID: {}", dbosExecutor.getExecutorId());
         logger.info("Application version: {}", dbosExecutor.getAppVersion());
 
-        queueService.start();
+        queueService.start(queueRegistry.getSnapshot());
 
         schedulerService.start();
 
@@ -235,7 +297,7 @@ public class DBOS {
 
         if (config.isHttp()) {
             httpServer = HttpServer.getInstance(config.getHttpPort(),
-                    new AdminController(systemDatabase, dbosExecutor));
+                    new AdminController(systemDatabase, dbosExecutor, queueRegistry.getSnapshot()));
             if (config.isHttpAwaitOnStart()) {
                 Thread httpThread = new Thread(() -> {
                     logger.info("Start http in background thread");
@@ -251,14 +313,24 @@ public class DBOS {
         recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
         recoveryService.start();
 
+        if (!isRunning.compareAndSet(false, true)) {
+            throw new RuntimeException("isRunning was already true");
+        }
+
     }
 
     public void shutdown() {
         logger.debug("shutdown() called");
 
+        if (!isRunning.compareAndSet(true, false)) {
+            logger.warn("isRunning was already false");
+        }
+
         if (isShutdown.compareAndSet(false, true)) {
 
-            recoveryService.stop();
+            if (recoveryService != null) {
+                recoveryService.stop();
+            }
 
             if (queueService != null) {
                 queueService.stop();
@@ -296,7 +368,29 @@ public class DBOS {
      *            instance of a class
      */
     public void scheduleWorkflow(Object implementation) {
-        schedulerService.scanAndSchedule(implementation);
+        var expectedParams = new Class<?>[]{Instant.class, Instant.class};
+
+        for (Method method : implementation.getClass().getDeclaredMethods()) {
+            if (!method.isAnnotationPresent(Workflow.class)) {
+                continue;
+            }
+            if (!method.isAnnotationPresent(Scheduled.class)) {
+                continue;
+            }
+
+            var paramTypes = method.getParameterTypes();
+            if (!Arrays.equals(paramTypes, expectedParams)) {
+                throw new IllegalArgumentException(
+                        "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)");
+            }
+
+            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
+            String workflowName = wfAnnotation.name().isEmpty() ? method.getName() : wfAnnotation.name();
+            registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
+
+            Scheduled scheduled = method.getAnnotation(Scheduled.class);
+            schedulerService.scheduleWorkflow(workflowName, implementation, scheduled.cron());
+        }
     }
 
     /**

@@ -17,32 +17,23 @@ public class QueueService {
 
     Logger logger = LoggerFactory.getLogger(QueueService.class);
 
+    private List<Queue> queues;
+
     private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
     private volatile boolean running = false;
     private Thread workerThread;
-    private QueueRegistry queueRegistry;
     private CountDownLatch shutdownLatch;
 
     private Queue internalQueue;
 
     public QueueService(SystemDatabase systemDatabase, DBOSExecutor dbosExecutor) {
         this.systemDatabase = systemDatabase;
-        queueRegistry = new QueueRegistry();
         this.dbosExecutor = dbosExecutor;
-    }
-
-    public void setDbosExecutor(DBOSExecutor dbosExecutor) {
-        this.dbosExecutor = dbosExecutor;
-        dbosExecutor.setQueueService(this);
     }
 
     public void setInternalQueue(Queue internalQueue) {
         this.internalQueue = internalQueue;
-    }
-
-    public void register(Queue queue) {
-        queueRegistry.register(queue.getName(), queue);
     }
 
     private void pollForWorkflows() {
@@ -72,9 +63,7 @@ public class QueueService {
                     break;
                 }
 
-                List<Queue> queuesList = queueRegistry.getAllQueuesSnapshot();
-
-                for (Queue queue : queuesList) {
+                for (Queue queue : queues) {
 
                     try {
 
@@ -102,7 +91,9 @@ public class QueueService {
         }
     }
 
-    public synchronized void start() {
+    public synchronized void start(List<Queue> queues) {
+
+        this.queues = queues;
 
         if (running) {
             logger.info("QueuesPollThread is already running.");
@@ -143,6 +134,8 @@ public class QueueService {
                 workerThread = null;
             }
         }
+
+        this.queues = null;
         logger.info("QueuePollThread stopped.");
     }
 
@@ -158,9 +151,5 @@ public class QueueService {
         // has completed.
         // We also check !workerThread.isAlive() as a final confirmation.
         return shutdownLatch != null && shutdownLatch.getCount() == 0 && !workerThread.isAlive();
-    }
-
-    public List<Queue> getAllQueuesSnapshot() {
-        return queueRegistry.getAllQueuesSnapshot();
     }
 }

@@ -38,8 +38,6 @@ public class StepsTest {
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-        dbos.launch();
     }
 
     @AfterEach
@@ -55,6 +53,8 @@ public class StepsTest {
 
         ServiceA serviceA = dbos.<ServiceA>Workflow().interfaceClass(ServiceA.class)
                 .implementation(new ServiceAImpl(serviceB)).build();
+
+        dbos.launch();
 
         String wid = "sync123";
 
@@ -93,6 +93,8 @@ public class StepsTest {
         ServiceA serviceA = dbos.<ServiceA>Workflow().interfaceClass(ServiceA.class)
                 .implementation(new ServiceAImpl(serviceB)).build();
 
+        dbos.launch();
+
         String wid = "sync123er";
         try (SetWorkflowID id = new SetWorkflowID(wid)) {
             String result = serviceA.workflowWithStepError("hello");
@@ -117,6 +119,8 @@ public class StepsTest {
 
         ServiceA serviceA = dbos.<ServiceA>Workflow().interfaceClass(ServiceA.class)
                 .implementation(new ServiceAImpl(serviceB)).async().build();
+
+        dbos.launch();
 
         String workflowId = "wf-1234";
 
@@ -155,6 +159,8 @@ public class StepsTest {
                 .interfaceClass(ServiceWFAndStep.class).implementation(new ServiceWFAndStepImpl())
                 .async().build();
 
+        dbos.launch();
+
         service.setSelf(service);
 
         String workflowId = "wf-same-1234";
@@ -183,6 +189,8 @@ public class StepsTest {
 
         ServiceB serviceB = dbos.<ServiceB>Workflow().interfaceClass(ServiceB.class)
                 .implementation(new ServiceBImpl()).build();
+
+        dbos.launch();
 
         String result = serviceB.step2("abcde");
         assertEquals("abcde", result);

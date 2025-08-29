@@ -54,8 +54,6 @@ public class WorkflowMgmtTest {
         dbos = DBOS.initialize(dbosConfig);
         systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-        dbos.launch();
     }
 
     @AfterEach
@@ -72,6 +70,8 @@ public class WorkflowMgmtTest {
         MgmtService mgmtService = dbos.<MgmtService>Workflow().interfaceClass(MgmtService.class)
                 .implementation(new MgmtServiceImpl(mainLatch, workLatch)).build();
         mgmtService.setMgmtService(mgmtService);
+
+        dbos.launch();
 
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
@@ -120,6 +120,8 @@ public class WorkflowMgmtTest {
 
         Queue myqueue = dbos.Queue("myqueue").build();
 
+        dbos.launch();
+
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).queue(myqueue).build();
         int result;
@@ -163,6 +165,8 @@ public class WorkflowMgmtTest {
         MgmtService mgmtService = dbos.<MgmtService>Workflow().interfaceClass(MgmtService.class)
                 .implementation(new MgmtServiceImpl(mainLatch, workLatch)).build();
         mgmtService.setMgmtService(mgmtService);
+
+        dbos.launch();
 
         ExecutorService e = Executors.newFixedThreadPool(2);
         String workflowId = "wfid1";
@@ -218,6 +222,8 @@ public class WorkflowMgmtTest {
     @Test
     public void forkNonExistent() {
 
+        dbos.launch();
+
         try {
             ForkOptions options = new ForkOptions.Builder().build();
             WorkflowHandle<String> rstatHandle = dbos.forkWorkflow("12345", 2, options);
@@ -236,6 +242,8 @@ public class WorkflowMgmtTest {
         ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
                 .implementation(impl).build();
         forkService.setForkService(forkService);
+
+        dbos.launch();
 
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
@@ -309,6 +317,8 @@ public class WorkflowMgmtTest {
         ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
                 .implementation(impl).build();
         forkService.setForkService(forkService);
+
+        dbos.launch();
 
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
@@ -407,6 +417,8 @@ public class WorkflowMgmtTest {
                 .implementation(impl).build();
         forkService.setForkService(forkService);
 
+        dbos.launch();
+
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
         String result;
@@ -459,6 +471,8 @@ public class WorkflowMgmtTest {
         GCService gcService = dbos.<GCService>Workflow().interfaceClass(GCService.class)
                 .implementation(impl).build();
         gcService.setGCService(gcService);
+
+        dbos.launch();
 
         // Start one blocked workflow and 10 normal workflows
         WorkflowHandle<String> handle = dbos.startWorkflow(() -> gcService.gcBlockedWorkflow());
@@ -518,6 +532,8 @@ public class WorkflowMgmtTest {
         GCService gcService = dbos.<GCService>Workflow().interfaceClass(GCService.class)
                 .implementation(impl).build();
         gcService.setGCService(gcService);
+
+        dbos.launch();
 
         List<WorkflowHandle<String>> handles = new ArrayList<>();
         for (int i = 0; i < numWorkflows; i++) {

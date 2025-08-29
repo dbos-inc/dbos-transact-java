@@ -34,6 +34,7 @@ class RecoveryServiceTest {
     private static DBOSConfig dbosConfig;
     private static DataSource dataSource;
     private DBOS dbos;
+    private Queue testQueue;
     private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
     private ExecutingService executingService;
@@ -59,6 +60,8 @@ class RecoveryServiceTest {
         executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
+
+        testQueue = dbos.Queue("q1").build();
 
         dbos.launch();
     }
@@ -92,8 +95,7 @@ class RecoveryServiceTest {
 
         wfid = "wf-127";
         WorkflowHandle<String> handle7 = null;
-        Queue q = dbos.Queue("q1").build();
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(q).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
         try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
@@ -138,8 +140,7 @@ class RecoveryServiceTest {
 
         wfid = "wf-127";
         WorkflowHandle<String> handle7 = null;
-        Queue q = dbos.Queue("q1").build();
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(q).build();
+        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
         try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
             handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
