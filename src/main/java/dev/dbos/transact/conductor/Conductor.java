@@ -427,7 +427,7 @@ public class Conductor implements AutoCloseable {
         ListWorkflowsRequest request = (ListWorkflowsRequest) message;
         try {
             ListWorkflowsInput input = request.asInput();
-            List<WorkflowStatus> statuses = conductor.systemDatabase.listWorkflows(input);
+            List<WorkflowStatus> statuses = conductor.dbosExecutor.listWorkflows(input);
             List<WorkflowsOutput> output = statuses.stream().map(s -> new WorkflowsOutput(s))
                     .collect(Collectors.toList());
             return new WorkflowOutputsResponse(request, output);
@@ -442,7 +442,7 @@ public class Conductor implements AutoCloseable {
         try {
             ListQueuedWorkflowsInput input = request.asInput();
             boolean loadInput = request.body.load_input != null ? request.body.load_input : false;
-            List<WorkflowStatus> statuses = conductor.systemDatabase.getQueuedWorkflows(input, loadInput);
+            List<WorkflowStatus> statuses = conductor.dbosExecutor.listQueuedWorkflows(input, loadInput);
             List<WorkflowsOutput> output = statuses.stream().map(s -> new WorkflowsOutput(s))
                     .collect(Collectors.toList());
             return new WorkflowOutputsResponse(request, output);
@@ -455,7 +455,7 @@ public class Conductor implements AutoCloseable {
     static BaseResponse handleListSteps(Conductor conductor, BaseMessage message) {
         ListStepsRequest request = (ListStepsRequest) message;
         try {
-            List<StepInfo> stepInfoList = conductor.systemDatabase.listWorkflowSteps(request.workflow_id);
+            List<StepInfo> stepInfoList = conductor.dbosExecutor.listWorkflowSteps(request.workflow_id);
             List<ListStepsResponse.Step> steps = stepInfoList.stream().map(i -> new ListStepsResponse.Step(i))
                     .collect(Collectors.toList());
             return new ListStepsResponse(request, steps);

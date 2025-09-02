@@ -73,18 +73,6 @@ public class DBOS {
         return dbosExecutor.get();
     }
 
-    SystemDatabase getSystemDatabase() {
-        return getDbosExecutor().getSystemDatabase();
-    }
-
-    QueueService getQueueService() {
-        return getDbosExecutor().getQueueService();
-    }
-
-    SchedulerService getSchedulerService() {
-        return getDbosExecutor().getSchedulerService();
-    }
-
     void clearRegistry() {
         workflowRegistry.clear();
         queueRegistry.clear();
@@ -329,17 +317,7 @@ public class DBOS {
         if (exectuor == null) {
             throw new IllegalStateException("cannot send before launch");
         }
-        var systemDatabase = exectuor.getSystemDatabase();
-        assert systemDatabase != null;
-
-        DBOSContext ctx = DBOSContextHolder.get();
-        if (!ctx.isInWorkflow()) {
-            this.internalWorkflowsService.sendWorkflow(destinationId, message, topic);
-            return;
-        }
-        int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-        systemDatabase.send(ctx.getWorkflowId(), stepFunctionId, destinationId, message, topic);
+        exectuor.send(destinationId, message, topic, internalWorkflowsService);
     }
 
     /**
@@ -356,21 +334,7 @@ public class DBOS {
         if (exectuor == null) {
             throw new IllegalStateException("cannot recv before launch");
         }
-        var systemDatabase = exectuor.getSystemDatabase();
-        assert systemDatabase != null;
-
-        DBOSContext ctx = DBOSContextHolder.get();
-        if (!ctx.isInWorkflow()) {
-            throw new IllegalArgumentException("recv() must be called from a workflow.");
-        }
-        int stepFunctionId = ctx.getAndIncrementFunctionId();
-        int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-
-        return systemDatabase.recv(ctx.getWorkflowId(),
-                stepFunctionId,
-                timeoutFunctionId,
-                topic,
-                timeoutSeconds);
+        return exectuor.recv(topic, timeoutSeconds);
     }
 
     /**
@@ -388,16 +352,8 @@ public class DBOS {
         if (exectuor == null) {
             throw new IllegalStateException("cannot setEvent before launch");
         }
-        var systemDatabase = exectuor.getSystemDatabase();
-        assert systemDatabase != null;
 
-        DBOSContext ctx = DBOSContextHolder.get();
-        if (!ctx.isInWorkflow()) {
-            throw new IllegalArgumentException("send must be called from a workflow.");
-        }
-        int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-        systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+        exectuor.setEvent(key, value);
     }
 
     /**
@@ -418,20 +374,8 @@ public class DBOS {
         if (exectuor == null) {
             throw new IllegalStateException("cannot getEvent before launch");
         }
-        var systemDatabase = exectuor.getSystemDatabase();
-        assert systemDatabase != null;
 
-        DBOSContext ctx = DBOSContextHolder.get();
-
-        if (ctx.isInWorkflow()) {
-            int stepFunctionId = ctx.getAndIncrementFunctionId();
-            int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(ctx.getWorkflowId(),
-                    stepFunctionId, timeoutFunctionId);
-            return systemDatabase.getEvent(workflowId, key, timeOut, callerCtx);
-        }
-
-        return systemDatabase.getEvent(workflowId, key, timeOut, null);
+        return exectuor.getEvent(workflowId, key, timeOut);
     }
 
     /**
@@ -547,10 +491,7 @@ public class DBOS {
         if (exectuor == null) {
             throw new IllegalStateException("cannot listWorkflows before launch");
         }
-        var systemDatabase = exectuor.getSystemDatabase();
-        assert systemDatabase != null;
-
-        return systemDatabase.listWorkflows(input);
+        return exectuor.listWorkflows(input);
     }
 
     /**
@@ -565,10 +506,7 @@ public class DBOS {
         if (exectuor == null) {
             throw new IllegalStateException("cannot listWorkflowSteps before launch");
         }
-        var systemDatabase = exectuor.getSystemDatabase();
-        assert systemDatabase != null;
-
-        return systemDatabase.listWorkflowSteps(workflowId);
+        return exectuor.listWorkflowSteps(workflowId);
     }
 
     /**
@@ -585,9 +523,6 @@ public class DBOS {
         if (exectuor == null) {
             throw new IllegalStateException("cannot listQueuedWorkflows before launch");
         }
-        var systemDatabase = exectuor.getSystemDatabase();
-        assert systemDatabase != null;
-
-        return systemDatabase.getQueuedWorkflows(query, loadInput);
+        return exectuor.listQueuedWorkflows(query, loadInput);
     }
 }

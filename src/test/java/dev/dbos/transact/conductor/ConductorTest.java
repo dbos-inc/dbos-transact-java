@@ -644,7 +644,7 @@ public class ConductorTest {
                 "test-app-ver", null, null,
                 "test-app-id", null));
 
-        when(mockDB.getQueuedWorkflows(any(), anyBoolean())).thenReturn(statuses);
+        when(mockDB.listQueuedWorkflows(any(), anyBoolean())).thenReturn(statuses);
 
         try (Conductor conductor = builder.build()) {
             conductor.start();
@@ -659,7 +659,7 @@ public class ConductorTest {
             assertTrue(listener.messageLatch.await(100000000, TimeUnit.SECONDS), "message latch timed out");
             ArgumentCaptor<ListQueuedWorkflowsInput> inputCaptor = ArgumentCaptor
                     .forClass(ListQueuedWorkflowsInput.class);
-            verify(mockDB).getQueuedWorkflows(inputCaptor.capture(), eq(false));
+            verify(mockDB).listQueuedWorkflows(inputCaptor.capture(), eq(false));
             ListQueuedWorkflowsInput input = inputCaptor.getValue();
             assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.getStartTime());
             assertEquals("foobarbaz", input.getName());

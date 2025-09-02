@@ -9,6 +9,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
@@ -16,12 +17,15 @@ import dev.dbos.transact.http.HttpServer;
 import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.scheduled.SchedulerService;
 import dev.dbos.transact.scheduled.SchedulerService.ScheduledInstance;
+import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -104,15 +108,15 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     // package private methods for test purposes
-    public SystemDatabase getSystemDatabase() {
+    SystemDatabase getSystemDatabase() {
         return systemDatabase;
     }
 
-    public QueueService getQueueService() {
+    QueueService getQueueService() {
         return queueService;
     }
 
-    public SchedulerService getSchedulerService() {
+    SchedulerService getSchedulerService() {
         return schedulerService;
     }
 
@@ -727,4 +731,81 @@ public class DBOSExecutor implements AutoCloseable {
             cancelWorkflow(status.getWorkflowId());
         }
     }
+
+    public void send(String destinationId, Object message, String topic, InternalWorkflowsService internalWorkflowsService) {
+
+        DBOSContext ctx = DBOSContextHolder.get();
+        if (!ctx.isInWorkflow()) {
+            internalWorkflowsService.sendWorkflow(destinationId, message, topic);
+            return;
+        }
+        int stepFunctionId = ctx.getAndIncrementFunctionId();
+
+        systemDatabase.send(ctx.getWorkflowId(), stepFunctionId, destinationId, message, topic);
+    }
+
+    /**
+     * Get a message sent to a particular topic
+     *
+     * @param topic
+     *            the topic whose message to get
+     * @param timeoutSeconds
+     *            time in seconds after which the call times out
+     * @return the message if there is one or else null
+     */
+    public Object recv(String topic, float timeoutSeconds) {
+        DBOSContext ctx = DBOSContextHolder.get();
+        if (!ctx.isInWorkflow()) {
+            throw new IllegalArgumentException("recv() must be called from a workflow.");
+        }
+        int stepFunctionId = ctx.getAndIncrementFunctionId();
+        int timeoutFunctionId = ctx.getAndIncrementFunctionId();
+
+        return systemDatabase.recv(ctx.getWorkflowId(),
+                stepFunctionId,
+                timeoutFunctionId,
+                topic,
+                timeoutSeconds);
+    }
+
+    public void setEvent(String key, Object value) {
+        logger.info("Received setEvent for key " + key);
+
+        DBOSContext ctx = DBOSContextHolder.get();
+        if (!ctx.isInWorkflow()) {
+            throw new IllegalArgumentException("send must be called from a workflow.");
+        }
+        int stepFunctionId = ctx.getAndIncrementFunctionId();
+
+        systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+    }
+
+    public Object getEvent(String workflowId, String key, float timeOut) {
+        logger.info("Received getEvent for " + workflowId + " " + key);
+
+        DBOSContext ctx = DBOSContextHolder.get();
+
+        if (ctx.isInWorkflow()) {
+            int stepFunctionId = ctx.getAndIncrementFunctionId();
+            int timeoutFunctionId = ctx.getAndIncrementFunctionId();
+            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(ctx.getWorkflowId(),
+                    stepFunctionId, timeoutFunctionId);
+            return systemDatabase.getEvent(workflowId, key, timeOut, callerCtx);
+        }
+
+        return systemDatabase.getEvent(workflowId, key, timeOut, null);
+    }
+
+    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+        return systemDatabase.listWorkflows(input);
+    }
+
+    public List<StepInfo> listWorkflowSteps(String workflowId) {
+        return systemDatabase.listWorkflowSteps(workflowId);
+    }
+
+    public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput query, boolean loadInput) {
+        return systemDatabase.listQueuedWorkflows(query, loadInput);
+    }
+
 }

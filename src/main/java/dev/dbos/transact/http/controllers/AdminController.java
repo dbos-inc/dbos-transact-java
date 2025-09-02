@@ -113,7 +113,7 @@ public class AdminController {
         if (input == null) {
             input = new ListWorkflowsInput();
         }
-        return systemDatabase.listWorkflows(input);
+        return dbosExecutor.listWorkflows(input);
     }
 
     @GET
@@ -129,7 +129,7 @@ public class AdminController {
     @Produces(MediaType.APPLICATION_JSON)
     public List<StepInfo> ListSteps(@PathParam("workflowId") String workflowId) {
         logger.info("Retrieving steps for workflow {}", workflowId);
-        return systemDatabase.listWorkflowSteps(workflowId);
+        return dbosExecutor.listWorkflowSteps(workflowId);
     }
 
     @POST
