@@ -17,7 +17,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
     @SuppressWarnings("unchecked")
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation,
-            Supplier<DBOSExecutor>  executor) {
+            Supplier<DBOSExecutor> executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
@@ -27,7 +27,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
                 new UnifiedInvocationHandler(implementation, executor));
     }
 
-    protected UnifiedInvocationHandler(Object target, Supplier<DBOSExecutor>  dbosExecutor) {
+    protected UnifiedInvocationHandler(Object target, Supplier<DBOSExecutor> dbosExecutor) {
         super(target, dbosExecutor);
     }
 

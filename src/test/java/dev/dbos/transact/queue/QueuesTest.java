@@ -11,7 +11,6 @@ import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -93,43 +92,44 @@ public class QueuesTest {
 
         // queueService.stop();
         // while (!queueService.isStopped()) {
-        //     Thread.sleep(2000);
-        //     logger.info("Waiting for queueService to stop");
+        // Thread.sleep(2000);
+        // logger.info("Waiting for queueService to stop");
         // }
 
         // Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
-        //         .build();
+        // .build();
 
         // ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
-        //         .implementation(new ServiceQImpl()).queue(firstQ).build();
+        // .implementation(new ServiceQImpl()).queue(firstQ).build();
 
         // for (int i = 0; i < 5; i++) {
-        //     String id = "wfid" + i;
+        // String id = "wfid" + i;
 
-        //     try (SetWorkflowID ctx = new SetWorkflowID(id)) {
-        //         serviceQ.simpleQWorkflow("inputq" + i);
-        //     }
+        // try (SetWorkflowID ctx = new SetWorkflowID(id)) {
+        // serviceQ.simpleQWorkflow("inputq" + i);
+        // }
         // }
 
-        // List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
+        // List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new
+        // ListQueuedWorkflowsInput(), true);
 
         // for (int i = 0; i < 5; i++) {
-        //     String id = "wfid" + i;
+        // String id = "wfid" + i;
 
-        //     assertEquals(id, wfs.get(i).getWorkflowId());
-        //     assertEquals(WorkflowState.ENQUEUED.name(), wfs.get(i).getStatus());
+        // assertEquals(id, wfs.get(i).getWorkflowId());
+        // assertEquals(WorkflowState.ENQUEUED.name(), wfs.get(i).getStatus());
         // }
 
         // // queueService.start();
 
         // for (int i = 0; i < 5; i++) {
-        //     String id = "wfid" + i;
+        // String id = "wfid" + i;
 
-        //     WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id);
-        //     assertEquals(id, handle.getWorkflowId());
-        //     String result = (String) handle.getResult();
-        //     assertEquals("inputq" + i + "inputq" + i, result);
-        //     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+        // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id);
+        // assertEquals(id, handle.getWorkflowId());
+        // String result = (String) handle.getResult();
+        // assertEquals("inputq" + i + "inputq" + i, result);
+        // assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
         // }
     }
 
@@ -557,16 +557,22 @@ public class QueuesTest {
                 assertEquals(1, rowsAffected);
             }
 
-            // List<WorkflowHandle<?>> otherHandles = dbosExecutor.recoverPendingWorkflows(List.of("other"));
-            // assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
-            // assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
+            // List<WorkflowHandle<?>> otherHandles =
+            // dbosExecutor.recoverPendingWorkflows(List.of("other"));
+            // assertEquals(WorkflowState.PENDING.toString(),
+            // handle1.getStatus().getStatus());
+            // assertEquals(WorkflowState.PENDING.toString(),
+            // handle2.getStatus().getStatus());
             // assertEquals(1, otherHandles.size());
             // assertEquals(otherHandles.get(0).getWorkflowId(), handle3.getWorkflowId());
-            // assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
+            // assertEquals(WorkflowState.ENQUEUED.toString(),
+            // handle3.getStatus().getStatus());
 
-            // List<WorkflowHandle<?>> localHandles = dbosExecutor.recoverPendingWorkflows(List.of("local"));
+            // List<WorkflowHandle<?>> localHandles =
+            // dbosExecutor.recoverPendingWorkflows(List.of("local"));
             // assertEquals(2, localHandles.size());
-            // List<String> expectedWorkflowIds = List.of(handle1.getWorkflowId(), handle2.getWorkflowId());
+            // List<String> expectedWorkflowIds = List.of(handle1.getWorkflowId(),
+            // handle2.getWorkflowId());
             // assertTrue(expectedWorkflowIds.contains(localHandles.get(0).getWorkflowId()));
             // assertTrue(expectedWorkflowIds.contains(localHandles.get(1).getWorkflowId()));
 

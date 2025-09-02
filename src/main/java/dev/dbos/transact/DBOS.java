@@ -35,7 +35,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 public class DBOS {
 
     private static final Logger logger = LoggerFactory.getLogger(DBOS.class);
@@ -73,7 +72,7 @@ public class DBOS {
     DBOSExecutor getDbosExecutor() {
         return dbosExecutor.get();
     }
-    
+
     SystemDatabase getSystemDatabase() {
         return getDbosExecutor().getSystemDatabase();
     }
@@ -119,7 +118,6 @@ public class DBOS {
         return new QueueBuilder(this, name);
     }
 
-    
     private void registerInternals() {
         internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
                 .interfaceClass(InternalWorkflowsService.class)
@@ -258,7 +256,6 @@ public class DBOS {
         }
     }
 
-
     public void launch() {
         logger.debug("launch()");
 
@@ -266,7 +263,10 @@ public class DBOS {
             var executor = new DBOSExecutor(config);
 
             if (dbosExecutor.compareAndSet(null, executor)) {
-                executor.start(this, workflowRegistry.getSnapshot(), queueRegistry.getSnapshot(), List.copyOf(scheduledWorkflows));
+                executor.start(this,
+                        workflowRegistry.getSnapshot(),
+                        queueRegistry.getSnapshot(),
+                        List.copyOf(scheduledWorkflows));
             }
         }
     }
@@ -526,7 +526,6 @@ public class DBOS {
         return exectuor.startWorkflow(func);
     }
 
-    
     public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
         var exectuor = dbosExecutor.get();
         if (exectuor == null) {

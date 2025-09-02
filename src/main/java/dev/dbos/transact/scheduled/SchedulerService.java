@@ -30,7 +30,8 @@ public class SchedulerService {
     }
 
     private static Logger logger = LoggerFactory.getLogger(SchedulerService.class);
-    private static final CronParser cronParser = new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
+    private static final CronParser cronParser = new CronParser(
+            CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
 
     public static ScheduledInstance makeScheduledInstance(String workflowName, Object instance, String cronExpr) {
         logger.info("Scheduling wf " + workflowName);
@@ -43,7 +44,8 @@ public class SchedulerService {
     private final Queue schedulerQueue;
     private final List<ScheduledInstance> scheduledWorkflows;
 
-    public SchedulerService(DBOSExecutor dbosExecutor, Queue schedulerQueue, List<ScheduledInstance> scheduledWorkflows) {
+    public SchedulerService(DBOSExecutor dbosExecutor, Queue schedulerQueue,
+            List<ScheduledInstance> scheduledWorkflows) {
         Objects.requireNonNull(dbosExecutor);
         Objects.requireNonNull(schedulerQueue);
         Objects.requireNonNull(scheduledWorkflows);

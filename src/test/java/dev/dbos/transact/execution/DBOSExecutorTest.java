@@ -64,7 +64,6 @@ class DBOSExecutorTest {
 
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-
         String result = null;
 
         String wfid = "wf-123";
