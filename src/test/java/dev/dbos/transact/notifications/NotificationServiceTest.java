@@ -30,7 +30,6 @@ class NotificationServiceTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -44,11 +43,10 @@ class NotificationServiceTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
         dbos.shutdown();
     }
 
@@ -59,6 +57,7 @@ class NotificationServiceTest {
                 .implementation(new NotServiceImpl()).async().build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wfid1 = "recvwf1";
 
@@ -290,6 +289,7 @@ class NotificationServiceTest {
                 .implementation(new NotServiceImpl()).async().build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wfid1 = "recvwf1";
 
@@ -333,6 +333,7 @@ class NotificationServiceTest {
                 .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wfid1 = "recvwf1";
 

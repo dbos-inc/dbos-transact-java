@@ -59,7 +59,7 @@ class AdminControllerTest {
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws SQLException, Exception {
         dbos.shutdown();
     }
 

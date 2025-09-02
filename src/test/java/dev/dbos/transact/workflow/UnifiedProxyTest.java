@@ -27,8 +27,6 @@ public class UnifiedProxyTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -43,12 +41,10 @@ public class UnifiedProxyTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws SQLException, Exception {
         dbos.shutdown();
     }
 
@@ -61,6 +57,8 @@ public class UnifiedProxyTest {
         Queue q = dbos.Queue("simpleQ").build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         // synchronous
         String wfid1 = "wf-123";
@@ -114,6 +112,7 @@ public class UnifiedProxyTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         simpleService.setSimpleService(simpleService);
 

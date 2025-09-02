@@ -6,6 +6,7 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 
 import java.lang.reflect.Proxy;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +17,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
     @SuppressWarnings("unchecked")
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation,
-            DBOSExecutor executor) {
+            Supplier<DBOSExecutor>  executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
@@ -26,12 +27,17 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
                 new UnifiedInvocationHandler(implementation, executor));
     }
 
-    protected UnifiedInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
+    protected UnifiedInvocationHandler(Object target, Supplier<DBOSExecutor>  dbosExecutor) {
         super(target, dbosExecutor);
     }
 
     protected Object submitWorkflow(String workflowName, String targetClassName,
             WorkflowFunctionWrapper wrapper, Object[] args) throws Throwable {
+
+        var executor = executorSupplier.get();
+        if (executor == null) {
+            throw new IllegalStateException();
+        }
 
         DBOSContext ctx = DBOSContextHolder.get();
 
@@ -39,7 +45,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
             logger.debug("invoking workflow asynchronously");
 
-            dbosExecutor.submitWorkflow(workflowName,
+            executor.submitWorkflow(workflowName,
                     targetClassName,
                     wrapper.target,
                     args,
@@ -51,7 +57,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
             logger.debug("enqueuing workflow");
 
-            dbosExecutor.enqueueWorkflow(workflowName, targetClassName, wrapper, args, ctx.getQueue());
+            executor.enqueueWorkflow(workflowName, targetClassName, wrapper, args, ctx.getQueue());
 
             return null;
 
@@ -59,7 +65,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
             logger.debug("invoking workflow synchronously");
 
-            return dbosExecutor.syncWorkflow(workflowName,
+            return executor.syncWorkflow(workflowName,
                     targetClassName,
                     wrapper.target,
                     args,

@@ -34,8 +34,6 @@ public class WorkflowMgmtTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -52,12 +50,10 @@ public class WorkflowMgmtTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
         dbos.shutdown();
     }
 
@@ -72,6 +68,7 @@ public class WorkflowMgmtTest {
         mgmtService.setMgmtService(mgmtService);
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
@@ -121,6 +118,7 @@ public class WorkflowMgmtTest {
         Queue myqueue = dbos.Queue("myqueue").build();
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).queue(myqueue).build();
@@ -244,6 +242,8 @@ public class WorkflowMgmtTest {
         forkService.setForkService(forkService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
@@ -319,6 +319,8 @@ public class WorkflowMgmtTest {
         forkService.setForkService(forkService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
@@ -418,6 +420,8 @@ public class WorkflowMgmtTest {
         forkService.setForkService(forkService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
         WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
@@ -473,6 +477,7 @@ public class WorkflowMgmtTest {
         gcService.setGCService(gcService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // Start one blocked workflow and 10 normal workflows
         WorkflowHandle<String> handle = dbos.startWorkflow(() -> gcService.gcBlockedWorkflow());
@@ -534,6 +539,7 @@ public class WorkflowMgmtTest {
         gcService.setGCService(gcService);
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         List<WorkflowHandle<String>> handles = new ArrayList<>();
         for (int i = 0; i < numWorkflows; i++) {

@@ -28,7 +28,7 @@ public class AdminController {
     private final DBOSExecutor dbosExecutor;
     private final List<Queue> queues;
 
-    public AdminController(SystemDatabase sysDb, DBOSExecutor exec, List<Queue> queues) {
+    public AdminController(DBOSExecutor exec, SystemDatabase sysDb, List<Queue> queues) {
         this.systemDatabase = sysDb;
         this.dbosExecutor = exec;
         this.queues = queues;

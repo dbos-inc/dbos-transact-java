@@ -27,7 +27,6 @@ public class EventsTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -42,11 +41,10 @@ public class EventsTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
         dbos.shutdown();
     }
 
@@ -125,6 +123,7 @@ public class EventsTest {
                 .async().build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         try (SetWorkflowID id = new SetWorkflowID("id2")) {
             eventService.getWithlatch("id1", "key1", 5);

@@ -8,8 +8,8 @@ import dev.dbos.transact.queue.Queue;
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -26,31 +26,31 @@ public class SchedulerService {
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
 
-    record ScheduledInstance(String workflowName, Object instance, Cron cron) {
+    public record ScheduledInstance(String workflowName, Object instance, Cron cron) {
+    }
+
+    private static Logger logger = LoggerFactory.getLogger(SchedulerService.class);
+    private static final CronParser cronParser = new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
+
+    public static ScheduledInstance makeScheduledInstance(String workflowName, Object instance, String cronExpr) {
+        logger.info("Scheduling wf " + workflowName);
+        Cron cron = cronParser.parse(cronExpr);
+        return new ScheduledInstance(workflowName, instance, cron);
     }
 
     private final DBOSExecutor dbosExecutor;
-    private final CronParser cronParser;
-    Logger logger = LoggerFactory.getLogger(SchedulerService.class);
     private volatile boolean stop = false;
-    private Queue schedulerQueue;
-    private List<ScheduledInstance> scheduledWorkflows = new ArrayList<>();
+    private final Queue schedulerQueue;
+    private final List<ScheduledInstance> scheduledWorkflows;
 
-    public SchedulerService(DBOSExecutor dbosExecutor) {
+    public SchedulerService(DBOSExecutor dbosExecutor, Queue schedulerQueue, List<ScheduledInstance> scheduledWorkflows) {
+        Objects.requireNonNull(dbosExecutor);
+        Objects.requireNonNull(schedulerQueue);
+        Objects.requireNonNull(scheduledWorkflows);
+
         this.dbosExecutor = dbosExecutor;
-        this.cronParser = new CronParser(
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
-    }
-
-    public void setSchedulerQueue(Queue schedulerQueue) {
         this.schedulerQueue = schedulerQueue;
-    }
-
-    public void scheduleWorkflow(String workflowName, Object instance, String cronExpr) {
-
-        logger.info("Scheduling wf " + workflowName);
-        Cron cron = cronParser.parse(cronExpr);
-        scheduledWorkflows.add(new ScheduledInstance(workflowName, instance, cron));
+        this.scheduledWorkflows = scheduledWorkflows;
     }
 
     private void startScheduledWorkflows() {

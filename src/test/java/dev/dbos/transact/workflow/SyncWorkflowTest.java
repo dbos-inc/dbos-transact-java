@@ -19,8 +19,6 @@ public class SyncWorkflowTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -35,12 +33,10 @@ public class SyncWorkflowTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
         dbos.shutdown();
     }
 
@@ -52,6 +48,7 @@ public class SyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String result = simpleService.workWithString("test-item");
         assertEquals("Processed: test-item", result);
@@ -72,6 +69,7 @@ public class SyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         try {
             simpleService.workWithError();
@@ -93,6 +91,7 @@ public class SyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String result = null;
 
@@ -116,6 +115,7 @@ public class SyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String result = null;
         SimpleServiceImpl.executionCount = 0;
@@ -159,6 +159,7 @@ public class SyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         simpleService.setSimpleService(simpleService);
 
@@ -194,6 +195,8 @@ public class SyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         simpleService.setSimpleService(simpleService);
 
@@ -244,6 +247,8 @@ public class SyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         simpleService.setSimpleService(simpleService);
 

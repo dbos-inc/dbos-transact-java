@@ -23,8 +23,6 @@ class SchedulerServiceTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private SchedulerService schedulerService;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -37,9 +35,6 @@ class SchedulerServiceTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        schedulerService = DBOSTestAccess.getSchedulerService(dbos);
-
     }
 
     @AfterEach
@@ -55,6 +50,7 @@ class SchedulerServiceTest {
         EverySecWorkflow swf = new EverySecWorkflow();
         dbos.scheduleWorkflow(swf);
         dbos.launch();
+        var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
         Thread.sleep(5000);
         schedulerService.stop();
@@ -71,6 +67,7 @@ class SchedulerServiceTest {
         EveryThirdSec swf = new EveryThirdSec();
         dbos.scheduleWorkflow(swf);
         dbos.launch();
+        var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
         Thread.sleep(5000);
         schedulerService.stop();
@@ -87,6 +84,7 @@ class SchedulerServiceTest {
         MultipleWorkflows swf = new MultipleWorkflows();
         dbos.scheduleWorkflow(swf);
         dbos.launch();
+        var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
         Thread.sleep(5000);
         schedulerService.stop();
@@ -106,6 +104,7 @@ class SchedulerServiceTest {
         TimedWorkflow swf = new TimedWorkflow();
         dbos.scheduleWorkflow(swf);
         dbos.launch();
+        var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
         Thread.sleep(5000);
         schedulerService.stop();
@@ -157,6 +156,8 @@ class SchedulerServiceTest {
         WorkflowWithSteps swf = new WorkflowWithSteps(steps);
         dbos.scheduleWorkflow(swf);
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
         Thread.sleep(5000);
         schedulerService.stop();

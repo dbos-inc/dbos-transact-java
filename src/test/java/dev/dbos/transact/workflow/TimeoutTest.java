@@ -29,8 +29,6 @@ public class TimeoutTest {
     private static DBOSConfig dbosConfig;
     private static DataSource dataSource;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -51,12 +49,10 @@ public class TimeoutTest {
         TimeoutTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws SQLException, Exception {
         dbos.shutdown();
     }
 
@@ -98,6 +94,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // make it timeout
         String wfid1 = "wf-125";
@@ -162,6 +159,7 @@ public class TimeoutTest {
         Queue simpleQ = dbos.Queue("simpleQ").build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // make it timeout
         String wfid1 = "wf-127";
@@ -196,6 +194,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // synchronous
 
@@ -222,6 +221,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // synchronous
 
@@ -252,6 +252,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         // synchronous
 
@@ -279,6 +280,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         // asynchronous
 
@@ -308,6 +310,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String wfid1 = "wf-124";
         String result;
@@ -338,6 +341,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String wfid1 = "wf-124";
         String result;

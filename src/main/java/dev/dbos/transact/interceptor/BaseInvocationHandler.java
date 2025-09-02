@@ -11,6 +11,7 @@ import dev.dbos.transact.workflow.Workflow;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,12 +22,12 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
     private final Object target;
     private final String targetClassName;
-    protected final DBOSExecutor dbosExecutor;
+    protected final Supplier<DBOSExecutor> executorSupplier;
 
-    public BaseInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
+    public BaseInvocationHandler(Object target, Supplier<DBOSExecutor> executorSupplier) {
         this.target = target;
         this.targetClassName = target.getClass().getName();
-        this.dbosExecutor = dbosExecutor;
+        this.executorSupplier = executorSupplier;
     }
 
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -47,6 +48,10 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
     protected Object handleWorkflow(Method method, Object[] args, Workflow workflow)
             throws Throwable {
+        var executor = executorSupplier.get();
+        if (executor == null) {
+            throw new IllegalStateException();
+        }
 
         String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
 
@@ -56,7 +61,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
         logger.info(msg);
 
-        WorkflowFunctionWrapper wrapper = dbosExecutor.getWorkflow(workflowName);
+        WorkflowFunctionWrapper wrapper = executor.getWorkflow(workflowName);
         if (wrapper == null) {
             throw new IllegalStateException("Workflow not registered: " + workflowName);
         }
@@ -117,10 +122,15 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
     }
 
     protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
+        var executor = executorSupplier.get();
+        if (executor == null) {
+            throw new IllegalStateException();
+        }
+
         String msg = String.format("Before : Executing step %s %s", method.getName(), step.name());
         logger.info(msg);
         try {
-            Object result = dbosExecutor.runStep(step.name(),
+            Object result = executor.runStep(step.name(),
                     step.retriesAllowed(),
                     step.maxAttempts(),
                     step.backOffRate(),

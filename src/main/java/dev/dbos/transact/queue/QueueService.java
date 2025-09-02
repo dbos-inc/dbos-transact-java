@@ -25,15 +25,9 @@ public class QueueService {
     private Thread workerThread;
     private CountDownLatch shutdownLatch;
 
-    private Queue internalQueue;
-
-    public QueueService(SystemDatabase systemDatabase, DBOSExecutor dbosExecutor) {
+    public QueueService(DBOSExecutor dbosExecutor, SystemDatabase systemDatabase) {
         this.systemDatabase = systemDatabase;
         this.dbosExecutor = dbosExecutor;
-    }
-
-    public void setInternalQueue(Queue internalQueue) {
-        this.internalQueue = internalQueue;
     }
 
     private void pollForWorkflows() {

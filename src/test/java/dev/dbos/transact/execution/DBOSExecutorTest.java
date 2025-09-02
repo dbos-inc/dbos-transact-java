@@ -32,8 +32,6 @@ class DBOSExecutorTest {
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
     private static DataSource dataSource;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     public static void onetimeBefore() throws SQLException {
@@ -48,12 +46,10 @@ class DBOSExecutorTest {
         DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
         dbos.shutdown();
     }
 
@@ -65,6 +61,9 @@ class DBOSExecutorTest {
                 .build();
 
         dbos.launch();
+
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
 
         String result = null;
 
@@ -80,9 +79,9 @@ class DBOSExecutorTest {
 
         setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
-        WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
+        WorkflowHandle<?> handle = dbosExecutor.executeWorkflowById(wfid);
 
-        result = handle.getResult();
+        result = (String) handle.getResult();
         assertEquals("test-itemtest-item", result);
         assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
@@ -99,6 +98,9 @@ class DBOSExecutorTest {
 
         dbos.launch();
 
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+
         String result = null;
 
         String wfid = "wf-123";
@@ -113,7 +115,7 @@ class DBOSExecutorTest {
 
         boolean error = false;
         try {
-            WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById("wf-124");
+            WorkflowHandle<?> handle = dbosExecutor.executeWorkflowById("wf-124");
         } catch (Exception e) {
             error = true;
             assert e instanceof NonExistentWorkflowException
@@ -131,6 +133,9 @@ class DBOSExecutorTest {
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+
         String result = null;
 
         String wfid = "wf-123";
@@ -148,7 +153,7 @@ class DBOSExecutorTest {
 
         boolean error = false;
         try {
-            WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
+            WorkflowHandle<?> handle = dbosExecutor.executeWorkflowById(wfid);
         } catch (Exception e) {
             error = true;
             assert e instanceof WorkflowFunctionNotFoundException
@@ -166,6 +171,8 @@ class DBOSExecutorTest {
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -209,6 +216,8 @@ class DBOSExecutorTest {
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -257,6 +266,8 @@ class DBOSExecutorTest {
                 .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl()).build();
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // Needed to call the step
         executingService.setExecutingService(executingService);
@@ -286,6 +297,8 @@ class DBOSExecutorTest {
                 .interfaceClass(ExecutingService.class)
                 .implementation(new ExecutingServiceImpl()).build();
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // Needed to call the step
         executingService.setExecutingService(executingService);

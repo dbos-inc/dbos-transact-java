@@ -81,7 +81,7 @@ public class ConductorTest {
         mockDB = mock(SystemDatabase.class);
         mockExec = mock(DBOSExecutor.class);
         when(mockExec.getAppName()).thenReturn("test-app-name");
-        builder = new Conductor.Builder(mockDB, mockExec, "conductor-key")
+        builder = new Conductor.Builder(mockExec, mockDB, "conductor-key")
                 .domain(domain);
     }
 

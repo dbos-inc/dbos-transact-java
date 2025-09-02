@@ -114,7 +114,7 @@ public class Conductor implements AutoCloseable {
         private int reconnectDelayMs = 1000;
         private int connectTimeoutMs = 5000;
 
-        public Builder(SystemDatabase s, DBOSExecutor e, String key) {
+        public Builder(DBOSExecutor e, SystemDatabase s, String key) {
             systemDatabase = s;
             dbosExecutor = e;
             conductorKey = key;

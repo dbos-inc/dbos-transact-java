@@ -2,18 +2,24 @@ package dev.dbos.transact.execution;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.conductor.Conductor;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
-import dev.dbos.transact.database.NotificationService;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.http.HttpServer;
+import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.queue.QueueService;
+import dev.dbos.transact.scheduled.SchedulerService;
+import dev.dbos.transact.scheduled.SchedulerService.ScheduledInstance;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -36,33 +42,78 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DBOSExecutor {
+public class DBOSExecutor implements AutoCloseable {
+
+    private static final Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
     private final DBOSConfig config;
+
+    private DBOS dbos;
     private String appVersion;
     private String executorId;
 
-    private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private ExecutorService executorService;
-    private final ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
-    private NotificationService notificationService;
-
     private Map<String, WorkflowFunctionWrapper> workflowMap;
 
-    Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
+    private SystemDatabase systemDatabase;
+    private QueueService queueService;
+    private SchedulerService schedulerService;
+    private RecoveryService recoveryService;
+    private HttpServer httpServer;
+    private Conductor conductor;
+    private ExecutorService executorService = Executors.newCachedThreadPool();
+    private ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
+    private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
-    public DBOSExecutor(DBOSConfig config, SystemDatabase sysdb) {
+    public DBOSExecutor(DBOSConfig config) {
         this.config = config;
+    }
 
-        this.systemDatabase = sysdb;
-        this.executorService = Executors.newCachedThreadPool();
+    @Override
+    public void close() throws Exception {
+        if (isRunning.compareAndSet(true, false)) {
+
+            if (httpServer != null) {
+                httpServer.stop();
+                httpServer = null;
+            }
+
+            if (conductor != null) {
+                conductor.stop();
+                conductor = null;
+            }
+
+            recoveryService.stop();
+            recoveryService = null;
+            schedulerService.stop();
+            schedulerService = null;
+            queueService.stop();
+            queueService = null;
+            systemDatabase.stop();
+            systemDatabase = null;
+
+            this.workflowMap = null;
+            this.dbos = null;
+        }
+    }
+
+    // package private methods for test purposes
+    public SystemDatabase getSystemDatabase() {
+        return systemDatabase;
+    }
+
+    public QueueService getQueueService() {
+        return queueService;
+    }
+
+    public SchedulerService getSchedulerService() {
+        return schedulerService;
     }
 
     public String getAppName() {
@@ -77,36 +128,70 @@ public class DBOSExecutor {
         return this.appVersion;
     }
 
-    public void start(DBOS dbos, Map<String, WorkflowFunctionWrapper> workflowMap) {
+    public void start(DBOS dbos, Map<String, WorkflowFunctionWrapper> workflowMap, List<Queue> queues,
+            List<ScheduledInstance> scheduledWorkflows) {
 
-        this.dbos = dbos;
-        this.workflowMap = workflowMap;
+        if (isRunning.compareAndSet(false, true)) {
+            this.dbos = dbos;
+            this.workflowMap = workflowMap;
 
-        this.executorId = System.getenv("DBOS__VMID");
-        if (this.executorId == null) {
-            this.executorId = "local";
+            this.executorId = System.getenv("DBOS__VMID");
+            if (this.executorId == null) {
+                this.executorId = "local";
+            }
+
+            this.appVersion = System.getenv("DBOS__APPVERSION");
+            if (this.appVersion == null) {
+                List<Class<?>> registeredClasses = workflowMap.values().stream()
+                        .map(wrapper -> wrapper.target.getClass())
+                        .collect(Collectors.toList());
+                this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
+            }
+
+            systemDatabase = new SystemDatabase(config);
+            systemDatabase.start();
+
+            queueService = new QueueService(this, systemDatabase);
+            queueService.start(queues);
+
+            Queue schedulerQueue = null;
+            for (var queue : queues) {
+                if (queue.getName() == Constants.DBOS_SCHEDULER_QUEUE) {
+                    schedulerQueue = queue;
+                }
+            }
+            schedulerService = new SchedulerService(this, schedulerQueue, scheduledWorkflows);
+            schedulerService.start();
+
+            recoveryService = new RecoveryService(this, systemDatabase);
+            recoveryService.start();
+
+            String conductorKey = config.getConductorKey();
+            if (conductorKey != null) {
+                Conductor.Builder builder = new Conductor.Builder(this, systemDatabase, conductorKey);
+                String domain = config.getConductorDomain();
+                if (domain != null && !domain.trim().isEmpty()) {
+                    builder.domain(domain);
+                }
+                conductor = builder.build();
+                conductor.start();
+            }
+
+            if (config.isHttp()) {
+                httpServer = HttpServer.getInstance(config.getHttpPort(),
+                        new AdminController(this, systemDatabase, queues));
+                if (config.isHttpAwaitOnStart()) {
+                    Thread httpThread = new Thread(() -> {
+                        logger.info("Start http in background thread");
+                        httpServer.startAndBlock();
+                    }, "http-server-thread");
+                    httpThread.setDaemon(false); // Keep process alive
+                    httpThread.start();
+                } else {
+                    httpServer.start();
+                }
+            }
         }
-
-        this.appVersion = System.getenv("DBOS__APPVERSION");
-        if (this.appVersion == null) {
-            List<Class<?>> registeredClasses = workflowMap.values().stream()
-                    .map(wrapper -> wrapper.target.getClass())
-                    .collect(Collectors.toList());
-            this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
-        }
-
-        systemDatabase.start();
-    }
-
-    public void shutdown() {
-        // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/51
-        // executorService.shutdownNow();
-        // systemDatabase.destroy();
-
-        systemDatabase.stop();
-
-        this.workflowMap = null;
-        this.dbos = null;
     }
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
@@ -224,6 +309,7 @@ public class DBOSExecutor {
         systemDatabase.recordWorkflowError(workflowId, errorString);
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T syncWorkflow(String workflowName, String targetClassName, Object target,
             Object[] args, WorkflowFunctionReflect function, String workflowId) throws Throwable {
 
@@ -501,10 +587,10 @@ public class DBOSExecutor {
 
     /** Retrieve the workflowHandle for the workflowId */
     public <R> WorkflowHandle<R> retrieveWorkflow(String workflowId) {
-        return new WorkflowHandleDBPoll(workflowId, systemDatabase);
+        return new WorkflowHandleDBPoll<R>(workflowId, systemDatabase);
     }
 
-    public WorkflowHandle executeWorkflowById(String workflowId) {
+    public <T> WorkflowHandle<T> executeWorkflowById(String workflowId) {
 
         WorkflowStatus status = systemDatabase.getWorkflowStatus(workflowId);
 
@@ -520,14 +606,14 @@ public class DBOSExecutor {
             throw new WorkflowFunctionNotFoundException(workflowId);
         }
 
-        WorkflowHandle<?> handle = null;
+        WorkflowHandle<T> handle = null;
         try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
             var ctx = DBOSContextHolder.get();
             ctx.setInWorkflow(true);
             ctx.setDbos(dbos);
 
             try {
-                handle = submitWorkflow(status.getName(),
+                handle = (WorkflowHandle<T>) submitWorkflow(status.getName(),
                         functionWrapper.targetClassName,
                         functionWrapper.target,
                         inputs,

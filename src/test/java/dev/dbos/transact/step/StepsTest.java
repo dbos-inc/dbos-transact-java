@@ -20,8 +20,6 @@ public class StepsTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -36,12 +34,10 @@ public class StepsTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws SQLException, Exception {
         dbos.shutdown();
     }
 
@@ -55,6 +51,7 @@ public class StepsTest {
                 .implementation(new ServiceAImpl(serviceB)).build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wid = "sync123";
 
@@ -94,6 +91,7 @@ public class StepsTest {
                 .implementation(new ServiceAImpl(serviceB)).build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wid = "sync123er";
         try (SetWorkflowID id = new SetWorkflowID(wid)) {
@@ -121,6 +119,8 @@ public class StepsTest {
                 .implementation(new ServiceAImpl(serviceB)).async().build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wf-1234";
 
@@ -160,6 +160,8 @@ public class StepsTest {
                 .async().build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         service.setSelf(service);
 
@@ -185,7 +187,7 @@ public class StepsTest {
     }
 
     @Test
-    public void stepOutsideWorkflow() {
+    public void stepOutsideWorkflow() throws Exception {
 
         ServiceB serviceB = dbos.<ServiceB>Workflow().interfaceClass(ServiceB.class)
                 .implementation(new ServiceBImpl()).build();
