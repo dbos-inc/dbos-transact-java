@@ -503,15 +503,15 @@ public class QueuesTest {
     }
 
     @Test
-    @Disabled(value = "temporarily disabled during refactoring")
     public void testQueueConcurrencyUnderRecovery() throws Exception {
-        try {
             Queue queue = dbos.Queue("test_queue").concurrency(2).build();
 
             ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
             ConcurrencyTestService service = dbos.<ConcurrencyTestService>Workflow()
                     .interfaceClass(ConcurrencyTestService.class)
                     .implementation(impl).build();
+
+            dbos.launch();
 
             WorkflowHandle<Integer> handle1;
             WorkflowHandle<Integer> handle2;
@@ -542,6 +542,7 @@ public class QueuesTest {
             assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
             assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
 
+            // update WF3 to appear as if it's from a different executor
             String sql = "UPDATE dbos.workflow_status SET status = ?, executor_id = ? where workflow_uuid = ?;";
 
             try (Connection connection = DBUtils.getConnection(dbosConfig);
@@ -556,24 +557,19 @@ public class QueuesTest {
                 assertEquals(1, rowsAffected);
             }
 
-            // List<WorkflowHandle<?>> otherHandles =
-            // dbosExecutor.recoverPendingWorkflows(List.of("other"));
-            // assertEquals(WorkflowState.PENDING.toString(),
-            // handle1.getStatus().getStatus());
-            // assertEquals(WorkflowState.PENDING.toString(),
-            // handle2.getStatus().getStatus());
-            // assertEquals(1, otherHandles.size());
-            // assertEquals(otherHandles.get(0).getWorkflowId(), handle3.getWorkflowId());
-            // assertEquals(WorkflowState.ENQUEUED.toString(),
-            // handle3.getStatus().getStatus());
+            var executor = DBOSTestAccess.getDbosExecutor(dbos);
+            List<WorkflowHandle<?>> otherHandles = executor.recoverPendingWorkflows(List.of("other"));
+            assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
+            assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
+            assertEquals(1, otherHandles.size());
+            assertEquals(otherHandles.get(0).getWorkflowId(), handle3.getWorkflowId());
+            assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
 
-            // List<WorkflowHandle<?>> localHandles =
-            // dbosExecutor.recoverPendingWorkflows(List.of("local"));
-            // assertEquals(2, localHandles.size());
-            // List<String> expectedWorkflowIds = List.of(handle1.getWorkflowId(),
-            // handle2.getWorkflowId());
-            // assertTrue(expectedWorkflowIds.contains(localHandles.get(0).getWorkflowId()));
-            // assertTrue(expectedWorkflowIds.contains(localHandles.get(1).getWorkflowId()));
+            List<WorkflowHandle<?>> localHandles = executor.recoverPendingWorkflows(List.of("local"));
+            assertEquals(2, localHandles.size());
+            List<String> expectedWorkflowIds = List.of(handle1.getWorkflowId(), handle2.getWorkflowId());
+            assertTrue(expectedWorkflowIds.contains(localHandles.get(0).getWorkflowId()));
+            assertTrue(expectedWorkflowIds.contains(localHandles.get(1).getWorkflowId()));
 
             for (int i = 0; i < impl.wfSemaphores.size(); i++) {
                 logger.info("acquire {} semaphore", i);
@@ -592,9 +588,5 @@ public class QueuesTest {
             assertEquals("local", handle3.getStatus().getExecutorId());
 
             assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
-        } catch (Exception e) {
-            logger.error("testQueueConcurrencyUnderRecovery exception", e);
-            throw e;
-        }
     }
 }
