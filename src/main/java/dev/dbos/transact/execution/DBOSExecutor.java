@@ -282,6 +282,13 @@ public class DBOSExecutor implements AutoCloseable {
                     ? new ParentWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId())
                     : null;
         }
+
+        public static ParentWorkflow fromContext(DBOSContext ctx) {
+            return ctx.hasParent()
+                    ? new ParentWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId())
+                    : null;
+        }
+
     }
 
     private static WorkflowInitResult preInvokeWorkflow(SystemDatabase systemDatabase, String workflowName,
@@ -513,22 +520,16 @@ public class DBOSExecutor implements AutoCloseable {
         return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
     }
 
-    public void enqueueWorkflow(String workflowName, String targetClassName,
-            Object[] args, Queue queue) throws Throwable {
-
-        DBOSContext ctx = DBOSContextHolder.get();
-        String wfid = ctx.getWorkflowId();
+    public static void enqueueWorkflow(SystemDatabase systemDatabase, String wfid, String workflowName, String targetClassName,
+            Object[] args, String queueName, String executorId, String appVersion, ParentWorkflow parent, long workflowTimeoutMs) throws Throwable {
 
         if (wfid == null) {
             wfid = UUID.randomUUID().toString();
-            ctx.setWorkflowId(wfid);
         }
 
         WorkflowInitResult initResult = null;
         try {
-            var parent = ParentWorkflow.fromContext();
-            long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs();
-            initResult = preInvokeWorkflow(systemDatabase, workflowName, targetClassName, args, wfid, queue.getName(), getExecutorId(), getAppVersion(), parent, workflowTimeoutMs);
+            initResult = preInvokeWorkflow(systemDatabase, workflowName, targetClassName, args, wfid, queueName, executorId, appVersion, parent, workflowTimeoutMs);
         } catch (Throwable e) {
             Throwable actual = (e instanceof InvocationTargetException)
                     ? ((InvocationTargetException) e).getTargetException()
@@ -537,6 +538,18 @@ public class DBOSExecutor implements AutoCloseable {
             postInvokeWorkflow(systemDatabase, initResult.getWorkflowId(), actual);
             throw actual;
         }
+
+    }
+
+    public void enqueueWorkflow(String workflowName, String targetClassName,
+            Object[] args, Queue queue) throws Throwable {
+
+        DBOSContext ctx = DBOSContextHolder.get();
+        String wfid = ctx.getWorkflowId();
+        var parent = ParentWorkflow.fromContext(ctx);
+        long workflowTimeoutMs = ctx.getWorkflowTimeoutMs();
+
+        enqueueWorkflow(systemDatabase, wfid, workflowName, targetClassName, args, queue.getName(), getExecutorId(), getAppVersion(), parent, workflowTimeoutMs);
     }
 
     public <T> T runStep(String stepName, boolean retriedAllowed, int maxAttempts,
