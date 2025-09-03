@@ -748,7 +748,8 @@ public class DBOSExecutor implements AutoCloseable {
         }
     }
 
-    public void send(String destinationId, Object message, String topic, InternalWorkflowsService internalWorkflowsService) {
+    public void send(String destinationId, Object message, String topic,
+            InternalWorkflowsService internalWorkflowsService) {
 
         DBOSContext ctx = DBOSContextHolder.get();
         if (!ctx.isInWorkflow()) {

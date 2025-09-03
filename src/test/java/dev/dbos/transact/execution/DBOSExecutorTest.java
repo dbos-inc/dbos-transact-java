@@ -24,7 +24,6 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 class DBOSExecutorTest {
@@ -145,7 +144,7 @@ class DBOSExecutorTest {
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
-        dbos.shutdown(); 
+        dbos.shutdown();
         DBOSTestAccess.clearRegistry(dbos); // clear out the registry
         dbos.launch(); // restart dbos
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);

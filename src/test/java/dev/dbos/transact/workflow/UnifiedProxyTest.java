@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.queue.Queue;
@@ -19,7 +18,6 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class UnifiedProxyTest {
