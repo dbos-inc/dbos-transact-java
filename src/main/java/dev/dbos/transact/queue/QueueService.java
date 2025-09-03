@@ -22,18 +22,13 @@ public class QueueService {
     private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
     private volatile boolean running = false;
+    private volatile boolean paused = false;
     private Thread workerThread;
     private CountDownLatch shutdownLatch;
 
-    private Queue internalQueue;
-
-    public QueueService(SystemDatabase systemDatabase, DBOSExecutor dbosExecutor) {
+    public QueueService(DBOSExecutor dbosExecutor, SystemDatabase systemDatabase) {
         this.systemDatabase = systemDatabase;
         this.dbosExecutor = dbosExecutor;
-    }
-
-    public void setInternalQueue(Queue internalQueue) {
-        this.internalQueue = internalQueue;
     }
 
     private void pollForWorkflows() {
@@ -63,6 +58,10 @@ public class QueueService {
                     break;
                 }
 
+                if (paused) {
+                    continue;
+                }
+
                 for (Queue queue : queues) {
 
                     try {
@@ -89,6 +88,14 @@ public class QueueService {
             shutdownLatch.countDown();
             logger.info("QueuesPollThread has ended. Exiting " + Thread.currentThread().getId());
         }
+    }
+
+    public synchronized void pause() {
+        this.paused = true;
+    }
+
+    public synchronized void unpause() {
+        this.paused = false;
     }
 
     public synchronized void start(List<Queue> queues) {

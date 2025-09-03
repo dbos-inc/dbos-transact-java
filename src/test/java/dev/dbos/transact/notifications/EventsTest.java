@@ -7,7 +7,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.StepInfo;
 
@@ -27,7 +26,6 @@ public class EventsTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -42,11 +40,10 @@ public class EventsTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
         dbos.shutdown();
     }
 
@@ -125,6 +122,7 @@ public class EventsTest {
                 .async().build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         try (SetWorkflowID id = new SetWorkflowID("id2")) {
             eventService.getWithlatch("id1", "key1", 5);

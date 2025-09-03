@@ -8,8 +8,6 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -20,15 +18,12 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class UnifiedProxyTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -43,12 +38,10 @@ public class UnifiedProxyTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws SQLException, Exception {
         dbos.shutdown();
     }
 
@@ -61,6 +54,8 @@ public class UnifiedProxyTest {
         Queue q = dbos.Queue("simpleQ").build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         // synchronous
         String wfid1 = "wf-123";
@@ -106,14 +101,15 @@ public class UnifiedProxyTest {
     }
 
     @Test
-    @Disabled
     public void syncParentWithQueuedChildren() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
+        dbos.Queue("childQ").build();
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         simpleService.setSimpleService(simpleService);
 

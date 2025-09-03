@@ -4,6 +4,7 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 
 import java.lang.reflect.Proxy;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +15,7 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
 
     @SuppressWarnings("unchecked")
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation,
-            DBOSExecutor executor) {
+            Supplier<DBOSExecutor> executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
@@ -24,14 +25,20 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
                 new AsyncInvocationHandler(implementation, executor));
     }
 
-    public AsyncInvocationHandler(Object target, DBOSExecutor dbosExecutor) {
-        super(target, dbosExecutor);
+    public AsyncInvocationHandler(Object target, Supplier<DBOSExecutor> executor) {
+        super(target, executor);
     }
 
     protected Object submitWorkflow(String workflowName, String targetClassName,
             WorkflowFunctionWrapper wrapper, Object[] args) throws Throwable {
+        logger.debug("submitWorkflow");
 
-        dbosExecutor.submitWorkflow(workflowName,
+        var executor = executorSupplier.get();
+        if (executor == null) {
+            throw new IllegalStateException();
+        }
+
+        executor.submitWorkflow(workflowName,
                 targetClassName,
                 wrapper.target,
                 args,

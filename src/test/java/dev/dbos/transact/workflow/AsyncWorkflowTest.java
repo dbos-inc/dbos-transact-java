@@ -9,10 +9,8 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAppException;
 import dev.dbos.transact.exceptions.SerializableException;
-import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
@@ -24,8 +22,6 @@ public class AsyncWorkflowTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -40,12 +36,10 @@ public class AsyncWorkflowTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws SQLException, Exception {
         dbos.shutdown();
     }
 
@@ -57,6 +51,8 @@ public class AsyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
@@ -83,6 +79,8 @@ public class AsyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         SimpleServiceImpl.executionCount = 0;
 
@@ -137,6 +135,7 @@ public class AsyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         WorkflowHandle<Void> handle = null;
         String wfid = "abc";
@@ -170,6 +169,7 @@ public class AsyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         simpleService.setSimpleService(simpleService);
 
@@ -205,6 +205,7 @@ public class AsyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         simpleService.setSimpleService(simpleService);
 
@@ -255,6 +256,7 @@ public class AsyncWorkflowTest {
                 .build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         simpleService.setSimpleService(simpleService);
 

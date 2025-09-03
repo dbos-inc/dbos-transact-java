@@ -9,7 +9,6 @@ import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
-import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -21,7 +20,6 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class TimeoutTest {
@@ -29,8 +27,6 @@ public class TimeoutTest {
     private static DBOSConfig dbosConfig;
     private static DataSource dataSource;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -51,12 +47,10 @@ public class TimeoutTest {
         TimeoutTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws SQLException, Exception {
         dbos.shutdown();
     }
 
@@ -98,6 +92,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // make it timeout
         String wfid1 = "wf-125";
@@ -162,6 +157,7 @@ public class TimeoutTest {
         Queue simpleQ = dbos.Queue("simpleQ").build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // make it timeout
         String wfid1 = "wf-127";
@@ -196,6 +192,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // synchronous
 
@@ -222,6 +219,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         // synchronous
 
@@ -252,6 +250,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         // synchronous
 
@@ -279,6 +278,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         // asynchronous
 
@@ -308,6 +308,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String wfid1 = "wf-124";
         String result;
@@ -338,6 +339,7 @@ public class TimeoutTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String wfid1 = "wf-124";
         String result;
@@ -360,7 +362,6 @@ public class TimeoutTest {
     }
 
     @Test
-    @Disabled
     public void parentAsyncTimeoutInheritedByChild() throws Exception {
         // TOFIX : fails at times
 

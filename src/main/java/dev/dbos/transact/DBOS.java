@@ -1,17 +1,10 @@
 package dev.dbos.transact;
 
-import dev.dbos.transact.conductor.Conductor;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
-import dev.dbos.transact.database.GetWorkflowEventContext;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.RecoveryService;
 import dev.dbos.transact.execution.WorkflowFunction;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
-import dev.dbos.transact.http.HttpServer;
-import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
@@ -20,52 +13,41 @@ import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
+import dev.dbos.transact.scheduled.SchedulerService.ScheduledInstance;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class DBOS {
 
-    static Logger logger = LoggerFactory.getLogger(DBOS.class);
+    private static final Logger logger = LoggerFactory.getLogger(DBOS.class);
 
     private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
     private final QueueRegistry queueRegistry = new QueueRegistry();
+    private final List<ScheduledInstance> scheduledWorkflows = new ArrayList<>();
 
     private final DBOSConfig config;
-    private final SystemDatabase systemDatabase;
-    private final DBOSExecutor dbosExecutor;
-    private final QueueService queueService;
-    private final SchedulerService schedulerService;
-    private RecoveryService recoveryService;
-    private HttpServer httpServer;
-    private Conductor conductor;
 
     private InternalWorkflowsService internalWorkflowsService;
-    private Queue internalQueue;
-    private Queue schedulerQueue;
 
-    private final AtomicBoolean isShutdown = new AtomicBoolean(false);
-    private final AtomicBoolean isRunning = new AtomicBoolean(false);
+    private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
 
     private DBOS(DBOSConfig config) {
         this.config = config;
-        systemDatabase = new SystemDatabase(config);
-        dbosExecutor = new DBOSExecutor(config, systemDatabase);
-        queueService = new QueueService(systemDatabase, dbosExecutor);
-        schedulerService = new SchedulerService(dbosExecutor);
 
         DBOSContextHolder.clear();
     }
@@ -84,29 +66,20 @@ public class DBOS {
     }
 
     // package private methods for test purposes
-    SystemDatabase getSystemDatabase() {
-        return systemDatabase;
-    }
-
     DBOSExecutor getDbosExecutor() {
-        return dbosExecutor;
-    }
-
-    QueueService getQueueService() {
-        return queueService;
-    }
-
-    SchedulerService getSchedulerService() {
-        return schedulerService;
+        return dbosExecutor.get();
     }
 
     void clearRegistry() {
         workflowRegistry.clear();
         queueRegistry.clear();
+        scheduledWorkflows.clear();
+
+        registerInternals();
     }
 
     void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
-        if (isRunning.get()) {
+        if (dbosExecutor.get() != null) {
             throw new IllegalStateException("Cannot register workflow after DBOS is launched");
         }
 
@@ -114,11 +87,25 @@ public class DBOS {
     }
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
-        return workflowRegistry.get(workflowName);
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot retrieve workflow before launch");
+        }
+
+        return exectuor.getWorkflow(workflowName);
+    }
+
+    public Optional<Queue> getQueue(String queueName) {
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot retrieve queue before launch");
+        }
+
+        return exectuor.getQueue(queueName);
     }
 
     void registerQueue(Queue queue) {
-        if (this.isRunning.get()) {
+        if (dbosExecutor.get() != null) {
             throw new IllegalStateException("Cannot build a queue after DBOS is launched");
         }
 
@@ -131,6 +118,16 @@ public class DBOS {
 
     public QueueBuilder Queue(String name) {
         return new QueueBuilder(this, name);
+    }
+
+    private void registerInternals() {
+        internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
+                .interfaceClass(InternalWorkflowsService.class)
+                .implementation(new InternalWorkflowsServiceImpl(this))
+                .build();
+
+        this.Queue(Constants.DBOS_INTERNAL_QUEUE).build();
+        this.Queue(Constants.DBOS_SCHEDULER_QUEUE).build();
     }
 
     // inner builder class for workflows
@@ -175,16 +172,16 @@ public class DBOS {
             if (async) {
                 return AsyncInvocationHandler.createProxy(interfaceClass,
                         implementation,
-                        dbos.dbosExecutor);
+                        () -> dbos.dbosExecutor.get());
             } else if (queue != null) {
                 return QueueInvocationHandler.createProxy(interfaceClass,
                         implementation,
                         queue,
-                        dbos.dbosExecutor);
+                        () -> dbos.dbosExecutor.get());
             } else {
                 return UnifiedInvocationHandler.createProxy(interfaceClass,
                         implementation,
-                        dbos.dbosExecutor);
+                        () -> dbos.dbosExecutor.get());
             }
         }
     }
@@ -243,7 +240,7 @@ public class DBOS {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
-        if (isRunning.get()) {
+        if (dbosExecutor.get() != null) {
             throw new IllegalStateException("Cannot register workflow after DBOS is launched");
         }
 
@@ -261,103 +258,28 @@ public class DBOS {
         }
     }
 
-    private void registerInternals() {
-        internalWorkflowsService = this.<InternalWorkflowsService>Workflow()
-                .interfaceClass(InternalWorkflowsService.class)
-                .implementation(new InternalWorkflowsServiceImpl(this))
-                .build();
-
-        internalQueue = this.Queue(Constants.DBOS_INTERNAL_QUEUE).build();
-        this.queueService.setInternalQueue(internalQueue);
-        schedulerQueue = this.Queue("schedulerQueue").build();
-        this.schedulerService.setSchedulerQueue(schedulerQueue);
-    }
-
     public void launch() {
-        var workflowMap = workflowRegistry.getSnapshot();
-        dbosExecutor.start(this, workflowMap);
+        logger.debug("launch()");
 
-        logger.info("Executor ID: {}", dbosExecutor.getExecutorId());
-        logger.info("Application version: {}", dbosExecutor.getAppVersion());
+        if (dbosExecutor.get() == null) {
+            var executor = new DBOSExecutor(config);
 
-        queueService.start(queueRegistry.getSnapshot());
-
-        schedulerService.start();
-
-        String conductorKey = config.getConductorKey();
-        if (conductorKey != null) {
-            Conductor.Builder builder = new Conductor.Builder(systemDatabase, dbosExecutor, conductorKey);
-            String domain = config.getConductorDomain();
-            if (domain != null && !domain.trim().isEmpty()) {
-                builder.domain(domain);
+            if (dbosExecutor.compareAndSet(null, executor)) {
+                executor.start(this,
+                        workflowRegistry.getSnapshot(),
+                        queueRegistry.getSnapshot(),
+                        List.copyOf(scheduledWorkflows));
             }
-            conductor = builder.build();
-            conductor.start();
-        }
-
-        if (config.isHttp()) {
-            httpServer = HttpServer.getInstance(config.getHttpPort(),
-                    new AdminController(systemDatabase, dbosExecutor, queueRegistry.getSnapshot()));
-            if (config.isHttpAwaitOnStart()) {
-                Thread httpThread = new Thread(() -> {
-                    logger.info("Start http in background thread");
-                    httpServer.startAndBlock();
-                }, "http-server-thread");
-                httpThread.setDaemon(false); // Keep process alive
-                httpThread.start();
-            } else {
-                httpServer.start();
-            }
-        }
-
-        recoveryService = new RecoveryService(dbosExecutor, systemDatabase);
-        recoveryService.start();
-
-        if (!isRunning.compareAndSet(false, true)) {
-            throw new RuntimeException("isRunning was already true");
-        }
-
-    }
-
-    public void shutdown() {
-        logger.debug("shutdown() called");
-
-        if (!isRunning.compareAndSet(true, false)) {
-            logger.warn("isRunning was already false");
-        }
-
-        if (isShutdown.compareAndSet(false, true)) {
-
-            if (recoveryService != null) {
-                recoveryService.stop();
-            }
-
-            if (queueService != null) {
-                queueService.stop();
-            }
-            if (dbosExecutor != null) {
-                dbosExecutor.shutdown();
-            }
-
-            if (schedulerService != null) {
-                schedulerService.stop();
-            }
-
-            if (conductor != null) {
-                conductor.stop();
-            }
-
-            if (config.isHttp()) {
-                httpServer.stop();
-            }
-
-            // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/51
-            // systemDatabase.destroy();
         }
     }
 
-    public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
-        return this.dbosExecutor.retrieveWorkflow(workflowId);
+    public void shutdown() throws Exception {
+        logger.debug("shutdown()");
+
+        var current = dbosExecutor.getAndSet(null);
+        if (current != null) {
+            current.close();
+        }
     }
 
     /**
@@ -389,7 +311,8 @@ public class DBOS {
             registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
 
             Scheduled scheduled = method.getAnnotation(Scheduled.class);
-            schedulerService.scheduleWorkflow(workflowName, implementation, scheduled.cron());
+            var record = SchedulerService.makeScheduledInstance(workflowName, implementation, scheduled.cron());
+            this.scheduledWorkflows.add(record);
         }
     }
 
@@ -404,14 +327,11 @@ public class DBOS {
      *            topic to which the message is send
      */
     public void send(String destinationId, Object message, String topic) {
-        DBOSContext ctx = DBOSContextHolder.get();
-        if (!ctx.isInWorkflow()) {
-            this.internalWorkflowsService.sendWorkflow(destinationId, message, topic);
-            return;
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot send before launch");
         }
-        int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-        systemDatabase.send(ctx.getWorkflowId(), stepFunctionId, destinationId, message, topic);
+        exectuor.send(destinationId, message, topic, internalWorkflowsService);
     }
 
     /**
@@ -424,18 +344,11 @@ public class DBOS {
      * @return the message if there is one or else null
      */
     public Object recv(String topic, float timeoutSeconds) {
-        DBOSContext ctx = DBOSContextHolder.get();
-        if (!ctx.isInWorkflow()) {
-            throw new IllegalArgumentException("recv() must be called from a workflow.");
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot recv before launch");
         }
-        int stepFunctionId = ctx.getAndIncrementFunctionId();
-        int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-
-        return systemDatabase.recv(ctx.getWorkflowId(),
-                stepFunctionId,
-                timeoutFunctionId,
-                topic,
-                timeoutSeconds);
+        return exectuor.recv(topic, timeoutSeconds);
     }
 
     /**
@@ -449,13 +362,12 @@ public class DBOS {
     public void setEvent(String key, Object value) {
         logger.info("Received setEvent for key " + key);
 
-        DBOSContext ctx = DBOSContextHolder.get();
-        if (!ctx.isInWorkflow()) {
-            throw new IllegalArgumentException("send must be called from a workflow.");
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot setEvent before launch");
         }
-        int stepFunctionId = ctx.getAndIncrementFunctionId();
 
-        systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+        exectuor.setEvent(key, value);
     }
 
     /**
@@ -472,17 +384,12 @@ public class DBOS {
     public Object getEvent(String workflowId, String key, float timeOut) {
         logger.info("Received getEvent for " + workflowId + " " + key);
 
-        DBOSContext ctx = DBOSContextHolder.get();
-
-        if (ctx.isInWorkflow()) {
-            int stepFunctionId = ctx.getAndIncrementFunctionId();
-            int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-            GetWorkflowEventContext callerCtx = new GetWorkflowEventContext(ctx.getWorkflowId(),
-                    stepFunctionId, timeoutFunctionId);
-            return systemDatabase.getEvent(workflowId, key, timeOut, callerCtx);
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot getEvent before launch");
         }
 
-        return systemDatabase.getEvent(workflowId, key, timeOut, null);
+        return exectuor.getEvent(workflowId, key, timeOut);
     }
 
     /**
@@ -494,8 +401,12 @@ public class DBOS {
      *            in seconds
      */
     public void sleep(float seconds) {
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot sleep before launch");
+        }
 
-        this.dbosExecutor.sleep(seconds);
+        exectuor.sleep(seconds);
     }
 
     /**
@@ -506,7 +417,12 @@ public class DBOS {
      * @return A handle to the workflow
      */
     public <T> WorkflowHandle<T> resumeWorkflow(String workflowId) {
-        return this.dbosExecutor.resumeWorkflow(workflowId);
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot resumeWorkflow before launch");
+        }
+
+        return exectuor.resumeWorkflow(workflowId);
     }
 
     /***
@@ -518,7 +434,12 @@ public class DBOS {
      */
 
     public void cancelWorkflow(String workflowId) {
-        this.dbosExecutor.cancelWorkflow(workflowId);
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot cancelWorkflow before launch");
+        }
+
+        exectuor.cancelWorkflow(workflowId);
     }
 
     /**
@@ -536,7 +457,12 @@ public class DBOS {
      */
     public <T> WorkflowHandle<T> forkWorkflow(String workflowId, int startStep,
             ForkOptions options) {
-        return this.dbosExecutor.forkWorkflow(workflowId, startStep, options);
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot forkWorkflow before launch");
+        }
+
+        return exectuor.forkWorkflow(workflowId, startStep, options);
     }
 
     /**
@@ -550,7 +476,21 @@ public class DBOS {
      *            type returned by the function
      */
     public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
-        return this.dbosExecutor.startWorkflow(func);
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot startWorkflow before launch");
+        }
+
+        return exectuor.startWorkflow(func);
+    }
+
+    public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot startWorkflow before launch");
+        }
+
+        return exectuor.retrieveWorkflow(workflowId);
     }
 
     /**
@@ -561,7 +501,11 @@ public class DBOS {
      * @return a list of workflow status {@link WorkflowStatus}
      */
     public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-        return systemDatabase.listWorkflows(input);
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot listWorkflows before launch");
+        }
+        return exectuor.listWorkflows(input);
     }
 
     /**
@@ -572,7 +516,11 @@ public class DBOS {
      * @return list of step information {@link StepInfo}
      */
     public List<StepInfo> listWorkflowSteps(String workflowId) {
-        return systemDatabase.listWorkflowSteps(workflowId);
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot listWorkflowSteps before launch");
+        }
+        return exectuor.listWorkflowSteps(workflowId);
     }
 
     /**
@@ -585,6 +533,10 @@ public class DBOS {
      * @return list of workflow statuses {@link WorkflowStatus}
      */
     public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput query, boolean loadInput) {
-        return systemDatabase.getQueuedWorkflows(query, loadInput);
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot listQueuedWorkflows before launch");
+        }
+        return exectuor.listQueuedWorkflows(query, loadInput);
     }
 }

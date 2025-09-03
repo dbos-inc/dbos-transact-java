@@ -219,7 +219,7 @@ public class SystemDatabase implements AutoCloseable {
         return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
     }
 
-    public List<WorkflowStatus> getQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput) {
+    public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput) {
 
         Supplier<List<WorkflowStatus>> listQueuedWorkflowFunction = () -> {
             logger.info("List queued workflows ");

@@ -6,8 +6,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
-import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueuesTest;
 import dev.dbos.transact.utils.DBUtils;
@@ -28,8 +26,6 @@ public class QueueChildWorkflowTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -44,12 +40,10 @@ public class QueueChildWorkflowTest {
         DBUtils.recreateDB(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
         dbos.shutdown();
     }
 
@@ -65,6 +59,8 @@ public class QueueChildWorkflowTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
             simpleService.WorkflowWithMultipleChildren("123");
@@ -115,6 +111,8 @@ public class QueueChildWorkflowTest {
         simpleService.setSimpleService(simpleService);
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
             simpleService.grandParent("123");

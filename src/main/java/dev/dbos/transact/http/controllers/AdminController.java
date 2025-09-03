@@ -28,7 +28,7 @@ public class AdminController {
     private final DBOSExecutor dbosExecutor;
     private final List<Queue> queues;
 
-    public AdminController(SystemDatabase sysDb, DBOSExecutor exec, List<Queue> queues) {
+    public AdminController(DBOSExecutor exec, SystemDatabase sysDb, List<Queue> queues) {
         this.systemDatabase = sysDb;
         this.dbosExecutor = exec;
         this.queues = queues;
@@ -113,7 +113,7 @@ public class AdminController {
         if (input == null) {
             input = new ListWorkflowsInput();
         }
-        return systemDatabase.listWorkflows(input);
+        return dbosExecutor.listWorkflows(input);
     }
 
     @GET
@@ -129,7 +129,7 @@ public class AdminController {
     @Produces(MediaType.APPLICATION_JSON)
     public List<StepInfo> ListSteps(@PathParam("workflowId") String workflowId) {
         logger.info("Retrieving steps for workflow {}", workflowId);
-        return systemDatabase.listWorkflowSteps(workflowId);
+        return dbosExecutor.listWorkflowSteps(workflowId);
     }
 
     @POST

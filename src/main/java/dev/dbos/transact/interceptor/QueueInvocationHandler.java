@@ -5,6 +5,7 @@ import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.queue.Queue;
 
 import java.lang.reflect.Proxy;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +17,7 @@ public class QueueInvocationHandler extends BaseInvocationHandler {
 
     @SuppressWarnings("unchecked")
     public static <T> T createProxy(Class<T> interfaceClass, Object implementation, Queue queue,
-            DBOSExecutor executor) {
+            Supplier<DBOSExecutor> executor) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("interfaceClass must be an interface");
         }
@@ -26,15 +27,21 @@ public class QueueInvocationHandler extends BaseInvocationHandler {
                 new QueueInvocationHandler(implementation, queue, executor));
     }
 
-    public QueueInvocationHandler(Object target, Queue queue, DBOSExecutor dbosExecutor) {
+    public QueueInvocationHandler(Object target, Queue queue, Supplier<DBOSExecutor> dbosExecutor) {
         super(target, dbosExecutor);
         this.queue = queue;
     }
 
     protected Object submitWorkflow(String workflowName, String targetClassName,
             WorkflowFunctionWrapper wrapper, Object[] args) throws Throwable {
+        logger.debug("submitWorkflow");
 
-        dbosExecutor.enqueueWorkflow(workflowName, targetClassName, wrapper, args, queue);
+        var executor = executorSupplier.get();
+        if (executor == null) {
+            throw new IllegalStateException();
+        }
+
+        executor.enqueueWorkflow(workflowName, targetClassName, wrapper, args, queue);
 
         return null;
     }

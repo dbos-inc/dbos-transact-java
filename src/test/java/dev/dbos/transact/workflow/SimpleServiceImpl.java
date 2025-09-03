@@ -107,21 +107,20 @@ public class SimpleServiceImpl implements SimpleService {
     @Workflow(name = "syncWithQueued")
     public String syncWithQueued() {
 
-        throw new IllegalStateException("this test method is broken");
+        System.out.println("In syncWithQueued " + DBOSContext.workflowId().get());
+        var dbos = DBOSContext.dbosInstance().get();
+        var childQ = dbos.getQueue("childQ").get();
 
-        // System.out.println("In syncWithQueued " + DBOSContext.workflowId().get());
+        for (int i = 0; i < 3; i++) {
 
-        // for (int i = 0; i < 3; i++) {
+            String wid = "child" + i;
+            WorkflowOptions options = new WorkflowOptions.Builder(wid).queue(childQ).build();
+            try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+                simpleService.childWorkflow(wid);
+            }
+        }
 
-        // String wid = "child" + i;
-        // WorkflowOptions options = new
-        // WorkflowOptions.Builder(wid).queue(testQueue).build();
-        // try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-        // simpleService.childWorkflow(wid);
-        // }
-        // }
-
-        // return "QueuedChildren";
+        return "QueuedChildren";
     }
 
     @Workflow(name = "longWorkflow")

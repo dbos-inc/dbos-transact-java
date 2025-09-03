@@ -8,7 +8,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
@@ -30,7 +29,6 @@ class NotificationServiceTest {
 
     private static DBOSConfig dbosConfig;
     private DBOS dbos;
-    private SystemDatabase systemDatabase;
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
@@ -44,11 +42,10 @@ class NotificationServiceTest {
     void beforeEachTest() throws SQLException {
         DBUtils.recreateDB(dbosConfig);
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
         dbos.shutdown();
     }
 
@@ -59,6 +56,7 @@ class NotificationServiceTest {
                 .implementation(new NotServiceImpl()).async().build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wfid1 = "recvwf1";
 
@@ -290,6 +288,7 @@ class NotificationServiceTest {
                 .implementation(new NotServiceImpl()).async().build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wfid1 = "recvwf1";
 
@@ -333,6 +332,7 @@ class NotificationServiceTest {
                 .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
+        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wfid1 = "recvwf1";
 

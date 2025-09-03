@@ -54,9 +54,6 @@ class RecoveryServiceTest {
         RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
         dbos = DBOS.initialize(dbosConfig);
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
         executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
@@ -64,10 +61,13 @@ class RecoveryServiceTest {
         testQueue = dbos.Queue("q1").build();
 
         dbos.launch();
+        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
     }
 
     @AfterEach
-    void afterEachTest() throws SQLException {
+    void afterEachTest() throws Exception {
         dbos.shutdown();
     }
 
@@ -159,7 +159,7 @@ class RecoveryServiceTest {
     }
 
     @Test
-    public void recoveryThreadTest() throws SQLException {
+    public void recoveryThreadTest() throws Exception {
 
         String wfid = "wf-123";
         try (SetWorkflowID id = new SetWorkflowID(wfid)) {
