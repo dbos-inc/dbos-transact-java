@@ -41,7 +41,7 @@ public class QueueInvocationHandler extends BaseInvocationHandler {
             throw new IllegalStateException();
         }
 
-        executor.enqueueWorkflow(workflowName, targetClassName, wrapper, args, queue);
+        executor.enqueueWorkflow(workflowName, targetClassName, args, queue);
 
         return null;
     }

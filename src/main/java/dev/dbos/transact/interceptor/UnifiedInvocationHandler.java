@@ -57,7 +57,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
             logger.debug("enqueuing workflow");
 
-            executor.enqueueWorkflow(workflowName, targetClassName, wrapper, args, ctx.getQueue());
+            executor.enqueueWorkflow(workflowName, targetClassName, args, ctx.getQueue());
 
             return null;
 

@@ -503,7 +503,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     public void enqueueWorkflow(String workflowName, String targetClassName,
-            WorkflowFunctionWrapper wrapper, Object[] args, Queue queue) throws Throwable {
+            Object[] args, Queue queue) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
         ctx.setDbos(dbos);
