@@ -202,7 +202,6 @@ public class DBOSExecutor implements AutoCloseable {
         return this.appVersion;
     }
 
-
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
         if (workflowMap == null) {
             throw new IllegalStateException("attempted to retrieve workflow from executor when DBOS not launched");
@@ -276,8 +275,21 @@ public class DBOSExecutor implements AutoCloseable {
         return handles;
     }
 
-    private WorkflowInitResult preInvokeWorkflow(String workflowName, String className,
-            Object[] inputs, String workflowId, String queueName) {
+    record ParentWorkflow(String workflowId, int functionId) {
+        public static ParentWorkflow fromContext() {
+            DBOSContext ctx = DBOSContextHolder.get();
+            return ctx.hasParent()
+                    ? new ParentWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId())
+                    : null;
+        }
+    }
+
+    private static WorkflowInitResult preInvokeWorkflow(SystemDatabase systemDatabase, String workflowName,
+            String className, Object[] inputs, String workflowId,
+            String queueName, String executorId, String appVersion,
+            ParentWorkflow parentWorkflow, long workflowTimeoutMs
+            
+            ) {
 
         // TODO: queue deduplication and priority
 
@@ -285,7 +297,6 @@ public class DBOSExecutor implements AutoCloseable {
 
         WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
-        long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs();
         long workflowDeadlineEpoch = 0;
         if (workflowTimeoutMs > 0) {
             workflowDeadlineEpoch = System.currentTimeMillis() + workflowTimeoutMs;
@@ -294,7 +305,7 @@ public class DBOSExecutor implements AutoCloseable {
         WorkflowStatusInternal workflowStatusInternal = new WorkflowStatusInternal(workflowId,
                 status, workflowName, className, null, null, null, null, null, null, null, null,
                 queueName,
-                this.getExecutorId(), this.getAppVersion(),
+                executorId, appVersion,
                 null, 0,
                 workflowTimeoutMs, workflowDeadlineEpoch, null, 1, inputString);
 
@@ -306,24 +317,20 @@ public class DBOSExecutor implements AutoCloseable {
             throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(), e);
         }
 
-        DBOSContext ctx = DBOSContextHolder.get();
-        if (ctx.hasParent()) {
-            systemDatabase.recordChildWorkflow(ctx.getParentWorkflowId(),
-                    ctx.getWorkflowId(),
-                    ctx.getParentFunctionId(),
-                    workflowName);
+        if (parentWorkflow != null) {
+            systemDatabase.recordChildWorkflow(parentWorkflow.workflowId, workflowId, parentWorkflow.functionId, workflowName);
         }
 
         return initResult;
     }
 
-    private void postInvokeWorkflow(String workflowId, Object result) {
+    private static void postInvokeWorkflow(SystemDatabase systemDatabase, String workflowId, Object result) {
 
         String resultString = JSONUtil.serialize(result);
         systemDatabase.recordWorkflowOutput(workflowId, resultString);
     }
 
-    private void postInvokeWorkflow(String workflowId, Throwable error) {
+    private static void postInvokeWorkflow(SystemDatabase systemDatabase, String workflowId, Throwable error) {
 
         SerializableException se = new SerializableException(error);
         String errorString = JSONUtil.serialize(se);
@@ -350,7 +357,7 @@ public class DBOSExecutor implements AutoCloseable {
             @SuppressWarnings("unchecked")
             T result = (T) function.invoke(target, args);
 
-            postInvokeWorkflow(workflowId, result);
+            postInvokeWorkflow(systemDatabase, workflowId, result);
             return result;
         } catch (Throwable e) {
             Throwable actual = (e instanceof InvocationTargetException)
@@ -370,7 +377,7 @@ public class DBOSExecutor implements AutoCloseable {
                 throw new AwaitedWorkflowCancelledException(workflowId);
             }
 
-            postInvokeWorkflow(workflowId, actual);
+            postInvokeWorkflow(systemDatabase, workflowId, actual);
             throw actual;
         }
     }
@@ -393,7 +400,9 @@ public class DBOSExecutor implements AutoCloseable {
             }
         }
 
-        initResult = preInvokeWorkflow(workflowName, targetClassName, args, wfid, null);
+        var parent = ParentWorkflow.fromContext();
+        long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs();
+        initResult = preInvokeWorkflow(systemDatabase, workflowName, targetClassName, args, wfid, null, getExecutorId(), getAppVersion(), parent, workflowTimeoutMs);
 
         if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
             return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
@@ -441,11 +450,9 @@ public class DBOSExecutor implements AutoCloseable {
             }
         }
 
-        WorkflowInitResult initResult = preInvokeWorkflow(workflowName,
-                targetClassName,
-                args,
-                wfId,
-                null);
+        var parent = ParentWorkflow.fromContext();
+        long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs();
+        WorkflowInitResult initResult = preInvokeWorkflow(systemDatabase, workflowName, targetClassName, args, wfId, null, getExecutorId(), getAppVersion(), parent, workflowTimeoutMs);
 
         if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
             return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
@@ -517,14 +524,15 @@ public class DBOSExecutor implements AutoCloseable {
 
         WorkflowInitResult initResult = null;
         try {
-            initResult = preInvokeWorkflow(workflowName, targetClassName, args, wfid, queue.getName());
-
+            var parent = ParentWorkflow.fromContext();
+            long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs();
+            initResult = preInvokeWorkflow(systemDatabase, workflowName, targetClassName, args, wfid, queue.getName(), getExecutorId(), getAppVersion(), parent, workflowTimeoutMs);
         } catch (Throwable e) {
             Throwable actual = (e instanceof InvocationTargetException)
                     ? ((InvocationTargetException) e).getTargetException()
                     : e;
             logger.error("Error enqueing workflow", actual);
-            postInvokeWorkflow(initResult.getWorkflowId(), actual);
+            postInvokeWorkflow(systemDatabase, initResult.getWorkflowId(), actual);
             throw actual;
         }
     }
@@ -759,9 +767,9 @@ public class DBOSExecutor implements AutoCloseable {
      * Get a message sent to a particular topic
      *
      * @param topic
-     *            the topic whose message to get
+     *                       the topic whose message to get
      * @param timeoutSeconds
-     *            time in seconds after which the call times out
+     *                       time in seconds after which the call times out
      * @return the message if there is one or else null
      */
     public Object recv(String topic, float timeoutSeconds) {
