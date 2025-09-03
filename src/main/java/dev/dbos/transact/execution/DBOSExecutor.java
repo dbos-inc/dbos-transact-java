@@ -80,59 +80,6 @@ public class DBOSExecutor implements AutoCloseable {
         this.config = config;
     }
 
-    @Override
-    public void close() throws Exception {
-        if (isRunning.compareAndSet(true, false)) {
-
-            if (httpServer != null) {
-                httpServer.stop();
-                httpServer = null;
-            }
-
-            if (conductor != null) {
-                conductor.stop();
-                conductor = null;
-            }
-
-            recoveryService.stop();
-            recoveryService = null;
-            schedulerService.stop();
-            schedulerService = null;
-            queueService.stop();
-            queueService = null;
-            systemDatabase.stop();
-            systemDatabase = null;
-
-            this.workflowMap = null;
-            this.dbos = null;
-        }
-    }
-
-    // package private methods for test purposes
-    SystemDatabase getSystemDatabase() {
-        return systemDatabase;
-    }
-
-    QueueService getQueueService() {
-        return queueService;
-    }
-
-    SchedulerService getSchedulerService() {
-        return schedulerService;
-    }
-
-    public String getAppName() {
-        return config.getName();
-    }
-
-    public String getExecutorId() {
-        return this.executorId;
-    }
-
-    public String getAppVersion() {
-        return this.appVersion;
-    }
-
     public void start(DBOS dbos, Map<String, WorkflowFunctionWrapper> workflowMap, List<Queue> queues,
             List<ScheduledInstance> scheduledWorkflows) {
 
@@ -199,6 +146,62 @@ public class DBOSExecutor implements AutoCloseable {
             }
         }
     }
+
+    @Override
+    public void close() throws Exception {
+        if (isRunning.compareAndSet(true, false)) {
+
+            if (httpServer != null) {
+                httpServer.stop();
+                httpServer = null;
+            }
+
+            if (conductor != null) {
+                conductor.stop();
+                conductor = null;
+            }
+
+            recoveryService.stop();
+            recoveryService = null;
+            schedulerService.stop();
+            schedulerService = null;
+            queueService.stop();
+            queueService = null;
+            systemDatabase.stop();
+            systemDatabase = null;
+
+            this.workflowMap = null;
+            this.dbos = null;
+        }
+    }
+
+    // package private method for test purposes
+    SystemDatabase getSystemDatabase() {
+        return systemDatabase;
+    }
+
+    // package private method for test purposes
+    QueueService getQueueService() {
+        return queueService;
+    }
+
+    // package private method for test purposes
+    SchedulerService getSchedulerService() {
+        return schedulerService;
+    }
+
+    public String getAppName() {
+        return config.getName();
+    }
+
+    public String getExecutorId() {
+        return this.executorId;
+    }
+
+    public String getAppVersion() {
+        return this.appVersion;
+    }
+
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
         if (workflowMap == null) {
@@ -273,7 +276,7 @@ public class DBOSExecutor implements AutoCloseable {
         return handles;
     }
 
-    public WorkflowInitResult preInvokeWorkflow(String workflowName, String className,
+    private WorkflowInitResult preInvokeWorkflow(String workflowName, String className,
             Object[] inputs, String workflowId, String queueName) {
 
         // TODO: queue deduplication and priority
@@ -304,7 +307,6 @@ public class DBOSExecutor implements AutoCloseable {
         }
 
         DBOSContext ctx = DBOSContextHolder.get();
-        ctx.setDbos(dbos);
         if (ctx.hasParent()) {
             systemDatabase.recordChildWorkflow(ctx.getParentWorkflowId(),
                     ctx.getWorkflowId(),
@@ -315,18 +317,62 @@ public class DBOSExecutor implements AutoCloseable {
         return initResult;
     }
 
-    public void postInvokeWorkflow(String workflowId, Object result) {
+    private void postInvokeWorkflow(String workflowId, Object result) {
 
         String resultString = JSONUtil.serialize(result);
         systemDatabase.recordWorkflowOutput(workflowId, resultString);
     }
 
-    public void postInvokeWorkflow(String workflowId, Throwable error) {
+    private void postInvokeWorkflow(String workflowId, Throwable error) {
 
         SerializableException se = new SerializableException(error);
         String errorString = JSONUtil.serialize(se);
 
         systemDatabase.recordWorkflowError(workflowId, errorString);
+    }
+
+    /**
+     * Run and postInvoke reused separately preInvoke in reused separately
+     *
+     * @param target
+     * @param args
+     * @param function
+     * @param workflowId
+     * @return
+     * @param <T>
+     * @throws Throwable
+     */
+    private <T> T runAndSaveResult(Object target, Object[] args, WorkflowFunctionReflect function,
+            String workflowId) throws Throwable {
+
+        try {
+
+            @SuppressWarnings("unchecked")
+            T result = (T) function.invoke(target, args);
+
+            postInvokeWorkflow(workflowId, result);
+            return result;
+        } catch (Throwable e) {
+            Throwable actual = (e instanceof InvocationTargetException)
+                    ? ((InvocationTargetException) e).getTargetException()
+                    : e;
+
+            logger.error("Error in runWorkflow", actual);
+
+            if (actual instanceof WorkflowCancelledException
+                    || actual instanceof InterruptedException) {
+                // don'nt mark the workflow status as error yet. this is cancel
+                // if this is a parent cancel, the exception is thrown to caller
+                // state is already c
+                // if this is child cancel, its state is already Cancelled
+                // in parent it will fall thru to PostInvoke call below to set state to
+                // Error
+                throw new AwaitedWorkflowCancelledException(workflowId);
+            }
+
+            postInvokeWorkflow(workflowId, actual);
+            throw actual;
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -374,50 +420,6 @@ public class DBOSExecutor implements AutoCloseable {
         }
 
         return runAndSaveResult(target, args, function, workflowId);
-    }
-
-    /**
-     * Run and postInvoke reused separately preInvoke in reused separately
-     *
-     * @param target
-     * @param args
-     * @param function
-     * @param workflowId
-     * @return
-     * @param <T>
-     * @throws Throwable
-     */
-    <T> T runAndSaveResult(Object target, Object[] args, WorkflowFunctionReflect function,
-            String workflowId) throws Throwable {
-
-        try {
-
-            @SuppressWarnings("unchecked")
-            T result = (T) function.invoke(target, args);
-
-            postInvokeWorkflow(workflowId, result);
-            return result;
-        } catch (Throwable e) {
-            Throwable actual = (e instanceof InvocationTargetException)
-                    ? ((InvocationTargetException) e).getTargetException()
-                    : e;
-
-            logger.error("Error in runWorkflow", actual);
-
-            if (actual instanceof WorkflowCancelledException
-                    || actual instanceof InterruptedException) {
-                // don'nt mark the workflow status as error yet. this is cancel
-                // if this is a parent cancel, the exception is thrown to caller
-                // state is already c
-                // if this is child cancel, its state is already Cancelled
-                // in parent it will fall thru to PostInvoke call below to set state to
-                // Error
-                throw new AwaitedWorkflowCancelledException(workflowId);
-            }
-
-            postInvokeWorkflow(workflowId, actual);
-            throw actual;
-        }
     }
 
     public <T> WorkflowHandle<T> submitWorkflow(String workflowName, String targetClassName,
@@ -506,7 +508,6 @@ public class DBOSExecutor implements AutoCloseable {
             Object[] args, Queue queue) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
-        ctx.setDbos(dbos);
         String wfid = ctx.getWorkflowId();
 
         if (wfid == null) {
@@ -644,13 +645,6 @@ public class DBOSExecutor implements AutoCloseable {
         }
 
         return handle;
-    }
-
-    public void submit(Runnable task) {
-
-        ContextAwareRunnable contextAwareTask = new ContextAwareRunnable(
-                DBOSContextHolder.get().copy(), task);
-        executorService.submit(contextAwareTask);
     }
 
     public void sleep(float seconds) {
