@@ -363,7 +363,6 @@ public class TimeoutTest {
     }
 
     @Test
-    @Disabled
     public void parentAsyncTimeoutInheritedByChild() throws Exception {
         // TOFIX : fails at times
 

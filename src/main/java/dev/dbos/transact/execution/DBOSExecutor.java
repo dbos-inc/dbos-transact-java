@@ -64,6 +64,7 @@ public class DBOSExecutor implements AutoCloseable {
     private String executorId;
 
     private Map<String, WorkflowFunctionWrapper> workflowMap;
+    private List<Queue> queues;
 
     private SystemDatabase systemDatabase;
     private QueueService queueService;
@@ -138,6 +139,7 @@ public class DBOSExecutor implements AutoCloseable {
         if (isRunning.compareAndSet(false, true)) {
             this.dbos = dbos;
             this.workflowMap = workflowMap;
+            this.queues = queues;
 
             this.executorId = System.getenv("DBOS__VMID");
             if (this.executorId == null) {
@@ -204,6 +206,20 @@ public class DBOSExecutor implements AutoCloseable {
         }
 
         return workflowMap.get(workflowName);
+    }
+
+    public Optional<Queue> getQueue(String queueName) {
+        if (queues == null) {
+            throw new IllegalStateException("attempted to retrieve workflow from executor when DBOS not launched");
+        }
+
+        for (var queue : queues) {
+            if (queue.getName() == queueName) {
+                return Optional.of(queue);
+            }
+        }
+
+        return Optional.empty();
     }
 
     WorkflowHandle<?> recoverWorkflow(GetPendingWorkflowsOutput output) throws Exception {

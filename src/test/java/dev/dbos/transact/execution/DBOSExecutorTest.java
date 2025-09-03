@@ -125,14 +125,12 @@ class DBOSExecutorTest {
     }
 
     @Test
-    @Disabled(value = "disabled while we refactor DBOS internals related to workflow registration")
     void workflowFunctionNotfound() throws Exception {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
                 .build();
         dbos.launch();
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String result = null;
@@ -147,8 +145,10 @@ class DBOSExecutorTest {
         List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
         assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
-        dbos.shutdown(); // clear out the registry
-        startDBOS(); // restart dbos
+        dbos.shutdown(); 
+        DBOSTestAccess.clearRegistry(dbos); // clear out the registry
+        dbos.launch(); // restart dbos
+        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         boolean error = false;
         try {
@@ -401,10 +401,5 @@ class DBOSExecutorTest {
 
             assertEquals(1, rowsAffected);
         }
-    }
-
-    void startDBOS() throws SQLException {
-        dbos = DBOS.initialize(dbosConfig);
-        dbos.launch();
     }
 }

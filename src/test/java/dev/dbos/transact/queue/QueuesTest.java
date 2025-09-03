@@ -87,50 +87,49 @@ public class QueuesTest {
     }
 
     @Test
-    @Disabled
     public void testQueuedMultipleWorkflows() throws Exception {
 
-        // queueService.stop();
-        // while (!queueService.isStopped()) {
-        // Thread.sleep(2000);
-        // logger.info("Waiting for queueService to stop");
-        // }
+        Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
 
-        // Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
-        // .build();
+        ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class).implementation(new ServiceQImpl())
+                .queue(firstQ).build();
 
-        // ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
-        // .implementation(new ServiceQImpl()).queue(firstQ).build();
+        dbos.launch();
 
-        // for (int i = 0; i < 5; i++) {
-        // String id = "wfid" + i;
+        var queueService = DBOSTestAccess.getQueueService(dbos);
+        queueService.pause();
+        Thread.sleep(2000);
 
-        // try (SetWorkflowID ctx = new SetWorkflowID(id)) {
-        // serviceQ.simpleQWorkflow("inputq" + i);
-        // }
-        // }
+        for (int i = 0; i < 5; i++) {
+            String id = "wfid" + i;
 
-        // List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new
-        // ListQueuedWorkflowsInput(), true);
+            try (SetWorkflowID ctx = new SetWorkflowID(id)) {
+                serviceQ.simpleQWorkflow("inputq" + i);
+            }
+        }
 
-        // for (int i = 0; i < 5; i++) {
-        // String id = "wfid" + i;
+        List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
 
-        // assertEquals(id, wfs.get(i).getWorkflowId());
-        // assertEquals(WorkflowState.ENQUEUED.name(), wfs.get(i).getStatus());
-        // }
+        for (int i = 0; i < 5; i++) {
+            String id = "wfid" + i;
 
-        // // queueService.start();
+            assertEquals(id, wfs.get(i).getWorkflowId());
+            assertEquals(WorkflowState.ENQUEUED.name(), wfs.get(i).getStatus());
+        }
 
-        // for (int i = 0; i < 5; i++) {
-        // String id = "wfid" + i;
+        queueService.unpause();
 
-        // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id);
-        // assertEquals(id, handle.getWorkflowId());
-        // String result = (String) handle.getResult();
-        // assertEquals("inputq" + i + "inputq" + i, result);
-        // assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
-        // }
+        var executor = DBOSTestAccess.getDbosExecutor(dbos);
+
+        for (int i = 0; i < 5; i++) {
+            String id = "wfid" + i;
+
+            WorkflowHandle<?> handle = executor.retrieveWorkflow(id);
+            assertEquals(id, handle.getWorkflowId());
+            String result = (String) handle.getResult();
+            assertEquals("inputq" + i + "inputq" + i, result);
+            assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+        }
     }
 
     @Test

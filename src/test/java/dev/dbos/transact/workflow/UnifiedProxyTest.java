@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.queue.Queue;
@@ -102,13 +103,13 @@ public class UnifiedProxyTest {
     }
 
     @Test
-    @Disabled
     public void syncParentWithQueuedChildren() throws Exception {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
+        dbos.Queue("childQ").build();
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 

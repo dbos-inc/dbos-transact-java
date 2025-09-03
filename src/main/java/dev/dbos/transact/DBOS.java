@@ -24,12 +24,14 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;
 
+import java.lang.foreign.Linker.Option;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
@@ -76,6 +78,9 @@ public class DBOS {
     void clearRegistry() {
         workflowRegistry.clear();
         queueRegistry.clear();
+        scheduledWorkflows.clear();
+
+        registerInternals();
     }
 
     void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
@@ -87,7 +92,21 @@ public class DBOS {
     }
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
-        return workflowRegistry.get(workflowName);
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot retrieve workflow before launch");
+        }
+
+        return exectuor.getWorkflow(workflowName);
+    }
+
+    public Optional<Queue> getQueue(String queueName) {
+        var exectuor = dbosExecutor.get();
+        if (exectuor == null) {
+            throw new IllegalStateException("cannot retrieve queue before launch");
+        }
+
+        return exectuor.getQueue(queueName);
     }
 
     void registerQueue(Queue queue) {
