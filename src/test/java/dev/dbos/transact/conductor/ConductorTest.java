@@ -586,7 +586,7 @@ public class ConductorTest {
                 "test-app-ver", null, null,
                 "test-app-id", null));
 
-        when(mockDB.listWorkflows(any())).thenReturn(statuses);
+        when(mockExec.listWorkflows(any())).thenReturn(statuses);
 
         try (Conductor conductor = builder.build()) {
             conductor.start();
@@ -600,7 +600,7 @@ public class ConductorTest {
             listener.send(req);
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
             ArgumentCaptor<ListWorkflowsInput> inputCaptor = ArgumentCaptor.forClass(ListWorkflowsInput.class);
-            verify(mockDB).listWorkflows(inputCaptor.capture());
+            verify(mockExec).listWorkflows(inputCaptor.capture());
             ListWorkflowsInput input = inputCaptor.getValue();
             assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.getStartTime());
             assertEquals("foobarbaz", input.getWorkflowName());
@@ -644,7 +644,7 @@ public class ConductorTest {
                 "test-app-ver", null, null,
                 "test-app-id", null));
 
-        when(mockDB.listQueuedWorkflows(any(), anyBoolean())).thenReturn(statuses);
+        when(mockExec.listQueuedWorkflows(any(), anyBoolean())).thenReturn(statuses);
 
         try (Conductor conductor = builder.build()) {
             conductor.start();
@@ -659,7 +659,7 @@ public class ConductorTest {
             assertTrue(listener.messageLatch.await(100000000, TimeUnit.SECONDS), "message latch timed out");
             ArgumentCaptor<ListQueuedWorkflowsInput> inputCaptor = ArgumentCaptor
                     .forClass(ListQueuedWorkflowsInput.class);
-            verify(mockDB).listQueuedWorkflows(inputCaptor.capture(), eq(false));
+            verify(mockExec).listQueuedWorkflows(inputCaptor.capture(), eq(false));
             ListQueuedWorkflowsInput input = inputCaptor.getValue();
             assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.getStartTime());
             assertEquals("foobarbaz", input.getName());
@@ -787,7 +787,7 @@ public class ConductorTest {
         steps.add(new StepInfo(3, "function4", null, null, null));
         steps.add(new StepInfo(4, "function5", null, null, null));
 
-        when(mockDB.listWorkflowSteps(workflowId)).thenReturn(steps);
+        when(mockExec.listWorkflowSteps(workflowId)).thenReturn(steps);
 
         try (Conductor conductor = builder.build()) {
             conductor.start();
@@ -797,7 +797,7 @@ public class ConductorTest {
             ListStepsRequest req = new ListStepsRequest("12345", workflowId);
             listener.send(req);
             assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-            verify(mockDB).listWorkflowSteps(workflowId);
+            verify(mockExec).listWorkflowSteps(workflowId);
 
             JsonNode jsonNode = mapper.readTree(listener.message);
             assertNotNull(jsonNode);
