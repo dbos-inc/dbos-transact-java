@@ -8,10 +8,14 @@ import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
+import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.sql.SQLException;
 import java.util.List;
+import java.util.UUID;
 
 public class DBOSClient implements AutoCloseable {
 
@@ -112,8 +116,16 @@ public class DBOSClient implements AutoCloseable {
                 options.timeoutMS != null ? options.timeoutMS : 0L);
     }
 
-    public void send(String workflowId, int functionId, String destinationId, Object message, String topic) {
-        //
+    public void send(String destinationId, Object message, String topic, String idempotencyKey) throws SQLException {
+        var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
+        var now = System.currentTimeMillis();
+        if (idempotencyKey == null) {
+            idempotencyKey = UUID.randomUUID().toString();
+        }
+
+        var status = new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS, "temp_workflow-send-client", null, null, null, null, null, null, null, now, now, null, null, null, null, 0, null, null, null, 0, null); 
+        systemDatabase.initWorkflowStatus(status, null);
+        systemDatabase.send(status.getWorkflowUUID(), 0, destinationId, message, topic);
     }
 
     public Object getEvent(String targetId, String key, double timeoutSeconds) {
