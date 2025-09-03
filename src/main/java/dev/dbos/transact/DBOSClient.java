@@ -1,9 +1,8 @@
 package dev.dbos.transact;
 
-import java.util.List;
-
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -12,10 +11,11 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 
+import java.util.List;
+
 public class DBOSClient implements AutoCloseable {
 
     private final SystemDatabase systemDatabase;
-
 
     public DBOSClient(String url, String userName, String password) {
         var config = new DBOSConfig.Builder().url(url).dbUser(userName).dbPassword(password).build();
@@ -27,14 +27,93 @@ public class DBOSClient implements AutoCloseable {
         systemDatabase.close();
     }
 
+    public record EnqueueOptions(
+            String workflowName,
+            String queueName,
+            String targetClassName,
+            String workflowId,
+            String appVersion,
+            Long timeoutMS
+    // String deduplicationId,
+    // Integer priority
+    ) {
+    }
 
-    public void enqueueWorkflow(String workflowName, String targetClassName,
-            Object[] args, String queueName) {
-                
-            }
+    public static class EnqueueOptionsBuilder {
+        String workflowName;
+        String queueName;
+        String targetClassName;
+        String workflowId;
+        String appVersion;
+        Long timeoutMS;
+        // String deduplicationId;
+        // Integer priority;
+
+        public EnqueueOptionsBuilder(String workflowName, String queueName) {
+            this.workflowName = workflowName;
+            this.queueName = queueName;
+        }
+
+        public EnqueueOptionsBuilder targetClassName(String targetClassName) {
+            this.targetClassName = targetClassName;
+            return this;
+        }
+
+        public EnqueueOptionsBuilder workflowId(String workflowId) {
+            this.workflowId = workflowId;
+            return this;
+        }
+
+        public EnqueueOptionsBuilder appVersion(String appVersion) {
+            this.appVersion = appVersion;
+            return this;
+        }
+
+        public EnqueueOptionsBuilder timeoutMS(Long timeoutMS) {
+            this.timeoutMS = timeoutMS;
+            return this;
+        }
+
+        // public EnqueueOptionsBuilder deduplicationId(String deduplicationId) {
+        // this.deduplicationId = deduplicationId;
+        // return this;
+        // }
+
+        // public EnqueueOptionsBuilder priority(Integer priority) {
+        // this.priority = priority;
+        // return this;
+        // }
+
+        public EnqueueOptions build() {
+            return new EnqueueOptions(
+                    workflowName,
+                    queueName,
+                    targetClassName,
+                    workflowId,
+                    appVersion,
+                    timeoutMS
+            // deduplicationId,
+            // priority
+            );
+        }
+    }
+
+    public void enqueueWorkflow(EnqueueOptions options, Object[] args) throws Throwable {
+        DBOSExecutor.enqueueWorkflow(
+                this.systemDatabase,
+                options.workflowId,
+                options.workflowName,
+                options.targetClassName,
+                args,
+                options.queueName,
+                null,
+                options.appVersion,
+                null,
+                options.timeoutMS != null ? options.timeoutMS : 0L);
+    }
 
     public void send(String workflowId, int functionId, String destinationId, Object message, String topic) {
-        // 
+        //
     }
 
     public Object getEvent(String targetId, String key, double timeoutSeconds) {
@@ -61,11 +140,9 @@ public class DBOSClient implements AutoCloseable {
         return systemDatabase.getWorkflowStatus(workflowId);
     }
 
-    
     public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
         return systemDatabase.listWorkflows(input);
     }
-    
 
     public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput) {
         return systemDatabase.listQueuedWorkflows(input, loadInput);
