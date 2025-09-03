@@ -288,8 +288,7 @@ public class DBOSExecutor implements AutoCloseable {
             String className, Object[] inputs, String workflowId,
             String queueName, String executorId, String appVersion,
             ParentWorkflow parentWorkflow, long workflowTimeoutMs
-            
-            ) {
+    ) {
 
         // TODO: queue deduplication and priority
 
@@ -318,7 +317,8 @@ public class DBOSExecutor implements AutoCloseable {
         }
 
         if (parentWorkflow != null) {
-            systemDatabase.recordChildWorkflow(parentWorkflow.workflowId, workflowId, parentWorkflow.functionId, workflowName);
+            systemDatabase.recordChildWorkflow(parentWorkflow.workflowId, workflowId, parentWorkflow.functionId,
+                    workflowName);
         }
 
         return initResult;
@@ -402,7 +402,8 @@ public class DBOSExecutor implements AutoCloseable {
 
         var parent = ParentWorkflow.fromContext();
         long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs();
-        initResult = preInvokeWorkflow(systemDatabase, workflowName, targetClassName, args, wfid, null, getExecutorId(), getAppVersion(), parent, workflowTimeoutMs);
+        initResult = preInvokeWorkflow(systemDatabase, workflowName, targetClassName, args, wfid, null, getExecutorId(),
+                getAppVersion(), parent, workflowTimeoutMs);
 
         if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
             return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
@@ -452,7 +453,8 @@ public class DBOSExecutor implements AutoCloseable {
 
         var parent = ParentWorkflow.fromContext();
         long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs();
-        WorkflowInitResult initResult = preInvokeWorkflow(systemDatabase, workflowName, targetClassName, args, wfId, null, getExecutorId(), getAppVersion(), parent, workflowTimeoutMs);
+        WorkflowInitResult initResult = preInvokeWorkflow(systemDatabase, workflowName, targetClassName, args, wfId,
+                null, getExecutorId(), getAppVersion(), parent, workflowTimeoutMs);
 
         if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
             return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
