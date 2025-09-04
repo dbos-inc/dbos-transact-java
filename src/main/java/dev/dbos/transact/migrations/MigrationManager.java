@@ -123,8 +123,7 @@ public class MigrationManager {
 
             stmt.execute("CREATE SCHEMA IF NOT EXISTS dbos");
 
-            stmt.execute("CREATE TABLE IF NOT EXISTS dbos.migration_history ( "
-                    + "version TEXT PRIMARY KEY, " + " applied_at TIMESTAMPTZ DEFAULT now() )");
+            stmt.execute("CREATE TABLE IF NOT EXISTS dbos.migration_history (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT now() )");
         }
     }
 

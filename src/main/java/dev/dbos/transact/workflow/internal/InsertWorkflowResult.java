@@ -114,9 +114,9 @@ public class InsertWorkflowResult {
 
     @Override
     public String toString() {
-        return "InsertWorkflowResult{" + "recoveryAttempts=" + recoveryAttempts + ", status='"
-                + status + '\'' + ", name='" + name + '\'' + ", className='" + className + '\''
-                + ", configName='" + configName + '\'' + ", queueName='" + queueName + '\''
-                + ", workflowDeadlineEpochMs=" + workflowDeadlineEpochMs + '}';
+        return String.format(
+            "InsertWorkflowResult{recoveryAttempts=%d, status='%s', name='%s', className='%s', configName='%s', queueName='%s', workflowDeadlineEpochMs=%s}",
+            recoveryAttempts, status, name, className, configName, queueName, workflowDeadlineEpochMs
+        );
     }
 }

@@ -64,8 +64,7 @@ public class NotificationsDAO {
                 }
 
                 // Insert notification
-                String insertSql = "INSERT INTO %s.notifications (destination_uuid, topic, message) "
-                        + " VALUES (?, ?, ?) ";
+                String insertSql = "INSERT INTO %s.notifications (destination_uuid, topic, message) VALUES (?, ?, ?) ";
 
                 insertSql = String.format(insertSql, Constants.DB_SCHEMA);
 
@@ -155,8 +154,7 @@ public class NotificationsDAO {
             // notification
             boolean hasExistingNotification = false;
             try (Connection conn = dataSource.getConnection()) {
-                String checkSql = " SELECT topic FROM %s.notifications "
-                        + " WHERE destination_uuid = ? AND topic = ? ";
+                String checkSql = " SELECT topic FROM %s.notifications WHERE destination_uuid = ? AND topic = ? ";
 
                 checkSql = String.format(checkSql, Constants.DB_SCHEMA);
 
@@ -194,15 +192,20 @@ public class NotificationsDAO {
 
             try {
                 // Find and delete the oldest entry for this workflow+topic
-                String deleteAndReturnSql = " WITH oldest_entry AS ( "
-                        + " SELECT destination_uuid, topic, message, created_at_epoch_ms "
-                        + " FROM %s.notifications " + " WHERE destination_uuid = ? AND topic = ? "
-                        + " ORDER BY created_at_epoch_ms ASC " + " LIMIT 1 " + " ) "
-                        + " DELETE FROM %s.notifications "
-                        + " WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry) "
-                        + "  AND topic = (SELECT topic FROM oldest_entry) "
-                        + " AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry) "
-                        + " RETURNING message ";
+                String deleteAndReturnSql = """
+                    WITH oldest_entry AS (
+                        SELECT destination_uuid, topic, message, created_at_epoch_ms
+                        FROM %s.notifications
+                        WHERE destination_uuid = ? AND topic = ?
+                        ORDER BY created_at_epoch_ms ASC
+                        LIMIT 1
+                    )
+                    DELETE FROM %s.notifications
+                    WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry)
+                      AND topic = (SELECT topic FROM oldest_entry)
+                      AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry)
+                    RETURNING message
+                    """;
 
                 deleteAndReturnSql = String.format(deleteAndReturnSql,
                         Constants.DB_SCHEMA,
@@ -272,9 +275,12 @@ public class NotificationsDAO {
                 String serializedMessage = JSONUtil.serialize(message);
 
                 // Insert or update the workflow event using UPSERT
-                String upsertSql = " INSERT INTO %s.workflow_events (workflow_uuid, key, value) "
-                        + " VALUES (?, ?, ?) " + " ON CONFLICT (workflow_uuid, key) "
-                        + " DO UPDATE SET value = EXCLUDED.value";
+                String upsertSql = """
+                    INSERT INTO %s.workflow_events (workflow_uuid, key, value)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (workflow_uuid, key)
+                    DO UPDATE SET value = EXCLUDED.value
+                    """;
 
                 upsertSql = String.format(upsertSql, Constants.DB_SCHEMA);
 

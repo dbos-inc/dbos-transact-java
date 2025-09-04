@@ -38,10 +38,11 @@ public class StepsDAO {
 
     public static void recordStepResultTxn(StepResult result, Connection connection) throws SQLException {
 
-        String sql = String.format(
-                "INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, output, error) "
-                        + "VALUES (?, ?, ?, ?, ?)",
-                Constants.DB_SCHEMA);
+        String sql = String.format("""
+            INSERT INTO %s.operation_outputs 
+                (workflow_uuid, function_id, function_name, output, error)
+            VALUES (?, ?, ?, ?, ?)
+            """, Constants.DB_SCHEMA);
 
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             int paramIdx = 1;
@@ -129,9 +130,11 @@ public class StepsDAO {
                     String.format("Workflow %s is cancelled. Aborting function.", workflowId));
         }
 
-        String operationOutputSql = String.format("SELECT output, error, function_name "
-                + "FROM %s.operation_outputs " + "WHERE workflow_uuid = ? AND function_id = ?",
-                Constants.DB_SCHEMA);
+        String operationOutputSql = String.format("""
+            SELECT output, error, function_name
+            FROM %s.operation_outputs
+            WHERE workflow_uuid = ? AND function_id = ?
+            """, Constants.DB_SCHEMA);
 
         StepResult recordedResult = null;
         String recordedFunctionName = null;
@@ -168,9 +171,12 @@ public class StepsDAO {
             throw new IllegalStateException("Database is closed!");
         }
 
-        String sqlTemplate = "SELECT function_id, function_name, output, error, child_workflow_id "
-                + "FROM %s.operation_outputs " + "WHERE workflow_uuid = ? "
-                + "ORDER BY function_id;";
+        String sqlTemplate = """
+            SELECT function_id, function_name, output, error, child_workflow_id
+            FROM %s.operation_outputs
+            WHERE workflow_uuid = ?
+            ORDER BY function_id;
+            """;
         final String sql = String.format(sqlTemplate, Constants.DB_SCHEMA);
         System.out.println(sql);
 

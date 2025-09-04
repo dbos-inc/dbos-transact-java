@@ -38,9 +38,8 @@ public class StepInfo {
 
     @Override
     public String toString() {
-        return "StepInfo{" + "functionId=" + functionId + ", functionName='" + functionName + '\''
-                + ", output=" + output + ", error=" + error + ", childWorkflowId='"
-                + childWorkflowId + '\'' + '}';
+        return String.format("StepInfo{functionId=%d, functionName='%s', output=%s, error=%s, childWorkflowId='%s'}",
+            functionId, functionName, output, error, childWorkflowId);
     }
 
     @Override
