@@ -91,7 +91,7 @@ public class DBOSClient implements AutoCloseable {
         Objects.requireNonNull(options.workflowName);
         Objects.requireNonNull(options.queueName);
 
-        var wfid = DBOSExecutor.enqueueWorkflow(
+        var workflowId = DBOSExecutor.enqueueWorkflow(
                 this.systemDatabase,
                 options.workflowId,
                 options.workflowName,
@@ -102,7 +102,7 @@ public class DBOSClient implements AutoCloseable {
                 options.appVersion,
                 null,
                 options.timeoutMS != null ? options.timeoutMS : 0L);
-        return retrieveWorkflow(wfid);
+        return retrieveWorkflow(workflowId);
     }
 
     public void send(String destinationId, Object message, String topic, String idempotencyKey) throws SQLException {
@@ -130,12 +130,14 @@ public class DBOSClient implements AutoCloseable {
         systemDatabase.cancelWorkflow(workflowId);
     }
 
-    public void resumeWorkflow(String workflowId) {
+    public <T> WorkflowHandle<T> resumeWorkflow(String workflowId) {
         systemDatabase.resumeWorkflow(workflowId);
+        return retrieveWorkflow(workflowId);
     }
 
-    public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-        return systemDatabase.forkWorkflow(originalWorkflowId, startStep, options);
+    public <T> WorkflowHandle<T> forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
+        var forkedWorkflowId = systemDatabase.forkWorkflow(originalWorkflowId, startStep, options);
+        return retrieveWorkflow(forkedWorkflowId);
     }
 
     public WorkflowStatus getWorkflowStatus(String workflowId) {
