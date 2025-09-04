@@ -24,9 +24,9 @@ public class ClientTest {
 
     @BeforeAll
     static void onetimeSetup() throws Exception {
-        dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .url(dbUrl).dbUser(dbUser).dbPassword(dbPassword)
-                .maximumPoolSize(2).build();
+        dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost")
+                .dbPort(5432).dbUser(dbUser).sysDbName("dbos_java_sys").maximumPoolSize(2)
+                .build();
     }
 
     @BeforeEach
@@ -41,7 +41,7 @@ public class ClientTest {
 
         dbos.Queue("testQueue").build();
 
-        ClientService service = dbos.<ClientService>Workflow()
+        dbos.<ClientService>Workflow()
                 .interfaceClass(ClientService.class)
                 .implementation(new ClientServiceImpl()).build();
 
@@ -65,8 +65,6 @@ public class ClientTest {
     public void clientSend() throws Throwable {
 
         var dbos = DBOS.initialize(dbosConfig);
-
-        dbos.Queue("testQueue").build();
 
         ClientService service = dbos.<ClientService>Workflow()
                 .interfaceClass(ClientService.class)
