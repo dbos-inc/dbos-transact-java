@@ -32,15 +32,16 @@ public class DBOSClient implements AutoCloseable {
         systemDatabase.close();
     }
 
-    // TODO: add priority + deduplicationId options (https://github.com/dbos-inc/dbos-transact-java/issues/67)
+    // TODO: add priority + deduplicationId options
+    // (https://github.com/dbos-inc/dbos-transact-java/issues/67)
     public record EnqueueOptions(
             String workflowName,
             String queueName,
             String targetClassName,
             String workflowId,
             String appVersion,
-            Long timeoutMS
-    ) {}
+            Long timeoutMS) {
+    }
 
     public static class EnqueueOptionsBuilder {
         String workflowName;
@@ -82,8 +83,7 @@ public class DBOSClient implements AutoCloseable {
                     targetClassName,
                     workflowId,
                     appVersion,
-                    timeoutMS
-            );
+                    timeoutMS);
         }
     }
 
@@ -112,7 +112,8 @@ public class DBOSClient implements AutoCloseable {
             idempotencyKey = UUID.randomUUID().toString();
         }
 
-        var status = new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS, "temp_workflow-send-client", null, null, null, null, null, null, null, now, now, null, null, null, null, 0, null, null, null, 0, null); 
+        var status = new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS, "temp_workflow-send-client", null,
+                null, null, null, null, null, null, now, now, null, null, null, null, 0, null, null, null, 0, null);
         systemDatabase.initWorkflowStatus(status, null);
         systemDatabase.send(status.getWorkflowUUID(), 0, destinationId, message, topic);
     }

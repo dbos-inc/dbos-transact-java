@@ -537,7 +537,8 @@ public class DBOSExecutor implements AutoCloseable {
         return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
     }
 
-    // TODO: add priority + deduplicationId support (https://github.com/dbos-inc/dbos-transact-java/issues/67)
+    // TODO: add priority + deduplicationId support
+    // (https://github.com/dbos-inc/dbos-transact-java/issues/67)
     public static String enqueueWorkflow(SystemDatabase systemDatabase, String wfid, String workflowName,
             String targetClassName,
             Object[] args, String queueName, String executorId, String appVersion, ParentWorkflow parent,
