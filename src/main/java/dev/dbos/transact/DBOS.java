@@ -3,6 +3,7 @@ package dev.dbos.transact;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.WorkflowFunction;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
@@ -482,6 +483,18 @@ public class DBOS {
         }
 
         return exectuor.startWorkflow(func);
+    }
+
+    public WorkflowHandle<Void> startWorkflow(ThrowingRunnable func) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
+            throw new IllegalStateException("cannot startWorkflow before launch");
+        }
+        
+        return executor.startWorkflow(() -> {
+            func.execute();
+            return null;
+        });
     }
 
     public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
