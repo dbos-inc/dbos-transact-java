@@ -32,6 +32,7 @@ public class DBOSClient implements AutoCloseable {
         systemDatabase.close();
     }
 
+    // TODO: add priority + deduplicationId options (https://github.com/dbos-inc/dbos-transact-java/issues/67)
     public record EnqueueOptions(
             String workflowName,
             String queueName,
@@ -39,10 +40,7 @@ public class DBOSClient implements AutoCloseable {
             String workflowId,
             String appVersion,
             Long timeoutMS
-    // String deduplicationId,
-    // Integer priority
-    ) {
-    }
+    ) {}
 
     public static class EnqueueOptionsBuilder {
         String workflowName;
@@ -51,8 +49,6 @@ public class DBOSClient implements AutoCloseable {
         String workflowId;
         String appVersion;
         Long timeoutMS;
-        // String deduplicationId;
-        // Integer priority;
 
         public EnqueueOptionsBuilder(String workflowName, String queueName) {
             this.workflowName = workflowName;
@@ -79,16 +75,6 @@ public class DBOSClient implements AutoCloseable {
             return this;
         }
 
-        // public EnqueueOptionsBuilder deduplicationId(String deduplicationId) {
-        // this.deduplicationId = deduplicationId;
-        // return this;
-        // }
-
-        // public EnqueueOptionsBuilder priority(Integer priority) {
-        // this.priority = priority;
-        // return this;
-        // }
-
         public EnqueueOptions build() {
             return new EnqueueOptions(
                     workflowName,
@@ -97,8 +83,6 @@ public class DBOSClient implements AutoCloseable {
                     workflowId,
                     appVersion,
                     timeoutMS
-            // deduplicationId,
-            // priority
             );
         }
     }
