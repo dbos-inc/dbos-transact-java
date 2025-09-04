@@ -36,7 +36,7 @@ public class DBUtils {
             logger.info("Cleaned up: Deleted " + rowsAffected + " rows from dbos.workflow_status");
 
         } catch (SQLException e) {
-            logger.error("Error deleting workflows in test helper: " + e.getMessage());
+            logger.error("Error deleting workflows in test helper", e);
             throw e;
         }
     }
@@ -52,7 +52,7 @@ public class DBUtils {
                     "Cleaned up: Deleted " + rowsAffected + " rows from dbos.operation_outputs");
 
         } catch (SQLException e) {
-            logger.error("Error deleting workflows in test helper: " + e.getMessage());
+            logger.error("Error deleting workflows in test helper", e);
             throw e;
         }
     }

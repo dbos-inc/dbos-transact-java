@@ -103,7 +103,7 @@ public class MigrationManager {
                 List<MigrationFile> migrationFiles = loadMigrationFiles();
                 for (MigrationFile migrationFile : migrationFiles) {
                     String filename = migrationFile.getFilename().toString();
-                    logger.info("processing migration file " + filename);
+                    logger.info("processing migration file {}", filename);
                     String version = filename.split("_")[0];
 
                     if (!appliedMigrations.contains(version)) {
@@ -113,7 +113,7 @@ public class MigrationManager {
                 }
             }
         } catch (Throwable t) {
-            logger.error("Migration error" + t.getMessage());
+            logger.error("Migration error", t);
             throw t;
         }
     }

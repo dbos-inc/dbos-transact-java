@@ -117,11 +117,11 @@ public class QueuesDAO {
                 // Check worker concurrency limit
                 if (queue.getWorkerConcurrency() > 0) {
                     if (localPendingWorkflows > queue.getWorkerConcurrency()) {
-                        logger.warn(String.format(
-                                "The number of local pending workflows (%d) on queue %s exceeds the local concurrency limit (%d)",
+                        logger.warn(
+                                "The number of local pending workflows ({}) on queue {} exceeds the local concurrency limit ({})",
                                 localPendingWorkflows,
                                 queue.getName(),
-                                queue.getWorkerConcurrency()));
+                                queue.getWorkerConcurrency());
                     }
                     maxTasks = Math.max(0, queue.getWorkerConcurrency() - localPendingWorkflows);
                 }
@@ -132,11 +132,11 @@ public class QueuesDAO {
                             .mapToInt(Integer::intValue).sum();
 
                     if (globalPendingWorkflows > queue.getConcurrency()) {
-                        logger.warn(String.format(
-                                "The total number of pending workflows (%d) on queue %s exceeds the global concurrency limit (%d)",
+                        logger.warn(
+                                "The total number of pending workflows ({}) on queue {} exceeds the global concurrency limit ({})",
                                 globalPendingWorkflows,
                                 queue.getName(),
-                                queue.getConcurrency()));
+                                queue.getConcurrency());
                     }
 
                     int availableTasks = Math.max(0,

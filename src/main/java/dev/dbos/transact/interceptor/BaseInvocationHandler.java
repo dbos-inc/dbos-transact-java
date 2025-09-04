@@ -55,11 +55,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
         String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
 
-        String msg = String.format("Before: Starting workflow '%s' (timeout: %ds)",
-                workflowName,
-                workflow.timeout());
-
-        logger.info(msg);
+        logger.info("Before: Starting workflow '{}' (timeout: {})", workflowName, workflow.timeout());
 
         WorkflowFunctionWrapper wrapper = executor.getWorkflow(workflowName);
         if (wrapper == null) {
@@ -127,8 +123,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
             throw new IllegalStateException();
         }
 
-        String msg = String.format("Before : Executing step %s %s", method.getName(), step.name());
-        logger.info(msg);
+        logger.info("Before : Executing step {} {}", method.getName(), step.name());
         try {
             Object result = executor.runStep(step.name(),
                     step.retriesAllowed(),

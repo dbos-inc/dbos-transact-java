@@ -156,7 +156,7 @@ public class NotificationService {
                 }
                 logger.debug("Signaled {} condition for {}", mapType, payload);
             } else {
-                logger.warn("ConditionMap has no entry for " + payload);
+                logger.warn("ConditionMap has no entry for {}", payload);
             }
             // If no condition found, we simply ignore the notification
         }

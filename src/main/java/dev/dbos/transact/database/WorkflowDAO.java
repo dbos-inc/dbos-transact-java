@@ -129,7 +129,7 @@ public class WorkflowDAO {
                 try {
                     connection.rollback();
                 } catch (SQLException rollbackEx) {
-                    logger.error("Rollback failed: " + rollbackEx.getMessage());
+                    logger.error("Rollback failed", rollbackEx);
                 }
                 throw e; // Re-throw the original SQLException
             } catch (DBOSWorkflowConflictException | DBOSDeadLetterQueueException e) {
@@ -137,7 +137,7 @@ public class WorkflowDAO {
                 try {
                     connection.rollback();
                 } catch (SQLException rollbackEx) {
-                    logger.error("Rollback failed: " + rollbackEx.getMessage());
+                    logger.error("Rollback failed", rollbackEx);
                 }
                 throw e; // Re-throw the custom exception
             }
@@ -384,7 +384,7 @@ public class WorkflowDAO {
                 return output.get(0);
             }
         } catch (SQLException e) {
-            logger.error("Error retrieving workflow for " + workflowId, e);
+            logger.error("Error retrieving workflow for {}", workflowId, e);
         }
 
         throw new NonExistentWorkflowException(workflowId);
@@ -639,8 +639,7 @@ public class WorkflowDAO {
                     // Row not found - workflow hasn't appeared yet, continue polling
                 }
             } catch (SQLException e) {
-                logger.error("Database error while polling workflow " + workflowId + ": "
-                        + e.getMessage());
+                logger.error("Database error while polling workflow {}", workflowId, e);
             }
 
             try {
@@ -805,7 +804,7 @@ public class WorkflowDAO {
                 ? UUID.randomUUID().toString()
                 : options.getForkedWorkflowId();
 
-        logger.info("Original " + originalWorkflowId + "forked " + forkedWorkflowId);
+        logger.info("forkWorkflow Original id {} forked id {}", originalWorkflowId, forkedWorkflowId);
 
         String applicationVersion = options.getApplicationVersion();
 

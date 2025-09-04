@@ -278,7 +278,7 @@ public class StepsDAO {
 
                 recordStepResultTxn(dataSource, output);
             } catch (DBOSWorkflowConflictException e) {
-                logger.error("Error recording sleep", e.getMessage());
+                logger.error("Error recording sleep", e);
             }
         }
 

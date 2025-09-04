@@ -151,7 +151,7 @@ public class DBOSConfig {
             }
             if (url == null) {
                 url = System.getenv(Constants.JDBC_URL_ENV_VAR);
-                logger.info("Using db_url env " + url);
+                logger.info("Using db_url env {}", url);
             }
             if (dbUser == null) {
                 dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);

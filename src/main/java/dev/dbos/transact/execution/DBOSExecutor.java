@@ -451,7 +451,7 @@ public class DBOSExecutor implements AutoCloseable {
             Optional<String> childId = systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(),
                     ctx.getParentFunctionId());
             if (childId.isPresent()) {
-                logger.info("child Id is present " + childId);
+                logger.info("child Id is present {}", childId);
                 return new WorkflowHandleDBPoll<>(childId.get(), systemDatabase);
             }
         }
@@ -503,7 +503,7 @@ public class DBOSExecutor implements AutoCloseable {
         long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis();
 
         if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0) {
-            logger.info("Timeout deadline exceeded. Cancelling workflow " + workflowId);
+            logger.info("Timeout deadline exceeded. Cancelling workflow {}", workflowId);
             systemDatabase.cancelWorkflow(workflowId);
             return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
         }
@@ -516,7 +516,7 @@ public class DBOSExecutor implements AutoCloseable {
         if (allowedTime > 0) {
             ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
                 if (!future.isDone()) {
-                    logger.info(" Workflow timed out " + wfId);
+                    logger.info(" Workflow timed out {}", wfId);
                     future.cancel(false);
                     systemDatabase.cancelWorkflow(wfId);
                 }
@@ -591,11 +591,10 @@ public class DBOSExecutor implements AutoCloseable {
         if (workflowId == null) {
             // throw new DBOSException(UNEXPECTED.getCode(),
             // "No workflow id. Step must be called from workflow");
-            logger.warn("Step executed outside a workflow. DBOS features like Checkpointing " +
-                    "will not apply: " + stepName);
+            logger.warn("Step executed outside a workflow. DBOS features like Checkpointing will not apply: {}", stepName);
             return function.execute();
         }
-        logger.info(String.format("Running step %s for workflow %s", stepName, workflowId));
+        logger.info("Running step {} for workflow {}", stepName, workflowId);
 
         int stepFunctionId = ctx.getAndIncrementFunctionId();
 
@@ -635,8 +634,7 @@ public class DBOSExecutor implements AutoCloseable {
                 Throwable actual = (e instanceof InvocationTargetException)
                         ? ((InvocationTargetException) e).getTargetException()
                         : e;
-                logger.info("After: step threw exception " + actual.getMessage() + "-----"
-                        + actual.toString());
+                logger.info("After: step threw exception", actual);
                 eThrown = actual;
             }
 
@@ -650,7 +648,7 @@ public class DBOSExecutor implements AutoCloseable {
             return result;
         } else {
             // TODO: serialize
-            logger.info("After: step threw exception saving error " + eThrown.getMessage());
+            logger.info("After: step threw exception saving error", eThrown);
             StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, null,
                     eThrown.getMessage());
             systemDatabase.recordStepResultTxn(stepResult);
@@ -668,7 +666,7 @@ public class DBOSExecutor implements AutoCloseable {
         WorkflowStatus status = systemDatabase.getWorkflowStatus(workflowId);
 
         if (status == null) {
-            logger.error("Workflow not found ", workflowId);
+            logger.error("Workflow not found {}", workflowId);
             throw new NonExistentWorkflowException(workflowId);
         }
 
@@ -692,7 +690,7 @@ public class DBOSExecutor implements AutoCloseable {
                         inputs,
                         functionWrapper.function);
             } catch (Throwable t) {
-                logger.error(String.format("Error executing workflow by id : %s", workflowId), t);
+                logger.error("Error executing workflow by id : {}", workflowId, t);
             }
         }
 
@@ -718,7 +716,7 @@ public class DBOSExecutor implements AutoCloseable {
     public <T> WorkflowHandle<T> resumeWorkflow(String workflowId) {
 
         Supplier<Void> resumeFunction = () -> {
-            logger.info("Resuming workflow: ", workflowId);
+            logger.info("Resuming workflow {}", workflowId);
             systemDatabase.resumeWorkflow(workflowId);
             return null; // void
         };
@@ -730,7 +728,7 @@ public class DBOSExecutor implements AutoCloseable {
     public void cancelWorkflow(String workflowId) {
 
         Supplier<Void> cancelFunction = () -> {
-            logger.info("Cancelling workflow: ", workflowId);
+            logger.info("Cancelling workflow {}", workflowId);
             systemDatabase.cancelWorkflow(workflowId);
             return null; // void
         };
@@ -742,7 +740,7 @@ public class DBOSExecutor implements AutoCloseable {
             ForkOptions options) {
 
         Supplier<String> forkFunction = () -> {
-            logger.info(String.format("Forking workflow:%s from step:%d ", workflowId, startStep));
+            logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
 
             return systemDatabase.forkWorkflow(workflowId, startStep, options);
         };
@@ -832,7 +830,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     public void setEvent(String key, Object value) {
-        logger.info("Received setEvent for key " + key);
+        logger.info("Received setEvent for key {}", key);
 
         DBOSContext ctx = DBOSContextHolder.get();
         if (!ctx.isInWorkflow()) {
@@ -844,7 +842,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     public Object getEvent(String workflowId, String key, float timeOut) {
-        logger.info("Received getEvent for " + workflowId + " " + key);
+        logger.info("Received getEvent for {} {}", workflowId, key);
 
         DBOSContext ctx = DBOSContextHolder.get();
 

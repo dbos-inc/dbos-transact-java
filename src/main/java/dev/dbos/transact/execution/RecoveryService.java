@@ -41,7 +41,7 @@ public class RecoveryService {
         try {
             workflows = systemDatabase.getPendingWorkflows(dbosExecutor.getExecutorId(), dbosExecutor.getAppVersion());
         } catch (SQLException e) {
-            logger.error("Error getting pending workflows", e.getMessage());
+            logger.error("Error getting pending workflows", e);
         }
 
         final List<GetPendingWorkflowsOutput> toRecover = workflows;
@@ -86,7 +86,7 @@ public class RecoveryService {
             List<GetPendingWorkflowsOutput> pendingWorkflows = new CopyOnWriteArrayList<>(
                     wToRecover);
 
-            logger.info("Starting recovery thread " + pendingWorkflows.size());
+            logger.info("Starting recovery thread {} ", pendingWorkflows.size());
 
             while (!stopRequested && !pendingWorkflows.isEmpty()) {
                 try {
