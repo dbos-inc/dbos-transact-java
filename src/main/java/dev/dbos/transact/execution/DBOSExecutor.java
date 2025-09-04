@@ -538,7 +538,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     // TODO: add deduplicationId & priority to enqueueWorkflow static method
-    public static void enqueueWorkflow(SystemDatabase systemDatabase, String wfid, String workflowName,
+    public static String enqueueWorkflow(SystemDatabase systemDatabase, String wfid, String workflowName,
             String targetClassName,
             Object[] args, String queueName, String executorId, String appVersion, ParentWorkflow parent,
             long workflowTimeoutMs) throws Throwable {
@@ -568,6 +568,7 @@ public class DBOSExecutor implements AutoCloseable {
             throw actual;
         }
 
+        return wfid;
     }
 
     public void enqueueWorkflow(String workflowName, String targetClassName,

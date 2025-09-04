@@ -15,6 +15,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 public class DBOSClient implements AutoCloseable {
@@ -102,8 +103,11 @@ public class DBOSClient implements AutoCloseable {
         }
     }
 
-    public void enqueueWorkflow(EnqueueOptions options, Object[] args) throws Throwable {
-        DBOSExecutor.enqueueWorkflow(
+    public <T> WorkflowHandle<T> enqueueWorkflow(EnqueueOptions options, Object[] args) throws Throwable {
+        Objects.requireNonNull(options.workflowName);
+        Objects.requireNonNull(options.queueName);
+
+        var wfid = DBOSExecutor.enqueueWorkflow(
                 this.systemDatabase,
                 options.workflowId,
                 options.workflowName,
@@ -114,6 +118,7 @@ public class DBOSClient implements AutoCloseable {
                 options.appVersion,
                 null,
                 options.timeoutMS != null ? options.timeoutMS : 0L);
+        return retrieveWorkflow(wfid);
     }
 
     public void send(String destinationId, Object message, String topic, String idempotencyKey) throws SQLException {
@@ -132,8 +137,8 @@ public class DBOSClient implements AutoCloseable {
         return systemDatabase.getEvent(targetId, key, timeoutSeconds, null);
     }
 
-    public <R> WorkflowHandle<R> retrieveWorkflow(String workflowId) {
-        return new WorkflowHandleDBPoll<R>(workflowId, systemDatabase);
+    public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
+        return new WorkflowHandleDBPoll<T>(workflowId, systemDatabase);
     }
 
     public void cancelWorkflow(String workflowId) {
