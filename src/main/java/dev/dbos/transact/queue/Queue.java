@@ -79,10 +79,13 @@ public class Queue {
 
     @Override
     public String toString() {
-        return String.format("WorkflowQueue{name='%s', concurrency=%d, workerConcurrency=%d, limit=%d, period=%d, priorityEnabled=%b}",
-            name, concurrency, workerConcurrency,
-            rateLimit != null ? rateLimit.getLimit() : null,
-            rateLimit != null ? rateLimit.getPeriod() : null,
-            priorityEnabled);
+        return String.format(
+                "WorkflowQueue{name='%s', concurrency=%d, workerConcurrency=%d, limit=%d, period=%d, priorityEnabled=%b}",
+                name,
+                concurrency,
+                workerConcurrency,
+                rateLimit != null ? rateLimit.getLimit() : null,
+                rateLimit != null ? rateLimit.getPeriod() : null,
+                priorityEnabled);
     }
 }

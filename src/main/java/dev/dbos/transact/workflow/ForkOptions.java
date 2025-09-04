@@ -101,7 +101,9 @@ public class ForkOptions {
 
     @Override
     public String toString() {
-        return String.format("ForkOptions{forkedWorkflowId='%s', applicationVersion='%s', timeoutMS=%d}", 
-            forkedWorkflowId, applicationVersion, timeoutMS);
+        return String.format("ForkOptions{forkedWorkflowId='%s', applicationVersion='%s', timeoutMS=%d}",
+                forkedWorkflowId,
+                applicationVersion,
+                timeoutMS);
     }
 }

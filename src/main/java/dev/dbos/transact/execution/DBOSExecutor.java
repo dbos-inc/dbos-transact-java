@@ -591,7 +591,8 @@ public class DBOSExecutor implements AutoCloseable {
         if (workflowId == null) {
             // throw new DBOSException(UNEXPECTED.getCode(),
             // "No workflow id. Step must be called from workflow");
-            logger.warn("Step executed outside a workflow. DBOS features like Checkpointing will not apply: {}", stepName);
+            logger.warn("Step executed outside a workflow. DBOS features like Checkpointing will not apply: {}",
+                    stepName);
             return function.execute();
         }
         logger.info("Running step {} for workflow {}", stepName, workflowId);

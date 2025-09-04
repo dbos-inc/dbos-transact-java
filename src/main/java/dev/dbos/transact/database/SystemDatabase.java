@@ -426,7 +426,8 @@ public class SystemDatabase implements AutoCloseable {
         }
     }
 
-    public static HikariDataSource createDataSource(String url, String user, String password, int poolSize, int timeout) {
+    public static HikariDataSource createDataSource(String url, String user, String password, int poolSize,
+            int timeout) {
         HikariConfig hikariConfig = new HikariConfig();
         hikariConfig.setJdbcUrl(url);
         hikariConfig.setUsername(user);

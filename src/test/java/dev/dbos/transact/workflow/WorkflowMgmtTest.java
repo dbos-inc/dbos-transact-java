@@ -192,7 +192,7 @@ public class WorkflowMgmtTest {
                 testLatch.countDown();
 
             } catch (InterruptedException ie) {
-                logger.error("syncCancelResumeTest interrupted" , ie);
+                logger.error("syncCancelResumeTest interrupted", ie);
             }
         });
 

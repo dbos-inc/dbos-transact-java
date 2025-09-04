@@ -233,8 +233,12 @@ public class DBOSConfig {
     @Override
     public String toString() {
         return String.format(
-            "DBOSConfig{name='%s', url='%s', maximumPoolSize=%d, connectionTimeout=%d, appDbName='%s', sysDbName='%s'}",
-            name, url, maximumPoolSize, connectionTimeout, appDbName, sysDbName
-        );
+                "DBOSConfig{name='%s', url='%s', maximumPoolSize=%d, connectionTimeout=%d, appDbName='%s', sysDbName='%s'}",
+                name,
+                url,
+                maximumPoolSize,
+                connectionTimeout,
+                appDbName,
+                sysDbName);
     }
 }

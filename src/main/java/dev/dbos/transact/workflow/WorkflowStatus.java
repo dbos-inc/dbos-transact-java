@@ -269,12 +269,26 @@ public class WorkflowStatus {
     @Override
     public String toString() {
         return String.format(
-            "WorkflowStatus{workflowId='%s', status='%s', name='%s', className='%s', configName='%s', authenticatedUser='%s', assumedRole='%s', authenticatedRoles=%s, input=%s, output=%s, error=%s, createdAt=%s, updatedAt=%s, queueName='%s', executorId='%s', appVersion='%s', workflowTimeoutMs=%s, workflowDeadlineEpochMs=%s, appId='%s', recoveryAttempts=%s}",
-            workflowId, status, name, className, configName, authenticatedUser, assumedRole,
-            java.util.Arrays.toString(authenticatedRoles),
-            java.util.Arrays.toString(input),
-            output, error, createdAt, updatedAt, queueName, executorId, appVersion,
-            workflowTimeoutMs, workflowDeadlineEpochMs, appId, recoveryAttempts
-        );
+                "WorkflowStatus{workflowId='%s', status='%s', name='%s', className='%s', configName='%s', authenticatedUser='%s', assumedRole='%s', authenticatedRoles=%s, input=%s, output=%s, error=%s, createdAt=%s, updatedAt=%s, queueName='%s', executorId='%s', appVersion='%s', workflowTimeoutMs=%s, workflowDeadlineEpochMs=%s, appId='%s', recoveryAttempts=%s}",
+                workflowId,
+                status,
+                name,
+                className,
+                configName,
+                authenticatedUser,
+                assumedRole,
+                java.util.Arrays.toString(authenticatedRoles),
+                java.util.Arrays.toString(input),
+                output,
+                error,
+                createdAt,
+                updatedAt,
+                queueName,
+                executorId,
+                appVersion,
+                workflowTimeoutMs,
+                workflowDeadlineEpochMs,
+                appId,
+                recoveryAttempts);
     }
 }

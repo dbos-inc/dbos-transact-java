@@ -490,7 +490,7 @@ public class DBOS {
         if (executor == null) {
             throw new IllegalStateException("cannot startWorkflow before launch");
         }
-        
+
         return executor.startWorkflow(() -> {
             func.execute();
             return null;
