@@ -232,6 +232,7 @@ public class DBOSConfig {
 
     @Override
     public String toString() {
+        // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/68
         return "DBOSConfig{" + "name='" + name + '\'' + ", url='" + url + '\''
                 + ", maximumPoolSize=" + maximumPoolSize + ", connectionTimeout="
                 + connectionTimeout + ", appDbName='" + appDbName + '\'' + ", sysDbName='"

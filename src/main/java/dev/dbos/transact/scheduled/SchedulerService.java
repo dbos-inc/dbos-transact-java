@@ -81,7 +81,6 @@ public class SchedulerService {
                         try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
                             dbosExecutor.enqueueWorkflow(wf.workflowName,
                                     wf.instance.getClass().getName(),
-                                    wrapper,
                                     args,
                                     schedulerQueue);
                         }
