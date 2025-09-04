@@ -346,17 +346,6 @@ public class DBOSExecutor implements AutoCloseable {
         systemDatabase.recordWorkflowError(workflowId, errorString);
     }
 
-    /**
-     * Run and postInvoke reused separately preInvoke in reused separately
-     *
-     * @param target
-     * @param args
-     * @param function
-     * @param workflowId
-     * @return
-     * @param <T>
-     * @throws Throwable
-     */
     private <T> T runAndSaveResult(Object target, Object[] args, WorkflowFunctionReflect function,
             String workflowId) throws Throwable {
 
@@ -376,7 +365,7 @@ public class DBOSExecutor implements AutoCloseable {
 
             if (actual instanceof WorkflowCancelledException
                     || actual instanceof InterruptedException) {
-                // don'nt mark the workflow status as error yet. this is cancel
+                // don't mark the workflow status as error yet. this is cancel
                 // if this is a parent cancel, the exception is thrown to caller
                 // state is already c
                 // if this is child cancel, its state is already Cancelled
