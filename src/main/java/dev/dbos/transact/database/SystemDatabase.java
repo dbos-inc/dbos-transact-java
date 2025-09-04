@@ -42,7 +42,11 @@ public class SystemDatabase implements AutoCloseable {
     private final NotificationService notificationService;
 
     public SystemDatabase(DBOSConfig config) {
-        dataSource = SystemDatabase.createDataSource(config, null);
+        this(SystemDatabase.createDataSource(config, null));
+    }
+
+    public SystemDatabase(HikariDataSource dataSource) {
+        this.dataSource = dataSource;
         stepsDAO = new StepsDAO(dataSource);
         workflowDAO = new WorkflowDAO(dataSource);
         queuesDAO = new QueuesDAO(dataSource);
@@ -422,8 +426,20 @@ public class SystemDatabase implements AutoCloseable {
         }
     }
 
-    public static HikariDataSource createDataSource(DBOSConfig config, String dbName) {
+    public static HikariDataSource createDataSource(String url, String user, String password, int poolSize, int timeout) {
         HikariConfig hikariConfig = new HikariConfig();
+        hikariConfig.setJdbcUrl(url);
+        hikariConfig.setUsername(user);
+        hikariConfig.setPassword(password);
+        hikariConfig.setMaximumPoolSize(poolSize > 0 ? poolSize : 2);
+        if (timeout > 0) {
+            hikariConfig.setConnectionTimeout(timeout);
+        }
+
+        return new HikariDataSource(hikariConfig);
+    }
+
+    public static HikariDataSource createDataSource(DBOSConfig config, String dbName) {
 
         if (dbName == null) {
             if (config.getSysDbName() != null) {
@@ -444,23 +460,10 @@ public class SystemDatabase implements AutoCloseable {
 
         String dbUser = config.getDbUser();
         String dbPassword = config.getDbPassword();
-        hikariConfig.setJdbcUrl(dburl);
-        hikariConfig.setUsername(dbUser);
-        hikariConfig.setPassword(dbPassword);
-
         int maximumPoolSize = config.getMaximumPoolSize();
-        if (maximumPoolSize > 0) {
-            hikariConfig.setMaximumPoolSize(maximumPoolSize);
-        } else {
-            hikariConfig.setMaximumPoolSize(2);
-        }
-
         int connectionTimeout = config.getConnectionTimeout();
-        if (connectionTimeout > 0) {
-            hikariConfig.setConnectionTimeout(connectionTimeout);
-        }
 
-        return new HikariDataSource(hikariConfig);
+        return createDataSource(dburl, dbUser, dbPassword, maximumPoolSize, connectionTimeout);
     }
 
     public static HikariDataSource createPostgresDataSource(DBOSConfig config) {

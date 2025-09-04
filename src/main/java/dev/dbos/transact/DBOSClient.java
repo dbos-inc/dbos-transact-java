@@ -22,9 +22,9 @@ public class DBOSClient implements AutoCloseable {
 
     private final SystemDatabase systemDatabase;
 
-    public DBOSClient(String url, String userName, String password) {
-        var config = new DBOSConfig.Builder().url(url).dbUser(userName).dbPassword(password).build();
-        systemDatabase = new SystemDatabase(config);
+    public DBOSClient(String url, String user, String password) {
+        var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
+        systemDatabase = new SystemDatabase(dataSource);
     }
 
     @Override
