@@ -49,18 +49,18 @@ public class NotificationsDAO {
 
                 if (recordedOutput != null) {
                     logger.debug(
-                            String.format("Replaying send, id: %d, destination_uuid: %s, topic: %s",
+                            "Replaying send, id: {}, destination_uuid: {}, topic: {}",
                                     functionId,
                                     destinationUuid,
-                                    finalTopic));
+                                    finalTopic);
                     conn.commit();
                     return;
                 } else {
                     logger.debug(
-                            String.format("Running send, id: %d, destination_uuid: %s, topic: %s",
+                            "Running send, id: {}, destination_uuid: {}, topic: {}",
                                     functionId,
                                     destinationUuid,
-                                    finalTopic));
+                                    finalTopic);
                 }
 
                 // Insert notification
@@ -124,7 +124,7 @@ public class NotificationsDAO {
         }
 
         if (recordedOutput != null) {
-            logger.debug(String.format("Replaying recv, id: %d, topic: %s", functionId, finalTopic));
+            logger.debug("Replaying recv, id: {}, topic: {}", functionId, finalTopic);
             if (recordedOutput.getOutput() != null) {
                 Object[] dSerOut = JSONUtil.deserializeToArray(recordedOutput.getOutput());
                 return dSerOut == null ? null : dSerOut[0];
@@ -132,7 +132,7 @@ public class NotificationsDAO {
                 throw new RuntimeException("No output recorded in the last recv");
             }
         } else {
-            logger.debug(String.format("Running recv, id: %d, topic: %s", functionId, finalTopic));
+            logger.debug("Running recv, id: {}, topic: {}", functionId, finalTopic);
         }
 
         // Insert a condition to the notifications map
@@ -390,7 +390,7 @@ public class NotificationsDAO {
 
                 try {
                     long timeout = (long) (actualTimeout * 1000);
-                    logger.debug("Waiting for notification ..." + timeout);
+                    logger.debug("Waiting for notification {}...", timeout);
                     lockConditionPair.condition.await(timeout, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();

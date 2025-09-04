@@ -143,7 +143,7 @@ public class NotificationService {
 
     private void handleNotification(String payload, String mapType) {
 
-        logger.debug("Received notification for " + payload);
+        logger.debug("Received notification for {}" ,payload);
 
         if (payload != null && !payload.isEmpty()) {
             LockConditionPair pair = notificationsMap.get(payload);
