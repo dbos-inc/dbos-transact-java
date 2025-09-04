@@ -88,21 +88,21 @@ public class DBOS {
     }
 
     public WorkflowFunctionWrapper getWorkflow(String workflowName) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot retrieve workflow before launch");
         }
 
-        return exectuor.getWorkflow(workflowName);
+        return executor.getWorkflow(workflowName);
     }
 
     public Optional<Queue> getQueue(String queueName) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot retrieve queue before launch");
         }
 
-        return exectuor.getQueue(queueName);
+        return executor.getQueue(queueName);
     }
 
     void registerQueue(Queue queue) {
@@ -328,11 +328,11 @@ public class DBOS {
      *            topic to which the message is send
      */
     public void send(String destinationId, Object message, String topic) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot send before launch");
         }
-        exectuor.send(destinationId, message, topic, internalWorkflowsService);
+        executor.send(destinationId, message, topic, internalWorkflowsService);
     }
 
     /**
@@ -345,11 +345,11 @@ public class DBOS {
      * @return the message if there is one or else null
      */
     public Object recv(String topic, float timeoutSeconds) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot recv before launch");
         }
-        return exectuor.recv(topic, timeoutSeconds);
+        return executor.recv(topic, timeoutSeconds);
     }
 
     /**
@@ -363,12 +363,12 @@ public class DBOS {
     public void setEvent(String key, Object value) {
         logger.info("Received setEvent for key " + key);
 
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot setEvent before launch");
         }
 
-        exectuor.setEvent(key, value);
+        executor.setEvent(key, value);
     }
 
     /**
@@ -385,12 +385,12 @@ public class DBOS {
     public Object getEvent(String workflowId, String key, float timeOut) {
         logger.info("Received getEvent for " + workflowId + " " + key);
 
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot getEvent before launch");
         }
 
-        return exectuor.getEvent(workflowId, key, timeOut);
+        return executor.getEvent(workflowId, key, timeOut);
     }
 
     /**
@@ -402,12 +402,12 @@ public class DBOS {
      *            in seconds
      */
     public void sleep(float seconds) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot sleep before launch");
         }
 
-        exectuor.sleep(seconds);
+        executor.sleep(seconds);
     }
 
     /**
@@ -418,12 +418,12 @@ public class DBOS {
      * @return A handle to the workflow
      */
     public <T> WorkflowHandle<T> resumeWorkflow(String workflowId) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot resumeWorkflow before launch");
         }
 
-        return exectuor.resumeWorkflow(workflowId);
+        return executor.resumeWorkflow(workflowId);
     }
 
     /***
@@ -435,12 +435,12 @@ public class DBOS {
      */
 
     public void cancelWorkflow(String workflowId) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot cancelWorkflow before launch");
         }
 
-        exectuor.cancelWorkflow(workflowId);
+        executor.cancelWorkflow(workflowId);
     }
 
     /**
@@ -458,12 +458,12 @@ public class DBOS {
      */
     public <T> WorkflowHandle<T> forkWorkflow(String workflowId, int startStep,
             ForkOptions options) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot forkWorkflow before launch");
         }
 
-        return exectuor.forkWorkflow(workflowId, startStep, options);
+        return executor.forkWorkflow(workflowId, startStep, options);
     }
 
     /**
@@ -477,12 +477,12 @@ public class DBOS {
      *            type returned by the function
      */
     public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot startWorkflow before launch");
         }
 
-        return exectuor.startWorkflow(func);
+        return executor.startWorkflow(func);
     }
 
     public WorkflowHandle<Void> startWorkflow(ThrowingRunnable func) {
@@ -498,12 +498,12 @@ public class DBOS {
     }
 
     public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot startWorkflow before launch");
         }
 
-        return exectuor.retrieveWorkflow(workflowId);
+        return executor.retrieveWorkflow(workflowId);
     }
 
     /**
@@ -514,11 +514,11 @@ public class DBOS {
      * @return a list of workflow status {@link WorkflowStatus}
      */
     public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot listWorkflows before launch");
         }
-        return exectuor.listWorkflows(input);
+        return executor.listWorkflows(input);
     }
 
     /**
@@ -529,11 +529,11 @@ public class DBOS {
      * @return list of step information {@link StepInfo}
      */
     public List<StepInfo> listWorkflowSteps(String workflowId) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot listWorkflowSteps before launch");
         }
-        return exectuor.listWorkflowSteps(workflowId);
+        return executor.listWorkflowSteps(workflowId);
     }
 
     /**
@@ -546,10 +546,10 @@ public class DBOS {
      * @return list of workflow statuses {@link WorkflowStatus}
      */
     public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput query, boolean loadInput) {
-        var exectuor = dbosExecutor.get();
-        if (exectuor == null) {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
             throw new IllegalStateException("cannot listQueuedWorkflows before launch");
         }
-        return exectuor.listQueuedWorkflows(query, loadInput);
+        return executor.listQueuedWorkflows(query, loadInput);
     }
 }
