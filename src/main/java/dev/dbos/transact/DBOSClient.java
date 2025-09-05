@@ -1,6 +1,5 @@
 package dev.dbos.transact;
 
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;

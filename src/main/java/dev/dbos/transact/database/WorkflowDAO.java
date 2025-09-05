@@ -35,8 +35,7 @@ public class WorkflowDAO {
             throw new IllegalStateException("Database is closed!");
         }
 
-        final String sql = "SELECT status, output, error " + "FROM dbos.workflow_status "
-                + "WHERE workflow_uuid = ?;";
+        final String sql = "SELECT status, output, error FROM dbos.workflow_status WHERE workflow_uuid = ?;";
 
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -130,7 +129,7 @@ public class WorkflowDAO {
                 try {
                     connection.rollback();
                 } catch (SQLException rollbackEx) {
-                    logger.error("Rollback failed: " + rollbackEx.getMessage());
+                    logger.error("Rollback failed", rollbackEx);
                 }
                 throw e; // Re-throw the original SQLException
             } catch (DBOSWorkflowConflictException | DBOSDeadLetterQueueException e) {
@@ -138,7 +137,7 @@ public class WorkflowDAO {
                 try {
                     connection.rollback();
                 } catch (SQLException rollbackEx) {
-                    logger.error("Rollback failed: " + rollbackEx.getMessage());
+                    logger.error("Rollback failed", rollbackEx);
                 }
                 throw e; // Re-throw the custom exception
             }
@@ -159,17 +158,20 @@ public class WorkflowDAO {
             throw new IllegalStateException("Database is closed!");
         }
 
-        String insertSQL = "INSERT INTO dbos.workflow_status ("
-                + "workflow_uuid, status, name, class_name, config_name, "
-                + "output, error, executor_id, application_version, application_id, "
-                + "authenticated_user, authenticated_roles, assumed_role, queue_name, "
-                + "recovery_attempts, workflow_timeout_ms, workflow_deadline_epoch_ms, "
-                + "deduplication_id, priority, inputs"
-                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                + "ON CONFLICT (workflow_uuid) DO UPDATE "
-                + "SET recovery_attempts = EXCLUDED.recovery_attempts + 1, "
-                + "updated_at = EXCLUDED.updated_at, " + "executor_id = EXCLUDED.executor_id "
-                + "RETURNING recovery_attempts, status, workflow_deadline_epoch_ms, name, class_name, config_name, queue_name";
+        String insertSQL = """
+                INSERT INTO dbos.workflow_status (
+                workflow_uuid, status, name, class_name, config_name,
+                output, error, executor_id, application_version, application_id,
+                authenticated_user, authenticated_roles, assumed_role, queue_name,
+                recovery_attempts, workflow_timeout_ms, workflow_deadline_epoch_ms,
+                deduplication_id, priority, inputs
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (workflow_uuid) DO UPDATE
+                SET recovery_attempts = EXCLUDED.recovery_attempts + 1,
+                    updated_at = EXCLUDED.updated_at,
+                    executor_id = EXCLUDED.executor_id
+                RETURNING recovery_attempts, status, workflow_deadline_epoch_ms, name, class_name, config_name, queue_name
+                """;
 
         try (PreparedStatement stmt = connection.prepareStatement(insertSQL)) {
 
@@ -382,7 +384,7 @@ public class WorkflowDAO {
                 return output.get(0);
             }
         } catch (SQLException e) {
-            logger.error("Error retrieving workflow for " + workflowId, e);
+            logger.error("Error retrieving workflow for {}", workflowId, e);
         }
 
         throw new NonExistentWorkflowException(workflowId);
@@ -400,13 +402,15 @@ public class WorkflowDAO {
 
         // Start building the SELECT clause. The order of columns here is critical
         // for mapping to the WorkflowStatus fields by index later in the ResultSet.
-        sqlBuilder.append("SELECT workflow_uuid, status, name, recovery_attempts, "
-                + "config_name, class_name, authenticated_user, authenticated_roles, "
-                + "assumed_role, queue_name, executor_id, created_at, updated_at, "
-                + "application_version, application_id, inputs, output, error, "
-                + "workflow_deadline_epoch_ms, workflow_timeout_ms ");
+        sqlBuilder.append("""
+                SELECT workflow_uuid, status, name, recovery_attempts,
+                   config_name, class_name, authenticated_user, authenticated_roles,
+                   assumed_role, queue_name, executor_id, created_at, updated_at,
+                   application_version, application_id, inputs, output, error,
+                   workflow_deadline_epoch_ms, workflow_timeout_ms
+                """);
 
-        sqlBuilder.append(String.format("FROM %s.workflow_status ", Constants.DB_SCHEMA));
+        sqlBuilder.append(String.format(" FROM %s.workflow_status ", Constants.DB_SCHEMA));
 
         // --- WHERE Clauses ---
         StringJoiner whereConditions = new StringJoiner(" AND ");
@@ -560,8 +564,13 @@ public class WorkflowDAO {
             throw new IllegalStateException("Database is closed!");
         }
 
-        String sqlTemplate = "SELECT workflow_uuid, queue_name " + "FROM %s.workflow_status "
-                + "WHERE status = ? " + "AND executor_id = ? " + "AND application_version = ?";
+        String sqlTemplate = """
+                SELECT workflow_uuid, queue_name
+                FROM %s.workflow_status
+                WHERE status = ?
+                  AND executor_id = ?
+                  AND application_version = ?
+                """;
 
         final String sql = String.format(sqlTemplate, Constants.DB_SCHEMA);
 
@@ -590,8 +599,11 @@ public class WorkflowDAO {
             throw new IllegalStateException("Database is closed!");
         }
 
-        final String sql = "SELECT status, output, error " + "FROM dbos.workflow_status "
-                + "WHERE workflow_uuid = ?";
+        final String sql = """
+                SELECT status, output, error
+                FROM dbos.workflow_status
+                WHERE workflow_uuid = ?
+                """;
 
         while (true) {
 
@@ -627,8 +639,7 @@ public class WorkflowDAO {
                     // Row not found - workflow hasn't appeared yet, continue polling
                 }
             } catch (SQLException e) {
-                logger.error("Database error while polling workflow " + workflowId + ": "
-                        + e.getMessage());
+                logger.error("Database error while polling workflow {}", workflowId, e);
             }
 
             try {
@@ -648,10 +659,9 @@ public class WorkflowDAO {
             throw new IllegalStateException("Database is closed!");
         }
 
-        String sql = String.format(
-                "INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, child_workflow_id) "
-                        + "VALUES (?, ?, ?, ?)",
-                Constants.DB_SCHEMA);
+        String sql = String
+                .format("INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, child_workflow_id) VALUES (?, ?, ?, ?)",
+                        Constants.DB_SCHEMA);
 
         try {
             try (Connection connection = dataSource.getConnection();
@@ -681,8 +691,7 @@ public class WorkflowDAO {
         if (dataSource.isClosed()) {
             throw new IllegalStateException("Database is closed!");
         }
-        String sql = "SELECT child_workflow_id " + " FROM dbos.operation_outputs "
-                + "WHERE workflow_uuid = ? AND function_id = ? ";
+        String sql = "SELECT child_workflow_id FROM dbos.operation_outputs WHERE workflow_uuid = ? AND function_id = ? ";
 
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -732,9 +741,14 @@ public class WorkflowDAO {
 
             // Set the workflow's status to CANCELLED and remove it from any queue it is
             // on
-            String updateSql = "UPDATE %s.workflow_status SET status = ?, "
-                    + " queue_name = NULL, deduplication_id = NULL, started_at_epoch_ms = NULL "
-                    + " WHERE workflow_uuid = ? ";
+            String updateSql = """
+                    UPDATE %s.workflow_status
+                    SET status = ?,
+                        queue_name = NULL,
+                        deduplication_id = NULL,
+                        started_at_epoch_ms = NULL
+                    WHERE workflow_uuid = ?
+                    """;
             updateSql = String.format(updateSql, Constants.DB_SCHEMA);
 
             try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
@@ -791,7 +805,7 @@ public class WorkflowDAO {
                 ? UUID.randomUUID().toString()
                 : options.getForkedWorkflowId();
 
-        logger.info("Original " + originalWorkflowId + "forked " + forkedWorkflowId);
+        logger.info("forkWorkflow Original id {} forked id {}", originalWorkflowId, forkedWorkflowId);
 
         String applicationVersion = options.getApplicationVersion();
 
@@ -840,10 +854,12 @@ public class WorkflowDAO {
             workflowDeadlineEpoch = System.currentTimeMillis() + timeoutMs;
         }
 
-        String sql = "INSERT INTO dbos.workflow_status ( "
-                + " workflow_uuid, status, name, class_name, config_name, application_version, application_id, "
-                + " authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_deadline_epoch_ms, workflow_timeout_ms "
-                + " ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ";
+        String sql = """
+                INSERT INTO dbos.workflow_status (
+                workflow_uuid, status, name, class_name, config_name, application_version, application_id,
+                authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_deadline_epoch_ms, workflow_timeout_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
 
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, forkedWorkflowId);
@@ -874,11 +890,13 @@ public class WorkflowDAO {
     private static void copyOperationOutputs(Connection connection, String originalWorkflowId,
             String forkedWorkflowId, int startStep) throws SQLException {
 
-        String sql = "INSERT INTO dbos.operation_outputs ( "
-                + " workflow_uuid, function_id, output, error, function_name, child_workflow_id) "
-                + " SELECT ? as workflow_uuid, function_id, output, error, function_name, child_workflow_id "
-                + " FROM dbos.operation_outputs " + " WHERE workflow_uuid = ? "
-                + " AND function_id < ? ";
+        String sql = """
+                INSERT INTO dbos.operation_outputs
+                    (workflow_uuid, function_id, output, error, function_name, child_workflow_id )
+                SELECT ? as workflow_uuid, function_id, output, error, function_name, child_workflow_id
+                    FROM dbos.operation_outputs
+                    WHERE workflow_uuid = ? AND function_id < ?
+                """;
 
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, forkedWorkflowId);
@@ -911,12 +929,12 @@ public class WorkflowDAO {
         }
     }
 
-    private static void updateWorkflowToEnqueued(Connection connection, String workflowId)
-            throws SQLException {
-        String sql = "UPDATE dbos.workflow_status " + " SET status = ?, " + " queue_name = ?, "
-                + " recovery_attempts = ?, " + " workflow_deadline_epoch_ms = 0, "
-                + " deduplication_id = NULL, " + " started_at_epoch_ms = NULL "
-                + " WHERE workflow_uuid = ? ";
+    private static void updateWorkflowToEnqueued(Connection connection, String workflowId) throws SQLException {
+        String sql = """
+                UPDATE dbos.workflow_status
+                SET status = ?, queue_name = ?, recovery_attempts = ?, workflow_deadline_epoch_ms = 0, deduplication_id = NULL,  started_at_epoch_ms = NULL
+                WHERE workflow_uuid = ?
+                """;
 
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, WorkflowState.ENQUEUED.name());

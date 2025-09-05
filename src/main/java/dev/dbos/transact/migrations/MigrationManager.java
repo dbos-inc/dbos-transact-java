@@ -103,7 +103,7 @@ public class MigrationManager {
                 List<MigrationFile> migrationFiles = loadMigrationFiles();
                 for (MigrationFile migrationFile : migrationFiles) {
                     String filename = migrationFile.getFilename().toString();
-                    logger.info("processing migration file " + filename);
+                    logger.info("processing migration file {}", filename);
                     String version = filename.split("_")[0];
 
                     if (!appliedMigrations.contains(version)) {
@@ -113,7 +113,7 @@ public class MigrationManager {
                 }
             }
         } catch (Throwable t) {
-            logger.error("Migration error" + t.getMessage());
+            logger.error("Migration error", t);
             throw t;
         }
     }
@@ -123,8 +123,8 @@ public class MigrationManager {
 
             stmt.execute("CREATE SCHEMA IF NOT EXISTS dbos");
 
-            stmt.execute("CREATE TABLE IF NOT EXISTS dbos.migration_history ( "
-                    + "version TEXT PRIMARY KEY, " + " applied_at TIMESTAMPTZ DEFAULT now() )");
+            stmt.execute(
+                    "CREATE TABLE IF NOT EXISTS dbos.migration_history (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT now() )");
         }
     }
 

@@ -268,15 +268,27 @@ public class WorkflowStatus {
 
     @Override
     public String toString() {
-        return "WorkflowStatus{" + "workflowId='" + workflowId + '\'' + ", status='" + status + '\''
-                + ", name='" + name + '\'' + ", className='" + className + '\'' + ", configName='"
-                + configName + '\'' + ", authenticatedUser='" + authenticatedUser + '\''
-                + ", assumedRole='" + assumedRole + '\'' + ", authenticatedRoles="
-                + authenticatedRoles + ", input=" + input + ", output=" + output + ", error="
-                + error + ", createdAt=" + createdAt + ", updatedAt=" + updatedAt + ", queueName='"
-                + queueName + '\'' + ", executorId='" + executorId + '\'' + ", appVersion='"
-                + appVersion + '\'' + ", workflowTimeoutMs=" + workflowTimeoutMs
-                + ", workflowDeadlineEpochMs=" + workflowDeadlineEpochMs + ", appId='" + appId
-                + '\'' + ", recoveryAttempts=" + recoveryAttempts + '}';
+        return String.format(
+                "WorkflowStatus{workflowId='%s', status='%s', name='%s', className='%s', configName='%s', authenticatedUser='%s', assumedRole='%s', authenticatedRoles=%s, input=%s, output=%s, error=%s, createdAt=%s, updatedAt=%s, queueName='%s', executorId='%s', appVersion='%s', workflowTimeoutMs=%s, workflowDeadlineEpochMs=%s, appId='%s', recoveryAttempts=%s}",
+                workflowId,
+                status,
+                name,
+                className,
+                configName,
+                authenticatedUser,
+                assumedRole,
+                java.util.Arrays.toString(authenticatedRoles),
+                java.util.Arrays.toString(input),
+                output,
+                error,
+                createdAt,
+                updatedAt,
+                queueName,
+                executorId,
+                appVersion,
+                workflowTimeoutMs,
+                workflowDeadlineEpochMs,
+                appId,
+                recoveryAttempts);
     }
 }

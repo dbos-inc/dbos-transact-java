@@ -143,7 +143,7 @@ public class NotificationService {
 
     private void handleNotification(String payload, String mapType) {
 
-        logger.debug("Received notification for " + payload);
+        logger.debug("Received notification for {}", payload);
 
         if (payload != null && !payload.isEmpty()) {
             LockConditionPair pair = notificationsMap.get(payload);
@@ -156,7 +156,7 @@ public class NotificationService {
                 }
                 logger.debug("Signaled {} condition for {}", mapType, payload);
             } else {
-                logger.warn("ConditionMap has no entry for " + payload);
+                logger.warn("ConditionMap has no entry for {}", payload);
             }
             // If no condition found, we simply ignore the notification
         }

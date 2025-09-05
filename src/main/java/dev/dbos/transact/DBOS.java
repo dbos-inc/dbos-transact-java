@@ -361,7 +361,7 @@ public class DBOS {
      *            data that is published
      */
     public void setEvent(String key, Object value) {
-        logger.info("Received setEvent for key " + key);
+        logger.info("Received setEvent for key {}", key);
 
         var executor = dbosExecutor.get();
         if (executor == null) {
@@ -383,7 +383,7 @@ public class DBOS {
      * @return the published value or null
      */
     public Object getEvent(String workflowId, String key, float timeOut) {
-        logger.info("Received getEvent for " + workflowId + " " + key);
+        logger.info("Received getEvent for {} {}", workflowId, key);
 
         var executor = dbosExecutor.get();
         if (executor == null) {
@@ -490,7 +490,7 @@ public class DBOS {
         if (executor == null) {
             throw new IllegalStateException("cannot startWorkflow before launch");
         }
-        
+
         return executor.startWorkflow(() -> {
             func.execute();
             return null;

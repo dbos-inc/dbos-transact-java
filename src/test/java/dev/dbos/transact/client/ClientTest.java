@@ -3,18 +3,15 @@ package dev.dbos.transact.client;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.utils.DBUtils;
+
 import java.sql.SQLException;
 import java.util.UUID;
 
 import org.junit.jupiter.api.*;
-
-import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSClient;
-import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.queue.ConcurrencyTestService;
-import dev.dbos.transact.queue.ConcurrencyTestServiceImpl;
-import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.utils.DBUtils;
 
 public class ClientTest {
     private static DBOSConfig dbosConfig;
@@ -50,8 +47,8 @@ public class ClientTest {
 
             try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
                 var options = new DBOSClient.EnqueueOptionsBuilder("enqueueTest", "testQueue")
-                    .targetClassName("dev.dbos.transact.client.ClientServiceImpl").build();
-                var handle = client.enqueueWorkflow(options, new Object[] { 42, "spam"});
+                        .targetClassName("dev.dbos.transact.client.ClientServiceImpl").build();
+                var handle = client.enqueueWorkflow(options, new Object[]{42, "spam"});
                 var result = handle.getResult();
                 assertTrue(result instanceof String);
                 assertEquals("42-spam", result);

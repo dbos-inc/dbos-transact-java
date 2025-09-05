@@ -34,7 +34,7 @@ public class SchedulerService {
             CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
 
     public static ScheduledInstance makeScheduledInstance(String workflowName, Object instance, String cronExpr) {
-        logger.info("Scheduling wf " + workflowName);
+        logger.info("Scheduling wf {}", workflowName);
         Cron cron = cronParser.parse(cronExpr);
         return new ScheduledInstance(workflowName, instance, cron);
     }
@@ -74,7 +74,7 @@ public class SchedulerService {
                         Object[] args = new Object[2];
                         args[0] = scheduledTime.toInstant();
                         args[1] = ZonedDateTime.now(ZoneOffset.UTC).toInstant();
-                        logger.info("submitting to dbos Executor " + wf.workflowName);
+                        logger.info("submitting to dbos Executor {}", wf.workflowName);
                         String workflowId = String.format("sched-%s-%s",
                                 wf.workflowName,
                                 scheduledTime.toString());
@@ -92,7 +92,7 @@ public class SchedulerService {
                         logger.info("Scheduling the next execution");
                         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
                         executionTime.nextExecution(now).ifPresent(nextTime -> {
-                            logger.info("Next execution time " + nextTime.toString());
+                            logger.info("Next execution time {}", nextTime);
                             long delayMs = Duration.between(now, nextTime).toMillis();
                             scheduler.schedule(this, delayMs, TimeUnit.MILLISECONDS);
                         });
@@ -112,7 +112,7 @@ public class SchedulerService {
     public void stop() {
         stop = true;
         List<Runnable> notRun = scheduler.shutdownNow();
-        logger.info("Shutting down scheduler service. Tasks not run :" + notRun.size());
+        logger.info("Shutting down scheduler service. Tasks not run {}", notRun.size());
     }
 
     public void start() {
