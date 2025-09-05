@@ -89,12 +89,12 @@ public class DBOSExecutor implements AutoCloseable {
             this.queues = queues;
 
             this.executorId = System.getenv("DBOS__VMID");
-            if (this.executorId == null) {
+            if (this.executorId == null || this.executorId.isEmpty()) {
                 this.executorId = "local";
             }
 
             this.appVersion = System.getenv("DBOS__APPVERSION");
-            if (this.appVersion == null) {
+            if (this.appVersion == null || this.appVersion.isEmpty()) {
                 List<Class<?>> registeredClasses = workflowMap.values().stream()
                         .map(wrapper -> wrapper.target.getClass())
                         .collect(Collectors.toList());
