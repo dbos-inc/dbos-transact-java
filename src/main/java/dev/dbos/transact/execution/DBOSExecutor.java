@@ -90,7 +90,7 @@ public class DBOSExecutor implements AutoCloseable {
 
             this.executorId = System.getenv("DBOS__VMID");
             if (this.executorId == null || this.executorId.isEmpty()) {
-                this.executorId = "local";
+                this.executorId = config.getConductorKey() == null ? "local" : UUID.randomUUID().toString();
             }
 
             this.appVersion = System.getenv("DBOS__APPVERSION");
