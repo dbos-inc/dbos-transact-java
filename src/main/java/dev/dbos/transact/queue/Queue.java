@@ -84,8 +84,8 @@ public class Queue {
                 name,
                 concurrency,
                 workerConcurrency,
-                rateLimit != null ? rateLimit.getLimit() : null,
-                rateLimit != null ? rateLimit.getPeriod() : null,
+                rateLimit != null ? rateLimit.getLimit() : 0,
+                rateLimit != null ? rateLimit.getPeriod() : 0,
                 priorityEnabled);
     }
 }
