@@ -50,17 +50,17 @@ public class NotificationsDAO {
                 if (recordedOutput != null) {
                     logger.debug(
                             "Replaying send, id: {}, destination_uuid: {}, topic: {}",
-                                    functionId,
-                                    destinationUuid,
-                                    finalTopic);
+                            functionId,
+                            destinationUuid,
+                            finalTopic);
                     conn.commit();
                     return;
                 } else {
                     logger.debug(
                             "Running send, id: {}, destination_uuid: {}, topic: {}",
-                                    functionId,
-                                    destinationUuid,
-                                    finalTopic);
+                            functionId,
+                            destinationUuid,
+                            finalTopic);
                 }
 
                 // Insert notification
