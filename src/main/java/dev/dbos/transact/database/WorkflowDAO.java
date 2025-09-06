@@ -371,6 +371,7 @@ public class WorkflowDAO {
         }
     }
 
+    // TODO: this should return Optional<WorkflowStatus>
     public WorkflowStatus getWorkflowStatus(String workflowId) {
         if (dataSource.isClosed()) {
             throw new IllegalStateException("Database is closed!");
@@ -387,7 +388,7 @@ public class WorkflowDAO {
             logger.error("Error retrieving workflow for {}", workflowId, e);
         }
 
-        throw new NonExistentWorkflowException(workflowId);
+        return null;
     }
 
     public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
@@ -773,7 +774,7 @@ public class WorkflowDAO {
 
                 if (currentStatus == null) {
                     connection.rollback();
-                    return;
+                    throw new NonExistentWorkflowException(workflowId);
                 }
 
                 // If workflow is already complete, do nothing
@@ -810,14 +811,13 @@ public class WorkflowDAO {
         String applicationVersion = options.getApplicationVersion();
 
         WorkflowStatus status = getWorkflowStatus(originalWorkflowId);
+        if (status == null) {
+            throw new NonExistentWorkflowException(originalWorkflowId);
+        }
 
         long timeoutMs = options.getTimeoutMS() == 0
                 ? status.getWorkflowTimeoutMs()
                 : options.getTimeoutMS();
-
-        if (status == null) {
-            throw new NonExistentWorkflowException(originalWorkflowId);
-        }
 
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
