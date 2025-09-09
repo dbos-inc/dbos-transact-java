@@ -66,8 +66,9 @@ public class QueuesTest {
         Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
                 .build();
 
+        // TODO was queue
         ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
-                .implementation(new ServiceQImpl()).queue(firstQ).build();
+                .implementation(new ServiceQImpl()).build();
 
         dbos.launch();
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -90,8 +91,9 @@ public class QueuesTest {
 
         Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
 
+        // TODO was queue
         ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class).implementation(new ServiceQImpl())
-                .queue(firstQ).build();
+                .build();
 
         dbos.launch();
 

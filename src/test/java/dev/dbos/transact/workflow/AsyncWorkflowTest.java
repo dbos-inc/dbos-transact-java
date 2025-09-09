@@ -44,8 +44,9 @@ public class AsyncWorkflowTest {
     @Test
     public void setWorkflowId() throws Exception {
 
+        // TODO was async
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl()).async()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         dbos.launch();
@@ -73,8 +74,9 @@ public class AsyncWorkflowTest {
     @Test
     public void sameWorkflowId() throws Exception {
 
+        // TODO was async
         SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl()).async()
+                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
                 .build();
 
         dbos.launch();

@@ -50,8 +50,9 @@ class NotificationServiceTest {
     @Test
     public void basic_send_recv() throws Exception {
 
+        // TODO was async
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl()).async().build();
+                .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
@@ -90,8 +91,9 @@ class NotificationServiceTest {
     @Test
     public void multiple_send_recv() throws Exception {
 
+        // TODO was async
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl()).async().build();
+                .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
 
@@ -127,8 +129,9 @@ class NotificationServiceTest {
     @Test
     public void notopic() throws Exception {
 
+        // TODO: was async
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl()).async().build();
+                .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
 
@@ -192,8 +195,9 @@ class NotificationServiceTest {
     @Test
     public void sendNull() throws Exception {
 
+        // TODO: was async
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl()).async().build();
+                .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
 
@@ -282,8 +286,9 @@ class NotificationServiceTest {
     @Test
     public void recv_sleep() throws Exception {
 
+        // TODO: was async
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl()).async().build();
+                .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);

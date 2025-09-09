@@ -5,8 +5,6 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.WorkflowFunction;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
-import dev.dbos.transact.interceptor.AsyncInvocationHandler;
-import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
 import dev.dbos.transact.internal.DBOSContextHolder;
 import dev.dbos.transact.internal.QueueRegistry;
@@ -136,8 +134,6 @@ public class DBOS {
         private final DBOS dbos;
         private Class<T> interfaceClass;
         private Object implementation;
-        private boolean async;
-        private Queue queue;
 
         WorkflowBuilder(DBOS dbos) {
             this.dbos = dbos;
@@ -153,37 +149,15 @@ public class DBOS {
             return this;
         }
 
-        public WorkflowBuilder<T> async() {
-            this.async = true;
-            return this;
-        }
-
-        public WorkflowBuilder<T> queue(Queue queue) {
-            this.queue = queue;
-            return this;
-        }
-
         public T build() {
             if (interfaceClass == null || implementation == null) {
                 throw new IllegalStateException("Interface and implementation must be set");
             }
 
             dbos.registerWorkflow(interfaceClass, implementation);
-
-            if (async) {
-                return AsyncInvocationHandler.createProxy(interfaceClass,
-                        implementation,
-                        () -> dbos.dbosExecutor.get());
-            } else if (queue != null) {
-                return QueueInvocationHandler.createProxy(interfaceClass,
-                        implementation,
-                        queue,
-                        () -> dbos.dbosExecutor.get());
-            } else {
-                return UnifiedInvocationHandler.createProxy(interfaceClass,
-                        implementation,
-                        () -> dbos.dbosExecutor.get());
-            }
+            return UnifiedInvocationHandler.createProxy(interfaceClass,
+                    implementation,
+                    () -> dbos.dbosExecutor.get());
         }
     }
 

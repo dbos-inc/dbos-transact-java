@@ -114,8 +114,9 @@ public class StepsTest {
         ServiceB serviceB = dbos.<ServiceB>Workflow().interfaceClass(ServiceB.class)
                 .implementation(new ServiceBImpl()).build();
 
+        //TODO: was async
         ServiceA serviceA = dbos.<ServiceA>Workflow().interfaceClass(ServiceA.class)
-                .implementation(new ServiceAImpl(serviceB)).async().build();
+                .implementation(new ServiceAImpl(serviceB)).build();
 
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
@@ -154,9 +155,10 @@ public class StepsTest {
     @Test
     public void SameInterfaceWorkflowWithSteps() throws Exception {
 
+        // TODO was async
         ServiceWFAndStep service = dbos.<ServiceWFAndStep>Workflow()
                 .interfaceClass(ServiceWFAndStep.class).implementation(new ServiceWFAndStepImpl())
-                .async().build();
+                .build();
 
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);

@@ -57,22 +57,22 @@ public record WorkflowOptions(
         private Duration timeout = null;
 
         public Builder workflowId(String workflowId) {
-            this.workflowId = workflowId;
+            this.workflowId = Objects.requireNonNull(workflowId);
             return this;
         }
 
         public Builder queue(Queue queue) {
-            this.queueName = queue.getName();
+            this.queueName = Objects.requireNonNull(queue).getName();
             return this;
         }
 
         public Builder queue(String queueName) {
-            this.queueName = queueName;
+            this.queueName = Objects.requireNonNull(queueName);
             return this;
         }
 
         public Builder timeout(Duration timeout) {
-            this.timeout = timeout;
+            this.timeout = Objects.requireNonNull(timeout);
             return this;
         }
 

@@ -216,10 +216,10 @@ public class DBOSContext {
         // this.inWorkflow = true;
     }
 
-    public boolean isAsync() {
-        throw new RuntimeException();
-        // return async;
-    }
+    // public boolean isAsync() {
+    //     throw new RuntimeException();
+    //     // return async;
+    // }
 
     public Queue getQueue() {
         throw new RuntimeException();
@@ -231,12 +231,12 @@ public class DBOSContext {
         // return workflowTimeoutMs;
     }
 
-    public DBOSContext copyWithAsync() {
-        throw new RuntimeException();
-        // return new DBOSContext(dbos.get(), workflowId, functionId, parentWorkflowId,
-        // parentFunctionId,
-        // inWorkflow, true, queue, workflowTimeoutMs);
-    }
+    // public DBOSContext copyWithAsync() {
+    //     throw new RuntimeException();
+    //     // return new DBOSContext(dbos.get(), workflowId, functionId, parentWorkflowId,
+    //     // parentFunctionId,
+    //     // inWorkflow, true, queue, workflowTimeoutMs);
+    // }
 
     // public DBOSContext copyWithQueue(Queue q) {
     // return new DBOSContext(dbos.get(), workflowId, functionId, parentWorkflowId,

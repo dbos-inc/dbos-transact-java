@@ -41,19 +41,8 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
         DBOSContext ctx = DBOSContextHolder.get();
 
-        if (ctx.isAsync()) {
-
-            logger.debug("invoking workflow asynchronously");
-
-            executor.submitWorkflow(workflowName,
-                    targetClassName,
-                    wrapper.target,
-                    args,
-                    wrapper.function);
-
-            return null;
-
-        } else if (ctx.getQueue() != null) {
+        // TODO: I think we want to remove this and force users to use submitWorkflow for wf enqueue
+        if (ctx.getQueue() != null) {
 
             logger.debug("enqueuing workflow");
 

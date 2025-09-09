@@ -96,9 +96,10 @@ public class EventsTest {
     @Test
     public void async_set_get() throws Exception {
 
+        // TODO: was async
         EventsService eventService = dbos.<EventsService>Workflow()
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
-                .async().build();
+                .build();
 
         dbos.launch();
 
@@ -117,9 +118,10 @@ public class EventsTest {
     @Test
     public void notification() throws Exception {
 
+        // TODO: was async
         EventsService eventService = dbos.<EventsService>Workflow()
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
-                .async().build();
+                .build();
 
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);

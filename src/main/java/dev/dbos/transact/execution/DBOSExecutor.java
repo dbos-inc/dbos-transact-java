@@ -483,7 +483,6 @@ public class DBOSExecutor implements AutoCloseable {
 
             // Doing this on purpose to ensure that we have the correct context
             var context = DBOSContextHolder.get();
-            context.setDbos(dbos);
             String id = context.getWorkflowId();
 
             try {
@@ -647,7 +646,6 @@ public class DBOSExecutor implements AutoCloseable {
             float backOffRate, Object[] args, WorkflowFunction<T> function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
-        ctx.setDbos(dbos);
         String workflowId = ctx.getWorkflowId();
 
         if (workflowId == null) {
@@ -760,7 +758,6 @@ public class DBOSExecutor implements AutoCloseable {
     public void sleep(float seconds) {
 
         DBOSContext context = DBOSContextHolder.get();
-        context.setDbos(dbos);
 
         if (context.getWorkflowId() == null) {
             throw new DBOSException(ErrorCode.SLEEP_NOT_IN_WORKFLOW.getCode(),
@@ -818,9 +815,10 @@ public class DBOSExecutor implements AutoCloseable {
             newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString());
         }
 
-        if (newCtx.getQueue() == null) {
-            newCtx = newCtx.copyWithAsync();
-        }
+        // TODO
+        // if (newCtx.getQueue() == null) {
+        //     newCtx = newCtx.copyWithAsync();
+        // }
 
         try {
             DBOSContextHolder.set(newCtx);
