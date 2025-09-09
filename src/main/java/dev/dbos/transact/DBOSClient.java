@@ -144,15 +144,27 @@ public class DBOSClient implements AutoCloseable {
     }
 
     public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-        return systemDatabase.listWorkflows(input);
+        try {
+            return systemDatabase.listWorkflows(input);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput) {
-        return systemDatabase.listQueuedWorkflows(input, loadInput);
+        try {
+            return systemDatabase.listQueuedWorkflows(input, loadInput);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public List<StepInfo> listWorkflowSteps(String workflowId) {
-        return systemDatabase.listWorkflowSteps(workflowId);
+        try {
+            return systemDatabase.listWorkflowSteps(workflowId);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // readStream
