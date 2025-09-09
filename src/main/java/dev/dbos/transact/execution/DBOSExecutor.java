@@ -938,7 +938,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     public List<StepInfo> listWorkflowSteps(String workflowId) {
         Supplier<List<StepInfo>> listWorkflowStepsFunction = () -> {
-            logger.info("List workflows");
+            logger.info("List workflow steps");
 
             try {
                 return systemDatabase.listWorkflowSteps(workflowId);
@@ -953,7 +953,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput query, boolean loadInput) {
         Supplier<List<WorkflowStatus>> listQueuedWorkflowsFunction = () -> {
-            logger.info("List workflows");
+            logger.info("List queued workflows");
 
             try {
                 return systemDatabase.listQueuedWorkflows(query, loadInput);
