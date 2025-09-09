@@ -7,8 +7,6 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
-import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
@@ -76,7 +74,8 @@ public class QueuesTest {
 
         String id = "q1234";
 
-        try (SetWorkflowID ctx = new SetWorkflowID(id)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(id)) {            
+
             serviceQ.simpleQWorkflow("inputq");
         }
 
@@ -103,7 +102,7 @@ public class QueuesTest {
         for (int i = 0; i < 5; i++) {
             String id = "wfid" + i;
 
-            try (SetWorkflowID ctx = new SetWorkflowID(id)) {
+            try (var _ignore = WorkflowOptions.setWorkflowId(id)) {            
                 serviceQ.simpleQWorkflow("inputq" + i);
             }
         }
@@ -152,8 +151,8 @@ public class QueuesTest {
         for (int i = 0; i < 5; i++) {
             String id = "wfid" + i;
 
-            WorkflowOptions option = new WorkflowOptions.Builder(id).queue(firstQ).build();
-            try (SetWorkflowOptions ctx = new SetWorkflowOptions(option)) {
+            WorkflowOptions option = WorkflowOptions.builder().workflowId(id).queue(firstQ).build();
+            try (var _ignore = option.set()) {
                 serviceQ.simpleQWorkflow("inputq" + i);
             }
         }
@@ -223,15 +222,15 @@ public class QueuesTest {
         String id1 = "firstQ1234";
         String id2 = "second1234";
 
-        WorkflowOptions options1 = new WorkflowOptions.Builder(id1).queue(firstQ).build();
+        WorkflowOptions options1 = WorkflowOptions.builder().workflowId(id1).queue(firstQ).build();
         WorkflowHandle<String> handle1 = null;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options1)) {
+        try (var _ignore = options1.set()) {
             handle1 = dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"));
         }
 
-        WorkflowOptions options2 = new WorkflowOptions.Builder(id2).queue(secondQ).build();
+        WorkflowOptions options2 = WorkflowOptions.builder().workflowId(id2).queue(secondQ).build();
         WorkflowHandle<Integer> handle2 = null;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options2)) {
+        try (var _ignore = options2.set()) {
             handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25));
         }
 
@@ -269,9 +268,9 @@ public class QueuesTest {
 
         for (int i = 0; i < numTasks; i++) {
             String id = "id" + i;
-            WorkflowOptions options = new WorkflowOptions.Builder(id).queue(limitQ).build();
+            WorkflowOptions options = WorkflowOptions.builder().workflowId(id).queue(limitQ).build();
             WorkflowHandle<Double> handle = null;
-            try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+            try (var _ignore = options.set()) {
                 handle = dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"));
             }
             handles.add(handle);
@@ -492,8 +491,8 @@ public class QueuesTest {
         String id = "q1234";
 
         WorkflowHandle<String> handle = null;
-        WorkflowOptions option = new WorkflowOptions.Builder(id).queue(firstQ).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(option)) {
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(id).queue(firstQ).build();
+        try (var _ignore = options.set()) {
             handle = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"));
         }
 
@@ -517,18 +516,19 @@ public class QueuesTest {
         WorkflowHandle<Integer> handle2;
         WorkflowHandle<Integer> handle3;
 
-        WorkflowOptions opt1 = new WorkflowOptions.Builder("wf1").queue(queue).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(opt1)) {
+        WorkflowOptions opt1 = WorkflowOptions.builder().workflowId("wf1").queue(queue).build();
+        try (var _ignore = opt1.set()) {
             handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0));
         }
 
-        WorkflowOptions opt2 = new WorkflowOptions.Builder("wf2").queue(queue).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(opt2)) {
-            handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1));
+        WorkflowOptions opt2 = WorkflowOptions.builder().workflowId("wf2").queue(queue).build();
+        try (var _ignore = opt2.set()) {
+                        handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1));
         }
 
-        WorkflowOptions opt3 = new WorkflowOptions.Builder("wf3").queue(queue).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(opt3)) {
+        WorkflowOptions opt3 = WorkflowOptions.builder().workflowId("wf3").queue(queue).build();
+        try (var _ignore = opt3.set()) {
+
             handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2));
         }
 
@@ -550,7 +550,7 @@ public class QueuesTest {
 
             pstmt.setString(1, WorkflowState.PENDING.toString());
             pstmt.setString(2, "other");
-            pstmt.setString(3, opt3.getWorkflowId());
+            pstmt.setString(3, opt3.workflowId());
 
             // Execute the update and get the number of rows affected
             int rowsAffected = pstmt.executeUpdate();

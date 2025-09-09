@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.execution.ExecutingService;
 import dev.dbos.transact.execution.ExecutingServiceImpl;
 import dev.dbos.transact.utils.DBUtils;
@@ -97,19 +97,19 @@ class AdminControllerTest {
         executingService.setExecutingService(executingService);
 
         // Execute multiple workflows with different IDs and inputs
-        try (SetWorkflowID id1 = new SetWorkflowID("workflow-001")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-001")) {
             executingService.workflowMethodWithStep("input-alpha");
         }
 
-        try (SetWorkflowID id2 = new SetWorkflowID("workflow-002")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-002")) {
             executingService.workflowMethodWithStep("input-beta");
         }
 
-        try (SetWorkflowID id3 = new SetWorkflowID("workflow-003")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-003")) {
             executingService.workflowMethodWithStep("input-gamma");
         }
 
-        try (SetWorkflowID id4 = new SetWorkflowID("workflow-004")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-004")) {
             simpleService.workWithString("input-delta");
         }
 
@@ -181,7 +181,8 @@ class AdminControllerTest {
         // Needed to call the step
         executingService.setExecutingService(executingService);
 
-        try (SetWorkflowID id = new SetWorkflowID("abc123")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("abv123")) {
+
             String result = executingService.workflowMethodWithStep("test-item");
             assertEquals("test-itemstepOnestepTwo", result);
         }
@@ -216,7 +217,8 @@ class AdminControllerTest {
         // Needed to call the step
         executingService.setExecutingService(executingService);
 
-        try (SetWorkflowID id = new SetWorkflowID("abc123")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("abc123")) {
+
             String result = executingService.workflowMethodWithStep("test-item");
             assertEquals("test-itemstepOnestepTwo", result);
         }
@@ -253,27 +255,27 @@ class AdminControllerTest {
         executingService.setExecutingService(executingService);
 
         // Execute multiple workflows with different IDs and inputs
-        try (SetWorkflowID id1 = new SetWorkflowID("workflow-001")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-001")) {            
             String result1 = executingService.workflowMethodWithStep("input-alpha");
             assertEquals("input-alphastepOnestepTwo", result1);
         }
 
-        try (SetWorkflowID id2 = new SetWorkflowID("workflow-002")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-002")) {            
             String result2 = executingService.workflowMethodWithStep("input-beta");
             assertEquals("input-betastepOnestepTwo", result2);
         }
 
-        try (SetWorkflowID id3 = new SetWorkflowID("workflow-003")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-003")) {            
             String result3 = executingService.workflowMethodWithStep("input-gamma");
             assertEquals("input-gammastepOnestepTwo", result3);
         }
 
-        try (SetWorkflowID id4 = new SetWorkflowID("workflow-004")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-004")) {            
             String result3 = simpleService.workWithString("input-delta");
             assertEquals("Processed: input-delta", result3);
         }
 
-        try (SetWorkflowID id5 = new SetWorkflowID("workflow-005")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-005")) {            
             simpleService.workWithError();
         } catch (Exception e) {
             assertEquals("DBOS Test error", e.getMessage());
@@ -340,7 +342,8 @@ class AdminControllerTest {
         dbos.launch();
 
         String workflowId = "wfid1";
-        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {            
+
             String result = forkService.simpleWorkflow("hello");
             assertEquals("hellohello", result);
         }

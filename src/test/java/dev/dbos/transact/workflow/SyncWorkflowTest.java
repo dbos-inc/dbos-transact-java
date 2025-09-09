@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
@@ -93,7 +93,7 @@ public class SyncWorkflowTest {
 
         String result = null;
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123")) {
+        try (var o = WorkflowOptions.setWorkflowId("wf-123")) {
             result = simpleService.workWithString("test-item");
         }
 
@@ -118,7 +118,7 @@ public class SyncWorkflowTest {
         String result = null;
         SimpleServiceImpl.executionCount = 0;
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123")) {
+        try (var o = WorkflowOptions.setWorkflowId("wf-123")) {
             result = simpleService.workWithString("test-item");
         }
 
@@ -131,7 +131,7 @@ public class SyncWorkflowTest {
 
         assertEquals(1, SimpleServiceImpl.executionCount);
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123")) {
+        try (var o = WorkflowOptions.setWorkflowId("wf-123")) {
             result = simpleService.workWithString("test-item");
         }
         assertEquals(1, SimpleServiceImpl.executionCount);
@@ -139,7 +139,7 @@ public class SyncWorkflowTest {
         assertEquals(1, wfs.size());
         assertEquals("wf-123", wfs.get(0).getWorkflowId());
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-124")) {
+        try (var o = WorkflowOptions.setWorkflowId("wf-124")) {
             result = simpleService.workWithString("test-item");
         }
 
@@ -163,7 +163,8 @@ public class SyncWorkflowTest {
 
         String result = null;
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
+        try (var o = WorkflowOptions.setWorkflowId("wf-123456")) {
+
             result = simpleService.parentWorkflowWithoutSet("123");
         }
 
@@ -200,7 +201,7 @@ public class SyncWorkflowTest {
 
         String result = null;
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
+        try (var o = WorkflowOptions.setWorkflowId("wf-123456")) {
             simpleService.WorkflowWithMultipleChildren("123");
         }
 
@@ -252,7 +253,7 @@ public class SyncWorkflowTest {
 
         String result = null;
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
+        try (var o = WorkflowOptions.setWorkflowId("wf-123456")) {
             simpleService.grandParent("123");
         }
 

@@ -1,9 +1,9 @@
 package dev.dbos.transact.workflow;
 
 import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.SetWorkflowID;
-import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
+
+import java.time.Duration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,17 +51,17 @@ public class SimpleServiceImpl implements SimpleService {
         var dbos = DBOSContext.dbosInstance().get();
         String result = input;
 
-        try (SetWorkflowID id = new SetWorkflowID("child1")) {
+        try (var o = WorkflowOptions.setWorkflowId("child1")) {
             simpleService.childWorkflow("abc");
         }
         result = result + dbos.retrieveWorkflow("child1").getResult();
 
-        try (SetWorkflowID id = new SetWorkflowID("child2")) {
+        try (var o = WorkflowOptions.setWorkflowId("child2")) {
             simpleService.childWorkflow2("def");
         }
         result = result + dbos.retrieveWorkflow("child2").getResult();
 
-        try (SetWorkflowID id = new SetWorkflowID("child3")) {
+        try (var o = WorkflowOptions.setWorkflowId("child3")) {
             simpleService.childWorkflow3("ghi");
         }
         result = result + dbos.retrieveWorkflow("child3").getResult();
@@ -82,7 +82,7 @@ public class SimpleServiceImpl implements SimpleService {
     @Workflow(name = "childWorkflow4")
     public String childWorkflow4(String input) throws Exception {
         String result = input;
-        try (SetWorkflowID id = new SetWorkflowID("child5")) {
+        try (var o = WorkflowOptions.setWorkflowId("child5")) {
             simpleService.grandchildWorkflow(input);
         }
         result = "c-" + DBOSContext.dbosInstance().get().retrieveWorkflow("child5").getResult();
@@ -97,7 +97,7 @@ public class SimpleServiceImpl implements SimpleService {
     @Workflow(name = "grandParent")
     public String grandParent(String input) throws Exception {
         String result = input;
-        try (SetWorkflowID id = new SetWorkflowID("child4")) {
+        try (var o = WorkflowOptions.setWorkflowId("child4")) {
             simpleService.childWorkflow4(input);
         }
         result = "p-" + DBOSContext.dbosInstance().get().retrieveWorkflow("child4").getResult();
@@ -114,8 +114,8 @@ public class SimpleServiceImpl implements SimpleService {
         for (int i = 0; i < 3; i++) {
 
             String wid = "child" + i;
-            WorkflowOptions options = new WorkflowOptions.Builder(wid).queue(childQ).build();
-            try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+            WorkflowOptions options = WorkflowOptions.builder().workflowId(wid).queue(childQ).build();
+            try (var o = options.set()) {
                 simpleService.childWorkflow(wid);
             }
         }
@@ -159,10 +159,10 @@ public class SimpleServiceImpl implements SimpleService {
 
         logger.info("In longParent");
         String workflowId = "childwf";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).timeout(timeoutSeconds).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).timeout(Duration.ofSeconds(timeoutSeconds)).build();
 
         WorkflowHandle<String> handle = null;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+        try (var o = options.set()) {
             handle = DBOSContext.dbosInstance().get()
                     .startWorkflow(() -> simpleService.childWorkflowWithSleep(input, sleepSeconds));
         }

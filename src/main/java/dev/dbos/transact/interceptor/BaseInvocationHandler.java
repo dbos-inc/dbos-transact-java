@@ -2,7 +2,7 @@ package dev.dbos.transact.interceptor;
 
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.workflow.Step;
@@ -77,7 +77,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                 // create child context from the parent
 
                 String childId = ctx.getWorkflowId() + "-" + ctx.getParentFunctionId();
-                try (SetWorkflowID id = new SetWorkflowID(childId)) {
+                try (var _ignore = WorkflowOptions.setWorkflowId(childId)) {
                     result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
             }
@@ -90,7 +90,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                 // so we generate a UUID and generate a new context to submit the workflow in.
 
                 String workflowId = UUID.randomUUID().toString();
-                try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+                try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
                     DBOSContextHolder.get().setInWorkflow(true);
                     result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }

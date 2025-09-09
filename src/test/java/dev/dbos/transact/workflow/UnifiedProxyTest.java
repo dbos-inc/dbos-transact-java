@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
@@ -59,9 +58,9 @@ public class UnifiedProxyTest {
 
         // synchronous
         String wfid1 = "wf-123";
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).build();
         String result;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        try (var id = options.set()) {
             result = simpleService.workWithString("test-item");
         }
         assertEquals("Processed: test-item", result);
@@ -69,9 +68,9 @@ public class UnifiedProxyTest {
         // asynchronous
 
         String wfid2 = "wf-124";
-        options = new WorkflowOptions.Builder(wfid2).build();
+        options = WorkflowOptions.builder().workflowId(wfid2).build();
         WorkflowHandle<String> handle = null;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        try (var id = options.set()) {
             handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
         }
 
@@ -82,8 +81,8 @@ public class UnifiedProxyTest {
 
         // Queued
         String wfid3 = "wf-125";
-        options = new WorkflowOptions.Builder(wfid3).queue(q).build();
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        options = WorkflowOptions.builder().workflowId(wfid3).queue(q).build();
+        try (var id = options.set()) {
             result = simpleService.workWithString("test-item-q");
         }
         assertNull(result);
@@ -114,9 +113,9 @@ public class UnifiedProxyTest {
         simpleService.setSimpleService(simpleService);
 
         String wfid1 = "wf-123";
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).build();
         String result;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        try (var id = options.set()) {
             result = simpleService.syncWithQueued();
         }
         assertEquals("QueuedChildren", result);

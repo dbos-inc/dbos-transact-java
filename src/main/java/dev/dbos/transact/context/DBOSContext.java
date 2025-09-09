@@ -4,6 +4,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.queue.Queue;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -14,6 +15,10 @@ import org.slf4j.LoggerFactory;
 public class DBOSContext {
 
     private static final Logger logger = LoggerFactory.getLogger(DBOSContext.class);
+
+    String assignedNextWorkflowId = null;
+    String assignedQueueName = null;
+    Duration assignedTimeout = null;
 
     // private String executorId = Constants.DEFAULT_EXECUTORID;
 

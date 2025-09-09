@@ -5,8 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
-import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.queue.Queue;
@@ -75,28 +73,28 @@ class RecoveryServiceTest {
     void recoverWorkflows() throws Exception {
 
         String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid)) {
             executingService.workflowMethod("test-item");
         }
         wfid = "wf-124";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid)) {
             executingService.workflowMethod("test-item");
         }
         wfid = "wf-125";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid)) {
             executingService.workflowMethod("test-item");
         }
         wfid = "wf-126";
         WorkflowHandle<String> handle6 = null;
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid)) {
             handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
         handle6.getResult();
 
         wfid = "wf-127";
         WorkflowHandle<String> handle7 = null;
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid).queue(testQueue).build();
+        try (var _ignore = options.set()) {
             handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
         assertEquals("q1", handle7.getStatus().getQueueName());
@@ -120,28 +118,28 @@ class RecoveryServiceTest {
     void recoverPendingWorkflows() throws Exception {
 
         String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid)) {
             executingService.workflowMethod("test-item");
         }
         wfid = "wf-124";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid)) {
             executingService.workflowMethod("test-item");
         }
         wfid = "wf-125";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid)) {
             executingService.workflowMethod("test-item");
         }
         wfid = "wf-126";
         WorkflowHandle<String> handle6 = null;
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid)) {
             handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
         handle6.getResult();
 
         wfid = "wf-127";
         WorkflowHandle<String> handle7 = null;
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid).queue(testQueue).build();
+        try (var _ignore = options.set()) {
             handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
         assertEquals("q1", handle7.getStatus().getQueueName());
@@ -162,11 +160,11 @@ class RecoveryServiceTest {
     public void recoveryThreadTest() throws Exception {
 
         String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid)) {
             executingService.workflowMethod("test-item");
         }
         wfid = "wf-124";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid)) {
             executingService.workflowMethod("test-item");
         }
 

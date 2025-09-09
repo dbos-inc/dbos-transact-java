@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueuesTest;
 import dev.dbos.transact.utils.DBUtils;
@@ -62,7 +62,7 @@ public class QueueChildWorkflowTest {
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
+        try (var o = WorkflowOptions.setWorkflowId("wf-123456")) {
             simpleService.WorkflowWithMultipleChildren("123");
         }
 
@@ -114,7 +114,7 @@ public class QueueChildWorkflowTest {
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
+        try (var o = WorkflowOptions.setWorkflowId("wf-123456")) {
             simpleService.grandParent("123");
         }
 

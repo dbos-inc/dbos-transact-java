@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 
@@ -53,7 +53,7 @@ public class StepsTest {
 
         String wid = "sync123";
 
-        try (SetWorkflowID id = new SetWorkflowID(wid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wid)) {
             String result = serviceA.workflowWithSteps("hello");
             assertEquals("hellohello", result);
         }
@@ -92,7 +92,8 @@ public class StepsTest {
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wid = "sync123er";
-        try (SetWorkflowID id = new SetWorkflowID(wid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wid)) {
+
             String result = serviceA.workflowWithStepError("hello");
             assertEquals("hellohello", result);
         }
@@ -122,7 +123,7 @@ public class StepsTest {
 
         String workflowId = "wf-1234";
 
-        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
             serviceA.workflowWithSteps("hello");
         }
 
@@ -165,7 +166,7 @@ public class StepsTest {
 
         String workflowId = "wf-same-1234";
 
-        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
             service.aWorkflow("hello");
         }
 

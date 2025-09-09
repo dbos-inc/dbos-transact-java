@@ -8,7 +8,7 @@ import dev.dbos.transact.conductor.Conductor;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
@@ -738,7 +738,7 @@ public class DBOSExecutor implements AutoCloseable {
         }
 
         WorkflowHandle<T> handle = null;
-        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
             var ctx = DBOSContextHolder.get();
             ctx.setInWorkflow(true);
             ctx.setDbos(dbos);

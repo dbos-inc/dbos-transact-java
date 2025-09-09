@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
@@ -69,10 +68,10 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).build();
         int result;
         WorkflowHandle<Integer> h = null;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+        try (var o = options.set()) {
             h = dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23));
         }
 
@@ -119,9 +118,9 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).queue(myqueue).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).queue(myqueue).build();
         int result;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+        try (var o = options.set()) {
             mgmtService.simpleWorkflow(23);
         }
 
@@ -170,12 +169,10 @@ public class WorkflowMgmtTest {
         CountDownLatch testLatch = new CountDownLatch(2);
 
         e.submit(() -> {
-            WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
+            WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).build();
 
-            try {
-                try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-                    mgmtService.simpleWorkflow(23);
-                }
+            try (var o = options.set()) {
+                mgmtService.simpleWorkflow(23);
             } catch (Throwable t) {
                 assertTrue(t instanceof AwaitedWorkflowCancelledException);
             }
@@ -244,9 +241,9 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).build();
         String result;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+        try (var o = options.set()) {
             result = forkService.simpleWorkflow("hello");
         }
 
@@ -321,9 +318,9 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).build();
         String result;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+        try (var o = options.set()) {
             result = forkService.parentChild("hello");
         }
 
@@ -422,9 +419,9 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).build();
         String result;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+        try (var o = options.set()) {
             result = forkService.parentChildAsync("hello");
         }
 

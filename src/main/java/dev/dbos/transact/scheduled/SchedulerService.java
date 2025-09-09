@@ -1,6 +1,6 @@
 package dev.dbos.transact.scheduled;
 
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
 import dev.dbos.transact.queue.Queue;
@@ -78,7 +78,7 @@ public class SchedulerService {
                         String workflowId = String.format("sched-%s-%s",
                                 wf.workflowName,
                                 scheduledTime.toString());
-                        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+                        try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
                             dbosExecutor.enqueueWorkflow(wf.workflowName,
                                     wf.instance.getClass().getName(),
                                     args,
