@@ -261,7 +261,7 @@ public class AsyncWorkflowTest {
 
         WorkflowOptions options = WorkflowOptions.builder().workflowId("wf-123456").build();
         WorkflowHandle<String> handle = null;
-        try (var  id = options.set()) {
+        try (var id = options.set()) {
             handle = dbos.startWorkflow(() -> simpleService.grandParent("123"));
         }
 

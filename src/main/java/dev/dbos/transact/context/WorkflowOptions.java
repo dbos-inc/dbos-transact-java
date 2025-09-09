@@ -1,15 +1,14 @@
 package dev.dbos.transact.context;
 
+import dev.dbos.transact.queue.Queue;
+
 import java.time.Duration;
 import java.util.Objects;
 
-import dev.dbos.transact.queue.Queue;
-
 public record WorkflowOptions(
-    String workflowId,
-    String queueName,
-    Duration timeout
-) {
+        String workflowId,
+        String queueName,
+        Duration timeout) {
 
     public static Builder builder() {
         return new Builder();
@@ -49,8 +48,8 @@ public record WorkflowOptions(
             ctx.assignedQueueName = assignedQueueName;
             ctx.assignedTimeout = assignedTimeout;
         }
-    }   
-    
+    }
+
     public static class Builder {
         private String workflowId = null;
         private String queueName = null;

@@ -255,27 +255,27 @@ class AdminControllerTest {
         executingService.setExecutingService(executingService);
 
         // Execute multiple workflows with different IDs and inputs
-        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-001")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-001")) {
             String result1 = executingService.workflowMethodWithStep("input-alpha");
             assertEquals("input-alphastepOnestepTwo", result1);
         }
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-002")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-002")) {
             String result2 = executingService.workflowMethodWithStep("input-beta");
             assertEquals("input-betastepOnestepTwo", result2);
         }
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-003")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-003")) {
             String result3 = executingService.workflowMethodWithStep("input-gamma");
             assertEquals("input-gammastepOnestepTwo", result3);
         }
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-004")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-004")) {
             String result3 = simpleService.workWithString("input-delta");
             assertEquals("Processed: input-delta", result3);
         }
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-005")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("workflow-005")) {
             simpleService.workWithError();
         } catch (Exception e) {
             assertEquals("DBOS Test error", e.getMessage());
@@ -342,7 +342,7 @@ class AdminControllerTest {
         dbos.launch();
 
         String workflowId = "wfid1";
-        try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
 
             String result = forkService.simpleWorkflow("hello");
             assertEquals("hellohello", result);

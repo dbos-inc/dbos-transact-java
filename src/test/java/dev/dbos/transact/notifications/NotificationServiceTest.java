@@ -58,13 +58,13 @@ class NotificationServiceTest {
 
         String wfid1 = "recvwf1";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
             notService.recvWorkflow("topic1", 10);
         }
 
         String wfid2 = "sendf1";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {
             notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
         }
 
@@ -97,22 +97,22 @@ class NotificationServiceTest {
 
         String wfid1 = "recvwf1";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
             notService.recvMultiple("topic1");
         }
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("send1")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("send1")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello1");
         }
         dbos.retrieveWorkflow("send1").getResult();
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("send2")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("send2")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello2");
         }
         dbos.retrieveWorkflow("send2").getResult();
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("send3")) {            
-                notService.sendWorkflow(wfid1, "topic1", "Hello3");
+        try (var _ignore = WorkflowOptions.setWorkflowId("send3")) {
+            notService.sendWorkflow(wfid1, "topic1", "Hello3");
         }
         dbos.retrieveWorkflow("send3").getResult();
 
@@ -134,13 +134,13 @@ class NotificationServiceTest {
 
         String wfid1 = "recvwf1";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {            
-                notService.recvWorkflow(null, 5);
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
+            notService.recvWorkflow(null, 5);
         }
 
         String wfid2 = "sendf1";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {
             notService.sendWorkflow(wfid1, null, "HelloDBOS");
         }
 
@@ -175,12 +175,12 @@ class NotificationServiceTest {
         dbos.launch();
 
         // just to open the latch
-        try (var _ignore = WorkflowOptions.setWorkflowId("abc")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("abc")) {
             notService.recvWorkflow(null, 1);
         }
 
         try {
-            try (var _ignore = WorkflowOptions.setWorkflowId("send1")) {            
+            try (var _ignore = WorkflowOptions.setWorkflowId("send1")) {
                 notService.sendWorkflow("fakeid", "topic1", "HelloDBOS");
             }
             assertTrue(false);
@@ -199,13 +199,13 @@ class NotificationServiceTest {
 
         String wfid1 = "recvwf1";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
             notService.recvWorkflow("topic1", 5);
         }
 
         String wfid2 = "sendf1";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {
             notService.sendWorkflow(wfid1, "topic1", null);
         }
 
@@ -230,7 +230,7 @@ class NotificationServiceTest {
         String wfid1 = "recvwf1";
 
         long start = System.currentTimeMillis();
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
             notService.recvWorkflow("topic1", 3);
         }
 
@@ -256,7 +256,7 @@ class NotificationServiceTest {
 
             String expectedMessage = "test message";
             // dbos.send(wfuuid, expectedMessage, topic);
-            try (var _ignore = WorkflowOptions.setWorkflowId("send1")) {            
+            try (var _ignore = WorkflowOptions.setWorkflowId("send1")) {
                 notService.sendWorkflow(wfuuid, topic, expectedMessage);
             }
 
@@ -274,7 +274,7 @@ class NotificationServiceTest {
     }
 
     private String testThread(NotService service, String id, String topic) {
-        try (var _ignore = WorkflowOptions.setWorkflowId(id)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(id)) {
             return service.concWorkflow(topic);
         }
     }
@@ -290,7 +290,7 @@ class NotificationServiceTest {
 
         String wfid1 = "recvwf1";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
             notService.recvWorkflow("topic1", 5);
         }
 
@@ -299,7 +299,7 @@ class NotificationServiceTest {
         // forcing the recv to wait on condition
         Thread.sleep(2000);
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {
             notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
         }
 

@@ -133,7 +133,8 @@ public class TimeoutTest {
         String wfid1 = "wf-126";
         String result;
 
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).queue(simpleQ).timeout(Duration.ofSeconds(3)).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).queue(simpleQ)
+                .timeout(Duration.ofSeconds(3)).build();
         WorkflowHandle<String> handle = null;
         try (var id = options.set()) {
             handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
@@ -163,7 +164,8 @@ public class TimeoutTest {
         String wfid1 = "wf-127";
         String result;
 
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).queue(simpleQ).timeout(Duration.ofSeconds(1)).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).queue(simpleQ)
+                .timeout(Duration.ofSeconds(1)).build();
         WorkflowHandle<String> handle = null;
         try (var id = options.set()) {
             handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
@@ -285,7 +287,7 @@ public class TimeoutTest {
         String wfid1 = "wf-124";
         String result;
 
-        WorkflowOptions options =  WorkflowOptions.builder().workflowId(wfid1).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).build();
         try (var id = options.set()) {
             result = simpleService.longParent("12345", 1, 2);
         }

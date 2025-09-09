@@ -74,7 +74,7 @@ public class QueuesTest {
 
         String id = "q1234";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(id)) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId(id)) {
 
             serviceQ.simpleQWorkflow("inputq");
         }
@@ -102,7 +102,7 @@ public class QueuesTest {
         for (int i = 0; i < 5; i++) {
             String id = "wfid" + i;
 
-            try (var _ignore = WorkflowOptions.setWorkflowId(id)) {            
+            try (var _ignore = WorkflowOptions.setWorkflowId(id)) {
                 serviceQ.simpleQWorkflow("inputq" + i);
             }
         }
@@ -523,7 +523,7 @@ public class QueuesTest {
 
         WorkflowOptions opt2 = WorkflowOptions.builder().workflowId("wf2").queue(queue).build();
         try (var _ignore = opt2.set()) {
-                        handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1));
+            handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1));
         }
 
         WorkflowOptions opt3 = WorkflowOptions.builder().workflowId("wf3").queue(queue).build();

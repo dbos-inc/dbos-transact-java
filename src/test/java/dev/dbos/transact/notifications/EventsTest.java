@@ -56,11 +56,11 @@ public class EventsTest {
 
         dbos.launch();
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {
             eventService.setEventWorkflow("key1", "value1");
         }
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {
             Object event = eventService.getEventWorkflow("id1", "key1", 3);
             assertEquals("value1", (String) event);
         }
@@ -79,11 +79,11 @@ public class EventsTest {
 
         dbos.launch();
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {
             eventService.setMultipleEvents();
         }
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {
             Object event = eventService.getEventWorkflow("id1", "key1", 3);
             assertEquals("value1", (String) event);
         }
@@ -102,11 +102,11 @@ public class EventsTest {
 
         dbos.launch();
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {
             eventService.setEventWorkflow("key1", "value1");
         }
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {
             eventService.getEventWorkflow("id1", "key1", 3);
         }
 
@@ -124,11 +124,11 @@ public class EventsTest {
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {
             eventService.getWithlatch("id1", "key1", 5);
         }
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {            
+        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {
             eventService.setWithLatch("key1", "value1");
         }
 
@@ -171,7 +171,7 @@ public class EventsTest {
             Future<Object> future2 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
 
             String expectedMessage = "test message";
-            try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {            
+            try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {
                 eventService.setEventWorkflow("key1", expectedMessage);;
             }
 
