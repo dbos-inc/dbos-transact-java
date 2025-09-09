@@ -258,7 +258,7 @@ class DBOSExecutorTest {
     }
 
     @Test
-    public void sleep() {
+    public void sleep() throws SQLException {
 
         ExecutingService executingService = dbos.<ExecutingService>Workflow()
                 .interfaceClass(ExecutingService.class)

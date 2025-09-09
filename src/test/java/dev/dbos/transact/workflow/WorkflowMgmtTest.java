@@ -231,7 +231,7 @@ public class WorkflowMgmtTest {
     }
 
     @Test
-    public void testFork() {
+    public void testFork() throws SQLException {
 
         ForkServiceImpl impl = new ForkServiceImpl();
 
@@ -308,7 +308,7 @@ public class WorkflowMgmtTest {
     }
 
     @Test
-    public void testParentChildFork() {
+    public void testParentChildFork() throws SQLException {
 
         ForkServiceImpl impl = new ForkServiceImpl();
 
@@ -409,7 +409,7 @@ public class WorkflowMgmtTest {
     }
 
     @Test
-    public void testParentChildAsyncFork() {
+    public void testParentChildAsyncFork() throws SQLException {
 
         ForkServiceImpl impl = new ForkServiceImpl();
 

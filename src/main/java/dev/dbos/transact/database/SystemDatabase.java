@@ -4,10 +4,7 @@ import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.exceptions.*;
-import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -21,7 +18,6 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.*;
 import java.util.*;
-import java.util.function.Supplier;
 
 import javax.sql.DataSource;
 
@@ -145,20 +141,9 @@ public class SystemDatabase implements AutoCloseable {
         return workflowDAO.getWorkflowStatus(workflowId);
     }
 
-    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
 
-        Supplier<List<WorkflowStatus>> listWorkflowFunction = () -> {
-            logger.info("List workflows");
-
-            try {
-                return workflowDAO.listWorkflows(input);
-            } catch (SQLException sq) {
-                logger.error("Unexpected SQL exception", sq);
-                throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-            }
-        };
-
-        return this.callFunctionAsStep(listWorkflowFunction, "listWorkflows");
+        return workflowDAO.listWorkflows(input);
     }
 
     public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
@@ -196,21 +181,9 @@ public class SystemDatabase implements AutoCloseable {
         }
     }
 
-    public List<StepInfo> listWorkflowSteps(String workflowId) {
+    public List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
 
-        Supplier<List<StepInfo>> listWorkflowStepsFunction = () -> {
-            logger.info("List steps for {}", workflowId);
-
-            try {
-                return stepsDAO.listWorkflowSteps(workflowId);
-            } catch (SQLException sq) {
-                logger.error("Unexpected SQL exception", sq);
-                throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-            }
-        };
-
-        return this.callFunctionAsStep(listWorkflowStepsFunction, "listWorkflowSteps");
-
+        return stepsDAO.listWorkflowSteps(workflowId);
     }
 
     public Object awaitWorkflowResult(String workflowId) {
@@ -223,20 +196,10 @@ public class SystemDatabase implements AutoCloseable {
         return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
     }
 
-    public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput) {
+    public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput)
+            throws SQLException {
 
-        Supplier<List<WorkflowStatus>> listQueuedWorkflowFunction = () -> {
-            logger.info("List queued workflows ");
-
-            try {
-                return queuesDAO.getQueuedWorkflows(input, loadInput);
-            } catch (SQLException sq) {
-                logger.error("Unexpected SQL exception", sq);
-                throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-            }
-        };
-
-        return this.callFunctionAsStep(listQueuedWorkflowFunction, "listQueuedWorkflows");
+        return queuesDAO.getQueuedWorkflows(input, loadInput);
     }
 
     public void recordChildWorkflow(String parentId, String childId, // workflowId of the
@@ -341,88 +304,12 @@ public class SystemDatabase implements AutoCloseable {
         }
     }
 
-    public <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
-        DBOSContext ctx = DBOSContextHolder.get();
-
-        int nextFuncId = 0;
-
-        if (ctx != null && ctx.isInWorkflow()) {
-            nextFuncId = ctx.getAndIncrementFunctionId();
-
-            StepResult result = null;
-
-            try (Connection connection = dataSource.getConnection()) {
-                result = StepsDAO.checkStepExecutionTxn(ctx.getWorkflowId(),
-                        nextFuncId,
-                        functionName,
-                        connection);
-            } catch (SQLException e) {
-                throw new DBOSException(UNEXPECTED.getCode(),
-                        "Function execution failed: " + functionName, e);
-            }
-
-            if (result != null) {
-                return handleExistingResult(result, functionName);
-            }
-        }
-
-        T functionResult;
-        try {
-
-            try {
-                functionResult = fn.get();
-            } catch (Exception e) {
-                if (ctx != null && ctx.isInWorkflow()) {
-                    String jsonError = JSONUtil.serializeError(e);
-                    StepResult r = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
-                            null, jsonError);
-                    StepsDAO.recordStepResultTxn(dataSource, r);
-                }
-
-                if (e instanceof NonExistentWorkflowException) {
-                    throw e;
-                } else {
-                    throw new DBOSException(UNEXPECTED.getCode(),
-                            "Function execution failed: " + functionName, e);
-                }
-            }
-
-            // If we're in a workflow, record the successful result
-            if (ctx != null && ctx.isInWorkflow()) {
-                String jsonOutput = JSONUtil.serialize(functionResult);
-                StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
-                        jsonOutput, null);
-                StepsDAO.recordStepResultTxn(dataSource, o);
-            }
-        } catch (SQLException sq) {
-            throw new DBOSException(UNEXPECTED.getCode(),
-                    "Function execution failed: " + functionName, sq);
-        }
-
-        return functionResult;
-    }
-
     public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) {
         try {
             workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold);
         } catch (SQLException sq) {
             logger.error("Unexpected SQL exception", sq);
             throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private <T> T handleExistingResult(StepResult result, String functionName) {
-        if (result.getOutput() != null) {
-            Object[] resArray = JSONUtil.deserializeToArray(result.getOutput());
-            return resArray == null ? null : (T) resArray[0];
-        } else if (result.getError() != null) {
-            Object[] eArray = JSONUtil.deserializeToArray(result.getError());
-            SerializableException se = (SerializableException) eArray[0];
-            throw new DBOSAppException(String.format("Exception of type %s", se.className), se);
-        } else {
-            throw new IllegalStateException(
-                    String.format("Recorded output and error are both null for %s", functionName));
         }
     }
 
