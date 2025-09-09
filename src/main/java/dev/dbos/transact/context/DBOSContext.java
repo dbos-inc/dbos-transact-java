@@ -53,24 +53,24 @@ public class DBOSContext {
         // this.dbos = new AtomicReference<>();
     }
 
-    public DBOSContext(String workflowId, int functionId) {
-        throw new RuntimeException();
-        // this.dbos = new AtomicReference<>();
-        // this.workflowId = workflowId;
-        // this.functionId = functionId;
-        // this.inWorkflow = false;
-    }
+    // public DBOSContext(String workflowId, int functionId) {
+    // throw new RuntimeException();
+    // // this.dbos = new AtomicReference<>();
+    // // this.workflowId = workflowId;
+    // // this.functionId = functionId;
+    // // this.inWorkflow = false;
+    // }
 
-    public DBOSContext(WorkflowOptions options, int functionId) {
-        throw new RuntimeException();
-        // this.dbos = new AtomicReference<>();
-        // this.workflowId = options.getWorkflowId();
-        // this.functionId = functionId;
-        // this.inWorkflow = false;
-        // this.async = options.isAsync();
-        // this.queue = options.getQueue();
-        // this.workflowTimeoutMs = options.getTimeout() * 1000;
-    }
+    // public DBOSContext(WorkflowOptions options, int functionId) {
+    // throw new RuntimeException();
+    // // this.dbos = new AtomicReference<>();
+    // // this.workflowId = options.getWorkflowId();
+    // // this.functionId = functionId;
+    // // this.inWorkflow = false;
+    // // this.async = options.isAsync();
+    // // this.queue = options.getQueue();
+    // // this.workflowTimeoutMs = options.getTimeout() * 1000;
+    // }
 
     // private DBOSContext(DBOS dbos, String workflowId, int functionId, String
     // parentWorkflowId,

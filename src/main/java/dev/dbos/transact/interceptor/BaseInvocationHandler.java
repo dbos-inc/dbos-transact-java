@@ -1,10 +1,10 @@
 package dev.dbos.transact.interceptor;
 
 import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+import dev.dbos.transact.internal.DBOSContextHolder;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 

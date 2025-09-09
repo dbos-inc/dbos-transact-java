@@ -1,5 +1,6 @@
 package dev.dbos.transact.context;
 
+import dev.dbos.transact.internal.DBOSContextHolder;
 import dev.dbos.transact.queue.Queue;
 
 import java.time.Duration;

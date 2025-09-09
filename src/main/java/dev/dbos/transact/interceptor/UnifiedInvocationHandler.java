@@ -1,9 +1,9 @@
 package dev.dbos.transact.interceptor;
 
 import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+import dev.dbos.transact.internal.DBOSContextHolder;
 
 import java.lang.reflect.Proxy;
 import java.util.function.Supplier;
