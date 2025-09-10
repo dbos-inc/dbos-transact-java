@@ -118,7 +118,9 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).queue(myqueue).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId)
+            // .queue(myqueue) 
+            .build();
         int result;
         try (var o = options.set()) {
             mgmtService.simpleWorkflow(23);

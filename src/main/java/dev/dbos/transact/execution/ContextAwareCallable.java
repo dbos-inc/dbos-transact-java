@@ -12,7 +12,7 @@ public class ContextAwareCallable<T> implements Callable<T> {
     private final Callable<T> task;
     private DBOSContext capturedContext;
 
-    Logger logger = LoggerFactory.getLogger(ContextAwareCallable.class);
+    // private final static Logger logger = LoggerFactory.getLogger(ContextAwareCallable.class);
 
     public ContextAwareCallable(DBOSContext ctx, Callable<T> task) {
         this.task = task;

@@ -13,6 +13,7 @@ import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -39,39 +40,41 @@ public class DBOSClient implements AutoCloseable {
             String targetClassName,
             String workflowId,
             String appVersion,
-            Long timeoutMS) {
-    }
-
-    public static class EnqueueOptionsBuilder {
-        String workflowName;
-        String queueName;
-        String targetClassName;
-        String workflowId;
-        String appVersion;
-        Long timeoutMS;
-
-        public EnqueueOptionsBuilder(String workflowName, String queueName) {
-            this.workflowName = workflowName;
-            this.queueName = queueName;
+            Duration timeout) {
+        public static Builder builder(String workflowName, String queueName) {
+            return new Builder(workflowName, queueName);
         }
 
-        public EnqueueOptionsBuilder targetClassName(String targetClassName) {
-            this.targetClassName = targetClassName;
+        public static class Builder {
+            String workflowName;
+            String queueName;
+            String targetClassName;
+            String workflowId;
+            String appVersion;
+            Duration timeout;
+
+        public Builder(String workflowName, String queueName) {
+            this.workflowName = Objects.requireNonNull(workflowName);
+            this.queueName = Objects.requireNonNull(queueName);
+        }
+
+        public Builder targetClassName(String targetClassName) {
+            this.targetClassName = Objects.requireNonNull(targetClassName);
             return this;
         }
 
-        public EnqueueOptionsBuilder workflowId(String workflowId) {
-            this.workflowId = workflowId;
+        public Builder workflowId(String workflowId) {
+            this.workflowId = Objects.requireNonNull(workflowId);
             return this;
         }
 
-        public EnqueueOptionsBuilder appVersion(String appVersion) {
-            this.appVersion = appVersion;
+        public Builder appVersion(String appVersion) {
+            this.appVersion = Objects.requireNonNull(appVersion);
             return this;
         }
 
-        public EnqueueOptionsBuilder timeoutMS(Long timeoutMS) {
-            this.timeoutMS = timeoutMS;
+        public Builder timeoutMS(Duration timeout) {
+            this.timeout = Objects.requireNonNull(timeout);
             return this;
         }
 
@@ -82,9 +85,12 @@ public class DBOSClient implements AutoCloseable {
                     targetClassName,
                     workflowId,
                     appVersion,
-                    timeoutMS);
+                    timeout);
         }
     }
+    }
+
+
 
     public <T> WorkflowHandle<T> enqueueWorkflow(EnqueueOptions options, Object[] args) throws Throwable {
         Objects.requireNonNull(options.workflowName);
@@ -100,7 +106,7 @@ public class DBOSClient implements AutoCloseable {
                 null,
                 options.appVersion,
                 null,
-                options.timeoutMS != null ? options.timeoutMS : 0L);
+                options.timeout);
         return retrieveWorkflow(workflowId);
     }
 

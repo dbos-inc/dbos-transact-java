@@ -114,7 +114,9 @@ public class SimpleServiceImpl implements SimpleService {
         for (int i = 0; i < 3; i++) {
 
             String wid = "child" + i;
-            WorkflowOptions options = WorkflowOptions.builder().workflowId(wid).queue(childQ).build();
+            WorkflowOptions options = WorkflowOptions.builder().workflowId(wid)
+                // .queue(childQ) TODO
+                .build();
             try (var o = options.set()) {
                 simpleService.childWorkflow(wid);
             }

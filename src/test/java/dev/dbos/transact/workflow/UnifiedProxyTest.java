@@ -81,7 +81,9 @@ public class UnifiedProxyTest {
 
         // Queued
         String wfid3 = "wf-125";
-        options = WorkflowOptions.builder().workflowId(wfid3).queue(q).build();
+        options = WorkflowOptions.builder().workflowId(wfid3)
+            // .queue(q) TODO
+            .build();
         try (var id = options.set()) {
             result = simpleService.workWithString("test-item-q");
         }

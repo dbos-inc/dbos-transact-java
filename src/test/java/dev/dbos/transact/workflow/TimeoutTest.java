@@ -133,7 +133,8 @@ public class TimeoutTest {
         String wfid1 = "wf-126";
         String result;
 
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).queue(simpleQ)
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1)
+            // .queue(simpleQ) TODO
                 .timeout(Duration.ofSeconds(3)).build();
         WorkflowHandle<String> handle = null;
         try (var id = options.set()) {
@@ -164,7 +165,8 @@ public class TimeoutTest {
         String wfid1 = "wf-127";
         String result;
 
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).queue(simpleQ)
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1)
+            // .queue(simpleQ) TODO
                 .timeout(Duration.ofSeconds(1)).build();
         WorkflowHandle<String> handle = null;
         try (var id = options.set()) {

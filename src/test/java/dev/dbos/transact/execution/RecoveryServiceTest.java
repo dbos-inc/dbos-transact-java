@@ -93,7 +93,9 @@ class RecoveryServiceTest {
 
         wfid = "wf-127";
         WorkflowHandle<String> handle7 = null;
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid).queue(testQueue).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid)
+            // .queue(testQueue) TODO use startWF queueParams
+            .build();
         try (var _ignore = options.set()) {
             handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }
@@ -138,7 +140,9 @@ class RecoveryServiceTest {
 
         wfid = "wf-127";
         WorkflowHandle<String> handle7 = null;
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid).queue(testQueue).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid)
+            // .queue(testQueue) TODO
+            .build();
         try (var _ignore = options.set()) {
             handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
         }

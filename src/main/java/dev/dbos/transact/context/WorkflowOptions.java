@@ -1,15 +1,18 @@
 package dev.dbos.transact.context;
 
 import dev.dbos.transact.internal.DBOSContextHolder;
-import dev.dbos.transact.queue.Queue;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 
 public record WorkflowOptions(
         String workflowId,
-        String queueName,
-        Duration timeout) {
+        Duration timeout,
+        String authenticatedUser,
+        List<String> authenticatedRoles,
+        String assumedRole
+    ) {
 
     public static Builder builder() {
         return new Builder();
@@ -19,13 +22,15 @@ public record WorkflowOptions(
         var ctx = DBOSContextHolder.get();
         var closer = new Closer(ctx);
         ctx.assignedNextWorkflowId = Objects.requireNonNullElse(workflowId, ctx.assignedNextWorkflowId);
-        ctx.assignedQueueName = Objects.requireNonNullElse(queueName, ctx.assignedQueueName);
-        ctx.assignedTimeout = Objects.requireNonNullElse(timeout, ctx.assignedTimeout);
+        ctx.timeout = Objects.requireNonNullElse(timeout, ctx.timeout);
+        ctx.authenticatedUser = Objects.requireNonNullElse(authenticatedUser, ctx.authenticatedUser);
+        ctx.authenticatedRoles = Objects.requireNonNullElse(List.copyOf(authenticatedRoles), ctx.authenticatedRoles);
+        ctx.assumedRole = Objects.requireNonNullElse(assumedRole, ctx.assumedRole);
         return closer;
     }
 
     public static Closer setWorkflowId(String workflowId) {
-        var options = new WorkflowOptions(Objects.requireNonNull(workflowId), null, null);
+        var options = builder().workflowId(workflowId).build();
         return options.set();
     }
 
@@ -33,41 +38,39 @@ public record WorkflowOptions(
 
         private final DBOSContext ctx;
         private final String assignedNextWorkflowId;
-        private final String assignedQueueName;
-        private final Duration assignedTimeout;
+        private final Duration timeout;
+        private final String authenticatedUser;
+        private final List<String> authenticatedRoles;
+        private final String assumedRole;
 
         public Closer(DBOSContext ctx) {
             this.ctx = ctx;
             this.assignedNextWorkflowId = ctx.assignedNextWorkflowId;
-            this.assignedQueueName = ctx.assignedQueueName;
-            this.assignedTimeout = ctx.assignedTimeout;
+            this.timeout = ctx.timeout;
+            this.authenticatedUser = ctx.authenticatedUser;
+            this.authenticatedRoles = List.copyOf(ctx.authenticatedRoles);
+            this.assumedRole = ctx.assumedRole;
         }
 
         @Override
         public void close() {
             ctx.assignedNextWorkflowId = assignedNextWorkflowId;
-            ctx.assignedQueueName = assignedQueueName;
-            ctx.assignedTimeout = assignedTimeout;
+            ctx.timeout = timeout;
+            ctx.authenticatedUser = authenticatedUser;
+            ctx.authenticatedRoles = authenticatedRoles;
+            ctx.assumedRole = assumedRole;
         }
     }
 
     public static class Builder {
         private String workflowId = null;
-        private String queueName = null;
         private Duration timeout = null;
+        private String authenticatedUser = null;
+        private List<String> authenticatedRoles = null;
+        private String assumedRole = null;
 
         public Builder workflowId(String workflowId) {
             this.workflowId = Objects.requireNonNull(workflowId);
-            return this;
-        }
-
-        public Builder queue(Queue queue) {
-            this.queueName = Objects.requireNonNull(queue).getName();
-            return this;
-        }
-
-        public Builder queue(String queueName) {
-            this.queueName = Objects.requireNonNull(queueName);
             return this;
         }
 
@@ -76,8 +79,23 @@ public record WorkflowOptions(
             return this;
         }
 
+        public Builder authenticatedUser(String authenticatedUser) {
+            this.authenticatedUser = Objects.requireNonNull(authenticatedUser);
+            return this;
+        }
+
+        public Builder authenticatedRoles(List<String> authenticatedRoles) {
+            this.authenticatedRoles = List.copyOf(Objects.requireNonNull(authenticatedRoles));
+            return this;
+        }
+
+        public Builder assumedRole(String assumedRole) {
+            this.assumedRole = Objects.requireNonNull(assumedRole);
+            return this;
+        }
+
         public WorkflowOptions build() {
-            return new WorkflowOptions(workflowId, queueName, timeout);
+            return new WorkflowOptions(workflowId, timeout, authenticatedUser, authenticatedRoles, assumedRole);
         }
     }
 }

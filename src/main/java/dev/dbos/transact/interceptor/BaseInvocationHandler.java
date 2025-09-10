@@ -91,7 +91,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
                 String workflowId = UUID.randomUUID().toString();
                 try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
-                    DBOSContextHolder.get().setInWorkflow(true);
+                    // DBOSContextHolder.get().setInWorkflow(true);
                     result = submitWorkflow(workflowName, targetClassName, wrapper, args);
                 }
             } else {
@@ -104,7 +104,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
                 // it must also set the workflow ID in order to signal to handleWorkflow the
                 // context is valid
 
-                DBOSContextHolder.get().setInWorkflow(true);
+                // DBOSContextHolder.get().setInWorkflow(true);
                 result = submitWorkflow(workflowName, targetClassName, wrapper, args);
             }
         }
