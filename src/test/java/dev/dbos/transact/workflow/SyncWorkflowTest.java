@@ -251,8 +251,6 @@ public class SyncWorkflowTest {
 
         simpleService.setSimpleService(simpleService);
 
-        String result = null;
-
         try (var o = WorkflowOptions.setWorkflowId("wf-123456")) {
             simpleService.grandParent("123");
         }

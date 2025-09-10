@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
@@ -69,11 +70,8 @@ public class TimeoutTest {
         String wfid1 = "wf-124";
         String result;
 
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).timeout(Duration.ofSeconds(3)).build();
-        WorkflowHandle<String> handle = null;
-        try (var id = options.set()) {
-            handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
-        }
+        var options = StartWorkflowOptions.builder(wfid1).timeout(Duration.ofSeconds(3)).build();
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
         // assertNull(result);
 
         // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
@@ -97,11 +95,8 @@ public class TimeoutTest {
         // make it timeout
         String wfid1 = "wf-125";
         String result;
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).timeout(Duration.ofSeconds(1)).build();
-        WorkflowHandle<String> handle = null;
-        try (var id = options.set()) {
-            handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
-        }
+        var options = StartWorkflowOptions.builder(wfid1).timeout(Duration.ofSeconds(1)).build();
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
         // assertNull(result);
         // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
 
@@ -133,13 +128,8 @@ public class TimeoutTest {
         String wfid1 = "wf-126";
         String result;
 
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1)
-            // .queue(simpleQ) TODO
-                .timeout(Duration.ofSeconds(3)).build();
-        WorkflowHandle<String> handle = null;
-        try (var id = options.set()) {
-            handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
-        }
+        var options = StartWorkflowOptions.builder(wfid1).queue(simpleQ).timeout(Duration.ofSeconds(3)).build();
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
         // assertNull(result);
 
         // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
@@ -165,13 +155,8 @@ public class TimeoutTest {
         String wfid1 = "wf-127";
         String result;
 
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1)
-            // .queue(simpleQ) TODO
-                .timeout(Duration.ofSeconds(1)).build();
-        WorkflowHandle<String> handle = null;
-        try (var id = options.set()) {
-            handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
-        }
+        var options = StartWorkflowOptions.builder().workflowId(wfid1).queue(simpleQ).timeout(Duration.ofSeconds(1)).build();
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
         // assertNull(result);
         // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
 
@@ -377,11 +362,8 @@ public class TimeoutTest {
         String wfid1 = "wf-124";
         String result;
 
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).timeout(Duration.ofSeconds(2)).build();
-        WorkflowHandle<String> handle = null;
-        try (var id = options.set()) {
-            handle = dbos.startWorkflow(() -> simpleService.longParent("12345", 3, 0));
-        }
+        var options = StartWorkflowOptions.builder(wfid1).timeout(Duration.ofSeconds(2)).build();
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.longParent("12345", 3, 0), options);
 
         try {
             handle.getResult();

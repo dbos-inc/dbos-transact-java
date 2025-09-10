@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
@@ -75,10 +76,8 @@ public class QueuesTest {
 
         String id = "q1234";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(id)) {
-
-            serviceQ.simpleQWorkflow("inputq");
-        }
+        var options = StartWorkflowOptions.builder(id).queue(firstQ).build();
+        dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
 
         WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id);
         assertEquals(id, handle.getWorkflowId());
@@ -91,8 +90,9 @@ public class QueuesTest {
 
         Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
 
-        // TODO was queue
-        ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class).implementation(new ServiceQImpl())
+        ServiceQ serviceQ = dbos.<ServiceQ>Workflow()
+            .interfaceClass(ServiceQ.class)
+            .implementation(new ServiceQImpl())
                 .build();
 
         dbos.launch();
@@ -103,10 +103,10 @@ public class QueuesTest {
 
         for (int i = 0; i < 5; i++) {
             String id = "wfid" + i;
+            String input = "inputq" + i;
 
-            try (var _ignore = WorkflowOptions.setWorkflowId(id)) {
-                serviceQ.simpleQWorkflow("inputq" + i);
-            }
+            var options = StartWorkflowOptions.builder(id).queue(firstQ).build();
+            dbos.startWorkflow(() -> serviceQ.simpleQWorkflow(input), options);
         }
 
         List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
@@ -152,13 +152,10 @@ public class QueuesTest {
 
         for (int i = 0; i < 5; i++) {
             String id = "wfid" + i;
+            String input = "inputq" + i;
 
-            WorkflowOptions option = WorkflowOptions.builder().workflowId(id)
-                // .queue(firstQ) TODO
-                .build();
-            try (var _ignore = option.set()) {
-                serviceQ.simpleQWorkflow("inputq" + i);
-            }
+            var options = StartWorkflowOptions.builder(id).queue(firstQ).build();
+            dbos.startWorkflow(() -> serviceQ.simpleQWorkflow(input), options);
         }
 
         List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
@@ -226,21 +223,11 @@ public class QueuesTest {
         String id1 = "firstQ1234";
         String id2 = "second1234";
 
-        WorkflowOptions options1 = WorkflowOptions.builder().workflowId(id1)
-            // .queue(firstQ) TODO
-            .build();
-        WorkflowHandle<String> handle1 = null;
-        try (var _ignore = options1.set()) {
-            handle1 = dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"));
-        }
+        var options1 = StartWorkflowOptions.builder(id1).queue(firstQ).build();
+        WorkflowHandle<String> handle1 = dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"), options1);
 
-        WorkflowOptions options2 = WorkflowOptions.builder().workflowId(id2)
-            // .queue(secondQ) TODO
-            .build();
-        WorkflowHandle<Integer> handle2 = null;
-        try (var _ignore = options2.set()) {
-            handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25));
-        }
+        var options2 = StartWorkflowOptions.builder(id2).queue(secondQ).build();
+        WorkflowHandle<Integer> handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25), options2);
 
         assertEquals(id1, handle1.getWorkflowId());
         String result = handle1.getResult();
@@ -276,13 +263,8 @@ public class QueuesTest {
 
         for (int i = 0; i < numTasks; i++) {
             String id = "id" + i;
-            WorkflowOptions options = WorkflowOptions.builder().workflowId(id)
-                // .queue(limitQ) TODO
-                .build();
-            WorkflowHandle<Double> handle = null;
-            try (var _ignore = options.set()) {
-                handle = dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"));
-            }
+            var options = StartWorkflowOptions.builder(id).queue(limitQ).build();
+            WorkflowHandle<Double> handle = dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"), options);
             handles.add(handle);
         }
 
@@ -500,13 +482,8 @@ public class QueuesTest {
 
         String id = "q1234";
 
-        WorkflowHandle<String> handle = null;
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(id)
-            // .queue(firstQ) TODO
-            .build();
-        try (var _ignore = options.set()) {
-            handle = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"));
-        }
+        var options = StartWorkflowOptions.builder(id).queue(firstQ).build();
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
 
         assertEquals(id, handle.getWorkflowId());
         String result = handle.getResult();
@@ -524,31 +501,15 @@ public class QueuesTest {
 
         dbos.launch();
 
-        WorkflowHandle<Integer> handle1;
-        WorkflowHandle<Integer> handle2;
-        WorkflowHandle<Integer> handle3;
-
-        WorkflowOptions opt1 = WorkflowOptions.builder().workflowId("wf1")
-            // .queue(queue) TODO
-            .build();
-        try (var _ignore = opt1.set()) {
-            handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0));
-        }
-
-        WorkflowOptions opt2 = WorkflowOptions.builder().workflowId("wf2")
-            // .queue(queue) TODO
-            .build();
-        try (var _ignore = opt2.set()) {
-            handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1));
-        }
-
-        WorkflowOptions opt3 = WorkflowOptions.builder().workflowId("wf3")
-            // .queue(queue) TODO
-            .build();
-        try (var _ignore = opt3.set()) {
-
-            handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2));
-        }
+        var opt1 = StartWorkflowOptions.builder("wf1").queue(queue).build();
+        WorkflowHandle<Integer> handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0), opt1);
+        
+        var opt2 = StartWorkflowOptions.builder("wf2").queue(queue).build();
+        WorkflowHandle<Integer> handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1), opt2);
+        
+        var opt3 = StartWorkflowOptions.builder("wf3").queue(queue).build();
+        WorkflowHandle<Integer> handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2), opt3);
+        
 
         for (Semaphore e : impl.wfSemaphores) {
             e.acquire();

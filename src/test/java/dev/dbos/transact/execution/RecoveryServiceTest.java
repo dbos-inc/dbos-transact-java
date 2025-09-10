@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
@@ -93,12 +94,9 @@ class RecoveryServiceTest {
 
         wfid = "wf-127";
         WorkflowHandle<String> handle7 = null;
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid)
-            // .queue(testQueue) TODO use startWF queueParams
-            .build();
-        try (var _ignore = options.set()) {
-            handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
-        }
+
+        var options = StartWorkflowOptions.builder(wfid).queue(testQueue).build();
+        handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
         assertEquals("q1", handle7.getStatus().getQueueName());
         handle7.getResult();
 
@@ -139,13 +137,8 @@ class RecoveryServiceTest {
         handle6.getResult();
 
         wfid = "wf-127";
-        WorkflowHandle<String> handle7 = null;
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid)
-            // .queue(testQueue) TODO
-            .build();
-        try (var _ignore = options.set()) {
-            handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
-        }
+        var options = StartWorkflowOptions.builder(wfid).queue(testQueue).build();
+        WorkflowHandle<String> handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
         assertEquals("q1", handle7.getStatus().getQueueName());
         handle7.getResult();
 

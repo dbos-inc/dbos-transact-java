@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
@@ -96,20 +97,17 @@ public class EventsTest {
     @Test
     public void async_set_get() throws Exception {
 
-        // TODO: was async
         EventsService eventService = dbos.<EventsService>Workflow()
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .build();
 
         dbos.launch();
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {
-            eventService.setEventWorkflow("key1", "value1");
-        }
+        var options1 = StartWorkflowOptions.fromWorkflowId("id1");
+        dbos.startWorkflow(() -> eventService.setEventWorkflow("key1", "value1"), options1);
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {
-            eventService.getEventWorkflow("id1", "key1", 3);
-        }
+        var options2 = StartWorkflowOptions.fromWorkflowId("id2");
+        dbos.startWorkflow(() -> eventService.getEventWorkflow("key1", "key1", 3), options2);
 
         String event = (String) dbos.retrieveWorkflow("id2").getResult();
         assertEquals("value1", event);
@@ -118,7 +116,6 @@ public class EventsTest {
     @Test
     public void notification() throws Exception {
 
-        // TODO: was async
         EventsService eventService = dbos.<EventsService>Workflow()
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
                 .build();
@@ -126,13 +123,12 @@ public class EventsTest {
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {
-            eventService.getWithlatch("id1", "key1", 5);
-        }
 
-        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {
-            eventService.setWithLatch("key1", "value1");
-        }
+        var options1 = StartWorkflowOptions.fromWorkflowId("id2");
+        dbos.startWorkflow(() -> eventService.getWithlatch("id1", "key1", 5), options1);
+
+        var options2 = StartWorkflowOptions.fromWorkflowId("id1");
+        dbos.startWorkflow(() -> eventService.setWithLatch("key1", "value1"), options2);
 
         String event = (String) dbos.retrieveWorkflow("id2").getResult();
         assertEquals("value1", event);

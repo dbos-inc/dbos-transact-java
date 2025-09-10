@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.queue.Queue;
@@ -68,11 +69,8 @@ public class UnifiedProxyTest {
         // asynchronous
 
         String wfid2 = "wf-124";
-        options = WorkflowOptions.builder().workflowId(wfid2).build();
-        WorkflowHandle<String> handle = null;
-        try (var id = options.set()) {
-            handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
-        }
+        var opt2 = StartWorkflowOptions.fromWorkflowId(wfid2);
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"), opt2);
 
         result = handle.getResult();
         assertEquals("Processed: test-item-async", result);
@@ -81,12 +79,8 @@ public class UnifiedProxyTest {
 
         // Queued
         String wfid3 = "wf-125";
-        options = WorkflowOptions.builder().workflowId(wfid3)
-            // .queue(q) TODO
-            .build();
-        try (var id = options.set()) {
-            result = simpleService.workWithString("test-item-q");
-        }
+        var opt3 = StartWorkflowOptions.builder(wfid3).queue(q).build();
+        result = dbos.startWorkflow(()-> simpleService.workWithString("test-item-q"), opt3).getResult();
         assertNull(result);
 
         handle = dbosExecutor.retrieveWorkflow(wfid3);;

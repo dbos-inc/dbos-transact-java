@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
@@ -114,7 +115,6 @@ public class StepsTest {
         ServiceB serviceB = dbos.<ServiceB>Workflow().interfaceClass(ServiceB.class)
                 .implementation(new ServiceBImpl()).build();
 
-        //TODO: was async
         ServiceA serviceA = dbos.<ServiceA>Workflow().interfaceClass(ServiceA.class)
                 .implementation(new ServiceAImpl(serviceB)).build();
 
@@ -123,10 +123,8 @@ public class StepsTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wf-1234";
-
-        try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
-            serviceA.workflowWithSteps("hello");
-        }
+        var options = StartWorkflowOptions.builder(workflowId).build();
+        dbos.startWorkflow(() -> serviceA.workflowWithSteps("hello"), options);
 
         WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
         assertEquals("hellohello", (String) handle.getResult());
@@ -155,7 +153,6 @@ public class StepsTest {
     @Test
     public void SameInterfaceWorkflowWithSteps() throws Exception {
 
-        // TODO was async
         ServiceWFAndStep service = dbos.<ServiceWFAndStep>Workflow()
                 .interfaceClass(ServiceWFAndStep.class).implementation(new ServiceWFAndStepImpl())
                 .build();
@@ -167,10 +164,8 @@ public class StepsTest {
         service.setSelf(service);
 
         String workflowId = "wf-same-1234";
-
-        try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
-            service.aWorkflow("hello");
-        }
+        var options = StartWorkflowOptions.fromWorkflowId(workflowId);
+        dbos.startWorkflow(() -> service.aWorkflow("hello"), options);
 
         WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
         assertEquals("helloonetwo", (String) handle.getResult());

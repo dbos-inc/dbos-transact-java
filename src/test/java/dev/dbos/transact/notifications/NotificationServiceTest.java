@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
@@ -50,7 +51,6 @@ class NotificationServiceTest {
     @Test
     public void basic_send_recv() throws Exception {
 
-        // TODO was async
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
                 .implementation(new NotServiceImpl()).build();
 
@@ -59,15 +59,12 @@ class NotificationServiceTest {
 
         String wfid1 = "recvwf1";
 
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
-            notService.recvWorkflow("topic1", 10);
-        }
+        var options1 = StartWorkflowOptions.fromWorkflowId(wfid1);
+        dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 10), options1);
 
         String wfid2 = "sendf1";
-
-        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {
-            notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
-        }
+        var options2 = StartWorkflowOptions.fromWorkflowId(wfid2);
+        dbos.startWorkflow(() -> notService.sendWorkflow(wfid1, "topic1", "HelloDBOS"), options2);
 
         WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
         WorkflowHandle<?> handle2 = dbos.retrieveWorkflow(wfid2);

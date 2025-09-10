@@ -18,6 +18,15 @@ public record WorkflowOptions(
         return new Builder();
     }
 
+    public static Builder builder(String workflowId) {
+        return builder().workflowId(workflowId);
+    }
+
+    public static WorkflowOptions fromWorkflowId(String workflowId) {
+        return builder(workflowId).build();
+    }
+
+
     public Closer set() {
         var ctx = DBOSContextHolder.get();
         var closer = new Closer(ctx);

@@ -451,6 +451,10 @@ public class DBOS {
      *            type returned by the function
      */
     public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
+        return startWorkflow(func, StartWorkflowOptions.builder().build());
+    }
+
+    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func, StartWorkflowOptions options) {
         var executor = dbosExecutor.get();
         if (executor == null) {
             throw new IllegalStateException("cannot startWorkflow before launch");
@@ -460,15 +464,20 @@ public class DBOS {
     }
 
     public WorkflowHandle<Void> startWorkflow(ThrowingRunnable func) {
-        var executor = dbosExecutor.get();
-        if (executor == null) {
-            throw new IllegalStateException("cannot startWorkflow before launch");
-        }
-
-        return executor.startWorkflow(() -> {
+        WorkflowFunction<Void> runnable = () -> {
             func.execute();
             return null;
-        });
+        };
+        return startWorkflow(runnable, StartWorkflowOptions.builder().build());
+    }
+
+    public WorkflowHandle<Void> startWorkflow(ThrowingRunnable func, StartWorkflowOptions options) {
+        WorkflowFunction<Void> runnable = () -> {
+            func.execute();
+            return null;
+        };
+
+        return startWorkflow(runnable, options);
     }
 
     public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {

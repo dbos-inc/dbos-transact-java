@@ -1,5 +1,6 @@
 package dev.dbos.transact.workflow;
 
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.WorkflowOptions;
 
@@ -114,12 +115,8 @@ public class SimpleServiceImpl implements SimpleService {
         for (int i = 0; i < 3; i++) {
 
             String wid = "child" + i;
-            WorkflowOptions options = WorkflowOptions.builder().workflowId(wid)
-                // .queue(childQ) TODO
-                .build();
-            try (var o = options.set()) {
-                simpleService.childWorkflow(wid);
-            }
+            var options = StartWorkflowOptions.builder(wid).queue(childQ).build();
+            dbos.startWorkflow(() -> simpleService.childWorkflow(wid), options);
         }
 
         return "QueuedChildren";
@@ -160,16 +157,11 @@ public class SimpleServiceImpl implements SimpleService {
             throws InterruptedException {
 
         logger.info("In longParent");
+        var dbos = DBOSContext.dbosInstance().get();
+
         String workflowId = "childwf";
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId)
-                .timeout(Duration.ofSeconds(timeoutSeconds)).build();
-
-        WorkflowHandle<String> handle = null;
-        try (var o = options.set()) {
-            handle = DBOSContext.dbosInstance().get()
-                    .startWorkflow(() -> simpleService.childWorkflowWithSleep(input, sleepSeconds));
-        }
-
+        var options = StartWorkflowOptions.builder(workflowId).timeout(Duration.ofSeconds(timeoutSeconds)).build();
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.childWorkflowWithSleep(input, sleepSeconds), options);
         String result = handle.getResult();
 
         logger.info("Done with longWorkflow");

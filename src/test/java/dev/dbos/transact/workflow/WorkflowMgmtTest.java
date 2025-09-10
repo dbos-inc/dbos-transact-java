@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
@@ -68,12 +69,9 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).build();
+        var options = StartWorkflowOptions.fromWorkflowId(workflowId);
         int result;
-        WorkflowHandle<Integer> h = null;
-        try (var o = options.set()) {
-            h = dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23));
-        }
+        WorkflowHandle<Integer> h = dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23), options);
 
         mainLatch.await();
         dbos.cancelWorkflow(workflowId);
@@ -118,13 +116,9 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId)
-            // .queue(myqueue) 
-            .build();
+        var options = StartWorkflowOptions.builder(workflowId).queue(myqueue) .build();
         int result;
-        try (var o = options.set()) {
-            mgmtService.simpleWorkflow(23);
-        }
+        dbos.startWorkflow(()-> mgmtService.simpleWorkflow(23), options);
 
         mainLatch.await();
         dbos.cancelWorkflow(workflowId);
@@ -171,9 +165,7 @@ public class WorkflowMgmtTest {
         CountDownLatch testLatch = new CountDownLatch(2);
 
         e.submit(() -> {
-            WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).build();
-
-            try (var o = options.set()) {
+            try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
                 mgmtService.simpleWorkflow(23);
             } catch (Throwable t) {
                 assertTrue(t instanceof AwaitedWorkflowCancelledException);
@@ -243,9 +235,8 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).build();
         String result;
-        try (var o = options.set()) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
             result = forkService.simpleWorkflow("hello");
         }
 
@@ -320,9 +311,8 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).build();
         String result;
-        try (var o = options.set()) {
+        try (var o = WorkflowOptions.setWorkflowId(workflowId)) {
             result = forkService.parentChild("hello");
         }
 
@@ -421,9 +411,8 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        WorkflowOptions options = WorkflowOptions.builder().workflowId(workflowId).build();
         String result;
-        try (var o = options.set()) {
+        try (var o = WorkflowOptions.setWorkflowId(workflowId)) {
             result = forkService.parentChildAsync("hello");
         }
 
