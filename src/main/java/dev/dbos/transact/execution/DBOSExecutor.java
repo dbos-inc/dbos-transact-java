@@ -509,9 +509,29 @@ public class DBOSExecutor implements AutoCloseable {
             return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
         }
 
+        class ContextAwareCallable implements Callable<T> {
+            private final Callable<T> task;
+            private DBOSContext capturedContext;
+
+            public ContextAwareCallable(DBOSContext ctx, Callable<T> task) {
+                this.task = task;
+                this.capturedContext = ctx;
+            }
+
+            @Override
+            public T call() throws Exception {
+                DBOSContextHolder.set(capturedContext);
+                try {
+                    return task.call();
+                } finally {
+                    DBOSContextHolder.clear();
+                }
+            }
+        };
+
         // Copy the context - dont just pass a reference - memory visibility
-        ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(
-                DBOSContextHolder.get().copy(), task);
+        ContextAwareCallable contextAwareTask = new ContextAwareCallable(
+            DBOSContextHolder.get().copy(), task);
         Future<T> future = executorService.submit(contextAwareTask);
 
         if (allowedTime > 0) {
