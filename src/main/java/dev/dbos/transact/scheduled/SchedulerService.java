@@ -79,10 +79,10 @@ public class SchedulerService {
                                 wf.workflowName,
                                 scheduledTime.toString());
                         try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
-                            dbosExecutor.enqueueWorkflow(wf.workflowName,
-                                    wf.instance.getClass().getName(),
-                                    args,
-                                    schedulerQueue);
+                            // dbosExecutor.enqueueWorkflow(wf.workflowName,
+                            //         wf.instance.getClass().getName(),
+                            //         args,
+                            //         schedulerQueue);
                         }
                     } catch (Throwable e) {
                         e.printStackTrace();

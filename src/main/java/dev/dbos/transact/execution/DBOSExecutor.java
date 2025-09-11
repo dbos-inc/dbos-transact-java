@@ -226,505 +226,6 @@ public class DBOSExecutor implements AutoCloseable {
         return Optional.empty();
     }
 
-    WorkflowHandle<?> recoverWorkflow(GetPendingWorkflowsOutput output) throws Exception {
-        Objects.requireNonNull(output);
-        String workflowId = output.getWorkflowUuid();
-        Objects.requireNonNull(workflowId);
-        String queue = output.getQueueName();
-
-        logger.info("Recovery executing workflow {}", workflowId);
-
-        if (queue != null) {
-            boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
-            if (cleared) {
-                return retrieveWorkflow(workflowId);
-            }
-        }
-        return executeWorkflowById(workflowId);
-    }
-
-    public List<WorkflowHandle<?>> recoverPendingWorkflows(List<String> executorIDs) {
-        if (executorIDs == null) {
-            executorIDs = new ArrayList<>(List.of("local"));
-        }
-
-        String appVersion = getAppVersion();
-
-        List<WorkflowHandle<?>> handles = new ArrayList<>();
-        for (String executorId : executorIDs) {
-            List<GetPendingWorkflowsOutput> pendingWorkflows;
-            try {
-                pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion);
-            } catch (Exception e) {
-                logger.error("Failed to get pending workflows for executor {} and application version {}",
-                        executorId,
-                        appVersion,
-                        e);
-                return new ArrayList<>();
-            }
-            logger.info("Recovering {} workflow(s) for executor {} and application version {}",
-                    pendingWorkflows.size(),
-                    executorId,
-                    appVersion);
-            for (GetPendingWorkflowsOutput output : pendingWorkflows) {
-                try {
-                    handles.add(recoverWorkflow(output));
-                } catch (Exception e) {
-                    logger.warn("Recovery of workflow {} failed", output.getWorkflowUuid(), e);
-                }
-            }
-        }
-        return handles;
-    }
-
-    record ParentWorkflow(String workflowId, int functionId) {
-        public static ParentWorkflow fromContext() {
-            DBOSContext ctx = DBOSContextHolder.get();
-            return ctx.hasParent()
-                    ? new ParentWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId())
-                    : null;
-        }
-
-        public static ParentWorkflow fromContext(DBOSContext ctx) {
-            return ctx.hasParent()
-                    ? new ParentWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId())
-                    : null;
-        }
-
-    }
-
-    private static WorkflowInitResult preInvokeWorkflow(SystemDatabase systemDatabase, String workflowName,
-            String className, Object[] inputs, String workflowId,
-            String queueName, String executorId, String appVersion,
-            ParentWorkflow parentWorkflow, Duration workflowTimeout) {
-
-        // TODO: queue deduplication and priority
-
-        String inputString = JSONUtil.serializeArray(inputs);
-
-        WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
-
-        Instant deadline = null;
-        if (workflowTimeout.toNanos() > 0) {
-            deadline = Instant.now().plus(workflowTimeout);
-        }
-
-        WorkflowStatusInternal workflowStatusInternal = new WorkflowStatusInternal(workflowId,
-                status, workflowName, className, null, null, null, null, null, null, null, null,
-                queueName,
-                executorId, appVersion,
-                null, 0,
-                workflowTimeout.toMillis(), deadline.toEpochMilli(), null, 1, inputString);
-
-        WorkflowInitResult initResult = null;
-        try {
-            initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
-        } catch (Exception e) {
-            logger.error("Error inserting into workflow_status", e);
-            throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(), e);
-        }
-
-        if (parentWorkflow != null) {
-            systemDatabase.recordChildWorkflow(parentWorkflow.workflowId,
-                    workflowId,
-                    parentWorkflow.functionId,
-                    workflowName);
-        }
-
-        return initResult;
-    }
-
-    private static void postInvokeWorkflow(SystemDatabase systemDatabase, String workflowId, Object result) {
-
-        String resultString = JSONUtil.serialize(result);
-        systemDatabase.recordWorkflowOutput(workflowId, resultString);
-    }
-
-    private static void postInvokeWorkflow(SystemDatabase systemDatabase, String workflowId, Throwable error) {
-
-        SerializableException se = new SerializableException(error);
-        String errorString = JSONUtil.serialize(se);
-
-        systemDatabase.recordWorkflowError(workflowId, errorString);
-    }
-
-    private <T> T runAndSaveResult(Object target, Object[] args, WorkflowFunctionReflect function,
-            String workflowId) throws Throwable {
-
-        try {
-
-            @SuppressWarnings("unchecked")
-            T result = (T) function.invoke(target, args);
-
-            postInvokeWorkflow(systemDatabase, workflowId, result);
-            return result;
-        } catch (Throwable e) {
-            Throwable actual = (e instanceof InvocationTargetException)
-                    ? ((InvocationTargetException) e).getTargetException()
-                    : e;
-
-            logger.error("Error in runWorkflow", actual);
-
-            if (actual instanceof WorkflowCancelledException
-                    || actual instanceof InterruptedException) {
-                // don't mark the workflow status as error yet. this is cancel
-                // if this is a parent cancel, the exception is thrown to caller
-                // state is already c
-                // if this is child cancel, its state is already Cancelled
-                // in parent it will fall thru to PostInvoke call below to set state to
-                // Error
-                throw new AwaitedWorkflowCancelledException(workflowId);
-            }
-
-            postInvokeWorkflow(systemDatabase, workflowId, actual);
-            throw actual;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    public <T> T syncWorkflow(String workflowName, String targetClassName, Object target,
-            Object[] args, WorkflowFunctionReflect function, String workflowId) throws Throwable {
-
-        String wfid = workflowId;
-
-        WorkflowInitResult initResult = null;
-
-        DBOSContext ctx = DBOSContextHolder.get();
-        ctx.setDbos(dbos);
-        if (ctx.hasParent()) {
-            Optional<String> childId = systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(),
-                    ctx.getParentFunctionId());
-            if (childId.isPresent()) {
-                return (T) systemDatabase.awaitWorkflowResult(childId.get());
-            }
-        }
-
-        var parent = ParentWorkflow.fromContext();
-        var workflowTimeout = DBOSContextHolder.get().getWorkflowTimeout();
-        initResult = preInvokeWorkflow(systemDatabase,
-                workflowName,
-                targetClassName,
-                args,
-                wfid,
-                null,
-                getExecutorId(),
-                getAppVersion(),
-                parent,
-                workflowTimeout);
-
-        if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
-            return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
-        } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
-            logger.warn("Idempotency check not impl for error");
-        } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
-            logger.warn("Idempotency check not impl for cancelled");
-        }
-
-        long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis();
-        if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0) {
-            systemDatabase.cancelWorkflow(workflowId);
-            return null;
-        }
-
-        if (allowedTime > 0) {
-            ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
-                WorkflowStatus status = systemDatabase.getWorkflowStatus(wfid);
-                if (status.getStatus() != WorkflowState.SUCCESS.name()
-                        && status.getStatus() != WorkflowState.ERROR.name()) {
-                    systemDatabase.cancelWorkflow(wfid);
-                }
-            }, allowedTime, TimeUnit.MILLISECONDS);
-        }
-
-        return runAndSaveResult(target, args, function, workflowId);
-    }
-
-    public <T> WorkflowHandle<T> submitWorkflow(String workflowName, String targetClassName,
-            Object target, Object[] args, WorkflowFunctionReflect function) throws Throwable {
-
-        DBOSContext ctx = DBOSContextHolder.get();
-        ctx.setDbos(dbos);
-
-        String workflowId = ctx.getWorkflowId();
-
-        final String wfId = workflowId;
-
-        if (ctx.hasParent()) {
-            Optional<String> childId = systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(),
-                    ctx.getParentFunctionId());
-            if (childId.isPresent()) {
-                logger.info("child Id is present {}", childId);
-                return new WorkflowHandleDBPoll<>(childId.get(), systemDatabase);
-            }
-        }
-
-        var parent = ParentWorkflow.fromContext();
-        var workflowTimeout = DBOSContextHolder.get().getWorkflowTimeout();
-        WorkflowInitResult initResult = preInvokeWorkflow(systemDatabase,
-                workflowName,
-                targetClassName,
-                args,
-                wfId,
-                null,
-                getExecutorId(),
-                getAppVersion(),
-                parent,
-                workflowTimeout);
-
-        if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
-            return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
-        } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
-            logger.warn("Idempotency check not impl for error");
-        } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
-            logger.warn("Idempotency check not impl for cancelled");
-        }
-
-        Callable<T> task = () -> {
-            T result = null;
-
-            // Doing this on purpose to ensure that we have the correct context
-            var context = DBOSContextHolder.get();
-            String id = context.getWorkflowId();
-
-            try {
-
-                result = runAndSaveResult(target, args, function, id);
-
-            } catch (Throwable e) {
-                Throwable actual = (e instanceof InvocationTargetException)
-                        ? ((InvocationTargetException) e).getTargetException()
-                        : e;
-
-                logger.error("Error executing workflow", actual);
-            }
-
-            return result;
-        };
-
-        long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis();
-
-        if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0) {
-            logger.info("Timeout deadline exceeded. Cancelling workflow {}", workflowId);
-            systemDatabase.cancelWorkflow(workflowId);
-            return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
-        }
-
-        // Copy the context - dont just pass a reference - memory visibility
-        ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(
-                DBOSContextHolder.get().copy(), task);
-        Future<T> future = executorService.submit(contextAwareTask);
-
-        if (allowedTime > 0) {
-            ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
-                if (!future.isDone()) {
-                    logger.info(" Workflow timed out {}", wfId);
-                    future.cancel(false);
-                    systemDatabase.cancelWorkflow(wfId);
-                }
-            }, allowedTime, TimeUnit.MILLISECONDS);
-        }
-
-        return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
-    }
-
-    // TODO: add priority + deduplicationId support
-    // (https://github.com/dbos-inc/dbos-transact-java/issues/67)
-    public static String enqueueWorkflow(SystemDatabase systemDatabase, String wfid, String workflowName,
-            String targetClassName,
-            Object[] args, String queueName, String executorId, String appVersion, ParentWorkflow parent,
-            Duration workflowTimeout) throws Throwable {
-
-        if (wfid == null) {
-            wfid = UUID.randomUUID().toString();
-        }
-
-        WorkflowInitResult initResult = null;
-        try {
-            initResult = preInvokeWorkflow(systemDatabase,
-                    workflowName,
-                    targetClassName,
-                    args,
-                    wfid,
-                    queueName,
-                    executorId,
-                    appVersion,
-                    parent,
-                    workflowTimeout);
-        } catch (Throwable e) {
-            Throwable actual = (e instanceof InvocationTargetException)
-                    ? ((InvocationTargetException) e).getTargetException()
-                    : e;
-            logger.error("Error enqueing workflow", actual);
-            postInvokeWorkflow(systemDatabase, initResult.getWorkflowId(), actual);
-            throw actual;
-        }
-
-        return wfid;
-    }
-
-    public void enqueueWorkflow(String workflowName, String targetClassName,
-            Object[] args, Queue queue) throws Throwable {
-
-        DBOSContext ctx = DBOSContextHolder.get();
-        String wfid = ctx.getWorkflowId();
-        var parent = ParentWorkflow.fromContext(ctx);
-        var workflowTimeout = ctx.getWorkflowTimeout();
-
-        enqueueWorkflow(systemDatabase,
-                wfid,
-                workflowName,
-                targetClassName,
-                args,
-                queue.getName(),
-                getExecutorId(),
-                getAppVersion(),
-                parent,
-                workflowTimeout);
-    }
-
-    public <T> T invokeWorkflow(String name, String className, Object[] args, Integer maxRecoveryAttempts)
-            throws Throwable {
-        throw new RuntimeException();
-    }
-
-    public <T> T invokeStep(String name, String className, ThrowingSupplier<T> supplier, Boolean retriesAllowed,
-            Duration interval, Integer maxAttempts, Float backoffRate) throws Throwable {
-        throw new RuntimeException();
-    }
-
-    public <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
-        DBOSContext ctx = DBOSContextHolder.get();
-
-        int nextFuncId = 0;
-        boolean inWorkflow = ctx != null && ctx.isInWorkflow();
-
-        if (inWorkflow) {
-            nextFuncId = ctx.getAndIncrementFunctionId();
-
-            StepResult result = systemDatabase.checkStepExecutionTxn(ctx.getWorkflowId(), nextFuncId, functionName);
-            if (result != null) {
-                return handleExistingResult(result, functionName);
-            }
-        }
-
-        T functionResult;
-
-        try {
-            functionResult = fn.get();
-        } catch (Exception e) {
-            if (inWorkflow) {
-                String jsonError = JSONUtil.serializeError(e);
-                StepResult r = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
-                        null, jsonError);
-                systemDatabase.recordStepResultTxn(r);
-            }
-
-            if (e instanceof NonExistentWorkflowException) {
-                throw e;
-            } else {
-                throw new DBOSException(UNEXPECTED.getCode(),
-                        "Function execution failed: " + functionName, e);
-            }
-        }
-
-        // If we're in a workflow, record the successful result
-        if (inWorkflow) {
-            String jsonOutput = JSONUtil.serialize(functionResult);
-            StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
-                    jsonOutput, null);
-            systemDatabase.recordStepResultTxn(o);
-        }
-
-        return functionResult;
-    }
-
-    @SuppressWarnings("unchecked")
-    private <T> T handleExistingResult(StepResult result, String functionName) {
-        if (result.getOutput() != null) {
-            Object[] resArray = JSONUtil.deserializeToArray(result.getOutput());
-            return resArray == null ? null : (T) resArray[0];
-        } else if (result.getError() != null) {
-            Object[] eArray = JSONUtil.deserializeToArray(result.getError());
-            SerializableException se = (SerializableException) eArray[0];
-            throw new DBOSAppException(String.format("Exception of type %s", se.className), se);
-        } else {
-            throw new IllegalStateException(
-                    String.format("Recorded output and error are both null for %s", functionName));
-        }
-    }
-
-    public <T> T runStep(String stepName, boolean retriedAllowed, int maxAttempts,
-            float backOffRate, Object[] args, WorkflowFunction<T> function) throws Throwable {
-
-        DBOSContext ctx = DBOSContextHolder.get();
-        String workflowId = ctx.getWorkflowId();
-
-        if (workflowId == null) {
-            // if there is no workflow, execute the step function without checkpointing
-            return function.execute();
-        }
-        logger.info("Running step {} for workflow {}", stepName, workflowId);
-
-        int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-        StepResult recordedResult = systemDatabase.checkStepExecutionTxn(workflowId,
-                stepFunctionId,
-                stepName);
-
-        if (recordedResult != null) {
-
-            String output = recordedResult.getOutput();
-            if (output != null) {
-                logger.info("Result has an output");
-                Object[] stepO = JSONUtil.deserializeToArray(output);
-                return stepO == null ? null : (T) stepO[0];
-            }
-
-            String error = recordedResult.getError();
-            if (error != null) {
-                // TODO: fix deserialization of errors
-                throw new Exception(error);
-            }
-        }
-
-        int currAttempts = 1;
-        String serializedOutput = null;
-        Throwable eThrown = null;
-        T result = null;
-
-        while (retriedAllowed && currAttempts <= maxAttempts) {
-
-            try {
-                result = function.execute();
-                serializedOutput = JSONUtil.serialize(result);
-                eThrown = null;
-            } catch (Exception e) {
-                // TODO: serialize
-                Throwable actual = (e instanceof InvocationTargetException)
-                        ? ((InvocationTargetException) e).getTargetException()
-                        : e;
-                logger.info("After: step threw exception", actual);
-                eThrown = actual;
-            }
-
-            ++currAttempts;
-        }
-
-        if (eThrown == null) {
-            StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName,
-                    serializedOutput, null);
-            systemDatabase.recordStepResultTxn(stepResult);
-            return result;
-        } else {
-            // TODO: serialize
-            logger.info("After: step threw exception saving error", eThrown);
-            StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, null,
-                    eThrown.getMessage());
-            systemDatabase.recordStepResultTxn(stepResult);
-            throw eThrown;
-        }
-    }
-
     /** Retrieve the workflowHandle for the workflowId */
     public <R> WorkflowHandle<R> retrieveWorkflow(String workflowId) {
         return new WorkflowHandleDBPoll<R>(workflowId, systemDatabase);
@@ -749,7 +250,7 @@ public class DBOSExecutor implements AutoCloseable {
         WorkflowHandle<T> handle = null;
         try (var _ignore = WorkflowOptions.setWorkflowId(workflowId)) {
             var ctx = DBOSContextHolder.get();
-            ctx.setDbos(dbos);
+            // ctx.setDbos(dbos);
 
             try {
                 handle = (WorkflowHandle<T>) submitWorkflow(status.getName(),
@@ -816,32 +317,7 @@ public class DBOSExecutor implements AutoCloseable {
         return retrieveWorkflow(forkedId);
     }
 
-    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
-        DBOSContext oldctx = DBOSContextHolder.get();
-        oldctx.setDbos(dbos);
-        DBOSContext newCtx = oldctx;
-
-        // if (newCtx.getWorkflowId() == null) {
-        // newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString());
-        // }
-
-        // TODO
-        // if (newCtx.getQueue() == null) {
-        // newCtx = newCtx.copyWithAsync();
-        // }
-
-        try {
-            DBOSContextHolder.set(newCtx);
-            func.execute();
-            return retrieveWorkflow(newCtx.getWorkflowId());
-        } catch (Throwable t) {
-            throw new DBOSException(UNEXPECTED.getCode(), t.getMessage());
-        } finally {
-            DBOSContextHolder.set(oldctx);
-        }
-    }
-
-    public void globalTimeout(Long cutoff) {
+        public void globalTimeout(Long cutoff) {
         OffsetDateTime endTime = Instant.ofEpochMilli(cutoff).atOffset(ZoneOffset.UTC);
         globalTimeout(endTime);
     }
@@ -974,4 +450,560 @@ public class DBOSExecutor implements AutoCloseable {
         return this.callFunctionAsStep(listQueuedWorkflowsFunction, "DBOS.listQueuedWorkflows");
     }
 
+
+
+    public List<WorkflowHandle<?>> recoverPendingWorkflows(List<String> executorIDs) {
+        if (executorIDs == null) {
+            executorIDs = new ArrayList<>(List.of("local"));
+        }
+
+        String appVersion = getAppVersion();
+
+        List<WorkflowHandle<?>> handles = new ArrayList<>();
+        for (String executorId : executorIDs) {
+            List<GetPendingWorkflowsOutput> pendingWorkflows;
+            try {
+                pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion);
+            } catch (Exception e) {
+                logger.error("Failed to get pending workflows for executor {} and application version {}",
+                        executorId,
+                        appVersion,
+                        e);
+                return new ArrayList<>();
+            }
+            logger.info("Recovering {} workflow(s) for executor {} and application version {}",
+                    pendingWorkflows.size(),
+                    executorId,
+                    appVersion);
+            for (GetPendingWorkflowsOutput output : pendingWorkflows) {
+                try {
+                    handles.add(recoverWorkflow(output));
+                } catch (Exception e) {
+                    logger.warn("Recovery of workflow {} failed", output.getWorkflowUuid(), e);
+                }
+            }
+        }
+        return handles;
+    }
+
+    WorkflowHandle<?> recoverWorkflow(GetPendingWorkflowsOutput output) throws Exception {
+        Objects.requireNonNull(output);
+        String workflowId = output.getWorkflowUuid();
+        Objects.requireNonNull(workflowId);
+        String queue = output.getQueueName();
+
+        logger.info("Recovery executing workflow {}", workflowId);
+
+        if (queue != null) {
+            boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
+            if (cleared) {
+                return retrieveWorkflow(workflowId);
+            }
+        }
+        return executeWorkflowById(workflowId);
+    }
+
+    public <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
+        DBOSContext ctx = DBOSContextHolder.get();
+
+        int nextFuncId = 0;
+        boolean inWorkflow = ctx != null && ctx.isInWorkflow();
+
+        if (inWorkflow) {
+            nextFuncId = ctx.getAndIncrementFunctionId();
+
+            StepResult result = systemDatabase.checkStepExecutionTxn(ctx.getWorkflowId(), nextFuncId, functionName);
+            if (result != null) {
+                return handleExistingResult(result, functionName);
+            }
+        }
+
+        T functionResult;
+
+        try {
+            functionResult = fn.get();
+        } catch (Exception e) {
+            if (inWorkflow) {
+                String jsonError = JSONUtil.serializeError(e);
+                StepResult r = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
+                        null, jsonError);
+                systemDatabase.recordStepResultTxn(r);
+            }
+
+            if (e instanceof NonExistentWorkflowException) {
+                throw e;
+            } else {
+                throw new DBOSException(UNEXPECTED.getCode(),
+                        "Function execution failed: " + functionName, e);
+            }
+        }
+
+        // If we're in a workflow, record the successful result
+        if (inWorkflow) {
+            String jsonOutput = JSONUtil.serialize(functionResult);
+            StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
+                    jsonOutput, null);
+            systemDatabase.recordStepResultTxn(o);
+        }
+
+        return functionResult;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T handleExistingResult(StepResult result, String functionName) {
+        if (result.getOutput() != null) {
+            Object[] resArray = JSONUtil.deserializeToArray(result.getOutput());
+            return resArray == null ? null : (T) resArray[0];
+        } else if (result.getError() != null) {
+            Object[] eArray = JSONUtil.deserializeToArray(result.getError());
+            SerializableException se = (SerializableException) eArray[0];
+            throw new DBOSAppException(String.format("Exception of type %s", se.className), se);
+        } else {
+            throw new IllegalStateException(
+                    String.format("Recorded output and error are both null for %s", functionName));
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    record ParentWorkflow(String workflowId, int functionId) {
+        public static ParentWorkflow fromContext() {
+            DBOSContext ctx = DBOSContextHolder.get();
+            return ctx.hasParent()
+                    ? new ParentWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId())
+                    : null;
+        }
+
+        public static ParentWorkflow fromContext(DBOSContext ctx) {
+            return ctx.hasParent()
+                    ? new ParentWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId())
+                    : null;
+        }
+
+    }
+
+    private static WorkflowInitResult preInvokeWorkflow(SystemDatabase systemDatabase, String workflowName,
+            String className, Object[] inputs, String workflowId,
+            String queueName, String executorId, String appVersion,
+            ParentWorkflow parentWorkflow, Duration workflowTimeout) {
+
+        // TODO: queue deduplication and priority
+
+        String inputString = JSONUtil.serializeArray(inputs);
+
+        WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
+
+        Instant deadline = null;
+        if (workflowTimeout.toNanos() > 0) {
+            deadline = Instant.now().plus(workflowTimeout);
+        }
+
+        WorkflowStatusInternal workflowStatusInternal = new WorkflowStatusInternal(workflowId,
+                status, workflowName, className, null, null, null, null, null, null, null, null,
+                queueName,
+                executorId, appVersion,
+                null, 0,
+                workflowTimeout.toMillis(), deadline.toEpochMilli(), null, 1, inputString);
+
+        WorkflowInitResult initResult = null;
+        try {
+            initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
+        } catch (Exception e) {
+            logger.error("Error inserting into workflow_status", e);
+            throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(), e);
+        }
+
+        if (parentWorkflow != null) {
+            systemDatabase.recordChildWorkflow(parentWorkflow.workflowId,
+                    workflowId,
+                    parentWorkflow.functionId,
+                    workflowName);
+        }
+
+        return initResult;
+    }
+
+    private static void postInvokeWorkflow(SystemDatabase systemDatabase, String workflowId, Object result) {
+
+        String resultString = JSONUtil.serialize(result);
+        systemDatabase.recordWorkflowOutput(workflowId, resultString);
+    }
+
+    private static void postInvokeWorkflow(SystemDatabase systemDatabase, String workflowId, Throwable error) {
+
+        SerializableException se = new SerializableException(error);
+        String errorString = JSONUtil.serialize(se);
+
+        systemDatabase.recordWorkflowError(workflowId, errorString);
+    }
+
+    private <T> T runAndSaveResult(Object target, Object[] args, WorkflowFunctionReflect function,
+            String workflowId) throws Throwable {
+
+        try {
+
+            @SuppressWarnings("unchecked")
+            T result = (T) function.invoke(target, args);
+
+            postInvokeWorkflow(systemDatabase, workflowId, result);
+            return result;
+        } catch (Throwable e) {
+            Throwable actual = (e instanceof InvocationTargetException)
+                    ? ((InvocationTargetException) e).getTargetException()
+                    : e;
+
+            logger.error("Error in runWorkflow", actual);
+
+            if (actual instanceof WorkflowCancelledException
+                    || actual instanceof InterruptedException) {
+                // don't mark the workflow status as error yet. this is cancel
+                // if this is a parent cancel, the exception is thrown to caller
+                // state is already c
+                // if this is child cancel, its state is already Cancelled
+                // in parent it will fall thru to PostInvoke call below to set state to
+                // Error
+                throw new AwaitedWorkflowCancelledException(workflowId);
+            }
+
+            postInvokeWorkflow(systemDatabase, workflowId, actual);
+            throw actual;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T syncWorkflow(String workflowName, String targetClassName, Object target,
+            Object[] args, WorkflowFunctionReflect function, String workflowId) throws Throwable {
+throw new RuntimeException(); }
+    //     String wfid = workflowId;
+
+    //     WorkflowInitResult initResult = null;
+
+    //     DBOSContext ctx = DBOSContextHolder.get();
+    //     // ctx.setDbos(dbos);
+    //     if (ctx.hasParent()) {
+    //         Optional<String> childId = systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(),
+    //                 ctx.getParentFunctionId());
+    //         if (childId.isPresent()) {
+    //             return (T) systemDatabase.awaitWorkflowResult(childId.get());
+    //         }
+    //     }
+
+    //     var parent = ParentWorkflow.fromContext();
+    //     var workflowTimeout = DBOSContextHolder.get().getWorkflowTimeout();
+    //     initResult = preInvokeWorkflow(systemDatabase,
+    //             workflowName,
+    //             targetClassName,
+    //             args,
+    //             wfid,
+    //             null,
+    //             getExecutorId(),
+    //             getAppVersion(),
+    //             parent,
+    //             workflowTimeout);
+
+    //     if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+    //         return (T) systemDatabase.getWorkflowResult(initResult.getWorkflowId()).get();
+    //     } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+    //         logger.warn("Idempotency check not impl for error");
+    //     } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+    //         logger.warn("Idempotency check not impl for cancelled");
+    //     }
+
+    //     long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis();
+    //     if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0) {
+    //         systemDatabase.cancelWorkflow(workflowId);
+    //         return null;
+    //     }
+
+    //     if (allowedTime > 0) {
+    //         ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
+    //             WorkflowStatus status = systemDatabase.getWorkflowStatus(wfid);
+    //             if (status.getStatus() != WorkflowState.SUCCESS.name()
+    //                     && status.getStatus() != WorkflowState.ERROR.name()) {
+    //                 systemDatabase.cancelWorkflow(wfid);
+    //             }
+    //         }, allowedTime, TimeUnit.MILLISECONDS);
+    //     }
+
+    //     return runAndSaveResult(target, args, function, workflowId);
+    // }
+
+    public <T> WorkflowHandle<T> submitWorkflow(String workflowName, String targetClassName,
+            Object target, Object[] args, WorkflowFunctionReflect function) throws Throwable {
+                throw new RuntimeException(); }
+
+    //     DBOSContext ctx = DBOSContextHolder.get();
+    //     ctx.setDbos(dbos);
+
+    //     String workflowId = ctx.getWorkflowId();
+
+    //     final String wfId = workflowId;
+
+    //     if (ctx.hasParent()) {
+    //         Optional<String> childId = systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(),
+    //                 ctx.getParentFunctionId());
+    //         if (childId.isPresent()) {
+    //             logger.info("child Id is present {}", childId);
+    //             return new WorkflowHandleDBPoll<>(childId.get(), systemDatabase);
+    //         }
+    //     }
+
+    //     var parent = ParentWorkflow.fromContext();
+    //     var workflowTimeout = DBOSContextHolder.get().getWorkflowTimeout();
+    //     WorkflowInitResult initResult = preInvokeWorkflow(systemDatabase,
+    //             workflowName,
+    //             targetClassName,
+    //             args,
+    //             wfId,
+    //             null,
+    //             getExecutorId(),
+    //             getAppVersion(),
+    //             parent,
+    //             workflowTimeout);
+
+    //     if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+    //         return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
+    //     } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+    //         logger.warn("Idempotency check not impl for error");
+    //     } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+    //         logger.warn("Idempotency check not impl for cancelled");
+    //     }
+
+    //     Callable<T> task = () -> {
+    //         T result = null;
+
+    //         // Doing this on purpose to ensure that we have the correct context
+    //         var context = DBOSContextHolder.get();
+    //         String id = context.getWorkflowId();
+
+    //         try {
+
+    //             result = runAndSaveResult(target, args, function, id);
+
+    //         } catch (Throwable e) {
+    //             Throwable actual = (e instanceof InvocationTargetException)
+    //                     ? ((InvocationTargetException) e).getTargetException()
+    //                     : e;
+
+    //             logger.error("Error executing workflow", actual);
+    //         }
+
+    //         return result;
+    //     };
+
+    //     long allowedTime = initResult.getDeadlineEpochMS() - System.currentTimeMillis();
+
+    //     if (initResult.getDeadlineEpochMS() > 0 && allowedTime < 0) {
+    //         logger.info("Timeout deadline exceeded. Cancelling workflow {}", workflowId);
+    //         systemDatabase.cancelWorkflow(workflowId);
+    //         return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
+    //     }
+
+    //     // Copy the context - dont just pass a reference - memory visibility
+    //     ContextAwareCallable<T> contextAwareTask = new ContextAwareCallable<>(
+    //             DBOSContextHolder.get().copy(), task);
+    //     Future<T> future = executorService.submit(contextAwareTask);
+
+    //     if (allowedTime > 0) {
+    //         ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
+    //             if (!future.isDone()) {
+    //                 logger.info(" Workflow timed out {}", wfId);
+    //                 future.cancel(false);
+    //                 systemDatabase.cancelWorkflow(wfId);
+    //             }
+    //         }, allowedTime, TimeUnit.MILLISECONDS);
+    //     }
+
+    //     return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
+    // }
+
+    // // TODO: add priority + deduplicationId support
+    // // (https://github.com/dbos-inc/dbos-transact-java/issues/67)
+    public static String enqueueWorkflow(SystemDatabase systemDatabase, String wfid, String workflowName,
+            String targetClassName,
+            Object[] args, String queueName, String executorId, String appVersion, ParentWorkflow parent,
+            Duration workflowTimeout) throws Throwable {
+                throw new RuntimeException(); }
+
+    //     if (wfid == null) {
+    //         wfid = UUID.randomUUID().toString();
+    //     }
+
+    //     WorkflowInitResult initResult = null;
+    //     try {
+    //         initResult = preInvokeWorkflow(systemDatabase,
+    //                 workflowName,
+    //                 targetClassName,
+    //                 args,
+    //                 wfid,
+    //                 queueName,
+    //                 executorId,
+    //                 appVersion,
+    //                 parent,
+    //                 workflowTimeout);
+    //     } catch (Throwable e) {
+    //         Throwable actual = (e instanceof InvocationTargetException)
+    //                 ? ((InvocationTargetException) e).getTargetException()
+    //                 : e;
+    //         logger.error("Error enqueing workflow", actual);
+    //         postInvokeWorkflow(systemDatabase, initResult.getWorkflowId(), actual);
+    //         throw actual;
+    //     }
+
+    //     return wfid;
+    // }
+
+    // public void enqueueWorkflow(String workflowName, String targetClassName,
+    //         Object[] args, Queue queue) throws Throwable {
+
+    //     DBOSContext ctx = DBOSContextHolder.get();
+    //     String wfid = ctx.getWorkflowId();
+    //     var parent = ParentWorkflow.fromContext(ctx);
+    //     var workflowTimeout = ctx.getWorkflowTimeout();
+
+    //     enqueueWorkflow(systemDatabase,
+    //             wfid,
+    //             workflowName,
+    //             targetClassName,
+    //             args,
+    //             queue.getName(),
+    //             getExecutorId(),
+    //             getAppVersion(),
+    //             parent,
+    //             workflowTimeout);
+    // }
+
+    public <T> T invokeWorkflow(String name, String className, Object[] args, Integer maxRecoveryAttempts)
+            throws Throwable {
+        throw new RuntimeException();
+    }
+
+    // public <T> T invokeStep(String name, String className, ThrowingSupplier<T> supplier, Boolean retriesAllowed,
+    //         Duration interval, Integer maxAttempts, Float backoffRate) throws Throwable {
+    //     throw new RuntimeException();
+    // }
+
+
+
+    // public <T> T runStep(String stepName, boolean retriedAllowed, int maxAttempts,
+    //         float backOffRate, Object[] args, WorkflowFunction<T> function) throws Throwable {
+
+    //     DBOSContext ctx = DBOSContextHolder.get();
+    //     String workflowId = ctx.getWorkflowId();
+
+    //     if (workflowId == null) {
+    //         // if there is no workflow, execute the step function without checkpointing
+    //         return function.execute();
+    //     }
+    //     logger.info("Running step {} for workflow {}", stepName, workflowId);
+
+    //     int stepFunctionId = ctx.getAndIncrementFunctionId();
+
+    //     StepResult recordedResult = systemDatabase.checkStepExecutionTxn(workflowId,
+    //             stepFunctionId,
+    //             stepName);
+
+    //     if (recordedResult != null) {
+
+    //         String output = recordedResult.getOutput();
+    //         if (output != null) {
+    //             logger.info("Result has an output");
+    //             Object[] stepO = JSONUtil.deserializeToArray(output);
+    //             return stepO == null ? null : (T) stepO[0];
+    //         }
+
+    //         String error = recordedResult.getError();
+    //         if (error != null) {
+    //             // TODO: fix deserialization of errors
+    //             throw new Exception(error);
+    //         }
+    //     }
+
+    //     int currAttempts = 1;
+    //     String serializedOutput = null;
+    //     Throwable eThrown = null;
+    //     T result = null;
+
+    //     while (retriedAllowed && currAttempts <= maxAttempts) {
+
+    //         try {
+    //             result = function.execute();
+    //             serializedOutput = JSONUtil.serialize(result);
+    //             eThrown = null;
+    //         } catch (Exception e) {
+    //             // TODO: serialize
+    //             Throwable actual = (e instanceof InvocationTargetException)
+    //                     ? ((InvocationTargetException) e).getTargetException()
+    //                     : e;
+    //             logger.info("After: step threw exception", actual);
+    //             eThrown = actual;
+    //         }
+
+    //         ++currAttempts;
+    //     }
+
+    //     if (eThrown == null) {
+    //         StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName,
+    //                 serializedOutput, null);
+    //         systemDatabase.recordStepResultTxn(stepResult);
+    //         return result;
+    //     } else {
+    //         // TODO: serialize
+    //         logger.info("After: step threw exception saving error", eThrown);
+    //         StepResult stepResult = new StepResult(workflowId, stepFunctionId, stepName, null,
+    //                 eThrown.getMessage());
+    //         systemDatabase.recordStepResultTxn(stepResult);
+    //         throw eThrown;
+    //     }
+    // }
+
+
+    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
+        throw new RuntimeException(); }
+    //     DBOSContext oldctx = DBOSContextHolder.get();
+    //     oldctx.setDbos(dbos);
+    //     DBOSContext newCtx = oldctx;
+
+    //     // if (newCtx.getWorkflowId() == null) {
+    //     // newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString());
+    //     // }
+
+    //     // TODO
+    //     // if (newCtx.getQueue() == null) {
+    //     // newCtx = newCtx.copyWithAsync();
+    //     // }
+
+    //     try {
+    //         DBOSContextHolder.set(newCtx);
+    //         func.execute();
+    //         return retrieveWorkflow(newCtx.getWorkflowId());
+    //     } catch (Throwable t) {
+    //         throw new DBOSException(UNEXPECTED.getCode(), t.getMessage());
+    //     } finally {
+    //         DBOSContextHolder.set(oldctx);
+    //     }
+    // }
+
+
+
+
+
+
+    
 }

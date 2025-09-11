@@ -78,14 +78,15 @@ public class DBOSInvocationHandler implements java.lang.reflect.InvocationHandle
 
         var interval = Duration.ofMillis(Math.round(step.intervalSeconds() * 1000));
 
-        return executor.invokeStep(
-                name,
-                targetClassName,
-                () -> method.invoke(target, args),
-                step.retriesAllowed(),
-                interval,
-                step.maxAttempts(),
-                step.backOffRate());
+        throw new RuntimeException();
+        // return executor.invokeStep(
+        //         name,
+        //         targetClassName,
+        //         () -> method.invoke(target, args),
+        //         step.retriesAllowed(),
+        //         interval,
+        //         step.maxAttempts(),
+        //         step.backOffRate());
     }
 
 }

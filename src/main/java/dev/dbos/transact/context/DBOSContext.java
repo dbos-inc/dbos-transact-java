@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,112 +20,145 @@ public class DBOSContext {
 
     public record StepStatus(int functionId, OptionalInt currentAttempt, OptionalInt maxAttempts) {
     }
-    public record WorkflowInfo(String workflowId, int functionId) {
-    }
 
-    DBOS dbos = null;
+    private final DBOS dbos;
 
     String assignedNextWorkflowId = null;
-    String authenticatedUser = null;
-    List<String> authenticatedRoles = null;
-    String assumedRole = null;
     Duration timeout = null;
 
-    String workflowId = null;
-    int functionId = 0;
-    WorkflowInfo parent = null;
+    private final String workflowId;
+    private int functionId = -1;
+
+    private String parentWorkflowId = null;
+    private int parentFunctionId = -1;
+
     StepStatus stepStatus = null;
     Instant deadline = null;
 
     public DBOSContext() {
+        dbos = null;
+        workflowId = null;
     }
 
-    public void setDbos(DBOS dbos) {
-        Objects.requireNonNull(dbos);
-        if (this.dbos != null) {
-            if (this.dbos != dbos) {
-                logger.error("setDbos collision {} {}",
-                        System.identityHashCode(this.dbos),
-                        System.identityHashCode(dbos));
-                throw new IllegalStateException("DBOS instance already set and does not match the provided instance.");
-            }
-        } else {
-            this.dbos = dbos;
+    public DBOSContext(DBOS dbos, String workflowId) {
+        this.dbos = Objects.requireNonNull(dbos);
+        this.workflowId = workflowId != null ? workflowId : UUID.randomUUID().toString();
+    }
+
+    // public void setDbos(DBOS dbos) {
+    //     Objects.requireNonNull(dbos);
+    //     if (this.dbos != null) {
+    //         if (this.dbos != dbos) {
+    //             logger.error("setDbos collision {} {}",
+    //                     System.identityHashCode(this.dbos),
+    //                     System.identityHashCode(dbos));
+    //             throw new IllegalStateException("DBOS instance already set and does not match the provided instance.");
+    //         }
+    //     } else {
+    //         this.dbos = dbos;
+    //     }
+    // }
+
+    public Optional<String> getNextWorkflowId() { 
+        return getNextWorkflowId(Optional.empty());
+    }
+
+    public Optional<String> getNextWorkflowId(Optional<String> assignedId) {
+        if (assignedId.isPresent()) { return assignedId; }
+
+        if (assignedNextWorkflowId != null) {
+            var workflowId = Optional.of(assignedNextWorkflowId);
+            assignedNextWorkflowId = null;
+            return workflowId;
         }
+
+        return Optional.empty();
     }
 
     public boolean isInWorkflow() {
         return workflowId != null;
     }
 
+    public boolean isInStep() {
+        return stepStatus != null;
+    }
+
     public String getWorkflowId() {
-        return workflowId;
+        // return workflowId;
+        throw new RuntimeException();
     }
 
-    public int getAndIncrementFunctionId() {
-        return functionId++;
-    }
+    // public int getNextFunctionId() {
+    //     return functionId++;
+    // }
 
-    public Duration getWorkflowTimeout() {
+    public Duration getTimeout() {
         return timeout;
     }
 
+    public Instant getDeadline() {
+        return deadline;
+    }
+
     public boolean hasParent() {
-        return parent != null;
+        return parentWorkflowId != null;
     }
 
     public String getParentWorkflowId() {
-        return parent != null ? parent.workflowId() : null;
+        return parentWorkflowId;
     }
 
     public int getParentFunctionId() {
-        return parent != null ? parent.functionId() : 0;
+        return parentFunctionId;
     }
 
-    public DBOSContext copy() {
-        var ctx = new DBOSContext();
-
-        ctx.dbos = dbos;
-
-        ctx.assignedNextWorkflowId = assignedNextWorkflowId;
-        ctx.authenticatedUser = authenticatedUser;
-        ctx.authenticatedRoles = List.copyOf(authenticatedRoles);
-        ctx.assumedRole = assumedRole;
-        ctx.timeout = timeout;
-
-        ctx.workflowId = workflowId;
-        ctx.functionId = functionId;
-        ctx.parent = parent;
-        ctx.stepStatus = stepStatus;
-        ctx.deadline = deadline;
-
-        return ctx;
+    public int getAndIncrementFunctionId() {
+        throw new RuntimeException();
     }
 
-    public DBOSContext createChild() {
-        var ctx = new DBOSContext();
-        ctx.dbos = dbos;
-        ctx.assignedNextWorkflowId = assignedNextWorkflowId;
-        assignedNextWorkflowId = null;
-        ctx.authenticatedUser = authenticatedUser;
-        ctx.authenticatedRoles = authenticatedRoles;
-        ctx.assumedRole = assumedRole;
-        ctx.parent = new WorkflowInfo(this.workflowId, this.functionId);
-        return ctx;
-    }
+    // public DBOSContext copy() {
+    //     var ctx = new DBOSContext();
+
+    //     ctx.dbos = dbos;
+
+    //     ctx.assignedNextWorkflowId = assignedNextWorkflowId;
+    //     ctx.authenticatedUser = authenticatedUser;
+    //     ctx.authenticatedRoles = List.copyOf(authenticatedRoles);
+    //     ctx.assumedRole = assumedRole;
+    //     ctx.timeout = timeout;
+
+    //     ctx.workflowId = workflowId;
+    //     ctx.functionId = functionId;
+    //     ctx.parent = parent;
+    //     ctx.stepStatus = stepStatus;
+    //     ctx.deadline = deadline;
+
+    //     return ctx;
+    // }
+
+    // public DBOSContext createChild() {
+    //     var ctx = new DBOSContext();
+    //     ctx.dbos = dbos;
+    //     ctx.assignedNextWorkflowId = assignedNextWorkflowId;
+    //     assignedNextWorkflowId = null;
+    //     ctx.authenticatedUser = authenticatedUser;
+    //     ctx.authenticatedRoles = authenticatedRoles;
+    //     ctx.assumedRole = assumedRole;
+    //     ctx.parent = new WorkflowInfo(this.workflowId, this.functionId);
+    //     return ctx;
+    // }
 
     public static Optional<String> workflowId() {
         var ctx = DBOSContextHolder.get();
-        return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.workflowId);
+        return Optional.ofNullable(ctx.workflowId);
     }
 
     public static Optional<DBOS> dbosInstance() {
         var ctx = DBOSContextHolder.get();
-        return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.dbos);
+        return Optional.ofNullable(ctx.dbos);
     }
 
     public static boolean inWorkflow() {
-        var ctx = DBOSContextHolder.get();
-        return ctx == null ? false : ctx.isInWorkflow();
+        return DBOSContextHolder.get().isInWorkflow();
     }
 }
