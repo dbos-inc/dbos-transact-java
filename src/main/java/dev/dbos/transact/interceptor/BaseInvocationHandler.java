@@ -125,7 +125,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
         logger.info("Before : Executing step {} {}", method.getName(), step.name());
         try {
-            Object result = executor.runStep(step.name(),
+            Object result = executor.runStepInternal(step.name(),
                     step.retriesAllowed(),
                     step.maxAttempts(),
                     step.backOffRate(),

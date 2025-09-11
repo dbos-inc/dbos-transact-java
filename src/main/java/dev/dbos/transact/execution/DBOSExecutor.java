@@ -347,7 +347,7 @@ public class DBOSExecutor implements AutoCloseable {
         systemDatabase.recordWorkflowError(workflowId, errorString);
     }
 
-    private <T> T runAndSaveResult(Object target, Object[] args, WorkflowFunctionReflect function,
+    private <T> T runWorkflowAndSaveResult(Object target, Object[] args, WorkflowFunctionReflect function,
             String workflowId) throws Throwable {
 
         try {
@@ -435,7 +435,7 @@ public class DBOSExecutor implements AutoCloseable {
             }, allowedTime, TimeUnit.MILLISECONDS);
         }
 
-        return runAndSaveResult(target, args, function, workflowId);
+        return runWorkflowAndSaveResult(target, args, function, workflowId);
     }
 
     public <T> WorkflowHandle<T> submitWorkflow(String workflowName, String targetClassName,
@@ -491,7 +491,7 @@ public class DBOSExecutor implements AutoCloseable {
             String id = context.getWorkflowId();
 
             try {
-                result = runAndSaveResult(target, args, function, id);
+                result = runWorkflowAndSaveResult(target, args, function, id);
             } catch (Throwable e) {
                 Throwable actual = (e instanceof InvocationTargetException)
                         ? ((InvocationTargetException) e).getTargetException()
@@ -583,19 +583,20 @@ public class DBOSExecutor implements AutoCloseable {
                 workflowTimeoutMs);
     }
 
-    public <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
+    /** This does not retry */
+    private <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
         DBOSContext ctx = DBOSContextHolder.get();
 
         int nextFuncId = 0;
         boolean inWorkflow = ctx != null && ctx.isInWorkflow();
 
-        if (inWorkflow) {
-            nextFuncId = ctx.getAndIncrementFunctionId();
+        if (!inWorkflow) return fn.get();
 
-            StepResult result = systemDatabase.checkStepExecutionTxn(ctx.getWorkflowId(), nextFuncId, functionName);
-            if (result != null) {
-                return handleExistingResult(result, functionName);
-            }
+        nextFuncId = ctx.getAndIncrementFunctionId();
+
+        StepResult result = systemDatabase.checkStepExecutionTxn(ctx.getWorkflowId(), nextFuncId, functionName);
+        if (result != null) {
+            return handleExistingResult(result, functionName);
         }
 
         T functionResult;
@@ -618,13 +619,11 @@ public class DBOSExecutor implements AutoCloseable {
             }
         }
 
-        // If we're in a workflow, record the successful result
-        if (inWorkflow) {
-            String jsonOutput = JSONUtil.serialize(functionResult);
-            StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
-                    jsonOutput, null);
-            systemDatabase.recordStepResultTxn(o);
-        }
+        // Record the successful result
+        String jsonOutput = JSONUtil.serialize(functionResult);
+        StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName,
+                jsonOutput, null);
+        systemDatabase.recordStepResultTxn(o);
 
         return functionResult;
     }
@@ -639,22 +638,27 @@ public class DBOSExecutor implements AutoCloseable {
             SerializableException se = (SerializableException) eArray[0];
             throw new DBOSAppException(String.format("Exception of type %s", se.className), se);
         } else {
+            // CB TODO: This should be acceptable, it means no return value?
             throw new IllegalStateException(
-                    String.format("Recorded output and error are both null for %s", functionName));
+                String.format("Recorded output and error are both null for %s", functionName));
         }
     }
 
-    public <T> T runStep(String stepName, boolean retriedAllowed, int maxAttempts,
-            float backOffRate, Object[] args, WorkflowFunction<T> function) throws Throwable {
-
+    // CB TODO: This should be package scope
+    public <T> T runStepInternal(String stepName, boolean retriedAllowed, int maxAttempts,
+            float backOffRate, Object[] args, WorkflowFunction<T> function) throws Throwable
+    {
         DBOSContext ctx = DBOSContextHolder.get();
-        ctx.setDbos(dbos);
-        String workflowId = ctx.getWorkflowId();
+        boolean inWorkflow = ctx != null && ctx.isInWorkflow();
 
-        if (workflowId == null) {
+        if (!inWorkflow) {
             // if there is no workflow, execute the step function without checkpointing
             return function.execute();
         }
+
+        ctx.setDbos(dbos);
+        String workflowId = ctx.getWorkflowId();
+
         logger.info("Running step {} for workflow {}", stepName, workflowId);
 
         int stepFunctionId = ctx.getAndIncrementFunctionId();
@@ -685,7 +689,6 @@ public class DBOSExecutor implements AutoCloseable {
         T result = null;
 
         while (retriedAllowed && currAttempts <= maxAttempts) {
-
             try {
                 result = function.execute();
                 serializedOutput = JSONUtil.serialize(result);
@@ -759,6 +762,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     public void sleep(float seconds) {
+        // CB TODO: This should be OK outside DBOS
 
         DBOSContext context = DBOSContextHolder.get();
         context.setDbos(dbos);
