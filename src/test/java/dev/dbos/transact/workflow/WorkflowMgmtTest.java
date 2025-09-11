@@ -116,9 +116,9 @@ public class WorkflowMgmtTest {
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wfid1";
-        var options = StartWorkflowOptions.builder(workflowId).queue(myqueue) .build();
+        var options = StartWorkflowOptions.builder(workflowId).queue(myqueue).build();
         int result;
-        dbos.startWorkflow(()-> mgmtService.simpleWorkflow(23), options);
+        dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23), options);
 
         mainLatch.await();
         dbos.cancelWorkflow(workflowId);

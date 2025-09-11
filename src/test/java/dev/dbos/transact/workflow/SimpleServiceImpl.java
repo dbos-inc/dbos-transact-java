@@ -161,7 +161,8 @@ public class SimpleServiceImpl implements SimpleService {
 
         String workflowId = "childwf";
         var options = StartWorkflowOptions.builder(workflowId).timeout(Duration.ofSeconds(timeoutSeconds)).build();
-        WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.childWorkflowWithSleep(input, sleepSeconds), options);
+        WorkflowHandle<String> handle = dbos
+                .startWorkflow(() -> simpleService.childWorkflowWithSleep(input, sleepSeconds), options);
         String result = handle.getResult();
 
         logger.info("Done with longWorkflow");

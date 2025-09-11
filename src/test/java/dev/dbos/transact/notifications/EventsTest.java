@@ -123,7 +123,6 @@ public class EventsTest {
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-
         var options1 = StartWorkflowOptions.fromWorkflowId("id2");
         dbos.startWorkflow(() -> eventService.getWithlatch("id1", "key1", 5), options1);
 

@@ -138,7 +138,8 @@ class RecoveryServiceTest {
 
         wfid = "wf-127";
         var options = StartWorkflowOptions.builder(wfid).queue(testQueue).build();
-        WorkflowHandle<String> handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
+        WorkflowHandle<String> handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"),
+                options);
         assertEquals("q1", handle7.getStatus().getQueueName());
         handle7.getResult();
 

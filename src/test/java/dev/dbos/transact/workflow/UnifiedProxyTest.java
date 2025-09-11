@@ -80,7 +80,7 @@ public class UnifiedProxyTest {
         // Queued
         String wfid3 = "wf-125";
         var opt3 = StartWorkflowOptions.builder(wfid3).queue(q).build();
-        result = dbos.startWorkflow(()-> simpleService.workWithString("test-item-q"), opt3).getResult();
+        result = dbos.startWorkflow(() -> simpleService.workWithString("test-item-q"), opt3).getResult();
         assertNull(result);
 
         handle = dbosExecutor.retrieveWorkflow(wfid3);;

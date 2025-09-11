@@ -53,44 +53,42 @@ public class DBOSClient implements AutoCloseable {
             String appVersion;
             Duration timeout;
 
-        public Builder(String workflowName, String queueName) {
-            this.workflowName = Objects.requireNonNull(workflowName);
-            this.queueName = Objects.requireNonNull(queueName);
-        }
+            public Builder(String workflowName, String queueName) {
+                this.workflowName = Objects.requireNonNull(workflowName);
+                this.queueName = Objects.requireNonNull(queueName);
+            }
 
-        public Builder targetClassName(String targetClassName) {
-            this.targetClassName = Objects.requireNonNull(targetClassName);
-            return this;
-        }
+            public Builder targetClassName(String targetClassName) {
+                this.targetClassName = Objects.requireNonNull(targetClassName);
+                return this;
+            }
 
-        public Builder workflowId(String workflowId) {
-            this.workflowId = Objects.requireNonNull(workflowId);
-            return this;
-        }
+            public Builder workflowId(String workflowId) {
+                this.workflowId = Objects.requireNonNull(workflowId);
+                return this;
+            }
 
-        public Builder appVersion(String appVersion) {
-            this.appVersion = Objects.requireNonNull(appVersion);
-            return this;
-        }
+            public Builder appVersion(String appVersion) {
+                this.appVersion = Objects.requireNonNull(appVersion);
+                return this;
+            }
 
-        public Builder timeoutMS(Duration timeout) {
-            this.timeout = Objects.requireNonNull(timeout);
-            return this;
-        }
+            public Builder timeoutMS(Duration timeout) {
+                this.timeout = Objects.requireNonNull(timeout);
+                return this;
+            }
 
-        public EnqueueOptions build() {
-            return new EnqueueOptions(
-                    workflowName,
-                    queueName,
-                    targetClassName,
-                    workflowId,
-                    appVersion,
-                    timeout);
+            public EnqueueOptions build() {
+                return new EnqueueOptions(
+                        workflowName,
+                        queueName,
+                        targetClassName,
+                        workflowId,
+                        appVersion,
+                        timeout);
+            }
         }
     }
-    }
-
-
 
     public <T> WorkflowHandle<T> enqueueWorkflow(EnqueueOptions options, Object[] args) throws Throwable {
         Objects.requireNonNull(options.workflowName);

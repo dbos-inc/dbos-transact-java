@@ -1,18 +1,17 @@
 package dev.dbos.transact;
 
+import dev.dbos.transact.queue.Queue;
+
 import java.time.Duration;
 import java.util.Objects;
 import java.util.OptionalInt;
 
-import dev.dbos.transact.queue.Queue;
-
 public record StartWorkflowOptions(
-    String workflowId,
-    Duration timeout,
-    Queue queue,
-    String deduplicationId,
-    OptionalInt priority
-) {
+        String workflowId,
+        Duration timeout,
+        Queue queue,
+        String deduplicationId,
+        OptionalInt priority) {
 
     public static StartWorkflowOptions fromWorkflowId(String workflowId) {
         return builder(workflowId).build();
@@ -60,12 +59,11 @@ public record StartWorkflowOptions(
 
         public StartWorkflowOptions build() {
             return new StartWorkflowOptions(
-                workflowId,
-                timeout,
-                queue,
-                deduplicationId,
-                priority
-            );
+                    workflowId,
+                    timeout,
+                    queue,
+                    deduplicationId,
+                    priority);
         }
     }
 

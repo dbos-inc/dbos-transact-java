@@ -17,8 +17,10 @@ public class DBOSContext {
 
     private static final Logger logger = LoggerFactory.getLogger(DBOSContext.class);
 
-    public record StepStatus(int functionId, OptionalInt currentAttempt, OptionalInt maxAttempts) {}
-    public record WorkflowInfo(String workflowId, int functionId) {}
+    public record StepStatus(int functionId, OptionalInt currentAttempt, OptionalInt maxAttempts) {
+    }
+    public record WorkflowInfo(String workflowId, int functionId) {
+    }
 
     DBOS dbos = null;
 
@@ -34,13 +36,16 @@ public class DBOSContext {
     StepStatus stepStatus = null;
     Instant deadline = null;
 
-    public DBOSContext() { }
+    public DBOSContext() {
+    }
 
     public void setDbos(DBOS dbos) {
         Objects.requireNonNull(dbos);
         if (this.dbos != null) {
             if (this.dbos != dbos) {
-                logger.error("setDbos collision {} {}", System.identityHashCode(this.dbos), System.identityHashCode(dbos));
+                logger.error("setDbos collision {} {}",
+                        System.identityHashCode(this.dbos),
+                        System.identityHashCode(dbos));
                 throw new IllegalStateException("DBOS instance already set and does not match the provided instance.");
             }
         } else {
@@ -108,8 +113,7 @@ public class DBOSContext {
         return ctx;
     }
 
-
-    public static Optional<String> workflowId() { 
+    public static Optional<String> workflowId() {
         var ctx = DBOSContextHolder.get();
         return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.workflowId);
     }

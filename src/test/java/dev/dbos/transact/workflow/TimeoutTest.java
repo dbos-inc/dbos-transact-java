@@ -155,7 +155,8 @@ public class TimeoutTest {
         String wfid1 = "wf-127";
         String result;
 
-        var options = StartWorkflowOptions.builder().workflowId(wfid1).queue(simpleQ).timeout(Duration.ofSeconds(1)).build();
+        var options = StartWorkflowOptions.builder().workflowId(wfid1).queue(simpleQ).timeout(Duration.ofSeconds(1))
+                .build();
         WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
         // assertNull(result);
         // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);

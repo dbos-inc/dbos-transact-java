@@ -8,7 +8,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -91,8 +90,8 @@ public class QueuesTest {
         Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
 
         ServiceQ serviceQ = dbos.<ServiceQ>Workflow()
-            .interfaceClass(ServiceQ.class)
-            .implementation(new ServiceQImpl())
+                .interfaceClass(ServiceQ.class)
+                .implementation(new ServiceQImpl())
                 .build();
 
         dbos.launch();
@@ -503,13 +502,12 @@ public class QueuesTest {
 
         var opt1 = StartWorkflowOptions.builder("wf1").queue(queue).build();
         WorkflowHandle<Integer> handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0), opt1);
-        
+
         var opt2 = StartWorkflowOptions.builder("wf2").queue(queue).build();
         WorkflowHandle<Integer> handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1), opt2);
-        
+
         var opt3 = StartWorkflowOptions.builder("wf3").queue(queue).build();
         WorkflowHandle<Integer> handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2), opt3);
-        
 
         for (Semaphore e : impl.wfSemaphores) {
             e.acquire();

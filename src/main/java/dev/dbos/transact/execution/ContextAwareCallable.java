@@ -5,14 +5,12 @@ import dev.dbos.transact.internal.DBOSContextHolder;
 
 import java.util.concurrent.Callable;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public class ContextAwareCallable<T> implements Callable<T> {
     private final Callable<T> task;
     private DBOSContext capturedContext;
 
-    // private final static Logger logger = LoggerFactory.getLogger(ContextAwareCallable.class);
+    // private final static Logger logger =
+    // LoggerFactory.getLogger(ContextAwareCallable.class);
 
     public ContextAwareCallable(DBOSContext ctx, Callable<T> task) {
         this.task = task;

@@ -11,8 +11,7 @@ public record WorkflowOptions(
         Duration timeout,
         String authenticatedUser,
         List<String> authenticatedRoles,
-        String assumedRole
-    ) {
+        String assumedRole) {
 
     public static Builder builder() {
         return new Builder();
@@ -25,7 +24,6 @@ public record WorkflowOptions(
     public static WorkflowOptions fromWorkflowId(String workflowId) {
         return builder(workflowId).build();
     }
-
 
     public Closer set() {
         var ctx = DBOSContextHolder.get();

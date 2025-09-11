@@ -46,7 +46,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -583,14 +582,15 @@ public class DBOSExecutor implements AutoCloseable {
                 workflowTimeout);
     }
 
-    public <T> T invokeWorkflow(String name, String className, Object[] args, Integer maxRecoveryAttempts) throws Throwable {
+    public <T> T invokeWorkflow(String name, String className, Object[] args, Integer maxRecoveryAttempts)
+            throws Throwable {
         throw new RuntimeException();
     }
 
-    public <T> T invokeStep(String name, String className, ThrowingSupplier<T> supplier, Boolean retriesAllowed, Duration interval, Integer maxAttempts, Float backoffRate)  throws Throwable {
+    public <T> T invokeStep(String name, String className, ThrowingSupplier<T> supplier, Boolean retriesAllowed,
+            Duration interval, Integer maxAttempts, Float backoffRate) throws Throwable {
         throw new RuntimeException();
     }
-
 
     public <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
         DBOSContext ctx = DBOSContextHolder.get();
@@ -822,12 +822,12 @@ public class DBOSExecutor implements AutoCloseable {
         DBOSContext newCtx = oldctx;
 
         // if (newCtx.getWorkflowId() == null) {
-        //     newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString());
+        // newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString());
         // }
 
         // TODO
         // if (newCtx.getQueue() == null) {
-        //     newCtx = newCtx.copyWithAsync();
+        // newCtx = newCtx.copyWithAsync();
         // }
 
         try {

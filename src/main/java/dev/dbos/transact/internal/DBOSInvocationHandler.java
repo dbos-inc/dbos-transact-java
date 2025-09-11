@@ -1,5 +1,9 @@
 package dev.dbos.transact.internal;
 
+import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.workflow.Step;
+import dev.dbos.transact.workflow.Workflow;
+
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.Duration;
@@ -8,10 +12,6 @@ import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.workflow.Step;
-import dev.dbos.transact.workflow.Workflow;
 
 public class DBOSInvocationHandler implements java.lang.reflect.InvocationHandler {
 
@@ -36,7 +36,7 @@ public class DBOSInvocationHandler implements java.lang.reflect.InvocationHandle
         }
 
         var handler = new DBOSInvocationHandler(target, executorSupplier);
-        return (T)Proxy.newProxyInstance(interfaceClass.getClassLoader(), new Class<?>[]{ interfaceClass}, handler);
+        return (T) Proxy.newProxyInstance(interfaceClass.getClassLoader(), new Class<?>[]{interfaceClass}, handler);
     }
 
     @Override
@@ -79,13 +79,13 @@ public class DBOSInvocationHandler implements java.lang.reflect.InvocationHandle
         var interval = Duration.ofMillis(Math.round(step.intervalSeconds() * 1000));
 
         return executor.invokeStep(
-            name, 
-            targetClassName,
-            () -> method.invoke(target, args), 
-            step.retriesAllowed(), 
-            interval, 
-            step.maxAttempts(), 
-            step.backOffRate());
+                name,
+                targetClassName,
+                () -> method.invoke(target, args),
+                step.retriesAllowed(),
+                interval,
+                step.maxAttempts(),
+                step.backOffRate());
     }
 
 }

@@ -6,7 +6,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueuesTest;
 import dev.dbos.transact.utils.DBUtils;
@@ -63,7 +62,7 @@ public class QueueChildWorkflowTest {
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-        var options= StartWorkflowOptions.builder("wf-123456").queue(childQ).build();
+        var options = StartWorkflowOptions.builder("wf-123456").queue(childQ).build();
         dbos.startWorkflow(() -> simpleService.WorkflowWithMultipleChildren("123"), options);
 
         WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
