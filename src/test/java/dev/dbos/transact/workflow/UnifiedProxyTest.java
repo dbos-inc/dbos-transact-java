@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
@@ -59,9 +59,9 @@ public class UnifiedProxyTest {
 
         // synchronous
         String wfid1 = "wf-123";
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).build();
         String result;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        try (var id = options.set()) {
             result = simpleService.workWithString("test-item");
         }
         assertEquals("Processed: test-item", result);
@@ -69,11 +69,8 @@ public class UnifiedProxyTest {
         // asynchronous
 
         String wfid2 = "wf-124";
-        options = new WorkflowOptions.Builder(wfid2).build();
-        WorkflowHandle<String> handle = null;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
-        }
+        var opt2 = StartWorkflowOptions.fromWorkflowId(wfid2);
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"), opt2);
 
         result = handle.getResult();
         assertEquals("Processed: test-item-async", result);
@@ -82,10 +79,8 @@ public class UnifiedProxyTest {
 
         // Queued
         String wfid3 = "wf-125";
-        options = new WorkflowOptions.Builder(wfid3).queue(q).build();
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            result = simpleService.workWithString("test-item-q");
-        }
+        var opt3 = StartWorkflowOptions.builder(wfid3).queue(q).build();
+        result = dbos.startWorkflow(()-> simpleService.workWithString("test-item-q"), opt3).getResult();
         assertNull(result);
 
         handle = dbosExecutor.retrieveWorkflow(wfid3);;
@@ -114,9 +109,9 @@ public class UnifiedProxyTest {
         simpleService.setSimpleService(simpleService);
 
         String wfid1 = "wf-123";
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).build();
         String result;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        try (var id = options.set()) {
             result = simpleService.syncWithQueued();
         }
         assertEquals("QueuedChildren", result);

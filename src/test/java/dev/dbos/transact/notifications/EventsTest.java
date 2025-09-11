@@ -5,8 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.StepInfo;
 
@@ -56,11 +57,11 @@ public class EventsTest {
 
         dbos.launch();
 
-        try (SetWorkflowID id = new SetWorkflowID("id1")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {
             eventService.setEventWorkflow("key1", "value1");
         }
 
-        try (SetWorkflowID id = new SetWorkflowID("id2")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {
             Object event = eventService.getEventWorkflow("id1", "key1", 3);
             assertEquals("value1", (String) event);
         }
@@ -79,11 +80,11 @@ public class EventsTest {
 
         dbos.launch();
 
-        try (SetWorkflowID id = new SetWorkflowID("id1")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {
             eventService.setMultipleEvents();
         }
 
-        try (SetWorkflowID id = new SetWorkflowID("id2")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("id2")) {
             Object event = eventService.getEventWorkflow("id1", "key1", 3);
             assertEquals("value1", (String) event);
         }
@@ -98,17 +99,15 @@ public class EventsTest {
 
         EventsService eventService = dbos.<EventsService>Workflow()
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
-                .async().build();
+                .build();
 
         dbos.launch();
 
-        try (SetWorkflowID id = new SetWorkflowID("id1")) {
-            eventService.setEventWorkflow("key1", "value1");
-        }
+        var options1 = StartWorkflowOptions.fromWorkflowId("id1");
+        dbos.startWorkflow(() -> eventService.setEventWorkflow("key1", "value1"), options1);
 
-        try (SetWorkflowID id = new SetWorkflowID("id2")) {
-            eventService.getEventWorkflow("id1", "key1", 3);
-        }
+        var options2 = StartWorkflowOptions.fromWorkflowId("id2");
+        dbos.startWorkflow(() -> eventService.getEventWorkflow("key1", "key1", 3), options2);
 
         String event = (String) dbos.retrieveWorkflow("id2").getResult();
         assertEquals("value1", event);
@@ -119,18 +118,17 @@ public class EventsTest {
 
         EventsService eventService = dbos.<EventsService>Workflow()
                 .interfaceClass(EventsService.class).implementation(new EventsServiceImpl())
-                .async().build();
+                .build();
 
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-        try (SetWorkflowID id = new SetWorkflowID("id2")) {
-            eventService.getWithlatch("id1", "key1", 5);
-        }
 
-        try (SetWorkflowID id = new SetWorkflowID("id1")) {
-            eventService.setWithLatch("key1", "value1");
-        }
+        var options1 = StartWorkflowOptions.fromWorkflowId("id2");
+        dbos.startWorkflow(() -> eventService.getWithlatch("id1", "key1", 5), options1);
+
+        var options2 = StartWorkflowOptions.fromWorkflowId("id1");
+        dbos.startWorkflow(() -> eventService.setWithLatch("key1", "value1"), options2);
 
         String event = (String) dbos.retrieveWorkflow("id2").getResult();
         assertEquals("value1", event);
@@ -171,7 +169,7 @@ public class EventsTest {
             Future<Object> future2 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
 
             String expectedMessage = "test message";
-            try (SetWorkflowID id = new SetWorkflowID("id1")) {
+            try (var _ignore = WorkflowOptions.setWorkflowId("id1")) {
                 eventService.setEventWorkflow("key1", expectedMessage);;
             }
 

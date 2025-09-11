@@ -1,14 +1,12 @@
 package dev.dbos.transact;
 
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.WorkflowFunction;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
-import dev.dbos.transact.interceptor.AsyncInvocationHandler;
-import dev.dbos.transact.interceptor.QueueInvocationHandler;
-import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
+import dev.dbos.transact.internal.DBOSContextHolder;
+import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
@@ -136,8 +134,6 @@ public class DBOS {
         private final DBOS dbos;
         private Class<T> interfaceClass;
         private Object implementation;
-        private boolean async;
-        private Queue queue;
 
         WorkflowBuilder(DBOS dbos) {
             this.dbos = dbos;
@@ -153,37 +149,15 @@ public class DBOS {
             return this;
         }
 
-        public WorkflowBuilder<T> async() {
-            this.async = true;
-            return this;
-        }
-
-        public WorkflowBuilder<T> queue(Queue queue) {
-            this.queue = queue;
-            return this;
-        }
-
         public T build() {
             if (interfaceClass == null || implementation == null) {
                 throw new IllegalStateException("Interface and implementation must be set");
             }
 
             dbos.registerWorkflow(interfaceClass, implementation);
-
-            if (async) {
-                return AsyncInvocationHandler.createProxy(interfaceClass,
-                        implementation,
-                        () -> dbos.dbosExecutor.get());
-            } else if (queue != null) {
-                return QueueInvocationHandler.createProxy(interfaceClass,
-                        implementation,
-                        queue,
-                        () -> dbos.dbosExecutor.get());
-            } else {
-                return UnifiedInvocationHandler.createProxy(interfaceClass,
-                        implementation,
-                        () -> dbos.dbosExecutor.get());
-            }
+            return DBOSInvocationHandler.createProxy(interfaceClass,
+                    implementation,
+                    () -> dbos.dbosExecutor.get());
         }
     }
 
@@ -477,6 +451,10 @@ public class DBOS {
      *            type returned by the function
      */
     public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
+        return startWorkflow(func, StartWorkflowOptions.builder().build());
+    }
+
+    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func, StartWorkflowOptions options) {
         var executor = dbosExecutor.get();
         if (executor == null) {
             throw new IllegalStateException("cannot startWorkflow before launch");
@@ -486,15 +464,20 @@ public class DBOS {
     }
 
     public WorkflowHandle<Void> startWorkflow(ThrowingRunnable func) {
-        var executor = dbosExecutor.get();
-        if (executor == null) {
-            throw new IllegalStateException("cannot startWorkflow before launch");
-        }
-
-        return executor.startWorkflow(() -> {
+        WorkflowFunction<Void> runnable = () -> {
             func.execute();
             return null;
-        });
+        };
+        return startWorkflow(runnable, StartWorkflowOptions.builder().build());
+    }
+
+    public WorkflowHandle<Void> startWorkflow(ThrowingRunnable func, StartWorkflowOptions options) {
+        WorkflowFunction<Void> runnable = () -> {
+            func.execute();
+            return null;
+        };
+
+        return startWorkflow(runnable, options);
     }
 
     public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {

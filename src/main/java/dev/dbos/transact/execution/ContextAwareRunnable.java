@@ -1,7 +1,7 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.internal.DBOSContextHolder;
 
 public class ContextAwareRunnable implements Runnable {
     private final Runnable task;

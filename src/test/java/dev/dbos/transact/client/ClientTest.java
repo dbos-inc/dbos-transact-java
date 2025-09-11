@@ -46,7 +46,7 @@ public class ClientTest {
             dbos.launch();
 
             try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
-                var options = new DBOSClient.EnqueueOptionsBuilder("enqueueTest", "testQueue")
+                var options = DBOSClient.EnqueueOptions.builder("enqueueTest", "testQueue")
                         .targetClassName("dev.dbos.transact.client.ClientServiceImpl").build();
                 var handle = client.enqueueWorkflow(options, new Object[]{42, "spam"});
                 var result = handle.getResult();

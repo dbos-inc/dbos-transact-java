@@ -4,8 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueuesTest;
 import dev.dbos.transact.utils.DBUtils;
@@ -54,7 +55,7 @@ public class QueueChildWorkflowTest {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .queue(childQ).build();
+                .build();
 
         simpleService.setSimpleService(simpleService);
 
@@ -62,9 +63,8 @@ public class QueueChildWorkflowTest {
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
-            simpleService.WorkflowWithMultipleChildren("123");
-        }
+        var options= StartWorkflowOptions.builder("wf-123456").queue(childQ).build();
+        dbos.startWorkflow(() -> simpleService.WorkflowWithMultipleChildren("123"), options);
 
         WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         assertEquals("123abcdefghi", (String) handle.getResult());
@@ -106,7 +106,7 @@ public class QueueChildWorkflowTest {
 
         SimpleService simpleService = dbos.<SimpleService>Workflow()
                 .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .queue(childQ).build();
+                .build();
 
         simpleService.setSimpleService(simpleService);
 
@@ -114,9 +114,8 @@ public class QueueChildWorkflowTest {
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-        try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
-            simpleService.grandParent("123");
-        }
+        var options = StartWorkflowOptions.builder("wf-123456").queue(childQ).build();
+        dbos.startWorkflow(() -> simpleService.grandParent("123"), options);
 
         WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
         assertEquals("p-c-gc-123", handle.getResult());

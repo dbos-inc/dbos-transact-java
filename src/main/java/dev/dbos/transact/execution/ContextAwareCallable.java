@@ -1,7 +1,7 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.internal.DBOSContextHolder;
 
 import java.util.concurrent.Callable;
 
@@ -12,7 +12,7 @@ public class ContextAwareCallable<T> implements Callable<T> {
     private final Callable<T> task;
     private DBOSContext capturedContext;
 
-    Logger logger = LoggerFactory.getLogger(ContextAwareCallable.class);
+    // private final static Logger logger = LoggerFactory.getLogger(ContextAwareCallable.class);
 
     public ContextAwareCallable(DBOSContext ctx, Callable<T> task) {
         this.task = task;

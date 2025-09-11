@@ -6,9 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
-import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
@@ -68,17 +67,17 @@ public class QueuesTest {
         Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1)
                 .build();
 
+        // TODO was queue
         ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class)
-                .implementation(new ServiceQImpl()).queue(firstQ).build();
+                .implementation(new ServiceQImpl()).build();
 
         dbos.launch();
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String id = "q1234";
 
-        try (SetWorkflowID ctx = new SetWorkflowID(id)) {
-            serviceQ.simpleQWorkflow("inputq");
-        }
+        var options = StartWorkflowOptions.builder(id).queue(firstQ).build();
+        dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
 
         WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id);
         assertEquals(id, handle.getWorkflowId());
@@ -91,8 +90,10 @@ public class QueuesTest {
 
         Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
 
-        ServiceQ serviceQ = dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class).implementation(new ServiceQImpl())
-                .queue(firstQ).build();
+        ServiceQ serviceQ = dbos.<ServiceQ>Workflow()
+            .interfaceClass(ServiceQ.class)
+            .implementation(new ServiceQImpl())
+                .build();
 
         dbos.launch();
 
@@ -102,10 +103,10 @@ public class QueuesTest {
 
         for (int i = 0; i < 5; i++) {
             String id = "wfid" + i;
+            String input = "inputq" + i;
 
-            try (SetWorkflowID ctx = new SetWorkflowID(id)) {
-                serviceQ.simpleQWorkflow("inputq" + i);
-            }
+            var options = StartWorkflowOptions.builder(id).queue(firstQ).build();
+            dbos.startWorkflow(() -> serviceQ.simpleQWorkflow(input), options);
         }
 
         List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
@@ -151,11 +152,10 @@ public class QueuesTest {
 
         for (int i = 0; i < 5; i++) {
             String id = "wfid" + i;
+            String input = "inputq" + i;
 
-            WorkflowOptions option = new WorkflowOptions.Builder(id).queue(firstQ).build();
-            try (SetWorkflowOptions ctx = new SetWorkflowOptions(option)) {
-                serviceQ.simpleQWorkflow("inputq" + i);
-            }
+            var options = StartWorkflowOptions.builder(id).queue(firstQ).build();
+            dbos.startWorkflow(() -> serviceQ.simpleQWorkflow(input), options);
         }
 
         List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
@@ -223,17 +223,11 @@ public class QueuesTest {
         String id1 = "firstQ1234";
         String id2 = "second1234";
 
-        WorkflowOptions options1 = new WorkflowOptions.Builder(id1).queue(firstQ).build();
-        WorkflowHandle<String> handle1 = null;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options1)) {
-            handle1 = dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"));
-        }
+        var options1 = StartWorkflowOptions.builder(id1).queue(firstQ).build();
+        WorkflowHandle<String> handle1 = dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"), options1);
 
-        WorkflowOptions options2 = new WorkflowOptions.Builder(id2).queue(secondQ).build();
-        WorkflowHandle<Integer> handle2 = null;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options2)) {
-            handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25));
-        }
+        var options2 = StartWorkflowOptions.builder(id2).queue(secondQ).build();
+        WorkflowHandle<Integer> handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25), options2);
 
         assertEquals(id1, handle1.getWorkflowId());
         String result = handle1.getResult();
@@ -269,11 +263,8 @@ public class QueuesTest {
 
         for (int i = 0; i < numTasks; i++) {
             String id = "id" + i;
-            WorkflowOptions options = new WorkflowOptions.Builder(id).queue(limitQ).build();
-            WorkflowHandle<Double> handle = null;
-            try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-                handle = dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"));
-            }
+            var options = StartWorkflowOptions.builder(id).queue(limitQ).build();
+            WorkflowHandle<Double> handle = dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"), options);
             handles.add(handle);
         }
 
@@ -491,11 +482,8 @@ public class QueuesTest {
 
         String id = "q1234";
 
-        WorkflowHandle<String> handle = null;
-        WorkflowOptions option = new WorkflowOptions.Builder(id).queue(firstQ).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(option)) {
-            handle = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"));
-        }
+        var options = StartWorkflowOptions.builder(id).queue(firstQ).build();
+        WorkflowHandle<String> handle = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
 
         assertEquals(id, handle.getWorkflowId());
         String result = handle.getResult();
@@ -513,24 +501,15 @@ public class QueuesTest {
 
         dbos.launch();
 
-        WorkflowHandle<Integer> handle1;
-        WorkflowHandle<Integer> handle2;
-        WorkflowHandle<Integer> handle3;
-
-        WorkflowOptions opt1 = new WorkflowOptions.Builder("wf1").queue(queue).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(opt1)) {
-            handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0));
-        }
-
-        WorkflowOptions opt2 = new WorkflowOptions.Builder("wf2").queue(queue).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(opt2)) {
-            handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1));
-        }
-
-        WorkflowOptions opt3 = new WorkflowOptions.Builder("wf3").queue(queue).build();
-        try (SetWorkflowOptions o = new SetWorkflowOptions(opt3)) {
-            handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2));
-        }
+        var opt1 = StartWorkflowOptions.builder("wf1").queue(queue).build();
+        WorkflowHandle<Integer> handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0), opt1);
+        
+        var opt2 = StartWorkflowOptions.builder("wf2").queue(queue).build();
+        WorkflowHandle<Integer> handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1), opt2);
+        
+        var opt3 = StartWorkflowOptions.builder("wf3").queue(queue).build();
+        WorkflowHandle<Integer> handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2), opt3);
+        
 
         for (Semaphore e : impl.wfSemaphores) {
             e.acquire();
@@ -550,7 +529,7 @@ public class QueuesTest {
 
             pstmt.setString(1, WorkflowState.PENDING.toString());
             pstmt.setString(2, "other");
-            pstmt.setString(3, opt3.getWorkflowId());
+            pstmt.setString(3, opt3.workflowId());
 
             // Execute the update and get the number of rows affected
             int rowsAffected = pstmt.executeUpdate();

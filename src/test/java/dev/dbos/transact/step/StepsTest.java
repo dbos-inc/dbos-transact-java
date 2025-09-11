@@ -4,8 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 
@@ -53,7 +54,7 @@ public class StepsTest {
 
         String wid = "sync123";
 
-        try (SetWorkflowID id = new SetWorkflowID(wid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wid)) {
             String result = serviceA.workflowWithSteps("hello");
             assertEquals("hellohello", result);
         }
@@ -92,7 +93,8 @@ public class StepsTest {
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wid = "sync123er";
-        try (SetWorkflowID id = new SetWorkflowID(wid)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wid)) {
+
             String result = serviceA.workflowWithStepError("hello");
             assertEquals("hellohello", result);
         }
@@ -114,17 +116,15 @@ public class StepsTest {
                 .implementation(new ServiceBImpl()).build();
 
         ServiceA serviceA = dbos.<ServiceA>Workflow().interfaceClass(ServiceA.class)
-                .implementation(new ServiceAImpl(serviceB)).async().build();
+                .implementation(new ServiceAImpl(serviceB)).build();
 
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
         var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
         String workflowId = "wf-1234";
-
-        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
-            serviceA.workflowWithSteps("hello");
-        }
+        var options = StartWorkflowOptions.builder(workflowId).build();
+        dbos.startWorkflow(() -> serviceA.workflowWithSteps("hello"), options);
 
         WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
         assertEquals("hellohello", (String) handle.getResult());
@@ -155,7 +155,7 @@ public class StepsTest {
 
         ServiceWFAndStep service = dbos.<ServiceWFAndStep>Workflow()
                 .interfaceClass(ServiceWFAndStep.class).implementation(new ServiceWFAndStepImpl())
-                .async().build();
+                .build();
 
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
@@ -164,10 +164,8 @@ public class StepsTest {
         service.setSelf(service);
 
         String workflowId = "wf-same-1234";
-
-        try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
-            service.aWorkflow("hello");
-        }
+        var options = StartWorkflowOptions.fromWorkflowId(workflowId);
+        dbos.startWorkflow(() -> service.aWorkflow("hello"), options);
 
         WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
         assertEquals("helloonetwo", (String) handle.getResult());

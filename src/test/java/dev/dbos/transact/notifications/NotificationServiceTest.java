@@ -4,9 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
-import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
@@ -53,22 +52,19 @@ class NotificationServiceTest {
     public void basic_send_recv() throws Exception {
 
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl()).async().build();
+                .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wfid1 = "recvwf1";
 
-        try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
-            notService.recvWorkflow("topic1", 10);
-        }
+        var options1 = StartWorkflowOptions.fromWorkflowId(wfid1);
+        dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 10), options1);
 
         String wfid2 = "sendf1";
-
-        try (SetWorkflowID id = new SetWorkflowID(wfid2)) {
-            notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
-        }
+        var options2 = StartWorkflowOptions.fromWorkflowId(wfid2);
+        dbos.startWorkflow(() -> notService.sendWorkflow(wfid1, "topic1", "HelloDBOS"), options2);
 
         WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
         WorkflowHandle<?> handle2 = dbos.retrieveWorkflow(wfid2);
@@ -92,28 +88,29 @@ class NotificationServiceTest {
     @Test
     public void multiple_send_recv() throws Exception {
 
+        // TODO was async
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl()).async().build();
+                .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
 
         String wfid1 = "recvwf1";
 
-        try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
             notService.recvMultiple("topic1");
         }
 
-        try (SetWorkflowID id = new SetWorkflowID("send1")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("send1")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello1");
         }
         dbos.retrieveWorkflow("send1").getResult();
 
-        try (SetWorkflowID id = new SetWorkflowID("send2")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("send2")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello2");
         }
         dbos.retrieveWorkflow("send2").getResult();
 
-        try (SetWorkflowID id = new SetWorkflowID("send3")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("send3")) {
             notService.sendWorkflow(wfid1, "topic1", "Hello3");
         }
         dbos.retrieveWorkflow("send3").getResult();
@@ -129,20 +126,21 @@ class NotificationServiceTest {
     @Test
     public void notopic() throws Exception {
 
+        // TODO: was async
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl()).async().build();
+                .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
 
         String wfid1 = "recvwf1";
 
-        try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
             notService.recvWorkflow(null, 5);
         }
 
         String wfid2 = "sendf1";
 
-        try (SetWorkflowID id = new SetWorkflowID(wfid2)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {
             notService.sendWorkflow(wfid1, null, "HelloDBOS");
         }
 
@@ -177,12 +175,12 @@ class NotificationServiceTest {
         dbos.launch();
 
         // just to open the latch
-        try (SetWorkflowID id = new SetWorkflowID("abc")) {
+        try (var _ignore = WorkflowOptions.setWorkflowId("abc")) {
             notService.recvWorkflow(null, 1);
         }
 
         try {
-            try (SetWorkflowID id = new SetWorkflowID("send1")) {
+            try (var _ignore = WorkflowOptions.setWorkflowId("send1")) {
                 notService.sendWorkflow("fakeid", "topic1", "HelloDBOS");
             }
             assertTrue(false);
@@ -194,20 +192,21 @@ class NotificationServiceTest {
     @Test
     public void sendNull() throws Exception {
 
+        // TODO: was async
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl()).async().build();
+                .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
 
         String wfid1 = "recvwf1";
 
-        try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
             notService.recvWorkflow("topic1", 5);
         }
 
         String wfid2 = "sendf1";
 
-        try (SetWorkflowID id = new SetWorkflowID(wfid2)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {
             notService.sendWorkflow(wfid1, "topic1", null);
         }
 
@@ -232,7 +231,7 @@ class NotificationServiceTest {
         String wfid1 = "recvwf1";
 
         long start = System.currentTimeMillis();
-        try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
             notService.recvWorkflow("topic1", 3);
         }
 
@@ -258,7 +257,7 @@ class NotificationServiceTest {
 
             String expectedMessage = "test message";
             // dbos.send(wfuuid, expectedMessage, topic);
-            try (SetWorkflowID id = new SetWorkflowID("send1")) {
+            try (var _ignore = WorkflowOptions.setWorkflowId("send1")) {
                 notService.sendWorkflow(wfuuid, topic, expectedMessage);
             }
 
@@ -276,7 +275,7 @@ class NotificationServiceTest {
     }
 
     private String testThread(NotService service, String id, String topic) {
-        try (SetWorkflowID context = new SetWorkflowID(id)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(id)) {
             return service.concWorkflow(topic);
         }
     }
@@ -284,15 +283,16 @@ class NotificationServiceTest {
     @Test
     public void recv_sleep() throws Exception {
 
+        // TODO: was async
         NotService notService = dbos.<NotService>Workflow().interfaceClass(NotService.class)
-                .implementation(new NotServiceImpl()).async().build();
+                .implementation(new NotServiceImpl()).build();
 
         dbos.launch();
         var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
         String wfid1 = "recvwf1";
 
-        try (SetWorkflowID id = new SetWorkflowID(wfid1)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid1)) {
             notService.recvWorkflow("topic1", 5);
         }
 
@@ -301,7 +301,7 @@ class NotificationServiceTest {
         // forcing the recv to wait on condition
         Thread.sleep(2000);
 
-        try (SetWorkflowID id = new SetWorkflowID(wfid2)) {
+        try (var _ignore = WorkflowOptions.setWorkflowId(wfid2)) {
             notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
         }
 
@@ -336,9 +336,9 @@ class NotificationServiceTest {
 
         String wfid1 = "recvwf1";
 
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
+        WorkflowOptions options = WorkflowOptions.builder().workflowId(wfid1).build();
         WorkflowHandle<String> handle = null;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+        try (var _ignore = options.set()) {
             handle = dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5));
         }
 
