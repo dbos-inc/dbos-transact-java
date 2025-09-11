@@ -413,7 +413,7 @@ public class DBOS {
     public <R, E extends Exception> R runStep(StepInterfaces.ThrowingNoArg<R, E> stepfunc, StepOptions opts) throws E {
         var executor = dbosExecutor.get();
         if (executor == null) {
-            throw new IllegalStateException("cannot sleep before launch");
+            throw new IllegalStateException("cannot runStep before launch");
         }
 
         return executor.runStepI(stepfunc, opts);
@@ -423,9 +423,8 @@ public class DBOS {
             throws E {
         var executor = dbosExecutor.get();
         if (executor == null) {
-            throw new IllegalStateException("cannot sleep before launch");
+            throw new IllegalStateException("cannot runStep before launch");
         }
-
         executor.runStepI(() -> {
             stepfunc.run();
             return null;

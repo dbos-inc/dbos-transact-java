@@ -1,6 +1,6 @@
 package dev.dbos.transact.step;
 
-import dev.dbos.transact.DBOS;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Workflow;
@@ -8,14 +8,9 @@ import dev.dbos.transact.workflow.Workflow;
 public class ServiceWFAndStepImpl implements ServiceWFAndStep {
 
     private ServiceWFAndStep self;
-    private DBOS dbos;
 
     public void setSelf(ServiceWFAndStep serviceWFAndStep) {
         self = serviceWFAndStep;
-    }
-
-    public void setDbos(DBOS dbos) {
-        this.dbos = dbos;
     }
 
     @Workflow(name = "myworkflow")
@@ -38,6 +33,7 @@ public class ServiceWFAndStepImpl implements ServiceWFAndStep {
 
     @Workflow(name = "aWorkflowWithInlineSteps")
     public String aWorkflowWithInlineSteps(String input) {
+        var dbos = DBOSContext.dbosInstance().get();
         var len = dbos.runStep(() -> input.length(), new StepOptions("stringLength"));
         return (input + len);
     }

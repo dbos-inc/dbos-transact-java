@@ -667,9 +667,14 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     // CB TODO: This should be package scope
-    // CB TODO: What is it doing with the args?!
-    public <T> T runStepInternal(String stepName, boolean retriedAllowed, int maxAttempts,
+    public <T> T runStepInternal(String stepName, boolean retryAllowed, int maxAttempts,
             float backOffRate, WorkflowFunction<T> function) throws Throwable {
+        if (maxAttempts < 1) {
+            maxAttempts = 1;
+        }
+        if (!retryAllowed) {
+            maxAttempts = 1;
+        }
         DBOSContext ctx = DBOSContextHolder.get();
         boolean inWorkflow = ctx != null && ctx.isInWorkflow();
 
@@ -710,7 +715,7 @@ public class DBOSExecutor implements AutoCloseable {
         Throwable eThrown = null;
         T result = null;
 
-        while (retriedAllowed && currAttempts <= maxAttempts) {
+        while (currAttempts <= maxAttempts) {
             try {
                 result = function.execute();
                 serializedOutput = JSONUtil.serialize(result);

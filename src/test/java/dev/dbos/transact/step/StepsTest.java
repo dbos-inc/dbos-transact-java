@@ -108,7 +108,7 @@ public class StepsTest {
     }
 
     @Test
-    public void workflowWithInlineSteps() {
+    public void workflowWithInlineSteps() throws SQLException {
         ServiceWFAndStep service = dbos.<ServiceWFAndStep>Workflow()
                 .interfaceClass(ServiceWFAndStep.class).implementation(new ServiceWFAndStepImpl())
                 .async().build();
@@ -117,9 +117,19 @@ public class StepsTest {
 
         String wid = "wfWISwww123";
         try (SetWorkflowID id = new SetWorkflowID(wid)) {
-            String result = service.aWorkflowWithInlineSteps("input");
-            assertEquals("input5", result);
+            service.aWorkflowWithInlineSteps("input");
         }
+
+        var handle = dbos.retrieveWorkflow(wid);
+        assertEquals("input5", (String) handle.getResult());
+
+        List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
+        assertEquals(1, stepInfos.size());
+
+        assertEquals("stringLength", stepInfos.get(0).getFunctionName());
+        assertEquals(0, stepInfos.get(0).getFunctionId());
+        assertEquals(5, stepInfos.get(0).getOutput());
+        assertNull(stepInfos.get(0).getError());
     }
 
     @Test
