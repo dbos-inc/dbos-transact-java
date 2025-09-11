@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -581,6 +582,15 @@ public class DBOSExecutor implements AutoCloseable {
                 parent,
                 workflowTimeout);
     }
+
+    public <T> T invokeWorkflow(String name, String className, Object[] args, Integer maxRecoveryAttempts) throws Throwable {
+        throw new RuntimeException();
+    }
+
+    public <T> T invokeStep(String name, String className, ThrowingSupplier<T> supplier, Boolean retriesAllowed, Duration interval, Integer maxAttempts, Float backoffRate)  throws Throwable {
+        throw new RuntimeException();
+    }
+
 
     public <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
         DBOSContext ctx = DBOSContextHolder.get();

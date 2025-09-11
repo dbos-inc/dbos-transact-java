@@ -5,8 +5,8 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.WorkflowFunction;
 import dev.dbos.transact.execution.WorkflowFunctionWrapper;
-import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
 import dev.dbos.transact.internal.DBOSContextHolder;
+import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
@@ -155,7 +155,7 @@ public class DBOS {
             }
 
             dbos.registerWorkflow(interfaceClass, implementation);
-            return UnifiedInvocationHandler.createProxy(interfaceClass,
+            return DBOSInvocationHandler.createProxy(interfaceClass,
                     implementation,
                     () -> dbos.dbosExecutor.get());
         }
