@@ -478,24 +478,28 @@ public class DBOSExecutor implements AutoCloseable {
             logger.warn("Idempotency check not impl for cancelled");
         }
 
+        // Copy the context - dont just pass a reference - memory visibility
+        var contextForInsideCall = DBOSContextHolder.get().copy();
         Callable<T> task = () -> {
             T result = null;
 
             // Doing this on purpose to ensure that we have the correct context
+
+            DBOSContextHolder.set(contextForInsideCall);
             var context = DBOSContextHolder.get();
             context.setDbos(dbos);
             String id = context.getWorkflowId();
 
             try {
-
                 result = runAndSaveResult(target, args, function, id);
-
             } catch (Throwable e) {
                 Throwable actual = (e instanceof InvocationTargetException)
                         ? ((InvocationTargetException) e).getTargetException()
                         : e;
 
                 logger.error("Error executing workflow", actual);
+            } finally {
+                DBOSContextHolder.clear();
             }
 
             return result;
@@ -509,30 +513,7 @@ public class DBOSExecutor implements AutoCloseable {
             return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
         }
 
-        class ContextAwareCallable implements Callable<T> {
-            private final Callable<T> task;
-            private DBOSContext capturedContext;
-
-            public ContextAwareCallable(DBOSContext ctx, Callable<T> task) {
-                this.task = task;
-                this.capturedContext = ctx;
-            }
-
-            @Override
-            public T call() throws Exception {
-                DBOSContextHolder.set(capturedContext);
-                try {
-                    return task.call();
-                } finally {
-                    DBOSContextHolder.clear();
-                }
-            }
-        };
-
-        // Copy the context - dont just pass a reference - memory visibility
-        ContextAwareCallable contextAwareTask = new ContextAwareCallable(
-            DBOSContextHolder.get().copy(), task);
-        Future<T> future = executorService.submit(contextAwareTask);
+        Future<T> future = executorService.submit(task);
 
         if (allowedTime > 0) {
             ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
