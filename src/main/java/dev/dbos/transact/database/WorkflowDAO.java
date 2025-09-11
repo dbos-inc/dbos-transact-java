@@ -627,7 +627,8 @@ public class WorkflowDAO {
                                 Object[] eArray = JSONUtil.deserializeToArray(error);
                                 SerializableException se = (SerializableException) eArray[0];
                                 throw new DBOSAppException(
-                                        String.format("Exception of type %s", se.className), se);
+                                        String.format("Exception of type %s", se != null ? se.className : "UNKNOWN"),
+                                        se);
                             case CANCELLED :
                                 throw new AwaitedWorkflowCancelledException(workflowId);
 
