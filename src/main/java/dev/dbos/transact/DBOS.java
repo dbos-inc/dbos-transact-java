@@ -410,6 +410,28 @@ public class DBOS {
         executor.sleep(seconds);
     }
 
+    public <R, E extends Exception> R runStep(StepInterfaces.ThrowingNoArg<R, E> stepfunc, StepOptions opts) throws E {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
+            throw new IllegalStateException("cannot sleep before launch");
+        }
+
+        return executor.runStepI(stepfunc, opts);
+    }
+
+    public <E extends Exception> void runStep(StepInterfaces.ThrowingNoArgNoReturn<E> stepfunc, StepOptions opts)
+            throws E {
+        var executor = dbosExecutor.get();
+        if (executor == null) {
+            throw new IllegalStateException("cannot sleep before launch");
+        }
+
+        executor.runStepI(() -> {
+            stepfunc.run();
+            return null;
+        }, opts);
+    }
+
     /**
      * Resume a workflow starting from the step after the last complete step
      *

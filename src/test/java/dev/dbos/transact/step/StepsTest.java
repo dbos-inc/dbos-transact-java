@@ -108,6 +108,21 @@ public class StepsTest {
     }
 
     @Test
+    public void workflowWithInlineSteps() {
+        ServiceWFAndStep service = dbos.<ServiceWFAndStep>Workflow()
+                .interfaceClass(ServiceWFAndStep.class).implementation(new ServiceWFAndStepImpl())
+                .async().build();
+
+        dbos.launch();
+
+        String wid = "wfWISwww123";
+        try (SetWorkflowID id = new SetWorkflowID(wid)) {
+            String result = service.aWorkflowWithInlineSteps("input");
+            assertEquals("input5", result);
+        }
+    }
+
+    @Test
     public void AsyncworkflowWithSteps() throws Exception {
 
         ServiceB serviceB = dbos.<ServiceB>Workflow().interfaceClass(ServiceB.class)

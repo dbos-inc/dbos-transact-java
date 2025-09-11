@@ -26,6 +26,8 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.StepInterfaces;
+import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -590,7 +592,8 @@ public class DBOSExecutor implements AutoCloseable {
         int nextFuncId = 0;
         boolean inWorkflow = ctx != null && ctx.isInWorkflow();
 
-        if (!inWorkflow) return fn.get();
+        if (!inWorkflow)
+            return fn.get();
 
         nextFuncId = ctx.getAndIncrementFunctionId();
 
@@ -628,6 +631,25 @@ public class DBOSExecutor implements AutoCloseable {
         return functionResult;
     }
 
+    // TODO: should these also throw DBOS exceptions?
+    // Should there be an unchecked version that promotes errors to unchecked?
+    @SuppressWarnings("unchecked")
+    public <R, E extends Exception> R runStepI(StepInterfaces.ThrowingNoArg<R, E> stepfunc, StepOptions opts) throws E {
+        try {
+            return runStepInternal(
+                    opts.name(),
+                    opts.retriesAllowed(),
+                    opts.maxAttempts(),
+                    (float) opts.backOffRate(),
+                    () -> {
+                        var res = stepfunc.get();
+                        return res;
+                    });
+        } catch (Throwable t) {
+            throw (E) t;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private <T> T handleExistingResult(StepResult result, String functionName) {
         if (result.getOutput() != null) {
@@ -640,14 +662,14 @@ public class DBOSExecutor implements AutoCloseable {
         } else {
             // CB TODO: This should be acceptable, it means no return value?
             throw new IllegalStateException(
-                String.format("Recorded output and error are both null for %s", functionName));
+                    String.format("Recorded output and error are both null for %s", functionName));
         }
     }
 
     // CB TODO: This should be package scope
+    // CB TODO: What is it doing with the args?!
     public <T> T runStepInternal(String stepName, boolean retriedAllowed, int maxAttempts,
-            float backOffRate, Object[] args, WorkflowFunction<T> function) throws Throwable
-    {
+            float backOffRate, WorkflowFunction<T> function) throws Throwable {
         DBOSContext ctx = DBOSContextHolder.get();
         boolean inWorkflow = ctx != null && ctx.isInWorkflow();
 

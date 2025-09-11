@@ -9,4 +9,6 @@ public interface ServiceWFAndStep {
     String stepOne(String input);
 
     String stepTwo(String input);
+
+    String aWorkflowWithInlineSteps(String input);
 }
