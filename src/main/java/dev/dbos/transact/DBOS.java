@@ -460,7 +460,8 @@ public class DBOS {
             throw new IllegalStateException("cannot startWorkflow before launch");
         }
 
-        return executor.startWorkflow(func);
+        throw new RuntimeException();
+        // return executor.startWorkflow(func);
     }
 
     public WorkflowHandle<Void> startWorkflow(ThrowingRunnable func) {

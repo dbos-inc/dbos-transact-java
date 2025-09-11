@@ -94,18 +94,19 @@ public class DBOSClient implements AutoCloseable {
         Objects.requireNonNull(options.workflowName);
         Objects.requireNonNull(options.queueName);
 
-        var workflowId = DBOSExecutor.enqueueWorkflow(
-                this.systemDatabase,
-                options.workflowId,
-                options.workflowName,
-                options.targetClassName,
-                args,
-                options.queueName,
-                null,
-                options.appVersion,
-                null,
-                options.timeout);
-        return retrieveWorkflow(workflowId);
+        throw new RuntimeException();
+        // var workflowId = DBOSExecutor.enqueueWorkflow(
+        //         this.systemDatabase,
+        //         options.workflowId,
+        //         options.workflowName,
+        //         options.targetClassName,
+        //         args,
+        //         options.queueName,
+        //         null,
+        //         options.appVersion,
+        //         null,
+        //         options.timeout);
+        // return retrieveWorkflow(workflowId);
     }
 
     public void send(String destinationId, Object message, String topic, String idempotencyKey) throws SQLException {
