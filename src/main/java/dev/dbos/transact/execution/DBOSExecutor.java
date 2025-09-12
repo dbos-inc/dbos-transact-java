@@ -683,7 +683,7 @@ public class DBOSExecutor implements AutoCloseable {
         Throwable eThrown = null;
         T result = null;
 
-        while (retriedAllowed && currAttempts <= maxAttempts) {
+        while (currAttempts <= maxAttempts) {
 
             try {
                 result = function.execute();
@@ -696,6 +696,10 @@ public class DBOSExecutor implements AutoCloseable {
                         : e;
                 logger.info("After: step threw exception", actual);
                 eThrown = actual;
+            }
+
+            if (!retriedAllowed) { 
+                break; 
             }
 
             ++currAttempts;
