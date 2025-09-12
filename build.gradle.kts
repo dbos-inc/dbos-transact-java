@@ -56,7 +56,7 @@ java {
 
 spotless {
     java {
-        eclipse().configFile("config/eclipse-code-formatter.xml")
+        googleJavaFormat()
         importOrder("dev.dbos", "java", "javax", "")
         removeUnusedImports()
         trimTrailingWhitespace()
