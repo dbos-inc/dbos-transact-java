@@ -12,7 +12,8 @@ public class WorkflowFunctionWrapper {
         this.function = function;
     }
 
-    public Object invoke(Object[] args) throws Exception {
-        return function.invoke(target, args);
+    @SuppressWarnings("unchecked")
+    public <T> ThrowingSupplier<T> getSupplier(Object[] args) {
+        return () -> (T)function.invoke(target, args);
     }
 }

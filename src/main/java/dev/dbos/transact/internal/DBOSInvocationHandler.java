@@ -60,7 +60,8 @@ public class DBOSInvocationHandler implements java.lang.reflect.InvocationHandle
     Object invokeWorkflow(Method method, Object[] args, Workflow workflow) throws Throwable {
         logger.debug("invokeWorkflow {}.{}", targetClassName, method.getName());
 
-        var executor = Objects.requireNonNull(executorSupplier.get(), "executor supplier returned null");
+        var executor = executorSupplier.get();
+        assert executor != null : "executor supplier returned null"; 
 
         var name = workflow.name();
         name = name.isEmpty() ? method.getName() : name;
@@ -71,7 +72,8 @@ public class DBOSInvocationHandler implements java.lang.reflect.InvocationHandle
     Object invokeStep(Method method, Object[] args, Step step) throws Throwable {
         logger.debug("invokeStep {}.{}", targetClassName, method.getName());
 
-        var executor = Objects.requireNonNull(executorSupplier.get(), "executor supplier returned null");
+        var executor = executorSupplier.get();
+        assert executor != null : "executor supplier returned null"; 
 
         var name = step.name();
         name = name.isEmpty() ? method.getName() : name;

@@ -5,18 +5,20 @@ import dev.dbos.transact.internal.DBOSContextHolder;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+// import org.slf4j.Logger;
+// import org.slf4j.LoggerFactory;
 
 public class DBOSContext {
 
-    private static final Logger logger = LoggerFactory.getLogger(DBOSContext.class);
+    // private static final Logger logger = LoggerFactory.getLogger(DBOSContext.class);
+
+    public record WorkflowInfo(String workflowId, int functionId) {
+    }
 
     public record StepStatus(int functionId, OptionalInt currentAttempt, OptionalInt maxAttempts) {
     }
@@ -29,20 +31,28 @@ public class DBOSContext {
     private final String workflowId;
     private int functionId = -1;
 
-    private String parentWorkflowId = null;
-    private int parentFunctionId = -1;
-
-    StepStatus stepStatus = null;
-    Instant deadline = null;
+    private final WorkflowInfo parent;
+    private StepStatus stepStatus = null;
+    private Instant deadline = null;
 
     public DBOSContext() {
         dbos = null;
         workflowId = null;
+        parent = null;
     }
 
     public DBOSContext(DBOS dbos, String workflowId) {
         this.dbos = Objects.requireNonNull(dbos);
         this.workflowId = workflowId != null ? workflowId : UUID.randomUUID().toString();
+        functionId = 0;
+        parent = null;
+    }
+
+    public DBOSContext(DBOS dbos, String workflowId, String parentWorkflowId, int parentFunctionId) {
+        this.dbos = Objects.requireNonNull(dbos);
+        this.workflowId = workflowId != null ? workflowId : UUID.randomUUID().toString();
+        functionId = 0;
+        this.parent = new WorkflowInfo(Objects.requireNonNull(parentWorkflowId), parentFunctionId);
     }
 
     // public void setDbos(DBOS dbos) {
@@ -59,34 +69,47 @@ public class DBOSContext {
     //     }
     // }
 
-    public Optional<String> getNextWorkflowId() { 
-        return getNextWorkflowId(Optional.empty());
+    public String getNextWorkflowId() { 
+        return getNextWorkflowId(null);
     }
 
-    public Optional<String> getNextWorkflowId(Optional<String> assignedId) {
-        if (assignedId.isPresent()) { return assignedId; }
+    public String getNextWorkflowId(String assignedId) {
+        if (assignedId != null) { return assignedId; }
 
         if (assignedNextWorkflowId != null) {
-            var workflowId = Optional.of(assignedNextWorkflowId);
+            var workflowId = assignedNextWorkflowId;
             assignedNextWorkflowId = null;
             return workflowId;
         }
 
-        return Optional.empty();
+        return null;
     }
 
+    
     public boolean isInWorkflow() {
         return workflowId != null;
     }
+
+    public String getWorkflowId() {
+        if (workflowId == null) { 
+            throw new IllegalAccessError("accessing workflow ID outside of a workflow");
+        }
+        return workflowId;
+    }
+
+    public int getNextFunctionId() {
+        if (workflowId == null) { 
+            throw new IllegalAccessError("accessing function ID outside of a workflow");
+        }
+        return functionId++;
+    }
+
+
 
     public boolean isInStep() {
         return stepStatus != null;
     }
 
-    public String getWorkflowId() {
-        // return workflowId;
-        throw new RuntimeException();
-    }
 
     // public int getNextFunctionId() {
     //     return functionId++;
@@ -100,41 +123,35 @@ public class DBOSContext {
         return deadline;
     }
 
-    public boolean hasParent() {
-        return parentWorkflowId != null;
+    public WorkflowInfo getParent() {
+        return parent;
     }
 
-    public String getParentWorkflowId() {
-        return parentWorkflowId;
+    public DBOSContext makeTop(DBOS dbos, String workflowId) {
+        assert this.dbos == null;
+        assert this.workflowId == null;
+
+        var ctx = new DBOSContext(dbos, workflowId);
+
+        ctx.assignedNextWorkflowId = assignedNextWorkflowId;
+        ctx.timeout = timeout;
+        ctx.deadline = deadline;
+
+        return ctx;
     }
 
-    public int getParentFunctionId() {
-        return parentFunctionId;
+    public DBOSContext makeChild(DBOS dbos, String workflowId, String parentWorkflowId, int parentFunctionId) {
+        assert this.dbos == dbos;
+        assert this.workflowId != null;
+
+        var ctx = new DBOSContext(dbos, workflowId, parentWorkflowId, parentFunctionId);
+        ctx.assignedNextWorkflowId = assignedNextWorkflowId;
+        ctx.timeout = timeout;
+        ctx.deadline = deadline;
+
+        return ctx;
     }
 
-    public int getAndIncrementFunctionId() {
-        throw new RuntimeException();
-    }
-
-    // public DBOSContext copy() {
-    //     var ctx = new DBOSContext();
-
-    //     ctx.dbos = dbos;
-
-    //     ctx.assignedNextWorkflowId = assignedNextWorkflowId;
-    //     ctx.authenticatedUser = authenticatedUser;
-    //     ctx.authenticatedRoles = List.copyOf(authenticatedRoles);
-    //     ctx.assumedRole = assumedRole;
-    //     ctx.timeout = timeout;
-
-    //     ctx.workflowId = workflowId;
-    //     ctx.functionId = functionId;
-    //     ctx.parent = parent;
-    //     ctx.stepStatus = stepStatus;
-    //     ctx.deadline = deadline;
-
-    //     return ctx;
-    // }
 
     // public DBOSContext createChild() {
     //     var ctx = new DBOSContext();
