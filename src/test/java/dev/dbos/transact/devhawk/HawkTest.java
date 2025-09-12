@@ -1,6 +1,7 @@
 package dev.dbos.transact.devhawk;
 
 import java.sql.SQLException;
+import java.time.Duration;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -61,5 +62,19 @@ public class HawkTest {
         }
     }
 
+    @Test 
+    void testThree() {
+
+        var impl = new HawkServiceImpl();
+        var proxy = dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
+        impl.setProxy(proxy);
+
+        dbos.launch();
+
+        var options = WorkflowOptions.builder().timeout(Duration.ofSeconds(1)).build();
+        try (var _o = options.set()) {
+            var result = proxy.recvWorkflow();
+        }
+    }
 
 }

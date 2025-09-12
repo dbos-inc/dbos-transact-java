@@ -66,7 +66,8 @@ public class DBOSInvocationHandler implements java.lang.reflect.InvocationHandle
         var name = workflow.name();
         name = name.isEmpty() ? method.getName() : name;
 
-        return executor.invokeWorkflow(name, targetClassName, args, workflow.maxRecoveryAttempts());
+        var handle = executor.invokeWorkflow(name, targetClassName, args, workflow.maxRecoveryAttempts());
+        return handle.getResult();
     }
 
     Object invokeStep(Method method, Object[] args, Step step) throws Throwable {
