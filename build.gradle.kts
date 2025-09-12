@@ -2,22 +2,16 @@ import java.io.ByteArrayOutputStream
 
 // Get the short Git hash
 val gitHash: String by lazy {
-    ByteArrayOutputStream().also { stdout ->
-        exec {
-            commandLine = listOf("git", "rev-parse", "--short", "HEAD")
-            standardOutput = stdout
-        }
-    }.toString().trim()
+    providers.exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+    }.standardOutput.asText.get().trim()
 }
 
 // Get the commit count
 val commitCount: String by lazy {
-    ByteArrayOutputStream().also { stdout ->
-        exec {
-            commandLine = listOf("git", "rev-list", "--count", "HEAD")
-            standardOutput = stdout
-        }
-    }.toString().trim()
+    providers.exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+    }.standardOutput.asText.get().trim()
 }
 
 // Get the current branch name
@@ -25,15 +19,12 @@ val branchName: String by lazy {
     // First, try GitHub Actions environment variable
     val githubBranch = System.getenv("GITHUB_REF_NAME")
     if (!githubBranch.isNullOrBlank()) githubBranch
-
+    
     // Fallback to local git command
     else {
-        ByteArrayOutputStream().also { stdout ->
-            exec {
-                commandLine = listOf("git", "rev-parse", "--abbrev-ref", "HEAD")
-                standardOutput = stdout
-            }
-        }.toString().trim()
+        providers.exec {
+            commandLine("git", "rev-parse", "--abbrev-ref", "HEAD")
+        }.standardOutput.asText.get().trim()
     }
 }
 
@@ -105,6 +96,8 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.java-websocket:Java-WebSocket:1.5.6")
+
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.test {
