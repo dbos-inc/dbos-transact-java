@@ -2,7 +2,7 @@ package dev.dbos.transact.scheduled;
 
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.queue.Queue;
 
 import java.time.Duration;
@@ -61,7 +61,7 @@ public class SchedulerService {
 
             ExecutionTime executionTime = ExecutionTime.forCron(wf.cron);
 
-            WorkflowFunctionWrapper wrapper = dbosExecutor.getWorkflow(wf.workflowName);
+            RegisteredWorkflow wrapper = dbosExecutor.getWorkflow(wf.workflowName);
             if (wrapper == null) {
                 throw new IllegalStateException("Workflow not registered: %s".formatted(wf.workflowName));
             }
