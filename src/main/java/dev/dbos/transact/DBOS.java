@@ -3,9 +3,9 @@ package dev.dbos.transact;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
-import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
@@ -79,7 +79,6 @@ public class DBOS {
         registerInternals();
     }
 
-    
     private void registerClassWorkflows(Class<?> interfaceClass, Object implementation) {
         Objects.requireNonNull(interfaceClass);
         Objects.requireNonNull(implementation);
@@ -290,11 +289,15 @@ public class DBOS {
 
         for (Method method : implementation.getClass().getDeclaredMethods()) {
             Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-            if (wfAnnotation == null) { continue; }
+            if (wfAnnotation == null) {
+                continue;
+            }
 
             Scheduled scheduled = method.getAnnotation(Scheduled.class);
-            if (scheduled == null) { continue; }
- 
+            if (scheduled == null) {
+                continue;
+            }
+
             var paramTypes = method.getParameterTypes();
             if (!Arrays.equals(paramTypes, expectedParams)) {
                 throw new IllegalArgumentException(

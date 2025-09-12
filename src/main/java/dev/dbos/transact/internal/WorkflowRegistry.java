@@ -1,7 +1,7 @@
 package dev.dbos.transact.internal;
 
-import dev.dbos.transact.execution.WorkflowFunctionReflect;
 import dev.dbos.transact.execution.RegisteredWorkflow;
+import dev.dbos.transact.execution.WorkflowFunctionReflect;
 
 import java.lang.reflect.Method;
 import java.util.Map;
