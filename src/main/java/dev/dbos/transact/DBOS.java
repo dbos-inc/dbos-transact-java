@@ -289,25 +289,21 @@ public class DBOS {
         var expectedParams = new Class<?>[]{Instant.class, Instant.class};
 
         for (Method method : implementation.getClass().getDeclaredMethods()) {
-            if (!method.isAnnotationPresent(Workflow.class)) {
-                continue;
-            }
-            if (!method.isAnnotationPresent(Scheduled.class)) {
-                continue;
-            }
+            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
+            if (wfAnnotation == null) { continue; }
 
+            Scheduled scheduled = method.getAnnotation(Scheduled.class);
+            if (scheduled == null) { continue; }
+ 
             var paramTypes = method.getParameterTypes();
             if (!Arrays.equals(paramTypes, expectedParams)) {
                 throw new IllegalArgumentException(
                         "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)");
             }
 
-            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-            String name = registerWorkflowMethod(wfAnnotation, implementation, method);
-
-            Scheduled scheduled = method.getAnnotation(Scheduled.class);
-            var record = SchedulerService.makeScheduledInstance(name, implementation, scheduled.cron());
-            this.scheduledWorkflows.add(record);
+            String wfName = registerWorkflowMethod(wfAnnotation, implementation, method);
+            var scheduledWF = SchedulerService.makeScheduledInstance(wfName, implementation, scheduled.cron());
+            this.scheduledWorkflows.add(scheduledWF);
         }
     }
 
