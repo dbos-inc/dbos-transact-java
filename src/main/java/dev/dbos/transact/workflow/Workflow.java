@@ -10,5 +10,5 @@ import java.lang.annotation.Target;
 public @interface Workflow {
     String name() default "";
 
-    int timeout() default 60; // in seconds
+    int maxRecoveryAttempts() default -1;
 }

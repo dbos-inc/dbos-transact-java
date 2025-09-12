@@ -55,7 +55,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
         String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
 
-        logger.info("Before: Starting workflow '{}' (timeout: {})", workflowName, workflow.timeout());
+        logger.info("Before: Starting workflow '{}'", workflowName);
 
         WorkflowFunctionWrapper wrapper = executor.getWorkflow(workflowName);
         if (wrapper == null) {
