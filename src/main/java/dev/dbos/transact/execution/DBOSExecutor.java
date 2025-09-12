@@ -698,8 +698,8 @@ public class DBOSExecutor implements AutoCloseable {
                 eThrown = actual;
             }
 
-            if (!retriedAllowed) { 
-                break; 
+            if (!retriedAllowed) {
+                break;
             }
 
             ++currAttempts;
