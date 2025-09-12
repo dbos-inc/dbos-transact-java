@@ -4,8 +4,8 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ThrowingRunnable;
-import dev.dbos.transact.execution.WorkflowFunction;
-import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+import dev.dbos.transact.execution.ThrowingSupplier;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.interceptor.AsyncInvocationHandler;
 import dev.dbos.transact.interceptor.QueueInvocationHandler;
 import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
@@ -79,15 +79,38 @@ public class DBOS {
         registerInternals();
     }
 
-    void registerWorkflow(String workflowName, Object target, String targetClassName, Method method) {
+    
+    private void registerClassWorkflows(Class<?> interfaceClass, Object implementation) {
+        Objects.requireNonNull(interfaceClass);
+        Objects.requireNonNull(implementation);
+        if (!interfaceClass.isInterface()) {
+            throw new IllegalArgumentException("interfaceClass must be an interface");
+        }
         if (dbosExecutor.get() != null) {
             throw new IllegalStateException("Cannot register workflow after DBOS is launched");
         }
 
-        workflowRegistry.register(workflowName, target, targetClassName, method);
+        Method[] methods = implementation.getClass().getDeclaredMethods();
+        for (Method method : methods) {
+            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
+            if (wfAnnotation != null) {
+                method.setAccessible(true); // In case it's not public
+                registerWorkflowMethod(wfAnnotation, implementation, method);
+            }
+        }
     }
 
-    public WorkflowFunctionWrapper getWorkflow(String workflowName) {
+    private String registerWorkflowMethod(Workflow wfTag, Object target, Method method) {
+        if (dbosExecutor.get() != null) {
+            throw new IllegalStateException("Cannot register workflow after DBOS is launched");
+        }
+
+        String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
+        workflowRegistry.register(name, target, method, wfTag.maxRecoveryAttempts());
+        return name;
+    }
+
+    public RegisteredWorkflow getWorkflow(String workflowName) {
         var executor = dbosExecutor.get();
         if (executor == null) {
             throw new IllegalStateException("cannot retrieve workflow before launch");
@@ -164,11 +187,7 @@ public class DBOS {
         }
 
         public T build() {
-            if (interfaceClass == null || implementation == null) {
-                throw new IllegalStateException("Interface and implementation must be set");
-            }
-
-            dbos.registerWorkflow(interfaceClass, implementation);
+            dbos.registerClassWorkflows(interfaceClass, implementation);
 
             if (async) {
                 return AsyncInvocationHandler.createProxy(interfaceClass,
@@ -235,30 +254,6 @@ public class DBOS {
         }
     }
 
-    private void registerWorkflow(Class<?> interfaceClass, Object implementation) {
-        Objects.requireNonNull(interfaceClass);
-        Objects.requireNonNull(implementation);
-        if (!interfaceClass.isInterface()) {
-            throw new IllegalArgumentException("interfaceClass must be an interface");
-        }
-        if (dbosExecutor.get() != null) {
-            throw new IllegalStateException("Cannot register workflow after DBOS is launched");
-        }
-
-        Method[] methods = implementation.getClass().getDeclaredMethods();
-        for (Method method : methods) {
-            Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-            if (wfAnnotation != null) {
-                String workflowName = wfAnnotation.name().isEmpty()
-                        ? method.getName()
-                        : wfAnnotation.name();
-                method.setAccessible(true); // In case it's not public
-
-                registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
-            }
-        }
-    }
-
     public void launch() {
         logger.debug("launch()");
 
@@ -308,11 +303,10 @@ public class DBOS {
             }
 
             Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-            String workflowName = wfAnnotation.name().isEmpty() ? method.getName() : wfAnnotation.name();
-            registerWorkflow(workflowName, implementation, implementation.getClass().getName(), method);
+            String name = registerWorkflowMethod(wfAnnotation, implementation, method);
 
             Scheduled scheduled = method.getAnnotation(Scheduled.class);
-            var record = SchedulerService.makeScheduledInstance(workflowName, implementation, scheduled.cron());
+            var record = SchedulerService.makeScheduledInstance(name, implementation, scheduled.cron());
             this.scheduledWorkflows.add(record);
         }
     }
@@ -476,7 +470,7 @@ public class DBOS {
      * @param <T>
      *            type returned by the function
      */
-    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
+    public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T> func) {
         var executor = dbosExecutor.get();
         if (executor == null) {
             throw new IllegalStateException("cannot startWorkflow before launch");

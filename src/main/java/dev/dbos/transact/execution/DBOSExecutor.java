@@ -64,7 +64,7 @@ public class DBOSExecutor implements AutoCloseable {
     private String appVersion;
     private String executorId;
 
-    private Map<String, WorkflowFunctionWrapper> workflowMap;
+    private Map<String, RegisteredWorkflow> workflowMap;
     private List<Queue> queues;
 
     private SystemDatabase systemDatabase;
@@ -81,7 +81,7 @@ public class DBOSExecutor implements AutoCloseable {
         this.config = config;
     }
 
-    public void start(DBOS dbos, Map<String, WorkflowFunctionWrapper> workflowMap, List<Queue> queues,
+    public void start(DBOS dbos, Map<String, RegisteredWorkflow> workflowMap, List<Queue> queues,
             List<ScheduledInstance> scheduledWorkflows) {
 
         if (isRunning.compareAndSet(false, true)) {
@@ -203,7 +203,7 @@ public class DBOSExecutor implements AutoCloseable {
         return this.appVersion;
     }
 
-    public WorkflowFunctionWrapper getWorkflow(String workflowName) {
+    public RegisteredWorkflow getWorkflow(String workflowName) {
         if (workflowMap == null) {
             throw new IllegalStateException("attempted to retrieve workflow from executor when DBOS not launched");
         }
@@ -644,7 +644,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     public <T> T runStep(String stepName, boolean retriedAllowed, int maxAttempts,
-            float backOffRate, Object[] args, WorkflowFunction<T> function) throws Throwable {
+            float backOffRate, Object[] args, ThrowingSupplier<T> function) throws Throwable {
 
         DBOSContext ctx = DBOSContextHolder.get();
         ctx.setDbos(dbos);
@@ -735,7 +735,7 @@ public class DBOSExecutor implements AutoCloseable {
         }
 
         Object[] inputs = status.getInput();
-        WorkflowFunctionWrapper functionWrapper = workflowMap.get(status.getName());
+        RegisteredWorkflow functionWrapper = workflowMap.get(status.getName());
 
         if (functionWrapper == null) {
             throw new WorkflowFunctionNotFoundException(workflowId);
@@ -813,7 +813,7 @@ public class DBOSExecutor implements AutoCloseable {
         return retrieveWorkflow(forkedId);
     }
 
-    public <T> WorkflowHandle<T> startWorkflow(WorkflowFunction<T> func) {
+    public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T> func) {
         DBOSContext oldctx = DBOSContextHolder.get();
         oldctx.setDbos(dbos);
         DBOSContext newCtx = oldctx;
