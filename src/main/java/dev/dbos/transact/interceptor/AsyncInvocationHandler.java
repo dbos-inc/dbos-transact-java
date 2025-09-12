@@ -40,9 +40,9 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
 
         executor.submitWorkflow(workflowName,
                 targetClassName,
-                wrapper.target,
+                wrapper.target(),
                 args,
-                wrapper.function);
+                wrapper.function());
 
         return null;
     }

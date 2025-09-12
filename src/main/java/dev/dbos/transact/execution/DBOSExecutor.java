@@ -97,7 +97,7 @@ public class DBOSExecutor implements AutoCloseable {
             this.appVersion = System.getenv("DBOS__APPVERSION");
             if (this.appVersion == null) {
                 List<Class<?>> registeredClasses = workflowMap.values().stream()
-                        .map(wrapper -> wrapper.target.getClass())
+                        .map(wrapper -> wrapper.target().getClass())
                         .collect(Collectors.toList());
                 this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
             }
@@ -426,6 +426,7 @@ public class DBOSExecutor implements AutoCloseable {
         }
 
         if (allowedTime > 0) {
+            @SuppressWarnings("unused")
             ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
                 WorkflowStatus status = systemDatabase.getWorkflowStatus(wfid);
                 if (status.getStatus() != WorkflowState.SUCCESS.name()
@@ -515,6 +516,7 @@ public class DBOSExecutor implements AutoCloseable {
         Future<T> future = executorService.submit(contextAwareTask);
 
         if (allowedTime > 0) {
+            @SuppressWarnings("unused")
             ScheduledFuture<?> timeoutTask = timeoutScheduler.schedule(() -> {
                 if (!future.isDone()) {
                     logger.info(" Workflow timed out {}", wfId);
@@ -643,6 +645,7 @@ public class DBOSExecutor implements AutoCloseable {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T runStep(String stepName, boolean retriedAllowed, int maxAttempts,
             float backOffRate, Object[] args, ThrowingSupplier<T> function) throws Throwable {
 
@@ -725,6 +728,7 @@ public class DBOSExecutor implements AutoCloseable {
         return new WorkflowHandleDBPoll<R>(workflowId, systemDatabase);
     }
 
+    @SuppressWarnings("unchecked")
     public <T> WorkflowHandle<T> executeWorkflowById(String workflowId) {
 
         WorkflowStatus status = systemDatabase.getWorkflowStatus(workflowId);
@@ -749,10 +753,10 @@ public class DBOSExecutor implements AutoCloseable {
 
             try {
                 handle = (WorkflowHandle<T>) submitWorkflow(status.getName(),
-                        functionWrapper.targetClassName,
-                        functionWrapper.target,
+                        functionWrapper.className(),
+                        functionWrapper.target(),
                         inputs,
-                        functionWrapper.function);
+                        functionWrapper.function());
             } catch (Throwable t) {
                 logger.error("Error executing workflow by id : {}", workflowId, t);
             }

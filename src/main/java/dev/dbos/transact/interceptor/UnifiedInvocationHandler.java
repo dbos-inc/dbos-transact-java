@@ -47,9 +47,9 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
             executor.submitWorkflow(workflowName,
                     targetClassName,
-                    wrapper.target,
+                    wrapper.target(),
                     args,
-                    wrapper.function);
+                    wrapper.function());
 
             return null;
 
@@ -67,9 +67,9 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
             return executor.syncWorkflow(workflowName,
                     targetClassName,
-                    wrapper.target,
+                    wrapper.target(),
                     args,
-                    wrapper.function,
+                    wrapper.function(),
                     DBOSContextHolder.get().getWorkflowId());
         }
     }
