@@ -7,56 +7,56 @@ import org.slf4j.LoggerFactory;
 
 public class MgmtServiceImpl implements MgmtService {
 
-    Logger logger = LoggerFactory.getLogger(MgmtServiceImpl.class);
+  Logger logger = LoggerFactory.getLogger(MgmtServiceImpl.class);
 
-    private volatile int stepsExecuted;
-    CountDownLatch mainThreadEvent;
-    CountDownLatch workflowEvent;
+  private volatile int stepsExecuted;
+  CountDownLatch mainThreadEvent;
+  CountDownLatch workflowEvent;
 
-    MgmtService service;
+  MgmtService service;
 
-    public MgmtServiceImpl(CountDownLatch mainLatch, CountDownLatch workLatch) {
-        this.mainThreadEvent = mainLatch;
-        this.workflowEvent = workLatch;
+  public MgmtServiceImpl(CountDownLatch mainLatch, CountDownLatch workLatch) {
+    this.mainThreadEvent = mainLatch;
+    this.workflowEvent = workLatch;
+  }
+
+  public void setMgmtService(MgmtService m) {
+    service = m;
+  }
+
+  @Workflow(name = "myworkflow")
+  public int simpleWorkflow(int input) {
+
+    try {
+      service.stepOne();
+      mainThreadEvent.countDown();
+      workflowEvent.await();
+      service.stepTwo();
+      service.stepThree();
+
+    } catch (InterruptedException e) {
+      logger.error("simpleWorkflow interrupted", e);
     }
 
-    public void setMgmtService(MgmtService m) {
-        service = m;
-    }
+    return input;
+  }
 
-    @Workflow(name = "myworkflow")
-    public int simpleWorkflow(int input) {
+  @Step(name = "one")
+  public void stepOne() {
+    ++stepsExecuted;
+  }
 
-        try {
-            service.stepOne();
-            mainThreadEvent.countDown();
-            workflowEvent.await();
-            service.stepTwo();
-            service.stepThree();
+  @Step(name = "two")
+  public void stepTwo() {
+    ++stepsExecuted;
+  }
 
-        } catch (InterruptedException e) {
-            logger.error("simpleWorkflow interrupted", e);
-        }
+  @Step(name = "three")
+  public void stepThree() {
+    ++stepsExecuted;
+  }
 
-        return input;
-    }
-
-    @Step(name = "one")
-    public void stepOne() {
-        ++stepsExecuted;
-    }
-
-    @Step(name = "two")
-    public void stepTwo() {
-        ++stepsExecuted;
-    }
-
-    @Step(name = "three")
-    public void stepThree() {
-        ++stepsExecuted;
-    }
-
-    public synchronized int getStepsExecuted() {
-        return stepsExecuted;
-    }
+  public synchronized int getStepsExecuted() {
+    return stepsExecuted;
+  }
 }

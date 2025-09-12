@@ -14,72 +14,72 @@ import org.slf4j.LoggerFactory;
 
 public class HttpServer {
 
-    private Tomcat tomcat;
-    private int port;
-    private AdminController adminController;
+  private Tomcat tomcat;
+  private int port;
+  private AdminController adminController;
 
-    Logger logger = LoggerFactory.getLogger(HttpServer.class);
+  Logger logger = LoggerFactory.getLogger(HttpServer.class);
 
-    private HttpServer(int port, AdminController ac) {
-        this.port = port == 0 ? 3001 : port;
-        this.adminController = ac;
+  private HttpServer(int port, AdminController ac) {
+    this.port = port == 0 ? 3001 : port;
+    this.adminController = ac;
+  }
+
+  private void init() {
+    tomcat = new Tomcat();
+    setUpContext();
+  }
+
+  public static HttpServer getInstance(int port, AdminController ac) {
+    HttpServer s = new HttpServer(port, ac);
+    s.init();
+    return s;
+  }
+
+  public void start() {
+
+    try {
+      tomcat.start();
+    } catch (Exception e) {
+      logger.error("Error starting http server", e);
     }
+  }
 
-    private void init() {
-        tomcat = new Tomcat();
-        setUpContext();
+  public void startAndBlock() {
+    start();
+    tomcat.getServer().await();
+  }
+
+  public void stop() {
+    try {
+      tomcat.stop();
+      tomcat.destroy();
+    } catch (Exception e) {
+      logger.error("Error stopping httpserver", e);
     }
+  }
 
-    public static HttpServer getInstance(int port, AdminController ac) {
-        HttpServer s = new HttpServer(port, ac);
-        s.init();
-        return s;
-    }
+  private void setUpContext() {
 
-    public void start() {
+    tomcat.setPort(port);
+    tomcat.getConnector(); // default connector
 
-        try {
-            tomcat.start();
-        } catch (Exception e) {
-            logger.error("Error starting http server", e);
-        }
-    }
+    String contextPath = "";
+    String docBase = new File(".").getAbsolutePath();
 
-    public void startAndBlock() {
-        start();
-        tomcat.getServer().await();
-    }
+    Context context = tomcat.addContext(contextPath, docBase);
 
-    public void stop() {
-        try {
-            tomcat.stop();
-            tomcat.destroy();
-        } catch (Exception e) {
-            logger.error("Error stopping httpserver", e);
-        }
-    }
+    ResourceConfig resourceConfig = new ResourceConfig();
+    resourceConfig.registerInstances(adminController);
 
-    private void setUpContext() {
+    // Register Jackson JSON providers for proper JSON serialization
+    resourceConfig.register(JacksonFeature.class);
 
-        tomcat.setPort(port);
-        tomcat.getConnector(); // default connector
+    // In future if we need to scan from a package
+    // resourceConfig.packages(pkg);
 
-        String contextPath = "";
-        String docBase = new File(".").getAbsolutePath();
-
-        Context context = tomcat.addContext(contextPath, docBase);
-
-        ResourceConfig resourceConfig = new ResourceConfig();
-        resourceConfig.registerInstances(adminController);
-
-        // Register Jackson JSON providers for proper JSON serialization
-        resourceConfig.register(JacksonFeature.class);
-
-        // In future if we need to scan from a package
-        // resourceConfig.packages(pkg);
-
-        // Add the REST API servlet
-        tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
-        context.addServletMappingDecoded("/*", "jersey-servlet");
-    }
+    // Add the REST API servlet
+    tomcat.addServlet(contextPath, "jersey-servlet", new ServletContainer(resourceConfig));
+    context.addServletMappingDecoded("/*", "jersey-servlet");
+  }
 }

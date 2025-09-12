@@ -15,148 +15,148 @@ import org.slf4j.LoggerFactory;
 
 public class QueueService {
 
-    Logger logger = LoggerFactory.getLogger(QueueService.class);
+  Logger logger = LoggerFactory.getLogger(QueueService.class);
 
-    private List<Queue> queues;
+  private List<Queue> queues;
 
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
-    private volatile boolean running = false;
-    private volatile boolean paused = false;
-    private Thread workerThread;
-    private CountDownLatch shutdownLatch;
+  private SystemDatabase systemDatabase;
+  private DBOSExecutor dbosExecutor;
+  private volatile boolean running = false;
+  private volatile boolean paused = false;
+  private Thread workerThread;
+  private CountDownLatch shutdownLatch;
 
-    public QueueService(DBOSExecutor dbosExecutor, SystemDatabase systemDatabase) {
-        this.systemDatabase = systemDatabase;
-        this.dbosExecutor = dbosExecutor;
-    }
+  public QueueService(DBOSExecutor dbosExecutor, SystemDatabase systemDatabase) {
+    this.systemDatabase = systemDatabase;
+    this.dbosExecutor = dbosExecutor;
+  }
 
-    private void pollForWorkflows() {
-        logger.info("PollQueuesThread started {}", Thread.currentThread().getId());
+  private void pollForWorkflows() {
+    logger.info("PollQueuesThread started {}", Thread.currentThread().getId());
 
-        double pollingInterval = 1.0;
-        double minPollingInterval = 1.0;
-        double maxPollingInterval = 120.0;
-        int randomSleep = 0;
+    double pollingInterval = 1.0;
+    double minPollingInterval = 1.0;
+    double maxPollingInterval = 120.0;
+    int randomSleep = 0;
+
+    try {
+
+      while (running) {
+
+        randomSleep = (int) (0.95 + ThreadLocalRandom.current().nextDouble(0.1));
 
         try {
-
-            while (running) {
-
-                randomSleep = (int) (0.95 + ThreadLocalRandom.current().nextDouble(0.1));
-
-                try {
-                    Thread.sleep(randomSleep);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    logger.error("QueuesPollThread interrupted while sleeping");
-                    running = false;
-                }
-
-                if (!running) {
-                    // check again after sleep
-                    break;
-                }
-
-                if (paused) {
-                    continue;
-                }
-
-                for (Queue queue : queues) {
-
-                    try {
-
-                        List<String> workflowIds = systemDatabase.getAndStartQueuedWorkflows(queue,
-                                dbosExecutor.getExecutorId(),
-                                dbosExecutor.getAppVersion());
-
-                        for (String id : workflowIds) {
-                            dbosExecutor.executeWorkflowById(id);
-                        }
-
-                    } catch (Exception e) {
-
-                        pollingInterval = min(maxPollingInterval, pollingInterval * 2);
-                        logger.error("Error executing queued workflow", e);
-                    }
-                }
-
-                pollingInterval = max(minPollingInterval, pollingInterval * 0.9);
-            }
-
-        } finally {
-            shutdownLatch.countDown();
-            logger.info("QueuesPollThread {} has ended. Exiting", Thread.currentThread().getId());
+          Thread.sleep(randomSleep);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          logger.error("QueuesPollThread interrupted while sleeping");
+          running = false;
         }
-    }
-
-    public synchronized void pause() {
-        this.paused = true;
-    }
-
-    public synchronized void unpause() {
-        this.paused = false;
-    }
-
-    public synchronized void start(List<Queue> queues) {
-
-        this.queues = queues;
-
-        if (running) {
-            logger.info("QueuesPollThread is already running.");
-            return;
-        }
-
-        running = true;
-        shutdownLatch = new CountDownLatch(1);
-        workerThread = new Thread(this::pollForWorkflows, "QueuesPollThread");
-        workerThread.setDaemon(true);
-        workerThread.start();
-        logger.info("QueuesPollThread started.");
-    }
-
-    public synchronized void stop() {
-        logger.debug("stop() called");
 
         if (!running) {
-            logger.info("QueuesPollThread is not running.");
-            return;
+          // check again after sleep
+          break;
         }
-        running = false;
-        if (workerThread != null) {
-            try {
-                workerThread.join(100);
-                // Adding a latch so stop is absolute and there is no race condition for
-                // tests
-                shutdownLatch.await(); // timeout ?
-                if (workerThread.isAlive()) {
-                    logger.warn(
-                            "QueuePollThread did not stop gracefully. It might be stuck. Interrupting...");
-                    workerThread.interrupt(); // Interrupt if it's still alive after join
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt(); // Restore interrupt status
-                logger.warn("Interrupted QueuesPollThread", e);
-            } finally {
-                workerThread = null;
+
+        if (paused) {
+          continue;
+        }
+
+        for (Queue queue : queues) {
+
+          try {
+
+            List<String> workflowIds =
+                systemDatabase.getAndStartQueuedWorkflows(
+                    queue, dbosExecutor.getExecutorId(), dbosExecutor.getAppVersion());
+
+            for (String id : workflowIds) {
+              dbosExecutor.executeWorkflowById(id);
             }
+
+          } catch (Exception e) {
+
+            pollingInterval = min(maxPollingInterval, pollingInterval * 2);
+            logger.error("Error executing queued workflow", e);
+          }
         }
 
-        this.queues = null;
-        logger.info("QueuePollThread stopped.");
+        pollingInterval = max(minPollingInterval, pollingInterval * 0.9);
+      }
+
+    } finally {
+      shutdownLatch.countDown();
+      logger.info("QueuesPollThread {} has ended. Exiting", Thread.currentThread().getId());
+    }
+  }
+
+  public synchronized void pause() {
+    this.paused = true;
+  }
+
+  public synchronized void unpause() {
+    this.paused = false;
+  }
+
+  public synchronized void start(List<Queue> queues) {
+
+    this.queues = queues;
+
+    if (running) {
+      logger.info("QueuesPollThread is already running.");
+      return;
     }
 
-    public synchronized boolean isStopped() {
-        // If the workerThread reference is null, it implies it hasn't started or has
-        // been fully cleaned
-        // up.
-        if (workerThread == null) {
-            return true;
-        }
-        // The most definitive check: if the latch has counted down to zero, the
-        // worker's run() method
-        // has completed.
-        // We also check !workerThread.isAlive() as a final confirmation.
-        return shutdownLatch != null && shutdownLatch.getCount() == 0 && !workerThread.isAlive();
+    running = true;
+    shutdownLatch = new CountDownLatch(1);
+    workerThread = new Thread(this::pollForWorkflows, "QueuesPollThread");
+    workerThread.setDaemon(true);
+    workerThread.start();
+    logger.info("QueuesPollThread started.");
+  }
+
+  public synchronized void stop() {
+    logger.debug("stop() called");
+
+    if (!running) {
+      logger.info("QueuesPollThread is not running.");
+      return;
     }
+    running = false;
+    if (workerThread != null) {
+      try {
+        workerThread.join(100);
+        // Adding a latch so stop is absolute and there is no race condition for
+        // tests
+        shutdownLatch.await(); // timeout ?
+        if (workerThread.isAlive()) {
+          logger.warn(
+              "QueuePollThread did not stop gracefully. It might be stuck. Interrupting...");
+          workerThread.interrupt(); // Interrupt if it's still alive after join
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt(); // Restore interrupt status
+        logger.warn("Interrupted QueuesPollThread", e);
+      } finally {
+        workerThread = null;
+      }
+    }
+
+    this.queues = null;
+    logger.info("QueuePollThread stopped.");
+  }
+
+  public synchronized boolean isStopped() {
+    // If the workerThread reference is null, it implies it hasn't started or has
+    // been fully cleaned
+    // up.
+    if (workerThread == null) {
+      return true;
+    }
+    // The most definitive check: if the latch has counted down to zero, the
+    // worker's run() method
+    // has completed.
+    // We also check !workerThread.isAlive() as a final confirmation.
+    return shutdownLatch != null && shutdownLatch.getCount() == 0 && !workerThread.isAlive();
+  }
 }

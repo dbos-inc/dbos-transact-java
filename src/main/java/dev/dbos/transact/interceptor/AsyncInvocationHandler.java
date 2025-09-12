@@ -11,39 +11,39 @@ import org.slf4j.LoggerFactory;
 
 public class AsyncInvocationHandler extends BaseInvocationHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(AsyncInvocationHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(AsyncInvocationHandler.class);
 
-    @SuppressWarnings("unchecked")
-    public static <T> T createProxy(Class<T> interfaceClass, Object implementation,
-            Supplier<DBOSExecutor> executor) {
-        if (!interfaceClass.isInterface()) {
-            throw new IllegalArgumentException("interfaceClass must be an interface");
-        }
-
-        return (T) Proxy.newProxyInstance(interfaceClass.getClassLoader(),
-                new Class<?>[]{interfaceClass},
-                new AsyncInvocationHandler(implementation, executor));
+  @SuppressWarnings("unchecked")
+  public static <T> T createProxy(
+      Class<T> interfaceClass, Object implementation, Supplier<DBOSExecutor> executor) {
+    if (!interfaceClass.isInterface()) {
+      throw new IllegalArgumentException("interfaceClass must be an interface");
     }
 
-    public AsyncInvocationHandler(Object target, Supplier<DBOSExecutor> executor) {
-        super(target, executor);
+    return (T)
+        Proxy.newProxyInstance(
+            interfaceClass.getClassLoader(),
+            new Class<?>[] {interfaceClass},
+            new AsyncInvocationHandler(implementation, executor));
+  }
+
+  public AsyncInvocationHandler(Object target, Supplier<DBOSExecutor> executor) {
+    super(target, executor);
+  }
+
+  protected Object submitWorkflow(
+      String workflowName, String targetClassName, RegisteredWorkflow wrapper, Object[] args)
+      throws Throwable {
+    logger.debug("submitWorkflow");
+
+    var executor = executorSupplier.get();
+    if (executor == null) {
+      throw new IllegalStateException();
     }
 
-    protected Object submitWorkflow(String workflowName, String targetClassName,
-            RegisteredWorkflow wrapper, Object[] args) throws Throwable {
-        logger.debug("submitWorkflow");
+    executor.submitWorkflow(
+        workflowName, targetClassName, wrapper.target(), args, wrapper.function());
 
-        var executor = executorSupplier.get();
-        if (executor == null) {
-            throw new IllegalStateException();
-        }
-
-        executor.submitWorkflow(workflowName,
-                targetClassName,
-                wrapper.target(),
-                args,
-                wrapper.function());
-
-        return null;
-    }
+    return null;
+  }
 }

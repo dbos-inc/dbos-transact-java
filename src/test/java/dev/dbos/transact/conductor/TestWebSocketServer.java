@@ -14,92 +14,87 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class TestWebSocketServer extends WebSocketServer {
-    public interface WebSocketTestListener {
-        default void onStart() {
-        }
+  public interface WebSocketTestListener {
+    default void onStart() {}
 
-        default void onPing(WebSocket conn, Framedata frame) {
-            TestWebSocketServer.logger.info("sending PongFrame");
-            conn.sendFrame(new PongFrame((PingFrame) frame));
-        }
-
-        default void onError(WebSocket conn, Exception ex) {
-        }
-
-        default void onOpen(WebSocket conn, ClientHandshake handshake) {
-        }
-
-        default void onMessage(WebSocket conn, String message) {
-        }
-
-        default void onClose(WebSocket conn, int code, String reason, boolean remote) {
-        }
+    default void onPing(WebSocket conn, Framedata frame) {
+      TestWebSocketServer.logger.info("sending PongFrame");
+      conn.sendFrame(new PongFrame((PingFrame) frame));
     }
 
-    private static Logger logger = LoggerFactory.getLogger(TestWebSocketServer.class);
-    private WebSocketTestListener listener;
-    private Semaphore startEvent = new Semaphore(0);
+    default void onError(WebSocket conn, Exception ex) {}
 
-    public TestWebSocketServer(int port) {
-        super(new InetSocketAddress(port));
-    }
+    default void onOpen(WebSocket conn, ClientHandshake handshake) {}
 
-    public void setListener(WebSocketTestListener listener) {
-        this.listener = listener;
-    }
+    default void onMessage(WebSocket conn, String message) {}
 
-    public boolean waitStart(long millis) throws InterruptedException {
-        return startEvent.tryAcquire(millis, TimeUnit.MILLISECONDS);
-    }
+    default void onClose(WebSocket conn, int code, String reason, boolean remote) {}
+  }
 
-    @Override
-    public void onOpen(WebSocket conn, ClientHandshake handshake) {
-        logger.info("onOpen");
-        if (listener != null) {
-            listener.onOpen(conn, handshake);
-        }
-    }
+  private static Logger logger = LoggerFactory.getLogger(TestWebSocketServer.class);
+  private WebSocketTestListener listener;
+  private Semaphore startEvent = new Semaphore(0);
 
-    @Override
-    public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-        startEvent.drainPermits();
-        logger.info("onClose");
-        if (listener != null) {
-            listener.onClose(conn, code, reason, remote);
-        }
-    }
+  public TestWebSocketServer(int port) {
+    super(new InetSocketAddress(port));
+  }
 
-    @Override
-    public void onMessage(WebSocket conn, String message) {
-        logger.info("onMessage, message {} ", message);
-        if (listener != null) {
-            listener.onMessage(conn, message);
-        }
-    }
+  public void setListener(WebSocketTestListener listener) {
+    this.listener = listener;
+  }
 
-    @Override
-    public void onWebsocketPing(WebSocket conn, Framedata f) {
-        logger.info("onWebsocketPing");
-        if (listener != null) {
-            listener.onPing(conn, f);
-        }
-    }
+  public boolean waitStart(long millis) throws InterruptedException {
+    return startEvent.tryAcquire(millis, TimeUnit.MILLISECONDS);
+  }
 
-    @Override
-    public void onError(WebSocket conn, Exception ex) {
-        startEvent.drainPermits();
-        logger.error("onError", ex);
-        if (listener != null) {
-            listener.onError(conn, ex);
-        }
+  @Override
+  public void onOpen(WebSocket conn, ClientHandshake handshake) {
+    logger.info("onOpen");
+    if (listener != null) {
+      listener.onOpen(conn, handshake);
     }
+  }
 
-    @Override
-    public void onStart() {
-        startEvent.release();
-        logger.info("onStart {}", getPort());
-        if (listener != null) {
-            listener.onStart();
-        }
+  @Override
+  public void onClose(WebSocket conn, int code, String reason, boolean remote) {
+    startEvent.drainPermits();
+    logger.info("onClose");
+    if (listener != null) {
+      listener.onClose(conn, code, reason, remote);
     }
+  }
+
+  @Override
+  public void onMessage(WebSocket conn, String message) {
+    logger.info("onMessage, message {} ", message);
+    if (listener != null) {
+      listener.onMessage(conn, message);
+    }
+  }
+
+  @Override
+  public void onWebsocketPing(WebSocket conn, Framedata f) {
+    logger.info("onWebsocketPing");
+    if (listener != null) {
+      listener.onPing(conn, f);
+    }
+  }
+
+  @Override
+  public void onError(WebSocket conn, Exception ex) {
+    startEvent.drainPermits();
+    logger.error("onError", ex);
+    if (listener != null) {
+      listener.onError(conn, ex);
+    }
+  }
+
+  @Override
+  public void onStart() {
+    startEvent.release();
+    logger.info("onStart {}", getPort());
+    if (listener != null) {
+      listener.onStart();
+    }
+  }
 }
