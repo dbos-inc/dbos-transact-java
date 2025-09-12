@@ -24,8 +24,8 @@ public record WorkflowOptions(
     public Closer set() {
         var ctx = DBOSContextHolder.get();
         var closer = new Closer(ctx);
-        ctx.assignedNextWorkflowId = Objects.requireNonNullElse(workflowId, ctx.assignedNextWorkflowId);
-        ctx.timeout = Objects.requireNonNullElse(timeout, ctx.timeout);
+        ctx.assignedNextWorkflowId = workflowId != null ? workflowId : ctx.assignedNextWorkflowId;
+        ctx.timeout = timeout != null ? timeout : ctx.timeout;
         return closer;
     }
 

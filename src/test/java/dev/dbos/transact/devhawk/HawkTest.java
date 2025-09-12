@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 
 public class HawkTest {
@@ -44,8 +45,21 @@ public class HawkTest {
         dbos.launch();
 
         var result = proxy.simpleWorkflow();
-
-
     }
+
+    @Test 
+    void testTwo() {
+
+        var impl = new HawkServiceImpl();
+        var proxy = dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
+        impl.setProxy(proxy);
+
+        dbos.launch();
+
+        try (var _o = WorkflowOptions.setWorkflowId("wf1234")) {
+            var result = proxy.simpleWorkflow();
+        }
+    }
+
 
 }
