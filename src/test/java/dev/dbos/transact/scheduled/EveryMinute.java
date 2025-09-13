@@ -7,10 +7,9 @@ import java.time.Instant;
 
 public class EveryMinute {
 
-    @Workflow(name = "everyMinute")
-    @Scheduled(cron = "0 * * * * ?")
-    public void everyMinute(Instant schedule, Instant actual) {
-        System.out.println(
-                "Executing everyMinute " + schedule.toString() + "   " + actual.toString());
-    }
+  @Workflow(name = "everyMinute")
+  @Scheduled(cron = "0 * * * * ?")
+  public void everyMinute(Instant schedule, Instant actual) {
+    System.out.println("Executing everyMinute " + schedule.toString() + "   " + actual.toString());
+  }
 }

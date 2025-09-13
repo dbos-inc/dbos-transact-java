@@ -8,13 +8,13 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
 public @interface Step {
-    String name() default "";
+  String name() default "";
 
-    boolean retriesAllowed() default false;
+  boolean retriesAllowed() default false;
 
-    float intervalSeconds() default 1.0f;
+  float intervalSeconds() default 1.0f;
 
-    int maxAttempts() default 3;
+  int maxAttempts() default 3;
 
-    float backOffRate() default 2.0f;
+  float backOffRate() default 2.0f;
 }

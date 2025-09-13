@@ -24,391 +24,421 @@ import org.junit.jupiter.api.Test;
 
 public class TimeoutTest {
 
-    private static DBOSConfig dbosConfig;
-    private static DataSource dataSource;
-    private DBOS dbos;
+  private static DBOSConfig dbosConfig;
+  private static DataSource dataSource;
+  private DBOS dbos;
 
-    @BeforeAll
-    static void onetimeSetup() throws Exception {
+  @BeforeAll
+  static void onetimeSetup() throws Exception {
 
-        TimeoutTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest").dbHost("localhost")
-                .dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys").maximumPoolSize(2)
-                .build();
+    TimeoutTest.dbosConfig =
+        new DBOSConfig.Builder()
+            .name("systemdbtest")
+            .dbHost("localhost")
+            .dbPort(5432)
+            .dbUser("postgres")
+            .sysDbName("dbos_java_sys")
+            .maximumPoolSize(2)
+            .build();
 
-        String dbUrl = String.format("jdbc:postgresql://%s:%d/%s",
-                dbosConfig.getDbHost(),
-                dbosConfig.getDbPort(),
-                "postgres");
+    String dbUrl =
+        String.format(
+            "jdbc:postgresql://%s:%d/%s",
+            dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
+  }
+
+  @BeforeEach
+  void beforeEachTest() throws SQLException {
+    DBUtils.recreateDB(dbosConfig);
+    TimeoutTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+
+    dbos = DBOS.initialize(dbosConfig);
+  }
+
+  @AfterEach
+  void afterEachTest() throws SQLException, Exception {
+    dbos.shutdown();
+  }
+
+  @Test
+  public void async() throws Exception {
+
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
+
+    dbos.launch();
+
+    // asynchronous
+
+    String wfid1 = "wf-124";
+    String result;
+
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(3).build();
+    WorkflowHandle<String> handle = null;
+    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+      handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
+    }
+    // assertNull(result);
+
+    // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
+    result = handle.getResult();
+    assertEquals("1234512345", result);
+    assertEquals(wfid1, handle.getWorkflowId());
+    assertEquals("SUCCESS", handle.getStatus().getStatus());
+  }
+
+  @Test
+  public void asyncTimedOut() {
+
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
+
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+
+    // make it timeout
+    String wfid1 = "wf-125";
+    String result;
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(1).build();
+    WorkflowHandle<String> handle = null;
+    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+      handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
+    }
+    // assertNull(result);
+    // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
+
+    try {
+      handle.getResult();
+      fail("Expected Exception to be thrown");
+    } catch (Throwable t) {
+      System.out.println(t.getClass().toString());
+      assertTrue(t instanceof AwaitedWorkflowCancelledException);
     }
 
-    @BeforeEach
-    void beforeEachTest() throws SQLException {
-        DBUtils.recreateDB(dbosConfig);
-        TimeoutTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+    WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
+    assertEquals(WorkflowState.CANCELLED.name(), s.getStatus());
+  }
 
-        dbos = DBOS.initialize(dbosConfig);
+  @Test
+  public void queued() throws Exception {
+
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
+    Queue simpleQ = dbos.Queue("simpleQ").build();
+
+    dbos.launch();
+
+    // queued
+
+    String wfid1 = "wf-126";
+    String result;
+
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).queue(simpleQ).timeout(3).build();
+    WorkflowHandle<String> handle = null;
+    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+      handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
+    }
+    // assertNull(result);
+
+    // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
+    result = (String) handle.getResult();
+    assertEquals("1234512345", result);
+    assertEquals(wfid1, handle.getWorkflowId());
+    assertEquals("SUCCESS", handle.getStatus().getStatus());
+  }
+
+  @Test
+  public void queuedTimedOut() {
+
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
+    Queue simpleQ = dbos.Queue("simpleQ").build();
+
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+
+    // make it timeout
+    String wfid1 = "wf-127";
+    String result;
+
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).queue(simpleQ).timeout(1).build();
+    WorkflowHandle<String> handle = null;
+    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+      handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
+    }
+    // assertNull(result);
+    // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
+
+    try {
+      handle.getResult();
+      fail("Expected Exception to be thrown");
+    } catch (Throwable t) {
+      System.out.println(t.getClass().toString());
+      assertTrue(t instanceof AwaitedWorkflowCancelledException);
     }
 
-    @AfterEach
-    void afterEachTest() throws SQLException, Exception {
-        dbos.shutdown();
+    WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
+    assertEquals(WorkflowState.CANCELLED.name(), s.getStatus());
+  }
+
+  @Test
+  public void sync() throws Exception {
+
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
+
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+
+    // synchronous
+
+    String wfid1 = "wf-128";
+    String result;
+
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(3).build();
+
+    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+      result = simpleService.longWorkflow("12345");
+    }
+    assertEquals("1234512345", result);
+
+    WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
+    assertEquals(WorkflowState.SUCCESS.name(), s.getStatus());
+  }
+
+  @Test
+  public void syncTimeout() throws Exception {
+
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
+
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+
+    // synchronous
+
+    String wfid1 = "wf-128";
+    String result = null;
+
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(1).build();
+
+    try {
+      try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        result = simpleService.longWorkflow("12345");
+      }
+    } catch (Throwable t) {
+      assertNull(result);
+      assertTrue(t instanceof AwaitedWorkflowCancelledException);
     }
 
-    @Test
-    public void async() throws Exception {
+    WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
+    assertEquals(WorkflowState.CANCELLED.name(), s.getStatus());
+  }
 
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
+  @Test
+  public void recovery() throws Exception {
 
-        dbos.launch();
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
 
-        // asynchronous
+    dbos.launch();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-        String wfid1 = "wf-124";
-        String result;
+    // synchronous
 
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(3).build();
-        WorkflowHandle<String> handle = null;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
-        }
-        // assertNull(result);
+    String wfid1 = "wf-128";
+    String result;
 
-        // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
-        result = handle.getResult();
-        assertEquals("1234512345", result);
-        assertEquals(wfid1, handle.getWorkflowId());
-        assertEquals("SUCCESS", handle.getStatus().getStatus());
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(3).build();
+
+    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+      result = simpleService.workWithString("12345");
     }
 
-    @Test
-    public void asyncTimedOut() {
+    setDelayEpoch(dataSource, wfid1);
 
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
+    WorkflowHandle handle = dbosExecutor.executeWorkflowById(wfid1);
+    assertEquals(WorkflowState.CANCELLED.name(), handle.getStatus().getStatus());
+  }
 
-        dbos.launch();
-        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+  @Test
+  public void parentChild() throws Exception {
 
-        // make it timeout
-        String wfid1 = "wf-125";
-        String result;
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(1).build();
-        WorkflowHandle<String> handle = null;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
-        }
-        // assertNull(result);
-        // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
 
-        try {
-            handle.getResult();
-            fail("Expected Exception to be thrown");
-        } catch (Throwable t) {
-            System.out.println(t.getClass().toString());
-            assertTrue(t instanceof AwaitedWorkflowCancelledException);
-        }
+    dbos.launch();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-        WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
-        assertEquals(WorkflowState.CANCELLED.name(), s.getStatus());
+    // asynchronous
+
+    String wfid1 = "wf-124";
+    String result;
+
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
+    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+      result = simpleService.longParent("12345", 1, 2);
     }
 
-    @Test
-    public void queued() throws Exception {
+    assertEquals("1234512345", result);
 
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
-        Queue simpleQ = dbos.Queue("simpleQ").build();
+    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1);
+    ;
+    result = (String) handle.getResult();
+    assertEquals("1234512345", result);
+    assertEquals(wfid1, handle.getWorkflowId());
+    assertEquals("SUCCESS", handle.getStatus().getStatus());
+  }
 
-        dbos.launch();
+  @Test
+  public void parentChildTimeOut() throws Exception {
 
-        // queued
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
 
-        String wfid1 = "wf-126";
-        String result;
+    dbos.launch();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).queue(simpleQ).timeout(3).build();
-        WorkflowHandle<String> handle = null;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
-        }
-        // assertNull(result);
+    String wfid1 = "wf-124";
+    String result;
 
-        // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
-        result = (String) handle.getResult();
-        assertEquals("1234512345", result);
-        assertEquals(wfid1, handle.getWorkflowId());
-        assertEquals("SUCCESS", handle.getStatus().getStatus());
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
+    try {
+      try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        result = simpleService.longParent("12345", 3, 1);
+      }
+    } catch (Exception e) {
+      assertTrue(e instanceof AwaitedWorkflowCancelledException);
+      assertEquals("childwf", ((AwaitedWorkflowCancelledException) e).getWorkflowId());
     }
 
-    @Test
-    public void queuedTimedOut() {
+    String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus();
+    assertEquals(WorkflowState.ERROR.name(), parentStatus);
 
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
-        Queue simpleQ = dbos.Queue("simpleQ").build();
+    String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus();
+    assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+  }
 
-        dbos.launch();
-        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+  @Test
+  public void parentTimeoutInheritedByChild() throws Exception {
 
-        // make it timeout
-        String wfid1 = "wf-127";
-        String result;
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
 
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).queue(simpleQ).timeout(1).build();
-        WorkflowHandle<String> handle = null;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"));
-        }
-        // assertNull(result);
-        // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
+    dbos.launch();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-        try {
-            handle.getResult();
-            fail("Expected Exception to be thrown");
-        } catch (Throwable t) {
-            System.out.println(t.getClass().toString());
-            assertTrue(t instanceof AwaitedWorkflowCancelledException);
-        }
+    String wfid1 = "wf-124";
+    String result;
 
-        WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
-        assertEquals(WorkflowState.CANCELLED.name(), s.getStatus());
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(1).build();
+    try {
+      try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+        result = simpleService.longParent("12345", 3, 0);
+      }
+    } catch (Exception e) {
+      assertTrue(e instanceof AwaitedWorkflowCancelledException);
+      assertEquals("childwf", ((AwaitedWorkflowCancelledException) e).getWorkflowId());
     }
 
-    @Test
-    public void sync() throws Exception {
+    String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus();
+    assertEquals(WorkflowState.ERROR.name(), parentStatus);
 
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
+    String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus();
+    assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+  }
 
-        dbos.launch();
-        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+  @Test
+  public void parentAsyncTimeoutInheritedByChild() throws Exception {
+    // TOFIX : fails at times
 
-        // synchronous
+    SimpleService simpleService =
+        dbos.<SimpleService>Workflow()
+            .interfaceClass(SimpleService.class)
+            .implementation(new SimpleServiceImpl())
+            .build();
+    simpleService.setSimpleService(simpleService);
 
-        String wfid1 = "wf-128";
-        String result;
+    dbos.launch();
 
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(3).build();
+    String wfid1 = "wf-124";
+    String result;
 
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            result = simpleService.longWorkflow("12345");
-        }
-        assertEquals("1234512345", result);
-
-        WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
-        assertEquals(WorkflowState.SUCCESS.name(), s.getStatus());
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(2).build();
+    WorkflowHandle<String> handle = null;
+    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+      handle = dbos.startWorkflow(() -> simpleService.longParent("12345", 3, 0));
     }
 
-    @Test
-    public void syncTimeout() throws Exception {
-
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
-
-        dbos.launch();
-        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-
-        // synchronous
-
-        String wfid1 = "wf-128";
-        String result = null;
-
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(1).build();
-
-        try {
-            try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-                result = simpleService.longWorkflow("12345");
-            }
-        } catch (Throwable t) {
-            assertNull(result);
-            assertTrue(t instanceof AwaitedWorkflowCancelledException);
-        }
-
-        WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
-        assertEquals(WorkflowState.CANCELLED.name(), s.getStatus());
+    try {
+      handle.getResult();
+    } catch (Exception e) {
+      System.out.println(e.getClass().getName());
+      assertTrue(e instanceof AwaitedWorkflowCancelledException);
+    } catch (Throwable t) {
+      System.out.println("a throwable " + t.getClass().getName());
     }
+  }
 
-    @Test
-    public void recovery() throws Exception {
+  private void setDelayEpoch(DataSource ds, String workflowId) throws SQLException {
 
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
+    String sql =
+        "UPDATE dbos.workflow_status SET status = ?, updated_at = ?, workflow_deadline_epoch_ms = ? WHERE workflow_uuid = ?";
 
-        dbos.launch();
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    try (Connection connection = ds.getConnection();
+        PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
-        // synchronous
+      pstmt.setString(1, WorkflowState.PENDING.name());
+      pstmt.setLong(2, Instant.now().toEpochMilli());
 
-        String wfid1 = "wf-128";
-        String result;
+      long newEpoch = System.currentTimeMillis() - 10000;
+      pstmt.setLong(3, newEpoch);
+      pstmt.setString(4, workflowId);
 
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(3).build();
+      // Execute the update and get the number of rows affected
+      int rowsAffected = pstmt.executeUpdate();
 
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            result = simpleService.workWithString("12345");
-        }
-
-        setDelayEpoch(dataSource, wfid1);
-
-        WorkflowHandle handle = dbosExecutor.executeWorkflowById(wfid1);
-        assertEquals(WorkflowState.CANCELLED.name(), handle.getStatus().getStatus());
+      assertEquals(1, rowsAffected);
     }
-
-    @Test
-    public void parentChild() throws Exception {
-
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
-
-        dbos.launch();
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-        // asynchronous
-
-        String wfid1 = "wf-124";
-        String result;
-
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            result = simpleService.longParent("12345", 1, 2);
-        }
-
-        assertEquals("1234512345", result);
-
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1);;
-        result = (String) handle.getResult();
-        assertEquals("1234512345", result);
-        assertEquals(wfid1, handle.getWorkflowId());
-        assertEquals("SUCCESS", handle.getStatus().getStatus());
-    }
-
-    @Test
-    public void parentChildTimeOut() throws Exception {
-
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
-
-        dbos.launch();
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-        String wfid1 = "wf-124";
-        String result;
-
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
-        try {
-            try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-                result = simpleService.longParent("12345", 3, 1);
-            }
-        } catch (Exception e) {
-            assertTrue(e instanceof AwaitedWorkflowCancelledException);
-            assertEquals("childwf", ((AwaitedWorkflowCancelledException) e).getWorkflowId());
-        }
-
-        String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus();
-        assertEquals(WorkflowState.ERROR.name(), parentStatus);
-
-        String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus();
-        assertEquals(WorkflowState.CANCELLED.name(), childStatus);
-    }
-
-    @Test
-    public void parentTimeoutInheritedByChild() throws Exception {
-
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
-
-        dbos.launch();
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-        String wfid1 = "wf-124";
-        String result;
-
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(1).build();
-        try {
-            try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-                result = simpleService.longParent("12345", 3, 0);
-            }
-        } catch (Exception e) {
-            assertTrue(e instanceof AwaitedWorkflowCancelledException);
-            assertEquals("childwf", ((AwaitedWorkflowCancelledException) e).getWorkflowId());
-        }
-
-        String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus();
-        assertEquals(WorkflowState.ERROR.name(), parentStatus);
-
-        String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus();
-        assertEquals(WorkflowState.CANCELLED.name(), childStatus);
-    }
-
-    @Test
-    public void parentAsyncTimeoutInheritedByChild() throws Exception {
-        // TOFIX : fails at times
-
-        SimpleService simpleService = dbos.<SimpleService>Workflow()
-                .interfaceClass(SimpleService.class).implementation(new SimpleServiceImpl())
-                .build();
-        simpleService.setSimpleService(simpleService);
-
-        dbos.launch();
-
-        String wfid1 = "wf-124";
-        String result;
-
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(2).build();
-        WorkflowHandle<String> handle = null;
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            handle = dbos.startWorkflow(() -> simpleService.longParent("12345", 3, 0));
-        }
-
-        try {
-            handle.getResult();
-        } catch (Exception e) {
-            System.out.println(e.getClass().getName());
-            assertTrue(e instanceof AwaitedWorkflowCancelledException);
-        } catch (Throwable t) {
-            System.out.println("a throwable " + t.getClass().getName());
-        }
-    }
-
-    private void setDelayEpoch(DataSource ds, String workflowId) throws SQLException {
-
-        String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ?, workflow_deadline_epoch_ms = ? WHERE workflow_uuid = ?";
-
-        try (Connection connection = ds.getConnection();
-                PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-            pstmt.setString(1, WorkflowState.PENDING.name());
-            pstmt.setLong(2, Instant.now().toEpochMilli());
-
-            long newEpoch = System.currentTimeMillis() - 10000;
-            pstmt.setLong(3, newEpoch);
-            pstmt.setString(4, workflowId);
-
-            // Execute the update and get the number of rows affected
-            int rowsAffected = pstmt.executeUpdate();
-
-            assertEquals(1, rowsAffected);
-        }
-    }
+  }
 }

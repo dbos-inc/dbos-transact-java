@@ -9,58 +9,58 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 public class JSONUtil {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
+  private static final ObjectMapper mapper = new ObjectMapper();
 
-    static {
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional
+  static {
+    mapper.registerModule(new JavaTimeModule());
+    mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional
+  }
+
+  public static String serialize(Object obj) {
+    return serializeArray(new Object[] {obj});
+  }
+
+  public static String serializeArray(Object[] args) {
+    try {
+      return mapper.writeValueAsString(new Boxed(args));
+    } catch (JsonProcessingException e) {
+      throw new RuntimeException("Serialization failed", e);
     }
+  }
 
-    public static String serialize(Object obj) {
-        return serializeArray(new Object[]{obj});
+  public static Object[] deserializeToArray(String json) {
+    try {
+      Boxed boxed = mapper.readValue(json, Boxed.class);
+      return boxed.args;
+    } catch (JsonProcessingException e) {
+      throw new RuntimeException("Deserialization failed", e);
     }
+  }
 
-    public static String serializeArray(Object[] args) {
-        try {
-            return mapper.writeValueAsString(new Boxed(args));
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Serialization failed", e);
-        }
+  public static String serializeError(Throwable error) {
+
+    SerializableException se = new SerializableException(error);
+    return JSONUtil.serialize(se);
+  }
+
+  public static SerializableException deserializeError(String json) {
+    Object[] eArray = JSONUtil.deserializeToArray(json);
+    return (SerializableException) eArray[0];
+  }
+
+  public static String toJson(Object obj) {
+    try {
+      return mapper.writeValueAsString(obj);
+    } catch (JsonProcessingException e) {
+      throw new RuntimeException("Serialization failed", e);
     }
+  }
 
-    public static Object[] deserializeToArray(String json) {
-        try {
-            Boxed boxed = mapper.readValue(json, Boxed.class);
-            return boxed.args;
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Deserialization failed", e);
-        }
+  public static <T> T fromJson(String content, Class<T> valueType) {
+    try {
+      return mapper.readValue(content, valueType);
+    } catch (JsonProcessingException e) {
+      throw new RuntimeException("Deserialization failed", e);
     }
-
-    public static String serializeError(Throwable error) {
-
-        SerializableException se = new SerializableException(error);
-        return JSONUtil.serialize(se);
-    }
-
-    public static SerializableException deserializeError(String json) {
-        Object[] eArray = JSONUtil.deserializeToArray(json);
-        return (SerializableException) eArray[0];
-    }
-
-    public static String toJson(Object obj) {
-        try {
-            return mapper.writeValueAsString(obj);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Serialization failed", e);
-        }
-    }
-
-    public static <T> T fromJson(String content, Class<T> valueType) {
-        try {
-            return mapper.readValue(content, valueType);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Deserialization failed", e);
-        }
-    }
+  }
 }

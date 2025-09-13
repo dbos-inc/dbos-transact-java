@@ -28,533 +28,550 @@ import org.slf4j.LoggerFactory;
 
 public class WorkflowMgmtTest {
 
-    Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
+  Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
 
-    private static DBOSConfig dbosConfig;
-    private DBOS dbos;
+  private static DBOSConfig dbosConfig;
+  private DBOS dbos;
 
-    @BeforeAll
-    static void onetimeSetup() throws Exception {
+  @BeforeAll
+  static void onetimeSetup() throws Exception {
 
-        WorkflowMgmtTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .url("jdbc:postgresql://localhost:5432/dbos_java_sys").dbUser("postgres")
-                .dbHost("localhost")
-                .dbPort(5432)
-                .sysDbName("dbos_java_sys").maximumPoolSize(2).build();
+    WorkflowMgmtTest.dbosConfig =
+        new DBOSConfig.Builder()
+            .name("systemdbtest")
+            .url("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .dbUser("postgres")
+            .dbHost("localhost")
+            .dbPort(5432)
+            .sysDbName("dbos_java_sys")
+            .maximumPoolSize(2)
+            .build();
+  }
+
+  @BeforeEach
+  void beforeEachTest() throws SQLException {
+    DBUtils.recreateDB(dbosConfig);
+
+    dbos = DBOS.initialize(dbosConfig);
+  }
+
+  @AfterEach
+  void afterEachTest() throws Exception {
+    dbos.shutdown();
+  }
+
+  @Test
+  public void asyncCancelResumeTest() throws Exception {
+
+    CountDownLatch mainLatch = new CountDownLatch(1);
+    CountDownLatch workLatch = new CountDownLatch(1);
+
+    MgmtService mgmtService =
+        dbos.<MgmtService>Workflow()
+            .interfaceClass(MgmtService.class)
+            .implementation(new MgmtServiceImpl(mainLatch, workLatch))
+            .build();
+    mgmtService.setMgmtService(mgmtService);
+
+    dbos.launch();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+    String workflowId = "wfid1";
+    WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
+    int result;
+    WorkflowHandle<Integer> h = null;
+    try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+      h = dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23));
     }
 
-    @BeforeEach
-    void beforeEachTest() throws SQLException {
-        DBUtils.recreateDB(dbosConfig);
+    mainLatch.await();
+    dbos.cancelWorkflow(workflowId);
+    workLatch.countDown();
 
-        dbos = DBOS.initialize(dbosConfig);
+    assertEquals(1, mgmtService.getStepsExecuted());
+    // WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId) ;
+    assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
+
+    WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId);
+
+    result = handle.getResult();
+    assertEquals(23, result);
+    assertEquals(3, mgmtService.getStepsExecuted());
+
+    // resume again
+
+    handle = dbos.resumeWorkflow(workflowId);
+
+    result = handle.getResult();
+    assertEquals(23, result);
+    assertEquals(3, mgmtService.getStepsExecuted());
+    h = dbosExecutor.retrieveWorkflow(workflowId);
+    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
+
+    logger.info("Test completed");
+  }
+
+  @Test
+  public void queuedCancelResumeTest() throws Exception {
+
+    CountDownLatch mainLatch = new CountDownLatch(1);
+    CountDownLatch workLatch = new CountDownLatch(1);
+
+    MgmtService mgmtService =
+        dbos.<MgmtService>Workflow()
+            .interfaceClass(MgmtService.class)
+            .implementation(new MgmtServiceImpl(mainLatch, workLatch))
+            .build();
+    mgmtService.setMgmtService(mgmtService);
+
+    Queue myqueue = dbos.Queue("myqueue").build();
+
+    dbos.launch();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+    String workflowId = "wfid1";
+    WorkflowOptions options = new WorkflowOptions.Builder(workflowId).queue(myqueue).build();
+    int result;
+    try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+      mgmtService.simpleWorkflow(23);
     }
 
-    @AfterEach
-    void afterEachTest() throws Exception {
-        dbos.shutdown();
-    }
+    mainLatch.await();
+    dbos.cancelWorkflow(workflowId);
+    workLatch.countDown();
 
-    @Test
-    public void asyncCancelResumeTest() throws Exception {
+    assertEquals(1, mgmtService.getStepsExecuted());
+    WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId);
+    assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
 
-        CountDownLatch mainLatch = new CountDownLatch(1);
-        CountDownLatch workLatch = new CountDownLatch(1);
+    WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId);
 
-        MgmtService mgmtService = dbos.<MgmtService>Workflow().interfaceClass(MgmtService.class)
-                .implementation(new MgmtServiceImpl(mainLatch, workLatch)).build();
-        mgmtService.setMgmtService(mgmtService);
+    result = handle.getResult();
+    assertEquals(23, result);
+    assertEquals(3, mgmtService.getStepsExecuted());
 
-        dbos.launch();
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    // resume again
 
-        String workflowId = "wfid1";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
-        int result;
-        WorkflowHandle<Integer> h = null;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-            h = dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23));
-        }
+    handle = dbos.resumeWorkflow(workflowId);
 
-        mainLatch.await();
-        dbos.cancelWorkflow(workflowId);
-        workLatch.countDown();
+    result = handle.getResult();
+    assertEquals(23, result);
+    assertEquals(3, mgmtService.getStepsExecuted());
+    h = dbosExecutor.retrieveWorkflow(workflowId);
+    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
 
-        assertEquals(1, mgmtService.getStepsExecuted());
-        // WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId) ;
-        assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
+    logger.info("Test completed");
+  }
 
-        WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId);
+  @Test
+  public void syncCancelResumeTest() throws Exception {
 
-        result = handle.getResult();
-        assertEquals(23, result);
-        assertEquals(3, mgmtService.getStepsExecuted());
+    CountDownLatch mainLatch = new CountDownLatch(1);
+    CountDownLatch workLatch = new CountDownLatch(1);
 
-        // resume again
+    MgmtService mgmtService =
+        dbos.<MgmtService>Workflow()
+            .interfaceClass(MgmtService.class)
+            .implementation(new MgmtServiceImpl(mainLatch, workLatch))
+            .build();
+    mgmtService.setMgmtService(mgmtService);
 
-        handle = dbos.resumeWorkflow(workflowId);
+    dbos.launch();
 
-        result = handle.getResult();
-        assertEquals(23, result);
-        assertEquals(3, mgmtService.getStepsExecuted());
-        h = dbosExecutor.retrieveWorkflow(workflowId);
-        assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
+    ExecutorService e = Executors.newFixedThreadPool(2);
+    String workflowId = "wfid1";
 
-        logger.info("Test completed");
-    }
+    CountDownLatch testLatch = new CountDownLatch(2);
 
-    @Test
-    public void queuedCancelResumeTest() throws Exception {
+    e.submit(
+        () -> {
+          WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
 
-        CountDownLatch mainLatch = new CountDownLatch(1);
-        CountDownLatch workLatch = new CountDownLatch(1);
-
-        MgmtService mgmtService = dbos.<MgmtService>Workflow().interfaceClass(MgmtService.class)
-                .implementation(new MgmtServiceImpl(mainLatch, workLatch)).build();
-        mgmtService.setMgmtService(mgmtService);
-
-        Queue myqueue = dbos.Queue("myqueue").build();
-
-        dbos.launch();
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-        String workflowId = "wfid1";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).queue(myqueue).build();
-        int result;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-            mgmtService.simpleWorkflow(23);
-        }
-
-        mainLatch.await();
-        dbos.cancelWorkflow(workflowId);
-        workLatch.countDown();
-
-        assertEquals(1, mgmtService.getStepsExecuted());
-        WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId);
-        assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
-
-        WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId);
-
-        result = handle.getResult();
-        assertEquals(23, result);
-        assertEquals(3, mgmtService.getStepsExecuted());
-
-        // resume again
-
-        handle = dbos.resumeWorkflow(workflowId);
-
-        result = handle.getResult();
-        assertEquals(23, result);
-        assertEquals(3, mgmtService.getStepsExecuted());
-        h = dbosExecutor.retrieveWorkflow(workflowId);
-        assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
-
-        logger.info("Test completed");
-    }
-
-    @Test
-    public void syncCancelResumeTest() throws Exception {
-
-        CountDownLatch mainLatch = new CountDownLatch(1);
-        CountDownLatch workLatch = new CountDownLatch(1);
-
-        MgmtService mgmtService = dbos.<MgmtService>Workflow().interfaceClass(MgmtService.class)
-                .implementation(new MgmtServiceImpl(mainLatch, workLatch)).build();
-        mgmtService.setMgmtService(mgmtService);
-
-        dbos.launch();
-
-        ExecutorService e = Executors.newFixedThreadPool(2);
-        String workflowId = "wfid1";
-
-        CountDownLatch testLatch = new CountDownLatch(2);
-
-        e.submit(() -> {
-            WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
-
-            try {
-                try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-                    mgmtService.simpleWorkflow(23);
-                }
-            } catch (Throwable t) {
-                assertTrue(t instanceof AwaitedWorkflowCancelledException);
+          try {
+            try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+              mgmtService.simpleWorkflow(23);
             }
+          } catch (Throwable t) {
+            assertTrue(t instanceof AwaitedWorkflowCancelledException);
+          }
 
-            assertEquals(1, mgmtService.getStepsExecuted());
+          assertEquals(1, mgmtService.getStepsExecuted());
+          testLatch.countDown();
+        });
+
+    e.submit(
+        () -> {
+          try {
+            mainLatch.await();
+            dbos.cancelWorkflow(workflowId);
+            workLatch.countDown();
             testLatch.countDown();
+
+          } catch (InterruptedException ie) {
+            logger.error("syncCancelResumeTest interrupted", ie);
+          }
         });
 
-        e.submit(() -> {
-            try {
-                mainLatch.await();
-                dbos.cancelWorkflow(workflowId);
-                workLatch.countDown();
-                testLatch.countDown();
+    testLatch.await();
 
-            } catch (InterruptedException ie) {
-                logger.error("syncCancelResumeTest interrupted", ie);
-            }
-        });
+    WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId);
 
-        testLatch.await();
+    int result = handle.getResult();
+    assertEquals(23, result);
+    assertEquals(3, mgmtService.getStepsExecuted());
 
-        WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId);
+    // resume again
 
-        int result = handle.getResult();
-        assertEquals(23, result);
-        assertEquals(3, mgmtService.getStepsExecuted());
+    handle = dbos.resumeWorkflow(workflowId);
 
-        // resume again
+    result = (Integer) handle.getResult();
+    assertEquals(23, result);
+    assertEquals(3, mgmtService.getStepsExecuted());
 
-        handle = dbos.resumeWorkflow(workflowId);
+    logger.info("Test completed");
+  }
 
-        result = (Integer) handle.getResult();
-        assertEquals(23, result);
-        assertEquals(3, mgmtService.getStepsExecuted());
+  @Test
+  public void forkNonExistent() {
 
-        logger.info("Test completed");
+    dbos.launch();
+
+    try {
+      ForkOptions options = new ForkOptions.Builder().build();
+      WorkflowHandle<String> rstatHandle = dbos.forkWorkflow("12345", 2, options);
+      fail("An exceptions should have been thrown");
+    } catch (Throwable t) {
+      logger.info(t.getClass().getName());
+      assertTrue(t instanceof NonExistentWorkflowException);
+    }
+  }
+
+  @Test
+  public void testFork() throws SQLException {
+
+    ForkServiceImpl impl = new ForkServiceImpl();
+
+    ForkService forkService =
+        dbos.<ForkService>Workflow().interfaceClass(ForkService.class).implementation(impl).build();
+    forkService.setForkService(forkService);
+
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+    String workflowId = "wfid1";
+    WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
+    String result;
+    try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+      result = forkService.simpleWorkflow("hello");
     }
 
-    @Test
-    public void forkNonExistent() {
+    assertEquals("hellohello", result);
+    WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(workflowId);
+    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
-        dbos.launch();
+    assertEquals(1, impl.step1Count);
+    assertEquals(1, impl.step2Count);
+    assertEquals(1, impl.step3Count);
+    assertEquals(1, impl.step4Count);
+    assertEquals(1, impl.step5Count);
 
-        try {
-            ForkOptions options = new ForkOptions.Builder().build();
-            WorkflowHandle<String> rstatHandle = dbos.forkWorkflow("12345", 2, options);
-            fail("An exceptions should have been thrown");
-        } catch (Throwable t) {
-            logger.info(t.getClass().getName());
-            assertTrue(t instanceof NonExistentWorkflowException);
-        }
+    logger.info("First execution done starting fork");
+
+    ForkOptions foptions = new ForkOptions.Builder().build();
+    WorkflowHandle<String> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
+    result = rstatHandle.getResult();
+    assertEquals("hellohello", result);
+    assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
+    assertTrue(rstatHandle.getWorkflowId() != workflowId);
+
+    assertEquals(2, impl.step1Count);
+    assertEquals(2, impl.step2Count);
+    assertEquals(2, impl.step3Count);
+    assertEquals(2, impl.step4Count);
+    assertEquals(2, impl.step5Count);
+
+    List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
+    assertEquals(5, steps.size());
+
+    logger.info("first fork done . starting 2nd fork ");
+
+    rstatHandle = dbos.forkWorkflow(workflowId, 2, foptions);
+    result = rstatHandle.getResult();
+    assertEquals("hellohello", result);
+    assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
+    assertTrue(rstatHandle.getWorkflowId() != workflowId);
+
+    assertEquals(2, impl.step1Count);
+    assertEquals(2, impl.step2Count);
+    assertEquals(3, impl.step3Count);
+    assertEquals(3, impl.step4Count);
+    assertEquals(3, impl.step5Count);
+
+    logger.info("Second fork done . starting 3rd fork ");
+
+    rstatHandle = dbos.forkWorkflow(workflowId, 4, foptions);
+    result = rstatHandle.getResult();
+    assertEquals("hellohello", result);
+    assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
+    assertTrue(rstatHandle.getWorkflowId() != workflowId);
+
+    assertEquals(2, impl.step1Count);
+    assertEquals(2, impl.step2Count);
+    assertEquals(3, impl.step3Count);
+    assertEquals(3, impl.step4Count);
+    assertEquals(4, impl.step5Count);
+  }
+
+  @Test
+  public void testParentChildFork() throws SQLException {
+
+    ForkServiceImpl impl = new ForkServiceImpl();
+
+    ForkService forkService =
+        dbos.<ForkService>Workflow().interfaceClass(ForkService.class).implementation(impl).build();
+    forkService.setForkService(forkService);
+
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+    String workflowId = "wfid1";
+    WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
+    String result;
+    try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+      result = forkService.parentChild("hello");
     }
 
-    @Test
-    public void testFork() throws SQLException {
+    assertEquals("hellohello", result);
+    WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(workflowId);
+    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
-        ForkServiceImpl impl = new ForkServiceImpl();
+    assertEquals(1, impl.step1Count);
+    assertEquals(1, impl.step2Count);
+    assertEquals(1, impl.child1Count);
+    assertEquals(1, impl.child2Count);
+    assertEquals(1, impl.step5Count);
 
-        ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
-                .implementation(impl).build();
-        forkService.setForkService(forkService);
+    List<StepInfo> stepsRun0 = systemDatabase.listWorkflowSteps(workflowId);
+    assertEquals(5, stepsRun0.size());
 
-        dbos.launch();
-        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    logger.info("First execution done starting fork");
 
-        String workflowId = "wfid1";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
-        String result;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-            result = forkService.simpleWorkflow("hello");
-        }
+    ForkOptions foptions = new ForkOptions.Builder().forkedWorkflowId("f1").build();
+    WorkflowHandle<String> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
+    result = rstatHandle.getResult();
+    assertEquals("hellohello", result);
+    assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
+    assertEquals(rstatHandle.getWorkflowId(), "f1");
 
-        assertEquals("hellohello", result);
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(workflowId);
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+    assertEquals(2, impl.step1Count);
+    assertEquals(2, impl.step2Count);
+    assertEquals(1, impl.child1Count);
+    assertEquals(1, impl.child2Count);
+    assertEquals(2, impl.step5Count);
 
-        assertEquals(1, impl.step1Count);
-        assertEquals(1, impl.step2Count);
-        assertEquals(1, impl.step3Count);
-        assertEquals(1, impl.step4Count);
-        assertEquals(1, impl.step5Count);
+    List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
+    assertEquals(5, steps.size());
 
-        logger.info("First execution done starting fork");
+    assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
+    assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
 
-        ForkOptions foptions = new ForkOptions.Builder().build();
-        WorkflowHandle<String> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
-        result = rstatHandle.getResult();
-        assertEquals("hellohello", result);
-        assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertTrue(rstatHandle.getWorkflowId() != workflowId);
+    logger.info("First execution done starting 2nd fork");
 
-        assertEquals(2, impl.step1Count);
-        assertEquals(2, impl.step2Count);
-        assertEquals(2, impl.step3Count);
-        assertEquals(2, impl.step4Count);
-        assertEquals(2, impl.step5Count);
+    foptions = new ForkOptions.Builder().forkedWorkflowId("f2").build();
+    rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
+    result = rstatHandle.getResult();
+    assertEquals("hellohello", result);
+    assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
+    assertEquals(rstatHandle.getWorkflowId(), "f2");
 
-        List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
-        assertEquals(5, steps.size());
+    assertEquals(2, impl.step1Count);
+    assertEquals(2, impl.step2Count);
+    assertEquals(1, impl.child1Count);
+    assertEquals(1, impl.child2Count);
+    assertEquals(3, impl.step5Count);
 
-        logger.info("first fork done . starting 2nd fork ");
+    steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
+    assertEquals(5, steps.size());
 
-        rstatHandle = dbos.forkWorkflow(workflowId, 2, foptions);
-        result = rstatHandle.getResult();
-        assertEquals("hellohello", result);
-        assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertTrue(rstatHandle.getWorkflowId() != workflowId);
+    logger.info(stepsRun0.get(2).getChildWorkflowId());
+    logger.info(steps.get(2).getChildWorkflowId());
+    assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
+    assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
 
-        assertEquals(2, impl.step1Count);
-        assertEquals(2, impl.step2Count);
-        assertEquals(3, impl.step3Count);
-        assertEquals(3, impl.step4Count);
-        assertEquals(3, impl.step5Count);
+    logger.info("2nd execution done starting 3nd fork");
 
-        logger.info("Second fork done . starting 3rd fork ");
+    foptions = new ForkOptions.Builder().forkedWorkflowId("f3").build();
+    rstatHandle = dbos.forkWorkflow(workflowId, 4, foptions);
+    result = rstatHandle.getResult();
+    assertEquals("hellohello", result);
+    assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
+    assertEquals(rstatHandle.getWorkflowId(), "f3");
 
-        rstatHandle = dbos.forkWorkflow(workflowId, 4, foptions);
-        result = rstatHandle.getResult();
-        assertEquals("hellohello", result);
-        assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertTrue(rstatHandle.getWorkflowId() != workflowId);
+    assertEquals(2, impl.step1Count);
+    assertEquals(2, impl.step2Count);
+    assertEquals(1, impl.child1Count);
+    assertEquals(1, impl.child2Count);
+    assertEquals(4, impl.step5Count);
 
-        assertEquals(2, impl.step1Count);
-        assertEquals(2, impl.step2Count);
-        assertEquals(3, impl.step3Count);
-        assertEquals(3, impl.step4Count);
-        assertEquals(4, impl.step5Count);
+    steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
+    assertEquals(5, steps.size());
+
+    assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
+    assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+
+    logger.info("First execution done starting 2nd fork");
+  }
+
+  @Test
+  public void testParentChildAsyncFork() throws SQLException {
+
+    ForkServiceImpl impl = new ForkServiceImpl();
+
+    ForkService forkService =
+        dbos.<ForkService>Workflow().interfaceClass(ForkService.class).implementation(impl).build();
+    forkService.setForkService(forkService);
+
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+    String workflowId = "wfid1";
+    WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
+    String result;
+    try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
+      result = forkService.parentChildAsync("hello");
     }
 
-    @Test
-    public void testParentChildFork() throws SQLException {
+    assertEquals("hellohello", result);
+    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
+    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
-        ForkServiceImpl impl = new ForkServiceImpl();
+    assertEquals(1, impl.step1Count);
+    assertEquals(1, impl.step2Count);
+    assertEquals(1, impl.child1Count);
+    assertEquals(1, impl.child2Count);
+    assertEquals(1, impl.step5Count);
 
-        ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
-                .implementation(impl).build();
-        forkService.setForkService(forkService);
+    List<StepInfo> stepsRun0 = systemDatabase.listWorkflowSteps(workflowId);
+    assertEquals(5, stepsRun0.size());
 
-        dbos.launch();
-        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    logger.info("First execution done starting fork");
 
-        String workflowId = "wfid1";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
-        String result;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-            result = forkService.parentChild("hello");
-        }
+    ForkOptions foptions = new ForkOptions.Builder().build();
+    WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
+    result = (String) rstatHandle.getResult();
 
-        assertEquals("hellohello", result);
-        WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(workflowId);
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+    assertEquals("hellohello", result);
+    assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
+    assertTrue(rstatHandle.getWorkflowId() != workflowId);
 
-        assertEquals(1, impl.step1Count);
-        assertEquals(1, impl.step2Count);
-        assertEquals(1, impl.child1Count);
-        assertEquals(1, impl.child2Count);
-        assertEquals(1, impl.step5Count);
+    assertEquals(1, impl.step1Count);
+    assertEquals(1, impl.step2Count);
+    assertEquals(1, impl.child1Count);
+    assertEquals(1, impl.child2Count); // 1 because the wf already executed even if we
+    // did not copy the step
+    assertEquals(2, impl.step5Count);
 
-        List<StepInfo> stepsRun0 = systemDatabase.listWorkflowSteps(workflowId);
-        assertEquals(5, stepsRun0.size());
+    List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
+    assertEquals(5, steps.size());
 
-        logger.info("First execution done starting fork");
+    assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
+    assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+  }
 
-        ForkOptions foptions = new ForkOptions.Builder().forkedWorkflowId("f1").build();
-        WorkflowHandle<String> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
-        result = rstatHandle.getResult();
-        assertEquals("hellohello", result);
-        assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertEquals(rstatHandle.getWorkflowId(), "f1");
+  @Test
+  void garbageCollection() throws Exception {
+    int numWorkflows = 10;
 
-        assertEquals(2, impl.step1Count);
-        assertEquals(2, impl.step2Count);
-        assertEquals(1, impl.child1Count);
-        assertEquals(1, impl.child2Count);
-        assertEquals(2, impl.step5Count);
+    GCServiceImpl impl = new GCServiceImpl(dbos);
+    GCService gcService =
+        dbos.<GCService>Workflow().interfaceClass(GCService.class).implementation(impl).build();
+    gcService.setGCService(gcService);
 
-        List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
-        assertEquals(5, steps.size());
+    dbos.launch();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-        assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
-        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
-
-        logger.info("First execution done starting 2nd fork");
-
-        foptions = new ForkOptions.Builder().forkedWorkflowId("f2").build();
-        rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
-        result = rstatHandle.getResult();
-        assertEquals("hellohello", result);
-        assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertEquals(rstatHandle.getWorkflowId(), "f2");
-
-        assertEquals(2, impl.step1Count);
-        assertEquals(2, impl.step2Count);
-        assertEquals(1, impl.child1Count);
-        assertEquals(1, impl.child2Count);
-        assertEquals(3, impl.step5Count);
-
-        steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
-        assertEquals(5, steps.size());
-
-        logger.info(stepsRun0.get(2).getChildWorkflowId());
-        logger.info(steps.get(2).getChildWorkflowId());
-        assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
-        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
-
-        logger.info("2nd execution done starting 3nd fork");
-
-        foptions = new ForkOptions.Builder().forkedWorkflowId("f3").build();
-        rstatHandle = dbos.forkWorkflow(workflowId, 4, foptions);
-        result = rstatHandle.getResult();
-        assertEquals("hellohello", result);
-        assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertEquals(rstatHandle.getWorkflowId(), "f3");
-
-        assertEquals(2, impl.step1Count);
-        assertEquals(2, impl.step2Count);
-        assertEquals(1, impl.child1Count);
-        assertEquals(1, impl.child2Count);
-        assertEquals(4, impl.step5Count);
-
-        steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
-        assertEquals(5, steps.size());
-
-        assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
-        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
-
-        logger.info("First execution done starting 2nd fork");
+    // Start one blocked workflow and 10 normal workflows
+    WorkflowHandle<String> handle = dbos.startWorkflow(() -> gcService.gcBlockedWorkflow());
+    for (int i = 0; i < numWorkflows; i++) {
+      int result = gcService.testWorkflow(i);
+      assertEquals(i, result);
     }
 
-    @Test
-    public void testParentChildAsyncFork() throws SQLException {
+    // Garbage collect all but one completed workflow
+    List<WorkflowStatus> statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    assertEquals(11, statusList.size());
+    systemDatabase.garbageCollect(null, 1L);
+    statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    assertEquals(2, statusList.size());
+    assertEquals(handle.getWorkflowId(), statusList.get(0).getWorkflowId());
 
-        ForkServiceImpl impl = new ForkServiceImpl();
+    // Garbage collect all completed workflows
+    systemDatabase.garbageCollect(System.currentTimeMillis(), null);
+    statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    assertEquals(1, statusList.size());
+    assertEquals(handle.getWorkflowId(), statusList.get(0).getWorkflowId());
 
-        ForkService forkService = dbos.<ForkService>Workflow().interfaceClass(ForkService.class)
-                .implementation(impl).build();
-        forkService.setForkService(forkService);
+    // Finish the blocked workflow, garbage collect everything
+    impl.gcLatch.countDown();
+    assertEquals(handle.getWorkflowId(), handle.getResult());
+    systemDatabase.garbageCollect(System.currentTimeMillis(), null);
+    statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    assertEquals(0, statusList.size());
 
-        dbos.launch();
-        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    // Verify GC runs without errors on an empty table
+    systemDatabase.garbageCollect(null, 1L);
 
-        String workflowId = "wfid1";
-        WorkflowOptions options = new WorkflowOptions.Builder(workflowId).build();
-        String result;
-        try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
-            result = forkService.parentChildAsync("hello");
-        }
-
-        assertEquals("hellohello", result);
-        WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
-
-        assertEquals(1, impl.step1Count);
-        assertEquals(1, impl.step2Count);
-        assertEquals(1, impl.child1Count);
-        assertEquals(1, impl.child2Count);
-        assertEquals(1, impl.step5Count);
-
-        List<StepInfo> stepsRun0 = systemDatabase.listWorkflowSteps(workflowId);
-        assertEquals(5, stepsRun0.size());
-
-        logger.info("First execution done starting fork");
-
-        ForkOptions foptions = new ForkOptions.Builder().build();
-        WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
-        result = (String) rstatHandle.getResult();
-
-        assertEquals("hellohello", result);
-        assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
-        assertTrue(rstatHandle.getWorkflowId() != workflowId);
-
-        assertEquals(1, impl.step1Count);
-        assertEquals(1, impl.step2Count);
-        assertEquals(1, impl.child1Count);
-        assertEquals(1, impl.child2Count); // 1 because the wf already executed even if we
-                                           // did not copy the step
-        assertEquals(2, impl.step5Count);
-
-        List<StepInfo> steps = systemDatabase.listWorkflowSteps(rstatHandle.getWorkflowId());
-        assertEquals(5, steps.size());
-
-        assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
-        assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+    // Run workflows, wait, run them again
+    for (int i = 0; i < numWorkflows; i++) {
+      int result = gcService.testWorkflow(i);
+      assertEquals(i, result);
     }
 
-    @Test
-    void garbageCollection() throws Exception {
-        int numWorkflows = 10;
+    Thread.sleep(1000L);
 
-        GCServiceImpl impl = new GCServiceImpl(dbos);
-        GCService gcService = dbos.<GCService>Workflow().interfaceClass(GCService.class)
-                .implementation(impl).build();
-        gcService.setGCService(gcService);
-
-        dbos.launch();
-        var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-
-        // Start one blocked workflow and 10 normal workflows
-        WorkflowHandle<String> handle = dbos.startWorkflow(() -> gcService.gcBlockedWorkflow());
-        for (int i = 0; i < numWorkflows; i++) {
-            int result = gcService.testWorkflow(i);
-            assertEquals(i, result);
-        }
-
-        // Garbage collect all but one completed workflow
-        List<WorkflowStatus> statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
-        assertEquals(11, statusList.size());
-        systemDatabase.garbageCollect(null, 1L);
-        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
-        assertEquals(2, statusList.size());
-        assertEquals(handle.getWorkflowId(), statusList.get(0).getWorkflowId());
-
-        // Garbage collect all completed workflows
-        systemDatabase.garbageCollect(System.currentTimeMillis(), null);
-        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
-        assertEquals(1, statusList.size());
-        assertEquals(handle.getWorkflowId(), statusList.get(0).getWorkflowId());
-
-        // Finish the blocked workflow, garbage collect everything
-        impl.gcLatch.countDown();
-        assertEquals(handle.getWorkflowId(), handle.getResult());
-        systemDatabase.garbageCollect(System.currentTimeMillis(), null);
-        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
-        assertEquals(0, statusList.size());
-
-        // Verify GC runs without errors on an empty table
-        systemDatabase.garbageCollect(null, 1L);
-
-        // Run workflows, wait, run them again
-        for (int i = 0; i < numWorkflows; i++) {
-            int result = gcService.testWorkflow(i);
-            assertEquals(i, result);
-        }
-
-        Thread.sleep(1000L);
-
-        for (int i = 0; i < numWorkflows; i++) {
-            int result = gcService.testWorkflow(i);
-            assertEquals(i, result);
-        }
-
-        // GC the first half, verify only half were GC'ed
-        systemDatabase.garbageCollect(System.currentTimeMillis() - 1000, null);
-        statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
-        assertEquals(numWorkflows, statusList.size());
+    for (int i = 0; i < numWorkflows; i++) {
+      int result = gcService.testWorkflow(i);
+      assertEquals(i, result);
     }
 
-    @Test
-    void globalTimeout() throws Exception {
-        int numWorkflows = 10;
+    // GC the first half, verify only half were GC'ed
+    systemDatabase.garbageCollect(System.currentTimeMillis() - 1000, null);
+    statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    assertEquals(numWorkflows, statusList.size());
+  }
 
-        GCServiceImpl impl = new GCServiceImpl(dbos);
-        GCService gcService = dbos.<GCService>Workflow().interfaceClass(GCService.class)
-                .implementation(impl).build();
-        gcService.setGCService(gcService);
+  @Test
+  void globalTimeout() throws Exception {
+    int numWorkflows = 10;
 
-        dbos.launch();
-        var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    GCServiceImpl impl = new GCServiceImpl(dbos);
+    GCService gcService =
+        dbos.<GCService>Workflow().interfaceClass(GCService.class).implementation(impl).build();
+    gcService.setGCService(gcService);
 
-        List<WorkflowHandle<String>> handles = new ArrayList<>();
-        for (int i = 0; i < numWorkflows; i++) {
-            handles.add(dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow()));
-        }
+    dbos.launch();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-        Thread.sleep(1000L);
-
-        // Wait one second, start one final workflow, then timeout all workflows started
-        // more than one second ago
-        WorkflowHandle<String> finalHandle = dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow());
-
-        dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);
-        for (WorkflowHandle<?> handle : handles) {
-            assertEquals(WorkflowState.CANCELLED.toString(), handle.getStatus().getStatus());
-        }
-        impl.timeoutLatch.countDown();
-        assertEquals(finalHandle.getWorkflowId(), finalHandle.getResult());
+    List<WorkflowHandle<String>> handles = new ArrayList<>();
+    for (int i = 0; i < numWorkflows; i++) {
+      handles.add(dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow()));
     }
+
+    Thread.sleep(1000L);
+
+    // Wait one second, start one final workflow, then timeout all workflows started
+    // more than one second ago
+    WorkflowHandle<String> finalHandle =
+        dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow());
+
+    dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);
+    for (WorkflowHandle<?> handle : handles) {
+      assertEquals(WorkflowState.CANCELLED.toString(), handle.getStatus().getStatus());
+    }
+    impl.timeoutLatch.countDown();
+    assertEquals(finalHandle.getWorkflowId(), finalHandle.getResult());
+  }
 }

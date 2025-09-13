@@ -19,154 +19,175 @@ import java.util.UUID;
 
 public class DBOSClient implements AutoCloseable {
 
-    private final SystemDatabase systemDatabase;
+  private final SystemDatabase systemDatabase;
 
-    public DBOSClient(String url, String user, String password) {
-        var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
-        systemDatabase = new SystemDatabase(dataSource);
+  public DBOSClient(String url, String user, String password) {
+    var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
+    systemDatabase = new SystemDatabase(dataSource);
+  }
+
+  @Override
+  public void close() throws Exception {
+    systemDatabase.close();
+  }
+
+  // TODO: add priority + deduplicationId options
+  // (https://github.com/dbos-inc/dbos-transact-java/issues/67)
+  public record EnqueueOptions(
+      String workflowName,
+      String queueName,
+      String targetClassName,
+      String workflowId,
+      String appVersion,
+      Long timeoutMS) {}
+
+  public static class EnqueueOptionsBuilder {
+    String workflowName;
+    String queueName;
+    String targetClassName;
+    String workflowId;
+    String appVersion;
+    Long timeoutMS;
+
+    public EnqueueOptionsBuilder(String workflowName, String queueName) {
+      this.workflowName = workflowName;
+      this.queueName = queueName;
     }
 
-    @Override
-    public void close() throws Exception {
-        systemDatabase.close();
+    public EnqueueOptionsBuilder targetClassName(String targetClassName) {
+      this.targetClassName = targetClassName;
+      return this;
     }
 
-    // TODO: add priority + deduplicationId options
-    // (https://github.com/dbos-inc/dbos-transact-java/issues/67)
-    public record EnqueueOptions(
-            String workflowName,
-            String queueName,
-            String targetClassName,
-            String workflowId,
-            String appVersion,
-            Long timeoutMS) {
+    public EnqueueOptionsBuilder workflowId(String workflowId) {
+      this.workflowId = workflowId;
+      return this;
     }
 
-    public static class EnqueueOptionsBuilder {
-        String workflowName;
-        String queueName;
-        String targetClassName;
-        String workflowId;
-        String appVersion;
-        Long timeoutMS;
-
-        public EnqueueOptionsBuilder(String workflowName, String queueName) {
-            this.workflowName = workflowName;
-            this.queueName = queueName;
-        }
-
-        public EnqueueOptionsBuilder targetClassName(String targetClassName) {
-            this.targetClassName = targetClassName;
-            return this;
-        }
-
-        public EnqueueOptionsBuilder workflowId(String workflowId) {
-            this.workflowId = workflowId;
-            return this;
-        }
-
-        public EnqueueOptionsBuilder appVersion(String appVersion) {
-            this.appVersion = appVersion;
-            return this;
-        }
-
-        public EnqueueOptionsBuilder timeoutMS(Long timeoutMS) {
-            this.timeoutMS = timeoutMS;
-            return this;
-        }
-
-        public EnqueueOptions build() {
-            return new EnqueueOptions(
-                    workflowName,
-                    queueName,
-                    targetClassName,
-                    workflowId,
-                    appVersion,
-                    timeoutMS);
-        }
+    public EnqueueOptionsBuilder appVersion(String appVersion) {
+      this.appVersion = appVersion;
+      return this;
     }
 
-    public <T> WorkflowHandle<T> enqueueWorkflow(EnqueueOptions options, Object[] args) throws Throwable {
-        Objects.requireNonNull(options.workflowName);
-        Objects.requireNonNull(options.queueName);
-
-        var workflowId = DBOSExecutor.enqueueWorkflow(
-                this.systemDatabase,
-                options.workflowId,
-                options.workflowName,
-                options.targetClassName,
-                args,
-                options.queueName,
-                null,
-                options.appVersion,
-                null,
-                options.timeoutMS != null ? options.timeoutMS : 0L);
-        return retrieveWorkflow(workflowId);
+    public EnqueueOptionsBuilder timeoutMS(Long timeoutMS) {
+      this.timeoutMS = timeoutMS;
+      return this;
     }
 
-    public void send(String destinationId, Object message, String topic, String idempotencyKey) throws SQLException {
-        var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
-        var now = System.currentTimeMillis();
-        if (idempotencyKey == null) {
-            idempotencyKey = UUID.randomUUID().toString();
-        }
+    public EnqueueOptions build() {
+      return new EnqueueOptions(
+          workflowName, queueName, targetClassName, workflowId, appVersion, timeoutMS);
+    }
+  }
 
-        var status = new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS, "temp_workflow-send-client", null,
-                null, null, null, null, null, null, now, now, null, null, null, null, 0, null, null, null, 0, null);
-        systemDatabase.initWorkflowStatus(status, null);
-        systemDatabase.send(status.getWorkflowUUID(), 0, destinationId, message, topic);
+  public <T> WorkflowHandle<T> enqueueWorkflow(EnqueueOptions options, Object[] args)
+      throws Throwable {
+    Objects.requireNonNull(options.workflowName);
+    Objects.requireNonNull(options.queueName);
+
+    var workflowId =
+        DBOSExecutor.enqueueWorkflow(
+            this.systemDatabase,
+            options.workflowId,
+            options.workflowName,
+            options.targetClassName,
+            args,
+            options.queueName,
+            null,
+            options.appVersion,
+            null,
+            options.timeoutMS != null ? options.timeoutMS : 0L);
+    return retrieveWorkflow(workflowId);
+  }
+
+  public void send(String destinationId, Object message, String topic, String idempotencyKey)
+      throws SQLException {
+    var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
+    var now = System.currentTimeMillis();
+    if (idempotencyKey == null) {
+      idempotencyKey = UUID.randomUUID().toString();
     }
 
-    public Object getEvent(String targetId, String key, double timeoutSeconds) {
-        return systemDatabase.getEvent(targetId, key, timeoutSeconds, null);
-    }
+    var status =
+        new WorkflowStatusInternal(
+            workflowId,
+            WorkflowState.SUCCESS,
+            "temp_workflow-send-client",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            now,
+            now,
+            null,
+            null,
+            null,
+            null,
+            0,
+            null,
+            null,
+            null,
+            0,
+            null);
+    systemDatabase.initWorkflowStatus(status, null);
+    systemDatabase.send(status.getWorkflowUUID(), 0, destinationId, message, topic);
+  }
 
-    public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
-        return new WorkflowHandleDBPoll<T>(workflowId, systemDatabase);
-    }
+  public Object getEvent(String targetId, String key, double timeoutSeconds) {
+    return systemDatabase.getEvent(targetId, key, timeoutSeconds, null);
+  }
 
-    public void cancelWorkflow(String workflowId) {
-        systemDatabase.cancelWorkflow(workflowId);
-    }
+  public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
+    return new WorkflowHandleDBPoll<T>(workflowId, systemDatabase);
+  }
 
-    public <T> WorkflowHandle<T> resumeWorkflow(String workflowId) {
-        systemDatabase.resumeWorkflow(workflowId);
-        return retrieveWorkflow(workflowId);
-    }
+  public void cancelWorkflow(String workflowId) {
+    systemDatabase.cancelWorkflow(workflowId);
+  }
 
-    public <T> WorkflowHandle<T> forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-        var forkedWorkflowId = systemDatabase.forkWorkflow(originalWorkflowId, startStep, options);
-        return retrieveWorkflow(forkedWorkflowId);
-    }
+  public <T> WorkflowHandle<T> resumeWorkflow(String workflowId) {
+    systemDatabase.resumeWorkflow(workflowId);
+    return retrieveWorkflow(workflowId);
+  }
 
-    public WorkflowStatus getWorkflowStatus(String workflowId) {
-        return systemDatabase.getWorkflowStatus(workflowId);
-    }
+  public <T> WorkflowHandle<T> forkWorkflow(
+      String originalWorkflowId, int startStep, ForkOptions options) {
+    var forkedWorkflowId = systemDatabase.forkWorkflow(originalWorkflowId, startStep, options);
+    return retrieveWorkflow(forkedWorkflowId);
+  }
 
-    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-        try {
-            return systemDatabase.listWorkflows(input);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
+  public WorkflowStatus getWorkflowStatus(String workflowId) {
+    return systemDatabase.getWorkflowStatus(workflowId);
+  }
 
-    public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput) {
-        try {
-            return systemDatabase.listQueuedWorkflows(input, loadInput);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+  public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+    try {
+      return systemDatabase.listWorkflows(input);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
     }
+  }
 
-    public List<StepInfo> listWorkflowSteps(String workflowId) {
-        try {
-            return systemDatabase.listWorkflowSteps(workflowId);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+  public List<WorkflowStatus> listQueuedWorkflows(
+      ListQueuedWorkflowsInput input, boolean loadInput) {
+    try {
+      return systemDatabase.listQueuedWorkflows(input, loadInput);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
     }
+  }
 
-    // readStream
+  public List<StepInfo> listWorkflowSteps(String workflowId) {
+    try {
+      return systemDatabase.listWorkflowSteps(workflowId);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  // readStream
 
 }
