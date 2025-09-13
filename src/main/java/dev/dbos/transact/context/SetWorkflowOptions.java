@@ -4,29 +4,29 @@ import java.io.Closeable;
 
 public class SetWorkflowOptions implements Closeable {
 
-    private final DBOSContext previousCtx;
+  private final DBOSContext previousCtx;
 
-    public SetWorkflowOptions(WorkflowOptions options) {
+  public SetWorkflowOptions(WorkflowOptions options) {
 
-        if (options.getWorkflowId() == null) {
-            throw new IllegalArgumentException("Workflow Id cannot be null with SetDBOSOptions. ");
-        }
-
-        previousCtx = DBOSContextHolder.get();
-
-        DBOSContext newCtx;
-
-        if (previousCtx.getWorkflowId() != null) {
-            // we must be a child workflow
-            newCtx = previousCtx.createChild(options);
-        } else {
-            newCtx = new DBOSContext(options, 0);
-        }
-        DBOSContextHolder.set(newCtx);
+    if (options.getWorkflowId() == null) {
+      throw new IllegalArgumentException("Workflow Id cannot be null with SetDBOSOptions. ");
     }
 
-    @Override
-    public void close() {
-        DBOSContextHolder.set(previousCtx);
+    previousCtx = DBOSContextHolder.get();
+
+    DBOSContext newCtx;
+
+    if (previousCtx.getWorkflowId() != null) {
+      // we must be a child workflow
+      newCtx = previousCtx.createChild(options);
+    } else {
+      newCtx = new DBOSContext(options, 0);
     }
+    DBOSContextHolder.set(newCtx);
+  }
+
+  @Override
+  public void close() {
+    DBOSContextHolder.set(previousCtx);
+  }
 }

@@ -2,13 +2,13 @@ package dev.dbos.transact.workflow;
 
 public interface GCService {
 
-    int testStep(int x);
+  int testStep(int x);
 
-    int testWorkflow(int x);
+  int testWorkflow(int x);
 
-    String gcBlockedWorkflow();
+  String gcBlockedWorkflow();
 
-    String timeoutBlockedWorkflow();
+  String timeoutBlockedWorkflow();
 
-    void setGCService(GCService service);
+  void setGCService(GCService service);
 }

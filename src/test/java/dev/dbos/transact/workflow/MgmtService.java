@@ -2,15 +2,15 @@ package dev.dbos.transact.workflow;
 
 public interface MgmtService {
 
-    void setMgmtService(MgmtService m);
+  void setMgmtService(MgmtService m);
 
-    int simpleWorkflow(int input);
+  int simpleWorkflow(int input);
 
-    void stepOne();
+  void stepOne();
 
-    void stepTwo();
+  void stepTwo();
 
-    void stepThree();
+  void stepThree();
 
-    int getStepsExecuted();
+  int getStepsExecuted();
 }

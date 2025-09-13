@@ -31,186 +31,197 @@ import org.slf4j.LoggerFactory;
 
 class RecoveryServiceTest {
 
-    private static DBOSConfig dbosConfig;
-    private static DataSource dataSource;
-    private DBOS dbos;
-    private Queue testQueue;
-    private SystemDatabase systemDatabase;
-    private DBOSExecutor dbosExecutor;
-    private ExecutingService executingService;
-    Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
+  private static DBOSConfig dbosConfig;
+  private static DataSource dataSource;
+  private DBOS dbos;
+  private Queue testQueue;
+  private SystemDatabase systemDatabase;
+  private DBOSExecutor dbosExecutor;
+  private ExecutingService executingService;
+  Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
-    @BeforeAll
-    public static void onetimeBefore() throws SQLException {
+  @BeforeAll
+  public static void onetimeBefore() throws SQLException {
 
-        RecoveryServiceTest.dbosConfig = new DBOSConfig.Builder().name("systemdbtest")
-                .dbHost("localhost").dbPort(5432).dbUser("postgres").sysDbName("dbos_java_sys")
-                .maximumPoolSize(2).build();
+    RecoveryServiceTest.dbosConfig =
+        new DBOSConfig.Builder()
+            .name("systemdbtest")
+            .dbHost("localhost")
+            .dbPort(5432)
+            .dbUser("postgres")
+            .sysDbName("dbos_java_sys")
+            .maximumPoolSize(2)
+            .build();
+  }
+
+  @BeforeEach
+  void setUp() throws SQLException {
+    DBUtils.recreateDB(dbosConfig);
+    RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+
+    dbos = DBOS.initialize(dbosConfig);
+    executingService =
+        dbos.<ExecutingService>Workflow()
+            .interfaceClass(ExecutingService.class)
+            .implementation(new ExecutingServiceImpl())
+            .build();
+
+    testQueue = dbos.Queue("q1").build();
+
+    dbos.launch();
+    systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+    dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+  }
+
+  @AfterEach
+  void afterEachTest() throws Exception {
+    dbos.shutdown();
+  }
+
+  @Test
+  void recoverWorkflows() throws Exception {
+
+    String wfid = "wf-123";
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      executingService.workflowMethod("test-item");
+    }
+    wfid = "wf-124";
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      executingService.workflowMethod("test-item");
+    }
+    wfid = "wf-125";
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      executingService.workflowMethod("test-item");
+    }
+    wfid = "wf-126";
+    WorkflowHandle<String> handle6 = null;
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+    }
+    handle6.getResult();
+
+    wfid = "wf-127";
+    WorkflowHandle<String> handle7 = null;
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
+    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+      handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+    }
+    assertEquals("q1", handle7.getStatus().getQueueName());
+    handle7.getResult();
+
+    setWorkflowStateToPending(dataSource);
+
+    List<GetPendingWorkflowsOutput> pending =
+        systemDatabase.getPendingWorkflows(
+            dbosExecutor.getExecutorId(), dbosExecutor.getAppVersion());
+
+    assertEquals(5, pending.size());
+
+    for (GetPendingWorkflowsOutput output : pending) {
+      WorkflowHandle<?> handle = dbosExecutor.recoverWorkflow(output);
+      handle.getResult();
+      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+    }
+  }
+
+  @Test
+  void recoverPendingWorkflows() throws Exception {
+
+    String wfid = "wf-123";
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      executingService.workflowMethod("test-item");
+    }
+    wfid = "wf-124";
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      executingService.workflowMethod("test-item");
+    }
+    wfid = "wf-125";
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      executingService.workflowMethod("test-item");
+    }
+    wfid = "wf-126";
+    WorkflowHandle<String> handle6 = null;
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+    }
+    handle6.getResult();
+
+    wfid = "wf-127";
+    WorkflowHandle<String> handle7 = null;
+    WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
+    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+      handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+    }
+    assertEquals("q1", handle7.getStatus().getQueueName());
+    handle7.getResult();
+
+    setWorkflowStateToPending(dataSource);
+
+    List<WorkflowHandle<?>> pending = dbosExecutor.recoverPendingWorkflows(null);
+    assertEquals(5, pending.size());
+
+    for (WorkflowHandle<?> handle : pending) {
+      handle.getResult();
+      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+    }
+  }
+
+  @Test
+  public void recoveryThreadTest() throws Exception {
+
+    String wfid = "wf-123";
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      executingService.workflowMethod("test-item");
+    }
+    wfid = "wf-124";
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      executingService.workflowMethod("test-item");
     }
 
-    @BeforeEach
-    void setUp() throws SQLException {
-        DBUtils.recreateDB(dbosConfig);
-        RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+    setWorkflowStateToPending(dataSource);
 
-        dbos = DBOS.initialize(dbosConfig);
-        executingService = dbos.<ExecutingService>Workflow()
-                .interfaceClass(ExecutingService.class).implementation(new ExecutingServiceImpl())
-                .build();
+    WorkflowStatus s = systemDatabase.getWorkflowStatus("wf-123");
+    assertEquals(WorkflowState.PENDING.name(), s.getStatus());
 
-        testQueue = dbos.Queue("q1").build();
+    dbos.shutdown();
 
-        dbos.launch();
-        systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-        dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    dbos = DBOS.initialize(dbosConfig);
+    // dbos = DBOS.getInstance();
 
+    // need to register again
+    // towatch: we are registering after launch. could lead to a race condition
+    // toimprove : allow registration before launch
+    executingService =
+        dbos.<ExecutingService>Workflow()
+            .interfaceClass(ExecutingService.class)
+            .implementation(new ExecutingServiceImpl())
+            .build();
+
+    dbos.launch();
+
+    WorkflowHandle h = dbos.retrieveWorkflow("wf-123");
+    h.getResult();
+    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
+
+    h = dbos.retrieveWorkflow("wf-124");
+    h.getResult();
+    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
+  }
+
+  private void setWorkflowStateToPending(DataSource ds) throws SQLException {
+
+    String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? ;";
+
+    try (Connection connection = ds.getConnection();
+        PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+      pstmt.setString(1, WorkflowState.PENDING.name());
+      pstmt.setLong(2, Instant.now().toEpochMilli());
+
+      // Execute the update and get the number of rows affected
+      int rowsAffected = pstmt.executeUpdate();
+
+      logger.info("Number of workflows made pending " + rowsAffected);
     }
-
-    @AfterEach
-    void afterEachTest() throws Exception {
-        dbos.shutdown();
-    }
-
-    @Test
-    void recoverWorkflows() throws Exception {
-
-        String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            executingService.workflowMethod("test-item");
-        }
-        wfid = "wf-124";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            executingService.workflowMethod("test-item");
-        }
-        wfid = "wf-125";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            executingService.workflowMethod("test-item");
-        }
-        wfid = "wf-126";
-        WorkflowHandle<String> handle6 = null;
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
-        }
-        handle6.getResult();
-
-        wfid = "wf-127";
-        WorkflowHandle<String> handle7 = null;
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
-        }
-        assertEquals("q1", handle7.getStatus().getQueueName());
-        handle7.getResult();
-
-        setWorkflowStateToPending(dataSource);
-
-        List<GetPendingWorkflowsOutput> pending = systemDatabase.getPendingWorkflows(dbosExecutor.getExecutorId(),
-                dbosExecutor.getAppVersion());
-
-        assertEquals(5, pending.size());
-
-        for (GetPendingWorkflowsOutput output : pending) {
-            WorkflowHandle<?> handle = dbosExecutor.recoverWorkflow(output);
-            handle.getResult();
-            assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
-        }
-    }
-
-    @Test
-    void recoverPendingWorkflows() throws Exception {
-
-        String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            executingService.workflowMethod("test-item");
-        }
-        wfid = "wf-124";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            executingService.workflowMethod("test-item");
-        }
-        wfid = "wf-125";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            executingService.workflowMethod("test-item");
-        }
-        wfid = "wf-126";
-        WorkflowHandle<String> handle6 = null;
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
-        }
-        handle6.getResult();
-
-        wfid = "wf-127";
-        WorkflowHandle<String> handle7 = null;
-        WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
-        try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-            handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
-        }
-        assertEquals("q1", handle7.getStatus().getQueueName());
-        handle7.getResult();
-
-        setWorkflowStateToPending(dataSource);
-
-        List<WorkflowHandle<?>> pending = dbosExecutor.recoverPendingWorkflows(null);
-        assertEquals(5, pending.size());
-
-        for (WorkflowHandle<?> handle : pending) {
-            handle.getResult();
-            assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
-        }
-    }
-
-    @Test
-    public void recoveryThreadTest() throws Exception {
-
-        String wfid = "wf-123";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            executingService.workflowMethod("test-item");
-        }
-        wfid = "wf-124";
-        try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-            executingService.workflowMethod("test-item");
-        }
-
-        setWorkflowStateToPending(dataSource);
-
-        WorkflowStatus s = systemDatabase.getWorkflowStatus("wf-123");
-        assertEquals(WorkflowState.PENDING.name(), s.getStatus());
-
-        dbos.shutdown();
-
-        dbos = DBOS.initialize(dbosConfig);
-        // dbos = DBOS.getInstance();
-
-        // need to register again
-        // towatch: we are registering after launch. could lead to a race condition
-        // toimprove : allow registration before launch
-        executingService = dbos.<ExecutingService>Workflow().interfaceClass(ExecutingService.class)
-                .implementation(new ExecutingServiceImpl()).build();
-
-        dbos.launch();
-
-        WorkflowHandle h = dbos.retrieveWorkflow("wf-123");
-        h.getResult();
-        assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
-
-        h = dbos.retrieveWorkflow("wf-124");
-        h.getResult();
-        assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
-    }
-
-    private void setWorkflowStateToPending(DataSource ds) throws SQLException {
-
-        String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? ;";
-
-        try (Connection connection = ds.getConnection();
-                PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-            pstmt.setString(1, WorkflowState.PENDING.name());
-            pstmt.setLong(2, Instant.now().toEpochMilli());
-
-            // Execute the update and get the number of rows affected
-            int rowsAffected = pstmt.executeUpdate();
-
-            logger.info("Number of workflows made pending " + rowsAffected);
-        }
-    }
+  }
 }

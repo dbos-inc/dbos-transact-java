@@ -13,64 +13,65 @@ import org.slf4j.LoggerFactory;
 
 public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(UnifiedInvocationHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(UnifiedInvocationHandler.class);
 
-    @SuppressWarnings("unchecked")
-    public static <T> T createProxy(Class<T> interfaceClass, Object implementation,
-            Supplier<DBOSExecutor> executor) {
-        if (!interfaceClass.isInterface()) {
-            throw new IllegalArgumentException("interfaceClass must be an interface");
-        }
-
-        return (T) Proxy.newProxyInstance(interfaceClass.getClassLoader(),
-                new Class<?>[]{interfaceClass},
-                new UnifiedInvocationHandler(implementation, executor));
+  @SuppressWarnings("unchecked")
+  public static <T> T createProxy(
+      Class<T> interfaceClass, Object implementation, Supplier<DBOSExecutor> executor) {
+    if (!interfaceClass.isInterface()) {
+      throw new IllegalArgumentException("interfaceClass must be an interface");
     }
 
-    protected UnifiedInvocationHandler(Object target, Supplier<DBOSExecutor> dbosExecutor) {
-        super(target, dbosExecutor);
+    return (T)
+        Proxy.newProxyInstance(
+            interfaceClass.getClassLoader(),
+            new Class<?>[] {interfaceClass},
+            new UnifiedInvocationHandler(implementation, executor));
+  }
+
+  protected UnifiedInvocationHandler(Object target, Supplier<DBOSExecutor> dbosExecutor) {
+    super(target, dbosExecutor);
+  }
+
+  protected Object submitWorkflow(
+      String workflowName, String targetClassName, WorkflowFunctionWrapper wrapper, Object[] args)
+      throws Throwable {
+
+    var executor = executorSupplier.get();
+    if (executor == null) {
+      throw new IllegalStateException();
     }
 
-    protected Object submitWorkflow(String workflowName, String targetClassName,
-            WorkflowFunctionWrapper wrapper, Object[] args) throws Throwable {
+    DBOSContext ctx = DBOSContextHolder.get();
 
-        var executor = executorSupplier.get();
-        if (executor == null) {
-            throw new IllegalStateException();
-        }
+    if (ctx.isAsync()) {
 
-        DBOSContext ctx = DBOSContextHolder.get();
+      logger.debug("invoking workflow asynchronously");
 
-        if (ctx.isAsync()) {
+      executor.submitWorkflow(
+          workflowName, targetClassName, wrapper.target, args, wrapper.function);
 
-            logger.debug("invoking workflow asynchronously");
+      return null;
 
-            executor.submitWorkflow(workflowName,
-                    targetClassName,
-                    wrapper.target,
-                    args,
-                    wrapper.function);
+    } else if (ctx.getQueue() != null) {
 
-            return null;
+      logger.debug("enqueuing workflow");
 
-        } else if (ctx.getQueue() != null) {
+      executor.enqueueWorkflow(workflowName, targetClassName, args, ctx.getQueue());
 
-            logger.debug("enqueuing workflow");
+      return null;
 
-            executor.enqueueWorkflow(workflowName, targetClassName, args, ctx.getQueue());
+    } else {
 
-            return null;
+      logger.debug("invoking workflow synchronously");
 
-        } else {
-
-            logger.debug("invoking workflow synchronously");
-
-            return executor.syncWorkflow(workflowName,
-                    targetClassName,
-                    wrapper.target,
-                    args,
-                    wrapper.function,
-                    DBOSContextHolder.get().getWorkflowId());
-        }
+      return executor.syncWorkflow(
+          workflowName,
+          targetClassName,
+          wrapper.target,
+          args,
+          wrapper.function,
+          DBOSContextHolder.get().getWorkflowId());
     }
+  }
 }

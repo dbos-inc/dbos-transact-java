@@ -11,32 +11,32 @@ import java.util.concurrent.Future;
 
 public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
 
-    private String workflowId;
-    private Future<T> futureResult;
-    private SystemDatabase systemDatabase;
+  private String workflowId;
+  private Future<T> futureResult;
+  private SystemDatabase systemDatabase;
 
-    public WorkflowHandleFuture(String workflowId, Future<T> future, SystemDatabase sysdb) {
-        this.workflowId = workflowId;
-        this.futureResult = future;
-        this.systemDatabase = sysdb;
-    }
+  public WorkflowHandleFuture(String workflowId, Future<T> future, SystemDatabase sysdb) {
+    this.workflowId = workflowId;
+    this.futureResult = future;
+    this.systemDatabase = sysdb;
+  }
 
-    @Override
-    public String getWorkflowId() {
-        return workflowId;
-    }
+  @Override
+  public String getWorkflowId() {
+    return workflowId;
+  }
 
-    @Override
-    public T getResult() {
-        try {
-            return futureResult.get();
-        } catch (Exception e) {
-            throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
-        }
+  @Override
+  public T getResult() {
+    try {
+      return futureResult.get();
+    } catch (Exception e) {
+      throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
     }
+  }
 
-    @Override
-    public WorkflowStatus getStatus() {
-        return systemDatabase.getWorkflowStatus(workflowId);
-    }
+  @Override
+  public WorkflowStatus getStatus() {
+    return systemDatabase.getWorkflowStatus(workflowId);
+  }
 }

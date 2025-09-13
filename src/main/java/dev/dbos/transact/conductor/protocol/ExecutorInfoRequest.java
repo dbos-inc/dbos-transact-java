@@ -1,13 +1,12 @@
 package dev.dbos.transact.conductor.protocol;
 
 public class ExecutorInfoRequest extends BaseMessage {
-    // empty on purpose
+  // empty on purpose
 
-    public ExecutorInfoRequest() {
-    }
+  public ExecutorInfoRequest() {}
 
-    public ExecutorInfoRequest(String requestId) {
-        this.type = MessageType.EXECUTOR_INFO.getValue();
-        this.request_id = requestId;
-    }
+  public ExecutorInfoRequest(String requestId) {
+    this.type = MessageType.EXECUTOR_INFO.getValue();
+    this.request_id = requestId;
+  }
 }
