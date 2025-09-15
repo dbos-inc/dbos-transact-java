@@ -271,7 +271,7 @@ public class StepsTest {
     assertEquals("stepWithNoRetriesAllowed", stepInfos.get(1).getFunctionName());
     assertEquals(1, stepInfos.get(1).getFunctionId());
     assertNotNull(stepInfos.get(1).getError());
-    assertEquals("stepWithLongRetry", stepInfos.get(1).getFunctionName());
+    assertEquals("stepWithLongRetry", stepInfos.get(2).getFunctionName());
     assertEquals(2, stepInfos.get(2).getFunctionId());
     assertNull(stepInfos.get(2).getError());
   }
