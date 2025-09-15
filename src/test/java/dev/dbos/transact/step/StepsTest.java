@@ -117,10 +117,38 @@ public class StepsTest {
     assertEquals(5, stepInfos.size());
     assertEquals("step3", stepInfos.get(2).getFunctionName());
     assertEquals(2, stepInfos.get(2).getFunctionId());
-    Throwable error = stepInfos.get(2).getError();
+    Exception error = stepInfos.get(2).getError();
     assertInstanceOf(Exception.class, error, "The error should be an Exception");
     assertEquals("step3 error", error.getMessage(), "Error message should match");
     assertNull(stepInfos.get(2).getOutput());
+  }
+
+  @Test
+  public void workflowWithInlineSteps() throws SQLException {
+    ServiceWFAndStep service =
+        dbos.<ServiceWFAndStep>Workflow()
+            .interfaceClass(ServiceWFAndStep.class)
+            .implementation(new ServiceWFAndStepImpl())
+            .async()
+            .build();
+
+    dbos.launch();
+
+    String wid = "wfWISwww123";
+    try (SetWorkflowID id = new SetWorkflowID(wid)) {
+      service.aWorkflowWithInlineSteps("input");
+    }
+
+    var handle = dbos.retrieveWorkflow(wid);
+    assertEquals("input5", (String) handle.getResult());
+
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
+    assertEquals(1, stepInfos.size());
+
+    assertEquals("stringLength", stepInfos.get(0).getFunctionName());
+    assertEquals(0, stepInfos.get(0).getFunctionId());
+    assertEquals(5, stepInfos.get(0).getOutput());
+    assertNull(stepInfos.get(0).getError());
   }
 
   @Test

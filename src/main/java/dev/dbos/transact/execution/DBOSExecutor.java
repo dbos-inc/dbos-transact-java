@@ -26,6 +26,7 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -383,9 +384,9 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.recordWorkflowError(workflowId, errorString);
   }
 
-  private <T> T runAndSaveResult(
+  private <T> T runWorkflowAndSaveResult(
       Object target, Object[] args, WorkflowFunctionReflect function, String workflowId)
-      throws Throwable {
+      throws Exception {
 
     try {
 
@@ -394,7 +395,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       postInvokeWorkflow(systemDatabase, workflowId, result);
       return result;
-    } catch (Throwable e) {
+    } catch (Exception e) {
       Throwable actual =
           (e instanceof InvocationTargetException)
               ? ((InvocationTargetException) e).getTargetException()
@@ -413,7 +414,7 @@ public class DBOSExecutor implements AutoCloseable {
       }
 
       postInvokeWorkflow(systemDatabase, workflowId, actual);
-      throw actual;
+      throw actual instanceof Exception ? (Exception) actual : e;
     }
   }
 
@@ -425,7 +426,7 @@ public class DBOSExecutor implements AutoCloseable {
       Object[] args,
       WorkflowFunctionReflect function,
       String workflowId)
-      throws Throwable {
+      throws Exception {
 
     String wfid = workflowId;
 
@@ -485,7 +486,7 @@ public class DBOSExecutor implements AutoCloseable {
               TimeUnit.MILLISECONDS);
     }
 
-    return runAndSaveResult(target, args, function, workflowId);
+    return runWorkflowAndSaveResult(target, args, function, workflowId);
   }
 
   public <T> WorkflowHandle<T> submitWorkflow(
@@ -494,7 +495,7 @@ public class DBOSExecutor implements AutoCloseable {
       Object target,
       Object[] args,
       WorkflowFunctionReflect function)
-      throws Throwable {
+      throws Exception {
 
     DBOSContext ctx = DBOSContextHolder.get();
     ctx.setDbos(dbos);
@@ -535,26 +536,31 @@ public class DBOSExecutor implements AutoCloseable {
       logger.warn("Idempotency check not impl for cancelled");
     }
 
+    // Copy the context - dont just pass a reference - memory visibility
+    var contextForInsideCall = DBOSContextHolder.get().copy();
     Callable<T> task =
         () -> {
           T result = null;
 
           // Doing this on purpose to ensure that we have the correct context
+          DBOSContextHolder.set(contextForInsideCall);
           var context = DBOSContextHolder.get();
           context.setDbos(dbos);
           String id = context.getWorkflowId();
 
           try {
 
-            result = runAndSaveResult(target, args, function, id);
+            result = runWorkflowAndSaveResult(target, args, function, id);
 
-          } catch (Throwable e) {
+          } catch (Exception e) {
             Throwable actual =
                 (e instanceof InvocationTargetException)
                     ? ((InvocationTargetException) e).getTargetException()
                     : e;
 
             logger.error("Error executing workflow", actual);
+          } finally {
+            DBOSContextHolder.clear();
           }
 
           return result;
@@ -568,10 +574,7 @@ public class DBOSExecutor implements AutoCloseable {
       return new WorkflowHandleDBPoll<>(wfId, systemDatabase);
     }
 
-    // Copy the context - dont just pass a reference - memory visibility
-    ContextAwareCallable<T> contextAwareTask =
-        new ContextAwareCallable<>(DBOSContextHolder.get().copy(), task);
-    Future<T> future = executorService.submit(contextAwareTask);
+    Future<T> future = executorService.submit(task);
 
     if (allowedTime > 0) {
       @SuppressWarnings("unused")
@@ -604,7 +607,7 @@ public class DBOSExecutor implements AutoCloseable {
       String appVersion,
       ParentWorkflow parent,
       long workflowTimeoutMs)
-      throws Throwable {
+      throws Exception {
 
     if (wfid == null) {
       wfid = UUID.randomUUID().toString();
@@ -624,21 +627,21 @@ public class DBOSExecutor implements AutoCloseable {
               appVersion,
               parent,
               workflowTimeoutMs);
-    } catch (Throwable e) {
+    } catch (Exception e) {
       Throwable actual =
           (e instanceof InvocationTargetException)
               ? ((InvocationTargetException) e).getTargetException()
               : e;
       logger.error("Error enqueing workflow", actual);
       postInvokeWorkflow(systemDatabase, initResult.getWorkflowId(), actual);
-      throw actual;
+      throw actual instanceof Exception ? (Exception) actual : e;
     }
 
     return wfid;
   }
 
   public void enqueueWorkflow(
-      String workflowName, String targetClassName, Object[] args, Queue queue) throws Throwable {
+      String workflowName, String targetClassName, Object[] args, Queue queue) throws Exception {
 
     DBOSContext ctx = DBOSContextHolder.get();
     String wfid = ctx.getWorkflowId();
@@ -658,20 +661,21 @@ public class DBOSExecutor implements AutoCloseable {
         workflowTimeoutMs);
   }
 
-  public <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
+  /** This does not retry */
+  private <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
     DBOSContext ctx = DBOSContextHolder.get();
 
     int nextFuncId = 0;
     boolean inWorkflow = ctx != null && ctx.isInWorkflow();
 
-    if (inWorkflow) {
-      nextFuncId = ctx.getAndIncrementFunctionId();
+    if (!inWorkflow) return fn.get();
 
-      StepResult result =
-          systemDatabase.checkStepExecutionTxn(ctx.getWorkflowId(), nextFuncId, functionName);
-      if (result != null) {
-        return handleExistingResult(result, functionName);
-      }
+    nextFuncId = ctx.getAndIncrementFunctionId();
+
+    StepResult result =
+        systemDatabase.checkStepExecutionTxn(ctx.getWorkflowId(), nextFuncId, functionName);
+    if (result != null) {
+      return handleExistingResult(result, functionName);
     }
 
     T functionResult;
@@ -694,15 +698,33 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    // If we're in a workflow, record the successful result
-    if (inWorkflow) {
-      String jsonOutput = JSONUtil.serialize(functionResult);
-      StepResult o =
-          new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, jsonOutput, null);
-      systemDatabase.recordStepResultTxn(o);
-    }
+    // Record the successful result
+    String jsonOutput = JSONUtil.serialize(functionResult);
+    StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, jsonOutput, null);
+    systemDatabase.recordStepResultTxn(o);
 
     return functionResult;
+  }
+
+  // TODO: should these also throw DBOS exceptions?
+  // Should there be an unchecked version that promotes errors to unchecked?
+  @SuppressWarnings("unchecked")
+  public <R, E extends Exception> R runStepI(ThrowingSupplier<R, E> stepfunc, StepOptions opts)
+      throws E {
+    try {
+      return runStepInternal(
+          opts.name(),
+          opts.retriesAllowed(),
+          opts.maxAttempts(),
+          opts.backOffRate(),
+          opts.intervalSeconds(),
+          () -> {
+            var res = stepfunc.execute();
+            return res;
+          });
+    } catch (Exception t) {
+      throw (E) t;
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -715,30 +737,38 @@ public class DBOSExecutor implements AutoCloseable {
       SerializableException se = (SerializableException) eArray[0];
       throw new DBOSAppException(String.format("Exception of type %s", se.className), se);
     } else {
+      // CB TODO: This should be acceptable, it means no return value?
       throw new IllegalStateException(
           String.format("Recorded output and error are both null for %s", functionName));
     }
   }
 
-  @SuppressWarnings("unchecked")
-  public <T> T runStep(
+  // CB TODO: This should be package scope
+  public <T> T runStepInternal(
       String stepName,
-      boolean retriedAllowed,
+      boolean retryAllowed,
       int maxAttempts,
       double timeBetweenAttemptsSec,
       double backOffRate,
-      Object[] args,
-      ThrowingSupplier<T> function)
-      throws Throwable {
-
+      ThrowingSupplier<T, Exception> function)
+      throws Exception {
+    if (maxAttempts < 1) {
+      maxAttempts = 1;
+    }
+    if (!retryAllowed) {
+      maxAttempts = 1;
+    }
     DBOSContext ctx = DBOSContextHolder.get();
-    ctx.setDbos(dbos);
-    String workflowId = ctx.getWorkflowId();
+    boolean inWorkflow = ctx != null && ctx.isInWorkflow();
 
-    if (workflowId == null) {
+    if (!inWorkflow) {
       // if there is no workflow, execute the step function without checkpointing
       return function.execute();
     }
+
+    ctx.setDbos(dbos);
+    String workflowId = ctx.getWorkflowId();
+
     logger.info("Running step {} for workflow {}", stepName, workflowId);
 
     int stepFunctionId = ctx.getAndIncrementFunctionId();
@@ -764,7 +794,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     int currAttempts = 1;
     String serializedOutput = null;
-    Throwable eThrown = null;
+    Exception eThrown = null;
     T result = null;
     boolean shouldRetry = true;
 
@@ -781,10 +811,10 @@ public class DBOSExecutor implements AutoCloseable {
                 ? ((InvocationTargetException) e).getTargetException()
                 : e;
         logger.info("After: step threw exception", actual);
-        eThrown = actual;
+        eThrown = e instanceof Exception ? (Exception) actual : e;
       }
 
-      if (!shouldRetry || !retriedAllowed) {
+      if (!shouldRetry || !retryAllowed) {
         break;
       }
 
@@ -848,7 +878,7 @@ public class DBOSExecutor implements AutoCloseable {
                     functionWrapper.target(),
                     inputs,
                     functionWrapper.function());
-      } catch (Throwable t) {
+      } catch (Exception t) {
         logger.error("Error executing workflow by id : {}", workflowId, t);
       }
     }
@@ -857,6 +887,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void sleep(float seconds) {
+    // CB TODO: This should be OK outside DBOS
 
     DBOSContext context = DBOSContextHolder.get();
     context.setDbos(dbos);
@@ -909,7 +940,7 @@ public class DBOSExecutor implements AutoCloseable {
     return retrieveWorkflow(forkedId);
   }
 
-  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T> func) {
+  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> func) {
     DBOSContext oldctx = DBOSContextHolder.get();
     oldctx.setDbos(dbos);
     DBOSContext newCtx = oldctx;
@@ -926,7 +957,7 @@ public class DBOSExecutor implements AutoCloseable {
       DBOSContextHolder.set(newCtx);
       func.execute();
       return retrieveWorkflow(newCtx.getWorkflowId());
-    } catch (Throwable t) {
+    } catch (Exception t) {
       throw new DBOSException(UNEXPECTED.getCode(), t.getMessage());
     } finally {
       DBOSContextHolder.set(oldctx);

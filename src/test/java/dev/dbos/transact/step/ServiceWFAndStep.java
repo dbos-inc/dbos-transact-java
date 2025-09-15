@@ -10,6 +10,8 @@ public interface ServiceWFAndStep {
 
   String stepTwo(String input);
 
+  String aWorkflowWithInlineSteps(String input);
+
   String stepWith2Retries(String input) throws Exception;
 
   String stepWithNoRetriesAllowed(String input) throws Exception;

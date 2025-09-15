@@ -112,7 +112,7 @@ public class MigrationManager {
           }
         }
       }
-    } catch (Throwable t) {
+    } catch (Exception t) {
       logger.error("Migration error", t);
       throw t;
     }

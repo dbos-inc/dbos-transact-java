@@ -38,7 +38,7 @@ public class ClientTest {
   }
 
   @Test
-  public void clientEnqueue() throws Throwable {
+  public void clientEnqueue() throws Exception {
 
     var dbos = DBOS.initialize(dbosConfig);
 
@@ -68,7 +68,7 @@ public class ClientTest {
   }
 
   @Test
-  public void clientSend() throws Throwable {
+  public void clientSend() throws Exception {
 
     var dbos = DBOS.initialize(dbosConfig);
 

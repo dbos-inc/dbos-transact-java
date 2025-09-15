@@ -389,6 +389,30 @@ public class DBOS {
     executor.sleep(seconds);
   }
 
+  public <R, E extends Exception> R runStep(ThrowingSupplier<R, E> stepfunc, StepOptions opts)
+      throws E {
+    var executor = dbosExecutor.get();
+    if (executor == null) {
+      throw new IllegalStateException("cannot runStep before launch");
+    }
+
+    return executor.runStepI(stepfunc, opts);
+  }
+
+  public <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, StepOptions opts)
+      throws E {
+    var executor = dbosExecutor.get();
+    if (executor == null) {
+      throw new IllegalStateException("cannot runStep before launch");
+    }
+    executor.runStepI(
+        () -> {
+          stepfunc.execute();
+          return null;
+        },
+        opts);
+  }
+
   /**
    * Resume a workflow starting from the step after the last complete step
    *
@@ -447,7 +471,7 @@ public class DBOS {
    * @return handle {@link WorkflowHandle} to the workflow
    * @param <T> type returned by the function
    */
-  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T> func) {
+  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> func) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");
@@ -456,7 +480,7 @@ public class DBOS {
     return executor.startWorkflow(func);
   }
 
-  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable func) {
+  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Exception> func) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");

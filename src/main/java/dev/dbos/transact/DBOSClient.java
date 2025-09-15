@@ -81,7 +81,7 @@ public class DBOSClient implements AutoCloseable {
   }
 
   public <T> WorkflowHandle<T> enqueueWorkflow(EnqueueOptions options, Object[] args)
-      throws Throwable {
+      throws Exception {
     Objects.requireNonNull(options.workflowName);
     Objects.requireNonNull(options.queueName);
 

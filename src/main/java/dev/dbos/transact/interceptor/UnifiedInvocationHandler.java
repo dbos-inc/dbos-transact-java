@@ -35,7 +35,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
   protected Object submitWorkflow(
       String workflowName, String targetClassName, RegisteredWorkflow wrapper, Object[] args)
-      throws Throwable {
+      throws Exception {
 
     var executor = executorSupplier.get();
     if (executor == null) {
