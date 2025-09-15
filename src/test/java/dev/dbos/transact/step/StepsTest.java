@@ -235,4 +235,44 @@ public class StepsTest {
     result = serviceB.step2("pqrstu");
     assertEquals("pqrstu", result);
   }
+
+  @Test
+  public void StepRetryLogic() throws Exception {
+    ServiceWFAndStep service =
+        dbos.<ServiceWFAndStep>Workflow()
+            .interfaceClass(ServiceWFAndStep.class)
+            .implementation(new ServiceWFAndStepImpl())
+            .async()
+            .build();
+
+    dbos.launch();
+
+    service.setSelf(service);
+
+    String workflowId = "wf-stepretrytest-1234";
+
+    try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+      service.stepRetryWorkflow("hello");
+    }
+
+    WorkflowHandle<String> handle = dbos.retrieveWorkflow(workflowId);
+    String expectedRes = "2 Retries: 2.  No retry: 1.  Backoff timeout: 2.";
+    if (expectedRes != handle.getResult()) {
+      System.out.println(handle.getResult());
+    }
+    assertEquals(expectedRes, (String) handle.getResult());
+
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
+    assertEquals(3, stepInfos.size());
+
+    assertEquals("stepWith2Retries", stepInfos.get(0).getFunctionName());
+    assertEquals(0, stepInfos.get(0).getFunctionId());
+    assertNotNull(stepInfos.get(0).getError());
+    assertEquals("stepWithNoRetriesAllowed", stepInfos.get(1).getFunctionName());
+    assertEquals(1, stepInfos.get(1).getFunctionId());
+    assertNotNull(stepInfos.get(1).getError());
+    assertEquals("stepWithLongRetry", stepInfos.get(1).getFunctionName());
+    assertEquals(2, stepInfos.get(2).getFunctionId());
+    assertNull(stepInfos.get(2).getError());
+  }
 }
