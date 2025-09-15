@@ -12,9 +12,9 @@ public @interface Step {
 
   boolean retriesAllowed() default false;
 
-  float intervalSeconds() default 1.0f;
+  double intervalSeconds() default 1.0;
 
   int maxAttempts() default 3;
 
-  float backOffRate() default 2.0f;
+  double backOffRate() default 2.0;
 }

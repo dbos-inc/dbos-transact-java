@@ -129,6 +129,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
               step.name(),
               step.retriesAllowed(),
               step.maxAttempts(),
+              step.intervalSeconds(),
               step.backOffRate(),
               args,
               () -> method.invoke(target, args));

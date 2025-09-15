@@ -9,4 +9,12 @@ public interface ServiceWFAndStep {
   String stepOne(String input);
 
   String stepTwo(String input);
+
+  String stepWith2Retries(String input) throws Exception;
+
+  String stepWithNoRetriesAllowed(String input) throws Exception;
+
+  String stepWithLongRetry(String input) throws Exception;
+
+  String stepRetryWorkflow(String input);
 }
