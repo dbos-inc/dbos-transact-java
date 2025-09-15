@@ -1,26 +1,47 @@
 package dev.dbos.transact.workflow;
 
 public record StepOptions(
-    String name, boolean retriesAllowed, int maxAttempts, double backOffRate) {
-  public static double DEFAULT_BACKOFF = 1.0;
+    String name,
+    boolean retriesAllowed,
+    int maxAttempts,
+    double intervalSeconds,
+    double backOffRate) {
+  public static double DEFAULT_INTERVAL_SECONDS = 1.0;
+  public static double DEFAULT_BACKOFF = 2.0;
 
   // --- Ctors - Overloads to simulate "default args"
   public StepOptions(String name) {
-    this(name, false, 1, StepOptions.DEFAULT_BACKOFF);
+    this(name, false, 1, StepOptions.DEFAULT_INTERVAL_SECONDS, StepOptions.DEFAULT_BACKOFF);
   }
 
   public StepOptions(String name, int maxAttempts) {
-    this(name, maxAttempts > 1, maxAttempts > 1 ? maxAttempts : 1, 1);
+    this(
+        name,
+        maxAttempts > 1,
+        maxAttempts > 1 ? maxAttempts : 1,
+        StepOptions.DEFAULT_INTERVAL_SECONDS,
+        StepOptions.DEFAULT_BACKOFF);
   }
 
-  public StepOptions(String name, int maxAttempts, double backOffRate) {
-    this(name, maxAttempts > 1, maxAttempts > 1 ? maxAttempts : 1, backOffRate);
+  public StepOptions(String name, int maxAttempts, double intervalSeconds) {
+    this(
+        name,
+        maxAttempts > 1,
+        maxAttempts > 1 ? maxAttempts : 1,
+        intervalSeconds,
+        StepOptions.DEFAULT_BACKOFF);
   }
 
-  public StepOptions(String name, boolean retriesAllowed, int maxAttempts, double backOffRate) {
+  public StepOptions(
+      String name,
+      boolean retriesAllowed,
+      int maxAttempts,
+      double intervalSeconds,
+      double backOffRate) {
     this.name = name;
     this.retriesAllowed = retriesAllowed;
     this.maxAttempts = maxAttempts;
+    this.intervalSeconds = intervalSeconds;
     this.backOffRate = backOffRate;
   }
 
@@ -31,15 +52,20 @@ public record StepOptions(
 
   // --- Withers for chaining (immutability preserved)
   public StepOptions withRetriesAllowed(boolean b) {
-    return new StepOptions(this.name, b, this.maxAttempts, this.backOffRate);
+    return new StepOptions(this.name, b, this.maxAttempts, this.intervalSeconds, this.backOffRate);
   }
 
   public StepOptions withMaxAttempts(int n) {
-    return new StepOptions(this.name, n, this.backOffRate);
+    return new StepOptions(this.name, n > 1, n, this.intervalSeconds, this.backOffRate);
   }
 
-  public StepOptions withBackoffRate(float t) {
-    return new StepOptions(this.name, this.retriesAllowed, this.maxAttempts, t);
+  public StepOptions withIntervalSeconds(double t) {
+    return new StepOptions(this.name, this.retriesAllowed, this.maxAttempts, t, this.backOffRate);
+  }
+
+  public StepOptions withBackoffRate(double t) {
+    return new StepOptions(
+        this.name, this.retriesAllowed, this.maxAttempts, this.intervalSeconds, t);
   }
 
   // Optional sugar for very common tweaks

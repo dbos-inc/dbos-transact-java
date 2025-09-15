@@ -717,7 +717,8 @@ public class DBOSExecutor implements AutoCloseable {
           opts.name(),
           opts.retriesAllowed(),
           opts.maxAttempts(),
-          (float) opts.backOffRate(),
+          opts.backOffRate(),
+          opts.intervalSeconds(),
           () -> {
             var res = stepfunc.get();
             return res;
@@ -748,7 +749,8 @@ public class DBOSExecutor implements AutoCloseable {
       String stepName,
       boolean retryAllowed,
       int maxAttempts,
-      float backOffRate,
+      double timeBetweenAttemptsSec,
+      double backOffRate,
       ThrowingSupplier<T> function)
       throws Throwable {
     if (maxAttempts < 1) {
@@ -795,10 +797,12 @@ public class DBOSExecutor implements AutoCloseable {
     String serializedOutput = null;
     Throwable eThrown = null;
     T result = null;
+    boolean shouldRetry = true;
 
     while (currAttempts <= maxAttempts) {
       try {
         result = function.execute();
+        shouldRetry = false;
         serializedOutput = JSONUtil.serialize(result);
         eThrown = null;
       } catch (Exception e) {
@@ -811,6 +815,15 @@ public class DBOSExecutor implements AutoCloseable {
         eThrown = actual;
       }
 
+      if (!shouldRetry || !retryAllowed) {
+        break;
+      }
+
+      try {
+        Thread.sleep((long) (timeBetweenAttemptsSec * 1000));
+      } catch (InterruptedException e) {
+      }
+      timeBetweenAttemptsSec *= backOffRate;
       ++currAttempts;
     }
 
