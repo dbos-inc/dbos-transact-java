@@ -4,7 +4,7 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 
@@ -54,9 +54,9 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
     String workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
 
-    logger.info("Before: Starting workflow '{}' (timeout: {})", workflowName, workflow.timeout());
+    logger.info("Before: Starting workflow '{}'", workflowName);
 
-    WorkflowFunctionWrapper wrapper = executor.getWorkflow(workflowName);
+    RegisteredWorkflow wrapper = executor.getWorkflow(workflowName);
     if (wrapper == null) {
       throw new IllegalStateException("Workflow not registered: " + workflowName);
     }
@@ -151,6 +151,6 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
   }
 
   protected abstract Object submitWorkflow(
-      String workflowName, String targetClassName, WorkflowFunctionWrapper wrapper, Object[] args)
+      String workflowName, String targetClassName, RegisteredWorkflow wrapper, Object[] args)
       throws Throwable;
 }

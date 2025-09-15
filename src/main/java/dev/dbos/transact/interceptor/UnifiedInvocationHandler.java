@@ -3,7 +3,7 @@ package dev.dbos.transact.interceptor;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 
 import java.lang.reflect.Proxy;
 import java.util.function.Supplier;
@@ -34,7 +34,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
   }
 
   protected Object submitWorkflow(
-      String workflowName, String targetClassName, WorkflowFunctionWrapper wrapper, Object[] args)
+      String workflowName, String targetClassName, RegisteredWorkflow wrapper, Object[] args)
       throws Throwable {
 
     var executor = executorSupplier.get();
@@ -49,7 +49,7 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
       logger.debug("invoking workflow asynchronously");
 
       executor.submitWorkflow(
-          workflowName, targetClassName, wrapper.target, args, wrapper.function);
+          workflowName, targetClassName, wrapper.target(), args, wrapper.function());
 
       return null;
 
@@ -68,9 +68,9 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
       return executor.syncWorkflow(
           workflowName,
           targetClassName,
-          wrapper.target,
+          wrapper.target(),
           args,
-          wrapper.function,
+          wrapper.function(),
           DBOSContextHolder.get().getWorkflowId());
     }
   }

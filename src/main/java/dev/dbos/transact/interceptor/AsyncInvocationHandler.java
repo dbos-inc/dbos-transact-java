@@ -1,7 +1,7 @@
 package dev.dbos.transact.interceptor;
 
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 
 import java.lang.reflect.Proxy;
 import java.util.function.Supplier;
@@ -32,7 +32,7 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
   }
 
   protected Object submitWorkflow(
-      String workflowName, String targetClassName, WorkflowFunctionWrapper wrapper, Object[] args)
+      String workflowName, String targetClassName, RegisteredWorkflow wrapper, Object[] args)
       throws Throwable {
     logger.debug("submitWorkflow");
 
@@ -41,7 +41,8 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
       throw new IllegalStateException();
     }
 
-    executor.submitWorkflow(workflowName, targetClassName, wrapper.target, args, wrapper.function);
+    executor.submitWorkflow(
+        workflowName, targetClassName, wrapper.target(), args, wrapper.function());
 
     return null;
   }

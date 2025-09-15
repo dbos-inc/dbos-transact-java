@@ -1,7 +1,7 @@
 package dev.dbos.transact.interceptor;
 
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.WorkflowFunctionWrapper;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.queue.Queue;
 
 import java.lang.reflect.Proxy;
@@ -38,7 +38,7 @@ public class QueueInvocationHandler extends BaseInvocationHandler {
   }
 
   protected Object submitWorkflow(
-      String workflowName, String targetClassName, WorkflowFunctionWrapper wrapper, Object[] args)
+      String workflowName, String targetClassName, RegisteredWorkflow wrapper, Object[] args)
       throws Throwable {
     logger.debug("submitWorkflow");
 
