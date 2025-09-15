@@ -725,7 +725,7 @@ public class DBOSExecutor implements AutoCloseable {
       String stepName,
       boolean retriedAllowed,
       int maxAttempts,
-      double timeBetweenAttempts,
+      double timeBetweenAttemptsSec,
       double backOffRate,
       Object[] args,
       ThrowingSupplier<T> function)
@@ -789,10 +789,10 @@ public class DBOSExecutor implements AutoCloseable {
       }
 
       try {
-        Thread.sleep((long) (timeBetweenAttempts * 1000));
+        Thread.sleep((long) (timeBetweenAttemptsSec * 1000));
       } catch (InterruptedException e) {
       }
-      timeBetweenAttempts *= backOffRate;
+      timeBetweenAttemptsSec *= backOffRate;
       ++currAttempts;
     }
 
