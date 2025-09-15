@@ -389,8 +389,8 @@ public class DBOS {
     executor.sleep(seconds);
   }
 
-  public <R, E extends Exception> R runStep(
-      StepInterfaces.ThrowingNoArg<R, E> stepfunc, StepOptions opts) throws E {
+  public <R, E extends Exception> R runStep(ThrowingSupplier<R, E> stepfunc, StepOptions opts)
+      throws E {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot runStep before launch");
@@ -399,15 +399,15 @@ public class DBOS {
     return executor.runStepI(stepfunc, opts);
   }
 
-  public <E extends Exception> void runStep(
-      StepInterfaces.ThrowingNoArgNoReturn<E> stepfunc, StepOptions opts) throws E {
+  public <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, StepOptions opts)
+      throws E {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot runStep before launch");
     }
     executor.runStepI(
         () -> {
-          stepfunc.run();
+          stepfunc.execute();
           return null;
         },
         opts);
@@ -471,7 +471,7 @@ public class DBOS {
    * @return handle {@link WorkflowHandle} to the workflow
    * @param <T> type returned by the function
    */
-  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T> func) {
+  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Throwable> func) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");
@@ -480,7 +480,7 @@ public class DBOS {
     return executor.startWorkflow(func);
   }
 
-  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable func) {
+  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Throwable> func) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");

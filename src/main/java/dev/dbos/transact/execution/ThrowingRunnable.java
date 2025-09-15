@@ -1,6 +1,6 @@
 package dev.dbos.transact.execution;
 
 @FunctionalInterface
-public interface ThrowingRunnable {
-  void execute() throws Throwable;
+public interface ThrowingRunnable<E extends Throwable> {
+  void execute() throws E;
 }

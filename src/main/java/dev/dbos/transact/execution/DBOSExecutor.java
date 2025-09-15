@@ -26,7 +26,6 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
-import dev.dbos.transact.workflow.StepInterfaces;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -710,8 +709,8 @@ public class DBOSExecutor implements AutoCloseable {
   // TODO: should these also throw DBOS exceptions?
   // Should there be an unchecked version that promotes errors to unchecked?
   @SuppressWarnings("unchecked")
-  public <R, E extends Exception> R runStepI(
-      StepInterfaces.ThrowingNoArg<R, E> stepfunc, StepOptions opts) throws E {
+  public <R, E extends Exception> R runStepI(ThrowingSupplier<R, E> stepfunc, StepOptions opts)
+      throws E {
     try {
       return runStepInternal(
           opts.name(),
@@ -720,7 +719,7 @@ public class DBOSExecutor implements AutoCloseable {
           opts.backOffRate(),
           opts.intervalSeconds(),
           () -> {
-            var res = stepfunc.get();
+            var res = stepfunc.execute();
             return res;
           });
     } catch (Throwable t) {
@@ -751,7 +750,7 @@ public class DBOSExecutor implements AutoCloseable {
       int maxAttempts,
       double timeBetweenAttemptsSec,
       double backOffRate,
-      ThrowingSupplier<T> function)
+      ThrowingSupplier<T, Throwable> function)
       throws Throwable {
     if (maxAttempts < 1) {
       maxAttempts = 1;
@@ -941,7 +940,7 @@ public class DBOSExecutor implements AutoCloseable {
     return retrieveWorkflow(forkedId);
   }
 
-  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T> func) {
+  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Throwable> func) {
     DBOSContext oldctx = DBOSContextHolder.get();
     oldctx.setDbos(dbos);
     DBOSContext newCtx = oldctx;
