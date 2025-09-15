@@ -6,8 +6,8 @@ public record StepOptions(
     int maxAttempts,
     double intervalSeconds,
     double backOffRate) {
-  public static double DEFAULT_INTERVAL_SECONDS = 1.0;
-  public static double DEFAULT_BACKOFF = 2.0;
+  public static final double DEFAULT_INTERVAL_SECONDS = 1.0;
+  public static final double DEFAULT_BACKOFF = 2.0;
 
   // --- Ctors - Overloads to simulate "default args"
   public StepOptions(String name) {

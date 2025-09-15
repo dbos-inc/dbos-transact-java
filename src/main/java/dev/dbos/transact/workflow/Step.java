@@ -12,9 +12,9 @@ public @interface Step {
 
   boolean retriesAllowed() default false;
 
-  double intervalSeconds() default 1.0;
+  double intervalSeconds() default StepOptions.DEFAULT_INTERVAL_SECONDS;
 
   int maxAttempts() default 3;
 
-  double backOffRate() default 2.0;
+  double backOffRate() default StepOptions.DEFAULT_BACKOFF;
 }
