@@ -47,7 +47,6 @@ public class StepsTest {
 
   @Test
   public void workflowWithStepsSync() throws SQLException {
-
     ServiceB serviceB =
         dbos.<ServiceB>Workflow()
             .interfaceClass(ServiceB.class)
@@ -93,7 +92,6 @@ public class StepsTest {
 
   @Test
   public void workflowWithStepsSyncError() throws SQLException {
-
     ServiceB serviceB =
         dbos.<ServiceB>Workflow()
             .interfaceClass(ServiceB.class)
@@ -126,8 +124,7 @@ public class StepsTest {
   }
 
   @Test
-  public void AsyncworkflowWithSteps() throws Exception {
-
+  public void asyncworkflowWithSteps() throws Exception {
     ServiceB serviceB =
         dbos.<ServiceB>Workflow()
             .interfaceClass(ServiceB.class)
@@ -176,8 +173,7 @@ public class StepsTest {
   }
 
   @Test
-  public void SameInterfaceWorkflowWithSteps() throws Exception {
-
+  public void sameInterfaceWorkflowWithSteps() throws Exception {
     ServiceWFAndStep service =
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
@@ -237,7 +233,7 @@ public class StepsTest {
   }
 
   @Test
-  public void StepRetryLogic() throws Exception {
+  public void stepRetryLogic() throws Exception {
     ServiceWFAndStep service =
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
