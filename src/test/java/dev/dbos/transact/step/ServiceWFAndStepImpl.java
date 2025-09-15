@@ -35,7 +35,7 @@ public class ServiceWFAndStepImpl implements ServiceWFAndStep {
       name = "stepWith2Retries",
       retriesAllowed = true,
       maxAttempts = 2,
-      intervalSeconds = .01f,
+      intervalSeconds = .01,
       backOffRate = 1)
   public String stepWith2Retries(String input) throws Exception {
     ++this.stepWithRetryRuns;
