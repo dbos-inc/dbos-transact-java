@@ -54,7 +54,7 @@ class JSONUtilTest {
     try {
       String msg = "Remote Exception of type: " + fromStr.className;
       throw new DBOSAppException(msg, fromStr);
-    } catch (Throwable t) {
+    } catch (Exception t) {
       assertEquals(
           "Remote Exception of type: dev.dbos.transact.json.TestException", t.getMessage());
     }

@@ -118,7 +118,7 @@ public class TimeoutTest {
     try {
       handle.getResult();
       fail("Expected Exception to be thrown");
-    } catch (Throwable t) {
+    } catch (Exception t) {
       System.out.println(t.getClass().toString());
       assertTrue(t instanceof AwaitedWorkflowCancelledException);
     }
@@ -188,7 +188,7 @@ public class TimeoutTest {
     try {
       handle.getResult();
       fail("Expected Exception to be thrown");
-    } catch (Throwable t) {
+    } catch (Exception t) {
       System.out.println(t.getClass().toString());
       assertTrue(t instanceof AwaitedWorkflowCancelledException);
     }
@@ -250,7 +250,7 @@ public class TimeoutTest {
       try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
         result = simpleService.longWorkflow("12345");
       }
-    } catch (Throwable t) {
+    } catch (Exception t) {
       assertNull(result);
       assertTrue(t instanceof AwaitedWorkflowCancelledException);
     }
@@ -402,7 +402,6 @@ public class TimeoutTest {
     dbos.launch();
 
     String wfid1 = "wf-124";
-    String result;
 
     WorkflowOptions options = new WorkflowOptions.Builder(wfid1).timeout(2).build();
     WorkflowHandle<String> handle = null;

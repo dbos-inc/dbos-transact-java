@@ -471,7 +471,7 @@ public class DBOS {
    * @return handle {@link WorkflowHandle} to the workflow
    * @param <T> type returned by the function
    */
-  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Throwable> func) {
+  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> func) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");
@@ -480,7 +480,7 @@ public class DBOS {
     return executor.startWorkflow(func);
   }
 
-  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Throwable> func) {
+  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Exception> func) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");

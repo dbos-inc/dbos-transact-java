@@ -191,7 +191,7 @@ public class WorkflowMgmtTest {
             try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
               mgmtService.simpleWorkflow(23);
             }
-          } catch (Throwable t) {
+          } catch (Exception t) {
             assertTrue(t instanceof AwaitedWorkflowCancelledException);
           }
 
@@ -239,8 +239,8 @@ public class WorkflowMgmtTest {
     try {
       ForkOptions options = new ForkOptions.Builder().build();
       WorkflowHandle<String> rstatHandle = dbos.forkWorkflow("12345", 2, options);
-      fail("An exceptions should have been thrown");
-    } catch (Throwable t) {
+      fail("An exception should have been thrown");
+    } catch (Exception t) {
       logger.info(t.getClass().getName());
       assertTrue(t instanceof NonExistentWorkflowException);
     }

@@ -33,7 +33,7 @@ public class AsyncInvocationHandler extends BaseInvocationHandler {
 
   protected Object submitWorkflow(
       String workflowName, String targetClassName, RegisteredWorkflow wrapper, Object[] args)
-      throws Throwable {
+      throws Exception {
     logger.debug("submitWorkflow");
 
     var executor = executorSupplier.get();

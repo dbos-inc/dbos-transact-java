@@ -82,7 +82,7 @@ public class SchedulerService {
                   dbosExecutor.enqueueWorkflow(
                       wf.workflowName, wf.instance.getClass().getName(), args, schedulerQueue);
                 }
-              } catch (Throwable e) {
+              } catch (Exception e) {
                 e.printStackTrace();
               }
 

@@ -30,7 +30,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
     this.executorSupplier = executorSupplier;
   }
 
-  public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+  public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
 
     Method implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
 
@@ -46,7 +46,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
   }
 
   protected Object handleWorkflow(Method method, Object[] args, Workflow workflow)
-      throws Throwable {
+      throws Exception {
     var executor = executorSupplier.get();
     if (executor == null) {
       throw new IllegalStateException();
@@ -116,7 +116,7 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
     }
   }
 
-  protected Object handleStep(Method method, Object[] args, Step step) throws Throwable {
+  protected Object handleStep(Method method, Object[] args, Step step) throws Exception {
     var executor = executorSupplier.get();
     if (executor == null) {
       throw new IllegalStateException();
@@ -153,5 +153,5 @@ public abstract class BaseInvocationHandler implements InvocationHandler {
 
   protected abstract Object submitWorkflow(
       String workflowName, String targetClassName, RegisteredWorkflow wrapper, Object[] args)
-      throws Throwable;
+      throws Exception;
 }
