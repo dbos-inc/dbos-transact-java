@@ -4,6 +4,7 @@ import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.conductor.Conductor;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
@@ -947,7 +948,7 @@ public class DBOSExecutor implements AutoCloseable {
     return retrieveWorkflow(forkedId);
   }
 
-  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> func) {
+  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> supplier, StartWorkflowOptions options) {
     DBOSContext oldctx = DBOSContextHolder.get();
     // oldctx.setDbos(dbos);
     DBOSContext newCtx = oldctx;
@@ -962,7 +963,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     try {
       DBOSContextHolder.set(newCtx);
-      func.execute();
+      supplier.execute();
       return retrieveWorkflow(newCtx.getWorkflowId());
     } catch (Exception t) {
       throw new DBOSException(UNEXPECTED.getCode(), t.getMessage());

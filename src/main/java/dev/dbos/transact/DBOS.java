@@ -441,34 +441,32 @@ public class DBOS {
     return executor.forkWorkflow(workflowId, startStep, options);
   }
 
-  /**
-   * Start a workflow asynchronously. If a queue is specified with DBOSOptions, the workflow is
-   * queued.
-   *
-   * @param func A function annotated with @Workflow
-   * @return handle {@link WorkflowHandle} to the workflow
-   * @param <T> type returned by the function
-   */
-  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> func) {
+  public <T> WorkflowHandle<T> startWorkflow(
+      ThrowingSupplier<T, Exception> supplier, StartWorkflowOptions options) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");
     }
 
-    return executor.startWorkflow(func);
+    return executor.startWorkflow(supplier, options);
   }
 
-  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Exception> func) {
-    var executor = dbosExecutor.get();
-    if (executor == null) {
-      throw new IllegalStateException("cannot startWorkflow before launch");
-    }
+  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> supplier) {
+    return startWorkflow(supplier, new StartWorkflowOptions());
+  }
 
-    return executor.startWorkflow(
+  public WorkflowHandle<Void> startWorkflow(
+      ThrowingRunnable<Exception> runnable, StartWorkflowOptions options) {
+    return startWorkflow(
         () -> {
-          func.execute();
+          runnable.execute();
           return null;
-        });
+        },
+        options);
+  }
+
+  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Exception> runnable) {
+    return startWorkflow(runnable, new StartWorkflowOptions());
   }
 
   public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {

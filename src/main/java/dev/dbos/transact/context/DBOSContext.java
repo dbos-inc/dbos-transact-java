@@ -3,7 +3,6 @@ package dev.dbos.transact.context;
 import dev.dbos.transact.DBOS;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -18,9 +17,11 @@ public class DBOSContext {
   // assigned context options
   String nextWorkflowId;
   Duration timeout;
-  String authenticatedUser;
-  List<String> authenticatedRoles;
-  String assumedRole;
+
+  // TODO: auth support
+  // String authenticatedUser;
+  // List<String> authenticatedRoles;
+  // String assumedRole;
 
   // current workflow fields
   private final DBOS dbos;
