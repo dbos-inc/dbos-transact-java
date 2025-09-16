@@ -44,34 +44,14 @@ public class UnifiedInvocationHandler extends BaseInvocationHandler {
 
     DBOSContext ctx = DBOSContextHolder.get();
 
-    if (ctx.isAsync()) {
+    logger.debug("invoking workflow synchronously");
 
-      logger.debug("invoking workflow asynchronously");
-
-      executor.submitWorkflow(
-          workflowName, targetClassName, wrapper.target(), args, wrapper.function());
-
-      return null;
-
-    } else if (ctx.getQueue() != null) {
-
-      logger.debug("enqueuing workflow");
-
-      executor.enqueueWorkflow(workflowName, targetClassName, args, ctx.getQueue());
-
-      return null;
-
-    } else {
-
-      logger.debug("invoking workflow synchronously");
-
-      return executor.syncWorkflow(
-          workflowName,
-          targetClassName,
-          wrapper.target(),
-          args,
-          wrapper.function(),
-          DBOSContextHolder.get().getWorkflowId());
-    }
+    return executor.syncWorkflow(
+        workflowName,
+        targetClassName,
+        wrapper.target(),
+        args,
+        wrapper.function(),
+        ctx.getWorkflowId());
   }
 }

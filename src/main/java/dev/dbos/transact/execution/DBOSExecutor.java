@@ -8,7 +8,6 @@ import dev.dbos.transact.conductor.Conductor;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
-import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
@@ -436,7 +435,7 @@ public class DBOSExecutor implements AutoCloseable {
     WorkflowInitResult initResult = null;
 
     DBOSContext ctx = DBOSContextHolder.get();
-    ctx.setDbos(dbos);
+    // ctx.setDbos(dbos);
     if (ctx.hasParent()) {
       Optional<String> childId =
           systemDatabase.checkChildWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId());
@@ -501,7 +500,7 @@ public class DBOSExecutor implements AutoCloseable {
       throws Exception {
 
     DBOSContext ctx = DBOSContextHolder.get();
-    ctx.setDbos(dbos);
+    // ctx.setDbos(dbos);
 
     String workflowId = ctx.getWorkflowId();
 
@@ -540,15 +539,15 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     // Copy the context - dont just pass a reference - memory visibility
-    var contextForInsideCall = DBOSContextHolder.get().copy();
+    // var contextForInsideCall = DBOSContextHolder.get().copy();
     Callable<T> task =
         () -> {
           T result = null;
 
           // Doing this on purpose to ensure that we have the correct context
-          DBOSContextHolder.set(contextForInsideCall);
+          // DBOSContextHolder.set(contextForInsideCall);
           var context = DBOSContextHolder.get();
-          context.setDbos(dbos);
+          // context.setDbos(dbos);
           String id = context.getWorkflowId();
 
           try {
@@ -769,7 +768,7 @@ public class DBOSExecutor implements AutoCloseable {
       return function.execute();
     }
 
-    ctx.setDbos(dbos);
+    // ctx.setDbos(dbos);
     String workflowId = ctx.getWorkflowId();
 
     logger.info("Running step {} for workflow {}", stepName, workflowId);
@@ -872,24 +871,24 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     WorkflowHandle<T> handle = null;
-    try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
-      var ctx = DBOSContextHolder.get();
-      ctx.setInWorkflow(true);
-      ctx.setDbos(dbos);
+    // try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+    var ctx = DBOSContextHolder.get();
+    // ctx.setInWorkflow(true);
+    // ctx.setDbos(dbos);
 
-      try {
-        handle =
-            (WorkflowHandle<T>)
-                submitWorkflow(
-                    status.getName(),
-                    functionWrapper.className(),
-                    functionWrapper.target(),
-                    inputs,
-                    functionWrapper.function());
-      } catch (Exception t) {
-        logger.error("Error executing workflow by id : {}", workflowId, t);
-      }
+    try {
+      handle =
+          (WorkflowHandle<T>)
+              submitWorkflow(
+                  status.getName(),
+                  functionWrapper.className(),
+                  functionWrapper.target(),
+                  inputs,
+                  functionWrapper.function());
+    } catch (Exception t) {
+      logger.error("Error executing workflow by id : {}", workflowId, t);
     }
+    // }
 
     return handle;
   }
@@ -898,7 +897,7 @@ public class DBOSExecutor implements AutoCloseable {
     // CB TODO: This should be OK outside DBOS
 
     DBOSContext context = DBOSContextHolder.get();
-    context.setDbos(dbos);
+    // context.setDbos(dbos);
 
     if (context.getWorkflowId() == null) {
       throw new DBOSException(
@@ -950,16 +949,16 @@ public class DBOSExecutor implements AutoCloseable {
 
   public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> func) {
     DBOSContext oldctx = DBOSContextHolder.get();
-    oldctx.setDbos(dbos);
+    // oldctx.setDbos(dbos);
     DBOSContext newCtx = oldctx;
 
-    if (newCtx.getWorkflowId() == null) {
-      newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString());
-    }
+    // if (newCtx.getWorkflowId() == null) {
+    //   newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString());
+    // }
 
-    if (newCtx.getQueue() == null) {
-      newCtx = newCtx.copyWithAsync();
-    }
+    // if (newCtx.getQueue() == null) {
+    //   newCtx = newCtx.copyWithAsync();
+    // }
 
     try {
       DBOSContextHolder.set(newCtx);
@@ -1109,28 +1108,26 @@ public class DBOSExecutor implements AutoCloseable {
 
   // invoke workflow - pull info from context
 
-    public <T> WorkflowHandle<T> invokeWorkflow(String workflowName, Method method, Object[] args) {
-      var name = workflowName.isEmpty() ? method.getName() : workflowName;
+  public <T> WorkflowHandle<T> invokeWorkflow(String workflowName, Method method, Object[] args) {
+    var name = workflowName.isEmpty() ? method.getName() : workflowName;
 
-      var workflow = getWorkflow(name);
-      if (workflow == null) {
-        throw new IllegalStateException("%s workflow not registered".formatted(name));
-      }
-
-      var ctx = DBOSContextHolder.get();
-      if (ctx.isInWorkflow()) {
-        // ensure we're not in a step
-
-        // get current wf + func id 
-
-
-      } else {
-
-      }
-
-      throw new RuntimeException();
+    var workflow = getWorkflow(name);
+    if (workflow == null) {
+      throw new IllegalStateException("%s workflow not registered".formatted(name));
     }
 
+    var ctx = DBOSContextHolder.get();
+    if (ctx.isInWorkflow()) {
+      // ensure we're not in a step
+
+      // get current wf + func id
+
+    } else {
+
+    }
+
+    throw new RuntimeException();
+  }
 
   public record ExecuteWorkflowOptions(
       String workflowId,
@@ -1211,7 +1208,7 @@ public class DBOSExecutor implements AutoCloseable {
                 (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
 
             logger.error("executeWorkflow", actual);
-    
+
             if (actual instanceof WorkflowCancelledException
                 || actual instanceof InterruptedException) {
               throw new AwaitedWorkflowCancelledException(workflowId);

@@ -1,63 +1,64 @@
 package dev.dbos.transact.context;
 
-import dev.dbos.transact.queue.Queue;
+import java.time.Duration;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
-public class WorkflowOptions {
+public record WorkflowOptions(String workflowId, Duration timeout) {
 
-  private final boolean async;
-  private final Queue queue;
-  private final String workflowId;
-  private final long timeoutSeconds;
-
-  private WorkflowOptions(Builder builder) {
-    this.async = builder.async;
-    this.queue = builder.queue;
-    this.workflowId = builder.workflowId;
-    this.timeoutSeconds = builder.timeoutSeconds;
+  public WorkflowOptions() {
+    this(null, null);
   }
 
-  public boolean isAsync() {
-    return async;
+  public WorkflowOptions(String workflowId) {
+    this(workflowId, null);
   }
 
-  public Queue getQueue() {
-    return queue;
+  public WorkflowOptions(Duration timeout) {
+    this(null, timeout);
   }
 
-  public String getWorkflowId() {
-    return workflowId;
+  public WorkflowOptions(long value, TimeUnit unit) {
+    this(Duration.ofNanos(unit.toNanos(value)));
   }
 
-  public long getTimeout() {
-    return timeoutSeconds;
+  public WorkflowOptions withWorkflowId(String workflowId) {
+    return new WorkflowOptions(workflowId, this.timeout);
   }
 
-  public static class Builder {
-    private boolean async = false;
-    private Queue queue = null;
-    private String workflowId = null;
-    private long timeoutSeconds = 0;
+  public WorkflowOptions withTimeout(Duration timeout) {
+    return new WorkflowOptions(this.workflowId, timeout);
+  }
 
-    public Builder(String workflowId) {
-      this.workflowId = workflowId;
+  public WorkflowOptions withTimeout(long value, TimeUnit unit) {
+    var timeout = Duration.ofNanos(unit.toNanos(value));
+    return new WorkflowOptions(this.workflowId, timeout);
+  }
+
+  public Guard setContext() {
+    var ctx = DBOSContextHolder.get();
+    var guard = new Guard(ctx);
+    ctx.nextWorkflowId = Objects.requireNonNullElse(workflowId, ctx.nextWorkflowId);
+    ctx.timeout = Objects.requireNonNullElse(timeout, ctx.timeout);
+    return guard;
+  }
+
+  public static class Guard implements AutoCloseable {
+
+    private final DBOSContext ctx;
+    private final String nextWorkflowId;
+    private final Duration timeout;
+
+    public Guard(DBOSContext ctx) {
+      this.ctx = ctx;
+      this.nextWorkflowId = ctx.nextWorkflowId;
+      this.timeout = ctx.timeout;
     }
 
-    /*
-     * public Builder async() { this.async = true; return this; }
-     */
-
-    public Builder queue(Queue queue) {
-      this.queue = queue;
-      return this;
-    }
-
-    public Builder timeout(long timeout) {
-      this.timeoutSeconds = timeout;
-      return this;
-    }
-
-    public WorkflowOptions build() {
-      return new WorkflowOptions(this);
+    @Override
+    public void close() {
+      ctx.nextWorkflowId = nextWorkflowId;
+      ctx.timeout = timeout;
     }
   }
 }

@@ -11,8 +11,7 @@ public record StartWorkflowOptions(
     Duration timeout,
     String queueName,
     String deduplicationId,
-    OptionalInt priority
-    ) {
+    OptionalInt priority) {
 
   public StartWorkflowOptions() {
     this(null, null, null, null, OptionalInt.empty());

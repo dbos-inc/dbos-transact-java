@@ -1,6 +1,5 @@
 package dev.dbos.transact.scheduled;
 
-import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.queue.Queue;
@@ -78,10 +77,10 @@ public class SchedulerService {
                 logger.info("submitting to dbos Executor {}", wf.workflowName);
                 String workflowId =
                     String.format("sched-%s-%s", wf.workflowName, scheduledTime.toString());
-                try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
-                  dbosExecutor.enqueueWorkflow(
-                      wf.workflowName, wf.instance.getClass().getName(), args, schedulerQueue);
-                }
+                // try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+                dbosExecutor.enqueueWorkflow(
+                    wf.workflowName, wf.instance.getClass().getName(), args, schedulerQueue);
+                // }
               } catch (Exception e) {
                 e.printStackTrace();
               }
