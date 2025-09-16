@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.execution.ExecutingService;
 import dev.dbos.transact.execution.ExecutingServiceImpl;
 import dev.dbos.transact.utils.DBUtils;
@@ -102,19 +102,19 @@ class AdminControllerTest {
     executingService.setExecutingService(executingService);
 
     // Execute multiple workflows with different IDs and inputs
-    try (SetWorkflowID id1 = new SetWorkflowID("workflow-001")) {
+    try (var id1 = new WorkflowOptions("workflow-001").setContext()) {
       executingService.workflowMethodWithStep("input-alpha");
     }
 
-    try (SetWorkflowID id2 = new SetWorkflowID("workflow-002")) {
+    try (var id2 = new WorkflowOptions("workflow-002").setContext()) {
       executingService.workflowMethodWithStep("input-beta");
     }
 
-    try (SetWorkflowID id3 = new SetWorkflowID("workflow-003")) {
+    try (var id3 = new WorkflowOptions("workflow-003").setContext()) {
       executingService.workflowMethodWithStep("input-gamma");
     }
 
-    try (SetWorkflowID id4 = new SetWorkflowID("workflow-004")) {
+    try (var id4 = new WorkflowOptions("workflow-004").setContext()) {
       simpleService.workWithString("input-delta");
     }
 
@@ -180,7 +180,7 @@ class AdminControllerTest {
     // Needed to call the step
     executingService.setExecutingService(executingService);
 
-    try (SetWorkflowID id = new SetWorkflowID("abc123")) {
+    try (var id = new WorkflowOptions("abc123").setContext()) {
       String result = executingService.workflowMethodWithStep("test-item");
       assertEquals("test-itemstepOnestepTwo", result);
     }
@@ -216,7 +216,7 @@ class AdminControllerTest {
     // Needed to call the step
     executingService.setExecutingService(executingService);
 
-    try (SetWorkflowID id = new SetWorkflowID("abc123")) {
+    try (var id = new WorkflowOptions("abc123").setContext()) {
       String result = executingService.workflowMethodWithStep("test-item");
       assertEquals("test-itemstepOnestepTwo", result);
     }
@@ -256,27 +256,27 @@ class AdminControllerTest {
     executingService.setExecutingService(executingService);
 
     // Execute multiple workflows with different IDs and inputs
-    try (SetWorkflowID id1 = new SetWorkflowID("workflow-001")) {
+    try (var id1 = new WorkflowOptions("workflow-001").setContext()) {
       String result1 = executingService.workflowMethodWithStep("input-alpha");
       assertEquals("input-alphastepOnestepTwo", result1);
     }
 
-    try (SetWorkflowID id2 = new SetWorkflowID("workflow-002")) {
+    try (var id2 = new WorkflowOptions("workflow-002").setContext()) {
       String result2 = executingService.workflowMethodWithStep("input-beta");
       assertEquals("input-betastepOnestepTwo", result2);
     }
 
-    try (SetWorkflowID id3 = new SetWorkflowID("workflow-003")) {
+    try (var id3 = new WorkflowOptions("workflow-003").setContext()) {
       String result3 = executingService.workflowMethodWithStep("input-gamma");
       assertEquals("input-gammastepOnestepTwo", result3);
     }
 
-    try (SetWorkflowID id4 = new SetWorkflowID("workflow-004")) {
+    try (var id4 = new WorkflowOptions("workflow-004").setContext()) {
       String result3 = simpleService.workWithString("input-delta");
       assertEquals("Processed: input-delta", result3);
     }
 
-    try (SetWorkflowID id5 = new SetWorkflowID("workflow-005")) {
+    try (var id5 = new WorkflowOptions("workflow-005").setContext()) {
       simpleService.workWithError();
     } catch (Exception e) {
       assertEquals("DBOS Test error", e.getMessage());
@@ -343,7 +343,7 @@ class AdminControllerTest {
     dbos.launch();
 
     String workflowId = "wfid1";
-    try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
       String result = forkService.simpleWorkflow("hello");
       assertEquals("hellohello", result);
     }

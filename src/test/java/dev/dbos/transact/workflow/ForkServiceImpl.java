@@ -1,8 +1,8 @@
 package dev.dbos.transact.workflow;
 
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.SetWorkflowOptions;
-import dev.dbos.transact.context.WorkflowOptions;
+ import dev.dbos.transact.context.WorkflowOptions;
 
 public class ForkServiceImpl implements ForkService {
 
@@ -37,13 +37,11 @@ public class ForkServiceImpl implements ForkService {
     forkService.stepOne("one");
     forkService.stepTwo(2);
 
-    try (SetWorkflowOptions o =
-        new SetWorkflowOptions(new WorkflowOptions.Builder("child1").build())) {
+    try (var o = new WorkflowOptions("child1").setContext()) {
       forkService.child1(25);
     }
 
-    try (SetWorkflowOptions o =
-        new SetWorkflowOptions(new WorkflowOptions.Builder("child2").build())) {
+    try (var o = new WorkflowOptions("child2").setContext()) {
       forkService.child2(25.75f);
     }
 
@@ -58,17 +56,10 @@ public class ForkServiceImpl implements ForkService {
     forkService.stepOne("one");
     forkService.stepTwo(2);
 
-    WorkflowHandle<String> handle = null;
-    try (SetWorkflowOptions o =
-        new SetWorkflowOptions(new WorkflowOptions.Builder("child1").build())) {
-      handle = dbos.startWorkflow(() -> forkService.child1(25));
-    }
-
+    WorkflowHandle<String> handle = dbos.startWorkflow(() -> forkService.child1(25), new StartWorkflowOptions("child1"));
     handle.getResult();
-    try (SetWorkflowOptions o =
-        new SetWorkflowOptions(new WorkflowOptions.Builder("child2").build())) {
-      handle = dbos.startWorkflow(() -> forkService.child2(25.75f));
-    }
+
+    handle = dbos.startWorkflow(() -> forkService.child2(25.75f), new StartWorkflowOptions("child1"));
 
     forkService.stepFive(false);
     return input + input;

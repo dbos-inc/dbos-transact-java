@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
@@ -74,7 +74,7 @@ class DBOSExecutorTest {
     String result = null;
 
     String wfid = "wf-123";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var _i = new WorkflowOptions(wfid).setContext()) {
       result = executingService.workflowMethod("test-item");
     }
 
@@ -112,7 +112,7 @@ class DBOSExecutorTest {
     String result = null;
 
     String wfid = "wf-123";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       result = executingService.workflowMethod("test-item");
     }
 
@@ -147,7 +147,7 @@ class DBOSExecutorTest {
     String result = null;
 
     String wfid = "wf-123";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       result = executingService.workflowMethod("test-item");
     }
 
@@ -191,7 +191,7 @@ class DBOSExecutorTest {
     String result = null;
 
     String wfid = "wf-123";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       result = executingService.workflowMethodWithStep("test-item");
     }
 
@@ -238,7 +238,7 @@ class DBOSExecutorTest {
     String result = null;
 
     String wfid = "wf-123";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       result = executingService.workflowMethodWithStep("test-item");
     }
 
@@ -291,7 +291,7 @@ class DBOSExecutorTest {
 
     String wfid = "wf-123";
     long start = System.currentTimeMillis();
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       executingService.sleepingWorkflow(2);
     }
 
@@ -324,7 +324,7 @@ class DBOSExecutorTest {
 
     String wfid = "wf-123";
     long start = System.currentTimeMillis();
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       executingService.sleepingWorkflow(.002f);
     }
 
