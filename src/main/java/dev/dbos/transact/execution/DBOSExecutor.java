@@ -37,7 +37,9 @@ import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -46,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -843,6 +846,11 @@ public class DBOSExecutor implements AutoCloseable {
 
   /** Retrieve the workflowHandle for the workflowId */
   public <R> WorkflowHandle<R> retrieveWorkflow(String workflowId) {
+    return retrieveWorkflow(workflowId, systemDatabase);
+  }
+
+  private static <R> WorkflowHandle<R> retrieveWorkflow(
+      String workflowId, SystemDatabase systemDatabase) {
     return new WorkflowHandleDBPoll<R>(workflowId, systemDatabase);
   }
 
@@ -1097,5 +1105,177 @@ public class DBOSExecutor implements AutoCloseable {
         };
 
     return this.callFunctionAsStep(listQueuedWorkflowsFunction, "DBOS.listQueuedWorkflows");
+  }
+
+  // invoke workflow - pull info from context
+
+    public <T> WorkflowHandle<T> invokeWorkflow(String workflowName, Method method, Object[] args) {
+      var name = workflowName.isEmpty() ? method.getName() : workflowName;
+
+      var workflow = getWorkflow(name);
+      if (workflow == null) {
+        throw new IllegalStateException("%s workflow not registered".formatted(name));
+      }
+
+      var ctx = DBOSContextHolder.get();
+      if (ctx.isInWorkflow()) {
+        // ensure we're not in a step
+
+        // get current wf + func id 
+
+
+      } else {
+
+      }
+
+      throw new RuntimeException();
+    }
+
+
+  public record ExecuteWorkflowOptions(
+      String workflowId,
+      Duration timeout,
+      Instant deadline,
+      String queueName,
+      String deduplicationId,
+      OptionalInt priority) {
+
+    public String getWorkflowId() {
+      return Objects.requireNonNullElseGet(workflowId, () -> UUID.randomUUID().toString());
+    }
+
+    public long getTimeoutMillis() {
+      return Objects.requireNonNullElse(timeout, Duration.ZERO).toMillis();
+    }
+  }
+
+  public <T> WorkflowHandle<T> executeWorkflow(
+      RegisteredWorkflow workflow,
+      Object[] args,
+      ExecuteWorkflowOptions options,
+      ParentWorkflow parent) {
+
+    if (options.queueName != null) {
+      return enqueueWorkflow(
+          workflow.name(),
+          workflow.className(),
+          args,
+          options,
+          parent,
+          getExecutorId(),
+          getAppVersion(),
+          systemDatabase);
+    }
+
+    if (parent != null) {
+      var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
+      if (childId.isPresent()) {
+        logger.info("child id is present {}", childId.get());
+        return retrieveWorkflow(childId.get());
+      }
+    }
+
+    var workflowId = options.getWorkflowId();
+    var timeoutMs = options.getTimeoutMillis();
+    var initResult =
+        preInvokeWorkflow(
+            systemDatabase,
+            workflow.name(),
+            workflow.className(),
+            args,
+            workflowId,
+            null,
+            getExecutorId(),
+            getAppVersion(),
+            parent,
+            timeoutMs);
+
+    if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+      return retrieveWorkflow(workflowId);
+    } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+      logger.warn("Idempotency check not impl for error");
+    } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+      logger.warn("Idempotency check not impl for cancelled");
+    }
+
+    Callable<T> task =
+        () -> {
+          // configure current context
+
+          try {
+            T result = workflow.invoke(args);
+            postInvokeWorkflow(systemDatabase, workflowId, result);
+            return result;
+          } catch (Exception e) {
+            var actual =
+                (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
+
+            logger.error("executeWorkflow", actual);
+    
+            if (actual instanceof WorkflowCancelledException
+                || actual instanceof InterruptedException) {
+              throw new AwaitedWorkflowCancelledException(workflowId);
+            }
+            postInvokeWorkflow(systemDatabase, workflowId, actual);
+            throw e;
+          } finally {
+            // clear context
+          }
+        };
+
+    long newTimeout = initResult.getDeadlineEpochMS() - System.currentTimeMillis();
+    if (initResult.getDeadlineEpochMS() > 0 && newTimeout < 0) {
+      systemDatabase.cancelWorkflow(workflowId);
+      return retrieveWorkflow(workflowId);
+    }
+
+    var future = executorService.submit(task);
+    if (newTimeout > 0) {
+      timeoutScheduler.schedule(
+          () -> {
+            if (!future.isDone()) {
+              future.cancel(true);
+              systemDatabase.cancelWorkflow(workflowId);
+            }
+          },
+          newTimeout,
+          TimeUnit.MILLISECONDS);
+    }
+
+    return new WorkflowHandleFuture<T>(workflowId, future, systemDatabase);
+  }
+
+  public static <T> WorkflowHandle<T> enqueueWorkflow(
+      String name,
+      String className,
+      Object[] args,
+      ExecuteWorkflowOptions options,
+      ParentWorkflow parent,
+      String executorId,
+      String appVersion,
+      SystemDatabase systemDatabase) {
+    var workflowId = options.getWorkflowId();
+    var timeoutMs = options.getTimeoutMillis();
+    var queueName = Objects.requireNonNull(options.queueName());
+    // HLP: add priority and dedupe ID support
+
+    try {
+      preInvokeWorkflow(
+          systemDatabase,
+          name,
+          className,
+          args,
+          workflowId,
+          queueName,
+          executorId,
+          appVersion,
+          parent,
+          timeoutMs);
+      return retrieveWorkflow(workflowId, systemDatabase);
+    } catch (Throwable e) {
+      var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
+      logger.error("enqueueWorkflow", actual);
+      throw e;
+    }
   }
 }
