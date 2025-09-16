@@ -1,9 +1,6 @@
 package dev.dbos.transact.workflow.internal;
 
-import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
-
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 

@@ -79,7 +79,8 @@ public class TimeoutTest {
     String result;
 
     var options = new StartWorkflowOptions(wfid1).withTimeout(3, TimeUnit.SECONDS);
-    WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
     // assertNull(result);
 
     // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
@@ -106,7 +107,8 @@ public class TimeoutTest {
     String wfid1 = "wf-125";
     String result;
     var options = new StartWorkflowOptions(wfid1).withTimeout(1, TimeUnit.SECONDS);
-    WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
     // assertNull(result);
     // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
 
@@ -140,8 +142,10 @@ public class TimeoutTest {
     String wfid1 = "wf-126";
     String result;
 
-    var options = new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(3, TimeUnit.SECONDS);
-    WorkflowHandle<String> handle =dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
+    var options =
+        new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(3, TimeUnit.SECONDS);
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
     // assertNull(result);
 
     // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
@@ -169,8 +173,10 @@ public class TimeoutTest {
     String wfid1 = "wf-127";
     String result;
 
-    var options = new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(1, TimeUnit.SECONDS);
-    WorkflowHandle<String> handle =  dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
+    var options =
+        new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(1, TimeUnit.SECONDS);
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
     // assertNull(result);
     // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
 
@@ -396,7 +402,8 @@ public class TimeoutTest {
 
     var options = new StartWorkflowOptions(wfid1).withTimeout(2, TimeUnit.SECONDS);
 
-    WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.longParent("12345", 3, 0), options);
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(() -> simpleService.longParent("12345", 3, 0), options);
 
     try {
       handle.getResult();

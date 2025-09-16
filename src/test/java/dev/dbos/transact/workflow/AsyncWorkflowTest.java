@@ -7,7 +7,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSAppException;
 import dev.dbos.transact.exceptions.SerializableException;
 import dev.dbos.transact.utils.DBUtils;
@@ -155,13 +154,13 @@ public class AsyncWorkflowTest {
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String wfid = "abc";
-    WorkflowHandle<Void> handle = 
-          dbos.startWorkflow(
-              () -> {
-                simpleService.workWithError();
-                return null;
-              }, new StartWorkflowOptions(wfid));
-    
+    WorkflowHandle<Void> handle =
+        dbos.startWorkflow(
+            () -> {
+              simpleService.workWithError();
+              return null;
+            },
+            new StartWorkflowOptions(wfid));
 
     try {
       handle.getResult();
@@ -192,7 +191,10 @@ public class AsyncWorkflowTest {
 
     simpleService.setSimpleService(simpleService);
 
-    WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.parentWorkflowWithoutSet("123"), new StartWorkflowOptions("wf-123456"));
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(
+            () -> simpleService.parentWorkflowWithoutSet("123"),
+            new StartWorkflowOptions("wf-123456"));
 
     System.out.println(handle.getResult());
 
@@ -226,7 +228,10 @@ public class AsyncWorkflowTest {
 
     simpleService.setSimpleService(simpleService);
 
-    WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.WorkflowWithMultipleChildren("123"), new StartWorkflowOptions("wf-123456"));
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(
+            () -> simpleService.WorkflowWithMultipleChildren("123"),
+            new StartWorkflowOptions("wf-123456"));
 
     assertEquals("123abcdefghi", handle.getResult());
 
@@ -274,7 +279,9 @@ public class AsyncWorkflowTest {
 
     simpleService.setSimpleService(simpleService);
 
-    WorkflowHandle<String> handle =dbos.startWorkflow(() -> simpleService.grandParent("123"), new StartWorkflowOptions("wf-123456"));
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(
+            () -> simpleService.grandParent("123"), new StartWorkflowOptions("wf-123456"));
 
     assertEquals("p-c-gc-123", handle.getResult());
 
@@ -315,7 +322,9 @@ public class AsyncWorkflowTest {
     dbos.launch();
 
     String wfid = "wf-123";
-    WorkflowHandle<String> handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item"), new StartWorkflowOptions(wfid));
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(
+            () -> simpleService.workWithString("test-item"), new StartWorkflowOptions(wfid));
 
     String result = handle.getResult();
     assertEquals("Processed: test-item", result);

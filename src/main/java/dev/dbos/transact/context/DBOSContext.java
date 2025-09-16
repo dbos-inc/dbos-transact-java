@@ -3,6 +3,7 @@ package dev.dbos.transact.context;
 import dev.dbos.transact.DBOS;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -28,21 +29,27 @@ public class DBOSContext {
   private final String workflowId;
   private int functionId;
   private final WorkflowInfo parent;
-  private StepStatus stepStatus;
+  private final Instant deadline;
+
+  // private StepStatus stepStatus;
 
   public DBOSContext() {
     dbos = null;
     workflowId = null;
     functionId = -1;
     parent = null;
-    stepStatus = null;
+    deadline = null;
+    // stepStatus = null;
   }
 
-  public DBOSContext(DBOS dbos, String workflowId, WorkflowInfo parent) {
+  public DBOSContext(
+      DBOS dbos, String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
     this.dbos = dbos;
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
+    this.timeout = timeout;
+    this.deadline = deadline;
   }
 
   public boolean isInWorkflow() {
@@ -57,26 +64,40 @@ public class DBOSContext {
     return functionId++;
   }
 
-  public long getWorkflowTimeoutMs() {
-    return timeout == null ? 0L : timeout.toMillis();
+  public WorkflowInfo getParent() {
+    return parent;
   }
 
-  public boolean hasParent() {
-    return parent != null;
+  public Instant getDeadline(Duration timeout) {
+    return timeout != null
+        ? Instant.ofEpochMilli(System.currentTimeMillis() + timeout.toMillis())
+        : deadline;
   }
 
-  public String getParentWorkflowId() {
-    return parent != null ? parent.workflowId() : null;
-  }
+  // public boolean hasParent() {
+  //   return parent != null;
+  // }
 
-  public int getParentFunctionId() {
-    return parent != null ? parent.functionId() : -1;
-  }
+  // public String getParentWorkflowId() {
+  //   return parent != null ? parent.workflowId() : null;
+  // }
+
+  // public int getParentFunctionId() {
+  //   return parent != null ? parent.functionId() : -1;
+  // }
 
   public String getNextWorkflowId() {
-    var value = nextWorkflowId;
-    this.nextWorkflowId = null;
-    return value;
+    return getNextWorkflowId(null);
+  }
+
+  public String getNextWorkflowId(String workflowId) {
+    if (nextWorkflowId != null) {
+      var value = nextWorkflowId;
+      this.nextWorkflowId = null;
+      return value;
+    }
+
+    return workflowId;
   }
 
   public Duration getTimeout() {

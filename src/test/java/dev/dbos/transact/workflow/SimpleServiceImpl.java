@@ -158,7 +158,8 @@ public class SimpleServiceImpl implements SimpleService {
 
     logger.info("In longParent");
     String workflowId = "childwf";
-    WorkflowOptions options = new WorkflowOptions(workflowId).withTimeout(timeoutSeconds, TimeUnit.SECONDS);
+    WorkflowOptions options =
+        new WorkflowOptions(workflowId).withTimeout(timeoutSeconds, TimeUnit.SECONDS);
 
     WorkflowHandle<String> handle = null;
     try (var o = options.setContext()) {

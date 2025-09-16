@@ -1,9 +1,12 @@
 package dev.dbos.transact.devhawk;
 
-
 public interface HawkService {
 
-    String simpleWorkflow(String workflowId);
+  String simpleWorkflow(String workflowId);
 
-    String recvWorkflow();
+  String sleepWorkflow(long sleepSeconds);
+
+  String parentWorkflow(String workflowId);
+
+  String parentSleepWorkflow(long sleepSeconds);
 }

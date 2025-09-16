@@ -1,7 +1,6 @@
 package dev.dbos.transact.context;
 
 import java.time.Duration;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 public record WorkflowOptions(String workflowId, Duration timeout) {
@@ -39,9 +38,13 @@ public record WorkflowOptions(String workflowId, Duration timeout) {
     var ctx = DBOSContextHolder.get();
     var guard = new Guard(ctx);
 
-    if (workflowId != null) { ctx.nextWorkflowId = workflowId; }
-    if (timeout != null) { ctx.timeout = timeout; }
-    
+    if (workflowId != null) {
+      ctx.nextWorkflowId = workflowId;
+    }
+    if (timeout != null) {
+      ctx.timeout = timeout;
+    }
+
     return guard;
   }
 

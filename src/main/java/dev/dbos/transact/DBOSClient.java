@@ -2,6 +2,7 @@ package dev.dbos.transact;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.DBOSExecutor.ExecuteWorkflowOptions;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -13,8 +14,10 @@ import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 public class DBOSClient implements AutoCloseable {
@@ -39,7 +42,11 @@ public class DBOSClient implements AutoCloseable {
       String targetClassName,
       String workflowId,
       String appVersion,
-      Long timeoutMS) {}
+      Long timeoutMS) {
+    Duration getTimeout() {
+      return timeoutMS == null ? null : Duration.ofMillis(timeoutMS);
+    }
+  }
 
   public static class EnqueueOptionsBuilder {
     String workflowName;
@@ -82,22 +89,27 @@ public class DBOSClient implements AutoCloseable {
 
   public <T> WorkflowHandle<T> enqueueWorkflow(EnqueueOptions options, Object[] args)
       throws Exception {
-    Objects.requireNonNull(options.workflowName);
-    Objects.requireNonNull(options.queueName);
+    var workflowName = Objects.requireNonNull(options.workflowName);
+    var queueName = Objects.requireNonNull(options.queueName);
 
-    var workflowId =
+    var handle =
         DBOSExecutor.enqueueWorkflow(
-            this.systemDatabase,
-            options.workflowId,
-            options.workflowName,
+            workflowName,
             options.targetClassName,
             args,
-            options.queueName,
+            new ExecuteWorkflowOptions(
+                options.workflowId(),
+                options.getTimeout(),
+                null,
+                queueName,
+                null,
+                OptionalInt.empty()),
+            null,
             null,
             options.appVersion,
-            null,
-            options.timeoutMS != null ? options.timeoutMS : 0L);
-    return retrieveWorkflow(workflowId);
+            systemDatabase);
+
+    return retrieveWorkflow(handle.getWorkflowId());
   }
 
   public void send(String destinationId, Object message, String topic, String idempotencyKey)

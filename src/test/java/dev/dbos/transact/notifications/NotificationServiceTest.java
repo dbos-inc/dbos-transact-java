@@ -378,7 +378,8 @@ class NotificationServiceTest {
     String wfid1 = "recvwf1";
 
     var options = new StartWorkflowOptions(wfid1);
-    WorkflowHandle<String> handle = dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5), options);
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5), options);
 
     assertEquals(WorkflowState.PENDING.name(), handle.getStatus().getStatus());
     dbos.send(wfid1, "hello", "topic1");

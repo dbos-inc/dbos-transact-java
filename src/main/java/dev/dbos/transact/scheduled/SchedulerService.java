@@ -78,8 +78,8 @@ public class SchedulerService {
                 String workflowId =
                     String.format("sched-%s-%s", wf.workflowName, scheduledTime.toString());
                 // try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
-                dbosExecutor.enqueueWorkflow(
-                    wf.workflowName, wf.instance.getClass().getName(), args, schedulerQueue);
+                // dbosExecutor.enqueueWorkflow(
+                //     wf.workflowName, wf.instance.getClass().getName(), args, schedulerQueue);
                 // }
               } catch (Exception e) {
                 e.printStackTrace();

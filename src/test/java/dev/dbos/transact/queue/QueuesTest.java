@@ -8,7 +8,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -220,7 +219,6 @@ public class QueuesTest {
   }
 
   @Test
-  
   public void multipleQueues() throws Exception {
 
     Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
@@ -245,7 +243,8 @@ public class QueuesTest {
     String id2 = "second1234";
 
     var options1 = new StartWorkflowOptions(id1).withQueue(firstQ);
-    WorkflowHandle<String> handle1 = dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"), options1);
+    WorkflowHandle<String> handle1 =
+        dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"), options1);
 
     var options2 = new StartWorkflowOptions(id2).withQueue(secondQ);
     WorkflowHandle<Integer> handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25), options2);
@@ -288,7 +287,8 @@ public class QueuesTest {
     for (int i = 0; i < numTasks; i++) {
       String id = "id" + i;
       var options = new StartWorkflowOptions(id).withQueue(limitQ);
-      WorkflowHandle<Double> handle = dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"), options);
+      WorkflowHandle<Double> handle =
+          dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"), options);
       handles.add(handle);
     }
 
@@ -523,7 +523,8 @@ public class QueuesTest {
     String id = "q1234";
 
     var option = new StartWorkflowOptions(id).withQueue(firstQ);
-    WorkflowHandle<String> handle = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), option);
+    WorkflowHandle<String> handle =
+        dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), option);
 
     assertEquals(id, handle.getWorkflowId());
     String result = handle.getResult();
@@ -547,7 +548,7 @@ public class QueuesTest {
     var handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0), opt1);
 
     var opt2 = new StartWorkflowOptions("wf2").withQueue(queue);
-      var handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1), opt2);
+    var handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1), opt2);
 
     var opt3 = new StartWorkflowOptions("wf3").withQueue(queue);
     var handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2), opt3);
