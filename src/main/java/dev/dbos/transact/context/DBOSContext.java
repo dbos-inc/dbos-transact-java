@@ -27,25 +27,22 @@ public class DBOSContext {
   private final DBOS dbos;
   private final String workflowId;
   private int functionId;
-  private final String parentWorkflowId;
-  private final int parentFunctionId;
+  private final WorkflowInfo parent;
   private StepStatus stepStatus;
 
   public DBOSContext() {
     dbos = null;
     workflowId = null;
     functionId = -1;
-    parentWorkflowId = null;
-    parentFunctionId = -1;
+    parent = null;
     stepStatus = null;
   }
 
-  public DBOSContext(DBOS dbos, String workflowId) {
+  public DBOSContext(DBOS dbos, String workflowId, WorkflowInfo parent) {
     this.dbos = dbos;
     this.workflowId = workflowId;
     this.functionId = 0;
-    this.parentWorkflowId = null;
-    this.parentFunctionId = -1;
+    this.parent = parent;
   }
 
   public boolean isInWorkflow() {
@@ -65,15 +62,25 @@ public class DBOSContext {
   }
 
   public boolean hasParent() {
-    return parentWorkflowId != null;
+    return parent != null;
   }
 
   public String getParentWorkflowId() {
-    return parentWorkflowId;
+    return parent != null ? parent.workflowId() : null;
   }
 
   public int getParentFunctionId() {
-    return parentFunctionId;
+    return parent != null ? parent.functionId() : -1;
+  }
+
+  public String getNextWorkflowId() {
+    var value = nextWorkflowId;
+    this.nextWorkflowId = null;
+    return value;
+  }
+
+  public Duration getTimeout() {
+    return this.timeout;
   }
 
   public static Optional<String> workflowId() {

@@ -9,6 +9,7 @@ import dev.dbos.transact.conductor.Conductor;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.context.WorkflowInfo;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
@@ -292,21 +293,6 @@ public class DBOSExecutor implements AutoCloseable {
     return handles;
   }
 
-  record ParentWorkflow(String workflowId, int functionId) {
-    public static ParentWorkflow fromContext() {
-      DBOSContext ctx = DBOSContextHolder.get();
-      return ctx.hasParent()
-          ? new ParentWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId())
-          : null;
-    }
-
-    public static ParentWorkflow fromContext(DBOSContext ctx) {
-      return ctx.hasParent()
-          ? new ParentWorkflow(ctx.getParentWorkflowId(), ctx.getParentFunctionId())
-          : null;
-    }
-  }
-
   private static WorkflowInitResult preInvokeWorkflow(
       SystemDatabase systemDatabase,
       String workflowName,
@@ -316,7 +302,7 @@ public class DBOSExecutor implements AutoCloseable {
       String queueName,
       String executorId,
       String appVersion,
-      ParentWorkflow parentWorkflow,
+      WorkflowInfo parentWorkflow,
       long workflowTimeoutMs) {
 
     // TODO: queue deduplication and priority
@@ -365,7 +351,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (parentWorkflow != null) {
       systemDatabase.recordChildWorkflow(
-          parentWorkflow.workflowId, workflowId, parentWorkflow.functionId, workflowName);
+          parentWorkflow.workflowId(), workflowId, parentWorkflow.functionId(), workflowName);
     }
 
     return initResult;
@@ -445,7 +431,7 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    var parent = ParentWorkflow.fromContext();
+    var parent = WorkflowInfo.fromContext();
     long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs();
     initResult =
         preInvokeWorkflow(
@@ -516,7 +502,7 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
-    var parent = ParentWorkflow.fromContext();
+    var parent = WorkflowInfo.fromContext();
     long workflowTimeoutMs = DBOSContextHolder.get().getWorkflowTimeoutMs();
     WorkflowInitResult initResult =
         preInvokeWorkflow(
@@ -608,7 +594,7 @@ public class DBOSExecutor implements AutoCloseable {
       String queueName,
       String executorId,
       String appVersion,
-      ParentWorkflow parent,
+      WorkflowInfo parent,
       long workflowTimeoutMs)
       throws Exception {
 
@@ -648,7 +634,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     DBOSContext ctx = DBOSContextHolder.get();
     String wfid = ctx.getWorkflowId();
-    var parent = ParentWorkflow.fromContext(ctx);
+    var parent = WorkflowInfo.fromContext(ctx);
     long workflowTimeoutMs = ctx.getWorkflowTimeoutMs();
 
     enqueueWorkflow(
@@ -1122,12 +1108,11 @@ public class DBOSExecutor implements AutoCloseable {
       // ensure we're not in a step
 
       // get current wf + func id
-
+      throw new RuntimeException();
     } else {
-
+      var options = new ExecuteWorkflowOptions(ctx.getNextWorkflowId(), ctx.getTimeout(), null,null, null, null);
+      return executeWorkflow(workflow, args, options, null);
     }
-
-    throw new RuntimeException();
   }
 
   public record ExecuteWorkflowOptions(
@@ -1151,7 +1136,7 @@ public class DBOSExecutor implements AutoCloseable {
       RegisteredWorkflow workflow,
       Object[] args,
       ExecuteWorkflowOptions options,
-      ParentWorkflow parent) {
+      WorkflowInfo parent) {
 
     if (options.queueName != null) {
       return enqueueWorkflow(
@@ -1198,9 +1183,8 @@ public class DBOSExecutor implements AutoCloseable {
 
     Callable<T> task =
         () -> {
-          // configure current context
-
           try {
+            DBOSContextHolder.set(new DBOSContext(dbos, workflowId, parent));
             T result = workflow.invoke(args);
             postInvokeWorkflow(systemDatabase, workflowId, result);
             return result;
@@ -1217,7 +1201,7 @@ public class DBOSExecutor implements AutoCloseable {
             postInvokeWorkflow(systemDatabase, workflowId, actual);
             throw e;
           } finally {
-            // clear context
+            DBOSContextHolder.clear();
           }
         };
 
@@ -1248,7 +1232,7 @@ public class DBOSExecutor implements AutoCloseable {
       String className,
       Object[] args,
       ExecuteWorkflowOptions options,
-      ParentWorkflow parent,
+      WorkflowInfo parent,
       String executorId,
       String appVersion,
       SystemDatabase systemDatabase) {

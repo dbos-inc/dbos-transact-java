@@ -38,8 +38,10 @@ public record WorkflowOptions(String workflowId, Duration timeout) {
   public Guard setContext() {
     var ctx = DBOSContextHolder.get();
     var guard = new Guard(ctx);
-    ctx.nextWorkflowId = Objects.requireNonNullElse(workflowId, ctx.nextWorkflowId);
-    ctx.timeout = Objects.requireNonNullElse(timeout, ctx.timeout);
+
+    if (workflowId != null) { ctx.nextWorkflowId = workflowId; }
+    if (timeout != null) { ctx.timeout = timeout; }
+    
     return guard;
   }
 
