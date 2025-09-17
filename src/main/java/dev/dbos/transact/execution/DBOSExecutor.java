@@ -747,6 +747,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  @SuppressWarnings("unchecked")
   public <T> T runStepInternal(
       String stepName,
       boolean retryAllowed,
@@ -904,7 +905,7 @@ public class DBOSExecutor implements AutoCloseable {
         context.getWorkflowId(), context.getAndIncrementFunctionId(), seconds, false);
   }
 
-  public <T> WorkflowHandle<T, ?> resumeWorkflow(String workflowId) {
+  public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
 
     Supplier<Void> resumeFunction =
         () -> {

@@ -148,12 +148,12 @@ public class DBOSClient implements AutoCloseable {
     systemDatabase.cancelWorkflow(workflowId);
   }
 
-  public <T> WorkflowHandle<T, ?> resumeWorkflow(String workflowId) {
+  public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
     systemDatabase.resumeWorkflow(workflowId);
     return retrieveWorkflow(workflowId);
   }
 
-  public <T> WorkflowHandle<T, ?> forkWorkflow(
+  public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
       String originalWorkflowId, int startStep, ForkOptions options) {
     var forkedWorkflowId = systemDatabase.forkWorkflow(originalWorkflowId, startStep, options);
     return retrieveWorkflow(forkedWorkflowId);

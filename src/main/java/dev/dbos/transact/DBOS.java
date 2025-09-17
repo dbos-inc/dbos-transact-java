@@ -419,7 +419,7 @@ public class DBOS {
    * @param workflowId id of the workflow
    * @return A handle to the workflow
    */
-  public <T> WorkflowHandle<T, ?> resumeWorkflow(String workflowId) {
+  public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot resumeWorkflow before launch");

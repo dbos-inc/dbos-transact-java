@@ -85,14 +85,9 @@ public class JSONUtil {
     public String causeType;
     public List<String> stackPreview;
     public int suppressedCount;
-    public SerializedPayload serialized;
-    public String ts; // ISO-8601
+    public String base64bytes;
     public String node; // host/instance id
     public Map<String, Object> extra;
-
-    public static final class SerializedPayload {
-      public String base64bytes;
-    }
   }
 
   public final class WireThrowableCodec {
@@ -109,26 +104,20 @@ public class JSONUtil {
               .limit(PREVIEW_FRAMES)
               .map(StackTraceElement::toString)
               .toList();
-      w.ts = java.time.Instant.now().toString();
       w.node = node;
       w.extra = (extra == null) ? Map.of() : extra;
 
       byte[] javaSer = javaSerialize(t);
       String b64 = Base64.getEncoder().encodeToString(javaSer);
-
-      WireThrowable.SerializedPayload s = new WireThrowable.SerializedPayload();
-      s.base64bytes = b64;
-
-      w.serialized = s;
+      w.base64bytes = b64;
       return w;
     }
 
     public static Throwable toThrowable(WireThrowable w, ClassLoader loader)
         throws IOException, ClassNotFoundException {
-      if (w.serialized == null || w.serialized.base64bytes == null)
-        throw new IllegalArgumentException("No serialized payload");
+      if (w.base64bytes == null) throw new IllegalArgumentException("No serialized payload");
 
-      byte[] javaSer = Base64.getDecoder().decode(w.serialized.base64bytes);
+      byte[] javaSer = Base64.getDecoder().decode(w.base64bytes);
 
       try (var ois = new ObjectInputStream(new ByteArrayInputStream(javaSer))) {
         Object obj = ois.readObject();
