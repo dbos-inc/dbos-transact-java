@@ -313,11 +313,11 @@ public class DBOSExecutor implements AutoCloseable {
     WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
     Long timeoutMS = timeout != null ? timeout.toMillis() : null;
-    Long deadlineEpochMs =
-        timeoutMS != null
-            ? queueName != null ? null : System.currentTimeMillis() + timeoutMS
-            : deadline != null ? deadline.toEpochMilli() : null;
+    Long deadlineEpochMs = queueName != null 
+      ? null 
+      : deadline != null ? deadline.toEpochMilli() : null;
 
+    logger.info("preInvokeWorkflow {} {}", timeoutMS, deadlineEpochMs);
     WorkflowStatusInternal workflowStatusInternal =
         new WorkflowStatusInternal(
             workflowId,
@@ -1116,9 +1116,10 @@ public class DBOSExecutor implements AutoCloseable {
       var functionId = ctx.getAndIncrementFunctionId();
       var parent = new WorkflowInfo(workflowId, functionId);
       var childWorkflowId = "%s-%d".formatted(ctx.getWorkflowId(), functionId);
-      var timeout = ctx.getTimeout();
-      var deadline = ctx.getDeadline(timeout);
 
+      Duration timeout = ctx.getTimeout();
+      Instant deadline = ctx.getDeadline();
+      logger.info("Invoke Child workflow {} {}", timeout.toMillis(), deadline.toEpochMilli());
       var options =
           new ExecuteWorkflowOptions(
               ctx.getNextWorkflowId(childWorkflowId), timeout, deadline, null, null, null);
@@ -1126,7 +1127,7 @@ public class DBOSExecutor implements AutoCloseable {
     } else {
       var options =
           new ExecuteWorkflowOptions(
-              ctx.getNextWorkflowId(), ctx.getTimeout(), null, null, null, null);
+              ctx.getNextWorkflowId(), ctx.getTimeout(), ctx.getDeadline(), null, null, null);
       return executeWorkflow(workflow, args, options, null);
     }
   }
@@ -1200,6 +1201,7 @@ public class DBOSExecutor implements AutoCloseable {
     Callable<T> task =
         () -> {
           try {
+            logger.info("executeWOrkflowTask {} {}", options.timeout.toMillis(), options.deadline.toEpochMilli());
             DBOSContextHolder.set(
                 new DBOSContext(dbos, workflowId, parent, options.timeout, options.deadline));
             T result = workflow.invoke(args);

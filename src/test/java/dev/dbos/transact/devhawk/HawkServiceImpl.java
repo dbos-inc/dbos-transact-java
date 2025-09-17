@@ -39,7 +39,7 @@ public class HawkServiceImpl implements HawkService {
   @Workflow
   @Override
   public String parentSleepWorkflow(long sleepSeconds) {
-    try (var o = new WorkflowOptions().withTimeout(null).setContext()) {
+    try (var o = new WorkflowOptions().withTimeout(Duration.ofSeconds(3)).setContext()) {
       return proxy.sleepWorkflow(sleepSeconds);
     }
   }

@@ -17,7 +17,7 @@ public class DBOSContext {
 
   // assigned context options
   String nextWorkflowId;
-  Duration timeout;
+  Duration nextTimeout;
 
   // TODO: auth support
   // String authenticatedUser;
@@ -29,6 +29,7 @@ public class DBOSContext {
   private final String workflowId;
   private int functionId;
   private final WorkflowInfo parent;
+  private final Duration timeout;
   private final Instant deadline;
 
   // private StepStatus stepStatus;
@@ -38,6 +39,7 @@ public class DBOSContext {
     workflowId = null;
     functionId = -1;
     parent = null;
+    timeout = null;
     deadline = null;
     // stepStatus = null;
   }
@@ -68,24 +70,6 @@ public class DBOSContext {
     return parent;
   }
 
-  public Instant getDeadline(Duration timeout) {
-    return timeout != null
-        ? Instant.ofEpochMilli(System.currentTimeMillis() + timeout.toMillis())
-        : deadline;
-  }
-
-  // public boolean hasParent() {
-  //   return parent != null;
-  // }
-
-  // public String getParentWorkflowId() {
-  //   return parent != null ? parent.workflowId() : null;
-  // }
-
-  // public int getParentFunctionId() {
-  //   return parent != null ? parent.functionId() : -1;
-  // }
-
   public String getNextWorkflowId() {
     return getNextWorkflowId(null);
   }
@@ -101,7 +85,14 @@ public class DBOSContext {
   }
 
   public Duration getTimeout() {
-    return this.timeout;
+    return nextTimeout != null ? nextTimeout : timeout;
+  }
+
+  public Instant getDeadline() {
+    if (nextTimeout != null) {
+      return Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
+    }
+    return deadline;
   }
 
   public static Optional<String> workflowId() {

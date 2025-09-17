@@ -42,7 +42,7 @@ public record WorkflowOptions(String workflowId, Duration timeout) {
       ctx.nextWorkflowId = workflowId;
     }
     if (timeout != null) {
-      ctx.timeout = timeout;
+      ctx.nextTimeout = timeout;
     }
 
     return guard;
@@ -57,13 +57,13 @@ public record WorkflowOptions(String workflowId, Duration timeout) {
     public Guard(DBOSContext ctx) {
       this.ctx = ctx;
       this.nextWorkflowId = ctx.nextWorkflowId;
-      this.timeout = ctx.timeout;
+      this.timeout = ctx.nextTimeout;
     }
 
     @Override
     public void close() {
       ctx.nextWorkflowId = nextWorkflowId;
-      ctx.timeout = timeout;
+      ctx.nextTimeout = timeout;
     }
   }
 }
