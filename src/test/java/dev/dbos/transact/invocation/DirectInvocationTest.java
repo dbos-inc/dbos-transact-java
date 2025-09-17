@@ -72,7 +72,7 @@ public class DirectInvocationTest {
     var result = proxy.simpleWorkflow();
     assertEquals(localDate, result);
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertDoesNotThrow(() -> UUID.fromString((String) row.workflowId()));
@@ -94,7 +94,7 @@ public class DirectInvocationTest {
       assertEquals(localDate, result);
     }
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(workflowId, row.workflowId());
@@ -109,7 +109,7 @@ public class DirectInvocationTest {
       assertEquals(localDate, result);
     }
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(10000L, row.timeoutMs());
@@ -125,7 +125,7 @@ public class DirectInvocationTest {
       assertEquals(localDate, result);
     }
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertNull(row.timeoutMs());
@@ -142,7 +142,7 @@ public class DirectInvocationTest {
       assertEquals(localDate, result);
     }
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(workflowId, row.workflowId());
@@ -158,7 +158,7 @@ public class DirectInvocationTest {
       assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
     }
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals("CANCELLED", row.status());
@@ -175,7 +175,7 @@ public class DirectInvocationTest {
       assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
     }
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(workflowId, row.workflowId());
@@ -190,7 +190,7 @@ public class DirectInvocationTest {
     var result = proxy.parentWorkflow();
     assertEquals(localDate, result);
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(2, rows.size());
     var row0 = rows.get(0);
     var row1 = rows.get(1);
@@ -216,7 +216,7 @@ public class DirectInvocationTest {
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(2, rows.size());
     var row0 = rows.get(0);
     var row1 = rows.get(1);
@@ -233,7 +233,7 @@ public class DirectInvocationTest {
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(2, rows.size());
     var row0 = rows.get(0);
     var row1 = rows.get(1);
@@ -251,7 +251,7 @@ public class DirectInvocationTest {
     var result = proxy.parentSleepWorkflow(5L, 1);
     assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(2, rows.size());
     var row0 = rows.get(0);
     var row1 = rows.get(1);
@@ -270,7 +270,7 @@ public class DirectInvocationTest {
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(2, rows.size());
     var row0 = rows.get(0);
     var row1 = rows.get(1);
@@ -291,7 +291,7 @@ public class DirectInvocationTest {
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(2, rows.size());
     var row0 = rows.get(0);
     var row1 = rows.get(1);
@@ -307,12 +307,38 @@ public class DirectInvocationTest {
   void invokeWorkflowFromStepThrows() {
     // HLP: need to clean up what we throw
     assertThrows(RuntimeException.class, () -> proxy.illegalWorkflow());
+
+    var wfs = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(1, wfs.size());
+    var wf = wfs.get(0);
+    assertNotNull(wf.workflowId());
+
+    var steps = DBUtils.getStepRows(dataSource, wf.workflowId());
+    assertEquals(1, steps.size());
+    var step = steps.get(0);
+    assertEquals(0, step.functionId());
+    assertNull(step.output());
+    assertEquals("cannot invoke a workflow from a step", step.error());
+    assertEquals("illegalStep", step.functionName());
   }
 
   @Test
   void directInvokeStep() {
     var result = proxy.stepWorkflow();
     assertNotNull(result);
+
+    var wfs = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(1, wfs.size());
+    var wf = wfs.get(0);
+    assertNotNull(wf.workflowId());
+
+    var steps = DBUtils.getStepRows(dataSource, wf.workflowId());
+    assertEquals(1, steps.size());
+    var step = steps.get(0);
+    assertEquals(0, step.functionId());
+    assertNotNull(step.output());
+    assertNull(step.error());
+    assertEquals("nowStep", step.functionName());
   }
 
   // @Test

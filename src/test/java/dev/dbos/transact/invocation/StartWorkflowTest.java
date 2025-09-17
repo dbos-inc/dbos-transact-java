@@ -85,7 +85,7 @@ public class StartWorkflowTest {
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var rows = DBUtils.geStatusRows(dataSource);
+    var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(handle.getWorkflowId(), row.workflowId());
@@ -102,7 +102,7 @@ public class StartWorkflowTest {
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var row = DBUtils.geStatusRow(dataSource, workflowId);
+    var row = DBUtils.getWorkflowRow(dataSource, workflowId);
     assertNotNull(row);
     assertEquals(workflowId, row.workflowId());
     assertEquals("SUCCESS", row.status());
@@ -120,7 +120,7 @@ public class StartWorkflowTest {
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var row = DBUtils.geStatusRow(dataSource, workflowId);
+    var row = DBUtils.getWorkflowRow(dataSource, workflowId);
     assertNotNull(row);
     assertEquals(workflowId, row.workflowId());
     assertEquals("SUCCESS", row.status());

@@ -72,7 +72,7 @@ public class ClientTest {
               .targetClassName("dev.dbos.transact.client.ClientServiceImpl")
               .build();
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
-      var rows = DBUtils.geStatusRows(dataSource);
+      var rows = DBUtils.getWorkflowRows(dataSource);
       assertEquals(1, rows.size());
       var row = rows.get(0);
       assertEquals(handle.getWorkflowId(), row.workflowId());
@@ -84,7 +84,7 @@ public class ClientTest {
       assertTrue(result instanceof String);
       assertEquals("42-spam", result);
 
-      row = DBUtils.geStatusRow(dataSource, handle.getWorkflowId());
+      row = DBUtils.getWorkflowRow(dataSource, handle.getWorkflowId());
       assertEquals("SUCCESS", row.status());
     }
   }
