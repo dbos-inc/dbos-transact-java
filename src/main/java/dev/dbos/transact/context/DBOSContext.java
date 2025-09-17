@@ -16,8 +16,6 @@ public class DBOSContext {
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSContext.class);
 
-  public record StepStatus(int stepId, int currentAttempt, int maxAttempts) {}
-
   // assigned context options
   String nextWorkflowId;
   Duration nextTimeout;
@@ -33,6 +31,7 @@ public class DBOSContext {
   private final DBOS dbos;
   private final String workflowId;
   private int functionId;
+  private Integer stepFunctionId;
   private final WorkflowInfo parent;
   private final Duration timeout;
   private final Instant deadline;
@@ -46,7 +45,6 @@ public class DBOSContext {
     parent = null;
     timeout = null;
     deadline = null;
-    // stepStatus = null;
   }
 
   public DBOSContext(
@@ -63,12 +61,24 @@ public class DBOSContext {
     return workflowId != null;
   }
 
+  public boolean isInStep() {
+    return stepFunctionId != null;
+  }
+
   public String getWorkflowId() {
     return workflowId;
   }
 
   public int getAndIncrementFunctionId() {
     return functionId++;
+  }
+
+  public void setStepFunctionId(int functionId) {
+    stepFunctionId = functionId;
+  }
+
+  public void resetStepFunctionId() {
+    stepFunctionId = null;
   }
 
   public WorkflowInfo getParent() {

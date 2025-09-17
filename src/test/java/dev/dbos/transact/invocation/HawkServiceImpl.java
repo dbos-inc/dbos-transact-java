@@ -1,9 +1,11 @@
 package dev.dbos.transact.invocation;
 
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
@@ -46,5 +48,29 @@ public class HawkServiceImpl implements HawkService {
     try (var o = options.setContext()) {
       return proxy.sleepWorkflow(sleepSec);
     }
+  }
+
+  @Step
+  @Override
+  public Instant nowStep() {
+    return Instant.now();
+  }
+
+  @Workflow
+  @Override
+  public Instant stepWorkflow() {
+    return proxy.nowStep();
+  }
+
+  @Step
+  @Override
+  public String illegalStep() {
+    return proxy.simpleWorkflow();
+  }
+
+  @Workflow
+  @Override
+  public String illegalWorkflow() {
+    return proxy.illegalStep();
   }
 }

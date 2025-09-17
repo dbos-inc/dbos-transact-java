@@ -38,7 +38,6 @@ import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -513,6 +512,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     while (currAttempts <= maxAttempts) {
       try {
+        ctx.setStepFunctionId(stepFunctionId);
         result = function.execute();
         shouldRetry = false;
         serializedOutput = JSONUtil.serialize(result);
@@ -525,6 +525,8 @@ public class DBOSExecutor implements AutoCloseable {
                 : e;
         logger.info("After: step threw exception", actual);
         eThrown = e instanceof Exception ? (Exception) actual : e;
+      } finally {
+        ctx.resetStepFunctionId();
       }
 
       if (!shouldRetry || !retryAllowed) {
@@ -792,9 +794,7 @@ public class DBOSExecutor implements AutoCloseable {
     return Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
   }
 
-  public <T> WorkflowHandle<T> invokeWorkflow(String workflowName, Method method, Object[] args) {
-    var name = workflowName.isEmpty() ? method.getName() : workflowName;
-
+  public <T> WorkflowHandle<T> invokeWorkflow(String name, Object[] args) {
     var workflow = getWorkflow(name);
     if (workflow == null) {
       throw new IllegalStateException("%s workflow not registered".formatted(name));
@@ -807,7 +807,9 @@ public class DBOSExecutor implements AutoCloseable {
     String childWorkflowId = null;
 
     if (ctx.isInWorkflow()) {
-      // ensure we're not in a step
+      if (ctx.isInStep()) {
+        throw new IllegalStateException("cannot invoke a workflow from a step");
+      }
 
       var workflowId = ctx.getWorkflowId();
       var functionId = ctx.getAndIncrementFunctionId();

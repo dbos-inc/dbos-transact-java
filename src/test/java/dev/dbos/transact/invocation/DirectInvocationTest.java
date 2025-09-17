@@ -303,6 +303,18 @@ public class DirectInvocationTest {
     assertNull(row1.deadlineEpochMs());
   }
 
+  @Test
+  void invokeWorkflowFromStepThrows() {
+    // HLP: need to clean up what we throw
+    assertThrows(RuntimeException.class, () -> proxy.illegalWorkflow());
+  }
+
+  @Test
+  void directInvokeStep() {
+    var result = proxy.stepWorkflow();
+    assertNotNull(result);
+  }
+
   // @Test
   // void directInvokeParentSetParentTimeout() {
 

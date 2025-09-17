@@ -62,7 +62,8 @@ public class DBOSInvocationHandler implements InvocationHandler {
       throw new IllegalStateException();
     }
 
-    var handle = executor.invokeWorkflow(workflow.name(), method, args);
+    var name = workflow.name().isEmpty() ? method.getName() : workflow.name();
+    var handle = executor.invokeWorkflow(name, args);
     return handle.getResult();
   }
 
@@ -72,11 +73,12 @@ public class DBOSInvocationHandler implements InvocationHandler {
       throw new IllegalStateException();
     }
 
-    logger.info("Before : Executing step {} {}", method.getName(), step.name());
+    var name = step.name().isEmpty() ? method.getName() : step.name();
+    logger.info("Before : Executing step {}", name);
     try {
       Object result =
           executor.runStepInternal(
-              step.name(),
+              name,
               step.retriesAllowed(),
               step.maxAttempts(),
               step.intervalSeconds(),
