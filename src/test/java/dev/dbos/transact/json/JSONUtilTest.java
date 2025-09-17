@@ -2,7 +2,6 @@ package dev.dbos.transact.json;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import dev.dbos.transact.exceptions.DBOSAppException;
 import dev.dbos.transact.exceptions.SerializableException;
 
 import java.time.Instant;
@@ -50,14 +49,6 @@ class JSONUtilTest {
     Object[] dser = JSONUtil.deserializeToArray(errStr);
     SerializableException fromStr = (SerializableException) dser[0];
     assertEquals("A significant error", fromStr.message);
-
-    try {
-      String msg = "Remote Exception of type: " + fromStr.className;
-      throw new DBOSAppException(msg, fromStr);
-    } catch (Exception t) {
-      assertEquals(
-          "Remote Exception of type: dev.dbos.transact.json.TestException", t.getMessage());
-    }
   }
 
   @Test

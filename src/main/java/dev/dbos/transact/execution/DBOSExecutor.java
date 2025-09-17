@@ -684,7 +684,7 @@ public class DBOSExecutor implements AutoCloseable {
       functionResult = fn.get();
     } catch (Exception e) {
       if (inWorkflow) {
-        String jsonError = JSONUtil.serializeError(e);
+        String jsonError = JSONUtil.serializeAppException(e);
         StepResult r =
             new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError);
         systemDatabase.recordStepResultTxn(r);
@@ -728,16 +728,21 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   @SuppressWarnings("unchecked")
-  private <T> T handleExistingResult(StepResult result, String functionName) {
+  private <T, E extends Exception> T handleExistingResult(StepResult result, String functionName)
+      throws E {
     if (result.getOutput() != null) {
       Object[] resArray = JSONUtil.deserializeToArray(result.getOutput());
       return resArray == null ? null : (T) resArray[0];
     } else if (result.getError() != null) {
-      Object[] eArray = JSONUtil.deserializeToArray(result.getError());
-      SerializableException se = (SerializableException) eArray[0];
-      throw new DBOSAppException(String.format("Exception of type %s", se.className), se);
+      Throwable t = JSONUtil.deserializeAppException(result.getError());
+      if (t instanceof Exception) {
+        throw (E) t;
+      } else {
+        throw new RuntimeException(t.getMessage(), t);
+      }
     } else {
-      // CB TODO: This should be acceptable, it means no return value?
+      // Note that this shouldn't happen because the result is always wrapped in an array, making
+      // output not null.
       throw new IllegalStateException(
           String.format("Recorded output and error are both null for %s", functionName));
     }
@@ -776,7 +781,6 @@ public class DBOSExecutor implements AutoCloseable {
         systemDatabase.checkStepExecutionTxn(workflowId, stepFunctionId, stepName);
 
     if (recordedResult != null) {
-
       String output = recordedResult.getOutput();
       if (output != null) {
         logger.info("Result has an output");
@@ -786,8 +790,10 @@ public class DBOSExecutor implements AutoCloseable {
 
       String error = recordedResult.getError();
       if (error != null) {
-        // TODO: fix deserialization of errors
-        throw new Exception(error);
+        var throwable = JSONUtil.deserializeAppException(error);
+        if (!(throwable instanceof Exception))
+          throw new RuntimeException(throwable.getMessage(), throwable);
+        throw (Exception) throwable;
       }
     }
 
@@ -804,12 +810,10 @@ public class DBOSExecutor implements AutoCloseable {
         serializedOutput = JSONUtil.serialize(result);
         eThrown = null;
       } catch (Exception e) {
-        // TODO: serialize
         Throwable actual =
             (e instanceof InvocationTargetException)
                 ? ((InvocationTargetException) e).getTargetException()
                 : e;
-        logger.info("After: step threw exception", actual);
         eThrown = e instanceof Exception ? (Exception) actual : e;
       }
 
@@ -831,10 +835,10 @@ public class DBOSExecutor implements AutoCloseable {
       systemDatabase.recordStepResultTxn(stepResult);
       return result;
     } else {
-      // TODO: serialize
-      logger.info("After: step threw exception saving error", eThrown);
+      logger.info("After: step threw exception; saving error");
       StepResult stepResult =
-          new StepResult(workflowId, stepFunctionId, stepName, null, eThrown.getMessage());
+          new StepResult(
+              workflowId, stepFunctionId, stepName, null, JSONUtil.serializeAppException(eThrown));
       systemDatabase.recordStepResultTxn(stepResult);
       throw eThrown;
     }

@@ -212,8 +212,8 @@ public class StepsDAO {
           Exception error = null;
           if (errorData != null) {
             try {
-              // TODO error = JSONUtil.deserialize(errorData);
-              error = new Exception(errorData);
+              // TODO This should not be at this layer in the stack;
+              error = (Exception) JSONUtil.deserializeAppException((errorData));
             } catch (Exception e) {
               throw new RuntimeException(
                   "Failed to deserialize error for function " + functionId, e);
