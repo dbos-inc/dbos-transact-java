@@ -1,4 +1,4 @@
-package dev.dbos.transact.directinvocation;
+package dev.dbos.transact.invocation;
 
 public interface HawkService {
 

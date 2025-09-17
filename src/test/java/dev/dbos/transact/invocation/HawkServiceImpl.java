@@ -1,4 +1,4 @@
-package dev.dbos.transact.directinvocation;
+package dev.dbos.transact.invocation;
 
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.workflow.Workflow;

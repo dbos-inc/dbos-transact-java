@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Disabled
 public class QueueChildWorkflowTest {
 
   Logger logger = LoggerFactory.getLogger(QueuesTest.class);

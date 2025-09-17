@@ -1,4 +1,4 @@
-package dev.dbos.transact.directinvocation;
+package dev.dbos.transact.invocation;
 
 import static dev.dbos.transact.utils.Assertions.assertKeyIsNull;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -78,7 +78,7 @@ public class DirectInvocationTest {
     assertDoesNotThrow(() -> UUID.fromString((String) row.get("workflow_uuid")));
     assertEquals("SUCCESS", row.get("status"));
     assertEquals("simpleWorkflow", row.get("name"));
-    assertEquals("dev.dbos.transact.directinvocation.HawkServiceImpl", row.get("class_name"));
+    assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", row.get("class_name"));
     assertNotNull(row.get("output"));
     assertKeyIsNull(row, "error");
     assertKeyIsNull(row, "workflow_timeout_ms");

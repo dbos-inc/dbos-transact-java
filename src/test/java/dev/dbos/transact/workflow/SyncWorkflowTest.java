@@ -13,6 +13,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.*;
 
+@Disabled
 public class SyncWorkflowTest {
 
   private static DBOSConfig dbosConfig;

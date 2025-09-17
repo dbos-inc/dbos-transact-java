@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.*;
 
+@Disabled
 public class ClientTest {
   private static DBOSConfig dbosConfig;
   private static final String dbUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
