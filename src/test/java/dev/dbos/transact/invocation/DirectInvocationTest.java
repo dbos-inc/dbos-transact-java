@@ -4,6 +4,7 @@ import static dev.dbos.transact.utils.Assertions.assertKeyIsNull;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
@@ -72,17 +73,17 @@ public class DirectInvocationTest {
     var result = proxy.simpleWorkflow();
     assertEquals(localDate, result);
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(1, table.size());
-    var row = table.get(0);
-    assertDoesNotThrow(() -> UUID.fromString((String) row.get("workflow_uuid")));
-    assertEquals("SUCCESS", row.get("status"));
-    assertEquals("simpleWorkflow", row.get("name"));
-    assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", row.get("class_name"));
-    assertNotNull(row.get("output"));
-    assertKeyIsNull(row, "error");
-    assertKeyIsNull(row, "workflow_timeout_ms");
-    assertKeyIsNull(row, "workflow_deadline_epoch_ms");
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(1, rows.size());
+    var row = rows.get(0);
+    assertDoesNotThrow(() -> UUID.fromString((String) row.workflowId()));
+    assertEquals("SUCCESS", row.status());
+    assertEquals("simpleWorkflow", row.name());
+    assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", row.className());
+    assertNotNull(row.output());
+    assertNull(row.error());
+    assertNull(row.timeoutMs());
+    assertNull(row.deadlineEpochMs());
   }
 
   @Test
@@ -94,10 +95,10 @@ public class DirectInvocationTest {
       assertEquals(localDate, result);
     }
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(1, table.size());
-    var row = table.get(0);
-    assertEquals(workflowId, row.get("workflow_uuid"));
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(1, rows.size());
+    var row = rows.get(0);
+    assertEquals(workflowId, row.workflowId());
   }
 
   @Test
@@ -109,11 +110,11 @@ public class DirectInvocationTest {
       assertEquals(localDate, result);
     }
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(1, table.size());
-    var row = table.get(0);
-    assertEquals(10000L, row.get("workflow_timeout_ms"));
-    assertNotNull(row.get("workflow_deadline_epoch_ms"));
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(1, rows.size());
+    var row = rows.get(0);
+    assertEquals(10000L, row.timeoutMs());
+    assertNotNull(row.deadlineEpochMs());
   }
 
   @Test
@@ -125,11 +126,11 @@ public class DirectInvocationTest {
       assertEquals(localDate, result);
     }
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(1, table.size());
-    var row = table.get(0);
-    assertKeyIsNull(row, "workflow_timeout_ms");
-    assertKeyIsNull(row, "workflow_deadline_epoch_ms");
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(1, rows.size());
+    var row = rows.get(0);
+    assertNull(row.timeoutMs());
+    assertNull(row.deadlineEpochMs());
   }
 
   @Test
@@ -142,12 +143,12 @@ public class DirectInvocationTest {
       assertEquals(localDate, result);
     }
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(1, table.size());
-    var row = table.get(0);
-    assertEquals(workflowId, row.get("workflow_uuid"));
-    assertEquals(10000L, row.get("workflow_timeout_ms"));
-    assertNotNull(row.get("workflow_deadline_epoch_ms"));
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(1, rows.size());
+    var row = rows.get(0);
+    assertEquals(workflowId, row.workflowId());
+    assertEquals(10000L, row.timeoutMs());
+    assertNotNull(row.deadlineEpochMs());
   }
 
   @Test
@@ -158,12 +159,12 @@ public class DirectInvocationTest {
       assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
     }
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(1, table.size());
-    var row = table.get(0);
-    assertEquals("CANCELLED", row.get("status"));
-    assertKeyIsNull(row, "output");
-    assertKeyIsNull(row, "error");
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(1, rows.size());
+    var row = rows.get(0);
+    assertEquals("CANCELLED", row.status());
+    assertNull(row.output());
+    assertNull(row.error());
   }
 
   @Test
@@ -175,13 +176,13 @@ public class DirectInvocationTest {
       assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
     }
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(1, table.size());
-    var row = table.get(0);
-    assertEquals(workflowId, row.get("workflow_uuid"));
-    assertEquals("CANCELLED", row.get("status"));
-    assertKeyIsNull(row, "output");
-    assertKeyIsNull(row, "error");
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(1, rows.size());
+    var row = rows.get(0);
+    assertEquals(workflowId, row.workflowId());
+    assertEquals("CANCELLED", row.status());
+    assertNull(row.output());
+    assertNull(row.error());
   }
 
   @Test
@@ -190,21 +191,21 @@ public class DirectInvocationTest {
     var result = proxy.parentWorkflow();
     assertEquals(localDate, result);
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(2, table.size());
-    var row0 = table.get(0);
-    var row1 = table.get(1);
-    assertDoesNotThrow(() -> UUID.fromString((String) row0.get("workflow_uuid")));
-    assertEquals(row0.get("workflow_uuid") + "-0", row1.get("workflow_uuid"));
-    assertEquals("SUCCESS", row0.get("status"));
-    assertEquals("SUCCESS", row1.get("status"));
-    assertEquals("parentWorkflow", row0.get("name"));
-    assertEquals("simpleWorkflow", row1.get("name"));
-    assertEquals(row0.get("output"), row1.get("output"));
-    assertKeyIsNull(row0, "workflow_timeout_ms");
-    assertKeyIsNull(row1, "workflow_timeout_ms");
-    assertKeyIsNull(row0, "workflow_deadline_epoch_ms");
-    assertKeyIsNull(row1, "workflow_deadline_epoch_ms");
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(2, rows.size());
+    var row0 = rows.get(0);
+    var row1 = rows.get(1);
+    assertDoesNotThrow(() -> UUID.fromString(row0.workflowId()));
+    assertEquals(row0.workflowId() + "-0", row1.workflowId());
+    assertEquals("SUCCESS", row0.status());
+    assertEquals("SUCCESS", row1.status());
+    assertEquals("parentWorkflow", row0.name());
+    assertEquals("simpleWorkflow", row1.name());
+    assertEquals(row0.output(), row1.output());
+    assertNull(row0.timeoutMs());
+    assertNull(row1.timeoutMs());
+    assertNull(row0.deadlineEpochMs());
+    assertNull(row1.deadlineEpochMs());
   }
 
   @Test
@@ -216,12 +217,12 @@ public class DirectInvocationTest {
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(2, table.size());
-    var row0 = table.get(0);
-    var row1 = table.get(1);
-    assertEquals(workflowId, row0.get("workflow_uuid"));
-    assertEquals(workflowId + "-0", row1.get("workflow_uuid"));
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(2, rows.size());
+    var row0 = rows.get(0);
+    var row1 = rows.get(1);
+    assertEquals(workflowId, row0.workflowId());
+    assertEquals(workflowId + "-0", row1.workflowId());
   }
 
   @Test
@@ -233,15 +234,16 @@ public class DirectInvocationTest {
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(2, table.size());
-    var row0 = table.get(0);
-    var row1 = table.get(1);
-    assertEquals(10000L, row0.get("workflow_timeout_ms"));
-    assertEquals(10000L, row1.get("workflow_timeout_ms"));
-    assertNotNull(row0.get("workflow_deadline_epoch_ms"));
-    assertNotNull(row1.get("workflow_deadline_epoch_ms"));
-    assertEquals(row0.get("workflow_deadline_epoch_ms"), row1.get("workflow_deadline_epoch_ms"));
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(2, rows.size());
+    var row0 = rows.get(0);
+    var row1 = rows.get(1);
+    
+    assertEquals(10000L, row0.timeoutMs());
+    assertEquals(10000L, row1.timeoutMs());
+    assertNotNull(row0.deadlineEpochMs());
+    assertNotNull(row1.deadlineEpochMs());
+    assertEquals(row0.deadlineEpochMs(), row1.deadlineEpochMs());
   }
 
   @Test
@@ -250,15 +252,14 @@ public class DirectInvocationTest {
     var result = proxy.parentSleepWorkflow(5L, 1);
     assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(2, table.size());
-    var row0 = table.get(0);
-    var row1 = table.get(1);
-    assertKeyIsNull(row0, "workflow_timeout_ms");
-    assertKeyIsNull(row0, "workflow_deadline_epoch_ms");
-
-    assertEquals(5000L, row1.get("workflow_timeout_ms"));
-    assertNotNull(row1.get("workflow_deadline_epoch_ms"));
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(2, rows.size());
+    var row0 = rows.get(0);
+    var row1 = rows.get(1);
+    assertNull(row0.timeoutMs());
+    assertNull(row0.deadlineEpochMs());
+    assertEquals(5000L, row1.timeoutMs());
+    assertNotNull(row1.deadlineEpochMs());
   }
 
   @Test
@@ -270,15 +271,16 @@ public class DirectInvocationTest {
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(2, table.size());
-    var row0 = table.get(0);
-    var row1 = table.get(1);
-    assertEquals(10000L, row0.get("workflow_timeout_ms"));
-    assertNotNull(row0.get("workflow_deadline_epoch_ms"));
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(2, rows.size());
+    var row0 = rows.get(0);
+    var row1 = rows.get(1);
 
-    assertEquals(5000L, row1.get("workflow_timeout_ms"));
-    assertNotNull(row1.get("workflow_deadline_epoch_ms"));
+    assertEquals(10000L, row0.timeoutMs());
+    assertNotNull(row0.deadlineEpochMs());
+
+    assertEquals(5000L, row1.timeoutMs());
+    assertNotNull(row1.deadlineEpochMs());
   }
 
   @Test
@@ -290,15 +292,16 @@ public class DirectInvocationTest {
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
-    var table = DBUtils.dumpWfStatus(dataSource);
-    assertEquals(2, table.size());
-    var row0 = table.get(0);
-    var row1 = table.get(1);
-    assertEquals(10000L, row0.get("workflow_timeout_ms"));
-    assertNotNull(row0.get("workflow_deadline_epoch_ms"));
+    var rows = DBUtils.geStatusRows(dataSource);
+    assertEquals(2, rows.size());
+    var row0 = rows.get(0);
+    var row1 = rows.get(1);    
+    
+    assertEquals(10000L, row0.timeoutMs());
+    assertNotNull(row0.deadlineEpochMs());
 
-    assertKeyIsNull(row1, "workflow_timeout_ms");
-    assertKeyIsNull(row1, "workflow_deadline_epoch_ms");
+    assertNull(row1.timeoutMs());
+    assertNull(row1.deadlineEpochMs());
   }
 
   // @Test
