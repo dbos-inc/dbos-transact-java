@@ -939,31 +939,6 @@ public class DBOSExecutor implements AutoCloseable {
     return retrieveWorkflow(forkedId);
   }
 
-  public <T> WorkflowHandle<T> startWorkflow(
-      ThrowingSupplier<T, Exception> supplier, StartWorkflowOptions options) {
-    DBOSContext oldctx = DBOSContextHolder.get();
-    // oldctx.setDbos(dbos);
-    DBOSContext newCtx = oldctx;
-
-    // if (newCtx.getWorkflowId() == null) {
-    //   newCtx = newCtx.copyWithWorkflowId(UUID.randomUUID().toString());
-    // }
-
-    // if (newCtx.getQueue() == null) {
-    //   newCtx = newCtx.copyWithAsync();
-    // }
-
-    try {
-      DBOSContextHolder.set(newCtx);
-      supplier.execute();
-      return retrieveWorkflow(newCtx.getWorkflowId());
-    } catch (Exception t) {
-      throw new DBOSException(UNEXPECTED.getCode(), t.getMessage());
-    } finally {
-      DBOSContextHolder.set(oldctx);
-    }
-  }
-
   public void globalTimeout(Long cutoff) {
     OffsetDateTime endTime = Instant.ofEpochMilli(cutoff).atOffset(ZoneOffset.UTC);
     globalTimeout(endTime);
@@ -1099,6 +1074,45 @@ public class DBOSExecutor implements AutoCloseable {
     return this.callFunctionAsStep(listQueuedWorkflowsFunction, "DBOS.listQueuedWorkflows");
   }
 
+  public <T> WorkflowHandle<T> startWorkflow(
+      ThrowingSupplier<T, Exception> supplier, StartWorkflowOptions options) throws Exception {
+
+    var ctx = DBOSContextHolder.get();
+    var startResult = ctx.setStartOptions(options);
+    try {
+      supplier.execute();
+      var workflowId = ctx.getStartedWorkflowId();
+      return retrieveWorkflow(workflowId);
+    } finally {
+      ctx.resetStartOptions(startResult);
+    }
+  }
+
+  private Duration getTimeout(DBOSContext ctx) {
+    var nextTimeout = ctx.getNextTimeout();
+
+    if (nextTimeout == null) {
+      return ctx.getTimeout();
+    }
+    // zero timeout is a marker for "no timeout"
+    if (nextTimeout.isZero()) {
+      return null;
+    }
+    return nextTimeout;
+  }
+
+  private Instant getDeadline(DBOSContext ctx) {
+    var nextTimeout = ctx.getNextTimeout();
+    if (nextTimeout == null) {
+      return ctx.getDeadline();
+    }
+    if (nextTimeout.isZero()) {
+      return null;
+    }
+
+    return Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
+  }
+
   public <T> WorkflowHandle<T> invokeWorkflow(String workflowName, Method method, Object[] args) {
     var name = workflowName.isEmpty() ? method.getName() : workflowName;
 
@@ -1108,26 +1122,38 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     var ctx = DBOSContextHolder.get();
+    ctx.validateStartedWorkflow();
+
+    WorkflowInfo parent = null;
+    String childWorkflowId = null;
+
     if (ctx.isInWorkflow()) {
       // ensure we're not in a step
 
       var workflowId = ctx.getWorkflowId();
       var functionId = ctx.getAndIncrementFunctionId();
-      var parent = new WorkflowInfo(workflowId, functionId);
-      var childWorkflowId = "%s-%d".formatted(ctx.getWorkflowId(), functionId);
+      parent = new WorkflowInfo(workflowId, functionId);
 
-      Duration timeout = ctx.getTimeout();
-      Instant deadline = ctx.getDeadline();
-      logger.info("Invoke Child workflow {} {}", timeout, deadline);
+      childWorkflowId = "%s-%d".formatted(ctx.getWorkflowId(), functionId);
+    }
+
+    var workflowId =
+        Objects.requireNonNullElseGet(
+            ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString());
+
+    var timeout = getTimeout(ctx);
+    var deadline = getDeadline(ctx);
+    var queueName = ctx.getQueueName();
+    var dedupeId = queueName != null ? ctx.getDeduplicationId() : null;
+    var priority = queueName != null ? ctx.getPriority() : OptionalInt.empty();
+
+    try {
       var options =
           new ExecuteWorkflowOptions(
-              ctx.getNextWorkflowId(childWorkflowId), timeout, deadline, null, null, null);
+              workflowId, timeout, deadline, queueName, dedupeId, priority);
       return executeWorkflow(workflow, args, options, parent);
-    } else {
-      var options =
-          new ExecuteWorkflowOptions(
-              ctx.getNextWorkflowId(), ctx.getTimeout(), ctx.getDeadline(), null, null, null);
-      return executeWorkflow(workflow, args, options, null);
+    } finally {
+      ctx.setStartedWorkflowId(workflowId);
     }
   }
 

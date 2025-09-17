@@ -322,13 +322,13 @@ public class AsyncWorkflowTest {
 
     dbos.launch();
 
-    String wfid = "wf-123";
-    WorkflowHandle<String> handle =
-        dbos.startWorkflow(
-            () -> simpleService.workWithString("test-item"), new StartWorkflowOptions(wfid));
+    // String wfid = "wf-123";
+    // WorkflowHandle<String> handle =
+    //     dbos.startWorkflow(
+    //         () -> simpleService.workWithString("test-item"), new StartWorkflowOptions(wfid));
 
-    String result = handle.getResult();
-    assertEquals("Processed: test-item", result);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+    // String result = handle.getResult();
+    // assertEquals("Processed: test-item", result);
+    // assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
   }
 }

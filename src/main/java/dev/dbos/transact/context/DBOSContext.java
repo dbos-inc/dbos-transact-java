@@ -1,10 +1,13 @@
 package dev.dbos.transact.context;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.StartWorkflowOptions;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +21,8 @@ public class DBOSContext {
   // assigned context options
   String nextWorkflowId;
   Duration nextTimeout;
+  StartWorkflowOptions startOptions;
+  String startedWorkflowId;
 
   // TODO: auth support
   // String authenticatedUser;
@@ -75,6 +80,9 @@ public class DBOSContext {
   }
 
   public String getNextWorkflowId(String workflowId) {
+    if (startOptions != null && startOptions.workflowId() != null) {
+      return startOptions.workflowId();
+    }
     if (nextWorkflowId != null) {
       var value = nextWorkflowId;
       this.nextWorkflowId = null;
@@ -84,26 +92,72 @@ public class DBOSContext {
     return workflowId;
   }
 
-  public Duration getTimeout() {
-    if (nextTimeout == null) {
-      return timeout;
+  public Duration getNextTimeout() {
+    if (startOptions != null && startOptions.timeout() != null) {
+      return startOptions.timeout();
     }
-    // zero timeout is a marker for "no timeout"
-    if (nextTimeout.isZero()) {
-      return null;
-    }
+
     return nextTimeout;
   }
 
-  public Instant getDeadline() {
-    if (nextTimeout == null) {
-      return deadline;
-    }
-    if (nextTimeout.isZero()) {
-      return null;
-    }
+  public Duration getTimeout() {
+    return timeout;
+  }
 
-    return Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
+  public Instant getDeadline() {
+    return deadline;
+  }
+
+  public String getQueueName() {
+    if (startOptions != null) {
+      return startOptions.queueName();
+    }
+    return null;
+  }
+
+  public String getDeduplicationId() {
+    if (startOptions != null) {
+      return startOptions.deduplicationId();
+    }
+    return null;
+  }
+
+  public OptionalInt getPriority() {
+    if (startOptions != null) {
+      return startOptions.priority();
+    }
+    return OptionalInt.empty();
+  }
+
+  public record StartOptionsResult(StartWorkflowOptions options, String workflowId) {}
+
+  public StartOptionsResult setStartOptions(StartWorkflowOptions options) {
+    var result = new StartOptionsResult(startOptions, startedWorkflowId);
+    startOptions = options;
+    startedWorkflowId = null;
+    return result;
+  }
+
+  public void validateStartedWorkflow() {
+    if (startOptions != null && startedWorkflowId != null) {
+      throw new IllegalCallerException("attempting to call multiple workflows from a start workflow lambda");
+    }
+  }
+
+  public void setStartedWorkflowId(String workflowId) {
+    if (startedWorkflowId != null) {
+      throw new IllegalStateException("more than one workflow called from start workflow lambda");
+    }
+    startedWorkflowId = Objects.requireNonNull(workflowId);
+  }
+
+  public String getStartedWorkflowId() {
+    return startedWorkflowId;
+  }
+
+  public void resetStartOptions(StartOptionsResult result) {
+    startOptions = result.options;
+    startedWorkflowId = result.workflowId;
   }
 
   public static Optional<String> workflowId() {

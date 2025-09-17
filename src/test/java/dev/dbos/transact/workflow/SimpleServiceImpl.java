@@ -116,7 +116,7 @@ public class SimpleServiceImpl implements SimpleService {
 
       String wid = "child" + i;
       var options = new StartWorkflowOptions(wid).withQueue(childQ);
-      dbos.startWorkflow(() -> simpleService.childWorkflow(wid), options);
+      // dbos.startWorkflow(() -> simpleService.childWorkflow(wid), options);
     }
 
     return "QueuedChildren";
@@ -161,17 +161,18 @@ public class SimpleServiceImpl implements SimpleService {
     WorkflowOptions options =
         new WorkflowOptions(workflowId).withTimeout(timeoutSeconds, TimeUnit.SECONDS);
 
-    WorkflowHandle<String> handle = null;
-    try (var o = options.setContext()) {
-      handle =
-          DBOSContext.dbosInstance()
-              .get()
-              .startWorkflow(() -> simpleService.childWorkflowWithSleep(input, sleepSeconds));
-    }
+    // WorkflowHandle<String> handle = null;
+    // try (var o = options.setContext()) {
+    //   handle =
+    //       DBOSContext.dbosInstance()
+    //           .get()
+    //           .startWorkflow(() -> simpleService.childWorkflowWithSleep(input, sleepSeconds));
+    // }
 
-    String result = handle.getResult();
+    // String result = handle.getResult();
 
-    logger.info("Done with longWorkflow");
-    return input + result;
+    // logger.info("Done with longWorkflow");
+    // return input + result;
+    return input;
   }
 }

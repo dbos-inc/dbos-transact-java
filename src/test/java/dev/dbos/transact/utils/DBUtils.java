@@ -150,4 +150,39 @@ public class DBUtils {
       throw new RuntimeException(e);
     }
   }
+
+  public static List<WorkflowStatusRow> geStatusRows(DataSource ds) {
+    try (var conn = ds.getConnection();
+        var stmt = conn.createStatement();
+        var rs = stmt.executeQuery("SELECT * FROM dbos.workflow_status ORDER BY \"created_at\"")) {
+      List<WorkflowStatusRow> rows = new ArrayList<>();
+
+      while (rs.next()) {
+        var row = new WorkflowStatusRow(rs);
+        rows.add(row);
+      }
+
+      return rows;
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static WorkflowStatusRow geStatusRow(DataSource ds, String workflowId) {
+    String sql = "SELECT * FROM dbos.workflow_status WHERE workflow_uuid = ?";
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          return new WorkflowStatusRow(rs);
+        } else {
+          return null;
+        }
+      }
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
 }

@@ -442,7 +442,7 @@ public class DBOS {
   }
 
   public <T> WorkflowHandle<T> startWorkflow(
-      ThrowingSupplier<T, Exception> supplier, StartWorkflowOptions options) {
+      ThrowingSupplier<T, Exception> supplier, StartWorkflowOptions options) throws Exception {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");
@@ -451,12 +451,13 @@ public class DBOS {
     return executor.startWorkflow(supplier, options);
   }
 
-  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> supplier) {
+  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> supplier)
+      throws Exception {
     return startWorkflow(supplier, new StartWorkflowOptions());
   }
 
   public WorkflowHandle<Void> startWorkflow(
-      ThrowingRunnable<Exception> runnable, StartWorkflowOptions options) {
+      ThrowingRunnable<Exception> runnable, StartWorkflowOptions options) throws Exception {
     return startWorkflow(
         () -> {
           runnable.execute();
@@ -465,7 +466,7 @@ public class DBOS {
         options);
   }
 
-  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Exception> runnable) {
+  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Exception> runnable) throws Exception {
     return startWorkflow(runnable, new StartWorkflowOptions());
   }
 
