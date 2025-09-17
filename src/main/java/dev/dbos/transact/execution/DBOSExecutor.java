@@ -313,9 +313,8 @@ public class DBOSExecutor implements AutoCloseable {
     WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
     Long timeoutMS = timeout != null ? timeout.toMillis() : null;
-    Long deadlineEpochMs = queueName != null 
-      ? null 
-      : deadline != null ? deadline.toEpochMilli() : null;
+    Long deadlineEpochMs =
+        queueName != null ? null : deadline != null ? deadline.toEpochMilli() : null;
 
     logger.info("preInvokeWorkflow {} {}", timeoutMS, deadlineEpochMs);
     WorkflowStatusInternal workflowStatusInternal =
@@ -1119,7 +1118,10 @@ public class DBOSExecutor implements AutoCloseable {
 
       Duration timeout = ctx.getTimeout();
       Instant deadline = ctx.getDeadline();
-      logger.info("Invoke Child workflow {} {}", timeout.toMillis(), deadline.toEpochMilli());
+      logger.info(
+          "Invoke Child workflow {} {}",
+          Objects.requireNonNullElse(timeout, Duration.ZERO).toMillis(),
+          Objects.requireNonNullElse(deadline, Instant.EPOCH).toEpochMilli());
       var options =
           new ExecuteWorkflowOptions(
               ctx.getNextWorkflowId(childWorkflowId), timeout, deadline, null, null, null);
@@ -1201,7 +1203,11 @@ public class DBOSExecutor implements AutoCloseable {
     Callable<T> task =
         () -> {
           try {
-            logger.info("executeWOrkflowTask {} {}", options.timeout.toMillis(), options.deadline.toEpochMilli());
+            logger.info(
+                "executeWorkflow task {} {}",
+                Objects.requireNonNullElse(options.timeout, Duration.ZERO).toMillis(),
+                Objects.requireNonNullElse(options.deadline, Instant.EPOCH).toEpochMilli());
+
             DBOSContextHolder.set(
                 new DBOSContext(dbos, workflowId, parent, options.timeout, options.deadline));
             T result = workflow.invoke(args);
