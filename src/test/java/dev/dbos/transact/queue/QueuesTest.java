@@ -89,7 +89,7 @@ public class QueuesTest {
       serviceQ.simpleQWorkflow("inputq");
     }
 
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(id);
+    var handle = dbosExecutor.retrieveWorkflow(id);
     assertEquals(id, handle.getWorkflowId());
     String result = (String) handle.getResult();
     assertEquals("inputqinputq", result);
@@ -137,7 +137,7 @@ public class QueuesTest {
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
 
-      WorkflowHandle<?> handle = executor.retrieveWorkflow(id);
+      var handle = executor.retrieveWorkflow(id);
       assertEquals(id, handle.getWorkflowId());
       String result = (String) handle.getResult();
       assertEquals("inputq" + i + "inputq" + i, result);
@@ -242,13 +242,13 @@ public class QueuesTest {
     String id2 = "second1234";
 
     WorkflowOptions options1 = new WorkflowOptions.Builder(id1).queue(firstQ).build();
-    WorkflowHandle<String> handle1 = null;
+    WorkflowHandle<String, ?> handle1 = null;
     try (SetWorkflowOptions o = new SetWorkflowOptions(options1)) {
       handle1 = dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"));
     }
 
     WorkflowOptions options2 = new WorkflowOptions.Builder(id2).queue(secondQ).build();
-    WorkflowHandle<Integer> handle2 = null;
+    WorkflowHandle<Integer, ?> handle2 = null;
     try (SetWorkflowOptions o = new SetWorkflowOptions(options2)) {
       handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25));
     }
@@ -285,20 +285,20 @@ public class QueuesTest {
 
     int numWaves = 3;
     int numTasks = numWaves * limit;
-    List<WorkflowHandle<Double>> handles = new ArrayList<>();
+    List<WorkflowHandle<Double, ?>> handles = new ArrayList<>();
     List<Double> times = new ArrayList<>();
 
     for (int i = 0; i < numTasks; i++) {
       String id = "id" + i;
       WorkflowOptions options = new WorkflowOptions.Builder(id).queue(limitQ).build();
-      WorkflowHandle<Double> handle = null;
+      WorkflowHandle<Double, ?> handle = null;
       try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
         handle = dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"));
       }
       handles.add(handle);
     }
 
-    for (WorkflowHandle<Double> h : handles) {
+    for (WorkflowHandle<Double, ?> h : handles) {
       double result = h.getResult();
       logger.info(String.valueOf(result));
       times.add(result);
@@ -336,7 +336,7 @@ public class QueuesTest {
               wave, wave + 1, period + periodTolerance, gap));
     }
 
-    for (WorkflowHandle<Double> h : handles) {
+    for (WorkflowHandle<Double, ?> h : handles) {
       assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
     }
   }
@@ -394,7 +394,7 @@ public class QueuesTest {
         wfStatusInternal.setWorkflowUUID(wfid);
         wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
         wfStatusInternal.setDeduplicationId("dedup" + i);
-        InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
+        systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
       }
     }
 
@@ -493,7 +493,7 @@ public class QueuesTest {
         wfStatusInternal.setStatus(WorkflowState.PENDING);
         wfStatusInternal.setDeduplicationId("dedup" + i);
         wfStatusInternal.setExecutorId(executor2);
-        InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
+        systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
       }
     }
 
@@ -528,7 +528,7 @@ public class QueuesTest {
 
     String id = "q1234";
 
-    WorkflowHandle<String> handle = null;
+    WorkflowHandle<String, ?> handle = null;
     WorkflowOptions option = new WorkflowOptions.Builder(id).queue(firstQ).build();
     try (SetWorkflowOptions o = new SetWorkflowOptions(option)) {
       handle = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"));
@@ -552,9 +552,9 @@ public class QueuesTest {
 
     dbos.launch();
 
-    WorkflowHandle<Integer> handle1;
-    WorkflowHandle<Integer> handle2;
-    WorkflowHandle<Integer> handle3;
+    WorkflowHandle<Integer, ?> handle1;
+    WorkflowHandle<Integer, ?> handle2;
+    WorkflowHandle<Integer, ?> handle3;
 
     WorkflowOptions opt1 = new WorkflowOptions.Builder("wf1").queue(queue).build();
     try (SetWorkflowOptions o = new SetWorkflowOptions(opt1)) {
@@ -598,14 +598,14 @@ public class QueuesTest {
     }
 
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
-    List<WorkflowHandle<?>> otherHandles = executor.recoverPendingWorkflows(List.of("other"));
+    List<WorkflowHandle<?, ?>> otherHandles = executor.recoverPendingWorkflows(List.of("other"));
     assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().getStatus());
     assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().getStatus());
     assertEquals(1, otherHandles.size());
     assertEquals(otherHandles.get(0).getWorkflowId(), handle3.getWorkflowId());
     assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().getStatus());
 
-    List<WorkflowHandle<?>> localHandles = executor.recoverPendingWorkflows(List.of("local"));
+    List<WorkflowHandle<?, ?>> localHandles = executor.recoverPendingWorkflows(List.of("local"));
     assertEquals(2, localHandles.size());
     List<String> expectedWorkflowIds = List.of(handle1.getWorkflowId(), handle2.getWorkflowId());
     assertTrue(expectedWorkflowIds.contains(localHandles.get(0).getWorkflowId()));

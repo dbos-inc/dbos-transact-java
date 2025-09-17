@@ -82,7 +82,7 @@ class DBOSExecutorTest {
 
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
-    WorkflowHandle<?> handle = dbosExecutor.executeWorkflowById(wfid);
+    var handle = dbosExecutor.executeWorkflowById(wfid);
 
     result = (String) handle.getResult();
     assertEquals("test-itemtest-item", result);
@@ -120,7 +120,7 @@ class DBOSExecutorTest {
 
     boolean error = false;
     try {
-      WorkflowHandle<?> handle = dbosExecutor.executeWorkflowById("wf-124");
+      var handle = dbosExecutor.executeWorkflowById("wf-124");
     } catch (Exception e) {
       error = true;
       assert e instanceof NonExistentWorkflowException
@@ -160,7 +160,7 @@ class DBOSExecutorTest {
 
     boolean error = false;
     try {
-      WorkflowHandle<?> handle = dbosExecutor.executeWorkflowById(wfid);
+      dbosExecutor.executeWorkflowById(wfid);
     } catch (Exception e) {
       error = true;
       assert e instanceof WorkflowFunctionNotFoundException
@@ -205,7 +205,7 @@ class DBOSExecutorTest {
     steps = systemDatabase.listWorkflowSteps(wfid);
     assertEquals(0, steps.size());
 
-    WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
+    WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
 
     result = handle.getResult();
     assertEquals("test-itemstepOnestepTwo", result);
@@ -254,7 +254,7 @@ class DBOSExecutorTest {
     steps = systemDatabase.listWorkflowSteps(wfid);
     assertEquals(1, steps.size());
 
-    WorkflowHandle<String> handle = dbosExecutor.executeWorkflowById(wfid);
+    WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
 
     result = handle.getResult();
     assertEquals("test-itemstepOnestepTwo", result);
@@ -333,7 +333,7 @@ class DBOSExecutorTest {
     DBUtils.updateStepEndTime(dataSource, wfid, steps.get(0).getFunctionId(), endTimeAsJson);
 
     long starttime = System.currentTimeMillis();
-    WorkflowHandle h = dbosExecutor.executeWorkflowById(wfid);
+    var h = dbosExecutor.executeWorkflowById(wfid);
     h.getResult();
 
     long duration = System.currentTimeMillis() - starttime;

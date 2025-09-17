@@ -80,8 +80,8 @@ class NotificationServiceTest {
       notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
     }
 
-    WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
-    WorkflowHandle<?> handle2 = dbos.retrieveWorkflow(wfid2);
+    var handle1 = dbos.retrieveWorkflow(wfid1);
+    var handle2 = dbos.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
@@ -132,7 +132,7 @@ class NotificationServiceTest {
     }
     dbos.retrieveWorkflow("send3").getResult();
 
-    WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
+    var handle1 = dbos.retrieveWorkflow(wfid1);
 
     String result = (String) handle1.getResult();
     assertEquals("Hello1Hello2Hello3", result);
@@ -164,8 +164,8 @@ class NotificationServiceTest {
       notService.sendWorkflow(wfid1, null, "HelloDBOS");
     }
 
-    WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
-    WorkflowHandle<?> handle2 = dbos.retrieveWorkflow(wfid2);
+    var handle1 = dbos.retrieveWorkflow(wfid1);
+    var handle2 = dbos.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
@@ -236,8 +236,8 @@ class NotificationServiceTest {
       notService.sendWorkflow(wfid1, "topic1", null);
     }
 
-    WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
-    WorkflowHandle<?> handle2 = dbos.retrieveWorkflow(wfid2);
+    var handle1 = dbos.retrieveWorkflow(wfid1);
+    var handle2 = dbos.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertNull(result);
@@ -340,8 +340,8 @@ class NotificationServiceTest {
       notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
     }
 
-    WorkflowHandle<?> handle1 = dbos.retrieveWorkflow(wfid1);
-    WorkflowHandle<?> handle2 = dbos.retrieveWorkflow(wfid2);
+    var handle1 = dbos.retrieveWorkflow(wfid1);
+    var handle2 = dbos.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
@@ -375,7 +375,7 @@ class NotificationServiceTest {
     String wfid1 = "recvwf1";
 
     WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
-    WorkflowHandle<String> handle = null;
+    WorkflowHandle<String, ?> handle = null;
     try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
       handle = dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5));
     }

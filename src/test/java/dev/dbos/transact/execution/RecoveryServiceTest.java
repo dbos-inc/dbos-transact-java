@@ -96,14 +96,14 @@ class RecoveryServiceTest {
       executingService.workflowMethod("test-item");
     }
     wfid = "wf-126";
-    WorkflowHandle<String> handle6 = null;
+    WorkflowHandle<String, ?> handle6 = null;
     try (SetWorkflowID id = new SetWorkflowID(wfid)) {
       handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
     wfid = "wf-127";
-    WorkflowHandle<String> handle7 = null;
+    WorkflowHandle<String, ?> handle7 = null;
     WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
     try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
       handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
@@ -120,7 +120,7 @@ class RecoveryServiceTest {
     assertEquals(5, pending.size());
 
     for (GetPendingWorkflowsOutput output : pending) {
-      WorkflowHandle<?> handle = dbosExecutor.recoverWorkflow(output);
+      WorkflowHandle<?, ?> handle = dbosExecutor.recoverWorkflow(output);
       handle.getResult();
       assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
     }
@@ -142,14 +142,14 @@ class RecoveryServiceTest {
       executingService.workflowMethod("test-item");
     }
     wfid = "wf-126";
-    WorkflowHandle<String> handle6 = null;
+    WorkflowHandle<String, ?> handle6 = null;
     try (SetWorkflowID id = new SetWorkflowID(wfid)) {
       handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
     wfid = "wf-127";
-    WorkflowHandle<String> handle7 = null;
+    WorkflowHandle<String, ?> handle7 = null;
     WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
     try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
       handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
@@ -159,10 +159,10 @@ class RecoveryServiceTest {
 
     setWorkflowStateToPending(dataSource);
 
-    List<WorkflowHandle<?>> pending = dbosExecutor.recoverPendingWorkflows(null);
+    List<WorkflowHandle<?, ?>> pending = dbosExecutor.recoverPendingWorkflows(null);
     assertEquals(5, pending.size());
 
-    for (WorkflowHandle<?> handle : pending) {
+    for (var handle : pending) {
       handle.getResult();
       assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
     }
@@ -201,7 +201,7 @@ class RecoveryServiceTest {
 
     dbos.launch();
 
-    WorkflowHandle h = dbos.retrieveWorkflow("wf-123");
+    var h = dbos.retrieveWorkflow("wf-123");
     h.getResult();
     assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
 
@@ -221,7 +221,7 @@ class RecoveryServiceTest {
     }
     assertEquals(executingServiceImpl.callsToThrowStep, 1);
     assertEquals(executingServiceImpl.callsToNoReturnStep, 1);
-    WorkflowHandle<?> h = dbos.retrieveWorkflow(wfid);
+    var h = dbos.retrieveWorkflow(wfid);
     assertNull(h.getStatus().getError());
     assertNull(h.getResult());
 

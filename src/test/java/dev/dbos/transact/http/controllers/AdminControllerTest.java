@@ -14,7 +14,6 @@ import dev.dbos.transact.workflow.ForkService;
 import dev.dbos.transact.workflow.ForkServiceImpl;
 import dev.dbos.transact.workflow.SimpleService;
 import dev.dbos.transact.workflow.SimpleServiceImpl;
-import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.net.URI;
@@ -348,7 +347,7 @@ class AdminControllerTest {
       assertEquals("hellohello", result);
     }
 
-    WorkflowHandle<String> handle = dbos.retrieveWorkflow(workflowId);
+    var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
     assertEquals(1, impl.step1Count);
@@ -370,7 +369,7 @@ class AdminControllerTest {
             .extract()
             .path("workflowId");
 
-    WorkflowHandle<String> newHandle = dbos.retrieveWorkflow(newWorkflowId);
+    var newHandle = dbos.retrieveWorkflow(newWorkflowId);
     assertEquals("hellohello", newHandle.getResult());
 
     assertEquals(1, impl.step1Count);
