@@ -4,6 +4,10 @@ import dev.dbos.transact.config.DBOSConfig;
 
 import java.sql.*;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import javax.sql.DataSource;
 
@@ -74,8 +78,7 @@ public class DBUtils {
   }
 
   public static boolean queueEntriesAreCleanedUp(DataSource ds) throws SQLException {
-    String sql =
-        "SELECT count(*) FROM dbos.workflow_status WHERE queue_name IS NOT NULL AND status IN ('ENQUEUED', 'PENDING');";
+    String sql = "SELECT count(*) FROM dbos.workflow_status WHERE queue_name IS NOT NULL AND status IN ('ENQUEUED', 'PENDING');";
 
     for (int i = 0; i < 10; i++) {
       try (Connection connection = ds.getConnection();
@@ -108,8 +111,7 @@ public class DBUtils {
     String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, "postgres");
 
     String sysDb = dbosConfig.getSysDbName();
-    try (Connection conn =
-            DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
+    try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
         Statement stmt = conn.createStatement()) {
 
       String dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", sysDb);
@@ -120,8 +122,29 @@ public class DBUtils {
   }
 
   public static Connection getConnection(DBOSConfig dbosConfig) throws SQLException {
-    String dbUrl =
-        String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, dbosConfig.getSysDbName());
+    String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, dbosConfig.getSysDbName());
     return DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
+  }
+
+  public static List<Map<String, Object>> dumpWfStatus(DataSource ds) {
+    try (var conn = ds.getConnection();
+        var stmt = conn.createStatement();
+        var rs = stmt.executeQuery("SELECT * FROM dbos.workflow_status ORDER BY \"created_at\"")) {
+      var meta = rs.getMetaData();
+      int columnCount = meta.getColumnCount();
+      List<Map<String, Object>> rows = new ArrayList<>();
+
+      while (rs.next()) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        for (int i = 1; i <= columnCount; i++) {
+          row.put(meta.getColumnLabel(i), rs.getObject(i));
+        }
+        rows.add(row);
+      }
+
+      return rows;
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
   }
 }

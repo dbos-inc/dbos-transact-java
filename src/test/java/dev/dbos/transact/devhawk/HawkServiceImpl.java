@@ -17,47 +17,35 @@ public class HawkServiceImpl implements HawkService {
 
   @Workflow
   @Override
-  public String simpleWorkflow(String workflowId) {
-    validateWorkflowId(workflowId);
+  public String simpleWorkflow() {
     return LocalDate.now().format(DateTimeFormatter.ISO_DATE);
   }
 
   @Workflow
   @Override
-  public String sleepWorkflow(long sleepSeconds) {
-    sleep(Duration.ofSeconds(sleepSeconds));
-    return LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-  }
-
-  @Workflow
-  @Override
-  public String parentWorkflow(String workflowId) {
-    var childId = workflowId == null ? null : "%s-0".formatted(workflowId);
-    return proxy.simpleWorkflow(childId);
-  }
-
-  @Workflow
-  @Override
-  public String parentSleepWorkflow(long sleepSeconds) {
-    try (var o = new WorkflowOptions().withTimeout(Duration.ofSeconds(3)).setContext()) {
-      return proxy.sleepWorkflow(sleepSeconds);
-    }
-  }
-
-  private void validateWorkflowId(String workflowId) {
-    if (workflowId != null) {
-      var ctxWfId = DBOSContext.workflowId().get();
-      if (!workflowId.equals(ctxWfId)) {
-        throw new RuntimeException("workflow ID mismatch %s %s".formatted(workflowId, ctxWfId));
-      }
-    }
-  }
-
-  private void sleep(Duration duration) {
+  public String sleepWorkflow(long sleepSec) {
+    var duration = Duration.ofSeconds(sleepSec);
     try {
       Thread.sleep(duration.toMillis());
     } catch (InterruptedException e) {
       throw new RuntimeException(e);
+    }
+    return LocalDate.now().format(DateTimeFormatter.ISO_DATE);
+  }
+
+  @Workflow
+  @Override
+  public String parentWorkflow() {
+    return proxy.simpleWorkflow();
+  }
+
+  @Workflow
+  @Override
+  public String parentSleepWorkflow(Long timeoutSec, long sleepSec) {
+    var duration = timeoutSec == null ? null : Duration.ofSeconds(timeoutSec);
+    var options = new WorkflowOptions(null, duration);
+    try (var o = options.setContext()) {
+      return proxy.sleepWorkflow(sleepSec);
     }
   }
 }

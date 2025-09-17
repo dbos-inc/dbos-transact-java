@@ -13,6 +13,13 @@ public record StartWorkflowOptions(
     String deduplicationId,
     OptionalInt priority) {
 
+
+  public StartWorkflowOptions {
+    if (timeout != null && timeout.isNegative()) {
+      throw new IllegalArgumentException("timeout must not be negative");
+    }
+  }
+
   public StartWorkflowOptions() {
     this(null, null, null, null, OptionalInt.empty());
   }

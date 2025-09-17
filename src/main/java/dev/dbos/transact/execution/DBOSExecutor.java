@@ -1118,10 +1118,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       Duration timeout = ctx.getTimeout();
       Instant deadline = ctx.getDeadline();
-      logger.info(
-          "Invoke Child workflow {} {}",
-          Objects.requireNonNullElse(timeout, Duration.ZERO).toMillis(),
-          Objects.requireNonNullElse(deadline, Instant.EPOCH).toEpochMilli());
+      logger.info("Invoke Child workflow {} {}", timeout, deadline);
       var options =
           new ExecuteWorkflowOptions(
               ctx.getNextWorkflowId(childWorkflowId), timeout, deadline, null, null, null);

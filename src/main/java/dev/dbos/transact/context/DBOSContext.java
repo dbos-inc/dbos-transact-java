@@ -85,12 +85,14 @@ public class DBOSContext {
   }
 
   public Duration getTimeout() {
-    return nextTimeout != null ? nextTimeout : timeout;
+    return nextTimeout != null 
+      ? nextTimeout.isZero() ? null : nextTimeout
+      : timeout;
   }
 
   public Instant getDeadline() {
     if (nextTimeout != null) {
-      return Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
+      return nextTimeout.isZero() ? null : Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
     }
     return deadline;
   }

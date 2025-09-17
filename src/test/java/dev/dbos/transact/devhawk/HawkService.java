@@ -1,12 +1,14 @@
 package dev.dbos.transact.devhawk;
 
+import java.time.Duration;
+
 public interface HawkService {
 
-  String simpleWorkflow(String workflowId);
+  String simpleWorkflow();
 
-  String sleepWorkflow(long sleepSeconds);
+  String sleepWorkflow(long sleepSec);
 
-  String parentWorkflow(String workflowId);
+  String parentWorkflow();
 
-  String parentSleepWorkflow(long sleepSeconds);
+  String parentSleepWorkflow(Long timeoutSec, long sleepSec);
 }

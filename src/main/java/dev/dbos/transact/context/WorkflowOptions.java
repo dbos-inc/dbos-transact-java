@@ -5,6 +5,12 @@ import java.util.concurrent.TimeUnit;
 
 public record WorkflowOptions(String workflowId, Duration timeout) {
 
+  public WorkflowOptions {
+    if (timeout != null && timeout.isNegative()) {
+      throw new IllegalArgumentException("timeout must not be negative");
+    }
+  }
+
   public WorkflowOptions() {
     this(null, null);
   }
@@ -30,8 +36,7 @@ public record WorkflowOptions(String workflowId, Duration timeout) {
   }
 
   public WorkflowOptions withTimeout(long value, TimeUnit unit) {
-    var timeout = Duration.ofNanos(unit.toNanos(value));
-    return new WorkflowOptions(this.workflowId, timeout);
+    return withTimeout(Duration.ofNanos(unit.toNanos(value)));
   }
 
   public Guard setContext() {
