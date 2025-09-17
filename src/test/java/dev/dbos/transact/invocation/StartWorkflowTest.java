@@ -63,18 +63,25 @@ public class StartWorkflowTest {
     dbos.shutdown();
   }
 
-
   @Test
   void startWorkflowMultipleInvocationsThrows() throws Exception {
-    assertThrows(IllegalCallerException.class, () -> dbos.startWorkflow(() -> { 
-      proxy.simpleWorkflow();
-      return proxy.simpleWorkflow();
-    }));
+    assertThrows(
+        IllegalCallerException.class,
+        () ->
+            dbos.startWorkflow(
+                () -> {
+                  proxy.simpleWorkflow();
+                  return proxy.simpleWorkflow();
+                }));
   }
 
   @Test
   void startWorkflow() throws Exception {
-    var handle = dbos.startWorkflow(() -> { return proxy.simpleWorkflow(); });
+    var handle =
+        dbos.startWorkflow(
+            () -> {
+              return proxy.simpleWorkflow();
+            });
     var result = handle.getResult();
     assertEquals(localDate, result);
 

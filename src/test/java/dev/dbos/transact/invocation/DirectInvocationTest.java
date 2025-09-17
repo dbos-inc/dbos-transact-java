@@ -1,6 +1,5 @@
 package dev.dbos.transact.invocation;
 
-import static dev.dbos.transact.utils.Assertions.assertKeyIsNull;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -238,7 +237,7 @@ public class DirectInvocationTest {
     assertEquals(2, rows.size());
     var row0 = rows.get(0);
     var row1 = rows.get(1);
-    
+
     assertEquals(10000L, row0.timeoutMs());
     assertEquals(10000L, row1.timeoutMs());
     assertNotNull(row0.deadlineEpochMs());
@@ -295,8 +294,8 @@ public class DirectInvocationTest {
     var rows = DBUtils.geStatusRows(dataSource);
     assertEquals(2, rows.size());
     var row0 = rows.get(0);
-    var row1 = rows.get(1);    
-    
+    var row1 = rows.get(1);
+
     assertEquals(10000L, row0.timeoutMs());
     assertNotNull(row0.deadlineEpochMs());
 

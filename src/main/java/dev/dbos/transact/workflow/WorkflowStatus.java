@@ -1,5 +1,7 @@
 package dev.dbos.transact.workflow;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
 public class WorkflowStatus {
@@ -199,12 +201,27 @@ public class WorkflowStatus {
     this.appVersion = appVersion;
   }
 
+  public Duration getTimeout() {
+    if (workflowTimeoutMs != null) {
+      return Duration.ofMillis(workflowTimeoutMs);
+    }
+
+    return null;
+  }
+
   public Long getWorkflowTimeoutMs() {
     return workflowTimeoutMs;
   }
 
   public void setWorkflowTimeoutMs(Long workflowTimeoutMs) {
     this.workflowTimeoutMs = workflowTimeoutMs;
+  }
+
+  public Instant getDeadline() {
+    if (workflowDeadlineEpochMs != null) {
+      return Instant.ofEpochMilli(workflowDeadlineEpochMs);
+    }
+    return null;
   }
 
   public Long getWorkflowDeadlineEpochMs() {
