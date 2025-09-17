@@ -375,39 +375,40 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.recordWorkflowError(workflowId, errorString);
   }
 
-  private <T> T runWorkflowAndSaveResult(
-      Object target, Object[] args, WorkflowFunctionReflect function, String workflowId)
-      throws Exception {
+  // private <T> T runWorkflowAndSaveResult(
+  //     Object target, Object[] args, WorkflowFunctionReflect function, String workflowId)
+  //     throws Exception {
 
-    try {
+  //   try {
 
-      @SuppressWarnings("unchecked")
-      T result = (T) function.invoke(target, args);
+  //     @SuppressWarnings("unchecked")
+  //     T result = (T) function.invoke(target, args);
 
-      postInvokeWorkflow(systemDatabase, workflowId, result);
-      return result;
-    } catch (Exception e) {
-      Throwable actual =
-          (e instanceof InvocationTargetException)
-              ? ((InvocationTargetException) e).getTargetException()
-              : e;
+  //     postInvokeWorkflow(systemDatabase, workflowId, result);
+  //     return result;
+  //   } catch (Exception e) {
+  //     Throwable actual =
+  //         (e instanceof InvocationTargetException)
+  //             ? ((InvocationTargetException) e).getTargetException()
+  //             : e;
 
-      logger.error("Error in runWorkflow", actual);
+  //     logger.error("Error in runWorkflow", actual);
 
-      if (actual instanceof WorkflowCancelledException || actual instanceof InterruptedException) {
-        // don't mark the workflow status as error yet. this is cancel
-        // if this is a parent cancel, the exception is thrown to caller
-        // state is already c
-        // if this is child cancel, its state is already Cancelled
-        // in parent it will fall thru to PostInvoke call below to set state to
-        // Error
-        throw new AwaitedWorkflowCancelledException(workflowId);
-      }
+  //     if (actual instanceof WorkflowCancelledException || actual instanceof InterruptedException)
+  // {
+  //       // don't mark the workflow status as error yet. this is cancel
+  //       // if this is a parent cancel, the exception is thrown to caller
+  //       // state is already c
+  //       // if this is child cancel, its state is already Cancelled
+  //       // in parent it will fall thru to PostInvoke call below to set state to
+  //       // Error
+  //       throw new AwaitedWorkflowCancelledException(workflowId);
+  //     }
 
-      postInvokeWorkflow(systemDatabase, workflowId, actual);
-      throw actual instanceof Exception ? (Exception) actual : e;
-    }
-  }
+  //     postInvokeWorkflow(systemDatabase, workflowId, actual);
+  //     throw actual instanceof Exception ? (Exception) actual : e;
+  //   }
+  // }
 
   // @SuppressWarnings("unchecked")
   // public <T> T syncWorkflow(
@@ -1205,15 +1206,25 @@ public class DBOSExecutor implements AutoCloseable {
             postInvokeWorkflow(systemDatabase, workflowId, result);
             return result;
           } catch (Exception e) {
-            var actual =
-                (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
+            Throwable actual = e;
 
-            logger.error("executeWorkflow", actual);
+            while (true) {
+              if (actual instanceof InvocationTargetException ite) {
+                actual = ite.getTargetException();
+              } else if (actual instanceof RuntimeException re && re.getCause() != null) {
+                actual = re.getCause();
+              } else {
+                break;
+              }
+            }
 
-            if (actual instanceof WorkflowCancelledException
-                || actual instanceof InterruptedException) {
+            logger.error("executeWorkflow {}", actual);
+
+            if (actual instanceof InterruptedException
+                || actual instanceof WorkflowCancelledException) {
               throw new AwaitedWorkflowCancelledException(workflowId);
             }
+
             postInvokeWorkflow(systemDatabase, workflowId, actual);
             throw e;
           } finally {
@@ -1232,8 +1243,8 @@ public class DBOSExecutor implements AutoCloseable {
       timeoutScheduler.schedule(
           () -> {
             if (!future.isDone()) {
-              future.cancel(true);
               systemDatabase.cancelWorkflow(workflowId);
+              future.cancel(true);
             }
           },
           newTimeout,
