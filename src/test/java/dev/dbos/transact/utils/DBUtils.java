@@ -78,7 +78,8 @@ public class DBUtils {
   }
 
   public static boolean queueEntriesAreCleanedUp(DataSource ds) throws SQLException {
-    String sql = "SELECT count(*) FROM dbos.workflow_status WHERE queue_name IS NOT NULL AND status IN ('ENQUEUED', 'PENDING');";
+    String sql =
+        "SELECT count(*) FROM dbos.workflow_status WHERE queue_name IS NOT NULL AND status IN ('ENQUEUED', 'PENDING');";
 
     for (int i = 0; i < 10; i++) {
       try (Connection connection = ds.getConnection();
@@ -111,7 +112,8 @@ public class DBUtils {
     String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, "postgres");
 
     String sysDb = dbosConfig.getSysDbName();
-    try (Connection conn = DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
+    try (Connection conn =
+            DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
         Statement stmt = conn.createStatement()) {
 
       String dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", sysDb);
@@ -122,7 +124,8 @@ public class DBUtils {
   }
 
   public static Connection getConnection(DBOSConfig dbosConfig) throws SQLException {
-    String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, dbosConfig.getSysDbName());
+    String dbUrl =
+        String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, dbosConfig.getSysDbName());
     return DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
   }
 

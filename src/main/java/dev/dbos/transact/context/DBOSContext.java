@@ -85,16 +85,25 @@ public class DBOSContext {
   }
 
   public Duration getTimeout() {
-    return nextTimeout != null 
-      ? nextTimeout.isZero() ? null : nextTimeout
-      : timeout;
+    if (nextTimeout == null) {
+      return timeout;
+    }
+    // zero timeout is a marker for "no timeout"
+    if (nextTimeout.isZero()) {
+      return null;
+    }
+    return nextTimeout;
   }
 
   public Instant getDeadline() {
-    if (nextTimeout != null) {
-      return nextTimeout.isZero() ? null : Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
+    if (nextTimeout == null) {
+      return deadline;
     }
-    return deadline;
+    if (nextTimeout.isZero()) {
+      return null;
+    }
+
+    return Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
   }
 
   public static Optional<String> workflowId() {

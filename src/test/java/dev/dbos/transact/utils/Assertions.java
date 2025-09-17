@@ -7,8 +7,8 @@ import java.util.Map;
 
 public class Assertions {
 
-    public static <K, V> void assertKeyIsNull(Map<K, V> map, K key) {
-        assertTrue(map.containsKey(key));
-        assertNull(map.get(key));
-    }
+  public static <K, V> void assertKeyIsNull(Map<K, V> map, K key) {
+    assertTrue(map.containsKey(key));
+    assertNull(map.get(key));
+  }
 }

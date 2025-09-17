@@ -1,6 +1,4 @@
-package dev.dbos.transact.devhawk;
-
-import java.time.Duration;
+package dev.dbos.transact.directinvocation;
 
 public interface HawkService {
 

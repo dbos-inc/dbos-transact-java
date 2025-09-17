@@ -1,6 +1,5 @@
-package dev.dbos.transact.devhawk;
+package dev.dbos.transact.directinvocation;
 
-import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.workflow.Workflow;
 

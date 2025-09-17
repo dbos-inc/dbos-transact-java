@@ -1,12 +1,10 @@
-package dev.dbos.transact.devhawk;
+package dev.dbos.transact.directinvocation;
 
+import static dev.dbos.transact.utils.Assertions.assertKeyIsNull;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static dev.dbos.transact.utils.Assertions.assertKeyIsNull;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
@@ -27,7 +25,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class HawkTest {
+public class DirectInvocationTest {
   private static DBOSConfig dbosConfig;
   private DBOS dbos;
   private HawkService proxy;
@@ -53,7 +51,8 @@ public class HawkTest {
     DBUtils.recreateDB(dbosConfig);
     dbos = DBOS.initialize(dbosConfig);
     var impl = new HawkServiceImpl();
-    proxy = dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
+    proxy =
+        dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
     impl.setProxy(proxy);
 
     dbos.launch();
@@ -76,10 +75,10 @@ public class HawkTest {
     var table = DBUtils.dumpWfStatus(dataSource);
     assertEquals(1, table.size());
     var row = table.get(0);
-    assertDoesNotThrow(() -> UUID.fromString((String)row.get("workflow_uuid")));
+    assertDoesNotThrow(() -> UUID.fromString((String) row.get("workflow_uuid")));
     assertEquals("SUCCESS", row.get("status"));
     assertEquals("simpleWorkflow", row.get("name"));
-    assertEquals("dev.dbos.transact.devhawk.HawkServiceImpl", row.get("class_name"));
+    assertEquals("dev.dbos.transact.directinvocation.HawkServiceImpl", row.get("class_name"));
     assertNotNull(row.get("output"));
     assertKeyIsNull(row, "error");
     assertKeyIsNull(row, "workflow_timeout_ms");
@@ -195,7 +194,7 @@ public class HawkTest {
     assertEquals(2, table.size());
     var row0 = table.get(0);
     var row1 = table.get(1);
-    assertDoesNotThrow(() -> UUID.fromString((String)row0.get("workflow_uuid")));
+    assertDoesNotThrow(() -> UUID.fromString((String) row0.get("workflow_uuid")));
     assertEquals(row0.get("workflow_uuid") + "-0", row1.get("workflow_uuid"));
     assertEquals("SUCCESS", row0.get("status"));
     assertEquals("SUCCESS", row1.get("status"));
@@ -282,7 +281,7 @@ public class HawkTest {
     assertNotNull(row1.get("workflow_deadline_epoch_ms"));
   }
 
-    @Test
+  @Test
   void directInvokeParentSetTimeoutParent3() {
 
     var options = new WorkflowOptions(Duration.ofSeconds(10));
@@ -327,7 +326,8 @@ public class HawkTest {
 
   //   var impl = new HawkServiceImpl();
   //   var proxy =
-  //       dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
+  //
+  // dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
   //   impl.setProxy(proxy);
 
   //   dbos.launch();
