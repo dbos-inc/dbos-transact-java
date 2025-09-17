@@ -37,6 +37,7 @@ class RecoveryServiceTest {
   private Queue testQueue;
   private SystemDatabase systemDatabase;
   private DBOSExecutor dbosExecutor;
+  private ExecutingServiceImpl executingServiceImpl;
   private ExecutingService executingService;
   Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
@@ -63,8 +64,9 @@ class RecoveryServiceTest {
     executingService =
         dbos.<ExecutingService>Workflow()
             .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
+            .implementation(executingServiceImpl = new ExecutingServiceImpl())
             .build();
+    executingService.setExecutingService(executingService);
 
     testQueue = dbos.Queue("q1").build();
 
@@ -94,14 +96,14 @@ class RecoveryServiceTest {
       executingService.workflowMethod("test-item");
     }
     wfid = "wf-126";
-    WorkflowHandle<String> handle6 = null;
+    WorkflowHandle<String, ?> handle6 = null;
     try (SetWorkflowID id = new SetWorkflowID(wfid)) {
       handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
     wfid = "wf-127";
-    WorkflowHandle<String> handle7 = null;
+    WorkflowHandle<String, ?> handle7 = null;
     WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
     try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
       handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
@@ -118,7 +120,7 @@ class RecoveryServiceTest {
     assertEquals(5, pending.size());
 
     for (GetPendingWorkflowsOutput output : pending) {
-      WorkflowHandle<?> handle = dbosExecutor.recoverWorkflow(output);
+      WorkflowHandle<?, ?> handle = dbosExecutor.recoverWorkflow(output);
       handle.getResult();
       assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
     }
@@ -140,14 +142,14 @@ class RecoveryServiceTest {
       executingService.workflowMethod("test-item");
     }
     wfid = "wf-126";
-    WorkflowHandle<String> handle6 = null;
+    WorkflowHandle<String, ?> handle6 = null;
     try (SetWorkflowID id = new SetWorkflowID(wfid)) {
       handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
     wfid = "wf-127";
-    WorkflowHandle<String> handle7 = null;
+    WorkflowHandle<String, ?> handle7 = null;
     WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
     try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
       handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
@@ -157,10 +159,10 @@ class RecoveryServiceTest {
 
     setWorkflowStateToPending(dataSource);
 
-    List<WorkflowHandle<?>> pending = dbosExecutor.recoverPendingWorkflows(null);
+    List<WorkflowHandle<?, ?>> pending = dbosExecutor.recoverPendingWorkflows(null);
     assertEquals(5, pending.size());
 
-    for (WorkflowHandle<?> handle : pending) {
+    for (var handle : pending) {
       handle.getResult();
       assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
     }
@@ -199,13 +201,48 @@ class RecoveryServiceTest {
 
     dbos.launch();
 
-    WorkflowHandle h = dbos.retrieveWorkflow("wf-123");
+    var h = dbos.retrieveWorkflow("wf-123");
     h.getResult();
     assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
 
     h = dbos.retrieveWorkflow("wf-124");
     h.getResult();
     assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
+  }
+
+  @Test
+  public void testRecoverNoOutputSteps() throws Exception {
+    // Run a workflow that will run a step that throws, and run a no-result step
+    //   in the catch handler.
+    // Check that this returns null (void) and that the right calls were made.
+    String wfid = "wftr-1x3";
+    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+      executingService.workflowWithNoResultSteps();
+    }
+    assertEquals(executingServiceImpl.callsToThrowStep, 1);
+    assertEquals(executingServiceImpl.callsToNoReturnStep, 1);
+    var h = dbos.retrieveWorkflow(wfid);
+    assertNull(h.getStatus().getError());
+    assertNull(h.getResult());
+
+    // Recover workflow
+    // This should use checkpointed step values
+    DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+    h = dbosExecutor.executeWorkflowById(wfid);
+    assertNull(h.getStatus().getError());
+    assertNull(h.getResult());
+    assertEquals(executingServiceImpl.callsToThrowStep, 1);
+    assertEquals(executingServiceImpl.callsToNoReturnStep, 1);
+
+    // Recover workflow net of last step
+    // This should use 1 checkpointed step value
+    DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+    DBUtils.deleteStepOutput(dataSource, wfid, 1);
+    h = dbosExecutor.executeWorkflowById(wfid);
+    assertNull(h.getStatus().getError());
+    assertNull(h.getResult());
+    assertEquals(executingServiceImpl.callsToThrowStep, 1);
+    assertEquals(executingServiceImpl.callsToNoReturnStep, 2);
   }
 
   private void setWorkflowStateToPending(DataSource ds) throws SQLException {

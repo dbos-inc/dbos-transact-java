@@ -44,4 +44,32 @@ public class ExecutingServiceImpl implements ExecutingService {
   public void sleepingWorkflow(float seconds) {
     DBOSContext.dbosInstance().get().sleep(seconds);
   }
+
+  public int callsToNoReturnStep = 0;
+
+  @Step(name = "noReturn")
+  public void stepWithNoReturn() {
+    ++callsToNoReturnStep;
+    return;
+  }
+
+  public int callsToThrowStep = 0;
+
+  @Step(name = "throws", retriesAllowed = false)
+  public void stepThatThrows() throws MyAppException {
+    ++callsToThrowStep;
+    throw new MyAppException();
+  }
+
+  @Workflow(name = "workflowWithNoResults")
+  public void workflowWithNoResultSteps() {
+    try {
+      executingService.stepThatThrows();
+    } catch (MyAppException e) {
+      executingService.stepWithNoReturn();
+    } catch (Exception e) {
+      System.err.println("Caught an unexpected exception of type: " + e.getClass().getName());
+      e.printStackTrace(System.err);
+    }
+  }
 }

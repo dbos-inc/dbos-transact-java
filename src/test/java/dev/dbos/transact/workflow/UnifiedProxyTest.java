@@ -78,7 +78,7 @@ public class UnifiedProxyTest {
 
     String wfid2 = "wf-124";
     options = new WorkflowOptions.Builder(wfid2).build();
-    WorkflowHandle<String> handle = null;
+    WorkflowHandle<String, ?> handle = null;
     try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
       handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
     }

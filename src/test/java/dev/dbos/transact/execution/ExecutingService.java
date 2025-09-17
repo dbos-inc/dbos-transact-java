@@ -13,4 +13,16 @@ public interface ExecutingService {
   void sleepingWorkflow(float seconds);
 
   void setExecutingService(ExecutingService service);
+
+  void stepWithNoReturn();
+
+  public static class MyAppException extends Exception {
+    public MyAppException() {
+      super("You asked for it");
+    }
+  }
+
+  void stepThatThrows() throws MyAppException;
+
+  void workflowWithNoResultSteps();
 }

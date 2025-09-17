@@ -23,7 +23,7 @@ public class ListStepsResponse extends BaseResponse {
       this.function_id = info.getFunctionId();
       this.function_name = info.getFunctionName();
       this.output = output != null ? JSONUtil.toJson(output) : null;
-      this.error = error != null ? JSONUtil.serializeError(error) : null;
+      this.error = error != null ? JSONUtil.serializeAppException(error) : null;
       this.child_workflow_id = info.getChildWorkflowId();
     }
   }

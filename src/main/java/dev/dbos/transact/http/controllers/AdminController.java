@@ -61,9 +61,9 @@ public class AdminController {
   @Produces(MediaType.APPLICATION_JSON)
   public List<String> recovery(List<String> executorIds) {
     logger.info("Recovering workflows for executors {}", executorIds);
-    List<WorkflowHandle<?>> handles = dbosExecutor.recoverPendingWorkflows(executorIds);
+    List<WorkflowHandle<?, ?>> handles = dbosExecutor.recoverPendingWorkflows(executorIds);
     List<String> workflowIds = new ArrayList<>();
-    for (WorkflowHandle<?> handle : handles) {
+    for (WorkflowHandle<?, ?> handle : handles) {
       workflowIds.add(handle.getWorkflowId());
     }
     return workflowIds;
@@ -137,7 +137,7 @@ public class AdminController {
   @Produces(MediaType.APPLICATION_JSON)
   public ForkWorkflowResponse restart(@PathParam("workflowId") String workflowId) {
     logger.info("Restarting workflow {} with a new ID", workflowId);
-    WorkflowHandle<?> handle = dbosExecutor.forkWorkflow(workflowId, 0, null);
+    WorkflowHandle<?, ?> handle = dbosExecutor.forkWorkflow(workflowId, 0, null);
     return new ForkWorkflowResponse(handle.getWorkflowId());
   }
 
@@ -173,7 +173,7 @@ public class AdminController {
       builder.timeoutMS(request.timeoutMs);
     }
 
-    WorkflowHandle<?> handle = dbosExecutor.forkWorkflow(workflowId, startStep, builder.build());
+    WorkflowHandle<?, ?> handle = dbosExecutor.forkWorkflow(workflowId, startStep, builder.build());
     return new ForkWorkflowResponse(handle.getWorkflowId());
   }
 

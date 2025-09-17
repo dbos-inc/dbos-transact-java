@@ -58,7 +58,7 @@ public class ForkServiceImpl implements ForkService {
     forkService.stepOne("one");
     forkService.stepTwo(2);
 
-    WorkflowHandle<String> handle = null;
+    WorkflowHandle<String, RuntimeException> handle = null;
     try (SetWorkflowOptions o =
         new SetWorkflowOptions(new WorkflowOptions.Builder("child1").build())) {
       handle = dbos.startWorkflow(() -> forkService.child1(25));

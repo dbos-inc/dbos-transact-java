@@ -9,8 +9,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.SetWorkflowID;
 import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.exceptions.DBOSAppException;
-import dev.dbos.transact.exceptions.SerializableException;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
@@ -70,8 +68,7 @@ public class AsyncWorkflowTest {
       simpleService.workWithString("test-item");
     }
 
-    WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid);
-    ;
+    var handle = dbosExecutor.retrieveWorkflow(wfid);
     String result = (String) handle.getResult();
     assertEquals("Processed: test-item", result);
     assertEquals("wf-123", handle.getWorkflowId());
@@ -104,7 +101,7 @@ public class AsyncWorkflowTest {
       simpleService.workWithString("test-item");
     }
 
-    WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid);
+    var handle = dbosExecutor.retrieveWorkflow(wfid);
     String result = (String) handle.getResult();
     assertEquals("Processed: test-item", result);
     assertEquals("wf-123", handle.getWorkflowId());
@@ -154,7 +151,7 @@ public class AsyncWorkflowTest {
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-    WorkflowHandle<Void> handle = null;
+    WorkflowHandle<Void, ?> handle = null;
     String wfid = "abc";
     try (SetWorkflowID id = new SetWorkflowID(wfid)) {
       handle =
@@ -167,10 +164,8 @@ public class AsyncWorkflowTest {
 
     try {
       handle.getResult();
-    } catch (DBOSAppException e) {
-      assertEquals("Exception of type java.lang.Exception", e.getMessage());
-      SerializableException se = e.original;
-      assertEquals("DBOS Test error", se.message);
+    } catch (Exception e) {
+      assertEquals("DBOS Test error", e.getMessage());
     }
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
@@ -194,7 +189,7 @@ public class AsyncWorkflowTest {
 
     simpleService.setSimpleService(simpleService);
 
-    WorkflowHandle<String> handle = null;
+    WorkflowHandle<String, ?> handle = null;
     WorkflowOptions options = new WorkflowOptions.Builder("wf-123456").build();
     try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
       handle = dbos.startWorkflow(() -> simpleService.parentWorkflowWithoutSet("123"));
@@ -234,7 +229,7 @@ public class AsyncWorkflowTest {
 
     WorkflowOptions options = new WorkflowOptions.Builder("wf-123456").build();
 
-    WorkflowHandle<String> handle = null;
+    WorkflowHandle<String, ?> handle = null;
     try (SetWorkflowOptions o = new SetWorkflowOptions(options)) {
       handle = dbos.startWorkflow(() -> simpleService.WorkflowWithMultipleChildren("123"));
     }
@@ -286,7 +281,7 @@ public class AsyncWorkflowTest {
     simpleService.setSimpleService(simpleService);
 
     WorkflowOptions options = new WorkflowOptions.Builder("wf-123456").build();
-    WorkflowHandle<String> handle = null;
+    WorkflowHandle<String, ?> handle = null;
     try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
       handle = dbos.startWorkflow(() -> simpleService.grandParent("123"));
     }
@@ -330,8 +325,7 @@ public class AsyncWorkflowTest {
     dbos.launch();
 
     String wfid = "wf-123";
-    WorkflowHandle<String> handle = null;
-    WorkflowOptions options = new WorkflowOptions.Builder(wfid).build();
+    WorkflowHandle<String, RuntimeException> handle = null;
     try (SetWorkflowID id = new SetWorkflowID(wfid)) {
       handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item"));
     }

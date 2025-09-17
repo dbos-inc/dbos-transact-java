@@ -1,6 +1,5 @@
 package dev.dbos.transact.step;
 
-import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.workflow.Workflow;
 
 public class ServiceAImpl implements ServiceA {
@@ -17,9 +16,6 @@ public class ServiceAImpl implements ServiceA {
 
   @Workflow(name = "workflowWithSteps")
   public String workflowWithSteps(String input) {
-
-    String wfid = DBOSContext.workflowId().get();
-
     serviceBproxy.step1("one");
     serviceBproxy.step2("two");
     try {
@@ -36,7 +32,6 @@ public class ServiceAImpl implements ServiceA {
 
   @Workflow(name = "workflowWithStepsError")
   public String workflowWithStepError(String input) {
-
     serviceBproxy.step1("one");
     serviceBproxy.step2("two");
     try {

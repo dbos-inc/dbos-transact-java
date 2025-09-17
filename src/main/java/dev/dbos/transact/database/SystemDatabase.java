@@ -170,8 +170,7 @@ public class SystemDatabase implements AutoCloseable {
     return stepsDAO.listWorkflowSteps(workflowId);
   }
 
-  public Object awaitWorkflowResult(String workflowId) {
-
+  public Object awaitWorkflowResult(String workflowId) throws Exception {
     return workflowDAO.awaitWorkflowResult(workflowId);
   }
 
