@@ -409,14 +409,14 @@ public class QueuesTest {
     assertEquals(0, idsToRun.size());
 
     // mark the first 2 as success
-    DBUtils.updateWorkflowState(
+    DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
 
     // next 2 get dequeued
     idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
     assertEquals(2, idsToRun.size());
 
-    DBUtils.updateWorkflowState(
+    DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
         systemDatabase.getAndStartQueuedWorkflows(
@@ -502,7 +502,7 @@ public class QueuesTest {
     // 0 because global concurrency limit is reached
     assertEquals(0, idsToRun.size());
 
-    DBUtils.updateWorkflowState(
+    DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
         systemDatabase.getAndStartQueuedWorkflows(

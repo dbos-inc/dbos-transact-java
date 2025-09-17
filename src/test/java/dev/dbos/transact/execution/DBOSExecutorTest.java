@@ -13,10 +13,7 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.time.Instant;
 import java.util.List;
 
 import javax.sql.DataSource;
@@ -83,7 +80,7 @@ class DBOSExecutorTest {
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).getStatus(), WorkflowState.SUCCESS.name());
 
-    setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+    DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
     WorkflowHandle<?> handle = dbosExecutor.executeWorkflowById(wfid);
 
@@ -203,8 +200,8 @@ class DBOSExecutorTest {
     List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid);
     assertEquals(2, steps.size());
 
-    setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-    deleteSteps(dataSource, wfid);
+    DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+    DBUtils.deleteAllStepOutputs(dataSource, wfid);
     steps = systemDatabase.listWorkflowSteps(wfid);
     assertEquals(0, steps.size());
 
@@ -252,8 +249,8 @@ class DBOSExecutorTest {
     List<StepInfo> steps = systemDatabase.listWorkflowSteps(wfid);
     assertEquals(2, steps.size());
 
-    setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-    deleteStepTwo(dataSource, wfid, 1);
+    DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+    DBUtils.deleteStepOutput(dataSource, wfid, 1);
     steps = systemDatabase.listWorkflowSteps(wfid);
     assertEquals(1, steps.size());
 
@@ -281,13 +278,10 @@ class DBOSExecutorTest {
             .implementation(new ExecutingServiceImpl())
             .build();
     dbos.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
-
-    String result = null;
 
     String wfid = "wf-123";
     long start = System.currentTimeMillis();
@@ -320,10 +314,7 @@ class DBOSExecutorTest {
     // Needed to call the step
     executingService.setExecutingService(executingService);
 
-    String result = null;
-
     String wfid = "wf-123";
-    long start = System.currentTimeMillis();
     try (SetWorkflowID id = new SetWorkflowID(wfid)) {
       executingService.sleepingWorkflow(.002f);
     }
@@ -333,13 +324,13 @@ class DBOSExecutorTest {
     assertEquals("DBOS.sleep", steps.get(0).getFunctionName());
 
     // let us set the state to PENDING and increase the sleep time
-    setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+    DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     long currenttime = System.currentTimeMillis();
     double newEndtime = (currenttime + 2000) / 1000;
 
     String endTimeAsJson = JSONUtil.serialize(newEndtime);
 
-    updateStepEndTime(dataSource, wfid, steps.get(0).getFunctionId(), endTimeAsJson);
+    DBUtils.updateStepEndTime(dataSource, wfid, steps.get(0).getFunctionId(), endTimeAsJson);
 
     long starttime = System.currentTimeMillis();
     WorkflowHandle h = dbosExecutor.executeWorkflowById(wfid);
@@ -347,79 +338,5 @@ class DBOSExecutorTest {
 
     long duration = System.currentTimeMillis() - starttime;
     assertTrue(duration >= 1000);
-  }
-
-  private void setWorkflowState(DataSource ds, String workflowId, String newState)
-      throws SQLException {
-
-    String sql =
-        "UPDATE dbos.workflow_status SET status = ?, updated_at = ? WHERE workflow_uuid = ?";
-
-    try (Connection connection = ds.getConnection();
-        PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-      pstmt.setString(1, newState);
-      pstmt.setLong(2, Instant.now().toEpochMilli());
-      pstmt.setString(3, workflowId);
-
-      // Execute the update and get the number of rows affected
-      int rowsAffected = pstmt.executeUpdate();
-
-      assertEquals(1, rowsAffected);
-    }
-  }
-
-  private void deleteSteps(DataSource ds, String workflowId) throws SQLException {
-
-    String sql = "DELETE from dbos.operation_outputs WHERE workflow_uuid = ?";
-
-    try (Connection connection = ds.getConnection();
-        PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-      pstmt.setString(1, workflowId);
-
-      // Execute the update and get the number of rows affected
-      int rowsAffected = pstmt.executeUpdate();
-
-      assertEquals(2, rowsAffected);
-    }
-  }
-
-  private void updateStepEndTime(DataSource ds, String workflowId, int functionId, String endtime)
-      throws SQLException {
-
-    String sql =
-        "update dbos.operation_outputs SET output = ? WHERE workflow_uuid = ? AND function_id = ? ";
-
-    try (Connection connection = ds.getConnection();
-        PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-      pstmt.setString(1, endtime);
-      pstmt.setString(2, workflowId);
-      pstmt.setInt(3, functionId);
-
-      // Execute the update and get the number of rows affected
-      int rowsAffected = pstmt.executeUpdate();
-
-      assertEquals(1, rowsAffected);
-    }
-  }
-
-  private void deleteStepTwo(DataSource ds, String workflowId, int function_id)
-      throws SQLException {
-
-    String sql = "DELETE from dbos.operation_outputs WHERE workflow_uuid = ? and function_id = ?;";
-
-    try (Connection connection = ds.getConnection();
-        PreparedStatement pstmt = connection.prepareStatement(sql)) {
-
-      pstmt.setString(1, workflowId);
-      pstmt.setInt(2, function_id);
-
-      // Execute the update and get the number of rows affected
-      int rowsAffected = pstmt.executeUpdate();
-
-      assertEquals(1, rowsAffected);
-    }
   }
 }

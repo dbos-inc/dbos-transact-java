@@ -124,7 +124,7 @@ class AdminControllerTest {
 
       pstmt.setString(1, WorkflowState.PENDING.name());
       pstmt.setLong(2, Instant.now().toEpochMilli());
-      int rowsAffected = pstmt.executeUpdate();
+      pstmt.executeUpdate();
     }
 
     given()

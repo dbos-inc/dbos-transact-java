@@ -743,7 +743,6 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  // CB TODO: This should be package scope
   public <T> T runStepInternal(
       String stepName,
       boolean retryAllowed,
