@@ -15,7 +15,8 @@ public class WorkflowRegistry {
     WorkflowFunctionReflect function = (t, args) -> method.invoke(t, args);
     var previous =
         registry.putIfAbsent(
-            workflowName, new RegisteredWorkflow(target, function, maxRecoveryAttempts));
+            workflowName,
+            new RegisteredWorkflow(workflowName, target, function, maxRecoveryAttempts));
 
     if (previous != null) {
       throw new IllegalStateException("Workflow already registered with name: " + workflowName);

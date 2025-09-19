@@ -1,12 +1,10 @@
 package dev.dbos.transact.workflow.internal;
 
-import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
-
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
@@ -30,8 +28,10 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
   public T getResult() {
     try {
       return futureResult.get();
-    } catch (Exception e) {
-      throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    } catch (ExecutionException e) {
+      throw new RuntimeException(e);
     }
   }
 

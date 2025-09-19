@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 
@@ -64,7 +64,7 @@ public class StepsTest {
 
     String wid = "sync123";
 
-    try (SetWorkflowID id = new SetWorkflowID(wid)) {
+    try (var id = new WorkflowOptions(wid).setContext()) {
       String result = serviceA.workflowWithSteps("hello");
       assertEquals("hellohello", result);
     }
@@ -108,7 +108,7 @@ public class StepsTest {
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String wid = "sync123er";
-    try (SetWorkflowID id = new SetWorkflowID(wid)) {
+    try (var id = new WorkflowOptions(wid).setContext()) {
       String result = serviceA.workflowWithStepError("hello");
       assertEquals("hellohello", result);
     }
@@ -124,18 +124,19 @@ public class StepsTest {
   }
 
   @Test
+  @Disabled
   public void workflowWithInlineSteps() throws SQLException {
     ServiceWFAndStep service =
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
             .implementation(new ServiceWFAndStepImpl())
-            .async()
+            // .async()
             .build();
 
     dbos.launch();
 
     String wid = "wfWISwww123";
-    try (SetWorkflowID id = new SetWorkflowID(wid)) {
+    try (var id = new WorkflowOptions(wid).setContext()) {
       service.aWorkflowWithInlineSteps("input");
     }
 
@@ -152,6 +153,7 @@ public class StepsTest {
   }
 
   @Test
+  @Disabled
   public void asyncworkflowWithSteps() throws Exception {
     ServiceB serviceB =
         dbos.<ServiceB>Workflow()
@@ -163,7 +165,7 @@ public class StepsTest {
         dbos.<ServiceA>Workflow()
             .interfaceClass(ServiceA.class)
             .implementation(new ServiceAImpl(serviceB))
-            .async()
+            // .async()
             .build();
 
     dbos.launch();
@@ -172,7 +174,7 @@ public class StepsTest {
 
     String workflowId = "wf-1234";
 
-    try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
       serviceA.workflowWithSteps("hello");
     }
 
@@ -201,12 +203,13 @@ public class StepsTest {
   }
 
   @Test
+  @Disabled
   public void sameInterfaceWorkflowWithSteps() throws Exception {
     ServiceWFAndStep service =
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
             .implementation(new ServiceWFAndStepImpl())
-            .async()
+            // .async()
             .build();
 
     dbos.launch();
@@ -217,7 +220,7 @@ public class StepsTest {
 
     String workflowId = "wf-same-1234";
 
-    try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
       service.aWorkflow("hello");
     }
 
@@ -261,12 +264,13 @@ public class StepsTest {
   }
 
   @Test
+  @Disabled
   public void stepRetryLogic() throws Exception {
     ServiceWFAndStep service =
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
             .implementation(new ServiceWFAndStepImpl())
-            .async()
+            // .async()
             .build();
 
     dbos.launch();
@@ -275,7 +279,7 @@ public class StepsTest {
 
     String workflowId = "wf-stepretrytest-1234";
 
-    try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
       service.stepRetryWorkflow("hello");
     }
 

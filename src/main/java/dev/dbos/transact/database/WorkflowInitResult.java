@@ -1,5 +1,7 @@
 package dev.dbos.transact.database;
 
+import java.util.Objects;
+
 public class WorkflowInitResult {
   private String workflowId;
   private String status;
@@ -16,7 +18,7 @@ public class WorkflowInitResult {
   }
 
   public Long getDeadlineEpochMS() {
-    return deadlineEpochMS;
+    return Objects.requireNonNullElse(deadlineEpochMS, 0L);
   }
 
   public String getWorkflowId() {

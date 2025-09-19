@@ -6,9 +6,7 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
-import dev.dbos.transact.interceptor.AsyncInvocationHandler;
-import dev.dbos.transact.interceptor.QueueInvocationHandler;
-import dev.dbos.transact.interceptor.UnifiedInvocationHandler;
+import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
@@ -159,8 +157,6 @@ public class DBOS {
     private final DBOS dbos;
     private Class<T> interfaceClass;
     private Object implementation;
-    private boolean async;
-    private Queue queue;
 
     WorkflowBuilder(DBOS dbos) {
       this.dbos = dbos;
@@ -176,29 +172,11 @@ public class DBOS {
       return this;
     }
 
-    public WorkflowBuilder<T> async() {
-      this.async = true;
-      return this;
-    }
-
-    public WorkflowBuilder<T> queue(Queue queue) {
-      this.queue = queue;
-      return this;
-    }
-
     public T build() {
       dbos.registerClassWorkflows(interfaceClass, implementation);
 
-      if (async) {
-        return AsyncInvocationHandler.createProxy(
-            interfaceClass, implementation, () -> dbos.dbosExecutor.get());
-      } else if (queue != null) {
-        return QueueInvocationHandler.createProxy(
-            interfaceClass, implementation, queue, () -> dbos.dbosExecutor.get());
-      } else {
-        return UnifiedInvocationHandler.createProxy(
-            interfaceClass, implementation, () -> dbos.dbosExecutor.get());
-      }
+      return DBOSInvocationHandler.createProxy(
+          interfaceClass, implementation, () -> dbos.dbosExecutor.get());
     }
   }
 
@@ -463,34 +441,33 @@ public class DBOS {
     return executor.forkWorkflow(workflowId, startStep, options);
   }
 
-  /**
-   * Start a workflow asynchronously. If a queue is specified with DBOSOptions, the workflow is
-   * queued.
-   *
-   * @param func A function annotated with @Workflow
-   * @return handle {@link WorkflowHandle} to the workflow
-   * @param <T> type returned by the function
-   */
-  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> func) {
+  public <T> WorkflowHandle<T> startWorkflow(
+      ThrowingSupplier<T, Exception> supplier, StartWorkflowOptions options) throws Exception {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");
     }
 
-    return executor.startWorkflow(func);
+    return executor.startWorkflow(supplier, options);
   }
 
-  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Exception> func) {
-    var executor = dbosExecutor.get();
-    if (executor == null) {
-      throw new IllegalStateException("cannot startWorkflow before launch");
-    }
+  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> supplier)
+      throws Exception {
+    return startWorkflow(supplier, new StartWorkflowOptions());
+  }
 
-    return executor.startWorkflow(
+  public WorkflowHandle<Void> startWorkflow(
+      ThrowingRunnable<Exception> runnable, StartWorkflowOptions options) throws Exception {
+    return startWorkflow(
         () -> {
-          func.execute();
+          runnable.execute();
           return null;
-        });
+        },
+        options);
+  }
+
+  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Exception> runnable) throws Exception {
+    return startWorkflow(runnable, new StartWorkflowOptions());
   }
 
   public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
