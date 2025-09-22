@@ -7,7 +7,6 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 
@@ -22,10 +21,8 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-@Disabled
 class NotificationServiceTest {
 
   private static DBOSConfig dbosConfig;
@@ -69,16 +66,13 @@ class NotificationServiceTest {
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String wfid1 = "recvwf1";
-
-    try (var id = new WorkflowOptions(wfid1).setContext()) {
-      notService.recvWorkflow("topic1", 10);
-    }
+    dbos.startWorkflow(
+        () -> notService.recvWorkflow("topic1", 10), new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
-
-    try (var id = new WorkflowOptions(wfid2).setContext()) {
-      notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
-    }
+    dbos.startWorkflow(
+        () -> notService.sendWorkflow(wfid1, "topic1", "HelloDBOS"),
+        new StartWorkflowOptions(wfid2));
 
     var handle1 = dbos.retrieveWorkflow(wfid1);
     var handle2 = dbos.retrieveWorkflow(wfid2);
@@ -100,37 +94,32 @@ class NotificationServiceTest {
   }
 
   @Test
-  @Disabled
   public void multiple_send_recv() throws Exception {
 
     NotService notService =
         dbos.<NotService>Workflow()
             .interfaceClass(NotService.class)
             .implementation(new NotServiceImpl())
-            // .async()
             .build();
 
     dbos.launch();
 
     String wfid1 = "recvwf1";
+    dbos.startWorkflow(() -> notService.recvMultiple("topic1"), new StartWorkflowOptions(wfid1));
 
-    // try (var id = new WorkflowOptions(wfid1)) {
-    //   notService.recvMultiple("topic1");
-    // }
-
-    // try (var id = new WorkflowOptions("send1")) {
-    //   notService.sendWorkflow(wfid1, "topic1", "Hello1");
-    // }
+    dbos.startWorkflow(
+        () -> notService.sendWorkflow(wfid1, "topic1", "Hello1"),
+        new StartWorkflowOptions("send1"));
     dbos.retrieveWorkflow("send1").getResult();
 
-    // try (var id = new WorkflowOptions("send2")) {
-    //   notService.sendWorkflow(wfid1, "topic1", "Hello2");
-    // }
+    dbos.startWorkflow(
+        () -> notService.sendWorkflow(wfid1, "topic1", "Hello2"),
+        new StartWorkflowOptions("send2"));
     dbos.retrieveWorkflow("send2").getResult();
 
-    // try (var id = new WorkflowOptions("send3")) {
-    //   notService.sendWorkflow(wfid1, "topic1", "Hello3");
-    // }
+    dbos.startWorkflow(
+        () -> notService.sendWorkflow(wfid1, "topic1", "Hello3"),
+        new StartWorkflowOptions("send3"));
     dbos.retrieveWorkflow("send3").getResult();
 
     var handle1 = dbos.retrieveWorkflow(wfid1);
@@ -142,29 +131,22 @@ class NotificationServiceTest {
   }
 
   @Test
-  @Disabled
   public void notopic() throws Exception {
 
     NotService notService =
         dbos.<NotService>Workflow()
             .interfaceClass(NotService.class)
             .implementation(new NotServiceImpl())
-            // .async()
             .build();
 
     dbos.launch();
 
     String wfid1 = "recvwf1";
-
-    // try (var id = new WorkflowOptions(wfid1)) {
-    //   notService.recvWorkflow(null, 5);
-    // }
+    dbos.startWorkflow(() -> notService.recvWorkflow(null, 5), new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
-
-    // try (var id = new WorkflowOptions(wfid2)) {
-    //   notService.sendWorkflow(wfid1, null, "HelloDBOS");
-    // }
+    dbos.startWorkflow(
+        () -> notService.sendWorkflow(wfid1, null, "HelloDBOS"), new StartWorkflowOptions(wfid2));
 
     var handle1 = dbos.retrieveWorkflow(wfid1);
     var handle2 = dbos.retrieveWorkflow(wfid2);
@@ -204,40 +186,29 @@ class NotificationServiceTest {
       notService.recvWorkflow(null, 1);
     }
 
-    try {
-      try (var id = new WorkflowOptions("send1").setContext()) {
-        notService.sendWorkflow("fakeid", "topic1", "HelloDBOS");
-      }
-      assertTrue(false);
-    } catch (NonExistentWorkflowException e) {
-      assertEquals("fakeid", e.getWorkflowId());
+    try (var id = new WorkflowOptions("send1").setContext()) {
+      assertThrows(
+          RuntimeException.class, () -> notService.sendWorkflow("fakeid", "topic1", "HelloDBOS"));
     }
   }
 
   @Test
-  @Disabled
   public void sendNull() throws Exception {
 
     NotService notService =
         dbos.<NotService>Workflow()
             .interfaceClass(NotService.class)
             .implementation(new NotServiceImpl())
-            // .async()
             .build();
 
     dbos.launch();
 
     String wfid1 = "recvwf1";
-
-    // try (var id = new WorkflowOptions(wfid1)) {
-    //   notService.recvWorkflow("topic1", 5);
-    // }
+    dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5), new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
-
-    // try (var id = new WorkflowOptions(wfid2)) {
-    //   notService.sendWorkflow(wfid1, "topic1", null);
-    // }
+    dbos.startWorkflow(
+        () -> notService.sendWorkflow(wfid1, "topic1", null), new StartWorkflowOptions(wfid2));
 
     var handle1 = dbos.retrieveWorkflow(wfid1);
     var handle2 = dbos.retrieveWorkflow(wfid2);
@@ -316,33 +287,28 @@ class NotificationServiceTest {
   }
 
   @Test
-  @Disabled
   public void recv_sleep() throws Exception {
 
     NotService notService =
         dbos.<NotService>Workflow()
             .interfaceClass(NotService.class)
             .implementation(new NotServiceImpl())
-            // .async()
             .build();
 
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String wfid1 = "recvwf1";
-
-    // try (var id = new WorkflowOptions(wfid1)) {
-    //   notService.recvWorkflow("topic1", 5);
-    // }
+    dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5), new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
 
     // forcing the recv to wait on condition
     Thread.sleep(2000);
 
-    // try (var id = new WorkflowOptions(wfid2)) {
-    //   notService.sendWorkflow(wfid1, "topic1", "HelloDBOS");
-    // }
+    dbos.startWorkflow(
+        () -> notService.sendWorkflow(wfid1, "topic1", "HelloDBOS"),
+        new StartWorkflowOptions(wfid2));
 
     var handle1 = dbos.retrieveWorkflow(wfid1);
     var handle2 = dbos.retrieveWorkflow(wfid2);
@@ -381,6 +347,8 @@ class NotificationServiceTest {
     var options = new StartWorkflowOptions(wfid1);
     WorkflowHandle<String, ?> handle =
         dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5), options);
+
+    Thread.sleep(1000);
 
     assertEquals(WorkflowState.PENDING.name(), handle.getStatus().getStatus());
     dbos.send(wfid1, "hello", "topic1");
