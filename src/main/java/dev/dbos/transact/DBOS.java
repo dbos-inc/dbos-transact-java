@@ -367,7 +367,7 @@ public class DBOS {
     executor.sleep(seconds);
   }
 
-  public <R, E extends Exception> R runStep(ThrowingSupplier<R, E> stepfunc, StepOptions opts)
+  public <T, E extends Exception> T runStep(ThrowingSupplier<T, E> stepfunc, StepOptions opts)
       throws E {
     var executor = dbosExecutor.get();
     if (executor == null) {
@@ -397,7 +397,7 @@ public class DBOS {
    * @param workflowId id of the workflow
    * @return A handle to the workflow
    */
-  public <T> WorkflowHandle<T> resumeWorkflow(String workflowId) {
+  public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot resumeWorkflow before launch");
@@ -432,7 +432,8 @@ public class DBOS {
    * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
    * @return handle to the workflow
    */
-  public <T> WorkflowHandle<T> forkWorkflow(String workflowId, int startStep, ForkOptions options) {
+  public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
+      String workflowId, int startStep, ForkOptions options) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot forkWorkflow before launch");
@@ -441,8 +442,8 @@ public class DBOS {
     return executor.forkWorkflow(workflowId, startStep, options);
   }
 
-  public <T> WorkflowHandle<T> startWorkflow(
-      ThrowingSupplier<T, Exception> supplier, StartWorkflowOptions options) throws Exception {
+  public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
+      ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");
@@ -451,13 +452,13 @@ public class DBOS {
     return executor.startWorkflow(supplier, options);
   }
 
-  public <T> WorkflowHandle<T> startWorkflow(ThrowingSupplier<T, Exception> supplier)
-      throws Exception {
+  public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
+      ThrowingSupplier<T, E> supplier) {
     return startWorkflow(supplier, new StartWorkflowOptions());
   }
 
-  public WorkflowHandle<Void> startWorkflow(
-      ThrowingRunnable<Exception> runnable, StartWorkflowOptions options) throws Exception {
+  public <E extends Exception> WorkflowHandle<Void, E> startWorkflow(
+      ThrowingRunnable<E> runnable, StartWorkflowOptions options) {
     return startWorkflow(
         () -> {
           runnable.execute();
@@ -466,11 +467,11 @@ public class DBOS {
         options);
   }
 
-  public WorkflowHandle<Void> startWorkflow(ThrowingRunnable<Exception> runnable) throws Exception {
+  public <E extends Exception> WorkflowHandle<Void, E> startWorkflow(ThrowingRunnable<E> runnable) {
     return startWorkflow(runnable, new StartWorkflowOptions());
   }
 
-  public <T> WorkflowHandle<T> retrieveWorkflow(String workflowId) {
+  public <T, E extends Exception> WorkflowHandle<T, E> retrieveWorkflow(String workflowId) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot startWorkflow before launch");

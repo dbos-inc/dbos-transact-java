@@ -81,7 +81,8 @@ public class WorkflowMgmtTest {
     String workflowId = "wfid1";
     var options = new StartWorkflowOptions(workflowId);
     int result;
-    WorkflowHandle<Integer> h = dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23), options);
+    WorkflowHandle<Integer, ?> h =
+        dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23), options);
 
     mainLatch.await();
     dbos.cancelWorkflow(workflowId);
@@ -91,7 +92,7 @@ public class WorkflowMgmtTest {
     // WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId) ;
     assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
 
-    WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId);
+    WorkflowHandle<Integer, ?> handle = dbos.resumeWorkflow(workflowId);
 
     result = handle.getResult();
     assertEquals(23, result);
@@ -138,10 +139,10 @@ public class WorkflowMgmtTest {
     workLatch.countDown();
 
     assertEquals(1, mgmtService.getStepsExecuted());
-    WorkflowHandle h = dbosExecutor.retrieveWorkflow(workflowId);
+    var h = dbosExecutor.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().getStatus());
 
-    WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId);
+    WorkflowHandle<Integer, ?> handle = dbos.resumeWorkflow(workflowId);
 
     result = handle.getResult();
     assertEquals(23, result);
@@ -211,7 +212,7 @@ public class WorkflowMgmtTest {
 
     testLatch.await();
 
-    WorkflowHandle<Integer> handle = dbos.resumeWorkflow(workflowId);
+    WorkflowHandle<Integer, ?> handle = dbos.resumeWorkflow(workflowId);
 
     int result = handle.getResult();
     assertEquals(23, result);
@@ -235,7 +236,7 @@ public class WorkflowMgmtTest {
 
     try {
       ForkOptions options = new ForkOptions.Builder().build();
-      WorkflowHandle<String> rstatHandle = dbos.forkWorkflow("12345", 2, options);
+      WorkflowHandle<String, ?> rstatHandle = dbos.forkWorkflow("12345", 2, options);
       fail("An exception should have been thrown");
     } catch (Exception t) {
       logger.info(t.getClass().getName());
@@ -264,7 +265,7 @@ public class WorkflowMgmtTest {
     }
 
     assertEquals("hellohello", result);
-    WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(workflowId);
+    WorkflowHandle<String, ?> handle = dbosExecutor.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
     assertEquals(1, impl.step1Count);
@@ -276,7 +277,7 @@ public class WorkflowMgmtTest {
     logger.info("First execution done starting fork");
 
     ForkOptions foptions = new ForkOptions.Builder().build();
-    WorkflowHandle<String> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
+    WorkflowHandle<String, SQLException> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
@@ -341,7 +342,7 @@ public class WorkflowMgmtTest {
     }
 
     assertEquals("hellohello", result);
-    WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(workflowId);
+    WorkflowHandle<String, SQLException> handle = dbosExecutor.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
     assertEquals(1, impl.step1Count);
@@ -356,7 +357,7 @@ public class WorkflowMgmtTest {
     logger.info("First execution done starting fork");
 
     ForkOptions foptions = new ForkOptions.Builder().forkedWorkflowId("f1").build();
-    WorkflowHandle<String> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
+    WorkflowHandle<String, SQLException> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().getStatus());
@@ -442,7 +443,7 @@ public class WorkflowMgmtTest {
     }
 
     assertEquals("hellohello", result);
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
+    WorkflowHandle<?, SQLException> handle = dbosExecutor.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
     assertEquals(1, impl.step1Count);
@@ -457,7 +458,7 @@ public class WorkflowMgmtTest {
     logger.info("First execution done starting fork");
 
     ForkOptions foptions = new ForkOptions.Builder().build();
-    WorkflowHandle<?> rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
+    WorkflowHandle<?, SQLException> rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
     result = (String) rstatHandle.getResult();
 
     assertEquals("hellohello", result);
@@ -491,7 +492,7 @@ public class WorkflowMgmtTest {
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // Start one blocked workflow and 10 normal workflows
-    WorkflowHandle<String> handle = dbos.startWorkflow(() -> gcService.gcBlockedWorkflow());
+    WorkflowHandle<String, ?> handle = dbos.startWorkflow(() -> gcService.gcBlockedWorkflow());
     for (int i = 0; i < numWorkflows; i++) {
       int result = gcService.testWorkflow(i);
       assertEquals(i, result);
@@ -552,7 +553,7 @@ public class WorkflowMgmtTest {
     dbos.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-    List<WorkflowHandle<String>> handles = new ArrayList<>();
+    List<WorkflowHandle<String, ?>> handles = new ArrayList<>();
     for (int i = 0; i < numWorkflows; i++) {
       handles.add(dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow()));
     }
@@ -561,11 +562,11 @@ public class WorkflowMgmtTest {
 
     // Wait one second, start one final workflow, then timeout all workflows started
     // more than one second ago
-    WorkflowHandle<String> finalHandle =
+    WorkflowHandle<String, ?> finalHandle =
         dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow());
 
     dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);
-    for (WorkflowHandle<?> handle : handles) {
+    for (var handle : handles) {
       assertEquals(WorkflowState.CANCELLED.toString(), handle.getStatus().getStatus());
     }
     impl.timeoutLatch.countDown();

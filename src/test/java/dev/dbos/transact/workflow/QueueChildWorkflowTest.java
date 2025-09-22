@@ -77,7 +77,7 @@ public class QueueChildWorkflowTest {
     //   simpleService.workflowWithMultipleChildren("123");
     // }
 
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+    var handle = dbosExecutor.retrieveWorkflow("wf-123456");
     assertEquals("123abcdefghi", (String) handle.getResult());
 
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
@@ -133,7 +133,7 @@ public class QueueChildWorkflowTest {
     //   simpleService.grandParent("123");
     // }
 
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+    var handle = dbosExecutor.retrieveWorkflow("wf-123456");
     assertEquals("p-c-gc-123", handle.getResult());
 
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());

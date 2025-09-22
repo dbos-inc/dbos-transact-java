@@ -1,5 +1,7 @@
 package dev.dbos.transact.utils;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import dev.dbos.transact.config.DBOSConfig;
 
 import java.sql.*;
@@ -20,7 +22,7 @@ public class DBUtils {
   public static void clearTables(DataSource ds) throws SQLException {
 
     try (Connection connection = ds.getConnection()) {
-      deleteOperations(connection);
+      deleteAllOperationOutputs(connection);
       deleteWorkflowsTestHelper(connection);
     } catch (Exception e) {
       logger.info("Error clearing tables" + e.getMessage());
@@ -43,7 +45,7 @@ public class DBUtils {
     }
   }
 
-  public static void deleteOperations(Connection connection) throws SQLException {
+  public static void deleteAllOperationOutputs(Connection connection) throws SQLException {
 
     String sql = "delete from dbos.operation_outputs;";
 
@@ -58,7 +60,7 @@ public class DBUtils {
     }
   }
 
-  public static void updateWorkflowState(DataSource ds, String oldState, String newState)
+  public static int updateAllWorkflowStates(DataSource ds, String oldState, String newState)
       throws SQLException {
 
     String sql = "UPDATE dbos.workflow_status SET status = ?, updated_at = ? where status = ? ;";
@@ -71,7 +73,81 @@ public class DBUtils {
       pstmt.setString(3, oldState);
 
       // Execute the update and get the number of rows affected
+      return pstmt.executeUpdate();
+    }
+  }
+
+  public static void setWorkflowState(DataSource ds, String workflowId, String newState)
+      throws SQLException {
+
+    String sql =
+        "UPDATE dbos.workflow_status SET status = ?, updated_at = ? WHERE workflow_uuid = ?";
+
+    try (Connection connection = ds.getConnection();
+        PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+      pstmt.setString(1, newState);
+      pstmt.setLong(2, Instant.now().toEpochMilli());
+      pstmt.setString(3, workflowId);
+
+      // Execute the update and get the number of rows affected
       int rowsAffected = pstmt.executeUpdate();
+
+      assertEquals(1, rowsAffected);
+    }
+  }
+
+  public static void deleteStepOutput(DataSource ds, String workflowId, int function_id)
+      throws SQLException {
+
+    String sql = "DELETE from dbos.operation_outputs WHERE workflow_uuid = ? and function_id = ?;";
+
+    try (Connection connection = ds.getConnection();
+        PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+      pstmt.setString(1, workflowId);
+      pstmt.setInt(2, function_id);
+
+      // Execute the update and get the number of rows affected
+      int rowsAffected = pstmt.executeUpdate();
+
+      assertEquals(1, rowsAffected);
+    }
+  }
+
+  public static void deleteAllStepOutputs(DataSource ds, String workflowId) throws SQLException {
+
+    String sql = "DELETE from dbos.operation_outputs WHERE workflow_uuid = ?";
+
+    try (Connection connection = ds.getConnection();
+        PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+      pstmt.setString(1, workflowId);
+
+      // Execute the update and get the number of rows affected
+      int rowsAffected = pstmt.executeUpdate();
+
+      assertEquals(2, rowsAffected);
+    }
+  }
+
+  public static void updateStepEndTime(
+      DataSource ds, String workflowId, int functionId, String endtime) throws SQLException {
+
+    String sql =
+        "update dbos.operation_outputs SET output = ? WHERE workflow_uuid = ? AND function_id = ? ";
+
+    try (Connection connection = ds.getConnection();
+        PreparedStatement pstmt = connection.prepareStatement(sql)) {
+
+      pstmt.setString(1, endtime);
+      pstmt.setString(2, workflowId);
+      pstmt.setInt(3, functionId);
+
+      // Execute the update and get the number of rows affected
+      int rowsAffected = pstmt.executeUpdate();
+
+      assertEquals(1, rowsAffected);
     }
   }
 

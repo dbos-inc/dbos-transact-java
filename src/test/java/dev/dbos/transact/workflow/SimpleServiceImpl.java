@@ -161,7 +161,7 @@ public class SimpleServiceImpl implements SimpleService {
     WorkflowOptions options =
         new WorkflowOptions(workflowId).withTimeout(timeoutSeconds, TimeUnit.SECONDS);
 
-    // WorkflowHandle<String> handle = null;
+    // WorkflowHandle<String, InterruptedException> handle = null;
     // try (var o = options.setContext()) {
     //   handle =
     //       DBOSContext.dbosInstance()

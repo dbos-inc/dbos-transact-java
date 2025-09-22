@@ -121,7 +121,7 @@ public class SyncWorkflowTest {
     assertEquals(wfs.get(0).getName(), "workWithString");
     assertEquals(wfid, wfs.get(0).getWorkflowId());
 
-    WorkflowHandle<String> handle = dbos.retrieveWorkflow(wfid);
+    WorkflowHandle<String, SQLException> handle = dbos.retrieveWorkflow(wfid);
     String hresult = (String) handle.getResult();
     assertEquals("Processed: test-item", hresult);
     assertEquals("wf-123", handle.getWorkflowId());
@@ -231,7 +231,7 @@ public class SyncWorkflowTest {
       simpleService.workflowWithMultipleChildren("123");
     }
 
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+    var handle = dbosExecutor.retrieveWorkflow("wf-123456");
     assertEquals("123abcdefghi", handle.getResult());
 
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
@@ -283,7 +283,7 @@ public class SyncWorkflowTest {
       simpleService.grandParent("123");
     }
 
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+    var handle = dbosExecutor.retrieveWorkflow("wf-123456");
     assertEquals("p-c-gc-123", handle.getResult());
 
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());

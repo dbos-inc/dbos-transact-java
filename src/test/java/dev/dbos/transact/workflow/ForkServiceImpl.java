@@ -55,7 +55,7 @@ public class ForkServiceImpl implements ForkService {
     forkService.stepOne("one");
     forkService.stepTwo(2);
 
-    // WorkflowHandle<String> handle =
+    // WorkflowHandle<String, RuntimeException> handle =
     //     dbos.startWorkflow(() -> forkService.child1(25), new StartWorkflowOptions("child1"));
     // handle.getResult();
 

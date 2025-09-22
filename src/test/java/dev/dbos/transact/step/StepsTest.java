@@ -140,7 +140,7 @@ public class StepsTest {
       service.aWorkflowWithInlineSteps("input");
     }
 
-    var handle = dbos.retrieveWorkflow(wid);
+    WorkflowHandle<String, RuntimeException> handle = dbos.retrieveWorkflow(wid);
     assertEquals("input5", (String) handle.getResult());
 
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
@@ -178,7 +178,7 @@ public class StepsTest {
       serviceA.workflowWithSteps("hello");
     }
 
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
+    var handle = dbosExecutor.retrieveWorkflow(workflowId);
     assertEquals("hellohello", (String) handle.getResult());
 
     List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(workflowId);
@@ -224,7 +224,7 @@ public class StepsTest {
       service.aWorkflow("hello");
     }
 
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(workflowId);
+    var handle = dbosExecutor.retrieveWorkflow(workflowId);
     assertEquals("helloonetwo", (String) handle.getResult());
 
     List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(workflowId);
@@ -283,7 +283,7 @@ public class StepsTest {
       service.stepRetryWorkflow("hello");
     }
 
-    WorkflowHandle<String> handle = dbos.retrieveWorkflow(workflowId);
+    var handle = dbos.retrieveWorkflow(workflowId);
     String expectedRes = "2 Retries: 2.  No retry: 1.  Backoff timeout: 2.";
     if (expectedRes != handle.getResult()) {
       System.out.println(handle.getResult());

@@ -443,7 +443,7 @@ public class Conductor implements AutoCloseable {
       if (request.body.application_version != null) {
         builder.applicationVersion(request.body.application_version);
       }
-      WorkflowHandle<?> handle =
+      WorkflowHandle<?, ?> handle =
           conductor.dbosExecutor.forkWorkflow(
               request.body.workflow_id, request.body.start_step, builder.build());
       return new ForkWorkflowResponse(request, handle.getWorkflowId());

@@ -4,10 +4,9 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
+public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHandle<T, E> {
 
   private String workflowId;
   private Future<T> futureResult;
@@ -24,14 +23,13 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
     return workflowId;
   }
 
+  @SuppressWarnings("unchecked")
   @Override
-  public T getResult() {
+  public T getResult() throws E {
     try {
       return futureResult.get();
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
-    } catch (ExecutionException e) {
-      throw new RuntimeException(e);
+    } catch (Exception e) {
+      throw (E) e;
     }
   }
 

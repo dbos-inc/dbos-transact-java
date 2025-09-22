@@ -80,7 +80,7 @@ public class UnifiedProxyTest {
 
     String wfid2 = "wf-124";
     options = new WorkflowOptions(wfid2);
-    WorkflowHandle<String> handle = null;
+    WorkflowHandle<String, ?> handle = null;
     try (var id = options.setContext()) {
       handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
     }

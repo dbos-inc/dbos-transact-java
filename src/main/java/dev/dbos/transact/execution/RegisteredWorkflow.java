@@ -1,5 +1,6 @@
 package dev.dbos.transact.execution;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.Objects;
 
 public record RegisteredWorkflow(
@@ -28,6 +29,19 @@ public record RegisteredWorkflow(
 
   @SuppressWarnings("unchecked")
   public <T> T invoke(Object[] args) throws Exception {
-    return (T) function.invoke(target, args);
+    try {
+      return (T) function.invoke(target, args);
+    } catch (Exception e) {
+      while (e instanceof InvocationTargetException) {
+        var ite = (InvocationTargetException) e;
+        var target = ite.getTargetException();
+        if (target instanceof Exception) {
+          e = (Exception) target;
+        } else {
+          throw new RuntimeException(e);
+        }
+      }
+      throw e;
+    }
   }
 }

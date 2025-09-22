@@ -43,11 +43,6 @@ public class TimeoutTest {
             .sysDbName("dbos_java_sys")
             .maximumPoolSize(2)
             .build();
-
-    String dbUrl =
-        String.format(
-            "jdbc:postgresql://%s:%d/%s",
-            dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
   }
 
   @BeforeEach
@@ -81,7 +76,7 @@ public class TimeoutTest {
     String result;
 
     var options = new StartWorkflowOptions(wfid1).withTimeout(3, TimeUnit.SECONDS);
-    WorkflowHandle<String> handle =
+    WorkflowHandle<String, ?> handle =
         dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
     // assertNull(result);
 
@@ -109,7 +104,7 @@ public class TimeoutTest {
   //   String wfid1 = "wf-125";
   //   String result;
   //   var options = new StartWorkflowOptions(wfid1).withTimeout(1, TimeUnit.SECONDS);
-  //   WorkflowHandle<String> handle =
+  //   WorkflowHandle<String, ?> handle =
   //       dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
   //   // assertNull(result);
   //   // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
@@ -146,7 +141,7 @@ public class TimeoutTest {
 
     var options =
         new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(3, TimeUnit.SECONDS);
-    WorkflowHandle<String> handle =
+    WorkflowHandle<String, ?> handle =
         dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
     // assertNull(result);
 
@@ -173,7 +168,6 @@ public class TimeoutTest {
 
   //   // make it timeout
   //   String wfid1 = "wf-127";
-  //   String result;
 
   //   var options =
   //       new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(1, TimeUnit.SECONDS);
@@ -272,17 +266,16 @@ public class TimeoutTest {
     // synchronous
 
     String wfid1 = "wf-128";
-    String result;
 
     WorkflowOptions options = new WorkflowOptions(wfid1).withTimeout(3, TimeUnit.SECONDS);
 
     try (var id = options.setContext()) {
-      result = simpleService.workWithString("12345");
+      simpleService.workWithString("12345");
     }
 
     setDelayEpoch(dataSource, wfid1);
 
-    WorkflowHandle handle = dbosExecutor.executeWorkflowById(wfid1);
+    var handle = dbosExecutor.executeWorkflowById(wfid1);
     assertEquals(WorkflowState.CANCELLED.name(), handle.getStatus().getStatus());
   }
 
@@ -312,8 +305,8 @@ public class TimeoutTest {
 
     assertEquals("1234512345", result);
 
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1);
-    ;
+    var handle = dbosExecutor.retrieveWorkflow(wfid1);
+
     result = (String) handle.getResult();
     assertEquals("1234512345", result);
     assertEquals(wfid1, handle.getWorkflowId());
@@ -334,12 +327,11 @@ public class TimeoutTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     String wfid1 = "wf-124";
-    String result;
 
     WorkflowOptions options = new WorkflowOptions(wfid1);
     try {
       try (var id = options.setContext()) {
-        result = simpleService.longParent("12345", 3, 1);
+        simpleService.longParent("12345", 3, 1);
       }
     } catch (Exception e) {
       assertTrue(e instanceof AwaitedWorkflowCancelledException);
@@ -367,13 +359,12 @@ public class TimeoutTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     String wfid1 = "wf-124";
-    String result;
 
     WorkflowOptions options = new WorkflowOptions(wfid1).withTimeout(1, TimeUnit.SECONDS);
 
     try {
       try (var id = options.setContext()) {
-        result = simpleService.longParent("12345", 3, 0);
+        simpleService.longParent("12345", 3, 0);
       }
     } catch (Exception e) {
       assertTrue(e instanceof AwaitedWorkflowCancelledException);
@@ -404,7 +395,7 @@ public class TimeoutTest {
 
     var options = new StartWorkflowOptions(wfid1).withTimeout(2, TimeUnit.SECONDS);
 
-    WorkflowHandle<String> handle =
+    WorkflowHandle<String, ?> handle =
         dbos.startWorkflow(() -> simpleService.longParent("12345", 3, 0), options);
 
     try {
