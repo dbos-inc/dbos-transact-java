@@ -231,7 +231,7 @@ public class AsyncWorkflowTest {
 
     WorkflowHandle<String> handle =
         dbos.startWorkflow(
-            () -> simpleService.WorkflowWithMultipleChildren("123"),
+            () -> simpleService.workflowWithMultipleChildren("123"),
             new StartWorkflowOptions("wf-123456"));
 
     assertEquals("123abcdefghi", handle.getResult());

@@ -13,7 +13,6 @@ import java.util.List;
 
 import org.junit.jupiter.api.*;
 
-@Disabled
 public class SyncWorkflowTest {
 
   private static DBOSConfig dbosConfig;
@@ -71,6 +70,8 @@ public class SyncWorkflowTest {
   }
 
   @Test
+  @Disabled
+  // TODO - this needs the error branch in order to pass
   public void workflowWithError() throws SQLException {
 
     SimpleService simpleService =
@@ -219,10 +220,8 @@ public class SyncWorkflowTest {
 
     simpleService.setSimpleService(simpleService);
 
-    String result = null;
-
     try (var id = new WorkflowOptions("wf-123456").setContext()) {
-      simpleService.WorkflowWithMultipleChildren("123");
+      simpleService.workflowWithMultipleChildren("123");
     }
 
     WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
@@ -272,8 +271,6 @@ public class SyncWorkflowTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     simpleService.setSimpleService(simpleService);
-
-    String result = null;
 
     try (var id = new WorkflowOptions("wf-123456").setContext()) {
       simpleService.grandParent("123");

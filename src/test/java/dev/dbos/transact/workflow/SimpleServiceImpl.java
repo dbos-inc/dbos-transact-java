@@ -47,8 +47,8 @@ public class SimpleServiceImpl implements SimpleService {
     this.simpleService = service;
   }
 
-  @Workflow(name = "WorkflowWithMultipleChildren")
-  public String WorkflowWithMultipleChildren(String input) throws Exception {
+  @Workflow(name = "workflowWithMultipleChildren")
+  public String workflowWithMultipleChildren(String input) throws Exception {
     var dbos = DBOSContext.dbosInstance().get();
     String result = input;
 

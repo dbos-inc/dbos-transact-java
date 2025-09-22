@@ -931,6 +931,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     Callable<T> task =
         () -> {
+          var prevCtx = DBOSContextHolder.get();
           try {
             logger.info(
                 "executeWorkflow task {} {}",
@@ -965,7 +966,7 @@ public class DBOSExecutor implements AutoCloseable {
             postInvokeWorkflow(systemDatabase, workflowId, actual);
             throw e;
           } finally {
-            DBOSContextHolder.clear();
+            DBOSContextHolder.set(prevCtx);
           }
         };
 

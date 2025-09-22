@@ -74,7 +74,7 @@ public class QueueChildWorkflowTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     // try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
-    //   simpleService.WorkflowWithMultipleChildren("123");
+    //   simpleService.workflowWithMultipleChildren("123");
     // }
 
     WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");

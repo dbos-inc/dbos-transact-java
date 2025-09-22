@@ -156,8 +156,11 @@ public class DBOSContext {
   }
 
   public void setStartedWorkflowId(String workflowId) {
-    if (startedWorkflowId != null) {
-      throw new IllegalStateException("more than one workflow called from start workflow lambda");
+    if (startedWorkflowId != null && startOptions != null) {
+      throw new IllegalStateException(
+          String.format(
+              "more than one workflow called from start workflow lambda: %s %s",
+              workflowId, startedWorkflowId));
     }
     startedWorkflowId = Objects.requireNonNull(workflowId);
   }
