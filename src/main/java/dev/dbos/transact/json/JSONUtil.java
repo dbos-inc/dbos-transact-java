@@ -1,5 +1,7 @@
 package dev.dbos.transact.json;
 
+import dev.dbos.transact.conductor.Conductor;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -16,8 +18,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JSONUtil {
+  private static Logger logger = LoggerFactory.getLogger(Conductor.class);
 
   private static final ObjectMapper mapper = new ObjectMapper();
 
@@ -57,7 +62,7 @@ public class JSONUtil {
     try {
       return WireThrowableCodec.toThrowable(wt, null);
     } catch (Exception e) {
-      System.err.println("Didn't deserialize");
+      logger.error(String.format("Couldn't deserialize %s", str));
       throw new RuntimeException(wt.message, e);
     }
   }
