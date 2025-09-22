@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
@@ -20,10 +21,8 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-@Disabled
 public class EventsTest {
 
   private static DBOSConfig dbosConfig;
@@ -106,32 +105,26 @@ public class EventsTest {
   }
 
   @Test
-  @Disabled("convert to startWorkflow")
   public void async_set_get() throws Exception {
 
     EventsService eventService =
         dbos.<EventsService>Workflow()
             .interfaceClass(EventsService.class)
             .implementation(new EventsServiceImpl())
-            // .async()
             .build();
 
     dbos.launch();
 
-    // try (var id = new WorkflowOptions("id1")) {
-    //   eventService.setEventWorkflow("key1", "value1");
-    // }
-
-    // try (var id = new WorkflowOptions("id2")) {
-    //   eventService.getEventWorkflow("id1", "key1", 3);
-    // }
+    dbos.startWorkflow(
+        () -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
+    dbos.startWorkflow(
+        () -> eventService.getEventWorkflow("id1", "key1", 3), new StartWorkflowOptions("id2"));
 
     String event = (String) dbos.retrieveWorkflow("id2").getResult();
     assertEquals("value1", event);
   }
 
   @Test
-  @Disabled("convert to startWorkflow")
   public void notification() throws Exception {
 
     EventsService eventService =
@@ -143,13 +136,10 @@ public class EventsTest {
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-    // try (var id = new WorkflowOptions("id2")) {
-    //   eventService.getWithlatch("id1", "key1", 5);
-    // }
-
-    // try (var id = new WorkflowOptions("id1")) {
-    //   eventService.setWithLatch("key1", "value1");
-    // }
+    dbos.startWorkflow(
+        () -> eventService.getWithlatch("id1", "key1", 5), new StartWorkflowOptions("id2"));
+    dbos.startWorkflow(
+        () -> eventService.setWithLatch("key1", "value1"), new StartWorkflowOptions("id1"));
 
     String event = (String) dbos.retrieveWorkflow("id2").getResult();
     assertEquals("value1", event);

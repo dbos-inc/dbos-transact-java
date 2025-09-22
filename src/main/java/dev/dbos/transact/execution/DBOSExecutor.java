@@ -292,71 +292,6 @@ public class DBOSExecutor implements AutoCloseable {
     return handles;
   }
 
-  private static WorkflowInitResult preInvokeWorkflow(
-      SystemDatabase systemDatabase,
-      String workflowName,
-      String className,
-      Object[] inputs,
-      String workflowId,
-      String queueName,
-      String executorId,
-      String appVersion,
-      WorkflowInfo parentWorkflow,
-      Duration timeout,
-      Instant deadline) {
-
-    // TODO: queue deduplication and priority
-
-    String inputString = JSONUtil.serializeArray(inputs);
-
-    WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
-
-    Long timeoutMS = timeout != null ? timeout.toMillis() : null;
-    Long deadlineEpochMs =
-        queueName != null ? null : deadline != null ? deadline.toEpochMilli() : null;
-
-    logger.info("preInvokeWorkflow {} {}", timeoutMS, deadlineEpochMs);
-    WorkflowStatusInternal workflowStatusInternal =
-        new WorkflowStatusInternal(
-            workflowId,
-            status,
-            workflowName,
-            className,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            queueName,
-            executorId,
-            appVersion,
-            null,
-            0,
-            timeoutMS,
-            deadlineEpochMs,
-            null,
-            1,
-            inputString);
-
-    WorkflowInitResult initResult = null;
-    try {
-      initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
-    } catch (Exception e) {
-      logger.error("Error inserting into workflow_status", e);
-      throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(), e);
-    }
-
-    if (parentWorkflow != null) {
-      systemDatabase.recordChildWorkflow(
-          parentWorkflow.workflowId(), workflowId, parentWorkflow.functionId(), workflowName);
-    }
-
-    return initResult;
-  }
-
   private static void postInvokeWorkflowResult(
       SystemDatabase systemDatabase, String workflowId, Object result) {
 
@@ -561,6 +496,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   /** Retrieve the workflowHandle for the workflowId */
   public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {
+    logger.debug("retrieveWorkflow {}", workflowId);
     return retrieveWorkflow(workflowId, systemDatabase);
   }
 
@@ -763,42 +699,29 @@ public class DBOSExecutor implements AutoCloseable {
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
     var ctx = DBOSContextHolder.get();
-    var startResult = ctx.setStartOptions(options);
-    try {
-      supplier.execute();
-      var workflowId = ctx.getStartedWorkflowId();
-      return retrieveWorkflow(workflowId);
-    } catch (Exception e) {
-      // Start workflow may throw DBOS internal errors only...
-      throw (RuntimeException) e;
-    } finally {
-      ctx.resetStartOptions(startResult);
-    }
-  }
 
-  private Duration getTimeout(DBOSContext ctx) {
-    var nextTimeout = ctx.getNextTimeout();
+    var _workflowId = options.workflowId();
+    if (_workflowId == null) {
+      _workflowId = ctx.getNextWorkflowId();
+    }
+    if (_workflowId == null) {
+      _workflowId = UUID.randomUUID().toString();
+    }
+    var workflowId = _workflowId;
 
-    if (nextTimeout == null) {
-      return ctx.getTimeout();
-    }
-    // zero timeout is a marker for "no timeout"
-    if (nextTimeout.isZero()) {
-      return null;
-    }
-    return nextTimeout;
-  }
+    Callable<T> task =
+        () -> {
+          DBOSContextHolder.clear();
+          try {
+            DBOSContextHolder.get().setStartOptions(options.withWorkflowId(workflowId));
+            return supplier.execute();
+          } finally {
+            DBOSContextHolder.clear();
+          }
+        };
 
-  private Instant getDeadline(DBOSContext ctx) {
-    var nextTimeout = ctx.getNextTimeout();
-    if (nextTimeout == null) {
-      return ctx.getDeadline();
-    }
-    if (nextTimeout.isZero()) {
-      return null;
-    }
-
-    return Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
+    executorService.submit(task);
+    return retrieveWorkflow(_workflowId);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(String name, Object[] args) {
@@ -808,7 +731,12 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     var ctx = DBOSContextHolder.get();
-    ctx.validateStartedWorkflow();
+    if (!ctx.validateStartedWorkflow()) {
+      logger.error(
+          "Attempting to call {} workflow from a startWorkflow lambda that has already invoked a workflow",
+          name);
+      throw new IllegalCallerException();
+    }
 
     WorkflowInfo parent = null;
     String childWorkflowId = null;
@@ -829,8 +757,20 @@ public class DBOSExecutor implements AutoCloseable {
         Objects.requireNonNullElseGet(
             ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString());
 
-    var timeout = getTimeout(ctx);
-    var deadline = getDeadline(ctx);
+    var nextTimeout = ctx.getNextTimeout();
+    var timeout =
+        nextTimeout == null
+            ? ctx.getTimeout()
+            // zero timeout is a marker for "no timeout"
+            : nextTimeout.isZero() ? null : nextTimeout;
+    var deadline =
+        nextTimeout == null
+            ? ctx.getDeadline()
+            // zero timeout is a marker for "no timeout"
+            : nextTimeout.isZero()
+                ? null
+                : Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
+
     var queueName = ctx.getQueueName();
     var dedupeId = queueName != null ? ctx.getDeduplicationId() : null;
     var priority = queueName != null ? ctx.getPriority() : OptionalInt.empty();
@@ -845,6 +785,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(String workflowId) {
+    logger.debug("executeWorkflowById {}", workflowId);
 
     WorkflowStatus status = systemDatabase.getWorkflowStatus(workflowId);
     if (status == null) {
@@ -938,7 +879,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     Callable<T> task =
         () -> {
-          var prevCtx = DBOSContextHolder.get();
+          DBOSContextHolder.clear();
           try {
             logger.info(
                 "executeWorkflow task {} {}",
@@ -973,7 +914,7 @@ public class DBOSExecutor implements AutoCloseable {
             postInvokeWorkflowError(systemDatabase, workflowId, actual);
             throw e;
           } finally {
-            DBOSContextHolder.set(prevCtx);
+            DBOSContextHolder.clear();
           }
         };
 
@@ -1032,5 +973,70 @@ public class DBOSExecutor implements AutoCloseable {
       logger.error("enqueueWorkflow", actual);
       throw e;
     }
+  }
+
+  private static WorkflowInitResult preInvokeWorkflow(
+      SystemDatabase systemDatabase,
+      String workflowName,
+      String className,
+      Object[] inputs,
+      String workflowId,
+      String queueName,
+      String executorId,
+      String appVersion,
+      WorkflowInfo parentWorkflow,
+      Duration timeout,
+      Instant deadline) {
+
+    // TODO: queue deduplication and priority
+
+    String inputString = JSONUtil.serializeArray(inputs);
+
+    WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
+
+    Long timeoutMS = timeout != null ? timeout.toMillis() : null;
+    Long deadlineEpochMs =
+        queueName != null ? null : deadline != null ? deadline.toEpochMilli() : null;
+
+    logger.info("preInvokeWorkflow {} {}", timeoutMS, deadlineEpochMs);
+    WorkflowStatusInternal workflowStatusInternal =
+        new WorkflowStatusInternal(
+            workflowId,
+            status,
+            workflowName,
+            className,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            queueName,
+            executorId,
+            appVersion,
+            null,
+            0,
+            timeoutMS,
+            deadlineEpochMs,
+            null,
+            1,
+            inputString);
+
+    WorkflowInitResult initResult = null;
+    try {
+      initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
+    } catch (Exception e) {
+      logger.error("Error inserting into workflow_status", e);
+      throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(), e);
+    }
+
+    if (parentWorkflow != null) {
+      systemDatabase.recordChildWorkflow(
+          parentWorkflow.workflowId(), workflowId, parentWorkflow.functionId(), workflowName);
+    }
+
+    return initResult;
   }
 }

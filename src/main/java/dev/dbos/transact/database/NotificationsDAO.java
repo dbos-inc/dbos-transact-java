@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
 
 public class NotificationsDAO {
 
-  Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
+  Logger logger = LoggerFactory.getLogger(NotificationsDAO.class);
   private HikariDataSource dataSource;
   private NotificationService notificationService;
 
@@ -137,7 +137,8 @@ public class NotificationsDAO {
         throw new RuntimeException("No output recorded in the last recv");
       }
     } else {
-      logger.debug("Running recv, id: {}, topic: {}", functionId, finalTopic);
+      logger.debug(
+          "Running recv, wfid {}, id: {}, topic: {}", workflowUuid, functionId, finalTopic);
     }
 
     // Insert a condition to the notifications map
@@ -149,8 +150,7 @@ public class NotificationsDAO {
       boolean success = notificationService.registerNotificationCondition(payload, lockPair);
       if (!success) {
         // This should not happen, but if it does, it means the workflow is
-        // executed
-        // concurrently
+        // executed concurrently
         throw new DBOSWorkflowConflictException(
             workflowUuid, "Workflow might be executing concurrently. ");
       }

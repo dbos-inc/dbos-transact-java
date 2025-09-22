@@ -90,7 +90,6 @@ public class ClientTest {
   }
 
   @Test
-  @Disabled
   public void clientSend() throws Exception {
 
     var handle = dbos.startWorkflow(() -> service.sendTest(42));

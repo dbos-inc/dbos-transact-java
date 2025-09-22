@@ -3,7 +3,6 @@ package dev.dbos.transact.invocation;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
@@ -61,18 +60,6 @@ public class StartWorkflowTest {
   void afterEachTest() throws Exception {
     dataSource.close();
     dbos.shutdown();
-  }
-
-  @Test
-  void startWorkflowMultipleInvocationsThrows() throws Exception {
-    assertThrows(
-        IllegalCallerException.class,
-        () ->
-            dbos.startWorkflow(
-                () -> {
-                  proxy.simpleWorkflow();
-                  return proxy.simpleWorkflow();
-                }));
   }
 
   @Test

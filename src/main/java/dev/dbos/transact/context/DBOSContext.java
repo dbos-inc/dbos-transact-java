@@ -148,11 +148,8 @@ public class DBOSContext {
     return result;
   }
 
-  public void validateStartedWorkflow() {
-    if (startOptions != null && startedWorkflowId != null) {
-      throw new IllegalCallerException(
-          "attempting to call multiple workflows from a start workflow lambda");
-    }
+  public boolean validateStartedWorkflow() {
+    return startOptions == null || startedWorkflowId == null;
   }
 
   public void setStartedWorkflowId(String workflowId) {
