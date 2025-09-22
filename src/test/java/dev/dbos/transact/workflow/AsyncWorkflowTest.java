@@ -16,7 +16,6 @@ import java.util.List;
 
 import org.junit.jupiter.api.*;
 
-@Disabled
 public class AsyncWorkflowTest {
 
   private static DBOSConfig dbosConfig;
@@ -142,7 +141,9 @@ public class AsyncWorkflowTest {
     assertEquals("wf-124", wfs.get(1).getWorkflowId());
   }
 
+  // CB TODO this needs the error branch to pass
   @Test
+  @Disabled
   public void workflowWithError() throws Exception {
 
     SimpleService simpleService =
