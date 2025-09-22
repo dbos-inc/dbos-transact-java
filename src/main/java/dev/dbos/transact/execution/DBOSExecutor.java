@@ -729,7 +729,9 @@ public class DBOSExecutor implements AutoCloseable {
 
     var ctx = DBOSContextHolder.get();
     if (!ctx.validateStartedWorkflow()) {
-      logger.error("Attempting to call {} workflow from a startWorkflow lambda that has already invoked a workflow", name);
+      logger.error(
+          "Attempting to call {} workflow from a startWorkflow lambda that has already invoked a workflow",
+          name);
       throw new IllegalCallerException();
     }
 

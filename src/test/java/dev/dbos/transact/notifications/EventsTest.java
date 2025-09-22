@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class EventsTest {
@@ -116,8 +115,10 @@ public class EventsTest {
 
     dbos.launch();
 
-    dbos.startWorkflow(() -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
-    dbos.startWorkflow(() -> eventService.getEventWorkflow("id1", "key1", 3), new StartWorkflowOptions("id2"));
+    dbos.startWorkflow(
+        () -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
+    dbos.startWorkflow(
+        () -> eventService.getEventWorkflow("id1", "key1", 3), new StartWorkflowOptions("id2"));
 
     String event = (String) dbos.retrieveWorkflow("id2").getResult();
     assertEquals("value1", event);
@@ -135,8 +136,10 @@ public class EventsTest {
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-    dbos.startWorkflow(() -> eventService.getWithlatch("id1", "key1", 5), new StartWorkflowOptions("id2"));
-    dbos.startWorkflow(() -> eventService.setWithLatch("key1", "value1"), new StartWorkflowOptions("id1"));
+    dbos.startWorkflow(
+        () -> eventService.getWithlatch("id1", "key1", 5), new StartWorkflowOptions("id2"));
+    dbos.startWorkflow(
+        () -> eventService.setWithLatch("key1", "value1"), new StartWorkflowOptions("id1"));
 
     String event = (String) dbos.retrieveWorkflow("id2").getResult();
     assertEquals("value1", event);
