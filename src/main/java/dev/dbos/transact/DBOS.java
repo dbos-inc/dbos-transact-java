@@ -389,7 +389,7 @@ public class DBOS {
     executor.sleep(seconds);
   }
 
-  public <R, E extends Exception> R runStep(ThrowingSupplier<R, E> stepfunc, StepOptions opts)
+  public <T, E extends Exception> T runStep(ThrowingSupplier<T, E> stepfunc, StepOptions opts)
       throws E {
     var executor = dbosExecutor.get();
     if (executor == null) {

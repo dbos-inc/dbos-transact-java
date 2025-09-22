@@ -708,7 +708,7 @@ public class DBOSExecutor implements AutoCloseable {
   // TODO: should these also throw DBOS exceptions?
   // Should there be an unchecked version that promotes errors to unchecked?
   @SuppressWarnings("unchecked")
-  public <R, E extends Exception> R runStepI(ThrowingSupplier<R, E> stepfunc, StepOptions opts)
+  public <T, E extends Exception> T runStepI(ThrowingSupplier<T, E> stepfunc, StepOptions opts)
       throws E {
     try {
       return runStepInternal(
@@ -845,8 +845,8 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /** Retrieve the workflowHandle for the workflowId */
-  public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {
-    return new WorkflowHandleDBPoll<R, E>(workflowId, systemDatabase);
+  public <T, E extends Exception> WorkflowHandle<T, E> retrieveWorkflow(String workflowId) {
+    return new WorkflowHandleDBPoll<T, E>(workflowId, systemDatabase);
   }
 
   @SuppressWarnings("unchecked")
