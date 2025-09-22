@@ -106,7 +106,8 @@ public class DBOSClient implements AutoCloseable {
         null,
         null,
         options.appVersion,
-        systemDatabase);
+        systemDatabase,
+        null);
   }
 
   public void send(String destinationId, Object message, String topic, String idempotencyKey)

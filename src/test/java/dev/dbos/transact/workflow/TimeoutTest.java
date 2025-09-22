@@ -24,7 +24,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-@Disabled
 public class TimeoutTest {
 
   private static DBOSConfig dbosConfig;
@@ -218,6 +217,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @Disabled
   public void syncTimeout() throws Exception {
 
     SimpleService simpleService =
@@ -280,6 +280,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @Disabled
   public void parentChild() throws Exception {
 
     SimpleService simpleService =
@@ -314,6 +315,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @Disabled
   public void parentChildTimeOut() throws Exception {
 
     SimpleService simpleService =
@@ -346,6 +348,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @Disabled
   public void parentTimeoutInheritedByChild() throws Exception {
 
     SimpleService simpleService =

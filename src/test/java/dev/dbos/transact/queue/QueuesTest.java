@@ -31,7 +31,6 @@ import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Disabled
 public class QueuesTest {
 
   Logger logger = LoggerFactory.getLogger(QueuesTest.class);
@@ -68,7 +67,6 @@ public class QueuesTest {
   }
 
   @Test
-  @Disabled
   public void testQueuedWorkflow() throws Exception {
 
     Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
@@ -77,17 +75,13 @@ public class QueuesTest {
         dbos.<ServiceQ>Workflow()
             .interfaceClass(ServiceQ.class)
             .implementation(new ServiceQImpl())
-            // .queue(firstQ)
             .build();
 
     dbos.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     String id = "q1234";
-
-    // try (SetWorkflowID ctx = new SetWorkflowID(id)) {
-    //   serviceQ.simpleQWorkflow("inputq");
-    // }
+    dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), new StartWorkflowOptions(id).withQueue(firstQ));
 
     var handle = dbosExecutor.retrieveWorkflow(id);
     assertEquals(id, handle.getWorkflowId());
@@ -96,7 +90,6 @@ public class QueuesTest {
   }
 
   @Test
-  @Disabled
   public void testQueuedMultipleWorkflows() throws Exception {
 
     Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
@@ -105,7 +98,6 @@ public class QueuesTest {
         dbos.<ServiceQ>Workflow()
             .interfaceClass(ServiceQ.class)
             .implementation(new ServiceQImpl())
-            // .queue(firstQ)
             .build();
 
     dbos.launch();
@@ -116,10 +108,8 @@ public class QueuesTest {
 
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
-
-      // try (SetWorkflowID ctx = new SetWorkflowID(id)) {
-      //   serviceQ.simpleQWorkflow("inputq" + i);
-      // }
+      var input = "inputq" + i;
+      dbos.startWorkflow(() -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
     }
 
     List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
@@ -147,7 +137,6 @@ public class QueuesTest {
   }
 
   @Test
-  @Disabled
   void testListQueuedWorkflow() throws Exception {
 
     Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
@@ -160,19 +149,13 @@ public class QueuesTest {
     dbos.launch();
     var queueService = DBOSTestAccess.getQueueService(dbos);
 
-    queueService.stop();
-    while (!queueService.isStopped()) {
-      Thread.sleep(2000);
-      logger.info("Waiting for queueService to stop");
-    }
+    queueService.pause();
 
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
-
-      // WorkflowOptions option = new StartWorkflowOptions(id).queue(firstQ).build();
-      // try (SetWorkflowOptions ctx = new SetWorkflowOptions(option)) {
-      //   serviceQ.simpleQWorkflow("inputq" + i);
-      // }
+      var input = "inputq" + i;
+      dbos.startWorkflow(() -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
+      Thread.sleep(100);
     }
 
     List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);

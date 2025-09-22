@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.concurrent.CountDownLatch;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +36,7 @@ public class DBOSContext {
   private final WorkflowInfo parent;
   private final Duration timeout;
   private final Instant deadline;
+  private CountDownLatch startWorkflowLatch;
 
   // private StepStatus stepStatus;
 
@@ -141,11 +143,13 @@ public class DBOSContext {
 
   public record StartOptionsResult(StartWorkflowOptions options, String workflowId) {}
 
-  public StartOptionsResult setStartOptions(StartWorkflowOptions options) {
-    var result = new StartOptionsResult(startOptions, startedWorkflowId);
+  public void setStartOptions(StartWorkflowOptions options, CountDownLatch latch) {
+    if (startedWorkflowId != null) {
+      throw new IllegalStateException();
+    }
     startOptions = options;
-    startedWorkflowId = null;
-    return result;
+    
+    startWorkflowLatch = latch;
   }
 
   public boolean validateStartedWorkflow() {
@@ -162,13 +166,8 @@ public class DBOSContext {
     startedWorkflowId = Objects.requireNonNull(workflowId);
   }
 
-  public String getStartedWorkflowId() {
-    return startedWorkflowId;
-  }
-
-  public void resetStartOptions(StartOptionsResult result) {
-    startOptions = result.options;
-    startedWorkflowId = result.workflowId;
+  public CountDownLatch getStartWorkflowLatch() {
+    return this.startWorkflowLatch;
   }
 
   public static Optional<String> workflowId() {
