@@ -218,13 +218,11 @@ public class SyncWorkflowTest {
 
     simpleService.setSimpleService(simpleService);
 
-    String result = null;
-
     try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
       simpleService.WorkflowWithMultipleChildren("123");
     }
 
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+    var handle = dbosExecutor.retrieveWorkflow("wf-123456");
     assertEquals("123abcdefghi", handle.getResult());
 
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
@@ -278,7 +276,7 @@ public class SyncWorkflowTest {
       simpleService.grandParent("123");
     }
 
-    WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow("wf-123456");
+    var handle = dbosExecutor.retrieveWorkflow("wf-123456");
     assertEquals("p-c-gc-123", handle.getResult());
 
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());

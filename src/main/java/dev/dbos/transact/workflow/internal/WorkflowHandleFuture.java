@@ -1,15 +1,12 @@
 package dev.dbos.transact.workflow.internal;
 
-import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
-
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.util.concurrent.Future;
 
-public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
+public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHandle<T, E> {
 
   private String workflowId;
   private Future<T> futureResult;
@@ -26,12 +23,13 @@ public class WorkflowHandleFuture<T> implements WorkflowHandle<T> {
     return workflowId;
   }
 
+  @SuppressWarnings("unchecked")
   @Override
-  public T getResult() {
+  public T getResult() throws E {
     try {
       return futureResult.get();
     } catch (Exception e) {
-      throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
+      throw (E) e;
     }
   }
 

@@ -1,6 +1,6 @@
 package dev.dbos.transact.workflow;
 
-public interface WorkflowHandle<T> {
+public interface WorkflowHandle<T, E extends Exception> {
 
   /**
    * Return the applicable workflow ID. Corresponds to the 'workflow_id' attribute and
@@ -16,7 +16,7 @@ public interface WorkflowHandle<T> {
    *
    * @return The result of the workflow invocation.
    */
-  T getResult();
+  T getResult() throws E;
 
   /**
    * Return the current workflow function invocation status as `WorkflowStatus`.

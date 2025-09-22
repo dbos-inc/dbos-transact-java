@@ -1,13 +1,28 @@
 package dev.dbos.transact.json;
 
-import dev.dbos.transact.exceptions.SerializableException;
+import dev.dbos.transact.conductor.Conductor;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.StreamCorruptedException;
+import java.io.UncheckedIOException;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JSONUtil {
+  private static Logger logger = LoggerFactory.getLogger(Conductor.class);
 
   private static final ObjectMapper mapper = new ObjectMapper();
 
@@ -37,15 +52,19 @@ public class JSONUtil {
     }
   }
 
-  public static String serializeError(Throwable error) {
-
-    SerializableException se = new SerializableException(error);
-    return JSONUtil.serialize(se);
+  public static String serializeAppException(Throwable error) {
+    var wt = WireThrowableCodec.toWire(error, null, null);
+    return serialize(wt);
   }
 
-  public static SerializableException deserializeError(String json) {
-    Object[] eArray = JSONUtil.deserializeToArray(json);
-    return (SerializableException) eArray[0];
+  public static Throwable deserializeAppException(String str) {
+    var wt = (WireThrowable) deserializeToArray(str)[0];
+    try {
+      return WireThrowableCodec.toThrowable(wt, null);
+    } catch (Exception e) {
+      logger.error(String.format("Couldn't deserialize %s", str));
+      throw new RuntimeException(wt.message, e);
+    }
   }
 
   public static String toJson(Object obj) {
@@ -61,6 +80,68 @@ public class JSONUtil {
       return mapper.readValue(content, valueType);
     } catch (JsonProcessingException e) {
       throw new RuntimeException("Deserialization failed", e);
+    }
+  }
+
+  public static final class WireThrowable {
+    public int v = 1;
+    public String type;
+    public String message;
+    public String causeType;
+    public List<String> stackPreview;
+    public int suppressedCount;
+    public String base64bytes;
+    public String node; // host/instance id
+    public Map<String, Object> extra;
+  }
+
+  public final class WireThrowableCodec {
+    private static final int PREVIEW_FRAMES = 12;
+
+    public static WireThrowable toWire(Throwable t, Map<String, Object> extra, String node) {
+      WireThrowable w = new WireThrowable();
+      w.type = t.getClass().getName();
+      w.message = t.getMessage();
+      w.causeType = (t.getCause() != null) ? t.getCause().getClass().getName() : null;
+      w.suppressedCount = t.getSuppressed().length;
+      w.stackPreview =
+          Arrays.stream(t.getStackTrace())
+              .limit(PREVIEW_FRAMES)
+              .map(StackTraceElement::toString)
+              .toList();
+      w.node = node;
+      w.extra = (extra == null) ? Map.of() : extra;
+
+      byte[] javaSer = javaSerialize(t);
+      String b64 = Base64.getEncoder().encodeToString(javaSer);
+      w.base64bytes = b64;
+      return w;
+    }
+
+    public static Throwable toThrowable(WireThrowable w, ClassLoader loader)
+        throws IOException, ClassNotFoundException {
+      if (w.base64bytes == null) throw new IllegalArgumentException("No serialized payload");
+
+      byte[] javaSer = Base64.getDecoder().decode(w.base64bytes);
+
+      try (var ois = new ObjectInputStream(new ByteArrayInputStream(javaSer))) {
+        Object obj = ois.readObject();
+        if (!(obj instanceof Throwable th)) {
+          throw new StreamCorruptedException("Not a Throwable");
+        }
+        return th; // exact class restored
+      }
+    }
+
+    private static byte[] javaSerialize(Object o) {
+      try (var baos = new ByteArrayOutputStream();
+          var oos = new ObjectOutputStream(baos)) {
+        oos.writeObject(o);
+        oos.flush();
+        return baos.toByteArray();
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
+      }
     }
   }
 }
