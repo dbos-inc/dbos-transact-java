@@ -109,7 +109,8 @@ public class SyncWorkflowTest {
 
     String result = null;
 
-    try (var id = new WorkflowOptions("wf-123").setContext()) {
+    String wfid = "wf-123";
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       result = simpleService.workWithString("test-item");
     }
 
@@ -118,7 +119,13 @@ public class SyncWorkflowTest {
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workWithString");
-    assertEquals("wf-123", wfs.get(0).getWorkflowId());
+    assertEquals(wfid, wfs.get(0).getWorkflowId());
+
+    WorkflowHandle<String> handle = dbos.retrieveWorkflow(wfid);
+    String hresult = (String) handle.getResult();
+    assertEquals("Processed: test-item", hresult);
+    assertEquals("wf-123", handle.getWorkflowId());
+    assertEquals("SUCCESS", handle.getStatus().getStatus());
   }
 
   @Test

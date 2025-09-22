@@ -7,6 +7,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSAppException;
 import dev.dbos.transact.exceptions.SerializableException;
 import dev.dbos.transact.utils.DBUtils;
@@ -51,38 +52,6 @@ public class AsyncWorkflowTest {
 
   @Test
   @Disabled
-  public void setWorkflowId() throws Exception {
-
-    SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            // .async()
-            .build();
-
-    dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-
-    String wfid = "wf-123";
-    // try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-    //   simpleService.workWithString("test-item");
-    // }
-
-    WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid);
-    String result = (String) handle.getResult();
-    assertEquals("Processed: test-item", result);
-    assertEquals("wf-123", handle.getWorkflowId());
-    assertEquals("SUCCESS", handle.getStatus().getStatus());
-
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
-    assertEquals(1, wfs.size());
-    assertEquals(wfs.get(0).getName(), "workWithString");
-    assertEquals("wf-123", wfs.get(0).getWorkflowId());
-  }
-
-  @Test
-  @Disabled
   public void sameWorkflowId() throws Exception {
 
     SimpleService simpleService =
@@ -99,19 +68,19 @@ public class AsyncWorkflowTest {
     SimpleServiceImpl.executionCount = 0;
 
     String wfid = "wf-123";
-    // try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-    //   simpleService.workWithString("test-item");
-    // }
+    try (var id = new WorkflowOptions(wfid).setContext()) {
+      simpleService.workWithString("test-item");
+    }
 
     WorkflowHandle<String> handle = dbosExecutor.retrieveWorkflow(wfid);
     String result = (String) handle.getResult();
     assertEquals("Processed: test-item", result);
-    assertEquals("wf-123", handle.getWorkflowId());
+    assertEquals(wfid, handle.getWorkflowId());
 
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workWithString");
-    assertEquals("wf-123", wfs.get(0).getWorkflowId());
+    assertEquals(wfid, wfs.get(0).getWorkflowId());
 
     // try (SetWorkflowID id = new SetWorkflowID("wf-123")) {
     //   simpleService.workWithString("test-item");
