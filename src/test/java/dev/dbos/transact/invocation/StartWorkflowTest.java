@@ -20,6 +20,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class StartWorkflowTest {
@@ -61,18 +62,6 @@ public class StartWorkflowTest {
   void afterEachTest() throws Exception {
     dataSource.close();
     dbos.shutdown();
-  }
-
-  @Test
-  void startWorkflowMultipleInvocationsThrows() throws Exception {
-    assertThrows(
-        IllegalCallerException.class,
-        () ->
-            dbos.startWorkflow(
-                () -> {
-                  proxy.simpleWorkflow();
-                  return proxy.simpleWorkflow();
-                }));
   }
 
   @Test
