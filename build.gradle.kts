@@ -1,4 +1,5 @@
 import java.io.ByteArrayOutputStream
+import java.time.Duration
 
 // Get the short Git hash
 val gitHash: String by lazy {
@@ -104,9 +105,8 @@ tasks.test {
     useJUnitPlatform()
 
     // Spin up a new JVM for each test class, with a 5 minute timeout and no parallel execution
-    forkEvery = 1
+    forkEvery = 1L
     maxParallelForks = 1
-    reuseForks = false
     timeout = Duration.ofMinutes(5)
 
     testLogging {
