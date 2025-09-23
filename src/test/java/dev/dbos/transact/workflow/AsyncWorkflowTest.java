@@ -58,7 +58,6 @@ public class AsyncWorkflowTest {
         dbos.<SimpleService>Workflow()
             .interfaceClass(SimpleService.class)
             .implementation(new SimpleServiceImpl())
-            // .async()
             .build();
 
     dbos.launch();
@@ -82,9 +81,10 @@ public class AsyncWorkflowTest {
     assertEquals(wfs.get(0).getName(), "workWithString");
     assertEquals(wfid, wfs.get(0).getWorkflowId());
 
-    // try (SetWorkflowID id = new SetWorkflowID("wf-123")) {
-    //   simpleService.workWithString("test-item");
-    // }
+    try (var id = new WorkflowOptions(wfid).setContext()) {
+      simpleService.workWithString("test-item");
+    }
+
     handle = dbosExecutor.retrieveWorkflow(wfid);
     result = (String) handle.getResult();
     assertEquals(1, SimpleServiceImpl.executionCount);
@@ -96,9 +96,9 @@ public class AsyncWorkflowTest {
     assertEquals("wf-123", wfs.get(0).getWorkflowId());
 
     String wfid2 = "wf-124";
-    // try (SetWorkflowID id = new SetWorkflowID(wfid2)) {
-    //   simpleService.workWithString("test-item");
-    // }
+    try (var id = new WorkflowOptions(wfid2).setContext()) {
+      simpleService.workWithString("test-item");
+    }
 
     handle = dbosExecutor.retrieveWorkflow(wfid2);
     result = (String) handle.getResult();
