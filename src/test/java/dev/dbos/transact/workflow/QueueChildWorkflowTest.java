@@ -73,7 +73,9 @@ public class QueueChildWorkflowTest {
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-    dbos.startWorkflow(() -> simpleService.workflowWithMultipleChildren("123"), new StartWorkflowOptions("wf-123456").withQueue(childQ));
+    dbos.startWorkflow(
+        () -> simpleService.workflowWithMultipleChildren("123"),
+        new StartWorkflowOptions("wf-123456").withQueue(childQ));
 
     var handle = dbosExecutor.retrieveWorkflow("wf-123456");
     assertEquals("123abcdefghi", (String) handle.getResult());
@@ -125,8 +127,10 @@ public class QueueChildWorkflowTest {
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-    dbos.startWorkflow(() -> simpleService.grandParent("123"), new StartWorkflowOptions("wf-123456").withQueue(childQ));
-    
+    dbos.startWorkflow(
+        () -> simpleService.grandParent("123"),
+        new StartWorkflowOptions("wf-123456").withQueue(childQ));
+
     var handle = dbosExecutor.retrieveWorkflow("wf-123456");
     assertEquals("p-c-gc-123", handle.getResult());
 
