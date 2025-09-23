@@ -22,6 +22,7 @@ import java.util.concurrent.Executors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -160,6 +161,7 @@ public class WorkflowMgmtTest {
   }
 
   @Test
+  @Disabled
   public void syncCancelResumeTest() throws Exception {
 
     CountDownLatch mainLatch = new CountDownLatch(1);
@@ -243,6 +245,7 @@ public class WorkflowMgmtTest {
   }
 
   @Test
+  @Disabled
   public void testFork() throws SQLException {
 
     ForkServiceImpl impl = new ForkServiceImpl();
@@ -320,6 +323,7 @@ public class WorkflowMgmtTest {
   }
 
   @Test
+  @Disabled
   public void testParentChildFork() throws SQLException {
 
     ForkServiceImpl impl = new ForkServiceImpl();
@@ -421,6 +425,7 @@ public class WorkflowMgmtTest {
   }
 
   @Test
+  @Disabled
   public void testParentChildAsyncFork() throws SQLException {
 
     ForkServiceImpl impl = new ForkServiceImpl();

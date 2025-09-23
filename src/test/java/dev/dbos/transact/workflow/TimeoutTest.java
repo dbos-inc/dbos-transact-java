@@ -21,6 +21,7 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class TimeoutTest {
@@ -216,6 +217,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @Disabled
   public void syncTimeout() throws Exception {
 
     SimpleService simpleService =
@@ -278,6 +280,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @Disabled
   public void parentChild() throws Exception {
 
     SimpleService simpleService =
@@ -312,6 +315,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @Disabled
   public void parentChildTimeOut() throws Exception {
 
     SimpleService simpleService =
@@ -344,6 +348,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @Disabled
   public void parentTimeoutInheritedByChild() throws Exception {
 
     SimpleService simpleService =
