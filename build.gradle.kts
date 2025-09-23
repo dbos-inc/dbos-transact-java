@@ -102,6 +102,13 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+
+    // Spin up a new JVM for each test class, with a 5 minute timeout and no parallel execution
+    forkEvery = 1
+    maxParallelForks = 1
+    reuseForks = false
+    timeout = Duration.ofMinutes(5)
+
     testLogging {
         events("passed", "skipped", "failed")
         showStandardStreams = true
