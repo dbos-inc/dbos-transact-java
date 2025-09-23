@@ -95,12 +95,9 @@ public class UnifiedProxyTest {
     String wfid3 = "wf-125";
     var startOptions = new StartWorkflowOptions(wfid3).withQueue(q);
 
-    handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-q"), startOptions);
-    result = handle.getResult();
-    assertNull(result);
+    dbos.startWorkflow(() -> simpleService.workWithString("test-item-q"), startOptions);
 
     handle = dbosExecutor.retrieveWorkflow(wfid3);
-    ;
     result = (String) handle.getResult();
     assertEquals("Processed: test-item-q", result);
     assertEquals(wfid3, handle.getWorkflowId());
