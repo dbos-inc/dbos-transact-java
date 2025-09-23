@@ -969,7 +969,8 @@ public class DBOSExecutor implements AutoCloseable {
     var workflowId = options.workflowId();
     var queueName = Objects.requireNonNull(options.queueName());
 
-    // HLP: add priority and dedupe ID support
+    // TODO: add priority and dedupe ID support
+    //       https://github.com/dbos-inc/dbos-transact-java/issues/67
 
     try {
       preInvokeWorkflow(

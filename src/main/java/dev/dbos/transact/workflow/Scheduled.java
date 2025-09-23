@@ -10,5 +10,6 @@ import java.lang.annotation.Target;
 public @interface Scheduled {
   String cron();
 
-  // HLP: TODO: add scheduler mode enum + queueName params
+  // TODO: add scheduler mode enum + queueName params
+  //       https://github.com/dbos-inc/dbos-transact-java/issues/87
 }
