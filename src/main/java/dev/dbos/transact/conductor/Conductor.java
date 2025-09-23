@@ -421,7 +421,7 @@ public class Conductor implements AutoCloseable {
   static BaseResponse handleRestart(Conductor conductor, BaseMessage message) {
     RestartRequest request = (RestartRequest) message;
     try {
-      ForkOptions options = ForkOptions.builder().build();
+      ForkOptions options = new ForkOptions();
       conductor.dbosExecutor.forkWorkflow(request.workflow_id, 0, options);
       return new SuccessResponse(request, true);
     } catch (Exception e) {
@@ -436,16 +436,10 @@ public class Conductor implements AutoCloseable {
       return new ForkWorkflowResponse(request, null, "Invalid Fork Workflow Request");
     }
     try {
-      ForkOptions.Builder builder = ForkOptions.builder();
-      if (request.body.new_workflow_id != null) {
-        builder.forkedWorkflowId(request.body.new_workflow_id);
-      }
-      if (request.body.application_version != null) {
-        builder.applicationVersion(request.body.application_version);
-      }
+      var options = new ForkOptions(request.body.new_workflow_id, request.body.application_version, null);
       WorkflowHandle<?, ?> handle =
           conductor.dbosExecutor.forkWorkflow(
-              request.body.workflow_id, request.body.start_step, builder.build());
+              request.body.workflow_id, request.body.start_step, options);
       return new ForkWorkflowResponse(request, handle.getWorkflowId());
     } catch (Exception e) {
       logger.error("Exception encountered when forking workflow {}", request, e);

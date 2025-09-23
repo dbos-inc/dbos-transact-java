@@ -236,7 +236,7 @@ public class WorkflowMgmtTest {
     dbos.launch();
 
     try {
-      ForkOptions options = new ForkOptions.Builder().build();
+      ForkOptions options = new ForkOptions();
       WorkflowHandle<String, ?> rstatHandle = dbos.forkWorkflow("12345", 2, options);
       fail("An exception should have been thrown");
     } catch (Exception t) {
@@ -277,7 +277,7 @@ public class WorkflowMgmtTest {
 
     logger.info("First execution done starting fork");
 
-    ForkOptions foptions = new ForkOptions.Builder().build();
+    ForkOptions foptions = new ForkOptions();
     WorkflowHandle<String, SQLException> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
@@ -357,7 +357,7 @@ public class WorkflowMgmtTest {
 
     logger.info("First execution done starting fork");
 
-    ForkOptions foptions = new ForkOptions.Builder().forkedWorkflowId("f1").build();
+    ForkOptions foptions = new ForkOptions("f1");
     WorkflowHandle<String, SQLException> rstatHandle = dbos.forkWorkflow(workflowId, 0, foptions);
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
@@ -378,7 +378,7 @@ public class WorkflowMgmtTest {
 
     logger.info("First execution done starting 2nd fork");
 
-    foptions = new ForkOptions.Builder().forkedWorkflowId("f2").build();
+    foptions = new ForkOptions("f2");
     rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
@@ -401,7 +401,7 @@ public class WorkflowMgmtTest {
 
     logger.info("2nd execution done starting 3nd fork");
 
-    foptions = new ForkOptions.Builder().forkedWorkflowId("f3").build();
+    foptions = new ForkOptions("f3");
     rstatHandle = dbos.forkWorkflow(workflowId, 4, foptions);
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
@@ -458,7 +458,7 @@ public class WorkflowMgmtTest {
 
     logger.info("First execution done starting fork");
 
-    ForkOptions foptions = new ForkOptions.Builder().build();
+    ForkOptions foptions = new ForkOptions();
     WorkflowHandle<?, SQLException> rstatHandle = dbos.forkWorkflow(workflowId, 3, foptions);
     result = (String) rstatHandle.getResult();
 

@@ -523,9 +523,9 @@ public class ConductorTest {
       verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
       ForkOptions capturedOptions = optionsCaptor.getValue();
       assertNotNull(capturedOptions);
-      assertEquals("appver-12345", capturedOptions.getApplicationVersion());
-      assertEquals(newWorkflowId, capturedOptions.getForkedWorkflowId());
-      assertEquals(0, capturedOptions.getTimeoutMS());
+      assertEquals("appver-12345", capturedOptions.applicationVersion());
+      assertEquals(newWorkflowId, capturedOptions.forkedWorkflowId());
+      assertEquals(null, capturedOptions.timeout());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -560,9 +560,9 @@ public class ConductorTest {
       verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
       ForkOptions options = optionsCaptor.getValue();
       assertNotNull(options);
-      assertEquals("appver-12345", options.getApplicationVersion());
-      assertEquals("new-wf-id", options.getForkedWorkflowId());
-      assertEquals(0, options.getTimeoutMS());
+      assertEquals("appver-12345", options.applicationVersion());
+      assertEquals("new-wf-id", options.forkedWorkflowId());
+      assertEquals(null, options.timeout());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
