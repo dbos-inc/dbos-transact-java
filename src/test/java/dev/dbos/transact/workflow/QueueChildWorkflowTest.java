@@ -11,16 +11,17 @@ import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Disabled
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class QueueChildWorkflowTest {
 
   Logger logger = LoggerFactory.getLogger(QueuesTest.class);

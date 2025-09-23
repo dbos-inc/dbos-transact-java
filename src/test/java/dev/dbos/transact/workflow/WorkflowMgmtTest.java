@@ -18,15 +18,18 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class WorkflowMgmtTest {
 
   Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
@@ -161,7 +164,6 @@ public class WorkflowMgmtTest {
   }
 
   @Test
-  @Disabled
   public void syncCancelResumeTest() throws Exception {
 
     CountDownLatch mainLatch = new CountDownLatch(1);
@@ -245,7 +247,6 @@ public class WorkflowMgmtTest {
   }
 
   @Test
-  @Disabled
   public void testFork() throws SQLException {
 
     ForkServiceImpl impl = new ForkServiceImpl();
@@ -323,7 +324,6 @@ public class WorkflowMgmtTest {
   }
 
   @Test
-  @Disabled
   public void testParentChildFork() throws SQLException {
 
     ForkServiceImpl impl = new ForkServiceImpl();
@@ -425,7 +425,6 @@ public class WorkflowMgmtTest {
   }
 
   @Test
-  @Disabled
   public void testParentChildAsyncFork() throws SQLException {
 
     ForkServiceImpl impl = new ForkServiceImpl();

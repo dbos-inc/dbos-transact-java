@@ -24,13 +24,16 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 class AdminControllerTest {
 
   private static DBOSConfig dbosConfig;
@@ -238,7 +241,6 @@ class AdminControllerTest {
   }
 
   @Test
-  @Disabled
   public void workflows() throws Exception {
     ExecutingService executingService =
         dbos.<ExecutingService>Workflow()
@@ -334,7 +336,6 @@ class AdminControllerTest {
   }
 
   @Test
-  @Disabled
   public void fork() throws Exception {
 
     ForkServiceImpl impl = new ForkServiceImpl();

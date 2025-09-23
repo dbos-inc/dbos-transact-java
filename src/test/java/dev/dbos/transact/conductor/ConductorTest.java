@@ -53,10 +53,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class ConductorTest {
 
   static Logger logger = LoggerFactory.getLogger(ConductorTest.class);
@@ -117,7 +119,6 @@ public class ConductorTest {
   }
 
   @Test
-  @Disabled
   public void sendsPing() throws Exception {
     logger.info("sendsPing Starting");
     class Listener implements WebSocketTestListener {

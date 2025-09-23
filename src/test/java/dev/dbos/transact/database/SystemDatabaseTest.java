@@ -11,9 +11,12 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.Connection;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Timeout;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 class SystemDatabaseTest {
 
   private static SystemDatabase systemDatabase;

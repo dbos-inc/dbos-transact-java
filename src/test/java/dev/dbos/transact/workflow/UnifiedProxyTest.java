@@ -14,13 +14,16 @@ import dev.dbos.transact.utils.DBUtils;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class UnifiedProxyTest {
 
   private static DBOSConfig dbosConfig;
@@ -53,7 +56,6 @@ public class UnifiedProxyTest {
   }
 
   @Test
-  @Disabled
   public void optionsWithCall() throws Exception {
 
     SimpleService simpleService =
@@ -112,7 +114,6 @@ public class UnifiedProxyTest {
   }
 
   @Test
-  @Disabled
   public void syncParentWithQueuedChildren() throws Exception {
 
     SimpleService simpleService =
