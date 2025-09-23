@@ -327,11 +327,13 @@ public class TimeoutTest {
     WorkflowOptions options = new WorkflowOptions(wfid1);
 
     // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/86
-    assertThrows(Exception.class, () -> {
-      try (var id = options.setContext()) {
-        simpleService.longParent("12345", 3, 1);
-      }
-    });
+    assertThrows(
+        Exception.class,
+        () -> {
+          try (var id = options.setContext()) {
+            simpleService.longParent("12345", 3, 1);
+          }
+        });
 
     String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus();
     assertEquals(WorkflowState.ERROR.name(), parentStatus);
@@ -357,11 +359,13 @@ public class TimeoutTest {
     String wfid1 = "wf-124";
 
     WorkflowOptions options = new WorkflowOptions(wfid1).withTimeout(1, TimeUnit.SECONDS);
-    assertThrows(Exception.class, () -> {
-      try (var id = options.setContext()) {
-        simpleService.longParent("12345", 3, 0);
-      }
-    });
+    assertThrows(
+        Exception.class,
+        () -> {
+          try (var id = options.setContext()) {
+            simpleService.longParent("12345", 3, 0);
+          }
+        });
 
     String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus();
     assertEquals(WorkflowState.ERROR.name(), parentStatus);

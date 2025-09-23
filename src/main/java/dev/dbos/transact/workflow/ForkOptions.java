@@ -2,11 +2,7 @@ package dev.dbos.transact.workflow;
 
 import java.time.Duration;
 
-public record ForkOptions(
-  String forkedWorkflowId,
-  String applicationVersion,
-  Duration timeout
-) {
+public record ForkOptions(String forkedWorkflowId, String applicationVersion, Duration timeout) {
 
   public ForkOptions {
     if (timeout != null && timeout.isNegative()) {
@@ -21,4 +17,4 @@ public record ForkOptions(
   public ForkOptions(String forkedWorkflowId) {
     this(forkedWorkflowId, null, null);
   }
-  }
+}

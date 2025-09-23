@@ -159,7 +159,8 @@ public class SimpleServiceImpl implements SimpleService {
     logger.info("In longParent");
     var dbos = DBOSContext.dbosInstance().get();
     String workflowId = "childwf";
-    var options = new StartWorkflowOptions(workflowId).withTimeout(timeoutSeconds, TimeUnit.SECONDS);
+    var options =
+        new StartWorkflowOptions(workflowId).withTimeout(timeoutSeconds, TimeUnit.SECONDS);
 
     var handle =
         dbos.startWorkflow(

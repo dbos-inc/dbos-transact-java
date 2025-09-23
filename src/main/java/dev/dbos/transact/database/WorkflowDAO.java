@@ -817,7 +817,8 @@ public class WorkflowDAO {
       throw new NonExistentWorkflowException(originalWorkflowId);
     }
 
-    String forkedWorkflowId = options.forkedWorkflowId() == null
+    String forkedWorkflowId =
+        options.forkedWorkflowId() == null
             ? UUID.randomUUID().toString()
             : options.forkedWorkflowId();
 
@@ -897,7 +898,6 @@ public class WorkflowDAO {
       stmt.setString(12, JSONUtil.serializeArray(originalStatus.getInput()));
       stmt.setLong(13, workflowDeadlineEpoch);
       stmt.setObject(14, originalStatus.getWorkflowTimeoutMs());
-      
 
       stmt.executeUpdate();
     }
