@@ -124,7 +124,6 @@ public class StepsTest {
   }
 
   @Test
-  @Disabled
   public void workflowWithInlineSteps() throws SQLException {
     ServiceWFAndStep service =
         dbos.<ServiceWFAndStep>Workflow()
@@ -153,7 +152,6 @@ public class StepsTest {
   }
 
   @Test
-  @Disabled
   public void asyncworkflowWithSteps() throws Exception {
     ServiceB serviceB =
         dbos.<ServiceB>Workflow()
@@ -203,7 +201,6 @@ public class StepsTest {
   }
 
   @Test
-  @Disabled
   public void sameInterfaceWorkflowWithSteps() throws Exception {
     ServiceWFAndStep service =
         dbos.<ServiceWFAndStep>Workflow()
@@ -264,7 +261,6 @@ public class StepsTest {
   }
 
   @Test
-  @Disabled
   public void stepRetryLogic() throws Exception {
     ServiceWFAndStep service =
         dbos.<ServiceWFAndStep>Workflow()

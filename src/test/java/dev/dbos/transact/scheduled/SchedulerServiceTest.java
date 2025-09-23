@@ -19,7 +19,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-@Disabled
 class SchedulerServiceTest {
 
   private static DBOSConfig dbosConfig;
@@ -52,6 +51,7 @@ class SchedulerServiceTest {
   }
 
   @Test
+  @Disabled
   public void simpleScheduledWorkflow() throws Exception {
 
     EverySecWorkflow swf = new EverySecWorkflow();
@@ -86,6 +86,7 @@ class SchedulerServiceTest {
   }
 
   @Test
+  @Disabled
   public void MultipleWorkflowsTest() throws Exception {
 
     MultipleWorkflows swf = new MultipleWorkflows();
@@ -106,6 +107,7 @@ class SchedulerServiceTest {
   }
 
   @Test
+  @Disabled
   public void TimedWorkflowsTest() throws Exception {
 
     TimedWorkflow swf = new TimedWorkflow();
@@ -154,6 +156,7 @@ class SchedulerServiceTest {
   }
 
   @Test
+  @Disabled
   public void stepsTest() throws Exception {
 
     Steps steps =

@@ -148,7 +148,7 @@ public class DBOSContext {
       throw new IllegalStateException();
     }
     startOptions = options;
-    
+
     startWorkflowLatch = latch;
   }
 

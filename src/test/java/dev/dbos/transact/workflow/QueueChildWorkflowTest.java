@@ -55,7 +55,6 @@ public class QueueChildWorkflowTest {
   }
 
   @Test
-  @Disabled
   public void multipleChildren() throws Exception {
 
     Queue childQ = dbos.Queue("childQ").concurrency(5).workerConcurrency(5).build();
@@ -111,7 +110,6 @@ public class QueueChildWorkflowTest {
   }
 
   @Test
-  @Disabled
   public void nestedChildren() throws Exception {
 
     Queue childQ = dbos.Queue("childQ").concurrency(5).workerConcurrency(5).build();

@@ -70,7 +70,6 @@ public class SyncWorkflowTest {
   }
 
   @Test
-  @Disabled
   // TODO - this needs the error branch in order to pass
   public void workflowWithError() throws SQLException {
 
@@ -83,11 +82,7 @@ public class SyncWorkflowTest {
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-    try {
-      simpleService.workWithError();
-    } catch (Exception e) {
-      assertEquals("DBOS Test error", e.getMessage());
-    }
+    assertThrows(Exception.class, () -> simpleService.workWithError());
 
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());

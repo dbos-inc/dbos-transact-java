@@ -81,7 +81,8 @@ public class QueuesTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     String id = "q1234";
-    dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), new StartWorkflowOptions(id).withQueue(firstQ));
+    dbos.startWorkflow(
+        () -> serviceQ.simpleQWorkflow("inputq"), new StartWorkflowOptions(id).withQueue(firstQ));
 
     var handle = dbosExecutor.retrieveWorkflow(id);
     assertEquals(id, handle.getWorkflowId());
@@ -109,7 +110,8 @@ public class QueuesTest {
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
       var input = "inputq" + i;
-      dbos.startWorkflow(() -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
+      dbos.startWorkflow(
+          () -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
     }
 
     List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
@@ -154,7 +156,8 @@ public class QueuesTest {
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
       var input = "inputq" + i;
-      dbos.startWorkflow(() -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
+      dbos.startWorkflow(
+          () -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
       Thread.sleep(100);
     }
 

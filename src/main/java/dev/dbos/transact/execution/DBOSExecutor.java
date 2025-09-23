@@ -723,8 +723,8 @@ public class DBOSExecutor implements AutoCloseable {
 
     executorService.submit(task);
     try {
-      if (!latch.await(10, TimeUnit.SECONDS)) { 
-        throw new RuntimeException("startWorkflow timed out"); 
+      if (!latch.await(10, TimeUnit.SECONDS)) {
+        throw new RuntimeException("startWorkflow timed out");
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
@@ -853,14 +853,16 @@ public class DBOSExecutor implements AutoCloseable {
           parent,
           getExecutorId(),
           getAppVersion(),
-          systemDatabase, 
+          systemDatabase,
           latch);
     }
 
     if (parent != null) {
       var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
       if (childId.isPresent()) {
-        if (latch != null) { latch.countDown(); }
+        if (latch != null) {
+          latch.countDown();
+        }
         logger.info("child id is present {}", childId.get());
         return retrieveWorkflow(childId.get());
       }
@@ -880,7 +882,9 @@ public class DBOSExecutor implements AutoCloseable {
             parent,
             options.timeout(),
             options.deadline());
-    if (latch != null) { latch.countDown(); }
+    if (latch != null) {
+      latch.countDown();
+    }
     if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
       return retrieveWorkflow(workflowId);
     } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
@@ -980,7 +984,9 @@ public class DBOSExecutor implements AutoCloseable {
           parent,
           options.timeout(),
           options.deadline());
-      if (latch != null) { latch.countDown(); }
+      if (latch != null) {
+        latch.countDown();
+      }
       return retrieveWorkflow(workflowId, systemDatabase);
     } catch (Throwable e) {
       var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;

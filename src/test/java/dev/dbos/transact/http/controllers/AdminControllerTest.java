@@ -31,7 +31,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-@Disabled
 class AdminControllerTest {
 
   private static DBOSConfig dbosConfig;
@@ -239,6 +238,7 @@ class AdminControllerTest {
   }
 
   @Test
+  @Disabled
   public void workflows() throws Exception {
     ExecutingService executingService =
         dbos.<ExecutingService>Workflow()
@@ -334,6 +334,7 @@ class AdminControllerTest {
   }
 
   @Test
+  @Disabled
   public void fork() throws Exception {
 
     ForkServiceImpl impl = new ForkServiceImpl();
