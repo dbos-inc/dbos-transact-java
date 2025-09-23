@@ -9,4 +9,6 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 public @interface Scheduled {
   String cron();
+
+  // HLP: TODO: add scheduler mode enum + queueName params
 }

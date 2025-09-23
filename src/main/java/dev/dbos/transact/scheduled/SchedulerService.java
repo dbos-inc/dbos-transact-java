@@ -1,6 +1,7 @@
 package dev.dbos.transact.scheduled;
 
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.DBOSExecutor.ExecuteWorkflowOptions;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.queue.Queue;
 
@@ -9,6 +10,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -41,17 +43,15 @@ public class SchedulerService {
   private final DBOSExecutor dbosExecutor;
   private volatile boolean stop = false;
   private final Queue schedulerQueue;
+  private final String schedulerQueueName;
   private final List<ScheduledInstance> scheduledWorkflows;
 
   public SchedulerService(
       DBOSExecutor dbosExecutor, Queue schedulerQueue, List<ScheduledInstance> scheduledWorkflows) {
-    Objects.requireNonNull(dbosExecutor);
-    Objects.requireNonNull(schedulerQueue);
-    Objects.requireNonNull(scheduledWorkflows);
-
-    this.dbosExecutor = dbosExecutor;
-    this.schedulerQueue = schedulerQueue;
-    this.scheduledWorkflows = scheduledWorkflows;
+    this.dbosExecutor = Objects.requireNonNull(dbosExecutor);
+    this.schedulerQueue = Objects.requireNonNull(schedulerQueue);
+    this.schedulerQueueName = this.schedulerQueue.getName();
+    this.scheduledWorkflows = Objects.requireNonNull(scheduledWorkflows);
   }
 
   private void startScheduledWorkflows() {
@@ -60,8 +60,8 @@ public class SchedulerService {
 
       ExecutionTime executionTime = ExecutionTime.forCron(wf.cron);
 
-      RegisteredWorkflow wrapper = dbosExecutor.getWorkflow(wf.workflowName);
-      if (wrapper == null) {
+      RegisteredWorkflow regWF = dbosExecutor.getWorkflow(wf.workflowName);
+      if (regWF == null) {
         throw new IllegalStateException("Workflow not registered: %s".formatted(wf.workflowName));
       }
 
@@ -77,10 +77,10 @@ public class SchedulerService {
                 logger.info("submitting to dbos Executor {}", wf.workflowName);
                 String workflowId =
                     String.format("sched-%s-%s", wf.workflowName, scheduledTime.toString());
-                // try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
-                // dbosExecutor.enqueueWorkflow(
-                //     wf.workflowName, wf.instance.getClass().getName(), args, schedulerQueue);
-                // }
+                var options =
+                    new ExecuteWorkflowOptions(
+                        workflowId, null, null, schedulerQueueName, null, OptionalInt.empty());
+                dbosExecutor.executeWorkflow(regWF, args, options, null, null);
               } catch (Exception e) {
                 e.printStackTrace();
               }

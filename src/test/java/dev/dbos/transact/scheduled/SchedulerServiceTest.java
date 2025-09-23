@@ -66,7 +66,8 @@ class SchedulerServiceTest {
 
     int count = swf.wfCounter;
     System.out.println("Final count: " + count);
-    assertTrue(count >= 2 && count <= 5);
+    assertTrue(count >= 2);
+    assertTrue(count <= 5);
   }
 
   @Test
@@ -83,6 +84,7 @@ class SchedulerServiceTest {
 
     int count = swf.wfCounter;
     System.out.println("Final count: " + count);
+    assertTrue(count >= 1);
     assertTrue(count <= 2);
   }
 
@@ -100,7 +102,8 @@ class SchedulerServiceTest {
 
     int count = swf.wfCounter;
     System.out.println("Final count: " + count);
-    assertTrue(count >= 2 && count <= 5);
+    assertTrue(count >= 2);
+    assertTrue(count <= 5);
     int count3 = swf.wfCounter3;
     System.out.println("Final count3: " + count3);
     assertTrue(count3 <= 2);
