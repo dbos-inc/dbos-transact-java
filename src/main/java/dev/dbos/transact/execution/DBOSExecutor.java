@@ -698,21 +698,18 @@ public class DBOSExecutor implements AutoCloseable {
 
     var ctx = DBOSContextHolder.get();
 
-    var _workflowId = options.workflowId();
-    if (_workflowId == null) {
-      _workflowId = ctx.getNextWorkflowId();
+    if (options.workflowId() == null) {
+      options = options.withWorkflowId(ctx.getNextWorkflowId());
     }
-    if (_workflowId == null) {
-      _workflowId = UUID.randomUUID().toString();
-    }
-    var workflowId = _workflowId;
 
-    CountDownLatch latch = new CountDownLatch(1);
+    var _options = options;
+
+    CompletableFuture<String> future = new CompletableFuture<>();
     Callable<T> task =
         () -> {
           DBOSContextHolder.clear();
           try {
-            DBOSContextHolder.get().setStartOptions(options.withWorkflowId(workflowId), latch);
+            DBOSContextHolder.get().setStartOptions(_options, future);
             return supplier.execute();
           } finally {
             DBOSContextHolder.clear();
@@ -721,14 +718,16 @@ public class DBOSExecutor implements AutoCloseable {
 
     executorService.submit(task);
     try {
-      if (!latch.await(10, TimeUnit.SECONDS)) {
-        throw new RuntimeException("startWorkflow timed out");
-      }
+      var wfid = future.get(10, TimeUnit.SECONDS);
+      return retrieveWorkflow(wfid);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new RuntimeException("startWorkflow latch await interupted");
+      throw new RuntimeException("startWorkflow future await interupted", e);
+    } catch (TimeoutException e) {
+      throw new RuntimeException("startWorkflow future await timed out", e);
+    } catch (ExecutionException e) {
+      throw new RuntimeException("startWorkflow future execution exception", e);
     }
-    return retrieveWorkflow(_workflowId);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(String name, Object[] args) {
@@ -785,7 +784,7 @@ public class DBOSExecutor implements AutoCloseable {
     try {
       var options =
           new ExecuteWorkflowOptions(workflowId, timeout, deadline, queueName, dedupeId, priority);
-      return executeWorkflow(workflow, args, options, parent, ctx.getStartWorkflowLatch());
+      return executeWorkflow(workflow, args, options, parent, ctx.getStartWorkflowFuture());
     } finally {
       ctx.setStartedWorkflowId(workflowId);
     }
@@ -840,7 +839,7 @@ public class DBOSExecutor implements AutoCloseable {
       Object[] args,
       ExecuteWorkflowOptions options,
       WorkflowInfo parent,
-      CountDownLatch latch) {
+      CompletableFuture<String> latch) {
 
     if (options.queueName != null) {
       return enqueueWorkflow(
@@ -859,7 +858,7 @@ public class DBOSExecutor implements AutoCloseable {
       var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
       if (childId.isPresent()) {
         if (latch != null) {
-          latch.countDown();
+          latch.complete(options.workflowId);
         }
         logger.info("child id is present {}", childId.get());
         return retrieveWorkflow(childId.get());
@@ -881,7 +880,7 @@ public class DBOSExecutor implements AutoCloseable {
             options.timeout(),
             options.deadline());
     if (latch != null) {
-      latch.countDown();
+      latch.complete(options.workflowId);
     }
     if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
       return retrieveWorkflow(workflowId);
@@ -963,7 +962,7 @@ public class DBOSExecutor implements AutoCloseable {
       String executorId,
       String appVersion,
       SystemDatabase systemDatabase,
-      CountDownLatch latch) {
+      CompletableFuture<String> latch) {
     var workflowId = options.workflowId();
     var queueName = Objects.requireNonNull(options.queueName());
 
@@ -984,7 +983,7 @@ public class DBOSExecutor implements AutoCloseable {
           options.timeout(),
           options.deadline());
       if (latch != null) {
-        latch.countDown();
+        latch.complete(workflowId);
       }
       return retrieveWorkflow(workflowId, systemDatabase);
     } catch (Throwable e) {
