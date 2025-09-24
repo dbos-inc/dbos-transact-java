@@ -70,9 +70,8 @@ public class ClientTest {
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
       var options =
-          new DBOSClient.EnqueueOptionsBuilder("enqueueTest", "testQueue")
-              .targetClassName("dev.dbos.transact.client.ClientServiceImpl")
-              .build();
+          new DBOSClient.EnqueueOptions("enqueueTest", "testQueue")
+              .withClassName("dev.dbos.transact.client.ClientServiceImpl");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var rows = DBUtils.getWorkflowRows(dataSource);
       assertEquals(1, rows.size());
