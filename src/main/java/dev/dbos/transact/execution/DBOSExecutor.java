@@ -785,13 +785,15 @@ public class DBOSExecutor implements AutoCloseable {
                 ? null
                 : Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
 
-    var queueName = ctx.getQueueName();
-    var dedupeId = queueName != null ? ctx.getDeduplicationId() : null;
-    var priority = queueName != null ? ctx.getPriority() : OptionalInt.empty();
-
     try {
       var options =
-          new ExecuteWorkflowOptions(workflowId, timeout, deadline, queueName, dedupeId, priority);
+          new ExecuteWorkflowOptions(
+              workflowId,
+              timeout,
+              deadline,
+              ctx.getQueueName(),
+              ctx.getDeduplicationId(),
+              ctx.getPriority());
       return executeWorkflow(workflow, args, options, parent, ctx.getStartWorkflowFuture());
     } finally {
       ctx.setStartedWorkflowId(workflowId);
@@ -885,6 +887,8 @@ public class DBOSExecutor implements AutoCloseable {
             args,
             workflowId,
             null,
+            null,
+            OptionalInt.empty(),
             getExecutorId(),
             getAppVersion(),
             parent,
@@ -974,11 +978,14 @@ public class DBOSExecutor implements AutoCloseable {
       String appVersion,
       SystemDatabase systemDatabase,
       CompletableFuture<String> latch) {
-    var workflowId = options.workflowId();
+    var workflowId = Objects.requireNonNull(options.workflowId());
+    if (workflowId.isEmpty()) {
+      throw new IllegalArgumentException("workflowId cannot be empty");
+    }
     var queueName = Objects.requireNonNull(options.queueName());
-
-    // TODO: add priority and dedupe ID support
-    //       https://github.com/dbos-inc/dbos-transact-java/issues/67
+    if (queueName.isEmpty()) {
+      throw new IllegalArgumentException("queueName cannot be empty");
+    }
 
     try {
       preInvokeWorkflow(
@@ -988,6 +995,8 @@ public class DBOSExecutor implements AutoCloseable {
           args,
           workflowId,
           queueName,
+          options.deduplicationId(),
+          options.priority(),
           executorId,
           appVersion,
           parent,
@@ -1011,13 +1020,13 @@ public class DBOSExecutor implements AutoCloseable {
       Object[] inputs,
       String workflowId,
       String queueName,
+      String deduplicationId,
+      OptionalInt priority,
       String executorId,
       String appVersion,
       WorkflowInfo parentWorkflow,
       Duration timeout,
       Instant deadline) {
-
-    // TODO: queue deduplication and priority
 
     String inputString = JSONUtil.serializeArray(inputs);
 
@@ -1049,8 +1058,8 @@ public class DBOSExecutor implements AutoCloseable {
             0,
             timeoutMS,
             deadlineEpochMs,
-            null,
-            1,
+            deduplicationId,
+            priority.orElse(0),
             inputString);
 
     WorkflowInitResult initResult = null;
