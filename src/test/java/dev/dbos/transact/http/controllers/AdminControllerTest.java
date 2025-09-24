@@ -278,13 +278,15 @@ class AdminControllerTest {
       assertEquals("Processed: input-delta", result3);
     }
 
-    assertThrows(
-        Exception.class,
-        () -> {
-          try (var id5 = new WorkflowOptions("workflow-005").setContext()) {
-            simpleService.workWithError();
-          }
-        });
+    var e =
+        assertThrows(
+            Exception.class,
+            () -> {
+              try (var id5 = new WorkflowOptions("workflow-005").setContext()) {
+                simpleService.workWithError();
+              }
+            });
+    assertEquals("DBOS Test error", e.getMessage());
 
     given()
         .port(3010)

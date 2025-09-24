@@ -318,7 +318,6 @@ class DBOSExecutorTest {
     executingService.setExecutingService(executingService);
 
     String wfid = "wf-123";
-    long start = System.currentTimeMillis();
     try (var id = new WorkflowOptions(wfid).setContext()) {
       executingService.sleepingWorkflow(.002f);
     }

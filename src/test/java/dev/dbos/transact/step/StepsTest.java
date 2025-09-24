@@ -132,7 +132,6 @@ public class StepsTest {
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
             .implementation(new ServiceWFAndStepImpl())
-            // .async()
             .build();
 
     dbos.launch();
@@ -166,7 +165,6 @@ public class StepsTest {
         dbos.<ServiceA>Workflow()
             .interfaceClass(ServiceA.class)
             .implementation(new ServiceAImpl(serviceB))
-            // .async()
             .build();
 
     dbos.launch();
@@ -209,7 +207,6 @@ public class StepsTest {
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
             .implementation(new ServiceWFAndStepImpl())
-            // .async()
             .build();
 
     dbos.launch();
@@ -269,7 +266,6 @@ public class StepsTest {
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
             .implementation(new ServiceWFAndStepImpl())
-            // .async()
             .build();
 
     dbos.launch();

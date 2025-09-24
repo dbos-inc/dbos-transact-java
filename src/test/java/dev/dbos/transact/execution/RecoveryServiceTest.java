@@ -127,30 +127,21 @@ class RecoveryServiceTest {
 
   @Test
   void recoverPendingWorkflows() throws Exception {
-
-    String wfid = "wf-123";
-    try (var id = new WorkflowOptions(wfid).setContext()) {
-      executingService.workflowMethod("test-item");
-    }
-    wfid = "wf-124";
-    try (var id = new WorkflowOptions(wfid).setContext()) {
-      executingService.workflowMethod("test-item");
-    }
-    wfid = "wf-125";
-    try (var id = new WorkflowOptions(wfid).setContext()) {
-      executingService.workflowMethod("test-item");
-    }
-    wfid = "wf-126";
+    executingService.workflowMethod("test-item");
+    executingService.workflowMethod("test-item");
+    executingService.workflowMethod("test-item");
     WorkflowHandle<String, ?> handle6 = null;
-    try (var id = new WorkflowOptions(wfid).setContext()) {
+    try (var id = new WorkflowOptions("wf-126").setContext()) {
       handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
-    wfid = "wf-127";
-    var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
+    var options = new StartWorkflowOptions("wf-127").withQueue(testQueue);
     var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
     assertEquals("q1", handle7.getStatus().getQueueName());
+    assertEquals("wf-126", handle6.getWorkflowId());
+    assertEquals("wf-127", handle7.getWorkflowId());
+
     handle7.getResult();
 
     setWorkflowStateToPending(dataSource);
