@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
@@ -110,10 +111,8 @@ public class AsyncWorkflowTest {
     assertEquals("wf-124", wfs.get(1).getWorkflowId());
   }
 
-  // CB TODO this needs the error branch to pass
   @Test
   public void workflowWithError() throws Exception {
-
     SimpleService simpleService =
         dbos.<SimpleService>Workflow()
             .interfaceClass(SimpleService.class)
@@ -132,16 +131,15 @@ public class AsyncWorkflowTest {
             },
             new StartWorkflowOptions(wfid));
 
-    try {
-      handle.getResult();
-    } catch (Exception e) {
-      assertEquals("DBOS Test error", e.getMessage());
-    }
+    var e = assertThrows(Exception.class, () -> handle.getResult());
+    assertEquals("DBOS Test error", e.getMessage());
+
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workError");
     assertNotNull(wfs.get(0).getWorkflowId());
     assertEquals(wfs.get(0).getWorkflowId(), handle.getWorkflowId());
+    // TODO: Check error contents
     assertEquals(WorkflowState.ERROR.name(), handle.getStatus().getStatus());
   }
 

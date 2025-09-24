@@ -4,6 +4,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHandle<T, E> {
@@ -28,6 +29,12 @@ public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHan
   public T getResult() throws E {
     try {
       return futureResult.get();
+    } catch (ExecutionException e) {
+      var ee = (ExecutionException) e;
+      if (ee.getCause() instanceof Exception) {
+        throw (E) ee.getCause();
+      }
+      throw new RuntimeException("Future threw non-exception", ee.getCause());
     } catch (Exception e) {
       throw (E) e;
     }

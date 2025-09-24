@@ -352,8 +352,6 @@ public class DBOSExecutor implements AutoCloseable {
     return functionResult;
   }
 
-  // TODO: should these also throw DBOS exceptions?
-  // Should there be an unchecked version that promotes errors to unchecked?
   @SuppressWarnings("unchecked")
   public <T, E extends Exception> T runStepI(ThrowingSupplier<T, E> stepfunc, StepOptions opts)
       throws E {

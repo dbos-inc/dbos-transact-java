@@ -70,20 +70,18 @@ public class QueueChildWorkflowTest {
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-    dbos.startWorkflow(
-        () -> simpleService.workflowWithMultipleChildren("123"),
-        new StartWorkflowOptions("wf-123456").withQueue(childQ));
+    var handle =
+        dbos.startWorkflow(
+            () -> simpleService.workflowWithMultipleChildren("123"),
+            new StartWorkflowOptions().withQueue(childQ));
 
-    var handle = dbosExecutor.retrieveWorkflow("wf-123456");
     assertEquals("123abcdefghi", (String) handle.getResult());
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(4, wfs.size());
-    assertEquals("wf-123456", wfs.get(0).getWorkflowId());
+    assertEquals(handle.getWorkflowId(), wfs.get(0).getWorkflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).getStatus());
 
     assertEquals("child1", wfs.get(1).getWorkflowId());
@@ -95,7 +93,7 @@ public class QueueChildWorkflowTest {
     assertEquals("child3", wfs.get(3).getWorkflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).getStatus());
 
-    List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+    List<StepInfo> steps = dbos.listWorkflowSteps(handle.getWorkflowId());
     assertEquals(3, steps.size());
     assertEquals("child1", steps.get(0).getChildWorkflowId());
     assertEquals(0, steps.get(0).getFunctionId());

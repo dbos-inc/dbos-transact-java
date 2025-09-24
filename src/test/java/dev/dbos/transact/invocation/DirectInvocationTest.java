@@ -308,23 +308,8 @@ public class DirectInvocationTest {
 
   @Test
   void invokeWorkflowFromStepThrows() {
-    // CB: This is still wrapped in an ExecutionException
-    try {
-      proxy.illegalWorkflow();
-    } catch (java.lang.reflect.UndeclaredThrowableException e) {
-      Throwable undeclared = e.getUndeclaredThrowable(); // often non-null
-
-      // Walk the chain and print everything
-      for (Throwable t = (undeclared != null ? undeclared : e); t != null; t = t.getCause()) {
-        t.printStackTrace(); // or log at ERROR
-      }
-    } catch (Exception e) {
-      e.printStackTrace();
-      System.err.println(e.getClass().toString());
-      System.err.println(e.getMessage());
-    }
-    // TODO Enable assertion - assertThrows(IllegalStateException.class, () ->
-    // proxy.illegalWorkflow());
+    var ise = assertThrows(IllegalStateException.class, () -> proxy.illegalWorkflow());
+    assertEquals("cannot invoke a workflow from a step", ise.getMessage());
 
     var wfs = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, wfs.size());

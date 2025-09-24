@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.Timeout;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class SyncWorkflowTest {
@@ -73,9 +72,7 @@ public class SyncWorkflowTest {
   }
 
   @Test
-  // TODO - this needs the error branch in order to pass
   public void workflowWithError() throws SQLException {
-
     SimpleService simpleService =
         dbos.<SimpleService>Workflow()
             .interfaceClass(SimpleService.class)
@@ -85,11 +82,13 @@ public class SyncWorkflowTest {
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-    assertThrows(Exception.class, () -> simpleService.workWithError());
+    var e = assertThrows(Exception.class, () -> simpleService.workWithError());
+    assertEquals("DBOS Test error", e.getMessage());
 
     List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workError");
+    // TODO: Check error: assertEquals(wfs.get(0).getError(), wfs);
     assertNotNull(wfs.get(0).getWorkflowId());
   }
 
