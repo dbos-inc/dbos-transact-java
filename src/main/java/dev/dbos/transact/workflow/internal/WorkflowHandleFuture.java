@@ -29,8 +29,7 @@ public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHan
   public T getResult() throws E {
     try {
       return futureResult.get();
-    } catch (ExecutionException e) {
-      var ee = (ExecutionException) e;
+    } catch (ExecutionException ee) {
       if (ee.getCause() instanceof Exception) {
         throw (E) ee.getCause();
       }

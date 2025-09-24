@@ -59,7 +59,7 @@ public class DBOSInvocationHandler implements InvocationHandler {
       throws Exception {
     var executor = executorSupplier.get();
     if (executor == null) {
-      throw new IllegalStateException();
+      throw new IllegalStateException("executorSupplier returned null");
     }
 
     var name = workflow.name().isEmpty() ? method.getName() : workflow.name();
@@ -70,7 +70,7 @@ public class DBOSInvocationHandler implements InvocationHandler {
   protected Object handleStep(Method method, Object[] args, Step step) throws Exception {
     var executor = executorSupplier.get();
     if (executor == null) {
-      throw new IllegalStateException();
+      throw new IllegalStateException("executorSupplier returned null");
     }
 
     var name = step.name().isEmpty() ? method.getName() : step.name();
