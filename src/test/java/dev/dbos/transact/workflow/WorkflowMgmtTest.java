@@ -161,7 +161,6 @@ public class WorkflowMgmtTest {
   }
 
   @Test
-  @Disabled
   public void syncCancelResumeTest() throws Exception {
 
     CountDownLatch mainLatch = new CountDownLatch(1);
