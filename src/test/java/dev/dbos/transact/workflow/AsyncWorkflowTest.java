@@ -278,7 +278,6 @@ public class AsyncWorkflowTest {
 
   @Test
   public void startWorkflowClosure() {
-
     SimpleService simpleService =
         dbos.<SimpleService>Workflow()
             .interfaceClass(SimpleService.class)
@@ -287,13 +286,11 @@ public class AsyncWorkflowTest {
 
     dbos.launch();
 
-    // String wfid = "wf-123";
-    // WorkflowHandle<String, RuntimException> handle =
-    //     dbos.startWorkflow(
-    //         () -> simpleService.workWithString("test-item"), new StartWorkflowOptions(wfid));
+    WorkflowHandle<String, RuntimeException> handle =
+        dbos.startWorkflow(() -> simpleService.workWithString("test-item"));
 
-    // String result = handle.getResult();
-    // assertEquals("Processed: test-item", result);
-    // assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+    String result = handle.getResult();
+    assertEquals("Processed: test-item", result);
+    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
   }
 }
