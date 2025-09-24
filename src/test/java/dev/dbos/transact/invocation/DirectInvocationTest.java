@@ -208,6 +208,48 @@ public class DirectInvocationTest {
     assertNull(row1.timeoutMs());
     assertNull(row0.deadlineEpochMs());
     assertNull(row1.deadlineEpochMs());
+
+    var steps = DBUtils.getStepRows(dataSource, row0.workflowId());
+    assertEquals(1, steps.size());
+    var step = steps.get(0);
+    assertEquals(row0.workflowId(), step.workflowId());
+    assertEquals(0, step.functionId());
+    assertNull(step.output());
+    assertNull(step.error());
+    assertEquals("simpleWorkflow", step.functionName());
+    assertEquals(row1.workflowId(), step.childWorkflowId());
+  }
+
+  @Test
+  void directInvokeParentStartWorkflow() throws Exception {
+    var result = proxy.parentStartWorkflow();
+    assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
+
+    var rows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(2, rows.size());
+    var row0 = rows.get(0);
+    var row1 = rows.get(1);
+    assertDoesNotThrow(() -> UUID.fromString(row0.workflowId()));
+    assertEquals(row0.workflowId() + "-0", row1.workflowId());
+    assertEquals("SUCCESS", row0.status());
+    assertEquals("SUCCESS", row1.status());
+    assertEquals("parentStartWorkflow", row0.name());
+    assertEquals("simpleWorkflow", row1.name());
+    assertEquals(row0.output(), row1.output());
+    assertNull(row0.timeoutMs());
+    assertNull(row1.timeoutMs());
+    assertNull(row0.deadlineEpochMs());
+    assertNull(row1.deadlineEpochMs());
+
+    var steps = DBUtils.getStepRows(dataSource, row0.workflowId());
+    assertEquals(1, steps.size());
+    var step = steps.get(0);
+    assertEquals(row0.workflowId(), step.workflowId());
+    assertEquals(0, step.functionId());
+    assertNull(step.output());
+    assertNull(step.error());
+    assertEquals("simpleWorkflow", step.functionName());
+    assertEquals(row1.workflowId(), step.childWorkflowId());
   }
 
   @Test

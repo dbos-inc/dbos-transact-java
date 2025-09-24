@@ -59,6 +59,27 @@ public class DBOSContext {
     this.deadline = deadline;
   }
 
+  public DBOSContext(
+      DBOSContext other, StartWorkflowOptions options, Integer functionId, CompletableFuture<String> future) {
+    this.nextWorkflowId = other.nextWorkflowId;
+    this.nextTimeout = other.nextTimeout;
+    this.dbos = other.dbos;
+    this.workflowId = other.workflowId;
+    this.functionId = functionId == null ? other.functionId : functionId;
+    this.stepFunctionId = other.stepFunctionId;
+    this.parent = other.parent;
+    this.timeout = other.timeout;
+    this.deadline = other.deadline;
+
+    if (other.startedWorkflowId != null) {
+      throw new IllegalStateException("startedWorkflowId not null");
+    }
+
+    this.startOptions = options;
+    this.startWorkflowFuture = future;
+    this.startedWorkflowId = null;
+  }
+
   public boolean isInWorkflow() {
     return workflowId != null;
   }
@@ -141,8 +162,6 @@ public class DBOSContext {
     return OptionalInt.empty();
   }
 
-  public record StartOptionsResult(StartWorkflowOptions options, String workflowId) {}
-
   public void setStartOptions(StartWorkflowOptions options, CompletableFuture<String> future) {
     if (startedWorkflowId != null) {
       throw new IllegalStateException();
@@ -156,13 +175,15 @@ public class DBOSContext {
   }
 
   public void setStartedWorkflowId(String workflowId) {
-    if (startedWorkflowId != null && startOptions != null) {
+    if (startOptions != null) {
+    if (startedWorkflowId != null) {
       throw new IllegalStateException(
           String.format(
               "more than one workflow called from start workflow lambda: %s %s",
               workflowId, startedWorkflowId));
     }
     startedWorkflowId = Objects.requireNonNull(workflowId);
+  }
   }
 
   public CompletableFuture<String> getStartWorkflowFuture() {

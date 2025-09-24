@@ -10,6 +10,8 @@ public interface HawkService {
 
   String parentWorkflow();
 
+  String parentStartWorkflow();
+
   String parentSleepWorkflow(Long timeoutSec, long sleepSec);
 
   Instant nowStep();

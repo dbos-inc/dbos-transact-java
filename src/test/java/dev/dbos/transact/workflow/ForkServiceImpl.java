@@ -1,5 +1,6 @@
 package dev.dbos.transact.workflow;
 
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.WorkflowOptions;
 
@@ -55,12 +56,8 @@ public class ForkServiceImpl implements ForkService {
     forkService.stepOne("one");
     forkService.stepTwo(2);
 
-    // WorkflowHandle<String, RuntimeException> handle =
-    //     dbos.startWorkflow(() -> forkService.child1(25), new StartWorkflowOptions("child1"));
-    // handle.getResult();
-
-    // handle =
-    //     dbos.startWorkflow(() -> forkService.child2(25.75f), new StartWorkflowOptions("child1"));
+    dbos.startWorkflow(() -> forkService.child1(25), new StartWorkflowOptions("child1"));
+    dbos.startWorkflow(() -> forkService.child2(25.75f), new StartWorkflowOptions("child2"));
 
     forkService.stepFive(false);
     return input + input;

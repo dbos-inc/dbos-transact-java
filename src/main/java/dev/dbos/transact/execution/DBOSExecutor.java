@@ -697,19 +697,27 @@ public class DBOSExecutor implements AutoCloseable {
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
     var ctx = DBOSContextHolder.get();
+    Integer functionId = null;
+
+    if (ctx.isInWorkflow()) {
+      if (ctx.isInStep()) {
+        throw new IllegalStateException("cannot invoke a workflow from a step");
+      }
+      functionId = ctx.getAndIncrementFunctionId();
+    }
 
     if (options.workflowId() == null) {
       options = options.withWorkflowId(ctx.getNextWorkflowId());
     }
 
-    var _options = options;
-
     CompletableFuture<String> future = new CompletableFuture<>();
+    var newCtx = new DBOSContext(ctx, options, functionId, future);
+
     Callable<T> task =
         () -> {
           DBOSContextHolder.clear();
           try {
-            DBOSContextHolder.get().setStartOptions(_options, future);
+            DBOSContextHolder.set(newCtx);
             return supplier.execute();
           } finally {
             DBOSContextHolder.clear();

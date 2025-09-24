@@ -419,7 +419,6 @@ public class WorkflowMgmtTest {
   }
 
   @Test
-  @Disabled
   public void testParentChildAsyncFork() throws SQLException {
 
     ForkServiceImpl impl = new ForkServiceImpl();
