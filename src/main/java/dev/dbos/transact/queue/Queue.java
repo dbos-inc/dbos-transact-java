@@ -37,23 +37,23 @@ public class Queue {
     return new Queue(name, concurrency, workerConcurrency, limit, priorityEnabled);
   }
 
-  public String getName() {
+  public String name() {
     return name;
   }
 
-  public Integer getConcurrency() {
+  public int concurrency() {
     return concurrency;
   }
 
-  public Integer getWorkerConcurrency() {
+  public int workerConcurrency() {
     return workerConcurrency;
   }
 
-  public RateLimit getRateLimit() {
+  public RateLimit rateLimit() {
     return rateLimit;
   }
 
-  public boolean isPriorityEnabled() {
+  public boolean priorityEnabled() {
     return priorityEnabled;
   }
 
