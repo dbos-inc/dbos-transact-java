@@ -4,9 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
-import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.queue.Queue;
@@ -19,6 +18,7 @@ import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import java.sql.*;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -26,9 +26,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 class RecoveryServiceTest {
 
   private static DBOSConfig dbosConfig;
@@ -84,30 +86,27 @@ class RecoveryServiceTest {
   void recoverWorkflows() throws Exception {
 
     String wfid = "wf-123";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       executingService.workflowMethod("test-item");
     }
     wfid = "wf-124";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       executingService.workflowMethod("test-item");
     }
     wfid = "wf-125";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       executingService.workflowMethod("test-item");
     }
     wfid = "wf-126";
     WorkflowHandle<String, ?> handle6 = null;
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
     wfid = "wf-127";
-    WorkflowHandle<String, ?> handle7 = null;
-    WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
-    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-      handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
-    }
+    var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
+    var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
     assertEquals("q1", handle7.getStatus().getQueueName());
     handle7.getResult();
 
@@ -128,33 +127,21 @@ class RecoveryServiceTest {
 
   @Test
   void recoverPendingWorkflows() throws Exception {
-
-    String wfid = "wf-123";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-      executingService.workflowMethod("test-item");
-    }
-    wfid = "wf-124";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-      executingService.workflowMethod("test-item");
-    }
-    wfid = "wf-125";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
-      executingService.workflowMethod("test-item");
-    }
-    wfid = "wf-126";
+    executingService.workflowMethod("test-item");
+    executingService.workflowMethod("test-item");
+    executingService.workflowMethod("test-item");
     WorkflowHandle<String, ?> handle6 = null;
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions("wf-126").setContext()) {
       handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
-    wfid = "wf-127";
-    WorkflowHandle<String, ?> handle7 = null;
-    WorkflowOptions options = new WorkflowOptions.Builder(wfid).queue(testQueue).build();
-    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-      handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
-    }
+    var options = new StartWorkflowOptions("wf-127").withQueue(testQueue);
+    var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
     assertEquals("q1", handle7.getStatus().getQueueName());
+    assertEquals("wf-126", handle6.getWorkflowId());
+    assertEquals("wf-127", handle7.getWorkflowId());
+
     handle7.getResult();
 
     setWorkflowStateToPending(dataSource);
@@ -172,11 +159,11 @@ class RecoveryServiceTest {
   public void recoveryThreadTest() throws Exception {
 
     String wfid = "wf-123";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       executingService.workflowMethod("test-item");
     }
     wfid = "wf-124";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       executingService.workflowMethod("test-item");
     }
 
@@ -216,7 +203,7 @@ class RecoveryServiceTest {
     //   in the catch handler.
     // Check that this returns null (void) and that the right calls were made.
     String wfid = "wftr-1x3";
-    try (SetWorkflowID id = new SetWorkflowID(wfid)) {
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       executingService.workflowWithNoResultSteps();
     }
     assertEquals(executingServiceImpl.callsToThrowStep, 1);

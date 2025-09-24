@@ -1,5 +1,3 @@
-import java.io.ByteArrayOutputStream
-
 // Get the short Git hash
 val gitHash: String by lazy {
     providers.exec {

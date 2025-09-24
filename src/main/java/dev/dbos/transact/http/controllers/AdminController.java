@@ -10,6 +10,7 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -162,18 +163,10 @@ public class AdminController {
     int startStep = (request.startStep != null) ? request.startStep : 0;
     logger.info("Forking workflow {} from step {} with a new ID", workflowId, startStep);
 
-    ForkOptions.Builder builder = ForkOptions.builder();
-    if (request.newWorkflowId != null) {
-      builder.forkedWorkflowId(request.newWorkflowId);
-    }
-    if (request.applicationVersion != null) {
-      builder.applicationVersion(request.applicationVersion);
-    }
-    if (request.timeoutMs != null) {
-      builder.timeoutMS(request.timeoutMs);
-    }
+    Duration timeout = request.timeoutMs != null ? Duration.ofMillis(request.timeoutMs) : null;
+    var options = new ForkOptions(request.newWorkflowId, request.applicationVersion, timeout);
 
-    WorkflowHandle<?, ?> handle = dbosExecutor.forkWorkflow(workflowId, startStep, builder.build());
+    WorkflowHandle<?, ?> handle = dbosExecutor.forkWorkflow(workflowId, startStep, options);
     return new ForkWorkflowResponse(handle.getWorkflowId());
   }
 

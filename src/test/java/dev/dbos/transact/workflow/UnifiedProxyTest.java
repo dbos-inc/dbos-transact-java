@@ -1,12 +1,10 @@
 package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
@@ -14,12 +12,15 @@ import dev.dbos.transact.utils.DBUtils;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class UnifiedProxyTest {
 
   private static DBOSConfig dbosConfig;
@@ -62,14 +63,12 @@ public class UnifiedProxyTest {
     Queue q = dbos.Queue("simpleQ").build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     // synchronous
     String wfid1 = "wf-123";
-    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
+    WorkflowOptions options = new WorkflowOptions(wfid1);
     String result;
-    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+    try (var id = options.setContext()) {
       result = simpleService.workWithString("test-item");
     }
     assertEquals("Processed: test-item", result);
@@ -77,9 +76,9 @@ public class UnifiedProxyTest {
     // asynchronous
 
     String wfid2 = "wf-124";
-    options = new WorkflowOptions.Builder(wfid2).build();
+    options = new WorkflowOptions(wfid2);
     WorkflowHandle<String, ?> handle = null;
-    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+    try (var id = options.setContext()) {
       handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
     }
 
@@ -90,14 +89,11 @@ public class UnifiedProxyTest {
 
     // Queued
     String wfid3 = "wf-125";
-    options = new WorkflowOptions.Builder(wfid3).queue(q).build();
-    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
-      result = simpleService.workWithString("test-item-q");
-    }
-    assertNull(result);
+    var startOptions = new StartWorkflowOptions(wfid3).withQueue(q);
 
-    handle = dbosExecutor.retrieveWorkflow(wfid3);
-    ;
+    dbos.startWorkflow(() -> simpleService.workWithString("test-item-q"), startOptions);
+
+    handle = dbos.retrieveWorkflow(wfid3);
     result = (String) handle.getResult();
     assertEquals("Processed: test-item-q", result);
     assertEquals(wfid3, handle.getWorkflowId());
@@ -105,7 +101,7 @@ public class UnifiedProxyTest {
 
     ListWorkflowsInput input = new ListWorkflowsInput();
     input.setWorkflowIDs(Arrays.asList(wfid3));
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(input);
+    List<WorkflowStatus> wfs = dbos.listWorkflows(input);
     assertEquals("simpleQ", wfs.get(0).getQueueName());
   }
 
@@ -120,25 +116,24 @@ public class UnifiedProxyTest {
 
     dbos.Queue("childQ").build();
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     simpleService.setSimpleService(simpleService);
 
     String wfid1 = "wf-123";
-    WorkflowOptions options = new WorkflowOptions.Builder(wfid1).build();
+    WorkflowOptions options = new WorkflowOptions(wfid1);
     String result;
-    try (SetWorkflowOptions id = new SetWorkflowOptions(options)) {
+    try (var id = options.setContext()) {
       result = simpleService.syncWithQueued();
     }
     assertEquals("QueuedChildren", result);
 
     for (int i = 0; i < 3; i++) {
       String wid = "child" + i;
-      WorkflowHandle h = dbos.retrieveWorkflow(wid);
+      WorkflowHandle<?, ?> h = dbos.retrieveWorkflow(wid);
       assertEquals(wid, h.getResult());
     }
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.size(), 4);
 
     assertEquals(wfid1, wfs.get(0).getWorkflowId());

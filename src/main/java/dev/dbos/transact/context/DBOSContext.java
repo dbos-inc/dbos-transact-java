@@ -1,12 +1,14 @@
 package dev.dbos.transact.context;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.StartWorkflowOptions;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.OptionalInt;
+import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,280 +17,191 @@ public class DBOSContext {
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSContext.class);
 
-  private String executorId = Constants.DEFAULT_EXECUTORID;
+  // assigned context options
+  String nextWorkflowId;
+  Duration nextTimeout;
+  StartWorkflowOptions startOptions;
+  String startedWorkflowId;
 
-  private final AtomicReference<DBOS> dbos;
-  private String parentWorkflowId;
-  private int parentFunctionId;
-  private volatile String workflowId;
-  private volatile int functionId;
+  // TODO: auth support
+  // String authenticatedUser;
+  // List<String> authenticatedRoles;
+  // String assumedRole;
 
-  private int currStepFunctionId;
+  // current workflow fields
+  private final DBOS dbos;
+  private final String workflowId;
+  private int functionId;
+  private Integer stepFunctionId;
+  private final WorkflowInfo parent;
+  private final Duration timeout;
+  private final Instant deadline;
+  private CompletableFuture<String> startWorkflowFuture;
 
-  private String authenticatedUser;
-  private String authenticateRole;
-  private String assumedRole;
-
-  private String appVersion;
-
-  // workflow timeouts
-  private Queue queue;
-  private long workflowTimeoutMs;
-  private long workflowDeadlineEpochMs;
-
-  // Queues
-  private String deduplicationId;
-  private int priority;
-
-  //
-  private volatile boolean inWorkflow = false;
-
-  private String stepId;
-
-  private boolean async;
+  // private StepStatus stepStatus;
 
   public DBOSContext() {
-    this.dbos = new AtomicReference<>();
+    dbos = null;
+    workflowId = null;
+    functionId = -1;
+    parent = null;
+    timeout = null;
+    deadline = null;
   }
 
-  public DBOSContext(String workflowId, int functionId) {
-    this.dbos = new AtomicReference<>();
+  public DBOSContext(
+      DBOS dbos, String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
+    this.dbos = dbos;
     this.workflowId = workflowId;
-    this.functionId = functionId;
-    this.inWorkflow = false;
+    this.functionId = 0;
+    this.parent = parent;
+    this.timeout = timeout;
+    this.deadline = deadline;
   }
 
-  public DBOSContext(WorkflowOptions options, int functionId) {
-    this.dbos = new AtomicReference<>();
-    this.workflowId = options.getWorkflowId();
-    this.functionId = functionId;
-    this.inWorkflow = false;
-    this.async = options.isAsync();
-    this.queue = options.getQueue();
-    this.workflowTimeoutMs = options.getTimeout() * 1000;
-  }
+  public DBOSContext(
+      DBOSContext other, StartWorkflowOptions options, Integer functionId, CompletableFuture<String> future) {
+    this.nextWorkflowId = other.nextWorkflowId;
+    this.nextTimeout = other.nextTimeout;
+    this.dbos = other.dbos;
+    this.workflowId = other.workflowId;
+    this.functionId = functionId == null ? other.functionId : functionId;
+    this.stepFunctionId = other.stepFunctionId;
+    this.parent = other.parent;
+    this.timeout = other.timeout;
+    this.deadline = other.deadline;
 
-  private DBOSContext(
-      DBOS dbos,
-      String workflowId,
-      int functionId,
-      String parentWorkflowId,
-      int parentFunctionId,
-      boolean inWorkflow,
-      boolean async,
-      Queue q,
-      long timeout) {
-    this.dbos = new AtomicReference<>(dbos);
-    this.workflowId = workflowId;
-    this.functionId = functionId;
-    this.inWorkflow = inWorkflow;
-    this.parentWorkflowId = parentWorkflowId;
-    this.parentFunctionId = parentFunctionId;
-    this.async = async;
-    this.queue = q;
-    this.workflowTimeoutMs = timeout;
-  }
-
-  private DBOSContext(
-      DBOS dbos,
-      String childWorkflowId,
-      String parentWorkflowId,
-      int parentFunctionId,
-      boolean async,
-      Queue queue,
-      long workflowTimeout) {
-    this.dbos = new AtomicReference<>(dbos);
-    this.workflowId = childWorkflowId;
-    this.parentWorkflowId = parentWorkflowId;
-    this.parentFunctionId = parentFunctionId;
-    this.inWorkflow = true;
-    this.async = async;
-    this.queue = queue;
-    this.workflowTimeoutMs = workflowTimeout;
-  }
-
-  private DBOSContext(
-      DBOS dbos,
-      WorkflowOptions options,
-      String parentWorkflowId,
-      int parentFunctionId,
-      long parentTimeout) {
-    this.dbos = new AtomicReference<>(dbos);
-    this.workflowId = options.getWorkflowId();
-    this.parentWorkflowId = parentWorkflowId;
-    this.parentFunctionId = parentFunctionId;
-    this.inWorkflow = true;
-    this.async = options.isAsync();
-    this.queue = options.getQueue();
-    if (options.getTimeout() > 0) {
-      this.workflowTimeoutMs = options.getTimeout() * 1000;
-    } else {
-      this.workflowTimeoutMs = parentTimeout;
+    if (other.startedWorkflowId != null) {
+      throw new IllegalStateException("startedWorkflowId not null");
     }
+
+    this.startOptions = options;
+    this.startWorkflowFuture = future;
+    this.startedWorkflowId = null;
   }
 
-  public void setDbos(DBOS dbos) {
-    Objects.requireNonNull(dbos);
-    if (!this.dbos.compareAndSet(null, dbos)) {
-      if (this.dbos.get() != dbos) {
-        logger.error(
-            "setDbos collision {} {}",
-            System.identityHashCode(this.dbos.get()),
-            System.identityHashCode(dbos));
-        throw new IllegalStateException(
-            "DBOS instance already set and does not match the provided instance.");
-      }
-    }
-    logger.debug("setDbos {}", System.identityHashCode(dbos));
+  public boolean isInWorkflow() {
+    return workflowId != null;
+  }
+
+  public boolean isInStep() {
+    return stepFunctionId != null;
   }
 
   public String getWorkflowId() {
     return workflowId;
   }
 
-  public String getParentWorkflowId() {
-    return parentWorkflowId;
-  }
-
-  public void setWorkflowId(String workflowId) {
-    this.workflowId = workflowId;
-  }
-
-  public String getAuthenticatedUser() {
-    return authenticatedUser;
-  }
-
-  public void setAuthenticatedUser(String user) {
-    this.authenticatedUser = user;
-  }
-
-  public int getFunctionId() {
-    return functionId;
-  }
-
-  public int getParentFunctionId() {
-    return parentFunctionId;
-  }
-
   public int getAndIncrementFunctionId() {
     return functionId++;
   }
 
-  public String getStepId() {
-    return stepId;
+  public void setStepFunctionId(int functionId) {
+    stepFunctionId = functionId;
   }
 
-  public void setStepId(String stepId) {
-    this.stepId = stepId;
+  public void resetStepFunctionId() {
+    stepFunctionId = null;
   }
 
-  public DBOSContext copy() {
-    if (dbos.get() == null) {
-      throw new IllegalStateException("DBOS instance null in context to copy");
+  public WorkflowInfo getParent() {
+    return parent;
+  }
+
+  public String getNextWorkflowId() {
+    return getNextWorkflowId(null);
+  }
+
+  public String getNextWorkflowId(String workflowId) {
+    if (startOptions != null && startOptions.workflowId() != null) {
+      return startOptions.workflowId();
     }
-    return new DBOSContext(
-        dbos.get(),
-        workflowId,
-        functionId,
-        parentWorkflowId,
-        parentFunctionId,
-        inWorkflow,
-        async,
-        queue,
-        workflowTimeoutMs);
+    if (nextWorkflowId != null) {
+      var value = nextWorkflowId;
+      this.nextWorkflowId = null;
+      return value;
+    }
+
+    return workflowId;
   }
 
-  public DBOSContext createChild(String childWorkflowId) {
-    return new DBOSContext(
-        dbos.get(),
-        childWorkflowId,
-        workflowId,
-        this.getAndIncrementFunctionId(),
-        this.async,
-        this.getQueue(),
-        this.workflowTimeoutMs);
+  public Duration getNextTimeout() {
+    if (startOptions != null && startOptions.timeout() != null) {
+      return startOptions.timeout();
+    }
+
+    return nextTimeout;
   }
 
-  public DBOSContext createChild(WorkflowOptions options) {
-    return new DBOSContext(
-        dbos.get(), options, workflowId, this.getAndIncrementFunctionId(), this.workflowTimeoutMs);
+  public Duration getTimeout() {
+    return timeout;
   }
 
-  public boolean hasParent() {
-    return this.parentWorkflowId != null;
+  public Instant getDeadline() {
+    return deadline;
   }
 
-  public boolean isInWorkflow() {
-    return inWorkflow;
+  public String getQueueName() {
+    if (startOptions != null) {
+      return startOptions.queueName();
+    }
+    return null;
   }
 
-  public void setInWorkflow(boolean in) {
-    this.inWorkflow = true;
+  public String getDeduplicationId() {
+    if (startOptions != null) {
+      return startOptions.deduplicationId();
+    }
+    return null;
   }
 
-  public boolean isAsync() {
-    return async;
+  public OptionalInt getPriority() {
+    if (startOptions != null) {
+      return startOptions.priority();
+    }
+    return OptionalInt.empty();
   }
 
-  public Queue getQueue() {
-    return queue;
+  public void setStartOptions(StartWorkflowOptions options, CompletableFuture<String> future) {
+    if (startedWorkflowId != null) {
+      throw new IllegalStateException();
+    }
+    startOptions = options;
+    startWorkflowFuture = future;
   }
 
-  public long getWorkflowTimeoutMs() {
-    return workflowTimeoutMs;
+  public boolean validateStartedWorkflow() {
+    return startOptions == null || startedWorkflowId == null;
   }
 
-  public DBOSContext copyWithAsync() {
-    return new DBOSContext(
-        dbos.get(),
-        workflowId,
-        functionId,
-        parentWorkflowId,
-        parentFunctionId,
-        inWorkflow,
-        true,
-        queue,
-        workflowTimeoutMs);
+  public void setStartedWorkflowId(String workflowId) {
+    if (startOptions != null) {
+    if (startedWorkflowId != null) {
+      throw new IllegalStateException(
+          String.format(
+              "more than one workflow called from start workflow lambda: %s %s",
+              workflowId, startedWorkflowId));
+    }
+    startedWorkflowId = Objects.requireNonNull(workflowId);
+  }
   }
 
-  public DBOSContext copyWithQueue(Queue q) {
-    return new DBOSContext(
-        dbos.get(),
-        workflowId,
-        functionId,
-        parentWorkflowId,
-        parentFunctionId,
-        inWorkflow,
-        async,
-        q,
-        workflowTimeoutMs);
-  }
-
-  public DBOSContext copyWithWorkflowId(String id) {
-    return new DBOSContext(
-        dbos.get(),
-        id,
-        functionId,
-        parentWorkflowId,
-        parentFunctionId,
-        inWorkflow,
-        async,
-        queue,
-        workflowTimeoutMs);
+  public CompletableFuture<String> getStartWorkflowFuture() {
+    return this.startWorkflowFuture;
   }
 
   public static Optional<String> workflowId() {
-    var holder = DBOSContextHolder.get();
-    return holder == null ? Optional.empty() : Optional.ofNullable(holder.workflowId);
+    var ctx = DBOSContextHolder.get();
+    return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.workflowId);
   }
 
   public static Optional<DBOS> dbosInstance() {
-    var holder = DBOSContextHolder.get();
-    return holder == null ? Optional.empty() : Optional.ofNullable(holder.dbos.get());
+    var ctx = DBOSContextHolder.get();
+    return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.dbos);
   }
 
   public static boolean inWorkflow() {
-    var holder = DBOSContextHolder.get();
-    return holder == null ? false : holder.inWorkflow;
+    var ctx = DBOSContextHolder.get();
+    return ctx == null ? false : ctx.isInWorkflow();
   }
 }

@@ -3,16 +3,17 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.*;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class SyncWorkflowTest {
 
   private static DBOSConfig dbosConfig;
@@ -56,12 +57,11 @@ public class SyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String result = simpleService.workWithString("test-item");
     assertEquals("Processed: test-item", result);
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workWithString");
     assertNotNull(wfs.get(0).getWorkflowId());
@@ -71,7 +71,6 @@ public class SyncWorkflowTest {
 
   @Test
   public void workflowWithError() throws SQLException {
-
     SimpleService simpleService =
         dbos.<SimpleService>Workflow()
             .interfaceClass(SimpleService.class)
@@ -79,17 +78,14 @@ public class SyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
-    try {
-      simpleService.workWithError();
-    } catch (Exception e) {
-      assertEquals("DBOS Test error", e.getMessage());
-    }
+    var e = assertThrows(Exception.class, () -> simpleService.workWithError());
+    assertEquals("DBOS Test error", e.getMessage());
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workError");
+    // TODO: Check error: assertEquals(wfs.get(0).getError(), wfs);
     assertNotNull(wfs.get(0).getWorkflowId());
   }
 
@@ -103,20 +99,26 @@ public class SyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String result = null;
 
-    try (SetWorkflowID id = new SetWorkflowID("wf-123")) {
+    String wfid = "wf-123";
+    try (var id = new WorkflowOptions(wfid).setContext()) {
       result = simpleService.workWithString("test-item");
     }
 
     assertEquals("Processed: test-item", result);
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workWithString");
-    assertEquals("wf-123", wfs.get(0).getWorkflowId());
+    assertEquals(wfid, wfs.get(0).getWorkflowId());
+
+    WorkflowHandle<String, SQLException> handle = dbos.retrieveWorkflow(wfid);
+    String hresult = (String) handle.getResult();
+    assertEquals("Processed: test-item", hresult);
+    assertEquals("wf-123", handle.getWorkflowId());
+    assertEquals("SUCCESS", handle.getStatus().getStatus());
   }
 
   @Test
@@ -129,38 +131,37 @@ public class SyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String result = null;
     SimpleServiceImpl.executionCount = 0;
 
-    try (SetWorkflowID id = new SetWorkflowID("wf-123")) {
+    try (var id = new WorkflowOptions("wf-123").setContext()) {
       result = simpleService.workWithString("test-item");
     }
 
     assertEquals("Processed: test-item", result);
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workWithString");
     assertEquals("wf-123", wfs.get(0).getWorkflowId());
 
     assertEquals(1, SimpleServiceImpl.executionCount);
 
-    try (SetWorkflowID id = new SetWorkflowID("wf-123")) {
+    try (var id = new WorkflowOptions("wf-123").setContext()) {
       result = simpleService.workWithString("test-item");
     }
     assertEquals(1, SimpleServiceImpl.executionCount);
-    wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals("wf-123", wfs.get(0).getWorkflowId());
 
-    try (SetWorkflowID id = new SetWorkflowID("wf-124")) {
+    try (var id = new WorkflowOptions("wf-124").setContext()) {
       result = simpleService.workWithString("test-item");
     }
 
     assertEquals(2, SimpleServiceImpl.executionCount);
-    wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(2, wfs.size());
     assertEquals("wf-124", wfs.get(1).getWorkflowId());
   }
@@ -175,19 +176,18 @@ public class SyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     simpleService.setSimpleService(simpleService);
 
     String result = null;
 
-    try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
+    try (var id = new WorkflowOptions("wf-123456").setContext()) {
       result = simpleService.parentWorkflowWithoutSet("123");
     }
 
     assertEquals("123abc", result);
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(2, wfs.size());
     assertEquals("wf-123456", wfs.get(0).getWorkflowId());
@@ -213,19 +213,17 @@ public class SyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     simpleService.setSimpleService(simpleService);
 
-    try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
-      simpleService.WorkflowWithMultipleChildren("123");
+    try (var id = new WorkflowOptions("wf-123456").setContext()) {
+      simpleService.workflowWithMultipleChildren("123");
     }
 
-    var handle = dbosExecutor.retrieveWorkflow("wf-123456");
+    var handle = dbos.retrieveWorkflow("wf-123456");
     assertEquals("123abcdefghi", handle.getResult());
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(4, wfs.size());
     assertEquals("wf-123456", wfs.get(0).getWorkflowId());
@@ -265,21 +263,17 @@ public class SyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     simpleService.setSimpleService(simpleService);
 
-    String result = null;
-
-    try (SetWorkflowID id = new SetWorkflowID("wf-123456")) {
+    try (var id = new WorkflowOptions("wf-123456").setContext()) {
       simpleService.grandParent("123");
     }
 
-    var handle = dbosExecutor.retrieveWorkflow("wf-123456");
+    var handle = dbos.retrieveWorkflow("wf-123456");
     assertEquals("p-c-gc-123", handle.getResult());
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(3, wfs.size());
     assertEquals("wf-123456", wfs.get(0).getWorkflowId());

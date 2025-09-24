@@ -14,6 +14,7 @@ import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.*;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
@@ -811,22 +812,26 @@ public class WorkflowDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
+    WorkflowStatus status = getWorkflowStatus(originalWorkflowId);
+    if (status == null) {
+      throw new NonExistentWorkflowException(originalWorkflowId);
+    }
+
     String forkedWorkflowId =
-        options.getForkedWorkflowId() == null
+        options.forkedWorkflowId() == null
             ? UUID.randomUUID().toString()
-            : options.getForkedWorkflowId();
+            : options.forkedWorkflowId();
 
     logger.info("forkWorkflow Original id {} forked id {}", originalWorkflowId, forkedWorkflowId);
 
-    String applicationVersion = options.getApplicationVersion();
+    String applicationVersion = options.applicationVersion();
 
-    WorkflowStatus status = getWorkflowStatus(originalWorkflowId);
-
-    long timeoutMs =
-        options.getTimeoutMS() == 0 ? status.getWorkflowTimeoutMs() : options.getTimeoutMS();
-
-    if (status == null) {
-      throw new NonExistentWorkflowException(originalWorkflowId);
+    var timeout = options.timeout();
+    if (timeout == null) {
+      timeout = status.getTimeout();
+    }
+    if (timeout == null) {
+      timeout = Duration.ZERO;
     }
 
     try (Connection connection = dataSource.getConnection()) {
@@ -835,7 +840,7 @@ public class WorkflowDAO {
       try {
         // Create entry for forked workflow
         insertForkedWorkflowStatus(
-            connection, forkedWorkflowId, status, applicationVersion, timeoutMs);
+            connection, forkedWorkflowId, status, applicationVersion, timeout.toMillis());
 
         // Copy operation outputs if starting from step > 0
         if (startStep > 0) {
@@ -892,7 +897,7 @@ public class WorkflowDAO {
       stmt.setString(11, Constants.DBOS_INTERNAL_QUEUE);
       stmt.setString(12, JSONUtil.serializeArray(originalStatus.getInput()));
       stmt.setLong(13, workflowDeadlineEpoch);
-      stmt.setLong(14, originalStatus.getWorkflowTimeoutMs());
+      stmt.setObject(14, originalStatus.getWorkflowTimeoutMs());
 
       stmt.executeUpdate();
     }

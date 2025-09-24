@@ -12,12 +12,15 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 class SchedulerServiceTest {
 
   private static DBOSConfig dbosConfig;
@@ -63,7 +66,8 @@ class SchedulerServiceTest {
 
     int count = swf.wfCounter;
     System.out.println("Final count: " + count);
-    assertTrue(count >= 2 && count <= 5);
+    assertTrue(count >= 2);
+    assertTrue(count <= 5);
   }
 
   @Test
@@ -80,6 +84,7 @@ class SchedulerServiceTest {
 
     int count = swf.wfCounter;
     System.out.println("Final count: " + count);
+    assertTrue(count >= 1);
     assertTrue(count <= 2);
   }
 
@@ -97,7 +102,8 @@ class SchedulerServiceTest {
 
     int count = swf.wfCounter;
     System.out.println("Final count: " + count);
-    assertTrue(count >= 2 && count <= 5);
+    assertTrue(count >= 2);
+    assertTrue(count <= 5);
     int count3 = swf.wfCounter3;
     System.out.println("Final count3: " + count3);
     assertTrue(count3 <= 2);
@@ -160,17 +166,16 @@ class SchedulerServiceTest {
     WorkflowWithSteps swf = new WorkflowWithSteps(steps);
     dbos.scheduleWorkflow(swf);
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
     Thread.sleep(5000);
     schedulerService.stop();
     Thread.sleep(1000);
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertTrue(wfs.size() <= 2);
 
-    List<StepInfo> wsteps = systemDatabase.listWorkflowSteps(wfs.get(0).getWorkflowId());
+    List<StepInfo> wsteps = dbos.listWorkflowSteps(wfs.get(0).getWorkflowId());
     assertEquals(2, wsteps.size());
   }
 

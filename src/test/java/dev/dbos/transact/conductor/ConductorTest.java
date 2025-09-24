@@ -51,12 +51,13 @@ import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ClientHandshake;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class ConductorTest {
 
   static Logger logger = LoggerFactory.getLogger(ConductorTest.class);
@@ -117,7 +118,6 @@ public class ConductorTest {
   }
 
   @Test
-  @Disabled
   public void sendsPing() throws Exception {
     logger.info("sendsPing Starting");
     class Listener implements WebSocketTestListener {
@@ -523,9 +523,9 @@ public class ConductorTest {
       verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
       ForkOptions capturedOptions = optionsCaptor.getValue();
       assertNotNull(capturedOptions);
-      assertEquals("appver-12345", capturedOptions.getApplicationVersion());
-      assertEquals(newWorkflowId, capturedOptions.getForkedWorkflowId());
-      assertEquals(0, capturedOptions.getTimeoutMS());
+      assertEquals("appver-12345", capturedOptions.applicationVersion());
+      assertEquals(newWorkflowId, capturedOptions.forkedWorkflowId());
+      assertEquals(null, capturedOptions.timeout());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -560,9 +560,9 @@ public class ConductorTest {
       verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
       ForkOptions options = optionsCaptor.getValue();
       assertNotNull(options);
-      assertEquals("appver-12345", options.getApplicationVersion());
-      assertEquals("new-wf-id", options.getForkedWorkflowId());
-      assertEquals(0, options.getTimeoutMS());
+      assertEquals("appver-12345", options.applicationVersion());
+      assertEquals("new-wf-id", options.forkedWorkflowId());
+      assertEquals(null, options.timeout());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);

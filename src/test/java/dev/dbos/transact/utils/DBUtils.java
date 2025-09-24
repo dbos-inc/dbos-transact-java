@@ -6,6 +6,8 @@ import dev.dbos.transact.config.DBOSConfig;
 
 import java.sql.*;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.sql.DataSource;
 
@@ -199,5 +201,78 @@ public class DBUtils {
     String dbUrl =
         String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, dbosConfig.getSysDbName());
     return DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
+  }
+
+  public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) {
+    try (var conn = ds.getConnection();
+        var stmt = conn.createStatement();
+        var rs = stmt.executeQuery("SELECT * FROM dbos.workflow_status ORDER BY \"created_at\"")) {
+      List<WorkflowStatusRow> rows = new ArrayList<>();
+
+      while (rs.next()) {
+        rows.add(new WorkflowStatusRow(rs));
+      }
+
+      return rows;
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId) {
+    String sql = "SELECT * FROM dbos.workflow_status WHERE workflow_uuid = ?";
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          return new WorkflowStatusRow(rs);
+        } else {
+          return null;
+        }
+      }
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static List<OperationOutputRow> getStepRows(DataSource ds, String workflowId) {
+    var sql = "SELECT * FROM dbos.operation_outputs WHERE workflow_uuid = ? ORDER BY function_id";
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        List<OperationOutputRow> rows = new ArrayList<>();
+
+        while (rs.next()) {
+          rows.add(new OperationOutputRow(rs));
+        }
+        return rows;
+      }
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static OperationOutputRow getStepRow(DataSource ds, String workflowId, int functionId) {
+    var sql = "SELECT * FROM dbos.operation_outputs WHERE workflow_uuid = ? AND function_id = ?";
+
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, functionId);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          return new OperationOutputRow(rs);
+        } else {
+          return null;
+        }
+      }
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
   }
 }

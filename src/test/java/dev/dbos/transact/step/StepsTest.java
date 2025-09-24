@@ -3,17 +3,19 @@ package dev.dbos.transact.step;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.SetWorkflowID;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Timeout;
 
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class StepsTest {
 
   private static DBOSConfig dbosConfig;
@@ -60,16 +62,15 @@ public class StepsTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String wid = "sync123";
 
-    try (SetWorkflowID id = new SetWorkflowID(wid)) {
+    try (var id = new WorkflowOptions(wid).setContext()) {
       String result = serviceA.workflowWithSteps("hello");
       assertEquals("hellohello", result);
     }
 
-    List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(wid);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
 
     assertEquals("step1", stepInfos.get(0).getFunctionName());
@@ -105,15 +106,14 @@ public class StepsTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String wid = "sync123er";
-    try (SetWorkflowID id = new SetWorkflowID(wid)) {
+    try (var id = new WorkflowOptions(wid).setContext()) {
       String result = serviceA.workflowWithStepError("hello");
       assertEquals("hellohello", result);
     }
 
-    List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(wid);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
     assertEquals("step3", stepInfos.get(2).getFunctionName());
     assertEquals(2, stepInfos.get(2).getFunctionId());
@@ -129,13 +129,12 @@ public class StepsTest {
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
             .implementation(new ServiceWFAndStepImpl())
-            .async()
             .build();
 
     dbos.launch();
 
     String wid = "wfWISwww123";
-    try (SetWorkflowID id = new SetWorkflowID(wid)) {
+    try (var id = new WorkflowOptions(wid).setContext()) {
       service.aWorkflowWithInlineSteps("input");
     }
 
@@ -163,23 +162,20 @@ public class StepsTest {
         dbos.<ServiceA>Workflow()
             .interfaceClass(ServiceA.class)
             .implementation(new ServiceAImpl(serviceB))
-            .async()
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     String workflowId = "wf-1234";
 
-    try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
       serviceA.workflowWithSteps("hello");
     }
 
-    var handle = dbosExecutor.retrieveWorkflow(workflowId);
+    var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals("hellohello", (String) handle.getResult());
 
-    List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(workflowId);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
     assertEquals(5, stepInfos.size());
 
     assertEquals("step1", stepInfos.get(0).getFunctionName());
@@ -206,25 +202,22 @@ public class StepsTest {
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
             .implementation(new ServiceWFAndStepImpl())
-            .async()
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     service.setSelf(service);
 
     String workflowId = "wf-same-1234";
 
-    try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
       service.aWorkflow("hello");
     }
 
-    var handle = dbosExecutor.retrieveWorkflow(workflowId);
+    var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals("helloonetwo", (String) handle.getResult());
 
-    List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(workflowId);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
     assertEquals(2, stepInfos.size());
 
     assertEquals("step1", stepInfos.get(0).getFunctionName());
@@ -266,7 +259,6 @@ public class StepsTest {
         dbos.<ServiceWFAndStep>Workflow()
             .interfaceClass(ServiceWFAndStep.class)
             .implementation(new ServiceWFAndStepImpl())
-            .async()
             .build();
 
     dbos.launch();
@@ -275,7 +267,7 @@ public class StepsTest {
 
     String workflowId = "wf-stepretrytest-1234";
 
-    try (SetWorkflowID id = new SetWorkflowID(workflowId)) {
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
       service.stepRetryWorkflow("hello");
     }
 
