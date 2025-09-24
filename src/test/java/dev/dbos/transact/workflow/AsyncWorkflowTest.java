@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -62,8 +61,6 @@ public class AsyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     SimpleServiceImpl.executionCount = 0;
 
@@ -72,12 +69,12 @@ public class AsyncWorkflowTest {
       simpleService.workWithString("test-item");
     }
 
-    var handle = dbosExecutor.retrieveWorkflow(wfid);
+    var handle = dbos.retrieveWorkflow(wfid);
     String result = (String) handle.getResult();
     assertEquals("Processed: test-item", result);
     assertEquals(wfid, handle.getWorkflowId());
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workWithString");
     assertEquals(wfid, wfs.get(0).getWorkflowId());
@@ -86,13 +83,13 @@ public class AsyncWorkflowTest {
       simpleService.workWithString("test-item");
     }
 
-    handle = dbosExecutor.retrieveWorkflow(wfid);
+    handle = dbos.retrieveWorkflow(wfid);
     result = (String) handle.getResult();
     assertEquals(1, SimpleServiceImpl.executionCount);
-    // TODO fix deser has quotes assertEquals("Processed: test-item", result);
+    assertEquals("Processed: test-item", result);
     assertEquals("wf-123", handle.getWorkflowId());
 
-    wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals("wf-123", wfs.get(0).getWorkflowId());
 
@@ -101,12 +98,12 @@ public class AsyncWorkflowTest {
       simpleService.workWithString("test-item");
     }
 
-    handle = dbosExecutor.retrieveWorkflow(wfid2);
+    handle = dbos.retrieveWorkflow(wfid2);
     result = (String) handle.getResult();
     assertEquals("wf-124", handle.getWorkflowId());
 
     assertEquals(2, SimpleServiceImpl.executionCount);
-    wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(2, wfs.size());
     assertEquals("wf-124", wfs.get(1).getWorkflowId());
   }
@@ -120,7 +117,6 @@ public class AsyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String wfid = "abc";
     WorkflowHandle<Void, ?> handle =
@@ -134,7 +130,7 @@ public class AsyncWorkflowTest {
     var e = assertThrows(Exception.class, () -> handle.getResult());
     assertEquals("DBOS Test error", e.getMessage());
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workError");
     assertNotNull(wfs.get(0).getWorkflowId());
@@ -153,7 +149,6 @@ public class AsyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     simpleService.setSimpleService(simpleService);
 
@@ -164,7 +159,7 @@ public class AsyncWorkflowTest {
 
     System.out.println(handle.getResult());
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(2, wfs.size());
     assertEquals("wf-123456", wfs.get(0).getWorkflowId());
@@ -173,7 +168,7 @@ public class AsyncWorkflowTest {
     assertEquals("wf-123456-0", wfs.get(1).getWorkflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
 
-    List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+    List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(1, steps.size());
     assertEquals("wf-123456-0", steps.get(0).getChildWorkflowId());
     assertEquals(0, steps.get(0).getFunctionId());
@@ -190,7 +185,6 @@ public class AsyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     simpleService.setSimpleService(simpleService);
 
@@ -216,7 +210,7 @@ public class AsyncWorkflowTest {
     assertEquals("child3", wfs.get(3).getWorkflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).getStatus());
 
-    List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+    List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(3, steps.size());
     assertEquals("child1", steps.get(0).getChildWorkflowId());
     assertEquals(0, steps.get(0).getFunctionId());
@@ -241,7 +235,6 @@ public class AsyncWorkflowTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     simpleService.setSimpleService(simpleService);
 
@@ -263,13 +256,13 @@ public class AsyncWorkflowTest {
     assertEquals("child5", wfs.get(2).getWorkflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).getStatus());
 
-    List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+    List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(1, steps.size());
     assertEquals("child4", steps.get(0).getChildWorkflowId());
     assertEquals(0, steps.get(0).getFunctionId());
     assertEquals("childWorkflow4", steps.get(0).getFunctionName());
 
-    steps = systemDatabase.listWorkflowSteps("child4");
+    steps = dbos.listWorkflowSteps("child4");
     assertEquals(1, steps.size());
     assertEquals("child5", steps.get(0).getChildWorkflowId());
     assertEquals(0, steps.get(0).getFunctionId());

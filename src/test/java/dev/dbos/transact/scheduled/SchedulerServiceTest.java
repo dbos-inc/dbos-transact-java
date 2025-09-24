@@ -166,17 +166,16 @@ class SchedulerServiceTest {
     WorkflowWithSteps swf = new WorkflowWithSteps(steps);
     dbos.scheduleWorkflow(swf);
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
     Thread.sleep(5000);
     schedulerService.stop();
     Thread.sleep(1000);
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertTrue(wfs.size() <= 2);
 
-    List<StepInfo> wsteps = systemDatabase.listWorkflowSteps(wfs.get(0).getWorkflowId());
+    List<StepInfo> wsteps = dbos.listWorkflowSteps(wfs.get(0).getWorkflowId());
     assertEquals(2, wsteps.size());
   }
 

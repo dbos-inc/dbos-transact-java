@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -136,7 +135,6 @@ public class EventsTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     dbos.startWorkflow(
         () -> eventService.getWithlatch("id1", "key1", 5), new StartWorkflowOptions("id2"));
@@ -146,11 +144,11 @@ public class EventsTest {
     String event = (String) dbos.retrieveWorkflow("id2").getResult();
     assertEquals("value1", event);
 
-    List<StepInfo> steps = systemDatabase.listWorkflowSteps("id1");
+    List<StepInfo> steps = dbos.listWorkflowSteps("id1");
     assertEquals(1, steps.size());
     assertEquals("DBOS.setEvent", steps.get(0).getFunctionName());
 
-    steps = systemDatabase.listWorkflowSteps("id2");
+    steps = dbos.listWorkflowSteps("id2");
     assertEquals(2, steps.size());
     assertEquals("DBOS.getEvent", steps.get(0).getFunctionName());
     assertEquals("DBOS.sleep", steps.get(1).getFunctionName());

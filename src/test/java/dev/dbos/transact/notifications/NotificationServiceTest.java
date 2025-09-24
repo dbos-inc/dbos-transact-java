@@ -3,7 +3,6 @@ package dev.dbos.transact.notifications;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -65,7 +64,6 @@ class NotificationServiceTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String wfid1 = "recvwf1";
     dbos.startWorkflow(
@@ -85,12 +83,12 @@ class NotificationServiceTest {
     assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
     assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
 
-    List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(wfid1);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
 
     // assertEquals(1, stepInfos.size()) ; cannot do this because sleep is a maybe
     assertEquals("DBOS.recv", stepInfos.get(0).getFunctionName());
 
-    stepInfos = systemDatabase.listWorkflowSteps(wfid2);
+    stepInfos = dbos.listWorkflowSteps(wfid2);
     assertEquals(1, stepInfos.size());
     assertEquals("DBOS.send", stepInfos.get(0).getFunctionName());
   }
@@ -298,7 +296,6 @@ class NotificationServiceTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String wfid1 = "recvwf1";
     dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5), new StartWorkflowOptions(wfid1));
@@ -321,13 +318,13 @@ class NotificationServiceTest {
     assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
     assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
 
-    List<StepInfo> stepInfos = systemDatabase.listWorkflowSteps(wfid1);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
     // Will be 2 when we implement DBOS.sleep
     assertEquals(2, stepInfos.size());
     assertEquals("DBOS.recv", stepInfos.get(0).getFunctionName());
     assertEquals("DBOS.sleep", stepInfos.get(1).getFunctionName());
 
-    stepInfos = systemDatabase.listWorkflowSteps(wfid2);
+    stepInfos = dbos.listWorkflowSteps(wfid2);
     assertEquals(1, stepInfos.size());
     assertEquals("DBOS.send", stepInfos.get(0).getFunctionName());
   }
@@ -342,7 +339,6 @@ class NotificationServiceTest {
             .build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     String wfid1 = "recvwf1";
 
@@ -358,7 +354,7 @@ class NotificationServiceTest {
     assertEquals("hello", handle.getResult());
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(2, wfs.size());
   }
 }

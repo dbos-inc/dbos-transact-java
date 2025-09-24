@@ -100,11 +100,8 @@ public class TimeoutTest {
 
     // make it timeout
     String wfid1 = "wf-125";
-    String result;
     var options = new StartWorkflowOptions(wfid1).withTimeout(1, TimeUnit.SECONDS);
     var handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
-    // assertNull(result);
-    // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
 
     try {
       handle.getResult();
@@ -140,9 +137,7 @@ public class TimeoutTest {
         new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(3, TimeUnit.SECONDS);
     WorkflowHandle<String, ?> handle =
         dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
-    // assertNull(result);
 
-    // WorkflowHandle<?> handle = dbosExecutor.retrieveWorkflow(wfid1); ;
     result = (String) handle.getResult();
     assertEquals("1234512345", result);
     assertEquals(wfid1, handle.getWorkflowId());
@@ -169,8 +164,6 @@ public class TimeoutTest {
     var options =
         new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(1, TimeUnit.SECONDS);
     var handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
-    // assertNull(result);
-    // WorkflowHandle handle = dbosExecutor.retrieveWorkflow(wfid1);
 
     try {
       handle.getResult();
@@ -286,7 +279,6 @@ public class TimeoutTest {
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     // asynchronous
 
@@ -301,7 +293,7 @@ public class TimeoutTest {
 
     assertEquals("1234512345", result);
 
-    var handle = dbosExecutor.retrieveWorkflow(wfid1);
+    var handle = dbos.retrieveWorkflow(wfid1);
 
     result = (String) handle.getResult();
     assertEquals("1234512345", result);
@@ -320,7 +312,6 @@ public class TimeoutTest {
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     String wfid1 = "wf-124";
 
@@ -335,10 +326,10 @@ public class TimeoutTest {
           }
         });
 
-    String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus();
+    String parentStatus = dbos.retrieveWorkflow(wfid1).getStatus().getStatus();
     assertEquals(WorkflowState.ERROR.name(), parentStatus);
 
-    String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus();
+    String childStatus = dbos.retrieveWorkflow("childwf").getStatus().getStatus();
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
@@ -354,7 +345,6 @@ public class TimeoutTest {
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     String wfid1 = "wf-124";
 
@@ -367,10 +357,10 @@ public class TimeoutTest {
           }
         });
 
-    String parentStatus = dbosExecutor.retrieveWorkflow(wfid1).getStatus().getStatus();
+    String parentStatus = dbos.retrieveWorkflow(wfid1).getStatus().getStatus();
     assertEquals(WorkflowState.ERROR.name(), parentStatus);
 
-    String childStatus = dbosExecutor.retrieveWorkflow("childwf").getStatus().getStatus();
+    String childStatus = dbos.retrieveWorkflow("childwf").getStatus().getStatus();
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 

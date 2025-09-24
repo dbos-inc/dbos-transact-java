@@ -3,7 +3,6 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -64,8 +63,6 @@ public class UnifiedProxyTest {
     Queue q = dbos.Queue("simpleQ").build();
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     // synchronous
     String wfid1 = "wf-123";
@@ -96,7 +93,7 @@ public class UnifiedProxyTest {
 
     dbos.startWorkflow(() -> simpleService.workWithString("test-item-q"), startOptions);
 
-    handle = dbosExecutor.retrieveWorkflow(wfid3);
+    handle = dbos.retrieveWorkflow(wfid3);
     result = (String) handle.getResult();
     assertEquals("Processed: test-item-q", result);
     assertEquals(wfid3, handle.getWorkflowId());
@@ -104,7 +101,7 @@ public class UnifiedProxyTest {
 
     ListWorkflowsInput input = new ListWorkflowsInput();
     input.setWorkflowIDs(Arrays.asList(wfid3));
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(input);
+    List<WorkflowStatus> wfs = dbos.listWorkflows(input);
     assertEquals("simpleQ", wfs.get(0).getQueueName());
   }
 
@@ -119,7 +116,6 @@ public class UnifiedProxyTest {
 
     dbos.Queue("childQ").build();
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     simpleService.setSimpleService(simpleService);
 
@@ -133,11 +129,11 @@ public class UnifiedProxyTest {
 
     for (int i = 0; i < 3; i++) {
       String wid = "child" + i;
-      WorkflowHandle h = dbos.retrieveWorkflow(wid);
+      WorkflowHandle<?, ?> h = dbos.retrieveWorkflow(wid);
       assertEquals(wid, h.getResult());
     }
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.size(), 4);
 
     assertEquals(wfid1, wfs.get(0).getWorkflowId());

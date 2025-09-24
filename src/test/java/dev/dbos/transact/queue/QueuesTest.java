@@ -13,7 +13,6 @@ import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.Connection;
@@ -81,13 +80,12 @@ public class QueuesTest {
             .build();
 
     dbos.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     String id = "q1234";
     dbos.startWorkflow(
         () -> serviceQ.simpleQWorkflow("inputq"), new StartWorkflowOptions(id).withQueue(firstQ));
 
-    var handle = dbosExecutor.retrieveWorkflow(id);
+    var handle = dbos.retrieveWorkflow(id);
     assertEquals(id, handle.getWorkflowId());
     String result = (String) handle.getResult();
     assertEquals("inputqinputq", result);
@@ -128,12 +126,10 @@ public class QueuesTest {
 
     queueService.unpause();
 
-    var executor = DBOSTestAccess.getDbosExecutor(dbos);
-
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
 
-      var handle = executor.retrieveWorkflow(id);
+      var handle = dbos.retrieveWorkflow(id);
       assertEquals(id, handle.getWorkflowId());
       String result = (String) handle.getResult();
       assertEquals("inputq" + i + "inputq" + i, result);
@@ -461,7 +457,7 @@ public class QueuesTest {
         wfStatusInternal.setWorkflowUUID(wfid);
         wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
         wfStatusInternal.setDeduplicationId("dedup" + i);
-        InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
+        systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
       }
     }
 

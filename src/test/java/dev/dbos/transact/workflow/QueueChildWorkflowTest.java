@@ -3,7 +3,6 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.queue.Queue;
@@ -122,17 +121,15 @@ public class QueueChildWorkflowTest {
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     dbos.startWorkflow(
         () -> simpleService.grandParent("123"),
         new StartWorkflowOptions("wf-123456").withQueue(childQ));
 
-    var handle = dbosExecutor.retrieveWorkflow("wf-123456");
+    var handle = dbos.retrieveWorkflow("wf-123456");
     assertEquals("p-c-gc-123", handle.getResult());
 
-    List<WorkflowStatus> wfs = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(3, wfs.size());
     assertEquals("wf-123456", wfs.get(0).getWorkflowId());
@@ -144,13 +141,13 @@ public class QueueChildWorkflowTest {
     assertEquals("child5", wfs.get(2).getWorkflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).getStatus());
 
-    List<StepInfo> steps = systemDatabase.listWorkflowSteps("wf-123456");
+    List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(1, steps.size());
     assertEquals("child4", steps.get(0).getChildWorkflowId());
     assertEquals(0, steps.get(0).getFunctionId());
     assertEquals("childWorkflow4", steps.get(0).getFunctionName());
 
-    steps = systemDatabase.listWorkflowSteps("child4");
+    steps = dbos.listWorkflowSteps("child4");
     assertEquals(1, steps.size());
     assertEquals("child5", steps.get(0).getChildWorkflowId());
     assertEquals(0, steps.get(0).getFunctionId());
