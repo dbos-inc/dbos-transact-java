@@ -57,4 +57,9 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         this.workflowId, this.timeout, queue.getName(), deduplicationId, OptionalInt.of(priority));
   }
+
+  @Override
+  public String workflowId() {
+    return workflowId != null && workflowId.isEmpty() ? null : workflowId;
+  }
 }

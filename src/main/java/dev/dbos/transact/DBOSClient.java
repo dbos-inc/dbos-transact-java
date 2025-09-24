@@ -47,14 +47,12 @@ public class DBOSClient implements AutoCloseable {
       OptionalInt priority) {
 
     public EnqueueOptions {
-      Objects.requireNonNull(workflowId);
-      if (workflowId.isEmpty()) {
-        throw new IllegalArgumentException("workflowId must not be empty");
+      if (Objects.requireNonNull(workflowName).isEmpty()) {
+        throw new IllegalArgumentException("workflowName must not be empty");
       }
 
-      Objects.requireNonNull(queueName);
-      if (queueName.isEmpty()) {
-        throw new IllegalArgumentException("workflowId must not be empty");
+      if (Objects.requireNonNull(queueName).isEmpty()) {
+        throw new IllegalArgumentException("queueName must not be empty");
       }
 
       if (timeout != null && timeout.isNegative()) {
@@ -136,6 +134,11 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deduplicationId,
           OptionalInt.of(priority));
+    }
+
+    @Override
+    public String workflowId() {
+      return workflowId != null && workflowId.isEmpty() ? null : workflowId;
     }
   }
 

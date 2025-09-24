@@ -827,7 +827,10 @@ public class DBOSExecutor implements AutoCloseable {
       OptionalInt priority) {
 
     public ExecuteWorkflowOptions {
-      Objects.requireNonNull(workflowId);
+      if (Objects.requireNonNull(workflowId).isEmpty()) {
+        throw new IllegalArgumentException("workflowId must not be empty");
+      }
+
       if (timeout != null && timeout.isNegative()) {
         throw new IllegalStateException("negative timeout");
       }

@@ -39,6 +39,11 @@ public record WorkflowOptions(String workflowId, Duration timeout) {
     return withTimeout(Duration.ofNanos(unit.toNanos(value)));
   }
 
+  @Override
+  public String workflowId() {
+    return workflowId != null && workflowId.isEmpty() ? null : workflowId;
+  }
+
   public Guard setContext() {
     var ctx = DBOSContextHolder.get();
     var guard = new Guard(ctx);
