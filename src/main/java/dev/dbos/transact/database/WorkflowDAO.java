@@ -549,7 +549,20 @@ public class WorkflowDAO {
             info.setOutput(oArray[0]);
           }
 
-          info.setError(serializedError);
+          if (serializedError != null) {
+            var wrapper = JSONUtil.deserializeAppExceptionWrapper(serializedError);
+            Throwable throwable = null;
+            try {
+              throwable = JSONUtil.deserializeAppException(serializedError);
+            } catch (Exception e) {
+            }
+            var err = new WorkflowStatus.WorkflowStatusError();
+            err.setClassName(wrapper.type);
+            err.setMessage(wrapper.message);
+            err.throwable = throwable;
+            err.serializedError = serializedError;
+            info.setError(err);
+          }
 
           info.setWorkflowDeadlineEpochMs(rs.getObject("workflow_deadline_epoch_ms", Long.class));
           info.setWorkflowTimeoutMs(rs.getObject("workflow_timeout_ms", Long.class));

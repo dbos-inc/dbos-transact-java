@@ -45,7 +45,11 @@ public class WorkflowsOutput {
     this.Input = input != null ? JSONUtil.serializeArray(input) : null;
     this.Output = output != null ? JSONUtil.toJson(output) : null;
     this.Request = null; // not used in Java TX
-    this.Error = status.getError();
+    this.Error =
+        status.getError() != null
+            ? String.format(
+                "%s: %s", status.getError().getClassName(), status.getError().getMessage())
+            : null;
     this.CreatedAt = createdAt != null ? Long.toString(createdAt) : null;
     this.UpdatedAt = updatedAt != null ? Long.toString(updatedAt) : null;
     this.QueueName = status.getQueueName();
