@@ -420,45 +420,47 @@ public class WorkflowDAO {
     // --- WHERE Clauses ---
     StringJoiner whereConditions = new StringJoiner(" AND ");
 
-    if (input != null && input.getWorkflowName() != null) {
-      whereConditions.add("name = ?");
-      parameters.add(input.getWorkflowName());
-    }
-    if (input != null && input.getAuthenticatedUser() != null) {
-      whereConditions.add("authenticated_user = ?");
-      parameters.add(input.getAuthenticatedUser());
-    }
-    if (input != null && input.getStartTime() != null) {
-      whereConditions.add("created_at >= ?");
-      // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
-      parameters.add(input.getStartTime().toInstant().toEpochMilli());
-    }
-    if (input != null && input.getEndTime() != null) {
-      whereConditions.add("created_at <= ?");
-      // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
-      parameters.add(input.getEndTime().toInstant().toEpochMilli());
-    }
-    if (input != null && input.getStatus() != null) {
-      whereConditions.add("status = ?");
-      parameters.add(input.getStatus());
-    }
-    if (input != null && input.getApplicationVersion() != null) {
-      whereConditions.add("application_version = ?");
-      parameters.add(input.getApplicationVersion());
-    }
-    if (input != null && input.getWorkflowIDs() != null && !input.getWorkflowIDs().isEmpty()) {
-      // Handle IN clause: dynamically generate ? for each ID
-      StringJoiner inClausePlaceholders = new StringJoiner(", ", "(", ")");
-      for (String id : input.getWorkflowIDs()) {
-        inClausePlaceholders.add("?");
-        parameters.add(id);
+    if (input != null) {
+      if (input.getWorkflowName() != null) {
+        whereConditions.add("name = ?");
+        parameters.add(input.getWorkflowName());
       }
-      whereConditions.add("workflow_uuid IN " + inClausePlaceholders.toString());
-    }
-    if (input != null && input.getWorkflowIdPrefix() != null) {
-      whereConditions.add("workflow_uuid LIKE ?");
-      // Append wildcard directly to the parameter value
-      parameters.add(input.getWorkflowIdPrefix() + "%");
+      if (input.getAuthenticatedUser() != null) {
+        whereConditions.add("authenticated_user = ?");
+        parameters.add(input.getAuthenticatedUser());
+      }
+      if (input.getStartTime() != null) {
+        whereConditions.add("created_at >= ?");
+        // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
+        parameters.add(input.getStartTime().toInstant().toEpochMilli());
+      }
+      if (input.getEndTime() != null) {
+        whereConditions.add("created_at <= ?");
+        // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
+        parameters.add(input.getEndTime().toInstant().toEpochMilli());
+      }
+      if (input.getStatus() != null) {
+        whereConditions.add("status = ?");
+        parameters.add(input.getStatus());
+      }
+      if (input.getApplicationVersion() != null) {
+        whereConditions.add("application_version = ?");
+        parameters.add(input.getApplicationVersion());
+      }
+      if (input.getWorkflowIDs() != null && !input.getWorkflowIDs().isEmpty()) {
+        // Handle IN clause: dynamically generate ? for each ID
+        StringJoiner inClausePlaceholders = new StringJoiner(", ", "(", ")");
+        for (String id : input.getWorkflowIDs()) {
+          inClausePlaceholders.add("?");
+          parameters.add(id);
+        }
+        whereConditions.add("workflow_uuid IN " + inClausePlaceholders.toString());
+      }
+      if (input.getWorkflowIdPrefix() != null) {
+        whereConditions.add("workflow_uuid LIKE ?");
+        // Append wildcard directly to the parameter value
+        parameters.add(input.getWorkflowIdPrefix() + "%");
+      }
     }
 
     // Only append WHERE keyword if there are actual conditions
@@ -475,13 +477,15 @@ public class WorkflowDAO {
     }
 
     // --- LIMIT and OFFSET Clauses ---
-    if (input != null && input.getLimit() != null) {
-      sqlBuilder.append(" LIMIT ?");
-      parameters.add(input.getLimit());
-    }
-    if (input != null && input.getOffset() != null) {
-      sqlBuilder.append(" OFFSET ?");
-      parameters.add(input.getOffset());
+    if (input != null) {
+      if (input.getLimit() != null) {
+        sqlBuilder.append(" LIMIT ?");
+        parameters.add(input.getLimit());
+      }
+      if (input.getOffset() != null) {
+        sqlBuilder.append(" OFFSET ?");
+        parameters.add(input.getOffset());
+      }
     }
 
     try (Connection connection = dataSource.getConnection();
