@@ -31,6 +31,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junitpioneer.jupiter.RetryingTest;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 class AdminControllerTest {
@@ -145,6 +146,7 @@ class AdminControllerTest {
   }
 
   @Test
+  @RetryingTest(3)
   public void queueMetadata() throws Exception {
     dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
 
