@@ -145,7 +145,6 @@ class AdminControllerTest {
         .body("[3]", equalTo("workflow-004"));
   }
 
-  @Test
   @RetryingTest(3)
   public void queueMetadata() throws Exception {
     dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
