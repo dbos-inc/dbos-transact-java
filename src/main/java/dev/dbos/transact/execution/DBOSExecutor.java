@@ -867,42 +867,44 @@ public class DBOSExecutor implements AutoCloseable {
           latch);
     }
 
-    if (parent != null) {
-      var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
-      if (childId.isPresent()) {
-        if (latch != null) {
-          latch.complete(options.workflowId);
-        }
-        logger.info("child id is present {}", childId.get());
-        return retrieveWorkflow(childId.get());
-      }
-    }
-
     var workflowId = options.workflowId();
-    var initResult =
-        preInvokeWorkflow(
-            systemDatabase,
-            workflow.name(),
-            workflow.className(),
-            args,
-            workflowId,
-            null,
-            null,
-            OptionalInt.empty(),
-            getExecutorId(),
-            getAppVersion(),
-            parent,
-            options.timeout(),
-            options.deadline());
-    if (latch != null) {
-      latch.complete(options.workflowId);
-    }
-    if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
-      return retrieveWorkflow(workflowId);
-    } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
-      logger.warn("Idempotency check not impl for error");
-    } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
-      logger.warn("Idempotency check not impl for cancelled");
+    WorkflowInitResult initResult = null;
+    try {
+      if (parent != null) {
+        var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
+        if (childId.isPresent()) {
+          logger.info("child id is present {}", childId.get());
+          return retrieveWorkflow(childId.get());
+        }
+      }
+
+      initResult =
+          preInvokeWorkflow(
+              systemDatabase,
+              workflow.name(),
+              workflow.className(),
+              args,
+              workflowId,
+              null,
+              null,
+              OptionalInt.empty(),
+              getExecutorId(),
+              getAppVersion(),
+              parent,
+              options.timeout(),
+              options.deadline());
+      if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+        return retrieveWorkflow(workflowId);
+      } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+        logger.warn("Idempotency check not impl for error");
+      } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+        logger.warn("Idempotency check not impl for cancelled");
+      }
+    } catch (Exception e) {
+      if (latch != null) { latch.completeExceptionally(e); }
+      throw e;
+    } finally {
+      if (latch != null) { latch.complete(options.workflowId); }
     }
 
     Callable<T> task =
@@ -1002,14 +1004,14 @@ public class DBOSExecutor implements AutoCloseable {
           parent,
           options.timeout(),
           options.deadline());
-      if (latch != null) {
-        latch.complete(workflowId);
-      }
       return retrieveWorkflow(workflowId, systemDatabase);
     } catch (Throwable e) {
       var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
       logger.error("enqueueWorkflow", actual);
+      if (latch != null) { latch.completeExceptionally(actual); }
       throw e;
+    } finally {
+      if (latch != null) { latch.complete(workflowId); }
     }
   }
 
@@ -1036,7 +1038,7 @@ public class DBOSExecutor implements AutoCloseable {
     Long deadlineEpochMs =
         queueName != null ? null : deadline != null ? deadline.toEpochMilli() : null;
 
-    logger.info("preInvokeWorkflow {} {}", timeoutMS, deadlineEpochMs);
+    logger.info("preInvokeWorkflow {} {}", queueName, deduplicationId);
     WorkflowStatusInternal workflowStatusInternal =
         new WorkflowStatusInternal(
             workflowId,

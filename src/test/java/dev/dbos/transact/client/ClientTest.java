@@ -1,6 +1,8 @@
 package dev.dbos.transact.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
@@ -8,6 +10,7 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
@@ -87,6 +90,24 @@ public class ClientTest {
 
       row = DBUtils.getWorkflowRow(dataSource, handle.getWorkflowId());
       assertEquals("SUCCESS", row.status());
+    }
+  }
+
+  @Test
+  public void clientEnqueueDeDupe() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+      var options =
+          new DBOSClient.EnqueueOptions("enqueueTest", "testQueue")
+              .withClassName("dev.dbos.transact.client.ClientServiceImpl")
+              .withDeduplicationId("plugh!");
+      var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
+      assertNotNull(handle);
+
+      assertThrows(
+          DBOSException.class, () -> client.enqueueWorkflow(options, new Object[] {17, "eggs"}));
     }
   }
 

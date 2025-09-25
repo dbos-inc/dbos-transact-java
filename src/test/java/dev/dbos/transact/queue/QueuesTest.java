@@ -1,6 +1,7 @@
 package dev.dbos.transact.queue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
@@ -28,7 +29,6 @@ import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,6 +89,30 @@ public class QueuesTest {
     assertEquals(id, handle.getWorkflowId());
     String result = (String) handle.getResult();
     assertEquals("inputqinputq", result);
+  }
+
+  @Test
+  public void testDedupeId() throws Exception {
+
+    Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
+
+    ServiceQ serviceQ =
+        dbos.<ServiceQ>Workflow()
+            .interfaceClass(ServiceQ.class)
+            .implementation(new ServiceQImpl())
+            .build();
+
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    var options = new StartWorkflowOptions().withQueue(firstQ, "dedupe");
+    dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
+
+    assertThrows(
+        RuntimeException.class,
+        () -> dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("id"), options));
   }
 
   @Test
