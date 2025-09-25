@@ -901,10 +901,14 @@ public class DBOSExecutor implements AutoCloseable {
         logger.warn("Idempotency check not impl for cancelled");
       }
     } catch (Exception e) {
-      if (latch != null) { latch.completeExceptionally(e); }
+      if (latch != null) {
+        latch.completeExceptionally(e);
+      }
       throw e;
     } finally {
-      if (latch != null) { latch.complete(options.workflowId); }
+      if (latch != null) {
+        latch.complete(options.workflowId);
+      }
     }
 
     Callable<T> task =
@@ -1008,10 +1012,14 @@ public class DBOSExecutor implements AutoCloseable {
     } catch (Throwable e) {
       var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
       logger.error("enqueueWorkflow", actual);
-      if (latch != null) { latch.completeExceptionally(actual); }
+      if (latch != null) {
+        latch.completeExceptionally(actual);
+      }
       throw e;
     } finally {
-      if (latch != null) { latch.complete(workflowId); }
+      if (latch != null) {
+        latch.complete(workflowId);
+      }
     }
   }
 

@@ -5,15 +5,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Instant;
+import java.util.LinkedList;
 
 public class ServiceQImpl implements ServiceQ {
 
-  @Workflow(name = "simpleQWorkflow")
+  public java.util.Queue<Integer> queue = new LinkedList<>();
+
+  @Override
+  @Workflow
   public String simpleQWorkflow(String input) {
     return input + input;
   }
 
-  @Workflow(name = "limitWorkflow")
+  @Override
+  @Workflow
   public Double limitWorkflow(String var1, String var2) {
     // Assertions as in Python test
     assertEquals("abc", var1, "var1 should be 'abc'");
@@ -21,5 +26,12 @@ public class ServiceQImpl implements ServiceQ {
 
     // Return current time in seconds (float equivalent)
     return Instant.now().toEpochMilli() / 1000.0;
+  }
+
+  @Override
+  @Workflow
+  public String priorityWorkflow(int input) {
+    queue.add(input);
+    return "%d".formatted(input);
   }
 }

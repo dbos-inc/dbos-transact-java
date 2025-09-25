@@ -116,6 +116,40 @@ public class QueuesTest {
   }
 
   @Test
+  public void testPriority() throws Exception {
+
+    Queue firstQ =
+        dbos.Queue("firstQueue").priorityEnabled(true).concurrency(1).workerConcurrency(1).build();
+
+    ServiceQImpl impl = new ServiceQImpl();
+    ServiceQ serviceQ =
+        dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class).implementation(impl).build();
+
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    var o1 = new StartWorkflowOptions().withQueue(firstQ, 100);
+    var h1 = dbos.startWorkflow(() -> serviceQ.priorityWorkflow(100), o1);
+
+    var o2 = new StartWorkflowOptions().withQueue(firstQ, 50);
+    dbos.startWorkflow(() -> serviceQ.priorityWorkflow(50), o2);
+
+    var o3 = new StartWorkflowOptions().withQueue(firstQ, 10);
+    dbos.startWorkflow(() -> serviceQ.priorityWorkflow(10), o3);
+
+    qs.unpause();
+
+    h1.getResult();
+
+    assertEquals(3, impl.queue.size());
+    assertEquals(10, impl.queue.remove());
+    assertEquals(50, impl.queue.remove());
+    assertEquals(100, impl.queue.remove());
+  }
+
+  @Test
   public void testQueuedMultipleWorkflows() throws Exception {
 
     Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
