@@ -47,8 +47,7 @@ public class WorkflowsOutput {
     this.Request = null; // not used in Java TX
     this.Error =
         status.getError() != null
-            ? String.format(
-                "%s: %s", status.getError().getClassName(), status.getError().getMessage())
+            ? String.format("%s: %s", status.getError().className(), status.getError().message())
             : null;
     this.CreatedAt = createdAt != null ? Long.toString(createdAt) : null;
     this.UpdatedAt = updatedAt != null ? Long.toString(updatedAt) : null;

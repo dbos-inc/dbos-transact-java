@@ -74,11 +74,11 @@ public class StartWorkflowTest {
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var rows = DBUtils.getWorkflowRows(dataSource);
+    var rows = dbos.listWorkflows(null);
     assertEquals(1, rows.size());
     var row = rows.get(0);
-    assertEquals(handle.getWorkflowId(), row.workflowId());
-    assertEquals("SUCCESS", row.status());
+    assertEquals(handle.getWorkflowId(), row.getWorkflowId());
+    assertEquals("SUCCESS", row.getStatus());
   }
 
   @Test
@@ -91,12 +91,12 @@ public class StartWorkflowTest {
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+    var row = handle.getStatus();
     assertNotNull(row);
-    assertEquals(workflowId, row.workflowId());
-    assertEquals("SUCCESS", row.status());
-    assertNull(row.timeoutMs());
-    assertNull(row.deadlineEpochMs());
+    assertEquals(workflowId, row.getWorkflowId());
+    assertEquals("SUCCESS", row.getStatus());
+    assertNull(row.getTimeout());
+    assertNull(row.getDeadline());
   }
 
   @Test

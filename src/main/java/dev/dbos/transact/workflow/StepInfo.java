@@ -1,14 +1,21 @@
 package dev.dbos.transact.workflow;
 
 public class StepInfo {
+  public static record StepInfoError(
+      String className, String message, String serializedError, Throwable throwable) {}
+
   private final int functionId;
   private final String functionName;
   private final Object output;
-  private final Exception error;
+  private final StepInfoError error;
   private final String childWorkflowId;
 
   public StepInfo(
-      int functionId, String functionName, Object output, Exception error, String childWorkflowId) {
+      int functionId,
+      String functionName,
+      Object output,
+      StepInfoError error,
+      String childWorkflowId) {
     this.functionId = functionId;
     this.functionName = functionName;
     this.output = output;
@@ -28,7 +35,7 @@ public class StepInfo {
     return output;
   }
 
-  public Exception getError() {
+  public StepInfoError getError() {
     return error;
   }
 
@@ -40,7 +47,11 @@ public class StepInfo {
   public String toString() {
     return String.format(
         "StepInfo{functionId=%d, functionName='%s', output=%s, error=%s, childWorkflowId='%s'}",
-        functionId, functionName, output, error, childWorkflowId);
+        functionId,
+        functionName,
+        output,
+        error != null ? String.format("%s: %S", error.className(), error.message()) : null,
+        childWorkflowId);
   }
 
   @Override

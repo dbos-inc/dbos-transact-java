@@ -117,9 +117,10 @@ public class StepsTest {
     assertEquals(5, stepInfos.size());
     assertEquals("step3", stepInfos.get(2).getFunctionName());
     assertEquals(2, stepInfos.get(2).getFunctionId());
-    Exception error = stepInfos.get(2).getError();
+    var error = stepInfos.get(2).getError().throwable();
     assertInstanceOf(Exception.class, error, "The error should be an Exception");
     assertEquals("step3 error", error.getMessage(), "Error message should match");
+    assertEquals("step3 error", stepInfos.get(2).getError().message());
     assertNull(stepInfos.get(2).getOutput());
   }
 

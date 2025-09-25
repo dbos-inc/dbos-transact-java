@@ -5,29 +5,8 @@ import java.time.Instant;
 import java.util.Objects;
 
 public class WorkflowStatus {
-  public static class WorkflowStatusError {
-    private String className;
-    private String message;
-    public String serializedError;
-    public Throwable throwable;
-
-    public void setClassName(String cn) {
-      this.className = cn;
-    }
-
-    public String getClassName() {
-      return this.className;
-    }
-
-    public void setMessage(String m) {
-      this.message = m;
-    }
-
-    public String getMessage() {
-      return this.message;
-    }
-  }
-  ;
+  public static record WorkflowStatusError(
+      String className, String message, String serializedError, Throwable throwable) {}
 
   private String workflowId;
   private String status;

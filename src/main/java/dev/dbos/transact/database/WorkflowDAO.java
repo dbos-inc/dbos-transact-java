@@ -420,33 +420,33 @@ public class WorkflowDAO {
     // --- WHERE Clauses ---
     StringJoiner whereConditions = new StringJoiner(" AND ");
 
-    if (input.getWorkflowName() != null) {
+    if (input != null && input.getWorkflowName() != null) {
       whereConditions.add("name = ?");
       parameters.add(input.getWorkflowName());
     }
-    if (input.getAuthenticatedUser() != null) {
+    if (input != null && input.getAuthenticatedUser() != null) {
       whereConditions.add("authenticated_user = ?");
       parameters.add(input.getAuthenticatedUser());
     }
-    if (input.getStartTime() != null) {
+    if (input != null && input.getStartTime() != null) {
       whereConditions.add("created_at >= ?");
       // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
       parameters.add(input.getStartTime().toInstant().toEpochMilli());
     }
-    if (input.getEndTime() != null) {
+    if (input != null && input.getEndTime() != null) {
       whereConditions.add("created_at <= ?");
       // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
       parameters.add(input.getEndTime().toInstant().toEpochMilli());
     }
-    if (input.getStatus() != null) {
+    if (input != null && input.getStatus() != null) {
       whereConditions.add("status = ?");
       parameters.add(input.getStatus());
     }
-    if (input.getApplicationVersion() != null) {
+    if (input != null && input.getApplicationVersion() != null) {
       whereConditions.add("application_version = ?");
       parameters.add(input.getApplicationVersion());
     }
-    if (input.getWorkflowIDs() != null && !input.getWorkflowIDs().isEmpty()) {
+    if (input != null && input.getWorkflowIDs() != null && !input.getWorkflowIDs().isEmpty()) {
       // Handle IN clause: dynamically generate ? for each ID
       StringJoiner inClausePlaceholders = new StringJoiner(", ", "(", ")");
       for (String id : input.getWorkflowIDs()) {
@@ -455,7 +455,7 @@ public class WorkflowDAO {
       }
       whereConditions.add("workflow_uuid IN " + inClausePlaceholders.toString());
     }
-    if (input.getWorkflowIdPrefix() != null) {
+    if (input != null && input.getWorkflowIdPrefix() != null) {
       whereConditions.add("workflow_uuid LIKE ?");
       // Append wildcard directly to the parameter value
       parameters.add(input.getWorkflowIdPrefix() + "%");
@@ -468,18 +468,18 @@ public class WorkflowDAO {
 
     // --- ORDER BY Clause ---
     sqlBuilder.append(" ORDER BY created_at ");
-    if (input.getSortDesc() != null && input.getSortDesc()) {
+    if (input != null && input.getSortDesc() != null && input.getSortDesc()) {
       sqlBuilder.append("DESC");
     } else {
       sqlBuilder.append("ASC");
     }
 
     // --- LIMIT and OFFSET Clauses ---
-    if (input.getLimit() != null) {
+    if (input != null && input.getLimit() != null) {
       sqlBuilder.append(" LIMIT ?");
       parameters.add(input.getLimit());
     }
-    if (input.getOffset() != null) {
+    if (input != null && input.getOffset() != null) {
       sqlBuilder.append(" OFFSET ?");
       parameters.add(input.getOffset());
     }
@@ -556,11 +556,9 @@ public class WorkflowDAO {
               throwable = JSONUtil.deserializeAppException(serializedError);
             } catch (Exception e) {
             }
-            var err = new WorkflowStatus.WorkflowStatusError();
-            err.setClassName(wrapper.type);
-            err.setMessage(wrapper.message);
-            err.throwable = throwable;
-            err.serializedError = serializedError;
+            var err =
+                new WorkflowStatus.WorkflowStatusError(
+                    wrapper.type, wrapper.message, serializedError, throwable);
             info.setError(err);
           }
 

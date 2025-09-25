@@ -328,7 +328,7 @@ public class TimeoutTest {
 
     var parentStatus = dbos.retrieveWorkflow(wfid1).getStatus();
     assertEquals(WorkflowState.ERROR.name(), parentStatus.getStatus());
-    assertEquals("Awaited workflow childwf was cancelled.", parentStatus.getError().getMessage());
+    assertEquals("Awaited workflow childwf was cancelled.", parentStatus.getError().message());
 
     String childStatus = dbos.retrieveWorkflow("childwf").getStatus().getStatus();
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
