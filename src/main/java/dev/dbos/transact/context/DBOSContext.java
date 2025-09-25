@@ -60,7 +60,10 @@ public class DBOSContext {
   }
 
   public DBOSContext(
-      DBOSContext other, StartWorkflowOptions options, Integer functionId, CompletableFuture<String> future) {
+      DBOSContext other,
+      StartWorkflowOptions options,
+      Integer functionId,
+      CompletableFuture<String> future) {
     this.nextWorkflowId = other.nextWorkflowId;
     this.nextTimeout = other.nextTimeout;
     this.dbos = other.dbos;
@@ -176,14 +179,14 @@ public class DBOSContext {
 
   public void setStartedWorkflowId(String workflowId) {
     if (startOptions != null) {
-    if (startedWorkflowId != null) {
-      throw new IllegalStateException(
-          String.format(
-              "more than one workflow called from start workflow lambda: %s %s",
-              workflowId, startedWorkflowId));
+      if (startedWorkflowId != null) {
+        throw new IllegalStateException(
+            String.format(
+                "more than one workflow called from start workflow lambda: %s %s",
+                workflowId, startedWorkflowId));
+      }
+      startedWorkflowId = Objects.requireNonNull(workflowId);
     }
-    startedWorkflowId = Objects.requireNonNull(workflowId);
-  }
   }
 
   public CompletableFuture<String> getStartWorkflowFuture() {
