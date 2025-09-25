@@ -42,7 +42,7 @@ public class QueuesDAO {
     long startTimeMs = System.currentTimeMillis();
     Long limiterPeriodMs = null;
     if (queue.hasLimiter()) {
-      limiterPeriodMs = (long) (queue.getRateLimit().getPeriod() * 1000);
+      limiterPeriodMs = (long) (queue.rateLimit().getPeriod() * 1000);
     }
 
     try (Connection connection = dataSource.getConnection()) {
@@ -69,7 +69,7 @@ public class QueuesDAO {
         limiterQuery = String.format(limiterQuery, Constants.DB_SCHEMA);
 
         try (PreparedStatement ps = connection.prepareStatement(limiterQuery)) {
-          ps.setString(1, queue.getName());
+          ps.setString(1, queue.name());
           ps.setLong(2, startTimeMs - limiterPeriodMs);
 
           try (ResultSet rs = ps.executeQuery()) {
@@ -79,7 +79,7 @@ public class QueuesDAO {
           }
         }
 
-        if (numRecentQueries >= queue.getRateLimit().getLimit()) {
+        if (numRecentQueries >= queue.rateLimit().getLimit()) {
           return new ArrayList<>();
         }
       }
@@ -87,7 +87,7 @@ public class QueuesDAO {
       // Calculate max tasks based on concurrency limits
       int maxTasks = 100;
 
-      if (queue.getWorkerConcurrency() > 0 || queue.getConcurrency() > 0) {
+      if (queue.workerConcurrency() > 0 || queue.concurrency() > 0) {
         // Count pending workflows by executor
         String pendingQuery =
             """
@@ -101,7 +101,7 @@ public class QueuesDAO {
 
         Map<String, Integer> pendingWorkflowsDict = new HashMap<>();
         try (PreparedStatement ps = connection.prepareStatement(pendingQuery)) {
-          ps.setString(1, queue.getName());
+          ps.setString(1, queue.name());
 
           try (ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
@@ -113,31 +113,31 @@ public class QueuesDAO {
         int localPendingWorkflows = pendingWorkflowsDict.getOrDefault(executorId, 0);
 
         // Check worker concurrency limit
-        if (queue.getWorkerConcurrency() > 0) {
-          if (localPendingWorkflows > queue.getWorkerConcurrency()) {
+        if (queue.workerConcurrency() > 0) {
+          if (localPendingWorkflows > queue.workerConcurrency()) {
             logger.warn(
                 "The number of local pending workflows ({}) on queue {} exceeds the local concurrency limit ({})",
                 localPendingWorkflows,
-                queue.getName(),
-                queue.getWorkerConcurrency());
+                queue.name(),
+                queue.workerConcurrency());
           }
-          maxTasks = Math.max(0, queue.getWorkerConcurrency() - localPendingWorkflows);
+          maxTasks = Math.max(0, queue.workerConcurrency() - localPendingWorkflows);
         }
 
         // Check global concurrency limit
-        if (queue.getConcurrency() > 0) {
+        if (queue.concurrency() > 0) {
           int globalPendingWorkflows =
               pendingWorkflowsDict.values().stream().mapToInt(Integer::intValue).sum();
 
-          if (globalPendingWorkflows > queue.getConcurrency()) {
+          if (globalPendingWorkflows > queue.concurrency()) {
             logger.warn(
                 "The total number of pending workflows ({}) on queue {} exceeds the global concurrency limit ({})",
                 globalPendingWorkflows,
-                queue.getName(),
-                queue.getConcurrency());
+                queue.name(),
+                queue.concurrency());
           }
 
-          int availableTasks = Math.max(0, queue.getConcurrency() - globalPendingWorkflows);
+          int availableTasks = Math.max(0, queue.concurrency() - globalPendingWorkflows);
           maxTasks = Math.min(maxTasks, availableTasks);
         }
       }
@@ -154,7 +154,7 @@ public class QueuesDAO {
                     """);
 
       // Add ordering
-      if (queue.isPriorityEnabled()) {
+      if (queue.priorityEnabled()) {
         queryBuilder.append(" ORDER BY priority ASC, created_at ASC");
       } else {
         queryBuilder.append(" ORDER BY created_at ASC");
@@ -166,7 +166,7 @@ public class QueuesDAO {
       }
 
       // Add FOR UPDATE NOWAIT or SKIP Locked
-      if (queue.getConcurrency() > 0) {
+      if (queue.concurrency() > 0) {
         queryBuilder.append(" FOR UPDATE NOWAIT");
       } else {
         queryBuilder.append(" FOR UPDATE SKIP LOCKED");
@@ -177,7 +177,7 @@ public class QueuesDAO {
       List<String> dequeuedIds = new ArrayList<>();
       try (PreparedStatement ps = connection.prepareStatement(workflowsQuery)) {
         int paramIndex = 1;
-        ps.setString(paramIndex++, queue.getName());
+        ps.setString(paramIndex++, queue.name());
         ps.setString(paramIndex++, appVersion);
 
         if (maxTasks != Integer.MAX_VALUE) {
@@ -192,8 +192,7 @@ public class QueuesDAO {
       }
 
       if (!dequeuedIds.isEmpty()) {
-        logger.trace(
-            String.format("[%s] dequeueing %d task(s)", queue.getName(), dequeuedIds.size()));
+        logger.trace(String.format("[%s] dequeueing %d task(s)", queue.name(), dequeuedIds.size()));
       }
 
       List<String> retIds = new ArrayList<>();
@@ -220,7 +219,7 @@ public class QueuesDAO {
         for (String id : dequeuedIds) {
           // Check limiter again for each workflow
           if (queue.hasLimiter()) {
-            if (retIds.size() + numRecentQueries >= queue.getRateLimit().getLimit()) {
+            if (retIds.size() + numRecentQueries >= queue.rateLimit().getLimit()) {
               break;
             }
           }

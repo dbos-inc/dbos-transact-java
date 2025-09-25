@@ -39,70 +39,123 @@ public class DBOSClient implements AutoCloseable {
   public record EnqueueOptions(
       String workflowName,
       String queueName,
-      String targetClassName,
+      String className,
       String workflowId,
       String appVersion,
-      Long timeoutMS) {
-    Duration getTimeout() {
-      return timeoutMS == null ? null : Duration.ofMillis(timeoutMS);
-    }
-  }
+      Duration timeout,
+      String deduplicationId,
+      OptionalInt priority) {
 
-  public static class EnqueueOptionsBuilder {
-    String workflowName;
-    String queueName;
-    String targetClassName;
-    String workflowId;
-    String appVersion;
-    Long timeoutMS;
+    public EnqueueOptions {
+      if (Objects.requireNonNull(workflowName).isEmpty()) {
+        throw new IllegalArgumentException("workflowName must not be empty");
+      }
 
-    public EnqueueOptionsBuilder(String workflowName, String queueName) {
-      this.workflowName = workflowName;
-      this.queueName = queueName;
-    }
+      if (Objects.requireNonNull(queueName).isEmpty()) {
+        throw new IllegalArgumentException("queueName must not be empty");
+      }
 
-    public EnqueueOptionsBuilder targetClassName(String targetClassName) {
-      this.targetClassName = targetClassName;
-      return this;
+      if (timeout != null && timeout.isNegative()) {
+        throw new IllegalArgumentException("timeout must not be negative");
+      }
     }
 
-    public EnqueueOptionsBuilder workflowId(String workflowId) {
-      this.workflowId = workflowId;
-      return this;
+    public EnqueueOptions(String workflowName, String queueName) {
+      this(workflowName, queueName, null, null, null, null, null, OptionalInt.empty());
     }
 
-    public EnqueueOptionsBuilder appVersion(String appVersion) {
-      this.appVersion = appVersion;
-      return this;
-    }
-
-    public EnqueueOptionsBuilder timeoutMS(Long timeoutMS) {
-      this.timeoutMS = timeoutMS;
-      return this;
-    }
-
-    public EnqueueOptions build() {
+    public EnqueueOptions withClassName(String className) {
       return new EnqueueOptions(
-          workflowName, queueName, targetClassName, workflowId, appVersion, timeoutMS);
+          this.workflowName,
+          this.queueName,
+          className,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deduplicationId,
+          this.priority);
+    }
+
+    public EnqueueOptions withWorkflowId(String workflowId) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.queueName,
+          this.className,
+          workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deduplicationId,
+          this.priority);
+    }
+
+    public EnqueueOptions withAppVersion(String appVersion) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.queueName,
+          this.className,
+          this.workflowId,
+          appVersion,
+          this.timeout,
+          this.deduplicationId,
+          this.priority);
+    }
+
+    public EnqueueOptions withTimeout(Duration timeout) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.queueName,
+          this.className,
+          this.workflowId,
+          this.appVersion,
+          timeout,
+          this.deduplicationId,
+          this.priority);
+    }
+
+    public EnqueueOptions withDeduplicationId(String deduplicationId) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.queueName,
+          this.className,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          deduplicationId,
+          this.priority);
+    }
+
+    public EnqueueOptions withPriority(int priority) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.queueName,
+          this.className,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deduplicationId,
+          OptionalInt.of(priority));
+    }
+
+    @Override
+    public String workflowId() {
+      return workflowId != null && workflowId.isEmpty() ? null : workflowId;
     }
   }
 
   public <T> WorkflowHandle<T, ?> enqueueWorkflow(EnqueueOptions options, Object[] args)
       throws Exception {
-    var workflowName = Objects.requireNonNull(options.workflowName);
-    var queueName = Objects.requireNonNull(options.queueName);
 
     return DBOSExecutor.enqueueWorkflow(
-        workflowName,
-        options.targetClassName,
+        Objects.requireNonNull(options.workflowName),
+        options.className,
         args,
         new ExecuteWorkflowOptions(
             Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString()),
-            options.getTimeout(),
+            options.timeout(),
             null,
-            queueName,
-            null,
-            OptionalInt.empty()),
+            Objects.requireNonNull(options.queueName),
+            options.deduplicationId,
+            options.priority),
         null,
         null,
         options.appVersion,

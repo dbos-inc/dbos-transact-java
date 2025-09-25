@@ -1,6 +1,7 @@
 package dev.dbos.transact.queue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
@@ -28,7 +29,6 @@ import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,6 +89,64 @@ public class QueuesTest {
     assertEquals(id, handle.getWorkflowId());
     String result = (String) handle.getResult();
     assertEquals("inputqinputq", result);
+  }
+
+  @Test
+  public void testDedupeId() throws Exception {
+
+    Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
+
+    ServiceQ serviceQ =
+        dbos.<ServiceQ>Workflow()
+            .interfaceClass(ServiceQ.class)
+            .implementation(new ServiceQImpl())
+            .build();
+
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    var options = new StartWorkflowOptions().withQueue(firstQ, "dedupe");
+    dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
+
+    assertThrows(
+        RuntimeException.class,
+        () -> dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("id"), options));
+  }
+
+  @Test
+  public void testPriority() throws Exception {
+
+    Queue firstQ =
+        dbos.Queue("firstQueue").priorityEnabled(true).concurrency(1).workerConcurrency(1).build();
+
+    ServiceQImpl impl = new ServiceQImpl();
+    ServiceQ serviceQ =
+        dbos.<ServiceQ>Workflow().interfaceClass(ServiceQ.class).implementation(impl).build();
+
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    var o1 = new StartWorkflowOptions().withQueue(firstQ, 100);
+    var h1 = dbos.startWorkflow(() -> serviceQ.priorityWorkflow(100), o1);
+
+    var o2 = new StartWorkflowOptions().withQueue(firstQ, 50);
+    dbos.startWorkflow(() -> serviceQ.priorityWorkflow(50), o2);
+
+    var o3 = new StartWorkflowOptions().withQueue(firstQ, 10);
+    dbos.startWorkflow(() -> serviceQ.priorityWorkflow(10), o3);
+
+    qs.unpause();
+
+    h1.getResult();
+
+    assertEquals(3, impl.queue.size());
+    assertEquals(10, impl.queue.remove());
+    assertEquals(50, impl.queue.remove());
+    assertEquals(100, impl.queue.remove());
   }
 
   @Test

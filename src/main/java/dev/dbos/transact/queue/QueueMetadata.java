@@ -1,31 +1,26 @@
 package dev.dbos.transact.queue;
 
-public class QueueMetadata {
-  public String name;
-  public Integer concurrency;
-  public Integer workerConcurrency;
-  public RateLimitMetadata rateLimit;
-  public Boolean priorityEnabled;
+public record QueueMetadata(
+    String name,
+    int concurrency,
+    int workerConcurrency,
+    RateLimit rateLimit,
+    boolean priorityEnabled) {
 
   public QueueMetadata(Queue queue) {
-    this.name = queue.getName();
-    this.concurrency = queue.getConcurrency();
-    this.workerConcurrency = queue.getWorkerConcurrency();
-    if (queue.getRateLimit() != null) {
-      this.rateLimit = new RateLimitMetadata(queue.getRateLimit());
-    } else {
-      this.rateLimit = null;
-    }
-    this.priorityEnabled = queue.isPriorityEnabled();
+    this(
+        queue.name(),
+        queue.concurrency(),
+        queue.workerConcurrency(),
+        RateLimit.of(queue),
+        queue.priorityEnabled());
   }
 
-  public static class RateLimitMetadata {
-    public Integer limit;
-    public Double period;
-
-    public RateLimitMetadata(dev.dbos.transact.queue.RateLimit rateLimit) {
-      this.limit = rateLimit.getLimit();
-      this.period = rateLimit.getPeriod();
+  public record RateLimit(Integer limit, Double period) {
+    public static RateLimit of(Queue queue) {
+      return queue.rateLimit() == null
+          ? null
+          : new RateLimit(queue.rateLimit().getLimit(), queue.rateLimit().getPeriod());
     }
   }
 }

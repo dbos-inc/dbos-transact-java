@@ -14,7 +14,7 @@ public class QueueRegistry {
   Logger logger = LoggerFactory.getLogger(QueueRegistry.class);
 
   public void register(Queue queue) {
-    var queueName = queue.getName();
+    var queueName = queue.name();
     var previous = registry.putIfAbsent(queueName, queue);
 
     if (previous != null) {

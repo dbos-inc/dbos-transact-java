@@ -50,7 +50,7 @@ public class SchedulerService {
       DBOSExecutor dbosExecutor, Queue schedulerQueue, List<ScheduledInstance> scheduledWorkflows) {
     this.dbosExecutor = Objects.requireNonNull(dbosExecutor);
     this.schedulerQueue = Objects.requireNonNull(schedulerQueue);
-    this.schedulerQueueName = this.schedulerQueue.getName();
+    this.schedulerQueueName = this.schedulerQueue.name();
     this.scheduledWorkflows = Objects.requireNonNull(scheduledWorkflows);
   }
 
