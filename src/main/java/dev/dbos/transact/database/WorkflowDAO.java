@@ -427,47 +427,45 @@ public class WorkflowDAO {
     // --- WHERE Clauses ---
     StringJoiner whereConditions = new StringJoiner(" AND ");
 
-    if (input != null) {
-      if (input.workflowName() != null) {
-        whereConditions.add("name = ?");
-        parameters.add(input.workflowName());
+    if (input.workflowName() != null) {
+      whereConditions.add("name = ?");
+      parameters.add(input.workflowName());
+    }
+    if (input.authenticatedUser() != null) {
+      whereConditions.add("authenticated_user = ?");
+      parameters.add(input.authenticatedUser());
+    }
+    if (input.startTime() != null) {
+      whereConditions.add("created_at >= ?");
+      // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
+      parameters.add(input.startTime().toInstant().toEpochMilli());
+    }
+    if (input.endTime() != null) {
+      whereConditions.add("created_at <= ?");
+      // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
+      parameters.add(input.endTime().toInstant().toEpochMilli());
+    }
+    if (input.status() != null) {
+      whereConditions.add("status = ?");
+      parameters.add(input.status());
+    }
+    if (input.applicationVersion() != null) {
+      whereConditions.add("application_version = ?");
+      parameters.add(input.applicationVersion());
+    }
+    if (input.workflowIDs() != null && !input.workflowIDs().isEmpty()) {
+      // Handle IN clause: dynamically generate ? for each ID
+      StringJoiner inClausePlaceholders = new StringJoiner(", ", "(", ")");
+      for (String id : input.workflowIDs()) {
+        inClausePlaceholders.add("?");
+        parameters.add(id);
       }
-      if (input.authenticatedUser() != null) {
-        whereConditions.add("authenticated_user = ?");
-        parameters.add(input.authenticatedUser());
-      }
-      if (input.startTime() != null) {
-        whereConditions.add("created_at >= ?");
-        // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
-        parameters.add(input.startTime().toInstant().toEpochMilli());
-      }
-      if (input.endTime() != null) {
-        whereConditions.add("created_at <= ?");
-        // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
-        parameters.add(input.endTime().toInstant().toEpochMilli());
-      }
-      if (input.status() != null) {
-        whereConditions.add("status = ?");
-        parameters.add(input.status());
-      }
-      if (input.applicationVersion() != null) {
-        whereConditions.add("application_version = ?");
-        parameters.add(input.applicationVersion());
-      }
-      if (input.workflowIDs() != null && !input.workflowIDs().isEmpty()) {
-        // Handle IN clause: dynamically generate ? for each ID
-        StringJoiner inClausePlaceholders = new StringJoiner(", ", "(", ")");
-        for (String id : input.workflowIDs()) {
-          inClausePlaceholders.add("?");
-          parameters.add(id);
-        }
-        whereConditions.add("workflow_uuid IN " + inClausePlaceholders.toString());
-      }
-      if (input.workflowIdPrefix() != null) {
-        whereConditions.add("workflow_uuid LIKE ?");
-        // Append wildcard directly to the parameter value
-        parameters.add(input.workflowIdPrefix() + "%");
-      }
+      whereConditions.add("workflow_uuid IN " + inClausePlaceholders.toString());
+    }
+    if (input.workflowIdPrefix() != null) {
+      whereConditions.add("workflow_uuid LIKE ?");
+      // Append wildcard directly to the parameter value
+      parameters.add(input.workflowIdPrefix() + "%");
     }
 
     // Only append WHERE keyword if there are actual conditions
@@ -550,7 +548,8 @@ public class WorkflowDAO {
           if (loadInput) {
             String serializedInput = rs.getString("inputs");
             if (serializedInput != null) {
-              info.setInput(JSONUtil.deserializeToArray(serializedInput));
+              var inputValue = JSONUtil.deserializeToArray(serializedInput);
+              info.setInput(inputValue == null ? new Object[0] : inputValue);
             }
           }
 
