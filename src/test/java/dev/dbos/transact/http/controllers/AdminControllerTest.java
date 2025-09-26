@@ -356,7 +356,7 @@ class AdminControllerTest {
     }
 
     var handle = dbos.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);

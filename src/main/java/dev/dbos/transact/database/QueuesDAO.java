@@ -355,41 +355,34 @@ public class QueuesDAO {
 
       try (ResultSet rs = stmt.executeQuery()) {
         while (rs.next()) {
-          WorkflowStatus info = new WorkflowStatus();
-
-          info.setWorkflowId(rs.getString(1));
-          info.setStatus(rs.getString(2));
-          info.setName(rs.getString(3));
-          info.setRecoveryAttempts(rs.getInt(4));
-          info.setConfigName(rs.getString(5));
-          info.setClassName(rs.getString(6));
-          info.setAuthenticatedUser(rs.getString(7));
-
-          // Parse authenticated_roles JSON
           String rolesJson = rs.getString(8);
-          if (rolesJson != null) {
-            info.setAuthenticatedRoles((String[]) JSONUtil.deserializeToArray(rolesJson));
-          }
-
-          info.setAssumedRole(rs.getString(9));
-          info.setQueueName(rs.getString(10));
-          info.setExecutorId(rs.getString(11));
-          info.setCreatedAt(rs.getLong(12));
-          info.setUpdatedAt(rs.getLong(13));
-          info.setAppVersion(rs.getString(14));
-          info.setAppId(rs.getString(15));
-          info.setWorkflowDeadlineEpochMs(rs.getLong(16));
-          info.setWorkflowTimeoutMs(rs.getLong(17));
-
           String rawInput = null;
           if (loadInput) {
             rawInput = rs.getString(18);
           }
 
-          info.setInput(JSONUtil.deserializeToArray(rawInput));
-          info.setOutput(null);
-          info.setError(null);
-
+          WorkflowStatus info =
+              new WorkflowStatus(
+                  rs.getString(1),
+                  rs.getString(2),
+                  rs.getString(3),
+                  rs.getString(6),
+                  rs.getString(5),
+                  rs.getString(7),
+                  rs.getString(9),
+                  rolesJson != null ? (String[]) JSONUtil.deserializeToArray(rolesJson) : null,
+                  JSONUtil.deserializeToArray(rawInput),
+                  null,
+                  null,
+                  rs.getLong(12),
+                  rs.getLong(13),
+                  rs.getString(10),
+                  rs.getString(11),
+                  rs.getString(14),
+                  rs.getLong(17),
+                  rs.getLong(16),
+                  rs.getString(15),
+                  rs.getInt(4));
           workflowStatuses.add(info);
         }
       }

@@ -146,12 +146,12 @@ public class EventsTest {
 
     List<StepInfo> steps = dbos.listWorkflowSteps("id1");
     assertEquals(1, steps.size());
-    assertEquals("DBOS.setEvent", steps.get(0).getFunctionName());
+    assertEquals("DBOS.setEvent", steps.get(0).functionName());
 
     steps = dbos.listWorkflowSteps("id2");
     assertEquals(2, steps.size());
-    assertEquals("DBOS.getEvent", steps.get(0).getFunctionName());
-    assertEquals("DBOS.sleep", steps.get(1).getFunctionName());
+    assertEquals("DBOS.getEvent", steps.get(0).functionName());
+    assertEquals("DBOS.sleep", steps.get(1).functionName());
   }
 
   @Test

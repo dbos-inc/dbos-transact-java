@@ -175,7 +175,7 @@ class SchedulerServiceTest {
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertTrue(wfs.size() <= 2);
 
-    List<StepInfo> wsteps = dbos.listWorkflowSteps(wfs.get(0).getWorkflowId());
+    List<StepInfo> wsteps = dbos.listWorkflowSteps(wfs.get(0).workflowId());
     assertEquals(2, wsteps.size());
   }
 

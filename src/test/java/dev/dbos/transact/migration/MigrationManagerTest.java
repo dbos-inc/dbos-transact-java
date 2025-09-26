@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.migrations.MigrationManager;
+import dev.dbos.transact.utils.DBUtils;
 
 import java.net.URL;
 import java.nio.file.Files;
@@ -12,9 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.sql.Statement;
 import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
@@ -43,21 +42,7 @@ class MigrationManagerTest {
             .maximumPoolSize(3)
             .build();
 
-    String dbUrl =
-        String.format(
-            "jdbc:postgresql://%s:%d/%s",
-            dbosConfig.getDbHost(), dbosConfig.getDbPort(), "postgres");
-
-    String sysDb = dbosConfig.getSysDbName();
-    try (Connection conn =
-            DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
-        Statement stmt = conn.createStatement()) {
-
-      String dropDbSql = String.format("DROP DATABASE IF EXISTS %s", sysDb);
-      String createDbSql = String.format("CREATE DATABASE %s", sysDb);
-      stmt.execute(dropDbSql);
-      stmt.execute(createDbSql);
-    }
+    DBUtils.recreateDB(MigrationManagerTest.dbosConfig);
     testDataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
