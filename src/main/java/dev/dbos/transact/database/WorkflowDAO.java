@@ -13,7 +13,6 @@ import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
-import java.lang.foreign.Linker.Option;
 import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
