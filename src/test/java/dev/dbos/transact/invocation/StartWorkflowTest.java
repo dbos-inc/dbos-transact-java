@@ -109,11 +109,11 @@ public class StartWorkflowTest {
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+    var row = dbos.retrieveWorkflow(workflowId);
     assertNotNull(row);
-    assertEquals(workflowId, row.workflowId());
-    assertEquals("SUCCESS", row.status());
-    assertEquals(1000, row.timeoutMs());
-    assertNotNull(row.deadlineEpochMs());
+    assertEquals(workflowId, row.getWorkflowId());
+    assertEquals("SUCCESS", row.getStatus().status());
+    assertEquals(1000, row.getStatus().workflowTimeoutMs());
+    assertNotNull(row.getStatus().workflowDeadlineEpochMs());
   }
 }

@@ -88,8 +88,8 @@ public class ClientTest {
       assertTrue(result instanceof String);
       assertEquals("42-spam", result);
 
-      row = DBUtils.getWorkflowRow(dataSource, handle.getWorkflowId());
-      assertEquals("SUCCESS", row.status());
+      var stat = client.getWorkflowStatus(handle.getWorkflowId());
+      assertEquals("SUCCESS", stat.status());
     }
   }
 
