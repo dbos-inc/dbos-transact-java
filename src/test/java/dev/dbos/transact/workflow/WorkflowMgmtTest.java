@@ -366,8 +366,8 @@ public class WorkflowMgmtTest {
     List<StepInfo> steps = dbos.listWorkflowSteps(rstatHandle.getWorkflowId());
     assertEquals(5, steps.size());
 
-    assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
-    assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+    assertTrue(stepsRun0.get(2).childWorkflowId().equals(steps.get(2).childWorkflowId()));
+    assertTrue(stepsRun0.get(3).childWorkflowId().equals(steps.get(3).childWorkflowId()));
 
     logger.info("First execution done starting 2nd fork");
 
@@ -387,10 +387,10 @@ public class WorkflowMgmtTest {
     steps = dbos.listWorkflowSteps(rstatHandle.getWorkflowId());
     assertEquals(5, steps.size());
 
-    logger.info(stepsRun0.get(2).getChildWorkflowId());
-    logger.info(steps.get(2).getChildWorkflowId());
-    assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
-    assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+    logger.info(stepsRun0.get(2).childWorkflowId());
+    logger.info(steps.get(2).childWorkflowId());
+    assertTrue(stepsRun0.get(2).childWorkflowId().equals(steps.get(2).childWorkflowId()));
+    assertTrue(stepsRun0.get(3).childWorkflowId().equals(steps.get(3).childWorkflowId()));
 
     logger.info("2nd execution done starting 3nd fork");
 
@@ -410,8 +410,8 @@ public class WorkflowMgmtTest {
     steps = dbos.listWorkflowSteps(rstatHandle.getWorkflowId());
     assertEquals(5, steps.size());
 
-    assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
-    assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+    assertTrue(stepsRun0.get(2).childWorkflowId().equals(steps.get(2).childWorkflowId()));
+    assertTrue(stepsRun0.get(3).childWorkflowId().equals(steps.get(3).childWorkflowId()));
 
     logger.info("First execution done starting 2nd fork");
   }
@@ -467,8 +467,8 @@ public class WorkflowMgmtTest {
     List<StepInfo> steps = dbos.listWorkflowSteps(rstatHandle.getWorkflowId());
     assertEquals(5, steps.size());
 
-    assertTrue(stepsRun0.get(2).getChildWorkflowId().equals(steps.get(2).getChildWorkflowId()));
-    assertTrue(stepsRun0.get(3).getChildWorkflowId().equals(steps.get(3).getChildWorkflowId()));
+    assertTrue(stepsRun0.get(2).childWorkflowId().equals(steps.get(2).childWorkflowId()));
+    assertTrue(stepsRun0.get(3).childWorkflowId().equals(steps.get(3).childWorkflowId()));
   }
 
   @Test

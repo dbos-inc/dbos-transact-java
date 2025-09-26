@@ -294,7 +294,7 @@ class DBOSExecutorTest {
 
     List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
 
-    assertEquals("DBOS.sleep", steps.get(0).getFunctionName());
+    assertEquals("DBOS.sleep", steps.get(0).functionName());
   }
 
   @Test
@@ -318,7 +318,7 @@ class DBOSExecutorTest {
 
     List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
 
-    assertEquals("DBOS.sleep", steps.get(0).getFunctionName());
+    assertEquals("DBOS.sleep", steps.get(0).functionName());
 
     // let us set the state to PENDING and increase the sleep time
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
@@ -327,7 +327,7 @@ class DBOSExecutorTest {
 
     String endTimeAsJson = JSONUtil.serialize(newEndtime);
 
-    DBUtils.updateStepEndTime(dataSource, wfid, steps.get(0).getFunctionId(), endTimeAsJson);
+    DBUtils.updateStepEndTime(dataSource, wfid, steps.get(0).functionId(), endTimeAsJson);
 
     long starttime = System.currentTimeMillis();
     var h = dbosExecutor.executeWorkflowById(wfid);

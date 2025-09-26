@@ -199,9 +199,9 @@ public class SyncWorkflowTest {
 
     List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(1, steps.size());
-    assertEquals("wf-123456-0", steps.get(0).getChildWorkflowId());
-    assertEquals(0, steps.get(0).getFunctionId());
-    assertEquals("childWorkflow", steps.get(0).getFunctionName());
+    assertEquals("wf-123456-0", steps.get(0).childWorkflowId());
+    assertEquals(0, steps.get(0).functionId());
+    assertEquals("childWorkflow", steps.get(0).functionName());
   }
 
   @Test
@@ -241,17 +241,17 @@ public class SyncWorkflowTest {
 
     List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(3, steps.size());
-    assertEquals("child1", steps.get(0).getChildWorkflowId());
-    assertEquals(0, steps.get(0).getFunctionId());
-    assertEquals("childWorkflow", steps.get(0).getFunctionName());
+    assertEquals("child1", steps.get(0).childWorkflowId());
+    assertEquals(0, steps.get(0).functionId());
+    assertEquals("childWorkflow", steps.get(0).functionName());
 
-    assertEquals("child2", steps.get(1).getChildWorkflowId());
-    assertEquals(1, steps.get(1).getFunctionId());
-    assertEquals("childWorkflow2", steps.get(1).getFunctionName());
+    assertEquals("child2", steps.get(1).childWorkflowId());
+    assertEquals(1, steps.get(1).functionId());
+    assertEquals("childWorkflow2", steps.get(1).functionName());
 
-    assertEquals("child3", steps.get(2).getChildWorkflowId());
-    assertEquals(2, steps.get(2).getFunctionId());
-    assertEquals("childWorkflow3", steps.get(2).getFunctionName());
+    assertEquals("child3", steps.get(2).childWorkflowId());
+    assertEquals(2, steps.get(2).functionId());
+    assertEquals("childWorkflow3", steps.get(2).functionName());
   }
 
   @Test
@@ -288,14 +288,14 @@ public class SyncWorkflowTest {
 
     List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(1, steps.size());
-    assertEquals("child4", steps.get(0).getChildWorkflowId());
-    assertEquals(0, steps.get(0).getFunctionId());
-    assertEquals("childWorkflow4", steps.get(0).getFunctionName());
+    assertEquals("child4", steps.get(0).childWorkflowId());
+    assertEquals(0, steps.get(0).functionId());
+    assertEquals("childWorkflow4", steps.get(0).functionName());
 
     steps = dbos.listWorkflowSteps("child4");
     assertEquals(1, steps.size());
-    assertEquals("child5", steps.get(0).getChildWorkflowId());
-    assertEquals(0, steps.get(0).getFunctionId());
-    assertEquals("grandchildWorkflow", steps.get(0).getFunctionName());
+    assertEquals("child5", steps.get(0).childWorkflowId());
+    assertEquals(0, steps.get(0).functionId());
+    assertEquals("grandchildWorkflow", steps.get(0).functionName());
   }
 }

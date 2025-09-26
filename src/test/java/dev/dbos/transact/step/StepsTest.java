@@ -73,22 +73,22 @@ public class StepsTest {
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
 
-    assertEquals("step1", stepInfos.get(0).getFunctionName());
-    assertEquals(0, stepInfos.get(0).getFunctionId());
-    assertEquals("one", stepInfos.get(0).getOutput());
-    assertNull(stepInfos.get(0).getError());
-    assertEquals("step2", stepInfos.get(1).getFunctionName());
-    assertEquals(1, stepInfos.get(1).getFunctionId());
-    assertEquals("two", stepInfos.get(1).getOutput());
-    assertEquals("step3", stepInfos.get(2).getFunctionName());
-    assertEquals(2, stepInfos.get(2).getFunctionId());
-    assertEquals("three", stepInfos.get(2).getOutput());
-    assertEquals("step4", stepInfos.get(3).getFunctionName());
-    assertEquals(3, stepInfos.get(3).getFunctionId());
-    assertEquals("four", stepInfos.get(3).getOutput());
-    assertEquals("step5", stepInfos.get(4).getFunctionName());
-    assertEquals(4, stepInfos.get(4).getFunctionId());
-    assertEquals("five", stepInfos.get(4).getOutput());
+    assertEquals("step1", stepInfos.get(0).functionName());
+    assertEquals(0, stepInfos.get(0).functionId());
+    assertEquals("one", stepInfos.get(0).output());
+    assertNull(stepInfos.get(0).error());
+    assertEquals("step2", stepInfos.get(1).functionName());
+    assertEquals(1, stepInfos.get(1).functionId());
+    assertEquals("two", stepInfos.get(1).output());
+    assertEquals("step3", stepInfos.get(2).functionName());
+    assertEquals(2, stepInfos.get(2).functionId());
+    assertEquals("three", stepInfos.get(2).output());
+    assertEquals("step4", stepInfos.get(3).functionName());
+    assertEquals(3, stepInfos.get(3).functionId());
+    assertEquals("four", stepInfos.get(3).output());
+    assertEquals("step5", stepInfos.get(4).functionName());
+    assertEquals(4, stepInfos.get(4).functionId());
+    assertEquals("five", stepInfos.get(4).output());
   }
 
   @Test
@@ -115,13 +115,13 @@ public class StepsTest {
 
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
-    assertEquals("step3", stepInfos.get(2).getFunctionName());
-    assertEquals(2, stepInfos.get(2).getFunctionId());
-    var error = stepInfos.get(2).getError().throwable();
+    assertEquals("step3", stepInfos.get(2).functionName());
+    assertEquals(2, stepInfos.get(2).functionId());
+    var error = stepInfos.get(2).error().throwable();
     assertInstanceOf(Exception.class, error, "The error should be an Exception");
     assertEquals("step3 error", error.getMessage(), "Error message should match");
-    assertEquals("step3 error", stepInfos.get(2).getError().message());
-    assertNull(stepInfos.get(2).getOutput());
+    assertEquals("step3 error", stepInfos.get(2).error().message());
+    assertNull(stepInfos.get(2).output());
   }
 
   @Test
@@ -145,10 +145,10 @@ public class StepsTest {
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
     assertEquals(1, stepInfos.size());
 
-    assertEquals("stringLength", stepInfos.get(0).getFunctionName());
-    assertEquals(0, stepInfos.get(0).getFunctionId());
-    assertEquals(5, stepInfos.get(0).getOutput());
-    assertNull(stepInfos.get(0).getError());
+    assertEquals("stringLength", stepInfos.get(0).functionName());
+    assertEquals(0, stepInfos.get(0).functionId());
+    assertEquals(5, stepInfos.get(0).output());
+    assertNull(stepInfos.get(0).error());
   }
 
   @Test
@@ -179,22 +179,22 @@ public class StepsTest {
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
     assertEquals(5, stepInfos.size());
 
-    assertEquals("step1", stepInfos.get(0).getFunctionName());
-    assertEquals(0, stepInfos.get(0).getFunctionId());
-    assertEquals("one", stepInfos.get(0).getOutput());
-    assertEquals("step2", stepInfos.get(1).getFunctionName());
-    assertEquals(1, stepInfos.get(1).getFunctionId());
-    assertEquals("two", stepInfos.get(1).getOutput());
-    assertEquals("step3", stepInfos.get(2).getFunctionName());
-    assertEquals(2, stepInfos.get(2).getFunctionId());
-    assertEquals("three", stepInfos.get(2).getOutput());
-    assertEquals("step4", stepInfos.get(3).getFunctionName());
-    assertEquals(3, stepInfos.get(3).getFunctionId());
-    assertEquals("four", stepInfos.get(3).getOutput());
-    assertEquals("step5", stepInfos.get(4).getFunctionName());
-    assertEquals(4, stepInfos.get(4).getFunctionId());
-    assertEquals("five", stepInfos.get(4).getOutput());
-    assertNull(stepInfos.get(4).getError());
+    assertEquals("step1", stepInfos.get(0).functionName());
+    assertEquals(0, stepInfos.get(0).functionId());
+    assertEquals("one", stepInfos.get(0).output());
+    assertEquals("step2", stepInfos.get(1).functionName());
+    assertEquals(1, stepInfos.get(1).functionId());
+    assertEquals("two", stepInfos.get(1).output());
+    assertEquals("step3", stepInfos.get(2).functionName());
+    assertEquals(2, stepInfos.get(2).functionId());
+    assertEquals("three", stepInfos.get(2).output());
+    assertEquals("step4", stepInfos.get(3).functionName());
+    assertEquals(3, stepInfos.get(3).functionId());
+    assertEquals("four", stepInfos.get(3).output());
+    assertEquals("step5", stepInfos.get(4).functionName());
+    assertEquals(4, stepInfos.get(4).functionId());
+    assertEquals("five", stepInfos.get(4).output());
+    assertNull(stepInfos.get(4).error());
   }
 
   @Test
@@ -221,13 +221,13 @@ public class StepsTest {
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
     assertEquals(2, stepInfos.size());
 
-    assertEquals("step1", stepInfos.get(0).getFunctionName());
-    assertEquals(0, stepInfos.get(0).getFunctionId());
-    assertEquals("one", stepInfos.get(0).getOutput());
-    assertEquals("step2", stepInfos.get(1).getFunctionName());
-    assertEquals(1, stepInfos.get(1).getFunctionId());
-    assertEquals("two", stepInfos.get(1).getOutput());
-    assertNull(stepInfos.get(1).getError());
+    assertEquals("step1", stepInfos.get(0).functionName());
+    assertEquals(0, stepInfos.get(0).functionId());
+    assertEquals("one", stepInfos.get(0).output());
+    assertEquals("step2", stepInfos.get(1).functionName());
+    assertEquals(1, stepInfos.get(1).functionId());
+    assertEquals("two", stepInfos.get(1).output());
+    assertNull(stepInfos.get(1).error());
   }
 
   @Test
@@ -282,14 +282,14 @@ public class StepsTest {
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
     assertEquals(3, stepInfos.size());
 
-    assertEquals("stepWith2Retries", stepInfos.get(0).getFunctionName());
-    assertEquals(0, stepInfos.get(0).getFunctionId());
-    assertNotNull(stepInfos.get(0).getError());
-    assertEquals("stepWithNoRetriesAllowed", stepInfos.get(1).getFunctionName());
-    assertEquals(1, stepInfos.get(1).getFunctionId());
-    assertNotNull(stepInfos.get(1).getError());
-    assertEquals("stepWithLongRetry", stepInfos.get(2).getFunctionName());
-    assertEquals(2, stepInfos.get(2).getFunctionId());
-    assertNull(stepInfos.get(2).getError());
+    assertEquals("stepWith2Retries", stepInfos.get(0).functionName());
+    assertEquals(0, stepInfos.get(0).functionId());
+    assertNotNull(stepInfos.get(0).error());
+    assertEquals("stepWithNoRetriesAllowed", stepInfos.get(1).functionName());
+    assertEquals(1, stepInfos.get(1).functionId());
+    assertNotNull(stepInfos.get(1).error());
+    assertEquals("stepWithLongRetry", stepInfos.get(2).functionName());
+    assertEquals(2, stepInfos.get(2).functionId());
+    assertNull(stepInfos.get(2).error());
   }
 }

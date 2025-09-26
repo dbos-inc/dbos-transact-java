@@ -86,11 +86,11 @@ class NotificationServiceTest {
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
 
     // assertEquals(1, stepInfos.size()) ; cannot do this because sleep is a maybe
-    assertEquals("DBOS.recv", stepInfos.get(0).getFunctionName());
+    assertEquals("DBOS.recv", stepInfos.get(0).functionName());
 
     stepInfos = dbos.listWorkflowSteps(wfid2);
     assertEquals(1, stepInfos.size());
-    assertEquals("DBOS.send", stepInfos.get(0).getFunctionName());
+    assertEquals("DBOS.send", stepInfos.get(0).functionName());
   }
 
   @Test
@@ -321,12 +321,12 @@ class NotificationServiceTest {
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
     // Will be 2 when we implement DBOS.sleep
     assertEquals(2, stepInfos.size());
-    assertEquals("DBOS.recv", stepInfos.get(0).getFunctionName());
-    assertEquals("DBOS.sleep", stepInfos.get(1).getFunctionName());
+    assertEquals("DBOS.recv", stepInfos.get(0).functionName());
+    assertEquals("DBOS.sleep", stepInfos.get(1).functionName());
 
     stepInfos = dbos.listWorkflowSteps(wfid2);
     assertEquals(1, stepInfos.size());
-    assertEquals("DBOS.send", stepInfos.get(0).getFunctionName());
+    assertEquals("DBOS.send", stepInfos.get(0).functionName());
   }
 
   @Test
