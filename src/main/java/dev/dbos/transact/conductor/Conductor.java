@@ -95,9 +95,13 @@ public class Conductor implements AutoCloseable {
       } else {
         domain = "wss://" + dbosDomain.trim();
       }
+      domain += "/conductor/v1alpha1";
+    } else {
+      // ensure there is no trailing slash
+      domain = domain.replaceAll("/$", "");
     }
 
-    this.url = domain + "/conductor/v1alpha1/websocket/" + appName + "/" + builder.conductorKey;
+    this.url = domain + "/websocket/" + appName + "/" + builder.conductorKey;
 
     this.pingPeriodMs = builder.pingPeriodMs;
     this.pingTimeoutMs = builder.pingTimeoutMs;
@@ -158,10 +162,12 @@ public class Conductor implements AutoCloseable {
   }
 
   public void start() {
+    logger.debug("start");
     dispatchLoop();
   }
 
   public void stop() {
+    logger.debug("stop");
     if (isShutdown.compareAndSet(false, true)) {
       if (pingInterval != null) {
         pingInterval.cancel(true);
@@ -362,6 +368,7 @@ public class Conductor implements AutoCloseable {
   }
 
   BaseResponse getResponse(BaseMessage message) {
+    logger.debug("getResponse {}", message.type);
     MessageType messageType = MessageType.fromValue(message.type);
     BiFunction<Conductor, BaseMessage, BaseResponse> func = dispatchMap.get(messageType);
     if (func != null) {
@@ -508,8 +515,8 @@ public class Conductor implements AutoCloseable {
   static BaseResponse handleGetWorkflow(Conductor conductor, BaseMessage message) {
     GetWorkflowRequest request = (GetWorkflowRequest) message;
     try {
-      WorkflowStatus status = conductor.systemDatabase.getWorkflowStatus(request.workflow_id);
-      WorkflowsOutput output = status != null ? new WorkflowsOutput(status) : null;
+      var status = conductor.systemDatabase.getWorkflowStatus(request.workflow_id);
+      WorkflowsOutput output = status == null ? null : new WorkflowsOutput(status);
       return new GetWorkflowResponse(request, output);
     } catch (Exception e) {
       logger.error("Exception encountered when getting workflow {}", request.workflow_id, e);

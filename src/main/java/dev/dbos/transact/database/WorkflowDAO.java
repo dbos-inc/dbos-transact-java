@@ -391,7 +391,7 @@ public class WorkflowDAO {
       logger.error("Error retrieving workflow for {}", workflowId, e);
     }
 
-    throw new NonExistentWorkflowException(workflowId);
+    return null;
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
@@ -799,7 +799,7 @@ public class WorkflowDAO {
 
         if (currentStatus == null) {
           connection.rollback();
-          return;
+          throw new NonExistentWorkflowException(workflowId);
         }
 
         // If workflow is already complete, do nothing
