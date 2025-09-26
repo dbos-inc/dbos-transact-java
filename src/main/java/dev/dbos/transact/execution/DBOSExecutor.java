@@ -803,20 +803,20 @@ public class DBOSExecutor implements AutoCloseable {
   public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(String workflowId) {
     logger.debug("executeWorkflowById {}", workflowId);
 
-    WorkflowStatus status = systemDatabase.getWorkflowStatus(workflowId);
-    if (status == null) {
+    var status = systemDatabase.getWorkflowStatus(workflowId);
+    if (status.isEmpty()) {
       logger.error("Workflow not found {}", workflowId);
       throw new NonExistentWorkflowException(workflowId);
     }
 
-    Object[] inputs = status.getInput();
-    RegisteredWorkflow workflow = workflowMap.get(status.getName());
+    Object[] inputs = status.get().getInput();
+    RegisteredWorkflow workflow = workflowMap.get(status.get().getName());
 
     if (workflow == null) {
       throw new WorkflowFunctionNotFoundException(workflowId);
     }
 
-    var options = new ExecuteWorkflowOptions(workflowId, status.getTimeout(), status.getDeadline());
+    var options = new ExecuteWorkflowOptions(workflowId, status.get().getTimeout(), status.get().getDeadline());
     return executeWorkflow(workflow, inputs, options, null, null);
   }
 

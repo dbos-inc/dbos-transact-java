@@ -169,8 +169,9 @@ class RecoveryServiceTest {
 
     setWorkflowStateToPending(dataSource);
 
-    WorkflowStatus s = systemDatabase.getWorkflowStatus("wf-123");
-    assertEquals(WorkflowState.PENDING.name(), s.getStatus());
+    var s = systemDatabase.getWorkflowStatus("wf-123");
+    assertTrue(s.isPresent());
+    assertEquals(WorkflowState.PENDING.name(), s.get().getStatus());
 
     dbos.shutdown();
 

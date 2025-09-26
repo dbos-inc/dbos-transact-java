@@ -30,6 +30,6 @@ public class WorkflowHandleDBPoll<T, E extends Exception> implements WorkflowHan
 
   @Override
   public WorkflowStatus getStatus() {
-    return systemDatabase.getWorkflowStatus(workflowId);
+    return systemDatabase.getWorkflowStatus(workflowId).get();
   }
 }

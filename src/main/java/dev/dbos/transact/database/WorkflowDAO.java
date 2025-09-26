@@ -13,6 +13,7 @@ import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.lang.foreign.Linker.Option;
 import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -375,7 +376,7 @@ public class WorkflowDAO {
     }
   }
 
-  public WorkflowStatus getWorkflowStatus(String workflowId) {
+  public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -385,13 +386,13 @@ public class WorkflowDAO {
       input.setWorkflowIDs(Arrays.asList(workflowId));
       List<WorkflowStatus> output = listWorkflows(input);
       if (output.size() > 0) {
-        return output.get(0);
+        return Optional.of(output.get(0));
       }
     } catch (SQLException e) {
       logger.error("Error retrieving workflow for {}", workflowId, e);
     }
 
-    return null;
+    return Optional.empty();
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
@@ -827,8 +828,8 @@ public class WorkflowDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
-    WorkflowStatus status = getWorkflowStatus(originalWorkflowId);
-    if (status == null) {
+    var status = getWorkflowStatus(originalWorkflowId);
+    if (status.isEmpty()) {
       throw new NonExistentWorkflowException(originalWorkflowId);
     }
 
@@ -843,7 +844,7 @@ public class WorkflowDAO {
 
     var timeout = options.timeout();
     if (timeout == null) {
-      timeout = status.getTimeout();
+      timeout = status.get().getTimeout();
     }
     if (timeout == null) {
       timeout = Duration.ZERO;
@@ -855,7 +856,7 @@ public class WorkflowDAO {
       try {
         // Create entry for forked workflow
         insertForkedWorkflowStatus(
-            connection, forkedWorkflowId, status, applicationVersion, timeout.toMillis());
+            connection, forkedWorkflowId, status.get(), applicationVersion, timeout.toMillis());
 
         // Copy operation outputs if starting from step > 0
         if (startStep > 0) {
