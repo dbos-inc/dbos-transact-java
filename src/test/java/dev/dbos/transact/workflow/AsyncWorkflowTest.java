@@ -135,7 +135,8 @@ public class AsyncWorkflowTest {
     assertEquals(wfs.get(0).getName(), "workError");
     assertNotNull(wfs.get(0).getWorkflowId());
     assertEquals(wfs.get(0).getWorkflowId(), handle.getWorkflowId());
-    // TODO: Check error contents
+    assertEquals("java.lang.Exception", handle.getStatus().getError().className());
+    assertEquals("DBOS Test error", handle.getStatus().getError().message());
     assertEquals(WorkflowState.ERROR.name(), handle.getStatus().getStatus());
   }
 

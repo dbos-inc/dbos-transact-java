@@ -209,19 +209,23 @@ public class StepsDAO {
           }
 
           // Deserialize error if present
-          Exception error = null;
+          StepInfo.StepInfoError stepError = null;
           if (errorData != null) {
+            Exception error = null;
             try {
-              // TODO This should not be at this layer in the stack;
-              error = (Exception) JSONUtil.deserializeAppException((errorData));
+              error = (Exception) JSONUtil.deserializeAppException(errorData);
             } catch (Exception e) {
               throw new RuntimeException(
                   "Failed to deserialize error for function " + functionId, e);
             }
+            var errorWrapper = JSONUtil.deserializeAppExceptionWrapper(errorData);
+            stepError =
+                new StepInfo.StepInfoError(
+                    errorWrapper.type, errorWrapper.message, errorData, error);
           }
 
           Object outputVal = output != null ? output[0] : null;
-          steps.add(new StepInfo(functionId, functionName, outputVal, error, childWorkflowId));
+          steps.add(new StepInfo(functionId, functionName, outputVal, stepError, childWorkflowId));
         }
       }
     } catch (SQLException e) {

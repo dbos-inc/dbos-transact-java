@@ -57,6 +57,11 @@ public class JSONUtil {
     return serialize(wt);
   }
 
+  public static WireThrowable deserializeAppExceptionWrapper(String str) {
+    var wt = (WireThrowable) deserializeToArray(str)[0];
+    return wt;
+  }
+
   public static Throwable deserializeAppException(String str) {
     var wt = (WireThrowable) deserializeToArray(str)[0];
     try {
@@ -95,7 +100,7 @@ public class JSONUtil {
     public Map<String, Object> extra;
   }
 
-  public final class WireThrowableCodec {
+  public static final class WireThrowableCodec {
     private static final int PREVIEW_FRAMES = 12;
 
     public static WireThrowable toWire(Throwable t, Map<String, Object> extra, String node) {

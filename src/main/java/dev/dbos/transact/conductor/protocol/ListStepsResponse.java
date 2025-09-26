@@ -18,12 +18,13 @@ public class ListStepsResponse extends BaseResponse {
 
     public Step(StepInfo info) {
       Object output = info.getOutput();
-      Exception error = info.getError();
+      var error = info.getError();
 
       this.function_id = info.getFunctionId();
       this.function_name = info.getFunctionName();
       this.output = output != null ? JSONUtil.toJson(output) : null;
-      this.error = error != null ? JSONUtil.serializeAppException(error) : null;
+      this.error =
+          error != null ? String.format("%s: %s", error.className(), error.message()) : null;
       this.child_workflow_id = info.getChildWorkflowId();
     }
   }

@@ -5,6 +5,9 @@ import java.time.Instant;
 import java.util.Objects;
 
 public class WorkflowStatus {
+  public static record WorkflowStatusError(
+      String className, String message, String serializedError, Throwable throwable) {}
+
   private String workflowId;
   private String status;
   private String name;
@@ -15,8 +18,7 @@ public class WorkflowStatus {
   private String[] authenticatedRoles;
   private Object[] input;
   private Object output;
-  // TODO fix private Throwable error;
-  private String error;
+  private WorkflowStatusError error;
   private Long createdAt;
   private Long updatedAt;
   private String queueName;
@@ -41,7 +43,7 @@ public class WorkflowStatus {
       String[] authenticatedRoles,
       Object[] input,
       Object output,
-      String error,
+      WorkflowStatusError error,
       Long createdAt,
       Long updatedAt,
       String queueName,
@@ -153,11 +155,11 @@ public class WorkflowStatus {
     this.output = output;
   }
 
-  public String getError() {
+  public WorkflowStatusError getError() {
     return error;
   }
 
-  public void setError(String error) {
+  public void setError(WorkflowStatusError error) {
     this.error = error;
   }
 

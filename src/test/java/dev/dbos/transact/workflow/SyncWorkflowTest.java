@@ -85,7 +85,8 @@ public class SyncWorkflowTest {
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).getName(), "workError");
-    // TODO: Check error: assertEquals(wfs.get(0).getError(), wfs);
+    assertEquals("java.lang.Exception", wfs.get(0).getError().className());
+    assertEquals("DBOS Test error", wfs.get(0).getError().message());
     assertNotNull(wfs.get(0).getWorkflowId());
   }
 
