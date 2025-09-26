@@ -1,13 +1,7 @@
 package dev.dbos.transact.workflow;
 
 public record StepInfo(
-    int functionId,
-    String functionName,
-    Object output,
-    StepInfoError error,
-    String childWorkflowId) {
-  public static record StepInfoError(
-      String className, String message, String serializedError, Throwable throwable) {}
+    int functionId, String functionName, Object output, ErrorResult error, String childWorkflowId) {
 
   @Override
   public String toString() {

@@ -5,6 +5,7 @@ import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -560,9 +561,7 @@ public class WorkflowDAO {
               throwable = JSONUtil.deserializeAppException(serializedError);
             } catch (Exception e) {
             }
-            var err =
-                new WorkflowStatus.WorkflowStatusError(
-                    wrapper.type, wrapper.message, serializedError, throwable);
+            var err = new ErrorResult(wrapper.type, wrapper.message, serializedError, throwable);
             info.setError(err);
           }
 
