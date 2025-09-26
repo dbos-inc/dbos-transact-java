@@ -662,9 +662,9 @@ public class ConductorTest {
           ArgumentCaptor.forClass(ListWorkflowsInput.class);
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
-      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.getStartTime());
-      assertEquals("foobarbaz", input.getWorkflowName());
-      assertNull(input.getLimit());
+      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.startTime());
+      assertEquals("foobarbaz", input.workflowName());
+      assertNull(input.limit());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
