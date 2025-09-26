@@ -80,8 +80,8 @@ class NotificationServiceTest {
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
 
-    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
-    assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
+    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
 
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
 
@@ -127,7 +127,7 @@ class NotificationServiceTest {
     String result = (String) handle1.getResult();
     assertEquals("Hello1Hello2Hello3", result);
 
-    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
+    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
   }
 
   @Test
@@ -154,8 +154,8 @@ class NotificationServiceTest {
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
 
-    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
-    assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
+    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
   }
 
   @Test
@@ -216,8 +216,8 @@ class NotificationServiceTest {
     String result = (String) handle1.getResult();
     assertNull(result);
 
-    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
-    assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
+    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
   }
 
   @Test
@@ -315,8 +315,8 @@ class NotificationServiceTest {
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
 
-    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().getStatus());
-    assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().getStatus());
+    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
 
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
     // Will be 2 when we implement DBOS.sleep
@@ -348,11 +348,11 @@ class NotificationServiceTest {
 
     Thread.sleep(1000);
 
-    assertEquals(WorkflowState.PENDING.name(), handle.getStatus().getStatus());
+    assertEquals(WorkflowState.PENDING.name(), handle.getStatus().status());
     dbos.send(wfid1, "hello", "topic1");
 
     assertEquals("hello", handle.getResult());
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(2, wfs.size());

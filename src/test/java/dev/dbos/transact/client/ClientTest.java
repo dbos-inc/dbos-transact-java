@@ -124,7 +124,7 @@ public class ClientTest {
 
     var workflowId = "%s-%s".formatted(handle.getWorkflowId(), idempotencyKey);
     var sendHandle = dbos.retrieveWorkflow(workflowId);
-    assertEquals("SUCCESS", sendHandle.getStatus().getStatus());
+    assertEquals("SUCCESS", sendHandle.getStatus().status());
 
     assertEquals("42-test.message", handle.getResult());
   }
