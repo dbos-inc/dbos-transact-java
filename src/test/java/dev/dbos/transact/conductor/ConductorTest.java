@@ -112,8 +112,7 @@ public class ConductorTest {
     try (Conductor conductor = builder.build()) {
       conductor.start();
       assertTrue(listener.latch.await(10, TimeUnit.SECONDS), "latch timed out");
-      assertEquals(
-          "/websocket/test-app-name/conductor-key", listener.resourceDescriptor);
+      assertEquals("/websocket/test-app-name/conductor-key", listener.resourceDescriptor);
     }
   }
 
