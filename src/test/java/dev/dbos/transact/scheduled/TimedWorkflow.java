@@ -1,6 +1,5 @@
 package dev.dbos.transact.scheduled;
 
-import dev.dbos.transact.workflow.Scheduled;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Instant;

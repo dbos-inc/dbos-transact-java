@@ -13,6 +13,7 @@ import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.RateLimit;
+import dev.dbos.transact.scheduled.Scheduled;
 import dev.dbos.transact.scheduled.SchedulerService;
 import dev.dbos.transact.scheduled.SchedulerService.ScheduledInstance;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;

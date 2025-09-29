@@ -1,11 +1,9 @@
-package dev.dbos.transact.workflow;
+package dev.dbos.transact.scheduled;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-
-import dev.dbos.transact.scheduled.SchedulerMode;
 
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
