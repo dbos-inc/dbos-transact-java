@@ -38,6 +38,7 @@ import java.net.InetAddress;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -110,10 +111,8 @@ public class ConductorTest {
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
-
       assertTrue(listener.latch.await(10, TimeUnit.SECONDS), "latch timed out");
-      assertEquals(
-          "/conductor/v1alpha1/websocket/test-app-name/conductor-key", listener.resourceDescriptor);
+      assertEquals("/websocket/test-app-name/conductor-key", listener.resourceDescriptor);
     }
   }
 
@@ -663,9 +662,9 @@ public class ConductorTest {
           ArgumentCaptor.forClass(ListWorkflowsInput.class);
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
-      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.getStartTime());
-      assertEquals("foobarbaz", input.getWorkflowName());
-      assertNull(input.getLimit());
+      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.startTime());
+      assertEquals("foobarbaz", input.workflowName());
+      assertNull(input.limit());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -819,7 +818,7 @@ public class ConductorTest {
             "test-app-id",
             null);
 
-    when(mockDB.getWorkflowStatus(workflowId)).thenReturn(status);
+    when(mockDB.getWorkflowStatus(workflowId)).thenReturn(Optional.of(status));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();

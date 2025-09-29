@@ -97,12 +97,12 @@ public class DBOSExecutor implements AutoCloseable {
       this.queues = queues;
 
       this.executorId = System.getenv("DBOS__VMID");
-      if (this.executorId == null) {
-        this.executorId = "local";
+      if (this.executorId == null || this.executorId.isEmpty()) {
+        this.executorId = config.getConductorKey() == null ? "local" : UUID.randomUUID().toString();
       }
 
       this.appVersion = System.getenv("DBOS__APPVERSION");
-      if (this.appVersion == null) {
+      if (this.appVersion == null || this.appVersion.isEmpty()) {
         List<Class<?>> registeredClasses =
             workflowMap.values().stream()
                 .map(wrapper -> wrapper.target().getClass())
@@ -803,20 +803,22 @@ public class DBOSExecutor implements AutoCloseable {
   public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(String workflowId) {
     logger.debug("executeWorkflowById {}", workflowId);
 
-    WorkflowStatus status = systemDatabase.getWorkflowStatus(workflowId);
-    if (status == null) {
+    var status = systemDatabase.getWorkflowStatus(workflowId);
+    if (status.isEmpty()) {
       logger.error("Workflow not found {}", workflowId);
       throw new NonExistentWorkflowException(workflowId);
     }
 
-    Object[] inputs = status.input();
-    RegisteredWorkflow workflow = workflowMap.get(status.name());
+    Object[] inputs = status.get().input();
+    RegisteredWorkflow workflow = workflowMap.get(status.get().name());
 
     if (workflow == null) {
       throw new WorkflowFunctionNotFoundException(workflowId);
     }
 
-    var options = new ExecuteWorkflowOptions(workflowId, status.getTimeout(), status.getDeadline());
+    var options =
+        new ExecuteWorkflowOptions(
+            workflowId, status.get().getTimeout(), status.get().getDeadline());
     return executeWorkflow(workflow, inputs, options, null, null);
   }
 
@@ -1038,6 +1040,9 @@ public class DBOSExecutor implements AutoCloseable {
       Duration timeout,
       Instant deadline) {
 
+    if (inputs == null) {
+      inputs = new Object[0];
+    }
     String inputString = JSONUtil.serializeArray(inputs);
 
     WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;

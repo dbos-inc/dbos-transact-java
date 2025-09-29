@@ -123,7 +123,7 @@ public class SystemDatabase implements AutoCloseable {
     workflowDAO.recordWorkflowError(workflowId, error);
   }
 
-  public WorkflowStatus getWorkflowStatus(String workflowId) {
+  public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) {
 
     return workflowDAO.getWorkflowStatus(workflowId);
   }

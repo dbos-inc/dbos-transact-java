@@ -17,6 +17,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
 
@@ -222,7 +223,7 @@ public class DBOSClient implements AutoCloseable {
     return retrieveWorkflow(forkedWorkflowId);
   }
 
-  public WorkflowStatus getWorkflowStatus(String workflowId) {
+  public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) {
     return systemDatabase.getWorkflowStatus(workflowId);
   }
 

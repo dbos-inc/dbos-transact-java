@@ -371,7 +371,7 @@ public class QueuesDAO {
                   rs.getString(7),
                   rs.getString(9),
                   rolesJson != null ? (String[]) JSONUtil.deserializeToArray(rolesJson) : null,
-                  JSONUtil.deserializeToArray(rawInput),
+                  loadInput ? JSONUtil.deserializeToArray(rawInput) : null,
                   null,
                   null,
                   rs.getLong(12),

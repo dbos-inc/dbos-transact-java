@@ -172,7 +172,8 @@ class SchedulerServiceTest {
     schedulerService.stop();
     Thread.sleep(1000);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    var input = new ListWorkflowsInput.Builder().build();
+    List<WorkflowStatus> wfs = dbos.listWorkflows(input);
     assertTrue(wfs.size() <= 2);
 
     List<StepInfo> wsteps = dbos.listWorkflowSteps(wfs.get(0).workflowId());
