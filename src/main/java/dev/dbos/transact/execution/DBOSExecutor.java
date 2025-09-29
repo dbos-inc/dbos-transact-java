@@ -17,6 +17,7 @@ import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.http.HttpServer;
 import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
@@ -215,13 +216,13 @@ public class DBOSExecutor implements AutoCloseable {
     return this.appVersion;
   }
 
-  public RegisteredWorkflow getWorkflow(String workflowName) {
+  public RegisteredWorkflow getWorkflow(String className, String workflowName) {
     if (workflowMap == null) {
       throw new IllegalStateException(
           "attempted to retrieve workflow from executor when DBOS not launched");
     }
 
-    return workflowMap.get(workflowName);
+    return workflowMap.get(WorkflowRegistry.getFullyQualifiedWFName(className, workflowName));
   }
 
   public Optional<Queue> getQueue(String queueName) {
@@ -738,17 +739,18 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(String name, Object[] args) {
-    var workflow = getWorkflow(name);
+  public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
+      String clsName, String wfName, Object[] args) {
+    var workflow = getWorkflow(clsName, wfName);
     if (workflow == null) {
-      throw new IllegalStateException("%s workflow not registered".formatted(name));
+      throw new IllegalStateException("%s/%s workflow not registered".formatted(clsName, wfName));
     }
 
     var ctx = DBOSContextHolder.get();
     if (!ctx.validateStartedWorkflow()) {
       logger.error(
           "Attempting to call {} workflow from a startWorkflow lambda that has already invoked a workflow",
-          name);
+          wfName);
       throw new IllegalCallerException();
     }
 
@@ -810,7 +812,9 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     Object[] inputs = status.get().input();
-    RegisteredWorkflow workflow = workflowMap.get(status.get().name());
+    RegisteredWorkflow workflow =
+        workflowMap.get(
+            WorkflowRegistry.getFullyQualifiedWFName(status.get().className(), status.get().name()));
 
     if (workflow == null) {
       throw new WorkflowFunctionNotFoundException(workflowId);

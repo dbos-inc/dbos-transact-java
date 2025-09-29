@@ -27,17 +27,18 @@ public class SchedulerService {
 
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
 
-  public record ScheduledInstance(String workflowName, Object instance, Cron cron) {}
+  public record ScheduledInstance(
+      String className, String workflowName, Object instance, Cron cron) {}
 
   private static Logger logger = LoggerFactory.getLogger(SchedulerService.class);
   private static final CronParser cronParser =
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
 
   public static ScheduledInstance makeScheduledInstance(
-      String workflowName, Object instance, String cronExpr) {
+      String className, String workflowName, Object instance, String cronExpr) {
     logger.info("Scheduling wf {}", workflowName);
     Cron cron = cronParser.parse(cronExpr);
-    return new ScheduledInstance(workflowName, instance, cron);
+    return new ScheduledInstance(className, workflowName, instance, cron);
   }
 
   private final DBOSExecutor dbosExecutor;
@@ -60,7 +61,7 @@ public class SchedulerService {
 
       ExecutionTime executionTime = ExecutionTime.forCron(wf.cron);
 
-      RegisteredWorkflow regWF = dbosExecutor.getWorkflow(wf.workflowName);
+      RegisteredWorkflow regWF = dbosExecutor.getWorkflow(wf.className, wf.workflowName);
       if (regWF == null) {
         throw new IllegalStateException("Workflow not registered: %s".formatted(wf.workflowName));
       }
