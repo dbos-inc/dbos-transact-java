@@ -122,7 +122,8 @@ public class AdminController {
   @Produces(MediaType.APPLICATION_JSON)
   public WorkflowStatus GetWorkflowStatus(@PathParam("workflowId") String workflowId) {
     logger.info("Get workflow status for workflow {}", workflowId);
-    return systemDatabase.getWorkflowStatus(workflowId);
+    var status = systemDatabase.getWorkflowStatus(workflowId);
+    return status.isEmpty() ? null : status.get();
   }
 
   @GET

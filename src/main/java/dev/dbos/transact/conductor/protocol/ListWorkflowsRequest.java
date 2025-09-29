@@ -128,6 +128,8 @@ public class ListWorkflowsRequest extends BaseMessage {
         body.limit,
         body.offset,
         body.sort_desc,
-        null);
+        null,
+        body.load_input,
+        body.load_output);
   }
 }

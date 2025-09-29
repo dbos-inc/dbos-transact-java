@@ -99,8 +99,8 @@ public class UnifiedProxyTest {
     assertEquals(wfid3, handle.getWorkflowId());
     assertEquals("SUCCESS", handle.getStatus().status());
 
-    ListWorkflowsInput input = new ListWorkflowsInput();
-    input.setWorkflowIDs(Arrays.asList(wfid3));
+    var builder = new ListWorkflowsInput.Builder().workflowIDs(Arrays.asList(wfid3));
+    ListWorkflowsInput input = builder.build();
     List<WorkflowStatus> wfs = dbos.listWorkflows(input);
     assertEquals("simpleQ", wfs.get(0).queueName());
   }

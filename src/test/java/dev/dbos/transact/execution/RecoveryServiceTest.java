@@ -12,7 +12,6 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
-import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.sql.*;
@@ -169,8 +168,9 @@ class RecoveryServiceTest {
 
     setWorkflowStateToPending(dataSource);
 
-    WorkflowStatus s = systemDatabase.getWorkflowStatus("wf-123");
-    assertEquals(WorkflowState.PENDING.name(), s.status());
+    var s = systemDatabase.getWorkflowStatus("wf-123");
+    assertTrue(s.isPresent());
+    assertEquals(WorkflowState.PENDING.name(), s.get().status());
 
     dbos.shutdown();
 

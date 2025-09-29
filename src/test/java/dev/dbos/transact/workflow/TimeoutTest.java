@@ -111,8 +111,9 @@ public class TimeoutTest {
       assertTrue(t instanceof AwaitedWorkflowCancelledException);
     }
 
-    WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
-    assertEquals(WorkflowState.CANCELLED.name(), s.status());
+    var s = systemDatabase.getWorkflowStatus(wfid1);
+    assertTrue(s.isPresent());
+    assertEquals(WorkflowState.CANCELLED.name(), s.get().status());
   }
 
   @Test
@@ -173,8 +174,9 @@ public class TimeoutTest {
       assertTrue(t instanceof AwaitedWorkflowCancelledException);
     }
 
-    WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
-    assertEquals(WorkflowState.CANCELLED.name(), s.status());
+    var s = systemDatabase.getWorkflowStatus(wfid1);
+    assertTrue(s.isPresent());
+    assertEquals(WorkflowState.CANCELLED.name(), s.get().status());
   }
 
   @Test
@@ -202,8 +204,9 @@ public class TimeoutTest {
     }
     assertEquals("1234512345", result);
 
-    WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
-    assertEquals(WorkflowState.SUCCESS.name(), s.status());
+    var s = systemDatabase.getWorkflowStatus(wfid1);
+    assertTrue(s.isPresent());
+    assertEquals(WorkflowState.SUCCESS.name(), s.get().status());
   }
 
   @Test
@@ -235,8 +238,9 @@ public class TimeoutTest {
       assertTrue(t instanceof CancellationException);
     }
 
-    WorkflowStatus s = systemDatabase.getWorkflowStatus(wfid1);
-    assertEquals(WorkflowState.CANCELLED.name(), s.status());
+    var s = systemDatabase.getWorkflowStatus(wfid1);
+    assertTrue(s.isPresent());
+    assertEquals(WorkflowState.CANCELLED.name(), s.get().status());
   }
 
   @Test
