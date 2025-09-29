@@ -103,17 +103,18 @@ public class DBOS {
     }
 
     String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
-    workflowRegistry.register(name, target, method, wfTag.maxRecoveryAttempts());
+    workflowRegistry.register(
+        target.getClass().getName(), name, target, method, wfTag.maxRecoveryAttempts());
     return name;
   }
 
-  public RegisteredWorkflow getWorkflow(String workflowName) {
+  public RegisteredWorkflow getWorkflow(String className, String workflowName) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot retrieve workflow before launch");
     }
 
-    return executor.getWorkflow(workflowName);
+    return executor.getWorkflow(className, workflowName);
   }
 
   public Optional<Queue> getQueue(String queueName) {
@@ -280,7 +281,8 @@ public class DBOS {
 
       String wfName = registerWorkflowMethod(wfAnnotation, implementation, method);
       var scheduledWF =
-          SchedulerService.makeScheduledInstance(wfName, implementation, scheduled.cron());
+          SchedulerService.makeScheduledInstance(
+              implementation.getClass().getName(), wfName, implementation, scheduled.cron());
       this.scheduledWorkflows.add(scheduledWF);
     }
   }

@@ -62,8 +62,9 @@ public class DBOSInvocationHandler implements InvocationHandler {
       throw new IllegalStateException("executorSupplier returned null");
     }
 
-    var name = workflow.name().isEmpty() ? method.getName() : workflow.name();
-    var handle = executor.invokeWorkflow(name, args);
+    var clsName = target.getClass().getName();
+    var wfName = workflow.name().isEmpty() ? method.getName() : workflow.name();
+    var handle = executor.invokeWorkflow(clsName, wfName, args);
     return handle.getResult();
   }
 

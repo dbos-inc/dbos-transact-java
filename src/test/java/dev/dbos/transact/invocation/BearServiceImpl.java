@@ -6,6 +6,7 @@ import dev.dbos.transact.workflow.Workflow;
 import java.time.Instant;
 
 public class BearServiceImpl implements BearService {
+  public int nWfCalls = 0;
   private BearService proxy;
 
   public void setProxy(BearService proxy) {
@@ -26,6 +27,7 @@ public class BearServiceImpl implements BearService {
   @Workflow
   @Override
   public Instant stepWorkflow() {
+    ++nWfCalls;
     return proxy.nowStep();
   }
 }

@@ -9,6 +9,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
@@ -22,6 +23,8 @@ import org.junit.jupiter.api.Timeout;
 public class MultiInstTest {
   private static DBOSConfig dbosConfig;
   private DBOS dbos;
+  HawkServiceImpl himpl;
+  BearServiceImpl bimpl;
   private HawkService hproxy;
   private BearService bproxy;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
@@ -43,8 +46,8 @@ public class MultiInstTest {
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
     dbos = DBOS.initialize(dbosConfig);
-    var himpl = new HawkServiceImpl();
-    var bimpl = new BearServiceImpl();
+    himpl = new HawkServiceImpl();
+    bimpl = new BearServiceImpl();
 
     hproxy =
         dbos.<HawkService>Workflow()
@@ -75,7 +78,12 @@ public class MultiInstTest {
               return bproxy.stepWorkflow();
             });
     var bresult = bhandle.getResult();
-    assertEquals(localDate, LocalDate.from(bresult).format(DateTimeFormatter.ISO_DATE));
+    assertEquals(
+        localDate,
+        bresult
+            .atZone(ZoneId.systemDefault()) // or another zone
+            .toLocalDate()
+            .format(DateTimeFormatter.ISO_DATE));
 
     var hhandle =
         dbos.startWorkflow(
@@ -83,16 +91,22 @@ public class MultiInstTest {
               return hproxy.stepWorkflow();
             });
     var hresult = hhandle.getResult();
-    assertEquals(localDate, LocalDate.from(hresult).format(DateTimeFormatter.ISO_DATE));
+    assertEquals(
+        localDate,
+        hresult
+            .atZone(ZoneId.systemDefault()) // or another zone
+            .toLocalDate()
+            .format(DateTimeFormatter.ISO_DATE));
+    assertEquals(1, bimpl.nWfCalls);
 
     var brows =
         dbos.listWorkflows(
             new ListWorkflowsInput.Builder().workflowID(bhandle.getWorkflowId()).build());
     assertEquals(1, brows.size());
     var brow = brows.get(0);
-    assertEquals(hhandle.getWorkflowId(), brow.workflowId());
-    assertEquals("startWorkflow", brow.name());
-    assertEquals("BearService", brow.className());
+    assertEquals(bhandle.getWorkflowId(), brow.workflowId());
+    assertEquals("stepWorkflow", brow.name());
+    assertEquals("dev.dbos.transact.invocation.BearServiceImpl", brow.className());
     assertEquals("SUCCESS", brow.status());
 
     var hrows =
@@ -101,8 +115,8 @@ public class MultiInstTest {
     assertEquals(1, hrows.size());
     var hrow = hrows.get(0);
     assertEquals(hhandle.getWorkflowId(), hrow.workflowId());
-    assertEquals("startWorkflow", hrow.name());
-    assertEquals("HawkService", brow.className());
+    assertEquals("stepWorkflow", hrow.name());
+    assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", hrow.className());
     assertEquals("SUCCESS", hrow.status());
   }
 }
