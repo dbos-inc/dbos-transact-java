@@ -30,8 +30,11 @@ public class WorkflowHandleDBPoll<T, E extends Exception> implements WorkflowHan
 
   @Override
   public WorkflowStatus getStatus() {
-    return systemDatabase.getWorkflowStatus(workflowId)
-        .orElseThrow(() -> new java.util.NoSuchElementException(
-            "Workflow status not found for workflowId: " + workflowId));
+    return systemDatabase
+        .getWorkflowStatus(workflowId)
+        .orElseThrow(
+            () ->
+                new java.util.NoSuchElementException(
+                    "Workflow status not found for workflowId: " + workflowId));
   }
 }

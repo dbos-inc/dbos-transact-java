@@ -89,7 +89,9 @@ public class ClientTest {
       assertEquals("42-spam", result);
 
       var stat = client.getWorkflowStatus(handle.getWorkflowId());
-      assertEquals("SUCCESS", stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+      assertEquals(
+          "SUCCESS",
+          stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
     }
   }
 
