@@ -1040,6 +1040,9 @@ public class DBOSExecutor implements AutoCloseable {
       Duration timeout,
       Instant deadline) {
 
+    if (inputs == null) {
+      inputs = new Object[0];
+    }
     String inputString = JSONUtil.serializeArray(inputs);
 
     WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
