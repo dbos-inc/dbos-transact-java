@@ -22,6 +22,7 @@ public record ListWorkflowsInput(
   public ListWorkflowsInput() {
     this(null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
+
   public static class Builder {
     private List<String> workflowIDs = new ArrayList<>();
     private String workflowName;
@@ -129,5 +130,4 @@ public record ListWorkflowsInput(
           loadOutput);
     }
   }
-
 }
