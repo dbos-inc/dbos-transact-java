@@ -88,8 +88,8 @@ public class ClientTest {
       assertTrue(result instanceof String);
       assertEquals("42-spam", result);
 
-      row = DBUtils.getWorkflowRow(dataSource, handle.getWorkflowId());
-      assertEquals("SUCCESS", row.status());
+      var stat = client.getWorkflowStatus(handle.getWorkflowId());
+      assertEquals("SUCCESS", stat.get().status());
     }
   }
 
@@ -124,7 +124,7 @@ public class ClientTest {
 
     var workflowId = "%s-%s".formatted(handle.getWorkflowId(), idempotencyKey);
     var sendHandle = dbos.retrieveWorkflow(workflowId);
-    assertEquals("SUCCESS", sendHandle.getStatus().getStatus());
+    assertEquals("SUCCESS", sendHandle.getStatus().status());
 
     assertEquals("42-test.message", handle.getResult());
   }

@@ -17,15 +17,15 @@ public class ListStepsResponse extends BaseResponse {
     public String child_workflow_id;
 
     public Step(StepInfo info) {
-      Object output = info.getOutput();
-      var error = info.getError();
+      Object output = info.output();
+      var error = info.error();
 
-      this.function_id = info.getFunctionId();
-      this.function_name = info.getFunctionName();
+      this.function_id = info.functionId();
+      this.function_name = info.functionName();
       this.output = output != null ? JSONUtil.toJson(output) : null;
       this.error =
           error != null ? String.format("%s: %s", error.className(), error.message()) : null;
-      this.child_workflow_id = info.getChildWorkflowId();
+      this.child_workflow_id = info.childWorkflowId();
     }
   }
 

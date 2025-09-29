@@ -85,7 +85,7 @@ public class UnifiedProxyTest {
     result = handle.getResult();
     assertEquals("Processed: test-item-async", result);
     assertEquals(wfid2, handle.getWorkflowId());
-    assertEquals("SUCCESS", handle.getStatus().getStatus());
+    assertEquals("SUCCESS", handle.getStatus().status());
 
     // Queued
     String wfid3 = "wf-125";
@@ -97,12 +97,12 @@ public class UnifiedProxyTest {
     result = (String) handle.getResult();
     assertEquals("Processed: test-item-q", result);
     assertEquals(wfid3, handle.getWorkflowId());
-    assertEquals("SUCCESS", handle.getStatus().getStatus());
+    assertEquals("SUCCESS", handle.getStatus().status());
 
     var builder = new ListWorkflowsInput.Builder().workflowIDs(Arrays.asList(wfid3));
     ListWorkflowsInput input = builder.build();
     List<WorkflowStatus> wfs = dbos.listWorkflows(input);
-    assertEquals("simpleQ", wfs.get(0).getQueueName());
+    assertEquals("simpleQ", wfs.get(0).queueName());
   }
 
   @Test
@@ -136,17 +136,17 @@ public class UnifiedProxyTest {
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.size(), 4);
 
-    assertEquals(wfid1, wfs.get(0).getWorkflowId());
-    assertEquals("child0", wfs.get(1).getWorkflowId());
-    assertEquals("childQ", wfs.get(1).getQueueName());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).getStatus());
+    assertEquals(wfid1, wfs.get(0).workflowId());
+    assertEquals("child0", wfs.get(1).workflowId());
+    assertEquals("childQ", wfs.get(1).queueName());
+    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).status());
 
-    assertEquals("child1", wfs.get(2).getWorkflowId());
-    assertEquals("childQ", wfs.get(2).getQueueName());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).getStatus());
+    assertEquals("child1", wfs.get(2).workflowId());
+    assertEquals("childQ", wfs.get(2).queueName());
+    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).status());
 
-    assertEquals("child2", wfs.get(3).getWorkflowId());
-    assertEquals("childQ", wfs.get(3).getQueueName());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).getStatus());
+    assertEquals("child2", wfs.get(3).workflowId());
+    assertEquals("childQ", wfs.get(3).queueName());
+    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).status());
   }
 }

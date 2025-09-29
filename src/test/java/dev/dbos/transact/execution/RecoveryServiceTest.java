@@ -106,7 +106,7 @@ class RecoveryServiceTest {
     wfid = "wf-127";
     var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
     var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
-    assertEquals("q1", handle7.getStatus().getQueueName());
+    assertEquals("q1", handle7.getStatus().queueName());
     handle7.getResult();
 
     setWorkflowStateToPending(dataSource);
@@ -120,7 +120,7 @@ class RecoveryServiceTest {
     for (GetPendingWorkflowsOutput output : pending) {
       WorkflowHandle<?, ?> handle = dbosExecutor.recoverWorkflow(output);
       handle.getResult();
-      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
     }
   }
 
@@ -137,7 +137,7 @@ class RecoveryServiceTest {
 
     var options = new StartWorkflowOptions("wf-127").withQueue(testQueue);
     var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
-    assertEquals("q1", handle7.getStatus().getQueueName());
+    assertEquals("q1", handle7.getStatus().queueName());
     assertEquals("wf-126", handle6.getWorkflowId());
     assertEquals("wf-127", handle7.getWorkflowId());
 
@@ -150,7 +150,7 @@ class RecoveryServiceTest {
 
     for (var handle : pending) {
       handle.getResult();
-      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().getStatus());
+      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
     }
   }
 
@@ -170,7 +170,7 @@ class RecoveryServiceTest {
 
     var s = systemDatabase.getWorkflowStatus("wf-123");
     assertTrue(s.isPresent());
-    assertEquals(WorkflowState.PENDING.name(), s.get().getStatus());
+    assertEquals(WorkflowState.PENDING.name(), s.get().status());
 
     dbos.shutdown();
 
@@ -190,11 +190,11 @@ class RecoveryServiceTest {
 
     var h = dbos.retrieveWorkflow("wf-123");
     h.getResult();
-    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
+    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
 
     h = dbos.retrieveWorkflow("wf-124");
     h.getResult();
-    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().getStatus());
+    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
   }
 
   @Test
@@ -209,14 +209,14 @@ class RecoveryServiceTest {
     assertEquals(executingServiceImpl.callsToThrowStep, 1);
     assertEquals(executingServiceImpl.callsToNoReturnStep, 1);
     var h = dbos.retrieveWorkflow(wfid);
-    assertNull(h.getStatus().getError());
+    assertNull(h.getStatus().error());
     assertNull(h.getResult());
 
     // Recover workflow
     // This should use checkpointed step values
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     h = dbosExecutor.executeWorkflowById(wfid);
-    assertNull(h.getStatus().getError());
+    assertNull(h.getStatus().error());
     assertNull(h.getResult());
     assertEquals(executingServiceImpl.callsToThrowStep, 1);
     assertEquals(executingServiceImpl.callsToNoReturnStep, 1);
@@ -226,7 +226,7 @@ class RecoveryServiceTest {
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     DBUtils.deleteStepOutput(dataSource, wfid, 1);
     h = dbosExecutor.executeWorkflowById(wfid);
-    assertNull(h.getStatus().getError());
+    assertNull(h.getStatus().error());
     assertNull(h.getResult());
     assertEquals(executingServiceImpl.callsToThrowStep, 1);
     assertEquals(executingServiceImpl.callsToNoReturnStep, 2);

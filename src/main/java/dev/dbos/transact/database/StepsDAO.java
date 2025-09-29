@@ -3,6 +3,7 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.StepResult;
@@ -209,7 +210,7 @@ public class StepsDAO {
           }
 
           // Deserialize error if present
-          StepInfo.StepInfoError stepError = null;
+          ErrorResult stepError = null;
           if (errorData != null) {
             Exception error = null;
             try {
@@ -219,9 +220,7 @@ public class StepsDAO {
                   "Failed to deserialize error for function " + functionId, e);
             }
             var errorWrapper = JSONUtil.deserializeAppExceptionWrapper(errorData);
-            stepError =
-                new StepInfo.StepInfoError(
-                    errorWrapper.type, errorWrapper.message, errorData, error);
+            stepError = new ErrorResult(errorWrapper.type, errorWrapper.message, errorData, error);
           }
 
           Object outputVal = output != null ? output[0] : null;

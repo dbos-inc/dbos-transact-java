@@ -361,11 +361,11 @@ public class DirectInvocationTest {
     var steps = dbos.listWorkflowSteps(wf.workflowId());
     assertEquals(1, steps.size());
     var step = steps.get(0);
-    assertEquals(0, step.getFunctionId());
-    assertNull(step.getOutput());
-    assertEquals("cannot invoke a workflow from a step", step.getError().message());
-    assertEquals("cannot invoke a workflow from a step", step.getError().throwable().getMessage());
-    assertEquals("illegalStep", step.getFunctionName());
+    assertEquals(0, step.functionId());
+    assertNull(step.output());
+    assertEquals("cannot invoke a workflow from a step", step.error().message());
+    assertEquals("cannot invoke a workflow from a step", step.error().throwable().getMessage());
+    assertEquals("illegalStep", step.functionName());
   }
 
   @Test

@@ -25,19 +25,19 @@ public class WorkflowsOutput {
   public String ExecutorID;
 
   public WorkflowsOutput(WorkflowStatus status) {
-    Object[] input = status.getInput();
-    Object output = status.getOutput();
-    Long createdAt = status.getCreatedAt();
-    Long updatedAt = status.getUpdatedAt();
-    String[] authenticatedRoles = status.getAuthenticatedRoles();
+    Object[] input = status.input();
+    Object output = status.output();
+    Long createdAt = status.createdAt();
+    Long updatedAt = status.updatedAt();
+    String[] authenticatedRoles = status.authenticatedRoles();
 
-    this.WorkflowUUID = status.getWorkflowId();
-    this.Status = status.getStatus();
-    this.WorkflowName = status.getName();
-    this.WorkflowClassName = status.getClassName();
-    this.WorkflowConfigName = status.getConfigName();
-    this.AuthenticatedUser = status.getAuthenticatedUser();
-    this.AssumedRole = status.getAssumedRole();
+    this.WorkflowUUID = status.workflowId();
+    this.Status = status.status();
+    this.WorkflowName = status.name();
+    this.WorkflowClassName = status.className();
+    this.WorkflowConfigName = status.configName();
+    this.AuthenticatedUser = status.authenticatedUser();
+    this.AssumedRole = status.assumedRole();
     this.AuthenticatedRoles =
         authenticatedRoles != null && authenticatedRoles.length > 0
             ? JSONUtil.serializeArray(authenticatedRoles)
@@ -46,13 +46,13 @@ public class WorkflowsOutput {
     this.Output = output != null ? JSONUtil.toJson(output) : null;
     this.Request = null; // not used in Java TX
     this.Error =
-        status.getError() != null
-            ? String.format("%s: %s", status.getError().className(), status.getError().message())
+        status.error() != null
+            ? String.format("%s: %s", status.error().className(), status.error().message())
             : null;
     this.CreatedAt = createdAt != null ? Long.toString(createdAt) : null;
     this.UpdatedAt = updatedAt != null ? Long.toString(updatedAt) : null;
-    this.QueueName = status.getQueueName();
-    this.ApplicationVersion = status.getAppVersion();
-    this.ExecutorID = status.getExecutorId();
+    this.QueueName = status.queueName();
+    this.ApplicationVersion = status.appVersion();
+    this.ExecutorID = status.executorId();
   }
 }

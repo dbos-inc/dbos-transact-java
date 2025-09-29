@@ -5,6 +5,7 @@ import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -515,68 +516,46 @@ public class WorkflowDAO {
 
       try (ResultSet rs = pstmt.executeQuery()) {
         while (rs.next()) {
-          WorkflowStatus info = new WorkflowStatus();
-          // The column names or their order in the SELECT statement must match.
-          info.setWorkflowId(rs.getString("workflow_uuid"));
-          info.setStatus(rs.getString("status"));
-          info.setName(rs.getString("name"));
-          info.setRecoveryAttempts(rs.getInt("recovery_attempts")); // getObject
-          // for
-          // nullable
-          info.setConfigName(rs.getString("config_name"));
-          info.setClassName(rs.getString("class_name"));
-          info.setAuthenticatedUser(rs.getString("authenticated_user"));
-
           String authenticatedRolesJson = rs.getString("authenticated_roles");
-          if (authenticatedRolesJson != null) {
-            info.setAuthenticatedRoles(
-                (String[]) JSONUtil.deserializeToArray(authenticatedRolesJson));
-          }
-
-          info.setAssumedRole(rs.getString("assumed_role"));
-          info.setQueueName(rs.getString("queue_name"));
-          info.setExecutorId(rs.getString("executor_id"));
-          info.setCreatedAt(rs.getObject("created_at", Long.class)); // getObject
-          // for
-          // nullable
-          info.setUpdatedAt(rs.getObject("updated_at", Long.class)); // getObject
-          // for
-          // nullable
-          info.setAppVersion(rs.getString("application_version"));
-          info.setAppId(rs.getString("application_id"));
-
-          if (loadInput) {
-            String serializedInput = rs.getString("inputs");
-            if (serializedInput != null) {
-              var inputValue = JSONUtil.deserializeToArray(serializedInput);
-              info.setInput(inputValue == null ? new Object[0] : inputValue);
+          String serializedInput = rs.getString("inputs");
+          String serializedOutput = rs.getString("output");
+          String serializedError = rs.getString("error");
+          ErrorResult err = null;
+          if (serializedError != null) {
+            var wrapper = JSONUtil.deserializeAppExceptionWrapper(serializedError);
+            Throwable throwable = null;
+            try {
+              throwable = JSONUtil.deserializeAppException(serializedError);
+            } catch (Exception e) {
             }
+            err = new ErrorResult(wrapper.type, wrapper.message, serializedError, throwable);
           }
-
-          if (loadOutput) {
-            String serializedOutput = rs.getString("output");
-            String serializedError = rs.getString("error");
-
-            if (serializedOutput != null) {
-              Object[] oArray = JSONUtil.deserializeToArray(serializedOutput);
-              info.setOutput(oArray[0]);
-            }
-
-            if (serializedError != null) {
-              var wrapper = JSONUtil.deserializeAppExceptionWrapper(serializedError);
-              Throwable throwable = null;
-              try {
-                throwable = JSONUtil.deserializeAppException(serializedError);
-              } catch (Exception e) {
-              }
-              var err = new WorkflowStatus.WorkflowStatusError(
-                  wrapper.type, wrapper.message, serializedError, throwable);
-              info.setError(err);
-            }
-          }
-
-          info.setWorkflowDeadlineEpochMs(rs.getObject("workflow_deadline_epoch_ms", Long.class));
-          info.setWorkflowTimeoutMs(rs.getObject("workflow_timeout_ms", Long.class));
+          WorkflowStatus info =
+              new WorkflowStatus(
+                  rs.getString("workflow_uuid"),
+                  rs.getString("status"),
+                  rs.getString("name"),
+                  rs.getString("class_name"),
+                  rs.getString("config_name"),
+                  rs.getString("authenticated_user"),
+                  rs.getString("assumed_role"),
+                  (authenticatedRolesJson != null)
+                      ? (String[]) JSONUtil.deserializeToArray(authenticatedRolesJson)
+                      : null,
+                  (serializedInput != null) ? JSONUtil.deserializeToArray(serializedInput) : null,
+                  (serializedOutput != null)
+                      ? JSONUtil.deserializeToArray(serializedOutput)[0]
+                      : null,
+                  err,
+                  rs.getObject("created_at", Long.class),
+                  rs.getObject("updated_at", Long.class),
+                  rs.getString("queue_name"),
+                  rs.getString("executor_id"),
+                  rs.getString("application_version"),
+                  rs.getObject("workflow_timeout_ms", Long.class),
+                  rs.getObject("workflow_deadline_epoch_ms", Long.class),
+                  rs.getString("application_id"),
+                  rs.getInt("recovery_attempts"));
 
           workflows.add(info);
         }
@@ -898,22 +877,23 @@ public class WorkflowDAO {
     try (PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, forkedWorkflowId);
       stmt.setString(2, WorkflowState.ENQUEUED.name());
-      stmt.setString(3, originalStatus.getName());
-      stmt.setString(4, originalStatus.getClassName());
-      stmt.setString(5, originalStatus.getConfigName());
+      stmt.setString(3, originalStatus.name());
+      stmt.setString(4, originalStatus.className());
+      stmt.setString(5, originalStatus.configName());
 
       // Use provided application version or fall back to original
-      String appVersion = applicationVersion != null ? applicationVersion : originalStatus.getAppVersion();
+      String appVersion =
+          applicationVersion != null ? applicationVersion : originalStatus.appVersion();
       stmt.setString(6, appVersion);
 
-      stmt.setString(7, originalStatus.getAppId());
-      stmt.setString(8, originalStatus.getAuthenticatedUser());
-      stmt.setString(9, JSONUtil.serializeArray(originalStatus.getAuthenticatedRoles()));
-      stmt.setString(10, originalStatus.getAssumedRole());
+      stmt.setString(7, originalStatus.appId());
+      stmt.setString(8, originalStatus.authenticatedUser());
+      stmt.setString(9, JSONUtil.serializeArray(originalStatus.authenticatedRoles()));
+      stmt.setString(10, originalStatus.assumedRole());
       stmt.setString(11, Constants.DBOS_INTERNAL_QUEUE);
-      stmt.setString(12, JSONUtil.serializeArray(originalStatus.getInput()));
+      stmt.setString(12, JSONUtil.serializeArray(originalStatus.input()));
       stmt.setLong(13, workflowDeadlineEpoch);
-      stmt.setObject(14, originalStatus.getWorkflowTimeoutMs());
+      stmt.setObject(14, originalStatus.workflowTimeoutMs());
 
       stmt.executeUpdate();
     }

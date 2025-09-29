@@ -568,13 +568,13 @@ public class DBOSExecutor implements AutoCloseable {
       ListWorkflowsInput pendingInput =
           new ListWorkflowsInput.Builder().status(WorkflowState.PENDING).endTime(endTime).build();
       for (WorkflowStatus status : systemDatabase.listWorkflows(pendingInput)) {
-        cancelWorkflow(status.getWorkflowId());
+        cancelWorkflow(status.workflowId());
       }
 
       ListWorkflowsInput enqueuedInput =
           new ListWorkflowsInput.Builder().status(WorkflowState.ENQUEUED).endTime(endTime).build();
       for (WorkflowStatus status : systemDatabase.listWorkflows(enqueuedInput)) {
-        cancelWorkflow(status.getWorkflowId());
+        cancelWorkflow(status.workflowId());
       }
     } catch (SQLException e) {
       throw new RuntimeException(e);
@@ -809,8 +809,8 @@ public class DBOSExecutor implements AutoCloseable {
       throw new NonExistentWorkflowException(workflowId);
     }
 
-    Object[] inputs = status.get().getInput();
-    RegisteredWorkflow workflow = workflowMap.get(status.get().getName());
+    Object[] inputs = status.get().input();
+    RegisteredWorkflow workflow = workflowMap.get(status.get().name());
 
     if (workflow == null) {
       throw new WorkflowFunctionNotFoundException(workflowId);
