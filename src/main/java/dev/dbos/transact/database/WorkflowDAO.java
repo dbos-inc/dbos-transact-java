@@ -524,9 +524,9 @@ public class WorkflowDAO {
       try (ResultSet rs = pstmt.executeQuery()) {
         while (rs.next()) {
           String authenticatedRolesJson = rs.getString("authenticated_roles");
-          String serializedInput = rs.getString("inputs");
-          String serializedOutput = rs.getString("output");
-          String serializedError = rs.getString("error");
+          String serializedInput = loadInput ? rs.getString("inputs") : null;
+          String serializedOutput = loadOutput ? rs.getString("output") : null;
+          String serializedError = loadOutput ? rs.getString("error") : null;
           ErrorResult err = null;
           if (serializedError != null) {
             var wrapper = JSONUtil.deserializeAppExceptionWrapper(serializedError);
