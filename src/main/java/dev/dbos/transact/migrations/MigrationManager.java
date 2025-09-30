@@ -39,10 +39,10 @@ public class MigrationManager {
     }
 
     String dbName;
-    if (dbconfig.getSysDbName() != null) {
-      dbName = dbconfig.getSysDbName();
+    if (dbconfig.sysDbName() != null) {
+      dbName = dbconfig.sysDbName();
     } else {
-      dbName = dbconfig.getName() + Constants.SYS_DB_SUFFIX;
+      dbName = dbconfig.name() + Constants.SYS_DB_SUFFIX;
     }
 
     createDatabaseIfNotExists(dbconfig, dbName);

@@ -5,44 +5,24 @@ import dev.dbos.transact.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DBOSConfig {
-  private final String name;
-  private final String url;
-  private final String dbHost;
-  private final int dbPort;
-  private final String dbUser;
-  private final String dbPassword;
-  private final int maximumPoolSize;
-  private final int connectionTimeout;
-  private final String appDbName;
-  private final String sysDbName;
-  private final boolean http;
-  private final int httpPort;
-  private final boolean httpAwaitOnStart;
-  private final boolean migrate;
-  private final String conductorKey;
-  private final String conductorDomain;
+public record DBOSConfig(
+    String name,
+    String url,
+    String dbHost,
+    int dbPort,
+    String dbUser,
+    String dbPassword,
+    int maximumPoolSize,
+    int connectionTimeout,
+    String sysDbName,
+    boolean http,
+    int httpPort,
+    boolean httpAwaitOnStart,
+    boolean migrate,
+    String conductorKey,
+    String conductorDomain) {
 
   static Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
-
-  private DBOSConfig(Builder builder) {
-    this.name = builder.name;
-    this.url = builder.url;
-    this.maximumPoolSize = builder.maximumPoolSize;
-    this.connectionTimeout = builder.connectionTimeout;
-    this.appDbName = builder.appDbName;
-    this.sysDbName = builder.sysDbName;
-    this.dbUser = builder.dbUser;
-    this.dbPassword = builder.dbPassword;
-    this.dbHost = builder.dbHost;
-    this.dbPort = builder.dbPort;
-    this.http = builder.http;
-    this.httpPort = builder.httpPort;
-    this.httpAwaitOnStart = builder.httpAwaitOnStart;
-    this.migrate = builder.migrate;
-    this.conductorKey = builder.conductorKey;
-    this.conductorDomain = builder.conductorDomain;
-  }
 
   public static class Builder {
     private String name;
@@ -53,7 +33,6 @@ public class DBOSConfig {
     private String dbPassword;
     private int maximumPoolSize = 3;
     private int connectionTimeout = 30000;
-    private String appDbName;
     private String sysDbName;
     private boolean http = false;
     private int httpPort;
@@ -89,11 +68,6 @@ public class DBOSConfig {
 
     public Builder connectionTimeout(int connectionTimeout) {
       this.connectionTimeout = connectionTimeout;
-      return this;
-    }
-
-    public Builder appDbName(String appDbName) {
-      this.appDbName = appDbName;
       return this;
     }
 
@@ -160,79 +134,22 @@ public class DBOSConfig {
         sysDbName = name + Constants.SYS_DB_SUFFIX;
       }
 
-      return new DBOSConfig(this);
+      return new DBOSConfig(
+          name,
+          url,
+          dbHost,
+          dbPort,
+          dbUser,
+          dbPassword,
+          maximumPoolSize,
+          connectionTimeout,
+          sysDbName,
+          http,
+          httpPort,
+          httpAwaitOnStart,
+          migrate,
+          conductorKey,
+          conductorDomain);
     }
-  }
-
-  // Getters
-  public String getName() {
-    return name;
-  }
-
-  public String getUrl() {
-    return url;
-  }
-
-  public int getMaximumPoolSize() {
-    return maximumPoolSize;
-  }
-
-  public int getConnectionTimeout() {
-    return connectionTimeout;
-  }
-
-  public String getAppDbName() {
-    return appDbName;
-  }
-
-  public String getSysDbName() {
-    return sysDbName;
-  }
-
-  public String getDbUser() {
-    return dbUser;
-  }
-
-  public String getDbPassword() {
-    return dbPassword;
-  }
-
-  public String getDbHost() {
-    return dbHost;
-  }
-
-  public int getDbPort() {
-    return dbPort;
-  }
-
-  public boolean isHttp() {
-    return http;
-  }
-
-  public int getHttpPort() {
-    return httpPort;
-  }
-
-  public boolean isHttpAwaitOnStart() {
-    return httpAwaitOnStart;
-  }
-
-  public boolean migration() {
-    return migrate;
-  }
-
-  public String getConductorKey() {
-    return conductorKey;
-  }
-
-  public String getConductorDomain() {
-    return conductorDomain;
-  }
-
-  @Override
-  public String toString() {
-    return String.format(
-        "DBOSConfig{name='%s', url='%s', maximumPoolSize=%d, connectionTimeout=%d, appDbName='%s', sysDbName='%s'}",
-        name, url, maximumPoolSize, connectionTimeout, appDbName, sysDbName);
   }
 }

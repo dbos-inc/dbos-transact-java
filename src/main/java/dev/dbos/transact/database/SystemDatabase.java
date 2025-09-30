@@ -316,25 +316,23 @@ public class SystemDatabase implements AutoCloseable {
   public static HikariDataSource createDataSource(DBOSConfig config, String dbName) {
 
     if (dbName == null) {
-      if (config.getSysDbName() != null) {
-        dbName = config.getSysDbName();
+      if (config.sysDbName() != null) {
+        dbName = config.sysDbName();
       } else {
-        dbName = config.getName() + Constants.SYS_DB_SUFFIX;
+        dbName = config.name() + Constants.SYS_DB_SUFFIX;
       }
     }
 
-    String dburl = config.getUrl();
+    String dburl = config.url();
 
     if (dburl == null) {
-      dburl =
-          String.format(
-              "jdbc:postgresql://%s:%d/%s", config.getDbHost(), config.getDbPort(), dbName);
+      dburl = String.format("jdbc:postgresql://%s:%d/%s", config.dbHost(), config.dbPort(), dbName);
     }
 
-    String dbUser = config.getDbUser();
-    String dbPassword = config.getDbPassword();
-    int maximumPoolSize = config.getMaximumPoolSize();
-    int connectionTimeout = config.getConnectionTimeout();
+    String dbUser = config.dbUser();
+    String dbPassword = config.dbPassword();
+    int maximumPoolSize = config.maximumPoolSize();
+    int connectionTimeout = config.connectionTimeout();
 
     return createDataSource(dburl, dbUser, dbPassword, maximumPoolSize, connectionTimeout);
   }
@@ -342,7 +340,7 @@ public class SystemDatabase implements AutoCloseable {
   public static HikariDataSource createPostgresDataSource(DBOSConfig config) {
     HikariConfig hikariConfig = new HikariConfig();
 
-    String dburl = config.getUrl();
+    String dburl = config.url();
 
     if (dburl != null) {
       dburl = createPostgresConnectionUrl(dburl);
@@ -351,11 +349,11 @@ public class SystemDatabase implements AutoCloseable {
       dburl =
           String.format(
               "jdbc:postgresql://%s:%d/%s",
-              config.getDbHost(), config.getDbPort(), Constants.POSTGRES_DEFAULT_DB);
+              config.dbHost(), config.dbPort(), Constants.POSTGRES_DEFAULT_DB);
     }
 
-    String dbUser = config.getDbUser();
-    String dbPassword = config.getDbPassword();
+    String dbUser = config.dbUser();
+    String dbPassword = config.dbPassword();
     hikariConfig.setJdbcUrl(dburl);
     hikariConfig.setUsername(dbUser);
     hikariConfig.setPassword(dbPassword);
