@@ -4,9 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
 import java.time.Instant;
@@ -215,6 +218,23 @@ public class MultiInstTest {
       assertEquals(
           "SUCCESS",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+
+      var dataSource = SystemDatabase.createDataSource(dbosConfig);
+      DBUtils.setWorkflowState(dataSource, handle.getWorkflowId(), WorkflowState.PENDING.name());
+      stat = client.getWorkflowStatus(handle.getWorkflowId());
+      assertEquals(
+          "PENDING",
+          stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var eh = dbosExecutor.executeWorkflowById(handle.getWorkflowId());
+      eh.getResult();
+      stat = client.getWorkflowStatus(handle.getWorkflowId());
+      assertEquals(
+          "SUCCESS",
+          stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+      assertEquals(0, bimpl1.nWfCalls);
+      assertEquals(2, bimpla.nWfCalls);
     }
   }
 }
