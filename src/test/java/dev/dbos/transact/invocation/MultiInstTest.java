@@ -24,9 +24,11 @@ public class MultiInstTest {
   private static DBOSConfig dbosConfig;
   private DBOS dbos;
   HawkServiceImpl himpl;
-  BearServiceImpl bimpl;
+  BearServiceImpl bimpla;
+  BearServiceImpl bimpl1;
   private HawkService hproxy;
   private BearService bproxya;
+  private BearService bproxy1;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
 
   @BeforeAll
@@ -47,7 +49,8 @@ public class MultiInstTest {
     DBUtils.recreateDB(dbosConfig);
     dbos = DBOS.initialize(dbosConfig);
     himpl = new HawkServiceImpl();
-    bimpl = new BearServiceImpl();
+    bimpla = new BearServiceImpl();
+    bimpl1 = new BearServiceImpl();
 
     hproxy =
         dbos.<HawkService>Workflow()
@@ -55,13 +58,22 @@ public class MultiInstTest {
             .implementation(himpl)
             .build();
     himpl.setProxy(hproxy);
+
     bproxya =
         dbos.<BearService>Workflow()
             .interfaceClass(BearService.class)
             .instanceName("A")
-            .implementation(bimpl)
+            .implementation(bimpla)
             .build();
-    bimpl.setProxy(bproxya);
+    bimpla.setProxy(bproxya);
+
+    bproxy1 =
+        dbos.<BearService>Workflow()
+            .interfaceClass(BearService.class)
+            .instanceName("1")
+            .implementation(bimpl1)
+            .build();
+    bimpl1.setProxy(bproxy1);
 
     dbos.launch();
   }
@@ -85,6 +97,21 @@ public class MultiInstTest {
             .atZone(ZoneId.systemDefault()) // or another zone
             .toLocalDate()
             .format(DateTimeFormatter.ISO_DATE));
+    assertEquals(1, bimpla.nWfCalls);
+
+    var bhandle1 =
+        dbos.startWorkflow(
+            () -> {
+              return bproxy1.stepWorkflow();
+            });
+    var bresult1 = bhandle1.getResult();
+    assertEquals(
+        localDate,
+        bresult1
+            .atZone(ZoneId.systemDefault()) // or another zone
+            .toLocalDate()
+            .format(DateTimeFormatter.ISO_DATE));
+    assertEquals(1, bimpl1.nWfCalls);
 
     var hhandle =
         dbos.startWorkflow(
@@ -98,7 +125,6 @@ public class MultiInstTest {
             .atZone(ZoneId.systemDefault()) // or another zone
             .toLocalDate()
             .format(DateTimeFormatter.ISO_DATE));
-    assertEquals(1, bimpl.nWfCalls);
 
     var browsa =
         dbos.listWorkflows(
@@ -110,6 +136,17 @@ public class MultiInstTest {
     assertEquals("A", browa.instanceName());
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", browa.className());
     assertEquals("SUCCESS", browa.status());
+
+    var brows1 =
+        dbos.listWorkflows(
+            new ListWorkflowsInput.Builder().workflowID(bhandle1.getWorkflowId()).build());
+    assertEquals(1, brows1.size());
+    var brow1 = brows1.get(0);
+    assertEquals(bhandle1.getWorkflowId(), brow1.workflowId());
+    assertEquals("stepWorkflow", brow1.name());
+    assertEquals("1", brow1.instanceName());
+    assertEquals("dev.dbos.transact.invocation.BearServiceImpl", brow1.className());
+    assertEquals("SUCCESS", brow1.status());
 
     var hrows =
         dbos.listWorkflows(
