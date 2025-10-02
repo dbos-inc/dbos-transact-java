@@ -30,7 +30,7 @@ public class HttpServer {
     setUpContext();
   }
 
-  public static HttpServer getInstance(int port, AdminController ac) {
+  public static HttpServer create(int port, AdminController ac) {
     HttpServer s = new HttpServer(port, ac);
     s.init();
     return s;
@@ -43,11 +43,6 @@ public class HttpServer {
     } catch (Exception e) {
       logger.error("Error starting http server", e);
     }
-  }
-
-  public void startAndBlock() {
-    start();
-    tomcat.getServer().await();
   }
 
   public void stop() {

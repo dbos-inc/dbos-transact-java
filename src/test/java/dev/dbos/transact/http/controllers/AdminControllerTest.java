@@ -52,7 +52,6 @@ class AdminControllerTest {
             .maximumPoolSize(2)
             .runAdminServer()
             .adminServerPort(3010)
-            .adminAwaitOnStart(true)
             .build();
   }
 

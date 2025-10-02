@@ -15,9 +15,8 @@ public record DBOSConfig(
     int maximumPoolSize,
     int connectionTimeout,
     String sysDbName,
-    boolean http,
-    int httpPort,
-    boolean httpAwaitOnStart,
+    boolean runAdminServer,
+    int adminServerPort,
     boolean migrate,
     String conductorKey,
     String conductorDomain) {
@@ -34,9 +33,8 @@ public record DBOSConfig(
     private int maximumPoolSize = 3;
     private int connectionTimeout = 30000;
     private String sysDbName;
-    private boolean http = false;
-    private int httpPort;
-    private boolean httpAwaitOnStart = true;
+    private boolean runAdminServer = false;
+    private int adminServerPort;
     private boolean migrate = true;
     private String conductorKey;
     private String conductorDomain;
@@ -87,17 +85,12 @@ public record DBOSConfig(
     }
 
     public Builder runAdminServer() {
-      this.http = true;
+      this.runAdminServer = true;
       return this;
     }
 
     public Builder adminServerPort(int port) {
-      this.httpPort = port;
-      return this;
-    }
-
-    public Builder adminAwaitOnStart(boolean wait) {
-      this.httpAwaitOnStart = wait;
+      this.adminServerPort = port;
       return this;
     }
 
@@ -122,6 +115,7 @@ public record DBOSConfig(
       if (dbPassword == null) {
         dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
       }
+
       if (url == null) {
         url = System.getenv(Constants.JDBC_URL_ENV_VAR);
         logger.info("Using db_url env {}", url);
@@ -144,9 +138,8 @@ public record DBOSConfig(
           maximumPoolSize,
           connectionTimeout,
           sysDbName,
-          http,
-          httpPort,
-          httpAwaitOnStart,
+          runAdminServer,
+          adminServerPort,
           migrate,
           conductorKey,
           conductorDomain);

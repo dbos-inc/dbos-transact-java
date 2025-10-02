@@ -35,7 +35,6 @@ public class AsyncWorkflowTest {
             .sysDbName("dbos_java_sys")
             .maximumPoolSize(2)
             .runAdminServer()
-            .adminAwaitOnStart(false)
             .build();
   }
 

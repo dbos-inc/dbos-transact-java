@@ -31,7 +31,6 @@ public class SyncWorkflowTest {
             .sysDbName("dbos_java_sys")
             .maximumPoolSize(2)
             .runAdminServer()
-            .adminAwaitOnStart(false)
             .build();
   }
 
