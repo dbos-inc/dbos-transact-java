@@ -89,7 +89,7 @@ class SystemDatabaseTest {
       assertEquals(wfStatusInternal.getStatus().toString(), result.getStatus());
       assertEquals(wfStatusInternal.getName(), result.getName());
       assertEquals(wfStatusInternal.getClassName(), result.getClassName());
-      assertEquals(wfStatusInternal.getConfigName(), result.getConfigName());
+      assertEquals(wfStatusInternal.getInstanceName(), result.getInstanceName());
       assertEquals(wfStatusInternal.getQueueName(), result.getQueueName());
       assertEquals(
           wfStatusInternal.getWorkflowDeadlineEpochMs(), result.getWorkflowDeadlineEpochMs());

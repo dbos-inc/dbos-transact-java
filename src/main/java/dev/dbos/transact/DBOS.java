@@ -77,7 +77,8 @@ public class DBOS {
     registerInternals();
   }
 
-  private void registerClassWorkflows(Class<?> interfaceClass, Object implementation) {
+  private void registerClassWorkflows(
+      Class<?> interfaceClass, Object implementation, String instanceName) {
     Objects.requireNonNull(interfaceClass);
     Objects.requireNonNull(implementation);
     if (!interfaceClass.isInterface()) {
@@ -92,29 +93,36 @@ public class DBOS {
       Workflow wfAnnotation = method.getAnnotation(Workflow.class);
       if (wfAnnotation != null) {
         method.setAccessible(true); // In case it's not public
-        registerWorkflowMethod(wfAnnotation, implementation, method);
+        registerWorkflowMethod(wfAnnotation, implementation, instanceName, method);
       }
     }
   }
 
-  private String registerWorkflowMethod(Workflow wfTag, Object target, Method method) {
+  private String registerWorkflowMethod(
+      Workflow wfTag, Object target, String instanceName, Method method) {
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
 
     String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
     workflowRegistry.register(
-        target.getClass().getName(), name, target, method, wfTag.maxRecoveryAttempts());
+        target.getClass().getName(),
+        name,
+        target,
+        instanceName,
+        method,
+        wfTag.maxRecoveryAttempts());
     return name;
   }
 
-  public RegisteredWorkflow getWorkflow(String className, String workflowName) {
+  public RegisteredWorkflow getWorkflow(
+      String className, String instanceName, String workflowName) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot retrieve workflow before launch");
     }
 
-    return executor.getWorkflow(className, workflowName);
+    return executor.getWorkflow(className, instanceName, workflowName);
   }
 
   public Optional<Queue> getQueue(String queueName) {
@@ -158,6 +166,7 @@ public class DBOS {
     private final DBOS dbos;
     private Class<T> interfaceClass;
     private Object implementation;
+    private String instanceName = "";
 
     WorkflowBuilder(DBOS dbos) {
       this.dbos = dbos;
@@ -173,11 +182,16 @@ public class DBOS {
       return this;
     }
 
+    public WorkflowBuilder<T> instanceName(String name) {
+      this.instanceName = name;
+      return this;
+    }
+
     public T build() {
-      dbos.registerClassWorkflows(interfaceClass, implementation);
+      dbos.registerClassWorkflows(interfaceClass, implementation, instanceName);
 
       return DBOSInvocationHandler.createProxy(
-          interfaceClass, implementation, () -> dbos.dbosExecutor.get());
+          interfaceClass, implementation, instanceName, () -> dbos.dbosExecutor.get());
     }
   }
 
@@ -279,7 +293,7 @@ public class DBOS {
             "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)");
       }
 
-      String wfName = registerWorkflowMethod(wfAnnotation, implementation, method);
+      String wfName = registerWorkflowMethod(wfAnnotation, implementation, "", method);
       var scheduledWF =
           SchedulerService.makeScheduledInstance(
               implementation.getClass().getName(), wfName, implementation, scheduled.cron());
