@@ -26,7 +26,7 @@ public class MultiInstTest {
   HawkServiceImpl himpl;
   BearServiceImpl bimpl;
   private HawkService hproxy;
-  private BearService bproxy;
+  private BearService bproxya;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
 
   @BeforeAll
@@ -55,12 +55,13 @@ public class MultiInstTest {
             .implementation(himpl)
             .build();
     himpl.setProxy(hproxy);
-    bproxy =
+    bproxya =
         dbos.<BearService>Workflow()
             .interfaceClass(BearService.class)
+            .instanceName("A")
             .implementation(bimpl)
             .build();
-    bimpl.setProxy(bproxy);
+    bimpl.setProxy(bproxya);
 
     dbos.launch();
   }
@@ -72,15 +73,15 @@ public class MultiInstTest {
 
   @Test
   void startWorkflow() throws Exception {
-    var bhandle =
+    var bhandlea =
         dbos.startWorkflow(
             () -> {
-              return bproxy.stepWorkflow();
+              return bproxya.stepWorkflow();
             });
-    var bresult = bhandle.getResult();
+    var bresulta = bhandlea.getResult();
     assertEquals(
         localDate,
-        bresult
+        bresulta
             .atZone(ZoneId.systemDefault()) // or another zone
             .toLocalDate()
             .format(DateTimeFormatter.ISO_DATE));
@@ -99,15 +100,16 @@ public class MultiInstTest {
             .format(DateTimeFormatter.ISO_DATE));
     assertEquals(1, bimpl.nWfCalls);
 
-    var brows =
+    var browsa =
         dbos.listWorkflows(
-            new ListWorkflowsInput.Builder().workflowID(bhandle.getWorkflowId()).build());
-    assertEquals(1, brows.size());
-    var brow = brows.get(0);
-    assertEquals(bhandle.getWorkflowId(), brow.workflowId());
-    assertEquals("stepWorkflow", brow.name());
-    assertEquals("dev.dbos.transact.invocation.BearServiceImpl", brow.className());
-    assertEquals("SUCCESS", brow.status());
+            new ListWorkflowsInput.Builder().workflowID(bhandlea.getWorkflowId()).build());
+    assertEquals(1, browsa.size());
+    var browa = browsa.get(0);
+    assertEquals(bhandlea.getWorkflowId(), browa.workflowId());
+    assertEquals("stepWorkflow", browa.name());
+    assertEquals("A", browa.instanceName());
+    assertEquals("dev.dbos.transact.invocation.BearServiceImpl", browa.className());
+    assertEquals("SUCCESS", browa.status());
 
     var hrows =
         dbos.listWorkflows(
@@ -117,6 +119,7 @@ public class MultiInstTest {
     assertEquals(hhandle.getWorkflowId(), hrow.workflowId());
     assertEquals("stepWorkflow", hrow.name());
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", hrow.className());
+    assertEquals("", hrow.instanceName());
     assertEquals("SUCCESS", hrow.status());
   }
 }
