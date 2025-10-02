@@ -19,8 +19,6 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import java.sql.*;
 import java.util.*;
 
-import javax.sql.DataSource;
-
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
@@ -38,7 +36,7 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationService notificationService;
 
   public SystemDatabase(DBOSConfig config) {
-    this(SystemDatabase.createDataSource(config, null));
+    this(SystemDatabase.createDataSource(config));
   }
 
   public SystemDatabase(HikariDataSource dataSource) {
@@ -48,6 +46,11 @@ public class SystemDatabase implements AutoCloseable {
     queuesDAO = new QueuesDAO(dataSource);
     notificationService = new NotificationService(dataSource);
     notificationsDAO = new NotificationsDAO(dataSource, notificationService);
+  }
+
+  // test method
+  Connection getSysDBConnection() throws SQLException {
+    return dataSource.getConnection();
   }
 
   @Override
@@ -299,102 +302,41 @@ public class SystemDatabase implements AutoCloseable {
     }
   }
 
-  public static HikariDataSource createDataSource(
-      String url, String user, String password, int poolSize, int timeout) {
+  public static DatabaseUrl createDatabaseUrl(DBOSConfig config) {
+    if (config.url() != null) {
+      var dbinfo = DatabaseUrl.fromUri(config.url());
+      if (config.dbUser() != null) {
+        dbinfo = dbinfo.withUser(config.dbUser());
+      }
+      if (config.dbPassword() != null) {
+        dbinfo = dbinfo.withPassword(config.dbPassword());
+      }
+      return dbinfo;
+    }
+
+    var dbName = config.sysDbName() != null ? config.sysDbName() : config.name() + Constants.SYS_DB_SUFFIX;
+    return new DatabaseUrl("postgresql", config.dbHost(), config.dbPort(), dbName, config.dbUser(), config.dbPassword(), null);
+  }
+
+  public static HikariDataSource createDataSource(DBOSConfig config) {
+    var dbUrl = createDatabaseUrl(config);
+    return createDataSource(dbUrl, config.maximumPoolSize(), config.connectionTimeout());
+  }
+
+  public static HikariDataSource createDataSource(DatabaseUrl url) {
+    return createDataSource(url, 0, 0);
+  }
+
+  public static HikariDataSource createDataSource(DatabaseUrl url, int poolSize, int timeout) {
     HikariConfig hikariConfig = new HikariConfig();
-    hikariConfig.setJdbcUrl(url);
-    hikariConfig.setUsername(user);
-    hikariConfig.setPassword(password);
+    hikariConfig.setJdbcUrl(url.jdbcUrl());
+    hikariConfig.setUsername(url.username());
+    hikariConfig.setPassword(url.password());
     hikariConfig.setMaximumPoolSize(poolSize > 0 ? poolSize : 2);
     if (timeout > 0) {
       hikariConfig.setConnectionTimeout(timeout);
     }
 
     return new HikariDataSource(hikariConfig);
-  }
-
-  public static HikariDataSource createDataSource(DBOSConfig config, String dbName) {
-
-    if (dbName == null) {
-      if (config.sysDbName() != null) {
-        dbName = config.sysDbName();
-      } else {
-        dbName = config.name() + Constants.SYS_DB_SUFFIX;
-      }
-    }
-
-    String dburl = config.url();
-
-    if (dburl == null) {
-      dburl = String.format("jdbc:postgresql://%s:%d/%s", config.dbHost(), config.dbPort(), dbName);
-    }
-
-    String dbUser = config.dbUser();
-    String dbPassword = config.dbPassword();
-    int maximumPoolSize = config.maximumPoolSize();
-    int connectionTimeout = config.connectionTimeout();
-
-    return createDataSource(dburl, dbUser, dbPassword, maximumPoolSize, connectionTimeout);
-  }
-
-  public static HikariDataSource createPostgresDataSource(DBOSConfig config) {
-    HikariConfig hikariConfig = new HikariConfig();
-
-    String dburl = config.url();
-
-    if (dburl != null) {
-      dburl = createPostgresConnectionUrl(dburl);
-    } else {
-
-      dburl =
-          String.format(
-              "jdbc:postgresql://%s:%d/%s",
-              config.dbHost(), config.dbPort(), Constants.POSTGRES_DEFAULT_DB);
-    }
-
-    String dbUser = config.dbUser();
-    String dbPassword = config.dbPassword();
-    hikariConfig.setJdbcUrl(dburl);
-    hikariConfig.setUsername(dbUser);
-    hikariConfig.setPassword(dbPassword);
-
-    hikariConfig.setMaximumPoolSize(2);
-    return new HikariDataSource(hikariConfig);
-  }
-
-  public static DataSource createDataSource(DBOSConfig config) {
-    return createDataSource(config, null);
-  }
-
-  Connection getSysDBConnection() throws SQLException {
-    return dataSource.getConnection();
-  }
-
-  public static String createPostgresConnectionUrl(String originalUrl) {
-    if (originalUrl == null || !originalUrl.startsWith("jdbc:postgresql://")) {
-      throw new IllegalArgumentException("Invalid PostgreSQL JDBC URL: " + originalUrl);
-    }
-
-    String urlWithoutPrefix = originalUrl.substring("jdbc:postgresql://".length());
-
-    // Find the database name part (after the last '/' and before '?' if it exists)
-    int slashIndex = urlWithoutPrefix.lastIndexOf('/');
-    if (slashIndex == -1) {
-      throw new IllegalArgumentException(
-          "Invalid JDBC URL format - missing database name: " + originalUrl);
-    }
-
-    String hostAndPort = urlWithoutPrefix.substring(0, slashIndex);
-    String databaseAndParams = urlWithoutPrefix.substring(slashIndex + 1);
-
-    // Split database name from query parameters
-    String queryParams = "";
-    int questionMarkIndex = databaseAndParams.indexOf('?');
-    if (questionMarkIndex != -1) {
-      queryParams = databaseAndParams.substring(questionMarkIndex);
-    }
-
-    // Build new URL with 'postgres' database
-    return "jdbc:postgresql://" + hostAndPort + "/postgres" + queryParams;
   }
 }

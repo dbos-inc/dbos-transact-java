@@ -2,6 +2,7 @@ package dev.dbos.transact.migrations;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.DatabaseUrl;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.exceptions.ErrorCode;
@@ -31,23 +32,13 @@ public class MigrationManager {
     this.dataSource = dataSource;
   }
 
-  public static void runMigrations(DBOSConfig dbconfig) {
+  public static void runMigrations(DBOSConfig config) {
 
-    if (dbconfig == null) {
-      logger.warn("No database configuration. Skipping migration");
-      return;
-    }
+    var dbUrl = SystemDatabase.createDatabaseUrl(Objects.requireNonNull(config));
 
-    String dbName;
-    if (dbconfig.sysDbName() != null) {
-      dbName = dbconfig.sysDbName();
-    } else {
-      dbName = dbconfig.name() + Constants.SYS_DB_SUFFIX;
-    }
+    createDatabaseIfNotExists(dbUrl);
 
-    createDatabaseIfNotExists(dbconfig, dbName);
-
-    DataSource dataSource = SystemDatabase.createDataSource(dbconfig, dbName);
+    DataSource dataSource = SystemDatabase.createDataSource(dbUrl);
 
     try {
       MigrationManager m = new MigrationManager(dataSource);
@@ -62,28 +53,28 @@ public class MigrationManager {
     logger.info("Database migrations completed successfully");
   }
 
-  public static void createDatabaseIfNotExists(DBOSConfig config, String dbName) {
-    DataSource adminDS = SystemDatabase.createPostgresDataSource(config);
+  public static void createDatabaseIfNotExists(DatabaseUrl dbUrl) {
+    DataSource adminDS = SystemDatabase.createDataSource(dbUrl.withDatabase("postgres"));
     try {
       try (Connection conn = adminDS.getConnection();
           PreparedStatement ps =
               conn.prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
 
-        ps.setString(1, dbName);
+        ps.setString(1, dbUrl.database());
         try (ResultSet rs = ps.executeQuery()) {
           if (rs.next()) {
-            logger.info("Database '{}' already exists", dbName);
+            logger.info("Database '{}' already exists", dbUrl.database());
             // createSchemaIfNotExists(config, dbName, Constants.DB_SCHEMA);
             return;
           }
         }
 
         try (Statement stmt = conn.createStatement()) {
-          stmt.executeUpdate("CREATE DATABASE \"" + dbName + "\"");
-          logger.info("Database '{}' created successfully", dbName);
+          stmt.executeUpdate("CREATE DATABASE \"" + dbUrl.database() + "\"");
+          logger.info("Database '{}' created successfully", dbUrl.database());
         }
       } catch (SQLException e) {
-        throw new RuntimeException("Failed to check or create database: " + dbName, e);
+        throw new RuntimeException("Failed to check or create database: " + dbUrl.database(), e);
       }
     } finally {
       // temporary

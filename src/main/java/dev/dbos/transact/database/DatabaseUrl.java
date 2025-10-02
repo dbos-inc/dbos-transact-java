@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-record DatabaseInfo(
+public record DatabaseUrl(
     String scheme,
     String host,
     int port,
@@ -19,14 +19,22 @@ record DatabaseInfo(
     String password,
     Map<String, String> query) {
 
-  DatabaseInfo {
+  public DatabaseUrl {
     Objects.requireNonNull(scheme);
     Objects.requireNonNull(host);
     Objects.requireNonNull(database);
   }
 
-  public DatabaseInfo withDatabase(String database) {
-    return new DatabaseInfo(scheme, host, port, database, username, password, query);
+  public DatabaseUrl withDatabase(String database) {
+    return new DatabaseUrl(scheme(), host(), port(), database, username(), password(), query());
+  }
+
+  public DatabaseUrl withUser(String user) {
+    return new DatabaseUrl(scheme(), host(), port(), database(), user, password(), query());
+  }
+
+  public DatabaseUrl withPassword(String password) {
+    return new DatabaseUrl(scheme(), host(), port(), database(), username(), password, query());
   }
 
   static Map<String, String> parseQuery(String query) {
@@ -52,7 +60,7 @@ record DatabaseInfo(
     return URLEncoder.encode(value, StandardCharsets.UTF_8);
   }
 
-  public static DatabaseInfo fromUri(String dbUrl) {
+  public static DatabaseUrl fromUri(String dbUrl) {
     Objects.requireNonNull(dbUrl);
     boolean jdbcUrl = false;
     if (dbUrl.startsWith("jdbc:")) {
@@ -80,7 +88,7 @@ record DatabaseInfo(
       }
     }
 
-    return new DatabaseInfo(
+    return new DatabaseUrl(
         scheme,
         decode(uri.getHost()),
         uri.getPort(),

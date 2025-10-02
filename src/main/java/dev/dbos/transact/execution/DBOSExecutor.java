@@ -141,7 +141,8 @@ public class DBOSExecutor implements AutoCloseable {
       }
 
       if (config.runAdminServer()) {
-        httpServer = HttpServer.create(
+        httpServer =
+            HttpServer.create(
                 config.adminServerPort(), new AdminController(this, systemDatabase, queues));
         httpServer.start();
       }

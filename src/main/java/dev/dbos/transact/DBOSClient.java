@@ -1,5 +1,7 @@
 package dev.dbos.transact;
 
+import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.DatabaseUrl;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSExecutor.ExecuteWorkflowOptions;
@@ -26,7 +28,15 @@ public class DBOSClient implements AutoCloseable {
   private final SystemDatabase systemDatabase;
 
   public DBOSClient(String url, String user, String password) {
-    var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
+    var dbUrl = DatabaseUrl.fromUri(url);
+    if (user != null) {
+      dbUrl = dbUrl.withUser(user);
+    }
+    if (password != null) {
+      dbUrl = dbUrl.withPassword(password);
+    }
+
+    var dataSource = SystemDatabase.createDataSource(dbUrl);
     systemDatabase = new SystemDatabase(dataSource);
   }
 

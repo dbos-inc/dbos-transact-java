@@ -60,7 +60,7 @@ public class DirectInvocationTest {
 
     dbos.launch();
 
-    dataSource = SystemDatabase.createDataSource(dbosConfig, null);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach

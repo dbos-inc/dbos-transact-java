@@ -56,7 +56,7 @@ public class ClientTest {
             .build();
     dbos.launch();
 
-    dataSource = SystemDatabase.createDataSource(dbosConfig, null);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
