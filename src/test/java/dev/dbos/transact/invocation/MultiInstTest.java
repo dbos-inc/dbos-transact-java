@@ -158,5 +158,29 @@ public class MultiInstTest {
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", hrow.className());
     assertEquals("", hrow.instanceName());
     assertEquals("SUCCESS", hrow.status());
+
+    // All 3 w/ the same WF name
+    var allrows =
+        dbos.listWorkflows(new ListWorkflowsInput.Builder().workflowName("stepWorkflow").build());
+    assertEquals(3, allrows.size());
+
+    // 2 from BSI
+    var brows =
+        dbos.listWorkflows(
+            new ListWorkflowsInput.Builder()
+                .workflowName("stepWorkflow")
+                .className("dev.dbos.transact.invocation.BearServiceImpl")
+                .build());
+    assertEquals(2, brows.size());
+
+    // 2 from BSI
+    var browsjust1 =
+        dbos.listWorkflows(
+            new ListWorkflowsInput.Builder()
+                .workflowName("stepWorkflow")
+                .className("dev.dbos.transact.invocation.BearServiceImpl")
+                .instanceName("1")
+                .build());
+    assertEquals(1, browsjust1.size());
   }
 }

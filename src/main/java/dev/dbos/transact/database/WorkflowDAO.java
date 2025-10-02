@@ -439,6 +439,14 @@ public class WorkflowDAO {
       whereConditions.add("name = ?");
       parameters.add(input.workflowName());
     }
+    if (input.className() != null) {
+      whereConditions.add("class_name = ?");
+      parameters.add(input.className());
+    }
+    if (input.instanceName() != null) {
+      whereConditions.add("config_name = ?");
+      parameters.add(input.instanceName());
+    }
     if (input.authenticatedUser() != null) {
       whereConditions.add("authenticated_user = ?");
       parameters.add(input.authenticatedUser());
