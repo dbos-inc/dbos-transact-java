@@ -1,6 +1,5 @@
 package dev.dbos.transact.migrations;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.DatabaseUrl;
 import dev.dbos.transact.database.SystemDatabase;

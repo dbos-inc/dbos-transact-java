@@ -314,8 +314,16 @@ public class SystemDatabase implements AutoCloseable {
       return dbinfo;
     }
 
-    var dbName = config.sysDbName() != null ? config.sysDbName() : config.name() + Constants.SYS_DB_SUFFIX;
-    return new DatabaseUrl("postgresql", config.dbHost(), config.dbPort(), dbName, config.dbUser(), config.dbPassword(), null);
+    var dbName =
+        config.sysDbName() != null ? config.sysDbName() : config.name() + Constants.SYS_DB_SUFFIX;
+    return new DatabaseUrl(
+        "postgresql",
+        config.dbHost(),
+        config.dbPort(),
+        dbName,
+        config.dbUser(),
+        config.dbPassword(),
+        null);
   }
 
   public static HikariDataSource createDataSource(DBOSConfig config) {

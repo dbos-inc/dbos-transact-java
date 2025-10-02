@@ -131,14 +131,21 @@ public class DatabaseUrlTest {
 
   @Test
   public void requiredFields() {
-    assertThrows(NullPointerException.class, () -> new DatabaseUrl(null, "host", 12345, "db", "user", "pwd", new HashMap<>()) );
-    assertThrows(NullPointerException.class, () -> new DatabaseUrl("scheme", null, 12345, "db", "user", "pwd", new HashMap<>()) );
-    assertThrows(NullPointerException.class, () -> new DatabaseUrl("scheme", "host", 12345, null, "user", "pwd", new HashMap<>()) );
+    assertThrows(
+        NullPointerException.class,
+        () -> new DatabaseUrl(null, "host", 12345, "db", "user", "pwd", new HashMap<>()));
+    assertThrows(
+        NullPointerException.class,
+        () -> new DatabaseUrl("scheme", null, 12345, "db", "user", "pwd", new HashMap<>()));
+    assertThrows(
+        NullPointerException.class,
+        () -> new DatabaseUrl("scheme", "host", 12345, null, "user", "pwd", new HashMap<>()));
   }
 
   @Test
   public void toJdbcUrl() {
-    var dbInfo = new DatabaseUrl("postgresql", "some-host", 12345, "some-db", "some-user", "some-pwd", null);
+    var dbInfo =
+        new DatabaseUrl("postgresql", "some-host", 12345, "some-db", "some-user", "some-pwd", null);
     var uri = dbInfo.jdbcUrl();
     assertEquals("jdbc:postgresql://some-host:12345/some-db", uri);
     assertEquals("some-user", dbInfo.username());

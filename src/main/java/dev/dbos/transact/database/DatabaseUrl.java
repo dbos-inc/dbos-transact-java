@@ -108,9 +108,10 @@ public record DatabaseUrl(
     builder.append("/").append(encode(database));
 
     if (query != null) {
-      var qs = query.entrySet().stream()
-          .map(e -> encode(e.getKey()) + "=" + encode(e.getValue()))
-          .collect(Collectors.joining("&"));
+      var qs =
+          query.entrySet().stream()
+              .map(e -> encode(e.getKey()) + "=" + encode(e.getValue()))
+              .collect(Collectors.joining("&"));
       if (qs != null && qs.length() > 0) {
         builder.append("?").append(qs);
       }
