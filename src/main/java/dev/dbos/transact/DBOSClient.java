@@ -163,8 +163,8 @@ public class DBOSClient implements AutoCloseable {
     }
   }
 
-  public <T> WorkflowHandle<T, ?> enqueueWorkflow(EnqueueOptions options, Object[] args)
-      throws Exception {
+  public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflow(
+      EnqueueOptions options, Object[] args) throws Exception {
 
     return DBOSExecutor.enqueueWorkflow(
         Objects.requireNonNull(options.workflowName),

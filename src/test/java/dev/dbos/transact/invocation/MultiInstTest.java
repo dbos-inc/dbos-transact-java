@@ -3,11 +3,13 @@ package dev.dbos.transact.invocation;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -51,6 +53,7 @@ public class MultiInstTest {
     himpl = new HawkServiceImpl();
     bimpla = new BearServiceImpl();
     bimpl1 = new BearServiceImpl();
+    dbos.Queue("testQueue").build();
 
     hproxy =
         dbos.<HawkService>Workflow()
@@ -182,5 +185,36 @@ public class MultiInstTest {
                 .instanceName("1")
                 .build());
     assertEquals(1, browsjust1.size());
+  }
+
+  private static final String dbUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
+  private static final String dbUser = "postgres";
+  private static final String dbPassword = System.getenv("PGPASSWORD");
+
+  @Test
+  public void enqueueForSpecificInstance() throws Exception {
+    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+      var options =
+          new DBOSClient.EnqueueOptions(
+                  "dev.dbos.transact.invocation.BearServiceImpl", "stepWorkflow", "testQueue")
+              .withInstanceName("A");
+      var handle = client.<Instant, RuntimeException>enqueueWorkflow(options, new Object[] {});
+
+      var result = handle.getResult();
+      assertEquals(
+          localDate,
+          result
+              .atZone(ZoneId.systemDefault()) // or another zone
+              .toLocalDate()
+              .format(DateTimeFormatter.ISO_DATE));
+
+      assertEquals(1, bimpla.nWfCalls);
+      assertEquals(0, bimpl1.nWfCalls);
+
+      var stat = client.getWorkflowStatus(handle.getWorkflowId());
+      assertEquals(
+          "SUCCESS",
+          stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+    }
   }
 }
