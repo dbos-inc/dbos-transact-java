@@ -144,7 +144,7 @@ public class DBOSExecutor implements AutoCloseable {
         httpServer =
             HttpServer.getInstance(
                 config.adminServerPort(), new AdminController(this, systemDatabase, queues));
-          httpServer.start();
+        httpServer.start();
       }
     }
   }

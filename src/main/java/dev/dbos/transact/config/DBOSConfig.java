@@ -14,7 +14,6 @@ public record DBOSConfig(
     String dbPassword,
     int maximumPoolSize,
     int connectionTimeout,
-    String appDbName,
     String sysDbName,
     boolean adminServer,
     int adminServerPort,
@@ -33,7 +32,6 @@ public record DBOSConfig(
     private String dbPassword;
     private int maximumPoolSize = 3;
     private int connectionTimeout = 30000;
-    private String appDbName;
     private String sysDbName;
     private boolean adminServer = false;
     private int adminServerPort = 3001;
@@ -68,11 +66,6 @@ public record DBOSConfig(
 
     public Builder connectionTimeout(int connectionTimeout) {
       this.connectionTimeout = connectionTimeout;
-      return this;
-    }
-
-    public Builder appDbName(String appDbName) {
-      this.appDbName = appDbName;
       return this;
     }
 
@@ -143,7 +136,6 @@ public record DBOSConfig(
           dbPassword,
           maximumPoolSize,
           connectionTimeout,
-          appDbName,
           sysDbName,
           adminServer,
           adminServerPort,
