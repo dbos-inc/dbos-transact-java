@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 
 public record DBOSConfig(
     String appName,
-    String url,
+    String databaseUrl,
     String dbHost,
     int dbPort,
     String dbUser,
@@ -25,7 +25,7 @@ public record DBOSConfig(
 
   public static class Builder {
     private String appName;
-    private String url;
+    private String databaseUrl;
     private String dbHost;
     private int dbPort;
     private String dbUser;
@@ -44,8 +44,8 @@ public record DBOSConfig(
       return this;
     }
 
-    public Builder url(String url) {
-      this.url = url;
+    public Builder databaseUrl(String databaseUrl) {
+      this.databaseUrl = databaseUrl;
       return this;
     }
 
@@ -115,9 +115,9 @@ public record DBOSConfig(
       if (dbPassword == null) {
         dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
       }
-      if (url == null) {
-        url = System.getenv(Constants.JDBC_URL_ENV_VAR);
-        logger.info("Using db_url env {}", url);
+      if (databaseUrl == null) {
+        databaseUrl = System.getenv(Constants.JDBC_URL_ENV_VAR);
+        logger.info("Using db_url env {}", databaseUrl);
       }
       if (dbUser == null) {
         dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);
@@ -129,7 +129,7 @@ public record DBOSConfig(
 
       return new DBOSConfig(
           appName,
-          url,
+          databaseUrl,
           dbHost,
           dbPort,
           dbUser,

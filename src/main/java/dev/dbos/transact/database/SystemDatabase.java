@@ -323,7 +323,7 @@ public class SystemDatabase implements AutoCloseable {
       }
     }
 
-    String dburl = config.url();
+    String dburl = config.databaseUrl();
 
     if (dburl == null) {
       dburl = String.format("jdbc:postgresql://%s:%d/%s", config.dbHost(), config.dbPort(), dbName);
@@ -340,7 +340,7 @@ public class SystemDatabase implements AutoCloseable {
   public static HikariDataSource createPostgresDataSource(DBOSConfig config) {
     HikariConfig hikariConfig = new HikariConfig();
 
-    String dburl = config.url();
+    String dburl = config.databaseUrl();
 
     if (dburl != null) {
       dburl = createPostgresConnectionUrl(dburl);
