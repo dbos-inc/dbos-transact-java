@@ -57,6 +57,12 @@ public class DBOSClient implements AutoCloseable {
         throw new IllegalArgumentException("queueName must not be empty");
       }
 
+      if (Objects.requireNonNull(className).isEmpty()) {
+        throw new IllegalArgumentException("className must not be empty");
+      }
+
+      if (instanceName == null) instanceName = "";
+
       if (timeout != null && timeout.isNegative()) {
         throw new IllegalArgumentException("timeout must not be negative");
       }
@@ -167,15 +173,15 @@ public class DBOSClient implements AutoCloseable {
       EnqueueOptions options, Object[] args) throws Exception {
 
     return DBOSExecutor.enqueueWorkflow(
-        Objects.requireNonNull(options.workflowName),
-        options.className,
+        Objects.requireNonNull(options.workflowName()),
+        Objects.requireNonNull(options.className()),
         Objects.requireNonNullElse(options.instanceName(), ""),
         args,
         new ExecuteWorkflowOptions(
             Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString()),
             options.timeout(),
             null,
-            Objects.requireNonNull(options.queueName),
+            Objects.requireNonNull(options.queueName()),
             options.deduplicationId,
             options.priority),
         null,

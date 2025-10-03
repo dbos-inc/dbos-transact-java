@@ -12,8 +12,8 @@ public class ListWorkflowsRequest extends BaseMessage {
   public static class Body {
     public List<String> workflow_uuids;
     public String workflow_name;
-    public String class_name;
-    public String instance_name;
+    // public String class_name; // Future support
+    // public String instance_name;
     public String authenticated_user;
     public String start_time;
     public String end_time;
@@ -29,8 +29,8 @@ public class ListWorkflowsRequest extends BaseMessage {
   public static class Builder {
     private List<String> workflow_uuids = new ArrayList<String>();
     private String workflow_name;
-    private String class_name;
-    private String instance_name;
+    // private String class_name;
+    // private String instance_name;
     private String authenticated_user;
     private String start_time;
     private String end_time;
@@ -52,6 +52,7 @@ public class ListWorkflowsRequest extends BaseMessage {
       return this;
     }
 
+    /* Future
     public Builder className(String class_name) {
       this.class_name = class_name;
       return this;
@@ -61,6 +62,7 @@ public class ListWorkflowsRequest extends BaseMessage {
       this.instance_name = instance_name;
       return this;
     }
+    */
 
     public Builder workflowName(String workflow_name) {
       this.workflow_name = workflow_name;
@@ -114,8 +116,8 @@ public class ListWorkflowsRequest extends BaseMessage {
 
       Body body = new Body();
       body.workflow_uuids = this.workflow_uuids;
-      body.class_name = this.class_name;
-      body.instance_name = this.instance_name;
+      // body.class_name = this.class_name;
+      // body.instance_name = this.instance_name;
       body.workflow_name = this.workflow_name;
       body.authenticated_user = this.authenticated_user;
       body.start_time = this.start_time;
@@ -135,8 +137,8 @@ public class ListWorkflowsRequest extends BaseMessage {
   public ListWorkflowsInput asInput() {
     return new ListWorkflowsInput(
         body.workflow_uuids,
-        body.class_name,
-        body.instance_name,
+        null, // body.class_name,
+        null, // body.instance_name,
         body.workflow_name,
         body.authenticated_user,
         body.start_time != null ? OffsetDateTime.parse(body.start_time) : null,

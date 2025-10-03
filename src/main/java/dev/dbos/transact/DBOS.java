@@ -81,6 +81,7 @@ public class DBOS {
       Class<?> interfaceClass, Object implementation, String instanceName) {
     Objects.requireNonNull(interfaceClass);
     Objects.requireNonNull(implementation);
+    Objects.requireNonNull(instanceName);
     if (!interfaceClass.isInterface()) {
       throw new IllegalArgumentException("interfaceClass must be an interface");
     }
