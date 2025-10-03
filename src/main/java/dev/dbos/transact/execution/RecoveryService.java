@@ -41,7 +41,7 @@ public class RecoveryService {
     try {
       workflows =
           systemDatabase.getPendingWorkflows(
-              dbosExecutor.getExecutorId(), dbosExecutor.getAppVersion());
+              dbosExecutor.executorId(), dbosExecutor.appVersion());
     } catch (SQLException e) {
       logger.error("Error getting pending workflows", e);
     }

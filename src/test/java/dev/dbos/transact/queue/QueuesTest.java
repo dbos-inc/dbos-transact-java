@@ -388,8 +388,8 @@ public class QueuesTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var queueService = DBOSTestAccess.getQueueService(dbos);
 
-    String executorId = dbosExecutor.getExecutorId();
-    String appVersion = dbosExecutor.getAppVersion();
+    String executorId = dbosExecutor.executorId();
+    String appVersion = dbosExecutor.appVersion();
 
     queueService.stop();
     while (!queueService.isStopped()) {
@@ -470,8 +470,8 @@ public class QueuesTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var queueService = DBOSTestAccess.getQueueService(dbos);
 
-    String executorId = dbosExecutor.getExecutorId();
-    String appVersion = dbosExecutor.getAppVersion();
+    String executorId = dbosExecutor.executorId();
+    String appVersion = dbosExecutor.appVersion();
 
     queueService.stop();
     while (!queueService.isStopped()) {
