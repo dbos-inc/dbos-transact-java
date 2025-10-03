@@ -20,7 +20,6 @@ import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.Timeout;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -35,10 +34,8 @@ class MigrationManagerTest {
     MigrationManagerTest.dbosConfig =
         new DBOSConfig.Builder()
             .appName("migrationtest")
-            .dbHost("localhost")
-            .dbPort(5432)
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys_mm_test")
             .dbUser("postgres")
-            .sysDbName("dbos_java_sys_mm_test")
             .maximumPoolSize(3)
             .build();
 

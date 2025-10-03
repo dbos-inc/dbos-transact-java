@@ -8,13 +8,10 @@ import org.slf4j.LoggerFactory;
 public record DBOSConfig(
     String appName,
     String databaseUrl,
-    String dbHost,
-    int dbPort,
     String dbUser,
     String dbPassword,
     int maximumPoolSize,
     int connectionTimeout,
-    String sysDbName,
     boolean adminServer,
     int adminServerPort,
     boolean migrate,
@@ -26,13 +23,10 @@ public record DBOSConfig(
   public static class Builder {
     private String appName;
     private String databaseUrl;
-    private String dbHost;
-    private int dbPort;
     private String dbUser;
     private String dbPassword;
     private int maximumPoolSize = 3;
     private int connectionTimeout = 30000;
-    private String sysDbName;
     private boolean adminServer = false;
     private int adminServerPort = 3001;
     private boolean migrate = true;
@@ -66,21 +60,6 @@ public record DBOSConfig(
 
     public Builder connectionTimeout(int connectionTimeout) {
       this.connectionTimeout = connectionTimeout;
-      return this;
-    }
-
-    public Builder dbHost(String dbHost) {
-      this.dbHost = dbHost;
-      return this;
-    }
-
-    public Builder dbPort(int dbPort) {
-      this.dbPort = dbPort;
-      return this;
-    }
-
-    public Builder sysDbName(String sysDbName) {
-      this.sysDbName = sysDbName;
       return this;
     }
 
@@ -123,20 +102,13 @@ public record DBOSConfig(
         dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);
       }
 
-      if (sysDbName == null) {
-        sysDbName = appName + Constants.SYS_DB_SUFFIX;
-      }
-
       return new DBOSConfig(
           appName,
           databaseUrl,
-          dbHost,
-          dbPort,
           dbUser,
           dbPassword,
           maximumPoolSize,
           connectionTimeout,
-          sysDbName,
           adminServer,
           adminServerPort,
           migrate,

@@ -1,10 +1,7 @@
 package dev.dbos.transact.migrations;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.exceptions.DBOSException;
-import dev.dbos.transact.exceptions.ErrorCode;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -18,7 +15,6 @@ import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
-import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,90 +27,84 @@ public class MigrationManager {
     this.dataSource = dataSource;
   }
 
-  public static void runMigrations(DBOSConfig dbconfig) {
+  public static void runMigrations(DBOSConfig config) {
 
-    if (dbconfig == null) {
-      logger.warn("No database configuration. Skipping migration");
-      return;
-    }
+    createDatabaseIfNotExists(Objects.requireNonNull(config));
 
-    String dbName;
-    if (dbconfig.sysDbName() != null) {
-      dbName = dbconfig.sysDbName();
-    } else {
-      dbName = dbconfig.appName() + Constants.SYS_DB_SUFFIX;
-    }
-
-    createDatabaseIfNotExists(dbconfig, dbName);
-
-    DataSource dataSource = SystemDatabase.createDataSource(dbconfig, dbName);
-
-    try {
-      MigrationManager m = new MigrationManager(dataSource);
+    try (var ds = SystemDatabase.createDataSource(config)) {
+      MigrationManager m = new MigrationManager(ds);
       m.migrate();
-    } catch (Exception e) {
-      throw new DBOSException(ErrorCode.UNEXPECTED.getCode(), e.getMessage());
-
-    } finally {
-      ((HikariDataSource) dataSource).close();
     }
-
-    logger.info("Database migrations completed successfully");
   }
 
-  public static void createDatabaseIfNotExists(DBOSConfig config, String dbName) {
-    DataSource adminDS = SystemDatabase.createPostgresDataSource(config);
-    try {
-      try (Connection conn = adminDS.getConnection();
-          PreparedStatement ps =
-              conn.prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
+  public static void createDatabaseIfNotExists(DBOSConfig config) {
+    var dbUrl = Objects.requireNonNull(config.databaseUrl());
+    var pair = extractDbAndPostgresUrl(dbUrl);
 
-        ps.setString(1, dbName);
-        try (ResultSet rs = ps.executeQuery()) {
+    try (var adminDS =
+            SystemDatabase.createDataSource(pair.url(), config.dbUser(), config.dbPassword());
+        var conn = adminDS.getConnection()) {
+      try (var stmt = conn.prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
+        stmt.setString(1, pair.database());
+        try (ResultSet rs = stmt.executeQuery()) {
           if (rs.next()) {
-            logger.info("Database '{}' already exists", dbName);
-            // createSchemaIfNotExists(config, dbName, Constants.DB_SCHEMA);
+            logger.debug("Database '{}' already exists", pair.database());
             return;
           }
         }
-
-        try (Statement stmt = conn.createStatement()) {
-          stmt.executeUpdate("CREATE DATABASE \"" + dbName + "\"");
-          logger.info("Database '{}' created successfully", dbName);
-        }
       } catch (SQLException e) {
-        throw new RuntimeException("Failed to check or create database: " + dbName, e);
+        throw new RuntimeException("Failed to check database", e);
       }
-    } finally {
-      // temporary
-      // later keep the datasource global so we are not recreating them
-      ((HikariDataSource) adminDS).close();
+
+      try (Statement stmt = conn.createStatement()) {
+        stmt.executeUpdate("CREATE DATABASE \"" + pair.database() + "\"");
+        logger.info("'{}' database created", pair.database());
+      } catch (SQLException e) {
+        throw new RuntimeException("Failed to create database", e);
+      }
+    } catch (SQLException e) {
+      var msg = "Failed to connect to database {}".formatted(pair.url());
+      throw new RuntimeException(msg, e);
     }
   }
 
-  public void migrate() throws Exception {
+  public record UrlPair(String url, String database) {}
 
-    try {
-      try (Connection conn = dataSource.getConnection()) {
+  public static UrlPair extractDbAndPostgresUrl(String url) {
+    int qm = Objects.requireNonNull(url).indexOf('?');
+    var base = qm >= 0 ? url.substring(0, qm) : url;
+    var params = qm >= 0 ? url.substring(qm) : "";
+    int slash = base.lastIndexOf('/');
+    if (slash < "jdbc:postgresql://".length()) {
+      throw new IllegalArgumentException();
+    }
 
-        ensureMigrationTable(conn);
+    var newUrl = base.substring(0, slash + 1) + "postgres" + params;
+    var databaseName = base.substring(slash + 1);
+    return new UrlPair(newUrl, databaseName);
+  }
 
-        Set<String> appliedMigrations = getAppliedMigrations(conn);
-        List<MigrationFile> migrationFiles = loadMigrationFiles();
-        for (MigrationFile migrationFile : migrationFiles) {
-          String filename = migrationFile.getFilename().toString();
-          logger.info("processing migration file {}", filename);
-          String version = filename.split("_")[0];
+  public void migrate() {
 
-          if (!appliedMigrations.contains(version)) {
-            applyMigrationFile(conn, migrationFile.getSql());
-            markMigrationApplied(conn, version);
-          }
+    try (Connection conn = dataSource.getConnection()) {
+
+      ensureMigrationTable(conn);
+
+      Set<String> appliedMigrations = getAppliedMigrations(conn);
+      List<MigrationFile> migrationFiles = loadMigrationFiles();
+      for (MigrationFile migrationFile : migrationFiles) {
+        String filename = migrationFile.getFilename().toString();
+        logger.info("processing migration file {}", filename);
+        String version = filename.split("_")[0];
+
+        if (!appliedMigrations.contains(version)) {
+          applyMigrationFile(conn, migrationFile.getSql());
+          markMigrationApplied(conn, version);
         }
       }
     } catch (Exception t) {
       logger.error("Migration error", t);
-      throw t;
+      throw new RuntimeException("Migration Error", t);
     }
   }
 

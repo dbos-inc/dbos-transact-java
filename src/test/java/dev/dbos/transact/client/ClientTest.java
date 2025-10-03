@@ -36,10 +36,9 @@ public class ClientTest {
     dbosConfig =
         new DBOSConfig.Builder()
             .appName("systemdbtest")
-            .dbHost("localhost")
-            .dbPort(5432)
+            .databaseUrl(dbUrl)
             .dbUser(dbUser)
-            .sysDbName("dbos_java_sys")
+            .dbPassword(dbPassword)
             .maximumPoolSize(2)
             .build();
   }
@@ -56,7 +55,7 @@ public class ClientTest {
             .build();
     dbos.launch();
 
-    dataSource = SystemDatabase.createDataSource(dbosConfig, null);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach

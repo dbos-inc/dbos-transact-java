@@ -3,6 +3,7 @@ package dev.dbos.transact.utils;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.migrations.MigrationManager;
 
 import java.sql.*;
 import java.time.Instant;
@@ -181,26 +182,20 @@ public class DBUtils {
     ds.close();
   }
 
-  public static void recreateDB(DBOSConfig dbosConfig) throws SQLException {
+  public static void recreateDB(DBOSConfig config) throws SQLException {
 
-    String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, "postgres");
-
-    String sysDb = dbosConfig.sysDbName();
-    try (Connection conn =
-            DriverManager.getConnection(dbUrl, dbosConfig.dbUser(), dbosConfig.dbPassword());
-        Statement stmt = conn.createStatement()) {
-
-      String dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", sysDb);
-      String createDbSql = String.format("CREATE DATABASE %s", sysDb);
+    var pair = MigrationManager.extractDbAndPostgresUrl(config.databaseUrl());
+    var dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", pair.database());
+    var createDbSql = String.format("CREATE DATABASE %s", pair.database());
+    try (var conn = DriverManager.getConnection(pair.url(), config.dbUser(), config.dbPassword());
+        var stmt = conn.createStatement()) {
       stmt.execute(dropDbSql);
       stmt.execute(createDbSql);
     }
   }
 
-  public static Connection getConnection(DBOSConfig dbosConfig) throws SQLException {
-    String dbUrl =
-        String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, dbosConfig.sysDbName());
-    return DriverManager.getConnection(dbUrl, dbosConfig.dbUser(), dbosConfig.dbPassword());
+  public static Connection getConnection(DBOSConfig config) throws SQLException {
+    return DriverManager.getConnection(config.databaseUrl(), config.dbUser(), config.dbPassword());
   }
 
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) {
