@@ -511,9 +511,7 @@ public class DBOSExecutor implements AutoCloseable {
     // context.setDbos(dbos);
 
     if (context.getWorkflowId() == null) {
-      throw new DBOSException(
-          ErrorCode.SLEEP_NOT_IN_WORKFLOW.getCode(),
-          "sleep() must be called from within a workflow");
+      throw new IllegalStateException("sleep() must be called from within a workflow");
     }
 
     systemDatabase.sleep(

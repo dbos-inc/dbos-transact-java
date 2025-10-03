@@ -277,7 +277,7 @@ public class SystemDatabase implements AutoCloseable {
     try {
       workflowDAO.resumeWorkflow(workflowId);
     } catch (SQLException s) {
-      throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), s.getMessage());
+      throw new DBOSException(ErrorCode.SYSTEM_DATABASE_ACCESS_ERROR.getCode(), s.getMessage());
     }
   }
 
@@ -286,7 +286,7 @@ public class SystemDatabase implements AutoCloseable {
     try {
       return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options);
     } catch (SQLException sq) {
-      throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), sq.getMessage());
+      throw new DBOSException(ErrorCode.SYSTEM_DATABASE_ACCESS_ERROR.getCode(), sq.getMessage());
     }
   }
 
