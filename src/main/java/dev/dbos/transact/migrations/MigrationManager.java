@@ -92,7 +92,7 @@ public class MigrationManager {
     }
   }
 
-  public void migrate() throws Exception {
+  public void migrate() throws IOException, SQLException, URISyntaxException {
 
     try {
       try (Connection conn = dataSource.getConnection()) {
@@ -112,7 +112,7 @@ public class MigrationManager {
           }
         }
       }
-    } catch (Exception t) {
+    } catch (SQLException t) {
       logger.error("Migration error", t);
       throw t;
     }

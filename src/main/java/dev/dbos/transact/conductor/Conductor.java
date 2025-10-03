@@ -157,7 +157,7 @@ public class Conductor implements AutoCloseable {
   }
 
   @Override
-  public void close() throws Exception {
+  public void close() {
     this.stop();
   }
 

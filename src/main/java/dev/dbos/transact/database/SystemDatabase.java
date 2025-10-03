@@ -51,7 +51,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   @Override
-  public void close() throws Exception {
+  public void close() {
     dataSource.close();
   }
 
@@ -170,8 +170,8 @@ public class SystemDatabase implements AutoCloseable {
     return stepsDAO.listWorkflowSteps(workflowId);
   }
 
-  public Object awaitWorkflowResult(String workflowId) throws Exception {
-    return workflowDAO.awaitWorkflowResult(workflowId);
+  public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
+    return workflowDAO.<T, E>awaitWorkflowResult(workflowId);
   }
 
   public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId, String appVersion)

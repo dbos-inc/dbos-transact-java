@@ -610,7 +610,7 @@ public class WorkflowDAO {
     return results;
   }
 
-  public Object awaitWorkflowResult(String workflowId) throws Exception {
+  public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -637,13 +637,13 @@ public class WorkflowDAO {
               case SUCCESS:
                 String output = rs.getString("output");
                 Object[] oArray = JSONUtil.deserializeToArray(output);
-                return oArray[0];
+                return (T) oArray[0];
 
               case ERROR:
                 String error = rs.getString("error");
                 Throwable t = JSONUtil.deserializeAppException(error);
                 if (t instanceof Exception) {
-                  throw (Exception) t;
+                  throw (E) t;
                 }
                 throw new RuntimeException(t.getMessage(), t);
               case CANCELLED:

@@ -162,7 +162,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   @Override
-  public void close() throws Exception {
+  public void close() {
     if (isRunning.compareAndSet(true, false)) {
 
       if (httpServer != null) {
@@ -240,7 +240,7 @@ public class DBOSExecutor implements AutoCloseable {
     return Optional.empty();
   }
 
-  WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) throws Exception {
+  WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) throws SQLException {
     Objects.requireNonNull(output);
     String workflowId = output.getWorkflowUuid();
     Objects.requireNonNull(workflowId);
@@ -394,14 +394,14 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   @SuppressWarnings("unchecked")
-  public <T> T runStepInternal(
+  public <T, E extends Exception> T runStepInternal(
       String stepName,
       boolean retryAllowed,
       int maxAttempts,
       double timeBetweenAttemptsSec,
       double backOffRate,
-      ThrowingSupplier<T, Exception> function)
-      throws Exception {
+      ThrowingSupplier<T, E> function)
+      throws E {
     if (maxAttempts < 1) {
       maxAttempts = 1;
     }
@@ -439,7 +439,7 @@ public class DBOSExecutor implements AutoCloseable {
         var throwable = JSONUtil.deserializeAppException(error);
         if (!(throwable instanceof Exception))
           throw new RuntimeException(throwable.getMessage(), throwable);
-        throw (Exception) throwable;
+        throw (E) throwable;
       }
     }
 
@@ -489,7 +489,7 @@ public class DBOSExecutor implements AutoCloseable {
           new StepResult(
               workflowId, stepFunctionId, stepName, null, JSONUtil.serializeAppException(eThrown));
       systemDatabase.recordStepResultTxn(stepResult);
-      throw eThrown;
+      throw (E) eThrown;
     }
   }
 
@@ -814,7 +814,8 @@ public class DBOSExecutor implements AutoCloseable {
     Object[] inputs = status.get().input();
     RegisteredWorkflow workflow =
         workflowMap.get(
-            WorkflowRegistry.getFullyQualifiedWFName(status.get().className(), status.get().name()));
+            WorkflowRegistry.getFullyQualifiedWFName(
+                status.get().className(), status.get().name()));
 
     if (workflow == null) {
       throw new WorkflowFunctionNotFoundException(workflowId);

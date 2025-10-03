@@ -31,7 +31,7 @@ public class DBOSClient implements AutoCloseable {
   }
 
   @Override
-  public void close() throws Exception {
+  public void close() {
     systemDatabase.close();
   }
 
@@ -143,9 +143,7 @@ public class DBOSClient implements AutoCloseable {
     }
   }
 
-  public <T> WorkflowHandle<T, ?> enqueueWorkflow(EnqueueOptions options, Object[] args)
-      throws Exception {
-
+  public <T> WorkflowHandle<T, ?> enqueueWorkflow(EnqueueOptions options, Object[] args) {
     return DBOSExecutor.enqueueWorkflow(
         Objects.requireNonNull(options.workflowName),
         options.className,
