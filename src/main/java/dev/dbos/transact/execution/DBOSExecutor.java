@@ -99,7 +99,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       this.executorId = System.getenv("DBOS__VMID");
       if (this.executorId == null || this.executorId.isEmpty()) {
-        this.executorId = config.getConductorKey() == null ? "local" : UUID.randomUUID().toString();
+        this.executorId = config.conductorKey() == null ? "local" : UUID.randomUUID().toString();
       }
 
       this.appVersion = System.getenv("DBOS__APPVERSION");
@@ -129,10 +129,10 @@ public class DBOSExecutor implements AutoCloseable {
       recoveryService = new RecoveryService(this, systemDatabase);
       recoveryService.start();
 
-      String conductorKey = config.getConductorKey();
+      String conductorKey = config.conductorKey();
       if (conductorKey != null) {
         Conductor.Builder builder = new Conductor.Builder(this, systemDatabase, conductorKey);
-        String domain = config.getConductorDomain();
+        String domain = config.conductorDomain();
         if (domain != null && !domain.trim().isEmpty()) {
           builder.domain(domain);
         }
@@ -140,11 +140,11 @@ public class DBOSExecutor implements AutoCloseable {
         conductor.start();
       }
 
-      if (config.isHttp()) {
+      if (config.http()) {
         httpServer =
             HttpServer.getInstance(
-                config.getHttpPort(), new AdminController(this, systemDatabase, queues));
-        if (config.isHttpAwaitOnStart()) {
+                config.httpPort(), new AdminController(this, systemDatabase, queues));
+        if (config.httpAwaitOnStart()) {
           Thread httpThread =
               new Thread(
                   () -> {
@@ -205,7 +205,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public String getAppName() {
-    return config.getName();
+    return config.name();
   }
 
   public String getExecutorId() {
@@ -814,7 +814,8 @@ public class DBOSExecutor implements AutoCloseable {
     Object[] inputs = status.get().input();
     RegisteredWorkflow workflow =
         workflowMap.get(
-            WorkflowRegistry.getFullyQualifiedWFName(status.get().className(), status.get().name()));
+            WorkflowRegistry.getFullyQualifiedWFName(
+                status.get().className(), status.get().name()));
 
     if (workflow == null) {
       throw new WorkflowFunctionNotFoundException(workflowId);

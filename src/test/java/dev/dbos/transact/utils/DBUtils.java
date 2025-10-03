@@ -185,9 +185,9 @@ public class DBUtils {
 
     String dbUrl = String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, "postgres");
 
-    String sysDb = dbosConfig.getSysDbName();
+    String sysDb = dbosConfig.sysDbName();
     try (Connection conn =
-            DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
+            DriverManager.getConnection(dbUrl, dbosConfig.dbUser(), dbosConfig.dbPassword());
         Statement stmt = conn.createStatement()) {
 
       String dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", sysDb);
@@ -199,8 +199,8 @@ public class DBUtils {
 
   public static Connection getConnection(DBOSConfig dbosConfig) throws SQLException {
     String dbUrl =
-        String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, dbosConfig.getSysDbName());
-    return DriverManager.getConnection(dbUrl, dbosConfig.getDbUser(), dbosConfig.getDbPassword());
+        String.format("jdbc:postgresql://%s:%d/%s", "localhost", 5432, dbosConfig.sysDbName());
+    return DriverManager.getConnection(dbUrl, dbosConfig.dbUser(), dbosConfig.dbPassword());
   }
 
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) {

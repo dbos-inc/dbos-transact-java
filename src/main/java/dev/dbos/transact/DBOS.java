@@ -56,7 +56,7 @@ public class DBOS {
    * startup. @DBOSConfig config dbos configuration
    */
   public static synchronized DBOS initialize(DBOSConfig config) {
-    if (config.migration()) {
+    if (config.migrate()) {
       MigrationManager.runMigrations(config);
     }
     var instance = new DBOS(config);
