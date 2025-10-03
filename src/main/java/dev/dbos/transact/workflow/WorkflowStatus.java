@@ -8,7 +8,7 @@ public record WorkflowStatus(
     String status,
     String name,
     String className,
-    String configName,
+    String instanceName,
     String authenticatedUser,
     String assumedRole,
     String[] authenticatedRoles,

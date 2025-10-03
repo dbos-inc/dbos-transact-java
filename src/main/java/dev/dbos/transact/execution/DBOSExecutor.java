@@ -204,13 +204,15 @@ public class DBOSExecutor implements AutoCloseable {
     return this.appVersion;
   }
 
-  public RegisteredWorkflow getWorkflow(String className, String workflowName) {
+  public RegisteredWorkflow getWorkflow(
+      String className, String instanceName, String workflowName) {
     if (workflowMap == null) {
       throw new IllegalStateException(
           "attempted to retrieve workflow from executor when DBOS not launched");
     }
 
-    return workflowMap.get(WorkflowRegistry.getFullyQualifiedWFName(className, workflowName));
+    return workflowMap.get(
+        WorkflowRegistry.getFullyQualifiedWFName(className, instanceName, workflowName));
   }
 
   public Optional<Queue> getQueue(String queueName) {
@@ -728,10 +730,11 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
-      String clsName, String wfName, Object[] args) {
-    var workflow = getWorkflow(clsName, wfName);
+      String clsName, String instName, String wfName, Object[] args) {
+    var workflow = getWorkflow(clsName, instName, wfName);
     if (workflow == null) {
-      throw new IllegalStateException("%s/%s workflow not registered".formatted(clsName, wfName));
+      throw new IllegalStateException(
+          "%s/%s/%s workflow not registered".formatted(clsName, instName, wfName));
     }
 
     var ctx = DBOSContextHolder.get();
@@ -800,13 +803,13 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     Object[] inputs = status.get().input();
-    RegisteredWorkflow workflow =
-        workflowMap.get(
-            WorkflowRegistry.getFullyQualifiedWFName(
-                status.get().className(), status.get().name()));
+    var wfName =
+        WorkflowRegistry.getFullyQualifiedWFName(
+            status.get().className(), status.get().instanceName(), status.get().name());
+    RegisteredWorkflow workflow = workflowMap.get(wfName);
 
     if (workflow == null) {
-      throw new WorkflowFunctionNotFoundException(workflowId);
+      throw new WorkflowFunctionNotFoundException(workflowId, wfName);
     }
 
     var options =
@@ -853,6 +856,7 @@ public class DBOSExecutor implements AutoCloseable {
       return enqueueWorkflow(
           workflow.name(),
           workflow.className(),
+          workflow.instanceName(),
           args,
           options,
           parent,
@@ -878,6 +882,7 @@ public class DBOSExecutor implements AutoCloseable {
               systemDatabase,
               workflow.name(),
               workflow.className(),
+              workflow.instanceName(),
               args,
               workflowId,
               null,
@@ -972,6 +977,7 @@ public class DBOSExecutor implements AutoCloseable {
   public static <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflow(
       String name,
       String className,
+      String instanceName,
       Object[] args,
       ExecuteWorkflowOptions options,
       WorkflowInfo parent,
@@ -993,6 +999,7 @@ public class DBOSExecutor implements AutoCloseable {
           systemDatabase,
           name,
           className,
+          instanceName,
           args,
           workflowId,
           queueName,
@@ -1022,6 +1029,7 @@ public class DBOSExecutor implements AutoCloseable {
       SystemDatabase systemDatabase,
       String workflowName,
       String className,
+      String instanceName,
       Object[] inputs,
       String workflowId,
       String queueName,
@@ -1051,7 +1059,7 @@ public class DBOSExecutor implements AutoCloseable {
             status,
             workflowName,
             className,
-            null,
+            instanceName,
             null,
             null,
             null,

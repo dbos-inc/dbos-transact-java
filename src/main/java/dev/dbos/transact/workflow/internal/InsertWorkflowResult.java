@@ -6,7 +6,7 @@ public class InsertWorkflowResult {
   private String status;
   private String name;
   private String className;
-  private String configName;
+  private String instanceName;
   private String queueName;
   private Long workflowDeadlineEpochMs;
 
@@ -15,14 +15,14 @@ public class InsertWorkflowResult {
       String status,
       String name,
       String className,
-      String configName,
+      String instanceName,
       String queueName,
       Long workflowDeadlineEpochMs) {
     this.recoveryAttempts = recoveryAttempts;
     this.status = status;
     this.name = name;
     this.className = className;
-    this.configName = configName;
+    this.instanceName = instanceName;
     this.queueName = queueName;
     this.workflowDeadlineEpochMs = workflowDeadlineEpochMs;
   }
@@ -43,8 +43,8 @@ public class InsertWorkflowResult {
     return className;
   }
 
-  public String getConfigName() {
-    return configName;
+  public String getInstanceName() {
+    return instanceName;
   }
 
   public String getQueueName() {
@@ -67,7 +67,7 @@ public class InsertWorkflowResult {
     result = prime * result + ((status == null) ? 0 : status.hashCode());
     result = prime * result + ((name == null) ? 0 : name.hashCode());
     result = prime * result + ((className == null) ? 0 : className.hashCode());
-    result = prime * result + ((configName == null) ? 0 : configName.hashCode());
+    result = prime * result + ((instanceName == null) ? 0 : instanceName.hashCode());
     result = prime * result + ((queueName == null) ? 0 : queueName.hashCode());
     result =
         prime * result
@@ -91,9 +91,9 @@ public class InsertWorkflowResult {
     if (className == null) {
       if (other.className != null) return false;
     } else if (!className.equals(other.className)) return false;
-    if (configName == null) {
-      if (other.configName != null) return false;
-    } else if (!configName.equals(other.configName)) return false;
+    if (instanceName == null) {
+      if (other.instanceName != null) return false;
+    } else if (!instanceName.equals(other.instanceName)) return false;
     if (queueName == null) {
       if (other.queueName != null) return false;
     } else if (!queueName.equals(other.queueName)) return false;
@@ -106,7 +106,13 @@ public class InsertWorkflowResult {
   @Override
   public String toString() {
     return String.format(
-        "InsertWorkflowResult{recoveryAttempts=%d, status='%s', name='%s', className='%s', configName='%s', queueName='%s', workflowDeadlineEpochMs=%s}",
-        recoveryAttempts, status, name, className, configName, queueName, workflowDeadlineEpochMs);
+        "InsertWorkflowResult{recoveryAttempts=%d, status='%s', name='%s', className='%s', instanceName='%s', queueName='%s', workflowDeadlineEpochMs=%s}",
+        recoveryAttempts,
+        status,
+        name,
+        className,
+        instanceName,
+        queueName,
+        workflowDeadlineEpochMs);
   }
 }

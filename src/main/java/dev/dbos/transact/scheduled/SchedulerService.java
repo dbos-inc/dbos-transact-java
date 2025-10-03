@@ -61,9 +61,10 @@ public class SchedulerService {
 
       ExecutionTime executionTime = ExecutionTime.forCron(wf.cron);
 
-      RegisteredWorkflow regWF = dbosExecutor.getWorkflow(wf.className, wf.workflowName);
+      RegisteredWorkflow regWF = dbosExecutor.getWorkflow(wf.className, "", wf.workflowName);
       if (regWF == null) {
-        throw new IllegalStateException("Workflow not registered: %s".formatted(wf.workflowName));
+        throw new IllegalStateException(
+            "Workflow not registered: %s/%s".formatted(wf.className, wf.workflowName));
       }
 
       Runnable scheduleTask =

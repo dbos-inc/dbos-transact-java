@@ -99,12 +99,12 @@ public class WorkflowDAO {
                   resRow.getClassName(), initStatus.getClassName());
           throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(), msg);
         } else if (!Objects.equals(
-            resRow.getConfigName() != null ? resRow.getConfigName() : "",
-            initStatus.getConfigName() != null ? initStatus.getConfigName() : "")) {
+            resRow.getInstanceName() != null ? resRow.getInstanceName() : "",
+            initStatus.getInstanceName() != null ? initStatus.getInstanceName() : "")) {
           String msg =
               String.format(
                   "Workflow already exists with a different class configuration: %s, but the provided class configuration is: %s",
-                  resRow.getConfigName(), initStatus.getConfigName());
+                  resRow.getInstanceName(), initStatus.getInstanceName());
           throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(), msg);
         }
 
@@ -182,7 +182,7 @@ public class WorkflowDAO {
       stmt.setString(2, status.getStatus().toString());
       stmt.setString(3, status.getName());
       stmt.setString(4, status.getClassName());
-      stmt.setString(5, status.getConfigName());
+      stmt.setString(5, status.getInstanceName());
       stmt.setString(6, status.getOutput());
       stmt.setString(7, status.getError());
       stmt.setString(8, status.getExecutorId());
@@ -438,6 +438,14 @@ public class WorkflowDAO {
     if (input.workflowName() != null) {
       whereConditions.add("name = ?");
       parameters.add(input.workflowName());
+    }
+    if (input.className() != null) {
+      whereConditions.add("class_name = ?");
+      parameters.add(input.className());
+    }
+    if (input.instanceName() != null) {
+      whereConditions.add("config_name = ?");
+      parameters.add(input.instanceName());
     }
     if (input.authenticatedUser() != null) {
       whereConditions.add("authenticated_user = ?");
@@ -893,7 +901,7 @@ public class WorkflowDAO {
       stmt.setString(2, WorkflowState.ENQUEUED.name());
       stmt.setString(3, originalStatus.name());
       stmt.setString(4, originalStatus.className());
-      stmt.setString(5, originalStatus.configName());
+      stmt.setString(5, originalStatus.instanceName());
 
       // Use provided application version or fall back to original
       String appVersion =

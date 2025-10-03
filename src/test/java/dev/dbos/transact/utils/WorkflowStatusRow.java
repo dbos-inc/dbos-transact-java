@@ -19,7 +19,7 @@ public record WorkflowStatusRow(
     String applicationVersion,
     String applicationId,
     String className,
-    String configName,
+    String instanceName,
     Long recoveryAttempts,
     String queueName,
     Long timeoutMs,

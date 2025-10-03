@@ -17,16 +17,22 @@ public class DBOSInvocationHandler implements InvocationHandler {
   private static final Logger logger = LoggerFactory.getLogger(DBOSInvocationHandler.class);
 
   private final Object target;
+  private final String instanceName;
   protected final Supplier<DBOSExecutor> executorSupplier;
 
-  public DBOSInvocationHandler(Object target, Supplier<DBOSExecutor> executorSupplier) {
+  public DBOSInvocationHandler(
+      Object target, String instanceName, Supplier<DBOSExecutor> executorSupplier) {
     this.target = target;
+    this.instanceName = instanceName;
     this.executorSupplier = executorSupplier;
   }
 
   @SuppressWarnings("unchecked")
   public static <T> T createProxy(
-      Class<T> interfaceClass, Object implementation, Supplier<DBOSExecutor> executor) {
+      Class<T> interfaceClass,
+      Object implementation,
+      String instanceName,
+      Supplier<DBOSExecutor> executor) {
     if (!interfaceClass.isInterface()) {
       throw new IllegalArgumentException("interfaceClass must be an interface");
     }
@@ -35,7 +41,7 @@ public class DBOSInvocationHandler implements InvocationHandler {
         Proxy.newProxyInstance(
             interfaceClass.getClassLoader(),
             new Class<?>[] {interfaceClass},
-            new DBOSInvocationHandler(implementation, executor));
+            new DBOSInvocationHandler(implementation, instanceName, executor));
   }
 
   public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
@@ -64,7 +70,7 @@ public class DBOSInvocationHandler implements InvocationHandler {
 
     var clsName = target.getClass().getName();
     var wfName = workflow.name().isEmpty() ? method.getName() : workflow.name();
-    var handle = executor.invokeWorkflow(clsName, wfName, args);
+    var handle = executor.invokeWorkflow(clsName, instanceName, wfName, args);
     return handle.getResult();
   }
 

@@ -10,22 +10,25 @@ import java.util.concurrent.ConcurrentHashMap;
 public class WorkflowRegistry {
   private final ConcurrentHashMap<String, RegisteredWorkflow> registry = new ConcurrentHashMap<>();
 
-  public static String getFullyQualifiedWFName(String cls, String wf) {
-    return String.format("%s/%s", cls, wf);
+  public static String getFullyQualifiedWFName(String cls, String instanceName, String wf) {
+    return String.format("%s/%s/%s", cls, instanceName, wf);
   }
 
   public void register(
       String className,
       String workflowName,
       Object target,
+      String instanceName,
       Method method,
       int maxRecoveryAttempts) {
 
     WorkflowFunctionReflect function = (t, args) -> method.invoke(t, args);
-    var fqName = getFullyQualifiedWFName(className, workflowName);
+    var fqName = getFullyQualifiedWFName(className, instanceName, workflowName);
     var previous =
         registry.putIfAbsent(
-            fqName, new RegisteredWorkflow(workflowName, target, function, maxRecoveryAttempts));
+            fqName,
+            new RegisteredWorkflow(
+                workflowName, target, instanceName, function, maxRecoveryAttempts));
 
     if (previous != null) {
       throw new IllegalStateException("Workflow already registered with name: " + fqName);
