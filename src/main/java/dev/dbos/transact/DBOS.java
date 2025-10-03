@@ -244,7 +244,7 @@ public class DBOS {
     }
   }
 
-  public void shutdown() throws Exception {
+  public void shutdown() {
     logger.debug("shutdown()");
 
     var current = dbosExecutor.getAndSet(null);
