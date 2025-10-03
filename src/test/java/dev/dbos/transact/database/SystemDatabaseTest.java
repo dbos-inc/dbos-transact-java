@@ -14,7 +14,6 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.Timeout;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 class SystemDatabaseTest {
@@ -27,11 +26,9 @@ class SystemDatabaseTest {
 
     SystemDatabaseTest.dbosConfig =
         new DBOSConfig.Builder()
-            .name("systemdbtest")
-            .dbHost("localhost")
-            .dbPort(5432)
+            .appName("systemdbtest")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
-            .sysDbName("dbos_java_sys")
             .maximumPoolSize(3)
             .build();
 
