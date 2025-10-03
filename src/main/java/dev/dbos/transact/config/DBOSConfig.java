@@ -5,70 +5,41 @@ import dev.dbos.transact.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DBOSConfig {
-  private final String name;
-  private final String url;
-  private final String dbHost;
-  private final int dbPort;
-  private final String dbUser;
-  private final String dbPassword;
-  private final int maximumPoolSize;
-  private final int connectionTimeout;
-  private final String appDbName;
-  private final String sysDbName;
-  private final boolean http;
-  private final int httpPort;
-  private final boolean httpAwaitOnStart;
-  private final boolean migrate;
-  private final String conductorKey;
-  private final String conductorDomain;
+public record DBOSConfig(
+    String appName,
+    String databaseUrl,
+    String dbUser,
+    String dbPassword,
+    int maximumPoolSize,
+    int connectionTimeout,
+    boolean adminServer,
+    int adminServerPort,
+    boolean migrate,
+    String conductorKey,
+    String conductorDomain) {
 
   static Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
 
-  private DBOSConfig(Builder builder) {
-    this.name = builder.name;
-    this.url = builder.url;
-    this.maximumPoolSize = builder.maximumPoolSize;
-    this.connectionTimeout = builder.connectionTimeout;
-    this.appDbName = builder.appDbName;
-    this.sysDbName = builder.sysDbName;
-    this.dbUser = builder.dbUser;
-    this.dbPassword = builder.dbPassword;
-    this.dbHost = builder.dbHost;
-    this.dbPort = builder.dbPort;
-    this.http = builder.http;
-    this.httpPort = builder.httpPort;
-    this.httpAwaitOnStart = builder.httpAwaitOnStart;
-    this.migrate = builder.migrate;
-    this.conductorKey = builder.conductorKey;
-    this.conductorDomain = builder.conductorDomain;
-  }
-
   public static class Builder {
-    private String name;
-    private String url;
-    private String dbHost;
-    private int dbPort;
+    private String appName;
+    private String databaseUrl;
     private String dbUser;
     private String dbPassword;
     private int maximumPoolSize = 3;
     private int connectionTimeout = 30000;
-    private String appDbName;
-    private String sysDbName;
-    private boolean http = false;
-    private int httpPort;
-    private boolean httpAwaitOnStart = true;
+    private boolean adminServer = false;
+    private int adminServerPort = 3001;
     private boolean migrate = true;
     private String conductorKey;
     private String conductorDomain;
 
-    public Builder name(String name) {
-      this.name = name;
+    public Builder appName(String appName) {
+      this.appName = appName;
       return this;
     }
 
-    public Builder url(String url) {
-      this.url = url;
+    public Builder databaseUrl(String databaseUrl) {
+      this.databaseUrl = databaseUrl;
       return this;
     }
 
@@ -92,38 +63,13 @@ public class DBOSConfig {
       return this;
     }
 
-    public Builder appDbName(String appDbName) {
-      this.appDbName = appDbName;
-      return this;
-    }
-
-    public Builder dbHost(String dbHost) {
-      this.dbHost = dbHost;
-      return this;
-    }
-
-    public Builder dbPort(int dbPort) {
-      this.dbPort = dbPort;
-      return this;
-    }
-
-    public Builder sysDbName(String sysDbName) {
-      this.sysDbName = sysDbName;
-      return this;
-    }
-
     public Builder runAdminServer() {
-      this.http = true;
+      this.adminServer = true;
       return this;
     }
 
     public Builder adminServerPort(int port) {
-      this.httpPort = port;
-      return this;
-    }
-
-    public Builder adminAwaitOnStart(boolean wait) {
-      this.httpAwaitOnStart = wait;
+      this.adminServerPort = port;
       return this;
     }
 
@@ -143,96 +89,31 @@ public class DBOSConfig {
     }
 
     public DBOSConfig build() {
-      if (name == null) throw new IllegalArgumentException("Name is required");
+      if (appName == null) throw new IllegalArgumentException("Name is required");
 
       if (dbPassword == null) {
         dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
       }
-      if (url == null) {
-        url = System.getenv(Constants.JDBC_URL_ENV_VAR);
-        logger.info("Using db_url env {}", url);
+      if (databaseUrl == null) {
+        databaseUrl = System.getenv(Constants.JDBC_URL_ENV_VAR);
+        logger.info("Using db_url env {}", databaseUrl);
       }
       if (dbUser == null) {
         dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);
       }
 
-      if (sysDbName == null) {
-        sysDbName = name + Constants.SYS_DB_SUFFIX;
-      }
-
-      return new DBOSConfig(this);
+      return new DBOSConfig(
+          appName,
+          databaseUrl,
+          dbUser,
+          dbPassword,
+          maximumPoolSize,
+          connectionTimeout,
+          adminServer,
+          adminServerPort,
+          migrate,
+          conductorKey,
+          conductorDomain);
     }
-  }
-
-  // Getters
-  public String getName() {
-    return name;
-  }
-
-  public String getUrl() {
-    return url;
-  }
-
-  public int getMaximumPoolSize() {
-    return maximumPoolSize;
-  }
-
-  public int getConnectionTimeout() {
-    return connectionTimeout;
-  }
-
-  public String getAppDbName() {
-    return appDbName;
-  }
-
-  public String getSysDbName() {
-    return sysDbName;
-  }
-
-  public String getDbUser() {
-    return dbUser;
-  }
-
-  public String getDbPassword() {
-    return dbPassword;
-  }
-
-  public String getDbHost() {
-    return dbHost;
-  }
-
-  public int getDbPort() {
-    return dbPort;
-  }
-
-  public boolean isHttp() {
-    return http;
-  }
-
-  public int getHttpPort() {
-    return httpPort;
-  }
-
-  public boolean isHttpAwaitOnStart() {
-    return httpAwaitOnStart;
-  }
-
-  public boolean migration() {
-    return migrate;
-  }
-
-  public String getConductorKey() {
-    return conductorKey;
-  }
-
-  public String getConductorDomain() {
-    return conductorDomain;
-  }
-
-  @Override
-  public String toString() {
-    return String.format(
-        "DBOSConfig{name='%s', url='%s', maximumPoolSize=%d, connectionTimeout=%d, appDbName='%s', sysDbName='%s'}",
-        name, url, maximumPoolSize, connectionTimeout, appDbName, sysDbName);
   }
 }

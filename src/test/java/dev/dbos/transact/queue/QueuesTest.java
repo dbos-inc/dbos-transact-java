@@ -46,11 +46,9 @@ public class QueuesTest {
 
     QueuesTest.dbosConfig =
         new DBOSConfig.Builder()
-            .name("systemdbtest")
-            .dbHost("localhost")
-            .dbPort(5432)
+            .appName("systemdbtest")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
-            .sysDbName("dbos_java_sys")
             .maximumPoolSize(2)
             .build();
   }
