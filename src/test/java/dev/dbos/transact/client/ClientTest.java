@@ -72,8 +72,8 @@ public class ClientTest {
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
       var options =
-          new DBOSClient.EnqueueOptions("enqueueTest", "testQueue")
-              .withClassName("dev.dbos.transact.client.ClientServiceImpl");
+          new DBOSClient.EnqueueOptions(
+              "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var rows = DBUtils.getWorkflowRows(dataSource);
       assertEquals(1, rows.size());
@@ -101,8 +101,8 @@ public class ClientTest {
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
       var options =
-          new DBOSClient.EnqueueOptions("enqueueTest", "testQueue")
-              .withClassName("dev.dbos.transact.client.ClientServiceImpl")
+          new DBOSClient.EnqueueOptions(
+                  "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue")
               .withDeduplicationId("plugh!");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       assertNotNull(handle);

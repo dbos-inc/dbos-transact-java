@@ -6,6 +6,8 @@ import java.util.List;
 
 public record ListWorkflowsInput(
     List<String> workflowIDs,
+    String className,
+    String instanceName,
     String workflowName,
     String authenticatedUser,
     OffsetDateTime startTime,
@@ -20,12 +22,14 @@ public record ListWorkflowsInput(
     Boolean loadOutput) {
 
   public ListWorkflowsInput() {
-    this(null, null, null, null, null, null, null, null, null, null, null, null, null);
+    this(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public static class Builder {
     private List<String> workflowIDs = new ArrayList<>();
     private String workflowName;
+    private String className;
+    private String instanceName;
     private String authenticatedUser;
     private OffsetDateTime startTime;
     private OffsetDateTime endTime;
@@ -45,6 +49,16 @@ public record ListWorkflowsInput(
 
     public Builder workflowIDs(List<String> workflowIDs) {
       this.workflowIDs.addAll(workflowIDs);
+      return this;
+    }
+
+    public Builder className(String className) {
+      this.className = className;
+      return this;
+    }
+
+    public Builder instanceName(String instanceName) {
+      this.instanceName = instanceName;
       return this;
     }
 
@@ -116,6 +130,8 @@ public record ListWorkflowsInput(
     public ListWorkflowsInput build() {
       return new ListWorkflowsInput(
           workflowIDs,
+          className,
+          instanceName,
           workflowName,
           authenticatedUser,
           startTime,
