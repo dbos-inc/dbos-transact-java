@@ -68,7 +68,7 @@ public class QueueService {
 
             List<String> workflowIds =
                 systemDatabase.getAndStartQueuedWorkflows(
-                    queue, dbosExecutor.getExecutorId(), dbosExecutor.getAppVersion());
+                    queue, dbosExecutor.executorId(), dbosExecutor.appVersion());
 
             for (String id : workflowIds) {
               dbosExecutor.executeWorkflowById(id);

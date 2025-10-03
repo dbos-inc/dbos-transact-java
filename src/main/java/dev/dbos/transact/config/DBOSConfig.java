@@ -16,7 +16,9 @@ public record DBOSConfig(
     int adminServerPort,
     boolean migrate,
     String conductorKey,
-    String conductorDomain) {
+    String conductorDomain,
+    String appVersion,
+    String executorId) {
 
   static Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
 
@@ -32,6 +34,8 @@ public record DBOSConfig(
     private boolean migrate = true;
     private String conductorKey;
     private String conductorDomain;
+    private String appVersion;
+    private String executorId;
 
     public Builder appName(String appName) {
       this.appName = appName;
@@ -88,6 +92,16 @@ public record DBOSConfig(
       return this;
     }
 
+    public Builder appVersion(String appVersion) {
+      this.appVersion = appVersion;
+      return this;
+    }
+
+    public Builder executorId(String executorId) {
+      this.executorId = executorId;
+      return this;
+    }
+
     public DBOSConfig build() {
       if (appName == null) throw new IllegalArgumentException("Name is required");
 
@@ -113,7 +127,9 @@ public record DBOSConfig(
           adminServerPort,
           migrate,
           conductorKey,
-          conductorDomain);
+          conductorDomain,
+          appVersion,
+          executorId);
     }
   }
 }

@@ -99,10 +99,17 @@ public class DBOSExecutor implements AutoCloseable {
 
       this.executorId = System.getenv("DBOS__VMID");
       if (this.executorId == null || this.executorId.isEmpty()) {
+        this.executorId = config.executorId();
+      }
+      if (this.executorId == null || this.executorId.isEmpty()) {
         this.executorId = config.conductorKey() == null ? "local" : UUID.randomUUID().toString();
       }
 
       this.appVersion = System.getenv("DBOS__APPVERSION");
+      if (this.appVersion == null || this.appVersion.isEmpty()) {
+        this.appVersion = config.appVersion();
+      }
+
       if (this.appVersion == null || this.appVersion.isEmpty()) {
         List<Class<?>> registeredClasses =
             workflowMap.values().stream()
@@ -192,15 +199,15 @@ public class DBOSExecutor implements AutoCloseable {
     return schedulerService;
   }
 
-  public String getAppName() {
+  public String appName() {
     return config.appName();
   }
 
-  public String getExecutorId() {
+  public String executorId() {
     return this.executorId;
   }
 
-  public String getAppVersion() {
+  public String appVersion() {
     return this.appVersion;
   }
 
@@ -250,7 +257,7 @@ public class DBOSExecutor implements AutoCloseable {
       executorIDs = new ArrayList<>(List.of("local"));
     }
 
-    String appVersion = getAppVersion();
+    String appVersion = appVersion();
 
     List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
     for (String executorId : executorIDs) {
@@ -856,8 +863,8 @@ public class DBOSExecutor implements AutoCloseable {
           args,
           options,
           parent,
-          getExecutorId(),
-          getAppVersion(),
+          executorId(),
+          appVersion(),
           systemDatabase,
           latch);
     }
@@ -883,8 +890,8 @@ public class DBOSExecutor implements AutoCloseable {
               null,
               null,
               OptionalInt.empty(),
-              getExecutorId(),
-              getAppVersion(),
+              executorId(),
+              appVersion(),
               parent,
               options.timeout(),
               options.deadline());

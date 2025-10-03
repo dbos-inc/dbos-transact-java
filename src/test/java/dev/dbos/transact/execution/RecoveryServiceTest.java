@@ -111,7 +111,7 @@ class RecoveryServiceTest {
 
     List<GetPendingWorkflowsOutput> pending =
         systemDatabase.getPendingWorkflows(
-            dbosExecutor.getExecutorId(), dbosExecutor.getAppVersion());
+            dbosExecutor.executorId(), dbosExecutor.appVersion());
 
     assertEquals(5, pending.size());
 
