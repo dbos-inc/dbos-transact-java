@@ -36,7 +36,7 @@ class DBOSExecutorTest {
   public static void onetimeBefore() throws SQLException {
     DBOSExecutorTest.dbosConfig =
         new DBOSConfig.Builder()
-            .name("systemdbtest")
+            .appName("systemdbtest")
             .dbHost("localhost")
             .dbPort(5432)
             .dbUser("postgres")

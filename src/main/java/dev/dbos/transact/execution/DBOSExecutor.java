@@ -193,7 +193,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public String getAppName() {
-    return config.name();
+    return config.appName();
   }
 
   public String getExecutorId() {

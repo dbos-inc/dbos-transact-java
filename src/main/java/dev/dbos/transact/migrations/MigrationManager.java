@@ -42,7 +42,7 @@ public class MigrationManager {
     if (dbconfig.sysDbName() != null) {
       dbName = dbconfig.sysDbName();
     } else {
-      dbName = dbconfig.name() + Constants.SYS_DB_SUFFIX;
+      dbName = dbconfig.appName() + Constants.SYS_DB_SUFFIX;
     }
 
     createDatabaseIfNotExists(dbconfig, dbName);

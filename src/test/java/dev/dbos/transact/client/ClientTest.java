@@ -35,7 +35,7 @@ public class ClientTest {
   static void onetimeSetup() throws Exception {
     dbosConfig =
         new DBOSConfig.Builder()
-            .name("systemdbtest")
+            .appName("systemdbtest")
             .dbHost("localhost")
             .dbPort(5432)
             .dbUser(dbUser)

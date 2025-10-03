@@ -28,7 +28,7 @@ public class AsyncWorkflowTest {
 
     AsyncWorkflowTest.dbosConfig =
         new DBOSConfig.Builder()
-            .name("systemdbtest")
+            .appName("systemdbtest")
             .dbHost("localhost")
             .dbPort(5432)
             .dbUser("postgres")

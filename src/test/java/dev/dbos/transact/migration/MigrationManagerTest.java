@@ -34,7 +34,7 @@ class MigrationManagerTest {
 
     MigrationManagerTest.dbosConfig =
         new DBOSConfig.Builder()
-            .name("migrationtest")
+            .appName("migrationtest")
             .dbHost("localhost")
             .dbPort(5432)
             .dbUser("postgres")

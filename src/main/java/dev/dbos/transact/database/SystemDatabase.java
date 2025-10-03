@@ -319,7 +319,7 @@ public class SystemDatabase implements AutoCloseable {
       if (config.sysDbName() != null) {
         dbName = config.sysDbName();
       } else {
-        dbName = config.name() + Constants.SYS_DB_SUFFIX;
+        dbName = config.appName() + Constants.SYS_DB_SUFFIX;
       }
     }
 

@@ -6,8 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public record DBOSConfig(
+    String appName,
     String url,
-    String name,
     String dbHost,
     int dbPort,
     String dbUser,
@@ -24,7 +24,7 @@ public record DBOSConfig(
   static Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
 
   public static class Builder {
-    private String name;
+    private String appName;
     private String url;
     private String dbHost;
     private int dbPort;
@@ -39,8 +39,8 @@ public record DBOSConfig(
     private String conductorKey;
     private String conductorDomain;
 
-    public Builder name(String name) {
-      this.name = name;
+    public Builder appName(String appName) {
+      this.appName = appName;
       return this;
     }
 
@@ -110,7 +110,7 @@ public record DBOSConfig(
     }
 
     public DBOSConfig build() {
-      if (name == null) throw new IllegalArgumentException("Name is required");
+      if (appName == null) throw new IllegalArgumentException("Name is required");
 
       if (dbPassword == null) {
         dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
@@ -124,12 +124,12 @@ public record DBOSConfig(
       }
 
       if (sysDbName == null) {
-        sysDbName = name + Constants.SYS_DB_SUFFIX;
+        sysDbName = appName + Constants.SYS_DB_SUFFIX;
       }
 
       return new DBOSConfig(
+          appName,
           url,
-          name,
           dbHost,
           dbPort,
           dbUser,

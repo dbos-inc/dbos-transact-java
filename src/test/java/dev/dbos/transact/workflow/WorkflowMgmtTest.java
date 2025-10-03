@@ -41,7 +41,7 @@ public class WorkflowMgmtTest {
 
     WorkflowMgmtTest.dbosConfig =
         new DBOSConfig.Builder()
-            .name("systemdbtest")
+            .appName("systemdbtest")
             .url("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
             .dbHost("localhost")
