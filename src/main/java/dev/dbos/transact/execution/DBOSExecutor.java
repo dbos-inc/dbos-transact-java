@@ -140,23 +140,11 @@ public class DBOSExecutor implements AutoCloseable {
         conductor.start();
       }
 
-      if (config.http()) {
+      if (config.adminServer()) {
         httpServer =
             HttpServer.getInstance(
-                config.httpPort(), new AdminController(this, systemDatabase, queues));
-        if (config.httpAwaitOnStart()) {
-          Thread httpThread =
-              new Thread(
-                  () -> {
-                    logger.info("Start http in background thread");
-                    httpServer.startAndBlock();
-                  },
-                  "http-server-thread");
-          httpThread.setDaemon(false); // Keep process alive
-          httpThread.start();
-        } else {
+                config.adminServerPort(), new AdminController(this, systemDatabase, queues));
           httpServer.start();
-        }
       }
     }
   }

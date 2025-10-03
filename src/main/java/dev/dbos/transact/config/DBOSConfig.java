@@ -16,9 +16,8 @@ public record DBOSConfig(
     int connectionTimeout,
     String appDbName,
     String sysDbName,
-    boolean http,
-    int httpPort,
-    boolean httpAwaitOnStart,
+    boolean adminServer,
+    int adminServerPort,
     boolean migrate,
     String conductorKey,
     String conductorDomain) {
@@ -36,9 +35,8 @@ public record DBOSConfig(
     private int connectionTimeout = 30000;
     private String appDbName;
     private String sysDbName;
-    private boolean http = false;
-    private int httpPort;
-    private boolean httpAwaitOnStart = true;
+    private boolean adminServer = false;
+    private int adminServerPort = 3001;
     private boolean migrate = true;
     private String conductorKey;
     private String conductorDomain;
@@ -94,17 +92,12 @@ public record DBOSConfig(
     }
 
     public Builder runAdminServer() {
-      this.http = true;
+      this.adminServer = true;
       return this;
     }
 
     public Builder adminServerPort(int port) {
-      this.httpPort = port;
-      return this;
-    }
-
-    public Builder adminAwaitOnStart(boolean wait) {
-      this.httpAwaitOnStart = wait;
+      this.adminServerPort = port;
       return this;
     }
 
@@ -152,9 +145,8 @@ public record DBOSConfig(
           connectionTimeout,
           appDbName,
           sysDbName,
-          http,
-          httpPort,
-          httpAwaitOnStart,
+          adminServer,
+          adminServerPort,
           migrate,
           conductorKey,
           conductorDomain);
