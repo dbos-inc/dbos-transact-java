@@ -95,6 +95,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.java-websocket:Java-WebSocket:1.5.6")
     testImplementation("org.junit-pioneer:junit-pioneer:2.3.0")
+    testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.8")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
