@@ -154,8 +154,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName)
-      throws IllegalStateException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
+  public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName) {
 
     return DbRetry.call(
         () -> {

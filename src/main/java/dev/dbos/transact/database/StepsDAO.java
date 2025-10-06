@@ -91,7 +91,7 @@ public class StepsDAO {
    * @param functionName The expected name of the function/operation.
    * @param connection The active JDBC connection (corresponding to Python's 'conn: sa.Connection').
    * @return A {@link StepResult} object if the operation has completed, otherwise {@code null}.
-   * @throws IllegalStateException If the workflow does not exist in the status table.
+   * @throws DBOSNonExistentWorkflowException If the workflow does not exist in the status table.
    * @throws DBOSWorkflowCancelledException If the workflow is in a cancelled status.
    * @throws DBOSUnexpectedStepException If the recorded function name for the operation does not
    *     match the provided name.
@@ -99,10 +99,7 @@ public class StepsDAO {
    */
   public static StepResult checkStepExecutionTxn(
       String workflowId, int functionId, String functionName, Connection connection)
-      throws SQLException,
-          IllegalStateException,
-          DBOSWorkflowCancelledException,
-          DBOSUnexpectedStepException {
+      throws SQLException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
 
     String workflowStatusSql =
         String.format(
@@ -119,8 +116,7 @@ public class StepsDAO {
     }
 
     if (workflowStatus == null) {
-      throw new IllegalStateException(
-          String.format("Error: Workflow %s does not exist", workflowId));
+      throw new DBOSNonExistentWorkflowException(workflowId);
     }
 
     if (Objects.equals(workflowStatus, WorkflowState.CANCELLED.name())) {
