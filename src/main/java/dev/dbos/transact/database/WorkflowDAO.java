@@ -1,7 +1,5 @@
 package dev.dbos.transact.database;
 
-import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
-
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
@@ -332,22 +330,18 @@ public class WorkflowDAO {
    * @param workflowId id of the workflow
    * @param result output serialized as json
    */
-  public void recordWorkflowOutput(String workflowId, String result) {
+  public void recordWorkflowOutput(String workflowId, String result) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
-    try {
-      try (Connection connection = dataSource.getConnection()) {
+    try (Connection connection = dataSource.getConnection()) {
 
-        UpdateWorkflowOptions options = new UpdateWorkflowOptions();
-        options.setOutput(result);
-        options.setResetDeduplicationID(true);
+      UpdateWorkflowOptions options = new UpdateWorkflowOptions();
+      options.setOutput(result);
+      options.setResetDeduplicationID(true);
 
-        updateWorkflowStatus(connection, workflowId, WorkflowState.SUCCESS.toString(), options);
-      }
-    } catch (SQLException e) {
-      throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
+      updateWorkflowStatus(connection, workflowId, WorkflowState.SUCCESS.toString(), options);
     }
   }
 
@@ -357,39 +351,31 @@ public class WorkflowDAO {
    * @param workflowId id of the workflow
    * @param error output serialized as json
    */
-  public void recordWorkflowError(String workflowId, String error) {
+  public void recordWorkflowError(String workflowId, String error) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
-    try {
-      try (Connection connection = dataSource.getConnection()) {
+    try (Connection connection = dataSource.getConnection()) {
 
-        UpdateWorkflowOptions options = new UpdateWorkflowOptions();
-        options.setError(error);
-        options.setResetDeduplicationID(true);
+      UpdateWorkflowOptions options = new UpdateWorkflowOptions();
+      options.setError(error);
+      options.setResetDeduplicationID(true);
 
-        updateWorkflowStatus(connection, workflowId, WorkflowState.ERROR.toString(), options);
-      }
-    } catch (SQLException e) {
-      throw new DBOSException(UNEXPECTED.getCode(), e.getMessage());
+      updateWorkflowStatus(connection, workflowId, WorkflowState.ERROR.toString(), options);
     }
   }
 
-  public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) {
+  public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
-    try {
-      var builder = new ListWorkflowsInput.Builder().workflowIDs(Arrays.asList(workflowId));
-      ListWorkflowsInput input = builder.build();
-      List<WorkflowStatus> output = listWorkflows(input);
-      if (output.size() > 0) {
-        return Optional.of(output.get(0));
-      }
-    } catch (SQLException e) {
-      logger.error("Error retrieving workflow for {}", workflowId, e);
+    var builder = new ListWorkflowsInput.Builder().workflowIDs(Arrays.asList(workflowId));
+    ListWorkflowsInput input = builder.build();
+    List<WorkflowStatus> output = listWorkflows(input);
+    if (output.size() > 0) {
+      return Optional.of(output.get(0));
     }
 
     return Optional.empty();
@@ -618,7 +604,7 @@ public class WorkflowDAO {
     return results;
   }
 
-  public Object awaitWorkflowResult(String workflowId) throws Exception {
+  public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -645,17 +631,17 @@ public class WorkflowDAO {
               case SUCCESS:
                 String output = rs.getString("output");
                 Object[] oArray = JSONUtil.deserializeToArray(output);
-                return oArray[0];
+                return (T) oArray[0];
 
               case ERROR:
                 String error = rs.getString("error");
                 Throwable t = JSONUtil.deserializeAppException(error);
                 if (t instanceof Exception) {
-                  throw (Exception) t;
+                  throw (E) t;
                 }
                 throw new RuntimeException(t.getMessage(), t);
               case CANCELLED:
-                throw new AwaitedWorkflowCancelledException(workflowId);
+                throw new DBOSAwaitedWorkflowCancelledException(workflowId);
 
               default:
                 // Status is PENDING or other - continue polling
@@ -682,7 +668,8 @@ public class WorkflowDAO {
       String childId, // workflowId of the
       // child
       int functionId, // func id in the parent
-      String functionName) {
+      String functionName)
+      throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -709,7 +696,7 @@ public class WorkflowDAO {
             parentId,
             String.format("Record exists for parent %s and functionId %d", parentId, functionId));
       } else {
-        throw new DBOSException(UNEXPECTED.getCode(), sqe.getMessage());
+        throw sqe;
       }
     }
   }
@@ -802,7 +789,7 @@ public class WorkflowDAO {
 
         if (currentStatus == null) {
           connection.rollback();
-          throw new NonExistentWorkflowException(workflowId);
+          throw new DBOSNonExistentWorkflowException(workflowId);
         }
 
         // If workflow is already complete, do nothing
@@ -832,7 +819,7 @@ public class WorkflowDAO {
 
     var status = getWorkflowStatus(originalWorkflowId);
     if (status.isEmpty()) {
-      throw new NonExistentWorkflowException(originalWorkflowId);
+      throw new DBOSNonExistentWorkflowException(originalWorkflowId);
     }
 
     String forkedWorkflowId =

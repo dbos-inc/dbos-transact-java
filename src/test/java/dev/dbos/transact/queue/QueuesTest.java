@@ -217,6 +217,10 @@ public class QueuesTest {
     }
 
     List<WorkflowStatus> wfs = dbos.listQueuedWorkflows(new ListQueuedWorkflowsInput(), true);
+    wfs.sort(
+        (a, b) -> {
+          return a.workflowId().compareTo(b.workflowId());
+        });
 
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;

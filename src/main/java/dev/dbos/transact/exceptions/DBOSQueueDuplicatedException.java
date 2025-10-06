@@ -1,8 +1,6 @@
 package dev.dbos.transact.exceptions;
 
-import static dev.dbos.transact.exceptions.ErrorCode.QUEUE_DUPLICATED;
-
-public class DBOSQueueDuplicatedException extends DBOSException {
+public class DBOSQueueDuplicatedException extends RuntimeException {
   private final String workflowUUID;
   private final String queueName;
   private final String deduplicationID;
@@ -10,7 +8,6 @@ public class DBOSQueueDuplicatedException extends DBOSException {
   public DBOSQueueDuplicatedException(
       String workflowUUID, String queueName, String deduplicationID) {
     super(
-        QUEUE_DUPLICATED.getCode(),
         String.format(
             "Workflow %s (Queue: %s, Deduplication ID: %s) is already enqueued.",
             workflowUUID, queueName, deduplicationID));

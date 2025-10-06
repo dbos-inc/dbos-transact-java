@@ -34,8 +34,7 @@ public record RegisteredWorkflow(
         maxRecoveryAttempts);
   }
 
-  @SuppressWarnings("unchecked")
-  public <T> T invoke(Object[] args) throws Exception {
+  public <T, E extends Exception> T invoke(Object[] args) throws E {
     try {
       return (T) function.invoke(target, args);
     } catch (Exception e) {
@@ -48,7 +47,7 @@ public record RegisteredWorkflow(
           throw new RuntimeException(e);
         }
       }
-      throw e;
+      throw (E) e;
     }
   }
 }

@@ -4,32 +4,32 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
+
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-
-import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
+import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
 import uk.org.webcompere.systemstubs.jupiter.SystemStub;
 import uk.org.webcompere.systemstubs.jupiter.SystemStubsExtension;
-import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
 
 @ExtendWith(SystemStubsExtension.class)
 public class ConfigTest {
 
-  @SystemStub
-  private EnvironmentVariables envVars = new EnvironmentVariables();
+  @SystemStub private EnvironmentVariables envVars = new EnvironmentVariables();
 
   @Test
   public void setExecutorAndAppVersionViaConfig() throws Exception {
-    var config = new DBOSConfig.Builder()
-        .appName("config-test")
-        .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-        .dbUser("postgres")
-        .appVersion("test-app-version")
-        .executorId("test-executor-id")
-        .build();
+    var config =
+        new DBOSConfig.Builder()
+            .appName("config-test")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .dbUser("postgres")
+            .appVersion("test-app-version")
+            .executorId("test-executor-id")
+            .build();
 
     var dbos = DBOS.initialize(config);
     try {
@@ -48,13 +48,14 @@ public class ConfigTest {
     envVars.set("DBOS__VMID", "test-env-executor-id");
     envVars.set("DBOS__APPVERSION", "test-env-app-version");
 
-    var config = new DBOSConfig.Builder()
-        .appName("config-test")
-        .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-        .dbUser("postgres")
-        .appVersion("test-app-version")
-        .executorId("test-executor-id")
-        .build();
+    var config =
+        new DBOSConfig.Builder()
+            .appName("config-test")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .dbUser("postgres")
+            .appVersion("test-app-version")
+            .executorId("test-executor-id")
+            .build();
 
     var dbos = DBOS.initialize(config);
     try {
@@ -67,14 +68,14 @@ public class ConfigTest {
     }
   }
 
-
   @Test
   public void localExecutorId() throws Exception {
-    var config = new DBOSConfig.Builder()
-        .appName("config-test")
-        .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-        .dbUser("postgres")
-        .build();
+    var config =
+        new DBOSConfig.Builder()
+            .appName("config-test")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .dbUser("postgres")
+            .build();
 
     var dbos = DBOS.initialize(config);
     try {
@@ -88,12 +89,13 @@ public class ConfigTest {
 
   @Test
   public void conductorExecutorId() throws Exception {
-    var config = new DBOSConfig.Builder()
-        .appName("config-test")
-        .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-        .dbUser("postgres")
-        .conductorKey("test-conductor-key")
-        .build();
+    var config =
+        new DBOSConfig.Builder()
+            .appName("config-test")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .dbUser("postgres")
+            .conductorKey("test-conductor-key")
+            .build();
 
     var dbos = DBOS.initialize(config);
     try {
@@ -108,11 +110,12 @@ public class ConfigTest {
 
   @Test
   public void calcAppVersion() throws Exception {
-    var config = new DBOSConfig.Builder()
-        .appName("config-test")
-        .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-        .dbUser("postgres")
-        .build();
+    var config =
+        new DBOSConfig.Builder()
+            .appName("config-test")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .dbUser("postgres")
+            .build();
 
     var dbos = DBOS.initialize(config);
     try {

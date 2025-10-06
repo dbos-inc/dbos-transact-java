@@ -13,7 +13,6 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -31,7 +30,7 @@ public class DBOSClient implements AutoCloseable {
   }
 
   @Override
-  public void close() throws Exception {
+  public void close() {
     systemDatabase.close();
   }
 
@@ -191,8 +190,7 @@ public class DBOSClient implements AutoCloseable {
         null);
   }
 
-  public void send(String destinationId, Object message, String topic, String idempotencyKey)
-      throws SQLException {
+  public void send(String destinationId, Object message, String topic, String idempotencyKey) {
     var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
     var now = System.currentTimeMillis();
     if (idempotencyKey == null) {
@@ -255,28 +253,16 @@ public class DBOSClient implements AutoCloseable {
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-    try {
-      return systemDatabase.listWorkflows(input);
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
+    return systemDatabase.listWorkflows(input);
   }
 
   public List<WorkflowStatus> listQueuedWorkflows(
       ListQueuedWorkflowsInput input, boolean loadInput) {
-    try {
-      return systemDatabase.listQueuedWorkflows(input, loadInput);
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
+    return systemDatabase.listQueuedWorkflows(input, loadInput);
   }
 
   public List<StepInfo> listWorkflowSteps(String workflowId) {
-    try {
-      return systemDatabase.listWorkflowSteps(workflowId);
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
+    return systemDatabase.listWorkflowSteps(workflowId);
   }
 
   // readStream

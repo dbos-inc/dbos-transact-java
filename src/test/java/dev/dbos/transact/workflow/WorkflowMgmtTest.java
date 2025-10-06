@@ -7,8 +7,8 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
-import dev.dbos.transact.exceptions.NonExistentWorkflowException;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -185,7 +185,7 @@ public class WorkflowMgmtTest {
               mgmtService.simpleWorkflow(23);
             }
           } catch (Exception t) {
-            assertTrue(t instanceof AwaitedWorkflowCancelledException);
+            assertTrue(t instanceof DBOSAwaitedWorkflowCancelledException);
           }
 
           assertEquals(1, mgmtService.getStepsExecuted());
@@ -235,7 +235,7 @@ public class WorkflowMgmtTest {
       fail("An exception should have been thrown");
     } catch (Exception t) {
       logger.info(t.getClass().getName());
-      assertTrue(t instanceof NonExistentWorkflowException);
+      assertTrue(t instanceof DBOSNonExistentWorkflowException);
     }
   }
 

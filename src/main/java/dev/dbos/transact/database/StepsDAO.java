@@ -91,18 +91,15 @@ public class StepsDAO {
    * @param functionName The expected name of the function/operation.
    * @param connection The active JDBC connection (corresponding to Python's 'conn: sa.Connection').
    * @return A {@link StepResult} object if the operation has completed, otherwise {@code null}.
-   * @throws IllegalStateException If the workflow does not exist in the status table.
-   * @throws WorkflowCancelledException If the workflow is in a cancelled status.
-   * @throws UnexpectedStepException If the recorded function name for the operation does not match
-   *     the provided name.
+   * @throws DBOSNonExistentWorkflowException If the workflow does not exist in the status table.
+   * @throws DBOSWorkflowCancelledException If the workflow is in a cancelled status.
+   * @throws DBOSUnexpectedStepException If the recorded function name for the operation does not
+   *     match the provided name.
    * @throws SQLException For other database access errors.
    */
   public static StepResult checkStepExecutionTxn(
       String workflowId, int functionId, String functionName, Connection connection)
-      throws SQLException,
-          IllegalStateException,
-          WorkflowCancelledException,
-          UnexpectedStepException {
+      throws SQLException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
 
     String workflowStatusSql =
         String.format(
@@ -119,12 +116,11 @@ public class StepsDAO {
     }
 
     if (workflowStatus == null) {
-      throw new IllegalStateException(
-          String.format("Error: Workflow %s does not exist", workflowId));
+      throw new DBOSNonExistentWorkflowException(workflowId);
     }
 
     if (Objects.equals(workflowStatus, WorkflowState.CANCELLED.name())) {
-      throw new WorkflowCancelledException(
+      throw new DBOSWorkflowCancelledException(
           String.format("Workflow %s is cancelled. Aborting function.", workflowId));
     }
 
@@ -159,7 +155,8 @@ public class StepsDAO {
     }
 
     if (!Objects.equals(functionName, recordedFunctionName)) {
-      throw new UnexpectedStepException(workflowId, functionId, functionName, recordedFunctionName);
+      throw new DBOSUnexpectedStepException(
+          workflowId, functionId, functionName, recordedFunctionName);
     }
 
     return recordedResult;
@@ -264,7 +261,7 @@ public class StepsDAO {
     if (recordedOutput != null) {
       logger.debug("Replaying sleep, id: {}, seconds: {}", functionId, seconds);
       if (recordedOutput.getOutput() == null) {
-        throw new DBOSException(ErrorCode.UNEXPECTED.getCode(), "No recorded timeout for sleep");
+        throw new IllegalStateException("No recorded timeout for sleep");
       }
       Object[] dser = JSONUtil.deserializeToArray(recordedOutput.getOutput());
       endTime = (Double) dser[0];

@@ -85,7 +85,6 @@ public class MigrationManager {
   }
 
   public void migrate() {
-
     try (Connection conn = dataSource.getConnection()) {
 
       ensureMigrationTable(conn);
@@ -102,6 +101,8 @@ public class MigrationManager {
           markMigrationApplied(conn, version);
         }
       }
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
     } catch (Exception t) {
       logger.error("Migration error", t);
       throw new RuntimeException("Migration Error", t);

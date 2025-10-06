@@ -1,7 +1,5 @@
 package dev.dbos.transact.database;
 
-import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
-
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
@@ -48,7 +46,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   @Override
-  public void close() throws Exception {
+  public void close() {
     dataSource.close();
   }
 
@@ -66,10 +64,12 @@ public class SystemDatabase implements AutoCloseable {
    * @param workflowId The workflow UUID
    * @return Optional containing the raw output string if workflow completed successfully, empty
    *     otherwise
-   * @throws SQLException if database operation fails
    */
-  public Optional<String> getWorkflowResult(String workflowId) throws SQLException {
-    return workflowDAO.getWorkflowResult(workflowId);
+  public Optional<String> getWorkflowResult(String workflowId) {
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.getWorkflowResult(workflowId);
+        });
   }
 
   /**
@@ -78,14 +78,15 @@ public class SystemDatabase implements AutoCloseable {
    * @param initStatus The initial workflow status details.
    * @param maxRetries Optional maximum number of retries.
    * @return An object containing the current status and optionally the deadline epoch milliseconds.
-   * @throws SQLException If a database error occurs.
    * @throws DBOSWorkflowConflictException If a conflicting workflow already exists.
    * @throws DBOSDeadLetterQueueException If the workflow exceeds max retries.
    */
   public WorkflowInitResult initWorkflowStatus(
-      WorkflowStatusInternal initStatus, Integer maxRetries) throws SQLException {
-
-    return workflowDAO.initWorkflowStatus(initStatus, maxRetries);
+      WorkflowStatusInternal initStatus, Integer maxRetries) {
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.initWorkflowStatus(initStatus, maxRetries);
+        });
   }
 
   /**
@@ -93,7 +94,6 @@ public class SystemDatabase implements AutoCloseable {
    *
    * @param status @WorkflowStatusInternal holds the data for a workflow_status row
    * @return @InsertWorkflowResult some of the column inserted
-   * @throws SQLException
    */
   public InsertWorkflowResult insertWorkflowStatus(
       Connection connection, WorkflowStatusInternal status) throws SQLException {
@@ -107,7 +107,10 @@ public class SystemDatabase implements AutoCloseable {
    * @param result output serialized as json
    */
   public void recordWorkflowOutput(String workflowId, String result) {
-    workflowDAO.recordWorkflowOutput(workflowId, result);
+    DbRetry.run(
+        () -> {
+          workflowDAO.recordWorkflowOutput(workflowId, result);
+        });
   }
 
   /**
@@ -117,69 +120,82 @@ public class SystemDatabase implements AutoCloseable {
    * @param error output serialized as json
    */
   public void recordWorkflowError(String workflowId, String error) {
-    workflowDAO.recordWorkflowError(workflowId, error);
+    DbRetry.run(
+        () -> {
+          workflowDAO.recordWorkflowError(workflowId, error);
+        });
   }
 
   public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) {
-
-    return workflowDAO.getWorkflowStatus(workflowId);
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.getWorkflowStatus(workflowId);
+        });
   }
 
-  public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
-
-    return workflowDAO.listWorkflows(input);
+  public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.listWorkflows(input);
+        });
   }
 
-  public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
-      throws SQLException {
-    return workflowDAO.getPendingWorkflows(executorId, appVersion);
+  public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion) {
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.getPendingWorkflows(executorId, appVersion);
+        });
   }
 
-  public boolean clearQueueAssignment(String workflowId) throws SQLException {
-    return queuesDAO.clearQueueAssignment(workflowId);
+  public boolean clearQueueAssignment(String workflowId) {
+    return DbRetry.call(
+        () -> {
+          return queuesDAO.clearQueueAssignment(workflowId);
+        });
   }
 
-  public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName)
-      throws IllegalStateException, WorkflowCancelledException, UnexpectedStepException {
+  public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName) {
 
-    try {
-      try (Connection connection = dataSource.getConnection()) {
-        return StepsDAO.checkStepExecutionTxn(workflowId, functionId, functionName, connection);
-      }
-    } catch (SQLException sq) {
-      logger.error("Unexpected SQL exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          try (Connection connection = dataSource.getConnection()) {
+            return StepsDAO.checkStepExecutionTxn(workflowId, functionId, functionName, connection);
+          }
+        });
   }
 
   public void recordStepResultTxn(StepResult result) {
-
-    try {
-      StepsDAO.recordStepResultTxn(dataSource, result);
-    } catch (SQLException sq) {
-      logger.error("Unexpected SQL exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          StepsDAO.recordStepResultTxn(dataSource, result);
+        });
   }
 
-  public List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
-
-    return stepsDAO.listWorkflowSteps(workflowId);
+  public List<StepInfo> listWorkflowSteps(String workflowId) {
+    return DbRetry.call(
+        () -> {
+          return stepsDAO.listWorkflowSteps(workflowId);
+        });
   }
 
-  public Object awaitWorkflowResult(String workflowId) throws Exception {
-    return workflowDAO.awaitWorkflowResult(workflowId);
+  public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
+    return workflowDAO.<T, E>awaitWorkflowResult(workflowId);
   }
 
-  public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId, String appVersion)
-      throws SQLException {
-    return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
+  public List<String> getAndStartQueuedWorkflows(
+      Queue queue, String executorId, String appVersion) {
+    return DbRetry.call(
+        () -> {
+          return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
+        });
   }
 
-  public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput)
-      throws SQLException {
-
-    return queuesDAO.getQueuedWorkflows(input, loadInput);
+  public List<WorkflowStatus> listQueuedWorkflows(
+      ListQueuedWorkflowsInput input, boolean loadInput) {
+    return DbRetry.call(
+        () -> {
+          return queuesDAO.getQueuedWorkflows(input, loadInput);
+        });
   }
 
   public void recordChildWorkflow(
@@ -188,27 +204,26 @@ public class SystemDatabase implements AutoCloseable {
       // child
       int functionId, // func id in the parent
       String functionName) {
-    workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);
+    DbRetry.run(
+        () -> {
+          workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);
+        });
   }
 
   public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
-
-    try {
-      return workflowDAO.checkChildWorkflow(workflowUuid, functionId);
-    } catch (SQLException sq) {
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.checkChildWorkflow(workflowUuid, functionId);
+        });
   }
 
   public void send(
       String workflowId, int functionId, String destinationId, Object message, String topic) {
 
-    try {
-      notificationsDAO.send(workflowId, functionId, destinationId, message, topic);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          notificationsDAO.send(workflowId, functionId, destinationId, message, topic);
+        });
   }
 
   public Object recv(
@@ -218,82 +233,68 @@ public class SystemDatabase implements AutoCloseable {
       String topic,
       double timeoutSeconds) {
 
-    try {
-      return notificationsDAO.recv(
-          workflowId, functionId, timeoutFunctionId, topic, timeoutSeconds);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    } catch (InterruptedException ie) {
-      logger.error("recv() was interrupted", ie);
-      throw new DBOSException(UNEXPECTED.getCode(), ie.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          try {
+            return notificationsDAO.recv(
+                workflowId, functionId, timeoutFunctionId, topic, timeoutSeconds);
+          } catch (InterruptedException ie) {
+            logger.error("recv() was interrupted", ie);
+            throw new RuntimeException(ie.getMessage(), ie);
+          }
+        });
   }
 
   public void setEvent(String workflowId, int functionId, String key, Object message) {
 
-    try {
-      notificationsDAO.setEvent(workflowId, functionId, key, message);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          notificationsDAO.setEvent(workflowId, functionId, key, message);
+        });
   }
 
   public Object getEvent(
       String targetId, String key, double timeoutSeconds, GetWorkflowEventContext callerCtx) {
 
-    try {
-      return notificationsDAO.getEvent(targetId, key, timeoutSeconds, callerCtx);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          return notificationsDAO.getEvent(targetId, key, timeoutSeconds, callerCtx);
+        });
   }
 
   public double sleep(String workflowId, int functionId, double seconds, boolean skipSleep) {
-
-    try {
-      return stepsDAO.sleep(workflowId, functionId, seconds, skipSleep);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          return stepsDAO.sleep(workflowId, functionId, seconds, skipSleep);
+        });
   }
 
   public void cancelWorkflow(String workflowId) {
-    try {
-      workflowDAO.cancelWorkflow(workflowId);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          workflowDAO.cancelWorkflow(workflowId);
+        });
   }
 
   public void resumeWorkflow(String workflowId) {
-    try {
-      workflowDAO.resumeWorkflow(workflowId);
-    } catch (SQLException s) {
-      throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), s.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          workflowDAO.resumeWorkflow(workflowId);
+        });
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-
-    try {
-      return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options);
-    } catch (SQLException sq) {
-      throw new DBOSException(ErrorCode.RESUME_WORKFLOW_ERROR.getCode(), sq.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options);
+        });
   }
 
   public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) {
-    try {
-      workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold);
-    } catch (SQLException sq) {
-      logger.error("Unexpected SQL exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold);
+        });
   }
 
   Connection getSysDBConnection() throws SQLException {

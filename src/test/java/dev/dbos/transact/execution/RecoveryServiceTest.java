@@ -43,7 +43,7 @@ class RecoveryServiceTest {
   Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
   @BeforeAll
-  public static void onetimeBefore() throws SQLException {
+  public static void onetimeBefore() {
 
     RecoveryServiceTest.dbosConfig =
         new DBOSConfig.Builder()
@@ -110,8 +110,7 @@ class RecoveryServiceTest {
     setWorkflowStateToPending(dataSource);
 
     List<GetPendingWorkflowsOutput> pending =
-        systemDatabase.getPendingWorkflows(
-            dbosExecutor.executorId(), dbosExecutor.appVersion());
+        systemDatabase.getPendingWorkflows(dbosExecutor.executorId(), dbosExecutor.appVersion());
 
     assertEquals(5, pending.size());
 

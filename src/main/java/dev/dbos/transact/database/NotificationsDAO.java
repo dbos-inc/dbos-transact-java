@@ -1,8 +1,8 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
-import dev.dbos.transact.exceptions.NonExistentWorkflowException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -78,7 +78,7 @@ public class NotificationsDAO {
         } catch (SQLException e) {
           // Foreign key violation
           if ("23503".equals(e.getSQLState())) {
-            throw new NonExistentWorkflowException(destinationUuid);
+            throw new DBOSNonExistentWorkflowException(destinationUuid);
           }
           throw e;
         }
