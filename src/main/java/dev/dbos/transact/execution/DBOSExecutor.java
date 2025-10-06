@@ -78,8 +78,8 @@ public class DBOSExecutor implements AutoCloseable {
   private RecoveryService recoveryService;
   private HttpServer httpServer;
   private Conductor conductor;
-  private ExecutorService executorService = Executors.newCachedThreadPool();
-  private ScheduledExecutorService timeoutScheduler = Executors.newScheduledThreadPool(2);
+  private ExecutorService executorService;
+  private ScheduledExecutorService timeoutScheduler;
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
   public DBOSExecutor(DBOSConfig config) {
@@ -117,6 +117,9 @@ public class DBOSExecutor implements AutoCloseable {
                 .collect(Collectors.toList());
         this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
       }
+
+      executorService = Executors.newCachedThreadPool();
+      timeoutScheduler = Executors.newScheduledThreadPool(2);
 
       systemDatabase = new SystemDatabase(config);
       systemDatabase.start();
@@ -178,6 +181,9 @@ public class DBOSExecutor implements AutoCloseable {
       queueService = null;
       systemDatabase.stop();
       systemDatabase = null;
+
+      timeoutScheduler.shutdownNow();
+      executorService.shutdownNow();
 
       this.workflowMap = null;
       this.dbos = null;
