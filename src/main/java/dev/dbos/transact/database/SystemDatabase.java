@@ -66,10 +66,12 @@ public class SystemDatabase implements AutoCloseable {
    * @param workflowId The workflow UUID
    * @return Optional containing the raw output string if workflow completed successfully, empty
    *     otherwise
-   * @throws SQLException if database operation fails
    */
-  public Optional<String> getWorkflowResult(String workflowId) throws SQLException {
-    return workflowDAO.getWorkflowResult(workflowId);
+  public Optional<String> getWorkflowResult(String workflowId) {
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.getWorkflowResult(workflowId);
+        });
   }
 
   /**
@@ -78,14 +80,15 @@ public class SystemDatabase implements AutoCloseable {
    * @param initStatus The initial workflow status details.
    * @param maxRetries Optional maximum number of retries.
    * @return An object containing the current status and optionally the deadline epoch milliseconds.
-   * @throws SQLException If a database error occurs.
    * @throws DBOSWorkflowConflictException If a conflicting workflow already exists.
    * @throws DBOSDeadLetterQueueException If the workflow exceeds max retries.
    */
   public WorkflowInitResult initWorkflowStatus(
-      WorkflowStatusInternal initStatus, Integer maxRetries) throws SQLException {
-
-    return workflowDAO.initWorkflowStatus(initStatus, maxRetries);
+      WorkflowStatusInternal initStatus, Integer maxRetries) {
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.initWorkflowStatus(initStatus, maxRetries);
+        });
   }
 
   /**
@@ -93,7 +96,6 @@ public class SystemDatabase implements AutoCloseable {
    *
    * @param status @WorkflowStatusInternal holds the data for a workflow_status row
    * @return @InsertWorkflowResult some of the column inserted
-   * @throws SQLException
    */
   public InsertWorkflowResult insertWorkflowStatus(
       Connection connection, WorkflowStatusInternal status) throws SQLException {
@@ -125,18 +127,25 @@ public class SystemDatabase implements AutoCloseable {
     return workflowDAO.getWorkflowStatus(workflowId);
   }
 
-  public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
-
-    return workflowDAO.listWorkflows(input);
+  public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.listWorkflows(input);
+        });
   }
 
-  public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
-      throws SQLException {
-    return workflowDAO.getPendingWorkflows(executorId, appVersion);
+  public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion) {
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.getPendingWorkflows(executorId, appVersion);
+        });
   }
 
-  public boolean clearQueueAssignment(String workflowId) throws SQLException {
-    return queuesDAO.clearQueueAssignment(workflowId);
+  public boolean clearQueueAssignment(String workflowId) {
+    return DbRetry.call(
+        () -> {
+          return queuesDAO.clearQueueAssignment(workflowId);
+        });
   }
 
   public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName)
@@ -162,24 +171,31 @@ public class SystemDatabase implements AutoCloseable {
     }
   }
 
-  public List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
-
-    return stepsDAO.listWorkflowSteps(workflowId);
+  public List<StepInfo> listWorkflowSteps(String workflowId) {
+    return DbRetry.call(
+        () -> {
+          return stepsDAO.listWorkflowSteps(workflowId);
+        });
   }
 
   public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
     return workflowDAO.<T, E>awaitWorkflowResult(workflowId);
   }
 
-  public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId, String appVersion)
-      throws SQLException {
-    return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
+  public List<String> getAndStartQueuedWorkflows(
+      Queue queue, String executorId, String appVersion) {
+    return DbRetry.call(
+        () -> {
+          return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
+        });
   }
 
-  public List<WorkflowStatus> listQueuedWorkflows(ListQueuedWorkflowsInput input, boolean loadInput)
-      throws SQLException {
-
-    return queuesDAO.getQueuedWorkflows(input, loadInput);
+  public List<WorkflowStatus> listQueuedWorkflows(
+      ListQueuedWorkflowsInput input, boolean loadInput) {
+    return DbRetry.call(
+        () -> {
+          return queuesDAO.getQueuedWorkflows(input, loadInput);
+        });
   }
 
   public void recordChildWorkflow(

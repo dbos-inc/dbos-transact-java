@@ -4,7 +4,6 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -38,12 +37,8 @@ public class RecoveryService {
 
     List<GetPendingWorkflowsOutput> workflows = new ArrayList<>();
 
-    try {
-      workflows =
-          systemDatabase.getPendingWorkflows(dbosExecutor.executorId(), dbosExecutor.appVersion());
-    } catch (SQLException e) {
-      logger.error("Error getting pending workflows", e);
-    }
+    workflows =
+        systemDatabase.getPendingWorkflows(dbosExecutor.executorId(), dbosExecutor.appVersion());
 
     final List<GetPendingWorkflowsOutput> toRecover = workflows;
     stopRequested = false;

@@ -560,20 +560,16 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void globalTimeout(OffsetDateTime endTime) {
-    try {
-      ListWorkflowsInput pendingInput =
-          new ListWorkflowsInput.Builder().status(WorkflowState.PENDING).endTime(endTime).build();
-      for (WorkflowStatus status : systemDatabase.listWorkflows(pendingInput)) {
-        cancelWorkflow(status.workflowId());
-      }
+    ListWorkflowsInput pendingInput =
+        new ListWorkflowsInput.Builder().status(WorkflowState.PENDING).endTime(endTime).build();
+    for (WorkflowStatus status : systemDatabase.listWorkflows(pendingInput)) {
+      cancelWorkflow(status.workflowId());
+    }
 
-      ListWorkflowsInput enqueuedInput =
-          new ListWorkflowsInput.Builder().status(WorkflowState.ENQUEUED).endTime(endTime).build();
-      for (WorkflowStatus status : systemDatabase.listWorkflows(enqueuedInput)) {
-        cancelWorkflow(status.workflowId());
-      }
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
+    ListWorkflowsInput enqueuedInput =
+        new ListWorkflowsInput.Builder().status(WorkflowState.ENQUEUED).endTime(endTime).build();
+    for (WorkflowStatus status : systemDatabase.listWorkflows(enqueuedInput)) {
+      cancelWorkflow(status.workflowId());
     }
   }
 
@@ -645,12 +641,7 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           logger.info("List workflows");
 
-          try {
-            return systemDatabase.listWorkflows(input);
-          } catch (SQLException sq) {
-            logger.error("Unexpected SQL exception", sq);
-            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-          }
+          return systemDatabase.listWorkflows(input);
         };
 
     return this.callFunctionAsStep(listWorkflowFunction, "DBOS.listWorkflows");
@@ -661,12 +652,7 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           logger.info("List workflow steps");
 
-          try {
-            return systemDatabase.listWorkflowSteps(workflowId);
-          } catch (SQLException sq) {
-            logger.error("Unexpected SQL exception", sq);
-            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-          }
+          return systemDatabase.listWorkflowSteps(workflowId);
         };
 
     return this.callFunctionAsStep(listWorkflowStepsFunction, "DBOS.listWorkflowSteps");
@@ -678,12 +664,7 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           logger.info("List queued workflows");
 
-          try {
-            return systemDatabase.listQueuedWorkflows(query, loadInput);
-          } catch (SQLException sq) {
-            logger.error("Unexpected SQL exception", sq);
-            throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-          }
+          return systemDatabase.listQueuedWorkflows(query, loadInput);
         };
 
     return this.callFunctionAsStep(listQueuedWorkflowsFunction, "DBOS.listQueuedWorkflows");

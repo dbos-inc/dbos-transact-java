@@ -93,8 +93,8 @@ public class StepsDAO {
    * @return A {@link StepResult} object if the operation has completed, otherwise {@code null}.
    * @throws IllegalStateException If the workflow does not exist in the status table.
    * @throws DBOSWorkflowCancelledException If the workflow is in a cancelled status.
-   * @throws DBOSUnexpectedStepException If the recorded function name for the operation does not match
-   *     the provided name.
+   * @throws DBOSUnexpectedStepException If the recorded function name for the operation does not
+   *     match the provided name.
    * @throws SQLException For other database access errors.
    */
   public static StepResult checkStepExecutionTxn(
@@ -159,7 +159,8 @@ public class StepsDAO {
     }
 
     if (!Objects.equals(functionName, recordedFunctionName)) {
-      throw new DBOSUnexpectedStepException(workflowId, functionId, functionName, recordedFunctionName);
+      throw new DBOSUnexpectedStepException(
+          workflowId, functionId, functionName, recordedFunctionName);
     }
 
     return recordedResult;
