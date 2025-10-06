@@ -109,7 +109,10 @@ public class SystemDatabase implements AutoCloseable {
    * @param result output serialized as json
    */
   public void recordWorkflowOutput(String workflowId, String result) {
-    workflowDAO.recordWorkflowOutput(workflowId, result);
+    DbRetry.run(
+        () -> {
+          workflowDAO.recordWorkflowOutput(workflowId, result);
+        });
   }
 
   /**
@@ -119,12 +122,17 @@ public class SystemDatabase implements AutoCloseable {
    * @param error output serialized as json
    */
   public void recordWorkflowError(String workflowId, String error) {
-    workflowDAO.recordWorkflowError(workflowId, error);
+    DbRetry.run(
+        () -> {
+          workflowDAO.recordWorkflowError(workflowId, error);
+        });
   }
 
   public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) {
-
-    return workflowDAO.getWorkflowStatus(workflowId);
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.getWorkflowStatus(workflowId);
+        });
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
@@ -199,7 +207,10 @@ public class SystemDatabase implements AutoCloseable {
       // child
       int functionId, // func id in the parent
       String functionName) {
-    workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);
+    DbRetry.run(
+        () -> {
+          workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);
+        });
   }
 
   public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {

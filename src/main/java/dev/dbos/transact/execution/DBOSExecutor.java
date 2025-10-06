@@ -1,7 +1,5 @@
 package dev.dbos.transact.execution;
 
-import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
-
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
@@ -10,6 +8,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
+import dev.dbos.transact.database.DbRetry;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
@@ -52,7 +51,6 @@ import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -305,13 +303,14 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /** This does not retry */
-  private <T> T callFunctionAsStep(Supplier<T> fn, String functionName) {
+  private <T, E extends Exception> T callFunctionAsStep(
+      ThrowingSupplier<T, E> fn, String functionName) throws E {
     DBOSContext ctx = DBOSContextHolder.get();
 
     int nextFuncId = 0;
     boolean inWorkflow = ctx != null && ctx.isInWorkflow();
 
-    if (!inWorkflow) return fn.get();
+    if (!inWorkflow) return fn.execute();
 
     nextFuncId = ctx.getAndIncrementFunctionId();
 
@@ -324,7 +323,7 @@ public class DBOSExecutor implements AutoCloseable {
     T functionResult;
 
     try {
-      functionResult = fn.get();
+      functionResult = fn.execute();
     } catch (Exception e) {
       if (inWorkflow) {
         String jsonError = JSONUtil.serializeAppException(e);
@@ -332,13 +331,7 @@ public class DBOSExecutor implements AutoCloseable {
             new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError);
         systemDatabase.recordStepResultTxn(r);
       }
-
-      if (e instanceof DBOSNonExistentWorkflowException) {
-        throw e;
-      } else {
-        throw new DBOSException(
-            UNEXPECTED.getCode(), "Function execution failed: " + functionName, e);
-      }
+      throw (E) e;
     }
 
     // Record the successful result
@@ -515,41 +508,40 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
-
-    Supplier<Void> resumeFunction =
+    // Execute the resume operation as a workflow step
+    this.callFunctionAsStep(
         () -> {
           logger.info("Resuming workflow {}", workflowId);
           systemDatabase.resumeWorkflow(workflowId);
           return null; // void
-        };
-    // Execute the resume operation as a workflow step
-    this.callFunctionAsStep(resumeFunction, "DBOS.resumeWorkflow");
+        },
+        "DBOS.resumeWorkflow");
     return retrieveWorkflow(workflowId);
   }
 
   public void cancelWorkflow(String workflowId) {
 
-    Supplier<Void> cancelFunction =
+    // Execute the cancel operation as a workflow step
+    this.callFunctionAsStep(
         () -> {
           logger.info("Cancelling workflow {}", workflowId);
           systemDatabase.cancelWorkflow(workflowId);
           return null; // void
-        };
-    // Execute the cancel operation as a workflow step
-    this.callFunctionAsStep(cancelFunction, "DBOS.resumeWorkflow");
+        },
+        "DBOS.cancelWorkflow");
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
       String workflowId, int startStep, ForkOptions options) {
 
-    Supplier<String> forkFunction =
-        () -> {
-          logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
+    String forkedId =
+        this.callFunctionAsStep(
+            () -> {
+              logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
 
-          return systemDatabase.forkWorkflow(workflowId, startStep, options);
-        };
-
-    String forkedId = this.callFunctionAsStep(forkFunction, "DBOS.forkedWorkflow");
+              return systemDatabase.forkWorkflow(workflowId, startStep, options);
+            },
+            "DBOS.forkWorkflow");
     return retrieveWorkflow(forkedId);
   }
 
@@ -636,37 +628,34 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-    Supplier<List<WorkflowStatus>> listWorkflowFunction =
+    return this.callFunctionAsStep(
         () -> {
           logger.info("List workflows");
 
           return systemDatabase.listWorkflows(input);
-        };
-
-    return this.callFunctionAsStep(listWorkflowFunction, "DBOS.listWorkflows");
+        },
+        "DBOS.listWorkflows");
   }
 
   public List<StepInfo> listWorkflowSteps(String workflowId) {
-    Supplier<List<StepInfo>> listWorkflowStepsFunction =
+    return this.callFunctionAsStep(
         () -> {
           logger.info("List workflow steps");
 
           return systemDatabase.listWorkflowSteps(workflowId);
-        };
-
-    return this.callFunctionAsStep(listWorkflowStepsFunction, "DBOS.listWorkflowSteps");
+        },
+        "DBOS.listWorkflowSteps");
   }
 
   public List<WorkflowStatus> listQueuedWorkflows(
       ListQueuedWorkflowsInput query, boolean loadInput) {
-    Supplier<List<WorkflowStatus>> listQueuedWorkflowsFunction =
+    return this.callFunctionAsStep(
         () -> {
           logger.info("List queued workflows");
 
           return systemDatabase.listQueuedWorkflows(query, loadInput);
-        };
-
-    return this.callFunctionAsStep(listQueuedWorkflowsFunction, "DBOS.listQueuedWorkflows");
+        },
+        "DBOS.listQueuedWorkflows");
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
@@ -1063,19 +1052,17 @@ public class DBOSExecutor implements AutoCloseable {
             priority.orElse(0),
             inputString);
 
-    WorkflowInitResult initResult = null;
-    try {
-      initResult = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
-    } catch (Exception e) {
-      logger.error("Error inserting into workflow_status", e);
-      throw new DBOSException(UNEXPECTED.getCode(), e.getMessage(), e);
-    }
+    WorkflowInitResult[] initResult = {null};
+    DbRetry.run(
+        () -> {
+          initResult[0] = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
+        });
 
     if (parentWorkflow != null) {
       systemDatabase.recordChildWorkflow(
           parentWorkflow.workflowId(), workflowId, parentWorkflow.functionId(), workflowName);
     }
 
-    return initResult;
+    return initResult[0];
   }
 }
