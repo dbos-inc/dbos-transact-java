@@ -43,7 +43,7 @@ class RecoveryServiceTest {
   Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
   @BeforeAll
-  public static void onetimeBefore() throws SQLException {
+  public static void onetimeBefore() {
 
     RecoveryServiceTest.dbosConfig =
         new DBOSConfig.Builder()

@@ -39,7 +39,6 @@ import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.lang.reflect.InvocationTargetException;
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -237,7 +236,7 @@ public class DBOSExecutor implements AutoCloseable {
     return Optional.empty();
   }
 
-  WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) throws SQLException {
+  WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) {
     Objects.requireNonNull(output);
     String workflowId = output.getWorkflowUuid();
     Objects.requireNonNull(workflowId);

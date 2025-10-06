@@ -33,7 +33,7 @@ class DBOSExecutorTest {
   private static DataSource dataSource;
 
   @BeforeAll
-  public static void onetimeBefore() throws SQLException {
+  public static void onetimeBefore() {
     DBOSExecutorTest.dbosConfig =
         new DBOSConfig.Builder()
             .appName("systemdbtest")

@@ -46,7 +46,7 @@ public class UnifiedProxyTest {
   }
 
   @AfterEach
-  void afterEachTest() throws SQLException, Exception {
+  void afterEachTest() {
     dbos.shutdown();
   }
 
