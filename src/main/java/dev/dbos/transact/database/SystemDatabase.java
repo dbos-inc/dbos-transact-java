@@ -252,7 +252,6 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public double sleep(String workflowId, int functionId, double seconds, boolean skipSleep) {
-
     try {
       return stepsDAO.sleep(workflowId, functionId, seconds, skipSleep);
     } catch (SQLException sq) {
@@ -262,38 +261,31 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void cancelWorkflow(String workflowId) {
-    try {
-      workflowDAO.cancelWorkflow(workflowId);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          workflowDAO.cancelWorkflow(workflowId);
+        });
   }
 
   public void resumeWorkflow(String workflowId) {
-    try {
-      workflowDAO.resumeWorkflow(workflowId);
-    } catch (SQLException s) {
-      throw new DBOSException(ErrorCode.SYSTEM_DATABASE_ACCESS_ERROR.getCode(), s.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          workflowDAO.resumeWorkflow(workflowId);
+        });
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-
-    try {
-      return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options);
-    } catch (SQLException sq) {
-      throw new DBOSException(ErrorCode.SYSTEM_DATABASE_ACCESS_ERROR.getCode(), sq.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options);
+        });
   }
 
   public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) {
-    try {
-      workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold);
-    } catch (SQLException sq) {
-      logger.error("Unexpected SQL exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold);
+        });
   }
 
   Connection getSysDBConnection() throws SQLException {

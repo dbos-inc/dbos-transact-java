@@ -802,7 +802,7 @@ public class WorkflowDAO {
 
         if (currentStatus == null) {
           connection.rollback();
-          throw new NonExistentWorkflowException(workflowId);
+          throw new DBOSNonExistentWorkflowException(workflowId);
         }
 
         // If workflow is already complete, do nothing
@@ -832,7 +832,7 @@ public class WorkflowDAO {
 
     var status = getWorkflowStatus(originalWorkflowId);
     if (status.isEmpty()) {
-      throw new NonExistentWorkflowException(originalWorkflowId);
+      throw new DBOSNonExistentWorkflowException(originalWorkflowId);
     }
 
     String forkedWorkflowId =

@@ -334,7 +334,7 @@ public class DBOSExecutor implements AutoCloseable {
         systemDatabase.recordStepResultTxn(r);
       }
 
-      if (e instanceof NonExistentWorkflowException) {
+      if (e instanceof DBOSNonExistentWorkflowException) {
         throw e;
       } else {
         throw new DBOSException(
@@ -804,7 +804,7 @@ public class DBOSExecutor implements AutoCloseable {
     var status = systemDatabase.getWorkflowStatus(workflowId);
     if (status.isEmpty()) {
       logger.error("Workflow not found {}", workflowId);
-      throw new NonExistentWorkflowException(workflowId);
+      throw new DBOSNonExistentWorkflowException(workflowId);
     }
 
     Object[] inputs = status.get().input();

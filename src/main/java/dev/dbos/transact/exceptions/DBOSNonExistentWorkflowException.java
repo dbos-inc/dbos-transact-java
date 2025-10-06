@@ -1,9 +1,9 @@
 package dev.dbos.transact.exceptions;
 
-public class NonExistentWorkflowException extends DBOSException {
+public class DBOSNonExistentWorkflowException extends DBOSException {
   private String workflowId;
 
-  public NonExistentWorkflowException(String workflowId) {
+  public DBOSNonExistentWorkflowException(String workflowId) {
     super(
         ErrorCode.NONEXISTENT_WORKFLOW.getCode(),
         String.format("Workflow does not exist %s", workflowId));
