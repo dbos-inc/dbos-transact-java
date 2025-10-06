@@ -35,10 +35,14 @@ public class RecoveryService {
       return;
     }
 
-    List<GetPendingWorkflowsOutput> workflows = new ArrayList<>();
-
-    workflows =
+    List<GetPendingWorkflowsOutput> workflows =
         systemDatabase.getPendingWorkflows(dbosExecutor.executorId(), dbosExecutor.appVersion());
+
+    if (workflows.size() > 0) {
+      logger.info("Recovering {} workflows for application version {}", workflows.size(), dbosExecutor.appVersion());
+    } else {
+      logger.info("No workflows to recover for application version {}", dbosExecutor.appVersion());
+    }
 
     final List<GetPendingWorkflowsOutput> toRecover = workflows;
     stopRequested = false;

@@ -115,6 +115,9 @@ public class DBOSExecutor implements AutoCloseable {
         this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
       }
 
+      logger.info("Executor ID: {}", this.executorId);
+      logger.info("Application Version: {}", this.appVersion);
+
       executorService = Executors.newCachedThreadPool();
       timeoutScheduler = Executors.newScheduledThreadPool(2);
 
@@ -153,6 +156,11 @@ public class DBOSExecutor implements AutoCloseable {
                 config.adminServerPort(), new AdminController(this, systemDatabase, queues));
         httpServer.start();
       }
+
+      logger.info("DBOS started");
+
+    } else {
+      logger.warn("DBOS Executor already started");
     }
   }
 

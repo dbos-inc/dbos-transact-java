@@ -244,7 +244,9 @@ public class DBOS {
   }
 
   public void launch() {
-    logger.info("DBOS.launch()");
+    var pkg = DBOS.class.getPackage();
+    var ver = pkg == null ? null : pkg.getImplementationVersion();
+    logger.info("Launching DBOS {}", ver == null ? "<unknown version>" : "v" + ver);
 
     if (dbosExecutor.get() == null) {
       var executor = new DBOSExecutor(config);
@@ -260,12 +262,12 @@ public class DBOS {
   }
 
   public void shutdown() {
-    logger.info("DBOS.shutdown()");
-
     var current = dbosExecutor.getAndSet(null);
     if (current != null) {
       current.close();
     }
+
+    logger.info("DBOS shut down");
   }
 
   /**

@@ -122,6 +122,10 @@ tasks.test {
 tasks.jar {
     archiveBaseName.set("transact")
     // Will produce: build/libs/transact-1.0.0.jar
+
+    manifest {
+        attributes["Implementation-Version"] = project.version.toString()
+    }
 }
 
 publishing {
