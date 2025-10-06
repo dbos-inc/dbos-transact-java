@@ -84,7 +84,7 @@ public class Conductor implements AutoCloseable {
     this.systemDatabase = builder.systemDatabase;
     this.dbosExecutor = builder.dbosExecutor;
 
-    String appName = dbosExecutor.getAppName();
+    String appName = dbosExecutor.appName();
     Objects.requireNonNull(appName, "App Name must not be null to use Conductor");
 
     String domain = builder.domain;
@@ -384,8 +384,8 @@ public class Conductor implements AutoCloseable {
       String hostname = InetAddress.getLocalHost().getHostName();
       return new ExecutorInfoResponse(
           message,
-          conductor.dbosExecutor.getExecutorId(),
-          conductor.dbosExecutor.getAppVersion(),
+          conductor.dbosExecutor.executorId(),
+          conductor.dbosExecutor.appVersion(),
           hostname);
     } catch (Exception e) {
       return new ExecutorInfoResponse(message, e);

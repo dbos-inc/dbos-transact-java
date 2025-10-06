@@ -99,10 +99,17 @@ public class DBOSExecutor implements AutoCloseable {
 
       this.executorId = System.getenv("DBOS__VMID");
       if (this.executorId == null || this.executorId.isEmpty()) {
-        this.executorId = config.getConductorKey() == null ? "local" : UUID.randomUUID().toString();
+        this.executorId = config.executorId();
+      }
+      if (this.executorId == null || this.executorId.isEmpty()) {
+        this.executorId = config.conductorKey() == null ? "local" : UUID.randomUUID().toString();
       }
 
       this.appVersion = System.getenv("DBOS__APPVERSION");
+      if (this.appVersion == null || this.appVersion.isEmpty()) {
+        this.appVersion = config.appVersion();
+      }
+
       if (this.appVersion == null || this.appVersion.isEmpty()) {
         List<Class<?>> registeredClasses =
             workflowMap.values().stream()
@@ -129,10 +136,10 @@ public class DBOSExecutor implements AutoCloseable {
       recoveryService = new RecoveryService(this, systemDatabase);
       recoveryService.start();
 
-      String conductorKey = config.getConductorKey();
+      String conductorKey = config.conductorKey();
       if (conductorKey != null) {
         Conductor.Builder builder = new Conductor.Builder(this, systemDatabase, conductorKey);
-        String domain = config.getConductorDomain();
+        String domain = config.conductorDomain();
         if (domain != null && !domain.trim().isEmpty()) {
           builder.domain(domain);
         }
@@ -140,23 +147,11 @@ public class DBOSExecutor implements AutoCloseable {
         conductor.start();
       }
 
-      if (config.isHttp()) {
+      if (config.adminServer()) {
         httpServer =
             HttpServer.getInstance(
-                config.getHttpPort(), new AdminController(this, systemDatabase, queues));
-        if (config.isHttpAwaitOnStart()) {
-          Thread httpThread =
-              new Thread(
-                  () -> {
-                    logger.info("Start http in background thread");
-                    httpServer.startAndBlock();
-                  },
-                  "http-server-thread");
-          httpThread.setDaemon(false); // Keep process alive
-          httpThread.start();
-        } else {
-          httpServer.start();
-        }
+                config.adminServerPort(), new AdminController(this, systemDatabase, queues));
+        httpServer.start();
       }
     }
   }
@@ -204,25 +199,27 @@ public class DBOSExecutor implements AutoCloseable {
     return schedulerService;
   }
 
-  public String getAppName() {
-    return config.getName();
+  public String appName() {
+    return config.appName();
   }
 
-  public String getExecutorId() {
+  public String executorId() {
     return this.executorId;
   }
 
-  public String getAppVersion() {
+  public String appVersion() {
     return this.appVersion;
   }
 
-  public RegisteredWorkflow getWorkflow(String className, String workflowName) {
+  public RegisteredWorkflow getWorkflow(
+      String className, String instanceName, String workflowName) {
     if (workflowMap == null) {
       throw new IllegalStateException(
           "attempted to retrieve workflow from executor when DBOS not launched");
     }
 
-    return workflowMap.get(WorkflowRegistry.getFullyQualifiedWFName(className, workflowName));
+    return workflowMap.get(
+        WorkflowRegistry.getFullyQualifiedWFName(className, instanceName, workflowName));
   }
 
   public Optional<Queue> getQueue(String queueName) {
@@ -262,7 +259,7 @@ public class DBOSExecutor implements AutoCloseable {
       executorIDs = new ArrayList<>(List.of("local"));
     }
 
-    String appVersion = getAppVersion();
+    String appVersion = appVersion();
 
     List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
     for (String executorId : executorIDs) {
@@ -738,10 +735,11 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
-      String clsName, String wfName, Object[] args) {
-    var workflow = getWorkflow(clsName, wfName);
+      String clsName, String instName, String wfName, Object[] args) {
+    var workflow = getWorkflow(clsName, instName, wfName);
     if (workflow == null) {
-      throw new IllegalStateException("%s/%s workflow not registered".formatted(clsName, wfName));
+      throw new IllegalStateException(
+          "%s/%s/%s workflow not registered".formatted(clsName, instName, wfName));
     }
 
     var ctx = DBOSContextHolder.get();
@@ -810,13 +808,13 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     Object[] inputs = status.get().input();
-    RegisteredWorkflow workflow =
-        workflowMap.get(
-            WorkflowRegistry.getFullyQualifiedWFName(
-                status.get().className(), status.get().name()));
+    var wfName =
+        WorkflowRegistry.getFullyQualifiedWFName(
+            status.get().className(), status.get().instanceName(), status.get().name());
+    RegisteredWorkflow workflow = workflowMap.get(wfName);
 
     if (workflow == null) {
-      throw new WorkflowFunctionNotFoundException(workflowId);
+      throw new WorkflowFunctionNotFoundException(workflowId, wfName);
     }
 
     var options =
@@ -863,11 +861,12 @@ public class DBOSExecutor implements AutoCloseable {
       return enqueueWorkflow(
           workflow.name(),
           workflow.className(),
+          workflow.instanceName(),
           args,
           options,
           parent,
-          getExecutorId(),
-          getAppVersion(),
+          executorId(),
+          appVersion(),
           systemDatabase,
           latch);
     }
@@ -888,13 +887,14 @@ public class DBOSExecutor implements AutoCloseable {
               systemDatabase,
               workflow.name(),
               workflow.className(),
+              workflow.instanceName(),
               args,
               workflowId,
               null,
               null,
               OptionalInt.empty(),
-              getExecutorId(),
-              getAppVersion(),
+              executorId(),
+              appVersion(),
               parent,
               options.timeout(),
               options.deadline());
@@ -982,6 +982,7 @@ public class DBOSExecutor implements AutoCloseable {
   public static <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflow(
       String name,
       String className,
+      String instanceName,
       Object[] args,
       ExecuteWorkflowOptions options,
       WorkflowInfo parent,
@@ -1003,6 +1004,7 @@ public class DBOSExecutor implements AutoCloseable {
           systemDatabase,
           name,
           className,
+          instanceName,
           args,
           workflowId,
           queueName,
@@ -1032,6 +1034,7 @@ public class DBOSExecutor implements AutoCloseable {
       SystemDatabase systemDatabase,
       String workflowName,
       String className,
+      String instanceName,
       Object[] inputs,
       String workflowId,
       String queueName,
@@ -1061,7 +1064,7 @@ public class DBOSExecutor implements AutoCloseable {
             status,
             workflowName,
             className,
-            null,
+            instanceName,
             null,
             null,
             null,

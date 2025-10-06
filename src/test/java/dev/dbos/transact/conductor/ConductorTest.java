@@ -83,7 +83,7 @@ public class ConductorTest {
 
     mockDB = mock(SystemDatabase.class);
     mockExec = mock(DBOSExecutor.class);
-    when(mockExec.getAppName()).thenReturn("test-app-name");
+    when(mockExec.appName()).thenReturn("test-app-name");
     builder = new Conductor.Builder(mockExec, mockDB, "conductor-key").domain(domain);
   }
 
@@ -311,8 +311,8 @@ public class ConductorTest {
 
     String hostname = InetAddress.getLocalHost().getHostName();
 
-    when(mockExec.getAppVersion()).thenReturn("test-app-version");
-    when(mockExec.getExecutorId()).thenReturn("test-executor-id");
+    when(mockExec.appVersion()).thenReturn("test-app-version");
+    when(mockExec.executorId()).thenReturn("test-executor-id");
 
     try (Conductor conductor = builder.build()) {
       conductor.start();

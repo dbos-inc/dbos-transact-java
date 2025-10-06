@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.Timeout;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class AsyncWorkflowTest {
@@ -28,14 +27,11 @@ public class AsyncWorkflowTest {
 
     AsyncWorkflowTest.dbosConfig =
         new DBOSConfig.Builder()
-            .name("systemdbtest")
-            .dbHost("localhost")
-            .dbPort(5432)
+            .appName("systemdbtest")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
-            .sysDbName("dbos_java_sys")
             .maximumPoolSize(2)
             .runAdminServer()
-            .adminAwaitOnStart(false)
             .build();
   }
 

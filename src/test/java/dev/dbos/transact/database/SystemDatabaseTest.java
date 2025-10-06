@@ -14,7 +14,6 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.Timeout;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 class SystemDatabaseTest {
@@ -27,11 +26,9 @@ class SystemDatabaseTest {
 
     SystemDatabaseTest.dbosConfig =
         new DBOSConfig.Builder()
-            .name("systemdbtest")
-            .dbHost("localhost")
-            .dbPort(5432)
+            .appName("systemdbtest")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
-            .sysDbName("dbos_java_sys")
             .maximumPoolSize(3)
             .build();
 
@@ -89,7 +86,7 @@ class SystemDatabaseTest {
       assertEquals(wfStatusInternal.getStatus().toString(), result.getStatus());
       assertEquals(wfStatusInternal.getName(), result.getName());
       assertEquals(wfStatusInternal.getClassName(), result.getClassName());
-      assertEquals(wfStatusInternal.getConfigName(), result.getConfigName());
+      assertEquals(wfStatusInternal.getInstanceName(), result.getInstanceName());
       assertEquals(wfStatusInternal.getQueueName(), result.getQueueName());
       assertEquals(
           wfStatusInternal.getWorkflowDeadlineEpochMs(), result.getWorkflowDeadlineEpochMs());

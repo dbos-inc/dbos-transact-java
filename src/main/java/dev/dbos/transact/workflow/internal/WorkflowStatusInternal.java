@@ -8,7 +8,7 @@ public class WorkflowStatusInternal {
   private WorkflowState status;
   private String name;
   private String className;
-  private String configName;
+  private String instanceName;
   private String authenticatedUser;
   private String assumedRole;
   private String authenticatedRoles;
@@ -32,7 +32,7 @@ public class WorkflowStatusInternal {
       WorkflowState status,
       String name,
       String className,
-      String configName,
+      String instanceName,
       String authenticatedUser,
       String assumedRole,
       String authenticatedRoles,
@@ -54,7 +54,7 @@ public class WorkflowStatusInternal {
     this.status = status;
     this.name = name;
     this.className = className;
-    this.configName = configName;
+    this.instanceName = instanceName;
     this.authenticatedUser = authenticatedUser;
     this.assumedRole = assumedRole;
     this.authenticatedRoles = authenticatedRoles;
@@ -98,8 +98,8 @@ public class WorkflowStatusInternal {
     return className;
   }
 
-  public String getConfigName() {
-    return configName;
+  public String getInstanceName() {
+    return instanceName;
   }
 
   public String getAuthenticatedUser() {

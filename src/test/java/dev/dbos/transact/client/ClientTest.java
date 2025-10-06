@@ -35,11 +35,10 @@ public class ClientTest {
   static void onetimeSetup() throws Exception {
     dbosConfig =
         new DBOSConfig.Builder()
-            .name("systemdbtest")
-            .dbHost("localhost")
-            .dbPort(5432)
+            .appName("systemdbtest")
+            .databaseUrl(dbUrl)
             .dbUser(dbUser)
-            .sysDbName("dbos_java_sys")
+            .dbPassword(dbPassword)
             .maximumPoolSize(2)
             .build();
   }
@@ -56,7 +55,7 @@ public class ClientTest {
             .build();
     dbos.launch();
 
-    dataSource = SystemDatabase.createDataSource(dbosConfig, null);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
@@ -73,8 +72,8 @@ public class ClientTest {
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
       var options =
-          new DBOSClient.EnqueueOptions("enqueueTest", "testQueue")
-              .withClassName("dev.dbos.transact.client.ClientServiceImpl");
+          new DBOSClient.EnqueueOptions(
+              "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var rows = DBUtils.getWorkflowRows(dataSource);
       assertEquals(1, rows.size());
@@ -102,8 +101,8 @@ public class ClientTest {
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
       var options =
-          new DBOSClient.EnqueueOptions("enqueueTest", "testQueue")
-              .withClassName("dev.dbos.transact.client.ClientServiceImpl")
+          new DBOSClient.EnqueueOptions(
+                  "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue")
               .withDeduplicationId("plugh!");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       assertNotNull(handle);

@@ -35,7 +35,7 @@ public class WorkflowsOutput {
     this.Status = status.status();
     this.WorkflowName = status.name();
     this.WorkflowClassName = status.className();
-    this.WorkflowConfigName = status.configName();
+    this.WorkflowConfigName = status.instanceName();
     this.AuthenticatedUser = status.authenticatedUser();
     this.AssumedRole = status.assumedRole();
     this.AuthenticatedRoles =

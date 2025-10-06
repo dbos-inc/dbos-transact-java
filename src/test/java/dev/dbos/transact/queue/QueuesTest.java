@@ -46,11 +46,9 @@ public class QueuesTest {
 
     QueuesTest.dbosConfig =
         new DBOSConfig.Builder()
-            .name("systemdbtest")
-            .dbHost("localhost")
-            .dbPort(5432)
+            .appName("systemdbtest")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
-            .sysDbName("dbos_java_sys")
             .maximumPoolSize(2)
             .build();
   }
@@ -390,8 +388,8 @@ public class QueuesTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var queueService = DBOSTestAccess.getQueueService(dbos);
 
-    String executorId = dbosExecutor.getExecutorId();
-    String appVersion = dbosExecutor.getAppVersion();
+    String executorId = dbosExecutor.executorId();
+    String appVersion = dbosExecutor.appVersion();
 
     queueService.stop();
     while (!queueService.isStopped()) {
@@ -472,8 +470,8 @@ public class QueuesTest {
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var queueService = DBOSTestAccess.getQueueService(dbos);
 
-    String executorId = dbosExecutor.getExecutorId();
-    String appVersion = dbosExecutor.getAppVersion();
+    String executorId = dbosExecutor.executorId();
+    String appVersion = dbosExecutor.appVersion();
 
     queueService.stop();
     while (!queueService.isStopped()) {

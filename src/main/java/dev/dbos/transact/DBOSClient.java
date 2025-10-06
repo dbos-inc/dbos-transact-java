@@ -41,6 +41,7 @@ public class DBOSClient implements AutoCloseable {
       String workflowName,
       String queueName,
       String className,
+      String instanceName,
       String workflowId,
       String appVersion,
       Duration timeout,
@@ -56,13 +57,19 @@ public class DBOSClient implements AutoCloseable {
         throw new IllegalArgumentException("queueName must not be empty");
       }
 
+      if (Objects.requireNonNull(className).isEmpty()) {
+        throw new IllegalArgumentException("className must not be empty");
+      }
+
+      if (instanceName == null) instanceName = "";
+
       if (timeout != null && timeout.isNegative()) {
         throw new IllegalArgumentException("timeout must not be negative");
       }
     }
 
-    public EnqueueOptions(String workflowName, String queueName) {
-      this(workflowName, queueName, null, null, null, null, null, OptionalInt.empty());
+    public EnqueueOptions(String className, String workflowName, String queueName) {
+      this(workflowName, queueName, className, "", null, null, null, null, OptionalInt.empty());
     }
 
     public EnqueueOptions withClassName(String className) {
@@ -70,6 +77,7 @@ public class DBOSClient implements AutoCloseable {
           this.workflowName,
           this.queueName,
           className,
+          this.instanceName,
           this.workflowId,
           this.appVersion,
           this.timeout,
@@ -82,6 +90,7 @@ public class DBOSClient implements AutoCloseable {
           this.workflowName,
           this.queueName,
           this.className,
+          this.instanceName,
           workflowId,
           this.appVersion,
           this.timeout,
@@ -94,6 +103,7 @@ public class DBOSClient implements AutoCloseable {
           this.workflowName,
           this.queueName,
           this.className,
+          this.instanceName,
           this.workflowId,
           appVersion,
           this.timeout,
@@ -106,6 +116,7 @@ public class DBOSClient implements AutoCloseable {
           this.workflowName,
           this.queueName,
           this.className,
+          this.instanceName,
           this.workflowId,
           this.appVersion,
           timeout,
@@ -118,10 +129,24 @@ public class DBOSClient implements AutoCloseable {
           this.workflowName,
           this.queueName,
           this.className,
+          this.instanceName,
           this.workflowId,
           this.appVersion,
           this.timeout,
           deduplicationId,
+          this.priority);
+    }
+
+    public EnqueueOptions withInstanceName(String instName) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.queueName,
+          this.className,
+          instName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deduplicationId,
           this.priority);
     }
 
@@ -130,6 +155,7 @@ public class DBOSClient implements AutoCloseable {
           this.workflowName,
           this.queueName,
           this.className,
+          this.instanceName,
           this.workflowId,
           this.appVersion,
           this.timeout,
@@ -143,16 +169,19 @@ public class DBOSClient implements AutoCloseable {
     }
   }
 
-  public <T> WorkflowHandle<T, ?> enqueueWorkflow(EnqueueOptions options, Object[] args) {
+  public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflow(
+      EnqueueOptions options, Object[] args) throws Exception {
+
     return DBOSExecutor.enqueueWorkflow(
-        Objects.requireNonNull(options.workflowName),
-        options.className,
+        Objects.requireNonNull(options.workflowName()),
+        Objects.requireNonNull(options.className()),
+        Objects.requireNonNullElse(options.instanceName(), ""),
         args,
         new ExecuteWorkflowOptions(
             Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString()),
             options.timeout(),
             null,
-            Objects.requireNonNull(options.queueName),
+            Objects.requireNonNull(options.queueName()),
             options.deduplicationId,
             options.priority),
         null,

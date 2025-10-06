@@ -6,6 +6,7 @@ import java.util.Objects;
 public record RegisteredWorkflow(
     String name,
     String className,
+    String instanceName,
     Object target,
     WorkflowFunctionReflect function,
     int maxRecoveryAttempts) {
@@ -14,14 +15,20 @@ public record RegisteredWorkflow(
     Objects.requireNonNull(name);
     Objects.requireNonNull(target);
     Objects.requireNonNull(className);
+    Objects.requireNonNull(instanceName);
     Objects.requireNonNull(function);
   }
 
   public RegisteredWorkflow(
-      String name, Object target, WorkflowFunctionReflect function, int maxRecoveryAttempts) {
+      String name,
+      Object target,
+      String instanceName,
+      WorkflowFunctionReflect function,
+      int maxRecoveryAttempts) {
     this(
         name,
         Objects.requireNonNull(target).getClass().getName(),
+        instanceName,
         target,
         function,
         maxRecoveryAttempts);
