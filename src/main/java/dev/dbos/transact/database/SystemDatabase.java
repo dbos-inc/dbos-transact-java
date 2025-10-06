@@ -151,24 +151,19 @@ public class SystemDatabase implements AutoCloseable {
   public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName)
       throws IllegalStateException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
 
-    try {
-      try (Connection connection = dataSource.getConnection()) {
-        return StepsDAO.checkStepExecutionTxn(workflowId, functionId, functionName, connection);
-      }
-    } catch (SQLException sq) {
-      logger.error("Unexpected SQL exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          try (Connection connection = dataSource.getConnection()) {
+            return StepsDAO.checkStepExecutionTxn(workflowId, functionId, functionName, connection);
+          }
+        });
   }
 
   public void recordStepResultTxn(StepResult result) {
-
-    try {
-      StepsDAO.recordStepResultTxn(dataSource, result);
-    } catch (SQLException sq) {
-      logger.error("Unexpected SQL exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          StepsDAO.recordStepResultTxn(dataSource, result);
+        });
   }
 
   public List<StepInfo> listWorkflowSteps(String workflowId) {
@@ -208,23 +203,19 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
-
-    try {
-      return workflowDAO.checkChildWorkflow(workflowUuid, functionId);
-    } catch (SQLException sq) {
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.checkChildWorkflow(workflowUuid, functionId);
+        });
   }
 
   public void send(
       String workflowId, int functionId, String destinationId, Object message, String topic) {
 
-    try {
-      notificationsDAO.send(workflowId, functionId, destinationId, message, topic);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          notificationsDAO.send(workflowId, functionId, destinationId, message, topic);
+        });
   }
 
   public Object recv(
@@ -234,46 +225,40 @@ public class SystemDatabase implements AutoCloseable {
       String topic,
       double timeoutSeconds) {
 
-    try {
-      return notificationsDAO.recv(
-          workflowId, functionId, timeoutFunctionId, topic, timeoutSeconds);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    } catch (InterruptedException ie) {
-      logger.error("recv() was interrupted", ie);
-      throw new DBOSException(UNEXPECTED.getCode(), ie.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          try {
+            return notificationsDAO.recv(
+                workflowId, functionId, timeoutFunctionId, topic, timeoutSeconds);
+          } catch (InterruptedException ie) {
+            logger.error("recv() was interrupted", ie);
+            throw new DBOSException(UNEXPECTED.getCode(), ie.getMessage());
+          }
+        });
   }
 
   public void setEvent(String workflowId, int functionId, String key, Object message) {
 
-    try {
-      notificationsDAO.setEvent(workflowId, functionId, key, message);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    DbRetry.run(
+        () -> {
+          notificationsDAO.setEvent(workflowId, functionId, key, message);
+        });
   }
 
   public Object getEvent(
       String targetId, String key, double timeoutSeconds, GetWorkflowEventContext callerCtx) {
 
-    try {
-      return notificationsDAO.getEvent(targetId, key, timeoutSeconds, callerCtx);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          return notificationsDAO.getEvent(targetId, key, timeoutSeconds, callerCtx);
+        });
   }
 
   public double sleep(String workflowId, int functionId, double seconds, boolean skipSleep) {
-    try {
-      return stepsDAO.sleep(workflowId, functionId, seconds, skipSleep);
-    } catch (SQLException sq) {
-      logger.error("Sql Exception", sq);
-      throw new DBOSException(UNEXPECTED.getCode(), sq.getMessage());
-    }
+    return DbRetry.call(
+        () -> {
+          return stepsDAO.sleep(workflowId, functionId, seconds, skipSleep);
+        });
   }
 
   public void cancelWorkflow(String workflowId) {

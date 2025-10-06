@@ -265,7 +265,7 @@ public class StepsDAO {
     if (recordedOutput != null) {
       logger.debug("Replaying sleep, id: {}, seconds: {}", functionId, seconds);
       if (recordedOutput.getOutput() == null) {
-        throw new DBOSException(ErrorCode.UNEXPECTED.getCode(), "No recorded timeout for sleep");
+        throw new IllegalStateException("No recorded timeout for sleep");
       }
       Object[] dser = JSONUtil.deserializeToArray(recordedOutput.getOutput());
       endTime = (Double) dser[0];
