@@ -140,7 +140,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName)
-      throws IllegalStateException, WorkflowCancelledException, UnexpectedStepException {
+      throws IllegalStateException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
 
     try {
       try (Connection connection = dataSource.getConnection()) {

@@ -8,7 +8,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.exceptions.AwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -106,7 +106,7 @@ public class TimeoutTest {
       fail("Expected Exception to be thrown");
     } catch (Exception t) {
       System.out.println(t.getClass().toString());
-      assertTrue(t instanceof AwaitedWorkflowCancelledException);
+      assertTrue(t instanceof DBOSAwaitedWorkflowCancelledException);
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
@@ -169,7 +169,7 @@ public class TimeoutTest {
       fail("Expected Exception to be thrown");
     } catch (Exception t) {
       System.out.println(t.getClass().toString());
-      assertTrue(t instanceof AwaitedWorkflowCancelledException);
+      assertTrue(t instanceof DBOSAwaitedWorkflowCancelledException);
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
@@ -391,7 +391,7 @@ public class TimeoutTest {
       handle.getResult();
     } catch (Exception e) {
       System.out.println(e.getClass().getName());
-      assertTrue(e instanceof AwaitedWorkflowCancelledException);
+      assertTrue(e instanceof DBOSAwaitedWorkflowCancelledException);
     } catch (Throwable t) {
       System.out.println("a throwable " + t.getClass().getName());
     }

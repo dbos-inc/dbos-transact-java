@@ -1,7 +1,7 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
+import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.sql.SQLException;
@@ -98,7 +98,7 @@ public class RecoveryService {
             dbosExecutor.recoverWorkflow(pendingWorkflow);
             pendingWorkflows.remove(pendingWorkflow);
           }
-        } catch (WorkflowFunctionNotFoundException e) {
+        } catch (DBOSWorkflowFunctionNotFoundException e) {
           logger.debug("Workflow function not found during recovery, retrying in 1 second", e);
           try {
             Thread.sleep(1000);

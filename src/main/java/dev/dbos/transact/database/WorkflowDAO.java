@@ -655,7 +655,7 @@ public class WorkflowDAO {
                 }
                 throw new RuntimeException(t.getMessage(), t);
               case CANCELLED:
-                throw new AwaitedWorkflowCancelledException(workflowId);
+                throw new DBOSAwaitedWorkflowCancelledException(workflowId);
 
               default:
                 // Status is PENDING or other - continue polling

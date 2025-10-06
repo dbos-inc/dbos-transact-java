@@ -8,7 +8,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
-import dev.dbos.transact.exceptions.WorkflowFunctionNotFoundException;
+import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
@@ -162,7 +162,7 @@ class DBOSExecutorTest {
       dbosExecutor.executeWorkflowById(wfid);
     } catch (Exception e) {
       error = true;
-      assert e instanceof WorkflowFunctionNotFoundException
+      assert e instanceof DBOSWorkflowFunctionNotFoundException
           : "Expected WorkflowFunctionNotfoundException but got " + e.getClass().getName();
     }
 

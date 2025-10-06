@@ -814,7 +814,7 @@ public class DBOSExecutor implements AutoCloseable {
     RegisteredWorkflow workflow = workflowMap.get(wfName);
 
     if (workflow == null) {
-      throw new WorkflowFunctionNotFoundException(workflowId, wfName);
+      throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
     }
 
     var options =
@@ -946,8 +946,8 @@ public class DBOSExecutor implements AutoCloseable {
             logger.error("executeWorkflow {}", actual);
 
             if (actual instanceof InterruptedException
-                || actual instanceof WorkflowCancelledException) {
-              throw new AwaitedWorkflowCancelledException(workflowId);
+                || actual instanceof DBOSWorkflowCancelledException) {
+              throw new DBOSAwaitedWorkflowCancelledException(workflowId);
             }
 
             postInvokeWorkflowError(systemDatabase, workflowId, actual);

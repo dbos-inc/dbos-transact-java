@@ -1,9 +1,9 @@
 package dev.dbos.transact.exceptions;
 
-public class AwaitedWorkflowCancelledException extends DBOSException {
+public class DBOSAwaitedWorkflowCancelledException extends DBOSException {
   private String workflowId;
 
-  public AwaitedWorkflowCancelledException(String workflowId) {
+  public DBOSAwaitedWorkflowCancelledException(String workflowId) {
     super(
         ErrorCode.WORKFLOW_CONFLICT.getCode(),
         String.format("Awaited workflow %s was cancelled.", workflowId));

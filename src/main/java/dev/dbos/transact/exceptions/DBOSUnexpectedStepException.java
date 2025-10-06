@@ -2,13 +2,13 @@ package dev.dbos.transact.exceptions;
 
 import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED_STEP;
 
-public class UnexpectedStepException extends DBOSException {
+public class DBOSUnexpectedStepException extends DBOSException {
   private final String workflowId;
   private final int stepId;
   private final String expectedName;
   private final String recordedName;
 
-  public UnexpectedStepException(
+  public DBOSUnexpectedStepException(
       String workflowId, int stepId, String expectedName, String recordedName) {
     super(
         UNEXPECTED_STEP.getCode(),
