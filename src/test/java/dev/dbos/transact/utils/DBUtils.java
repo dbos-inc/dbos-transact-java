@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
 
 public class DBUtils {
 
-  public static Logger logger = LoggerFactory.getLogger(DBUtils.class);
+  private static final Logger logger = LoggerFactory.getLogger(DBUtils.class);
 
   public static void clearTables(DataSource ds) throws SQLException {
 

@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
 
 public class MigrationManager {
 
-  static Logger logger = LoggerFactory.getLogger(MigrationManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
   private final DataSource dataSource;
 
   public MigrationManager(DataSource dataSource) {
@@ -93,7 +93,7 @@ public class MigrationManager {
       List<MigrationFile> migrationFiles = loadMigrationFiles();
       for (MigrationFile migrationFile : migrationFiles) {
         String filename = migrationFile.getFilename().toString();
-        logger.info("processing migration file {}", filename);
+        logger.debug("processing migration file {}", filename);
         String version = filename.split("_")[0];
 
         if (!appliedMigrations.contains(version)) {

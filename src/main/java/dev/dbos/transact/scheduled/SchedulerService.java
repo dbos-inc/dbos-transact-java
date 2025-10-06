@@ -30,13 +30,13 @@ public class SchedulerService {
   public record ScheduledInstance(
       String className, String workflowName, Object instance, Cron cron) {}
 
-  private static Logger logger = LoggerFactory.getLogger(SchedulerService.class);
+  private static final Logger logger = LoggerFactory.getLogger(SchedulerService.class);
   private static final CronParser cronParser =
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
 
   public static ScheduledInstance makeScheduledInstance(
       String className, String workflowName, Object instance, String cronExpr) {
-    logger.info("Scheduling wf {}", workflowName);
+    logger.debug("Scheduling wf {}", workflowName);
     Cron cron = cronParser.parse(cronExpr);
     return new ScheduledInstance(className, workflowName, instance, cron);
   }
@@ -76,7 +76,7 @@ public class SchedulerService {
                 Object[] args = new Object[2];
                 args[0] = scheduledTime.toInstant();
                 args[1] = ZonedDateTime.now(ZoneOffset.UTC).toInstant();
-                logger.info("submitting to dbos Executor {}", wf.workflowName);
+                logger.debug("submitting to dbos Executor {}", wf.workflowName);
                 String workflowId =
                     String.format("sched-%s-%s", wf.workflowName, scheduledTime.toString());
                 var options =
@@ -88,13 +88,13 @@ public class SchedulerService {
               }
 
               if (!stop) {
-                logger.info("Scheduling the next execution");
+                logger.debug("Scheduling the next execution");
                 ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
                 executionTime
                     .nextExecution(now)
                     .ifPresent(
                         nextTime -> {
-                          logger.info("Next execution time {}", nextTime);
+                          logger.debug("Next execution time {}", nextTime);
                           long delayMs = Duration.between(now, nextTime).toMillis();
                           scheduler.schedule(this, delayMs, TimeUnit.MILLISECONDS);
                         });
@@ -117,7 +117,7 @@ public class SchedulerService {
   public void stop() {
     stop = true;
     List<Runnable> notRun = scheduler.shutdownNow();
-    logger.info("Shutting down scheduler service. Tasks not run {}", notRun.size());
+    logger.debug("Shutting down scheduler service. Tasks not run {}", notRun.size());
   }
 
   public void start() {

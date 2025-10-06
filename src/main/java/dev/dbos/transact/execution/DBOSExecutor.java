@@ -246,7 +246,7 @@ public class DBOSExecutor implements AutoCloseable {
     Objects.requireNonNull(workflowId);
     String queue = output.getQueueName();
 
-    logger.info("Recovery executing workflow {}", workflowId);
+    logger.debug("Recovery executing workflow {}", workflowId);
 
     if (queue != null) {
       boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
@@ -277,7 +277,7 @@ public class DBOSExecutor implements AutoCloseable {
             e);
         return new ArrayList<>();
       }
-      logger.info(
+      logger.debug(
           "Recovering {} workflow(s) for executor {} and application version {}",
           pendingWorkflows.size(),
           executorId,
@@ -414,7 +414,7 @@ public class DBOSExecutor implements AutoCloseable {
     // ctx.setDbos(dbos);
     String workflowId = ctx.getWorkflowId();
 
-    logger.info("Running step {} for workflow {}", stepName, workflowId);
+    logger.debug("Running step {} for workflow {}", stepName, workflowId);
 
     int stepFunctionId = ctx.getAndIncrementFunctionId();
 
@@ -424,7 +424,6 @@ public class DBOSExecutor implements AutoCloseable {
     if (recordedResult != null) {
       String output = recordedResult.getOutput();
       if (output != null) {
-        logger.info("Result has an output");
         Object[] stepO = JSONUtil.deserializeToArray(output);
         return stepO == null ? null : (T) stepO[0];
       }
@@ -479,7 +478,6 @@ public class DBOSExecutor implements AutoCloseable {
       systemDatabase.recordStepResultTxn(stepResult);
       return result;
     } else {
-      logger.info("After: step threw exception; saving error");
       StepResult stepResult =
           new StepResult(
               workflowId, stepFunctionId, stepName, null, JSONUtil.serializeAppException(eThrown));
@@ -606,7 +604,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void setEvent(String key, Object value) {
-    logger.info("Received setEvent for key {}", key);
+    logger.debug("Received setEvent for key {}", key);
 
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
@@ -618,7 +616,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public Object getEvent(String workflowId, String key, float timeOut) {
-    logger.info("Received getEvent for {} {}", workflowId, key);
+    logger.debug("Received getEvent for {} {}", workflowId, key);
 
     DBOSContext ctx = DBOSContextHolder.get();
 
@@ -636,8 +634,6 @@ public class DBOSExecutor implements AutoCloseable {
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return this.callFunctionAsStep(
         () -> {
-          logger.info("List workflows");
-
           return systemDatabase.listWorkflows(input);
         },
         "DBOS.listWorkflows");
@@ -646,8 +642,6 @@ public class DBOSExecutor implements AutoCloseable {
   public List<StepInfo> listWorkflowSteps(String workflowId) {
     return this.callFunctionAsStep(
         () -> {
-          logger.info("List workflow steps");
-
           return systemDatabase.listWorkflowSteps(workflowId);
         },
         "DBOS.listWorkflowSteps");
@@ -657,8 +651,6 @@ public class DBOSExecutor implements AutoCloseable {
       ListQueuedWorkflowsInput query, boolean loadInput) {
     return this.callFunctionAsStep(
         () -> {
-          logger.info("List queued workflows");
-
           return systemDatabase.listQueuedWorkflows(query, loadInput);
         },
         "DBOS.listQueuedWorkflows");
@@ -852,7 +844,6 @@ public class DBOSExecutor implements AutoCloseable {
       if (parent != null) {
         var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
         if (childId.isPresent()) {
-          logger.info("child id is present {}", childId.get());
           return retrieveWorkflow(childId.get());
         }
       }
@@ -895,7 +886,7 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           DBOSContextHolder.clear();
           try {
-            logger.info(
+            logger.debug(
                 "executeWorkflow task {} {}",
                 Objects.requireNonNullElse(options.timeout, Duration.ZERO).toMillis(),
                 Objects.requireNonNullElse(options.deadline, Instant.EPOCH).toEpochMilli());
@@ -1032,7 +1023,6 @@ public class DBOSExecutor implements AutoCloseable {
     Long deadlineEpochMs =
         queueName != null ? null : deadline != null ? deadline.toEpochMilli() : null;
 
-    logger.info("preInvokeWorkflow {} {}", queueName, deduplicationId);
     WorkflowStatusInternal workflowStatusInternal =
         new WorkflowStatusInternal(
             workflowId,

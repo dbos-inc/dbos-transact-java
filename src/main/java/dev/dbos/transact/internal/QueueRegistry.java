@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 public class QueueRegistry {
   private final ConcurrentHashMap<String, Queue> registry = new ConcurrentHashMap<>();
 
-  Logger logger = LoggerFactory.getLogger(QueueRegistry.class);
+  private static final Logger logger = LoggerFactory.getLogger(QueueRegistry.class);
 
   public void register(Queue queue) {
     var queueName = queue.name();

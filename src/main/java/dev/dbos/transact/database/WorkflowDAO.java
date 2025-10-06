@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
 public class WorkflowDAO {
 
   private final HikariDataSource dataSource;
-  private final Logger logger = LoggerFactory.getLogger(WorkflowDAO.class);
+  private static final Logger logger = LoggerFactory.getLogger(WorkflowDAO.class);
 
   WorkflowDAO(HikariDataSource ds) {
     dataSource = ds;
@@ -750,7 +750,7 @@ public class WorkflowDAO {
       if (currentStatus == null
           || WorkflowState.SUCCESS.name().equals(currentStatus)
           || WorkflowState.ERROR.name().equals(currentStatus)) {
-        logger.info("Returning without updating status");
+        logger.debug("Workflow {} already complete, aborting cancelWorkflow", workflowId);
         return;
       }
 
@@ -827,7 +827,7 @@ public class WorkflowDAO {
             ? UUID.randomUUID().toString()
             : options.forkedWorkflowId();
 
-    logger.info("forkWorkflow Original id {} forked id {}", originalWorkflowId, forkedWorkflowId);
+    logger.debug("forkWorkflow Original id {} forked id {}", originalWorkflowId, forkedWorkflowId);
 
     String applicationVersion = options.applicationVersion();
 

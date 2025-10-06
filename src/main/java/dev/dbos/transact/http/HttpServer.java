@@ -18,7 +18,7 @@ public class HttpServer {
   private int port;
   private AdminController adminController;
 
-  Logger logger = LoggerFactory.getLogger(HttpServer.class);
+  private static final Logger logger = LoggerFactory.getLogger(HttpServer.class);
 
   private HttpServer(int port, AdminController ac) {
     this.port = port == 0 ? 3001 : port;

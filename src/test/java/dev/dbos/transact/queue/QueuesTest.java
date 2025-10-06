@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class QueuesTest {
 
-  Logger logger = LoggerFactory.getLogger(QueuesTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
 
   private static DBOSConfig dbosConfig;
   private static DataSource dataSource;

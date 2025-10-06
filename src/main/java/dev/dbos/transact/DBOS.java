@@ -244,7 +244,7 @@ public class DBOS {
   }
 
   public void launch() {
-    logger.debug("launch()");
+    logger.info("DBOS.launch()");
 
     if (dbosExecutor.get() == null) {
       var executor = new DBOSExecutor(config);
@@ -260,7 +260,7 @@ public class DBOS {
   }
 
   public void shutdown() {
-    logger.debug("shutdown()");
+    logger.info("DBOS.shutdown()");
 
     var current = dbosExecutor.getAndSet(null);
     if (current != null) {
@@ -339,7 +339,7 @@ public class DBOS {
    * @param value data that is published
    */
   public void setEvent(String key, Object value) {
-    logger.info("Received setEvent for key {}", key);
+    logger.debug("Received setEvent for key {}", key);
 
     var executor = dbosExecutor.get();
     if (executor == null) {
@@ -358,7 +358,7 @@ public class DBOS {
    * @return the published value or null
    */
   public Object getEvent(String workflowId, String key, float timeOut) {
-    logger.info("Received getEvent for {} {}", workflowId, key);
+    logger.debug("Received getEvent for {} {}", workflowId, key);
 
     var executor = dbosExecutor.get();
     if (executor == null) {
