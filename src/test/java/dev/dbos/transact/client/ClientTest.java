@@ -10,7 +10,6 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.exceptions.DBOSException;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
@@ -108,7 +107,7 @@ public class ClientTest {
       assertNotNull(handle);
 
       assertThrows(
-          DBOSException.class, () -> client.enqueueWorkflow(options, new Object[] {17, "eggs"}));
+          RuntimeException.class, () -> client.enqueueWorkflow(options, new Object[] {17, "eggs"}));
     }
   }
 

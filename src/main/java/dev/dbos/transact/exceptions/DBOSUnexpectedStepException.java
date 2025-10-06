@@ -1,8 +1,6 @@
 package dev.dbos.transact.exceptions;
 
-import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED_STEP;
-
-public class DBOSUnexpectedStepException extends DBOSException {
+public class DBOSUnexpectedStepException extends RuntimeException {
   private final String workflowId;
   private final int stepId;
   private final String expectedName;
@@ -11,7 +9,6 @@ public class DBOSUnexpectedStepException extends DBOSException {
   public DBOSUnexpectedStepException(
       String workflowId, int stepId, String expectedName, String recordedName) {
     super(
-        UNEXPECTED_STEP.getCode(),
         String.format(
             "During execution of workflow %s step %s, function %s was recorded when %s was expected. Check that your workflow is deterministic.",
             workflowId, stepId, recordedName, expectedName));

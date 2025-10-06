@@ -1,7 +1,5 @@
 package dev.dbos.transact.database;
 
-import static dev.dbos.transact.exceptions.ErrorCode.UNEXPECTED;
-
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
@@ -243,7 +241,7 @@ public class SystemDatabase implements AutoCloseable {
                 workflowId, functionId, timeoutFunctionId, topic, timeoutSeconds);
           } catch (InterruptedException ie) {
             logger.error("recv() was interrupted", ie);
-            throw new DBOSException(UNEXPECTED.getCode(), ie.getMessage());
+            throw new RuntimeException(ie.getMessage(), ie);
           }
         });
   }

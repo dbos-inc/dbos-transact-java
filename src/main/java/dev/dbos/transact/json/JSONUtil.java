@@ -26,6 +26,16 @@ public class JSONUtil {
 
   private static final ObjectMapper mapper = new ObjectMapper();
 
+  public static class JsonRuntimeException extends RuntimeException {
+    public JsonRuntimeException(JsonProcessingException cause) {
+      super(cause.getMessage(), cause);
+      setStackTrace(cause.getStackTrace());
+      for (Throwable suppressed : cause.getSuppressed()) {
+        addSuppressed(suppressed);
+      }
+    }
+  }
+
   static {
     mapper.registerModule(new JavaTimeModule());
     mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional
@@ -39,7 +49,7 @@ public class JSONUtil {
     try {
       return mapper.writeValueAsString(new Boxed(args));
     } catch (JsonProcessingException e) {
-      throw new RuntimeException("Serialization failed", e);
+      throw new JsonRuntimeException(e);
     }
   }
 
@@ -48,7 +58,7 @@ public class JSONUtil {
       Boxed boxed = mapper.readValue(json, Boxed.class);
       return boxed.args;
     } catch (JsonProcessingException e) {
-      throw new RuntimeException("Deserialization failed", e);
+      throw new JsonRuntimeException(e);
     }
   }
 
@@ -76,7 +86,7 @@ public class JSONUtil {
     try {
       return mapper.writeValueAsString(obj);
     } catch (JsonProcessingException e) {
-      throw new RuntimeException("Serialization failed", e);
+      throw new JsonRuntimeException(e);
     }
   }
 
@@ -84,7 +94,7 @@ public class JSONUtil {
     try {
       return mapper.readValue(content, valueType);
     } catch (JsonProcessingException e) {
-      throw new RuntimeException("Deserialization failed", e);
+      throw new JsonRuntimeException(e);
     }
   }
 
