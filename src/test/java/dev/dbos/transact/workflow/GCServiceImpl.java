@@ -1,7 +1,6 @@
 package dev.dbos.transact.workflow;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.context.DBOSContext;
 
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
@@ -36,7 +35,7 @@ public class GCServiceImpl implements GCService {
       throw new RuntimeException(e);
     }
 
-    return DBOSContext.workflowId().get();
+    return DBOS.workflowId();
   }
 
   @Workflow
@@ -44,6 +43,6 @@ public class GCServiceImpl implements GCService {
     while (timeoutLatch.getCount() > 0) {
       DBOS.sleep(Duration.ofMillis(100));
     }
-    return DBOSContext.workflowId().get();
+    return DBOS.workflowId();
   }
 }

@@ -6,7 +6,6 @@ import dev.dbos.transact.StartWorkflowOptions;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 
@@ -192,19 +191,19 @@ public class DBOSContext {
     return this.startWorkflowFuture;
   }
 
-  public static Optional<String> workflowId() {
+  public static String workflowId() {
     var ctx = DBOSContextHolder.get();
-    return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.workflowId);
+    return ctx == null ? null : ctx.workflowId;
   }
 
-  public static Optional<Integer> stepId() {
+  public static Integer stepId() {
     var ctx = DBOSContextHolder.get();
-    return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.stepFunctionId);
+    return ctx == null ? null : ctx.stepFunctionId;
   }
 
-  public static Optional<DBOS> dbosInstance() {
+  public static DBOS dbosInstance() {
     var ctx = DBOSContextHolder.get();
-    return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.dbos);
+    return ctx == null ? null : ctx.dbos;
   }
 
   public static boolean inWorkflow() {

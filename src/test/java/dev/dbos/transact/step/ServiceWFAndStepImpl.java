@@ -33,7 +33,7 @@ public class ServiceWFAndStepImpl implements ServiceWFAndStep {
 
   @Workflow(name = "aWorkflowWithInlineSteps")
   public String aWorkflowWithInlineSteps(String input) {
-    var dbos = DBOSContext.dbosInstance().get();
+    var dbos = DBOSContext.dbosInstance();
     var len = dbos.runStep(() -> input.length(), new StepOptions("stringLength"));
     return (input + len);
   }

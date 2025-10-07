@@ -273,11 +273,11 @@ public class DBOS {
   }
 
   public static String workflowId() {
-    return DBOSContext.workflowId().orElse(null);
+    return DBOSContext.workflowId();
   }
 
   public static Integer stepId() {
-    return DBOSContext.stepId().orElse(null);
+    return DBOSContext.stepId();
   }
 
   public static boolean inWorkflow() {
@@ -416,7 +416,7 @@ public class DBOS {
       } catch (InterruptedException e) {
       }
     } else {
-      DBOSContext.dbosInstance().get().sleepInst(duration);
+      DBOSContext.dbosInstance().sleepInst(duration);
     }
   }
 

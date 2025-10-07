@@ -1,5 +1,6 @@
 package dev.dbos.transact.workflow;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -49,7 +50,7 @@ public class SimpleServiceImpl implements SimpleService {
 
   @Workflow(name = "workflowWithMultipleChildren")
   public String workflowWithMultipleChildren(String input) throws Exception {
-    var dbos = DBOSContext.dbosInstance().get();
+    var dbos = DBOSContext.dbosInstance();
     String result = input;
 
     try (var id = new WorkflowOptions("child1").setContext()) {
@@ -86,7 +87,7 @@ public class SimpleServiceImpl implements SimpleService {
     try (var id = new WorkflowOptions("child5").setContext()) {
       simpleService.grandchildWorkflow(input);
     }
-    result = "c-" + DBOSContext.dbosInstance().get().retrieveWorkflow("child5").getResult();
+    result = "c-" + DBOSContext.dbosInstance().retrieveWorkflow("child5").getResult();
     return result;
   }
 
@@ -101,15 +102,15 @@ public class SimpleServiceImpl implements SimpleService {
     try (var id = new WorkflowOptions("child4").setContext()) {
       simpleService.childWorkflow4(input);
     }
-    result = "p-" + DBOSContext.dbosInstance().get().retrieveWorkflow("child4").getResult();
+    result = "p-" + DBOSContext.dbosInstance().retrieveWorkflow("child4").getResult();
     return result;
   }
 
   @Workflow(name = "syncWithQueued")
   public String syncWithQueued() {
 
-    System.out.println("In syncWithQueued " + DBOSContext.workflowId().get());
-    var dbos = DBOSContext.dbosInstance().get();
+    System.out.println("In syncWithQueued " + DBOS.workflowId());
+    var dbos = DBOSContext.dbosInstance();
     var childQ = dbos.getQueue("childQ").get();
 
     for (int i = 0; i < 3; i++) {
@@ -157,7 +158,7 @@ public class SimpleServiceImpl implements SimpleService {
       throws InterruptedException {
 
     logger.info("In longParent");
-    var dbos = DBOSContext.dbosInstance().get();
+    var dbos = DBOSContext.dbosInstance();
     String workflowId = "childwf";
     var options =
         new StartWorkflowOptions(workflowId).withTimeout(timeoutSeconds, TimeUnit.SECONDS);

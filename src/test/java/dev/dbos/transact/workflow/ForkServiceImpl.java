@@ -51,7 +51,7 @@ public class ForkServiceImpl implements ForkService {
 
   @Workflow(name = "parentasync")
   public String parentChildAsync(String input) {
-    var dbos = DBOSContext.dbosInstance().get();
+    var dbos = DBOSContext.dbosInstance();
 
     forkService.stepOne("one");
     forkService.stepTwo(2);

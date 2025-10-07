@@ -44,7 +44,7 @@ public class HawkServiceImpl implements HawkService {
   @Workflow
   @Override
   public String parentStartWorkflow() {
-    var dbos = DBOSContext.dbosInstance().get();
+    var dbos = DBOSContext.dbosInstance();
     var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow());
     return handle.getResult();
   }
