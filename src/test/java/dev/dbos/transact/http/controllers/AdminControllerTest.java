@@ -85,16 +85,9 @@ class AdminControllerTest {
   @Test
   public void recovery() throws Exception {
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
-
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -171,10 +164,7 @@ class AdminControllerTest {
   @Test
   public void listWorkflowSteps() throws Exception {
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     dbos.launch();
 
     // Needed to call the step
@@ -207,10 +197,7 @@ class AdminControllerTest {
   @Test
   public void getWorkflowStatus() throws Exception {
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     dbos.launch();
 
     // Needed to call the step
@@ -240,16 +227,9 @@ class AdminControllerTest {
   @Test
   public void workflows() throws Exception {
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
-
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     dbos.launch();
 
     // Needed to call the step
@@ -340,9 +320,7 @@ class AdminControllerTest {
   public void fork() throws Exception {
 
     ForkServiceImpl impl = new ForkServiceImpl();
-
-    ForkService forkService =
-        dbos.<ForkService>Workflow().interfaceClass(ForkService.class).implementation(impl).build();
+    ForkService forkService = dbos.registerWorkflows(ForkService.class, impl);
     forkService.setForkService(forkService);
     dbos.launch();
 

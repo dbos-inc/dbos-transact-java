@@ -48,10 +48,7 @@ public class SyncWorkflowTest {
   public void workflowWithOneInput() throws SQLException {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -69,10 +66,7 @@ public class SyncWorkflowTest {
   @Test
   public void workflowWithError() throws SQLException {
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -91,10 +85,7 @@ public class SyncWorkflowTest {
   public void setWorkflowId() throws SQLException {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -123,10 +114,7 @@ public class SyncWorkflowTest {
   public void sameWorkflowId() throws SQLException {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -168,10 +156,7 @@ public class SyncWorkflowTest {
   public void childWorkflowWithoutSet() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -205,10 +190,7 @@ public class SyncWorkflowTest {
   public void multipleChildren() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -255,10 +237,7 @@ public class SyncWorkflowTest {
   public void nestedChildren() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 

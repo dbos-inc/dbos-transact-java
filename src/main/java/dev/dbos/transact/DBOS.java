@@ -143,8 +143,15 @@ public class DBOS {
     queueRegistry.register(queue);
   }
 
-  public <T> WorkflowBuilder<T> Workflow() {
-    return new WorkflowBuilder<>(this);
+  public <T> T registerWorkflows(Class<T> interfaceClass, T implementation) {
+    return registerWorkflows(interfaceClass, implementation, "");
+  }
+
+  public <T> T registerWorkflows(Class<T> interfaceClass, T implementation, String instanceName) {
+    registerClassWorkflows(interfaceClass, implementation, instanceName);
+
+    return DBOSInvocationHandler.createProxy(
+        interfaceClass, implementation, instanceName, () -> this.dbosExecutor.get());
   }
 
   public QueueBuilder Queue(String name) {
@@ -153,47 +160,9 @@ public class DBOS {
 
   private void registerInternals() {
     internalWorkflowsService =
-        this.<InternalWorkflowsService>Workflow()
-            .interfaceClass(InternalWorkflowsService.class)
-            .implementation(new InternalWorkflowsServiceImpl(this))
-            .build();
-
+        registerWorkflows(InternalWorkflowsService.class, new InternalWorkflowsServiceImpl(this));
     this.Queue(Constants.DBOS_INTERNAL_QUEUE).build();
     this.Queue(Constants.DBOS_SCHEDULER_QUEUE).build();
-  }
-
-  // inner builder class for workflows
-  public static class WorkflowBuilder<T> {
-    private final DBOS dbos;
-    private Class<T> interfaceClass;
-    private Object implementation;
-    private String instanceName = "";
-
-    WorkflowBuilder(DBOS dbos) {
-      this.dbos = dbos;
-    }
-
-    public WorkflowBuilder<T> interfaceClass(Class<T> iface) {
-      this.interfaceClass = iface;
-      return this;
-    }
-
-    public WorkflowBuilder<T> implementation(Object impl) {
-      this.implementation = impl;
-      return this;
-    }
-
-    public WorkflowBuilder<T> instanceName(String name) {
-      this.instanceName = name;
-      return this;
-    }
-
-    public T build() {
-      dbos.registerClassWorkflows(interfaceClass, implementation, instanceName);
-
-      return DBOSInvocationHandler.createProxy(
-          interfaceClass, implementation, instanceName, () -> dbos.dbosExecutor.get());
-    }
   }
 
   public static class QueueBuilder {

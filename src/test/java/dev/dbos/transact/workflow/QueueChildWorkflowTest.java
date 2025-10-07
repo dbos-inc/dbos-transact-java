@@ -59,10 +59,7 @@ public class QueueChildWorkflowTest {
     Queue childQ = dbos.Queue("childQ").concurrency(5).workerConcurrency(5).build();
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     simpleService.setSimpleService(simpleService);
 
@@ -111,10 +108,7 @@ public class QueueChildWorkflowTest {
     Queue childQ = dbos.Queue("childQ").concurrency(5).workerConcurrency(5).build();
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     simpleService.setSimpleService(simpleService);
 

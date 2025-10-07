@@ -62,10 +62,7 @@ public class TimeoutTest {
   public void async() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
@@ -87,10 +84,7 @@ public class TimeoutTest {
   public void asyncTimedOut() {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
@@ -118,10 +112,7 @@ public class TimeoutTest {
   public void queued() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
     Queue simpleQ = dbos.Queue("simpleQ").build();
 
@@ -147,10 +138,7 @@ public class TimeoutTest {
   public void queuedTimedOut() {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
     Queue simpleQ = dbos.Queue("simpleQ").build();
 
@@ -181,10 +169,7 @@ public class TimeoutTest {
   public void sync() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
@@ -211,10 +196,7 @@ public class TimeoutTest {
   public void syncTimeout() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
@@ -245,10 +227,7 @@ public class TimeoutTest {
   public void recovery() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
@@ -274,10 +253,7 @@ public class TimeoutTest {
   public void parentChild() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
@@ -307,10 +283,7 @@ public class TimeoutTest {
   public void parentChildTimeOut() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
@@ -341,10 +314,7 @@ public class TimeoutTest {
   public void parentTimeoutInheritedByChild() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
@@ -372,10 +342,7 @@ public class TimeoutTest {
     // TOFIX : fails at times
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     dbos.launch();
