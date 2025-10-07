@@ -90,6 +90,10 @@ public class DBOSContext {
     return workflowId;
   }
 
+  public Integer getStepId() {
+    return stepFunctionId;
+  }
+
   public int getAndIncrementFunctionId() {
     return functionId++;
   }
@@ -193,6 +197,11 @@ public class DBOSContext {
     return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.workflowId);
   }
 
+  public static Optional<Integer> stepId() {
+    var ctx = DBOSContextHolder.get();
+    return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.stepFunctionId);
+  }
+
   public static Optional<DBOS> dbosInstance() {
     var ctx = DBOSContextHolder.get();
     return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.dbos);
@@ -201,5 +210,10 @@ public class DBOSContext {
   public static boolean inWorkflow() {
     var ctx = DBOSContextHolder.get();
     return ctx == null ? false : ctx.isInWorkflow();
+  }
+
+  public static boolean inStep() {
+    var ctx = DBOSContextHolder.get();
+    return ctx == null ? false : ctx.isInStep();
   }
 }

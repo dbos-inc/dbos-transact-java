@@ -3,18 +3,14 @@ package dev.dbos.transact.workflow;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSContext;
 
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 
 public class GCServiceImpl implements GCService {
 
-  private final DBOS dbos;
   GCService self;
   CountDownLatch gcLatch = new CountDownLatch(1);
   CountDownLatch timeoutLatch = new CountDownLatch(1);
-
-  public GCServiceImpl(DBOS dbos) {
-    this.dbos = dbos;
-  }
 
   public void setGCService(GCService service) {
     this.self = service;
@@ -46,7 +42,7 @@ public class GCServiceImpl implements GCService {
   @Workflow
   public String timeoutBlockedWorkflow() {
     while (timeoutLatch.getCount() > 0) {
-      dbos.sleep(0.1f);
+      DBOS.sleep(Duration.ofMillis(100));
     }
     return DBOSContext.workflowId().get();
   }

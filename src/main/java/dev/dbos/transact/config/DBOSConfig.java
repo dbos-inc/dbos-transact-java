@@ -107,8 +107,10 @@ public record DBOSConfig(
 
       if (databaseUrl == null) {
         databaseUrl = System.getenv(Constants.SYSTEM_JDBC_URL_ENV_VAR);
-        logger.debug("retrieved {} database url from {} env var", databaseUrl, Constants.SYSTEM_JDBC_URL_ENV_VAR);
-
+        logger.debug(
+            "retrieved {} database url from {} env var",
+            databaseUrl,
+            Constants.SYSTEM_JDBC_URL_ENV_VAR);
       }
       if (dbUser == null) {
         dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);

@@ -472,7 +472,7 @@ public class WorkflowMgmtTest {
   void garbageCollection() throws Exception {
     int numWorkflows = 10;
 
-    GCServiceImpl impl = new GCServiceImpl(dbos);
+    GCServiceImpl impl = new GCServiceImpl();
     GCService gcService =
         dbos.<GCService>Workflow().interfaceClass(GCService.class).implementation(impl).build();
     gcService.setGCService(gcService);
@@ -534,7 +534,7 @@ public class WorkflowMgmtTest {
   void globalTimeout() throws Exception {
     int numWorkflows = 10;
 
-    GCServiceImpl impl = new GCServiceImpl(dbos);
+    GCServiceImpl impl = new GCServiceImpl();
     GCService gcService =
         dbos.<GCService>Workflow().interfaceClass(GCService.class).implementation(impl).build();
     gcService.setGCService(gcService);

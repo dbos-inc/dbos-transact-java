@@ -175,8 +175,9 @@ public class NotificationsDAO {
         // Wait for the notification
         // Support OAOO sleep
         double actualTimeout =
-            StepsDAO.sleep(dataSource, workflowUuid, timeoutFunctionId, timeoutSeconds, true);
-        long timeoutMs = (long) (actualTimeout * 1000);
+            StepsDAO.sleepms(
+                dataSource, workflowUuid, timeoutFunctionId, timeoutSeconds * 1000, true);
+        long timeoutMs = (long) (actualTimeout);
         lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
       }
     } finally {
@@ -374,21 +375,21 @@ public class NotificationsDAO {
 
       if (value == null) {
         // Wait for the notification
-        double actualTimeout = timeoutSeconds;
+        double actualTimeout = timeoutSeconds * 1000;
         if (callerCtx != null) {
           // Support OAOO sleep for workflows
           actualTimeout =
-              StepsDAO.sleep(
+              StepsDAO.sleepms(
                   dataSource,
                   callerCtx.getWorkflowId(),
                   callerCtx.getTimeoutFunctionId(),
-                  timeoutSeconds,
+                  timeoutSeconds * 1000,
                   true // skip_sleep
                   );
         }
 
         try {
-          long timeout = (long) (actualTimeout * 1000);
+          long timeout = (long) (actualTimeout);
           logger.debug("Waiting for notification {}...", timeout);
           lockConditionPair.condition.await(timeout, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {

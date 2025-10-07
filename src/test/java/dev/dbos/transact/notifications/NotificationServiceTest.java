@@ -317,7 +317,7 @@ class NotificationServiceTest {
     assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
 
     List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
-    // Will be 2 when we implement DBOS.sleep
+
     assertEquals(2, stepInfos.size());
     assertEquals("DBOS.recv", stepInfos.get(0).functionName());
     assertEquals("DBOS.sleep", stepInfos.get(1).functionName());

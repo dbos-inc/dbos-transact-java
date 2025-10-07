@@ -45,8 +45,6 @@ public class SystemDatabase implements AutoCloseable {
     notificationsDAO = new NotificationsDAO(dataSource, notificationService);
   }
 
-
-
   @Override
   public void close() {
     dataSource.close();
@@ -264,10 +262,10 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public double sleep(String workflowId, int functionId, double seconds, boolean skipSleep) {
+  public double sleepms(String workflowId, int functionId, double mseconds, boolean skipSleep) {
     return DbRetry.call(
         () -> {
-          return stepsDAO.sleep(workflowId, functionId, seconds, skipSleep);
+          return stepsDAO.sleepms(workflowId, functionId, mseconds, skipSleep);
         });
   }
 

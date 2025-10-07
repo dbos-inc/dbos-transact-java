@@ -1,6 +1,7 @@
 package dev.dbos.transact;
 
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.RegisteredWorkflow;
@@ -20,6 +21,7 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;
 
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -270,6 +272,22 @@ public class DBOS {
     logger.info("DBOS shut down");
   }
 
+  public static String workflowId() {
+    return DBOSContext.workflowId().orElse(null);
+  }
+
+  public static Integer stepId() {
+    return DBOSContext.stepId().orElse(null);
+  }
+
+  public static boolean inWorkflow() {
+    return DBOSContext.inWorkflow();
+  }
+
+  public static boolean inStep() {
+    return DBOSContext.inStep();
+  }
+
   /**
    * Scans the class for all methods that have Workflow and Scheduled annotations and schedules them
    * for execution
@@ -326,7 +344,7 @@ public class DBOS {
    * @param timeoutSeconds time in seconds after which the call times out
    * @return the message if there is one or else null
    */
-  public Object recv(String topic, float timeoutSeconds) {
+  public Object recv(String topic, double timeoutSeconds) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot recv before launch");
@@ -359,7 +377,7 @@ public class DBOS {
    * @param timeOut time in seconds to wait for data
    * @return the published value or null
    */
-  public Object getEvent(String workflowId, String key, float timeOut) {
+  public Object getEvent(String workflowId, String key, double timeOut) {
     logger.debug("Received getEvent for {} {}", workflowId, key);
 
     var executor = dbosExecutor.get();
@@ -377,13 +395,33 @@ public class DBOS {
    *
    * @param seconds in seconds
    */
-  public void sleep(float seconds) {
+  public void sleepmsInst(double mseconds) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot sleep before launch");
     }
 
-    executor.sleep(seconds);
+    executor.sleepms(mseconds);
+  }
+
+  public static void sleepms(double mseconds) {
+    if (!inWorkflow()) {
+      try {
+        Thread.sleep((long) mseconds);
+      } catch (InterruptedException e) {
+      }
+    } else if (inStep()) {
+      try {
+        Thread.sleep((long) mseconds);
+      } catch (InterruptedException e) {
+      }
+    } else {
+      DBOSContext.dbosInstance().get().sleepmsInst(mseconds);
+    }
+  }
+
+  public static void sleep(Duration dur) {
+    sleepms(dur.toMillis());
   }
 
   public <T, E extends Exception> T runStep(ThrowingSupplier<T, E> stepfunc, StepOptions opts)

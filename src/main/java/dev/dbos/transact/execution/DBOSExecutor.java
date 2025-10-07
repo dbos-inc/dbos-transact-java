@@ -505,18 +505,17 @@ public class DBOSExecutor implements AutoCloseable {
     return new WorkflowHandleDBPoll<R, E>(workflowId, systemDatabase);
   }
 
-  public void sleep(float seconds) {
+  public void sleepms(double mseconds) {
     // CB TODO: This should be OK outside DBOS
 
     DBOSContext context = DBOSContextHolder.get();
-    // context.setDbos(dbos);
 
     if (context.getWorkflowId() == null) {
-      throw new IllegalStateException("sleep() must be called from within a workflow");
+      throw new IllegalStateException("sleepms() must be called from within a workflow");
     }
 
-    systemDatabase.sleep(
-        context.getWorkflowId(), context.getAndIncrementFunctionId(), seconds, false);
+    systemDatabase.sleepms(
+        context.getWorkflowId(), context.getAndIncrementFunctionId(), mseconds, false);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
@@ -599,7 +598,7 @@ public class DBOSExecutor implements AutoCloseable {
    * @param timeoutSeconds time in seconds after which the call times out
    * @return the message if there is one or else null
    */
-  public Object recv(String topic, float timeoutSeconds) {
+  public Object recv(String topic, double timeoutSeconds) {
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
       throw new IllegalArgumentException("recv() must be called from a workflow.");
@@ -623,7 +622,7 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
   }
 
-  public Object getEvent(String workflowId, String key, float timeOut) {
+  public Object getEvent(String workflowId, String key, double timeOut) {
     logger.debug("Received getEvent for {} {}", workflowId, key);
 
     DBOSContext ctx = DBOSContextHolder.get();
