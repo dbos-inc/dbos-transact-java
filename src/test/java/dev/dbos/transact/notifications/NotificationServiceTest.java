@@ -10,6 +10,7 @@ import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -65,7 +66,8 @@ class NotificationServiceTest {
 
     String wfid1 = "recvwf1";
     dbos.startWorkflow(
-        () -> notService.recvWorkflow("topic1", 10), new StartWorkflowOptions(wfid1));
+        () -> notService.recvWorkflow("topic1", Duration.ofSeconds(10)),
+        new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
     dbos.startWorkflow(
@@ -140,7 +142,9 @@ class NotificationServiceTest {
     dbos.launch();
 
     String wfid1 = "recvwf1";
-    dbos.startWorkflow(() -> notService.recvWorkflow(null, 5), new StartWorkflowOptions(wfid1));
+    dbos.startWorkflow(
+        () -> notService.recvWorkflow(null, Duration.ofSeconds(5)),
+        new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
     dbos.startWorkflow(
@@ -161,7 +165,7 @@ class NotificationServiceTest {
 
     dbos.launch();
     try {
-      dbos.recv("someTopic", 5);
+      dbos.recv("someTopic", Duration.ofSeconds(5));
       assertTrue(false);
     } catch (IllegalArgumentException e) {
       assertEquals("recv() must be called from a workflow.", e.getMessage());
@@ -181,7 +185,7 @@ class NotificationServiceTest {
 
     // just to open the latch
     try (var id = new WorkflowOptions("abc").setContext()) {
-      notService.recvWorkflow(null, 1);
+      notService.recvWorkflow(null, Duration.ofSeconds(1));
     }
 
     try (var id = new WorkflowOptions("send1").setContext()) {
@@ -202,7 +206,9 @@ class NotificationServiceTest {
     dbos.launch();
 
     String wfid1 = "recvwf1";
-    dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5), new StartWorkflowOptions(wfid1));
+    dbos.startWorkflow(
+        () -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)),
+        new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
     dbos.startWorkflow(
@@ -233,7 +239,7 @@ class NotificationServiceTest {
 
     long start = System.currentTimeMillis();
     try (var id = new WorkflowOptions(wfid1).setContext()) {
-      notService.recvWorkflow("topic1", 3);
+      notService.recvWorkflow("topic1", Duration.ofSeconds(3));
     }
 
     long elapsed = System.currentTimeMillis() - start;
@@ -296,7 +302,9 @@ class NotificationServiceTest {
     dbos.launch();
 
     String wfid1 = "recvwf1";
-    dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5), new StartWorkflowOptions(wfid1));
+    dbos.startWorkflow(
+        () -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)),
+        new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
 
@@ -342,7 +350,7 @@ class NotificationServiceTest {
 
     var options = new StartWorkflowOptions(wfid1);
     WorkflowHandle<String, ?> handle =
-        dbos.startWorkflow(() -> notService.recvWorkflow("topic1", 5), options);
+        dbos.startWorkflow(() -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)), options);
 
     Thread.sleep(1000);
 

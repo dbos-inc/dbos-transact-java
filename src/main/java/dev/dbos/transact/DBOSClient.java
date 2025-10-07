@@ -225,8 +225,8 @@ public class DBOSClient implements AutoCloseable {
     systemDatabase.send(status.getWorkflowUUID(), 0, destinationId, message, topic);
   }
 
-  public Object getEvent(String targetId, String key, double timeoutSeconds) {
-    return systemDatabase.getEvent(targetId, key, timeoutSeconds, null);
+  public Object getEvent(String targetId, String key, Duration timeout) {
+    return systemDatabase.getEvent(targetId, key, timeout, null);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> retrieveWorkflow(String workflowId) {

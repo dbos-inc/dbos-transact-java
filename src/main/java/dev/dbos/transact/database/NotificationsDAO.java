@@ -10,6 +10,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -105,11 +106,7 @@ public class NotificationsDAO {
   }
 
   public Object recv(
-      String workflowUuid,
-      int functionId,
-      int timeoutFunctionId,
-      String topic,
-      double timeoutSeconds)
+      String workflowUuid, int functionId, int timeoutFunctionId, String topic, Duration timeout)
       throws SQLException, InterruptedException {
 
     if (dataSource.isClosed()) {
@@ -175,8 +172,7 @@ public class NotificationsDAO {
         // Wait for the notification
         // Support OAOO sleep
         double actualTimeout =
-            StepsDAO.sleepms(
-                dataSource, workflowUuid, timeoutFunctionId, timeoutSeconds * 1000, true);
+            StepsDAO.sleep(dataSource, workflowUuid, timeoutFunctionId, timeout, true);
         long timeoutMs = (long) (actualTimeout);
         lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
       }
@@ -310,7 +306,7 @@ public class NotificationsDAO {
   }
 
   public Object getEvent(
-      String targetUuid, String key, double timeoutSeconds, GetWorkflowEventContext callerCtx)
+      String targetUuid, String key, Duration timeout, GetWorkflowEventContext callerCtx)
       throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
@@ -375,23 +371,23 @@ public class NotificationsDAO {
 
       if (value == null) {
         // Wait for the notification
-        double actualTimeout = timeoutSeconds * 1000;
+        double actualTimeout = timeout.toMillis();
         if (callerCtx != null) {
           // Support OAOO sleep for workflows
           actualTimeout =
-              StepsDAO.sleepms(
+              StepsDAO.sleep(
                   dataSource,
                   callerCtx.getWorkflowId(),
                   callerCtx.getTimeoutFunctionId(),
-                  timeoutSeconds * 1000,
+                  timeout,
                   true // skip_sleep
                   );
         }
 
         try {
-          long timeout = (long) (actualTimeout);
+          long timeoutms = (long) (actualTimeout);
           logger.debug("Waiting for notification {}...", timeout);
-          lockConditionPair.condition.await(timeout, TimeUnit.MILLISECONDS);
+          lockConditionPair.condition.await(timeoutms, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           throw new RuntimeException("Interrupted while waiting for event", e);

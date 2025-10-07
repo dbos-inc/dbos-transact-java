@@ -9,6 +9,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.*;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -231,16 +232,16 @@ public class StepsDAO {
     return steps;
   }
 
-  public double sleepms(String workflowUuid, int functionId, double mseconds, boolean skipSleep)
+  public double sleep(String workflowUuid, int functionId, Duration duration, boolean skipSleep)
       throws SQLException {
-    return StepsDAO.sleepms(dataSource, workflowUuid, functionId, mseconds, skipSleep);
+    return StepsDAO.sleep(dataSource, workflowUuid, functionId, duration, skipSleep);
   }
 
-  public static double sleepms(
+  public static double sleep(
       HikariDataSource dataSource,
       String workflowUuid,
       int functionId,
-      double mseconds,
+      Duration duration,
       boolean skipSleep)
       throws SQLException {
 
@@ -259,15 +260,15 @@ public class StepsDAO {
     double endTime;
 
     if (recordedOutput != null) {
-      logger.debug("Replaying sleep, id: {}, seconds: {}", functionId, mseconds / 1000.0);
+      logger.debug("Replaying sleep, id: {}, millis: {}", functionId, duration.toMillis());
       if (recordedOutput.getOutput() == null) {
         throw new IllegalStateException("No recorded timeout for sleep");
       }
       Object[] dser = JSONUtil.deserializeToArray(recordedOutput.getOutput());
       endTime = (Double) dser[0];
     } else {
-      logger.debug("Running sleep, id: {}, seconds: {}", functionId, mseconds / 1000.0);
-      endTime = System.currentTimeMillis() + mseconds;
+      logger.debug("Running sleep, id: {}, millis: {}", functionId, duration.toMillis());
+      endTime = System.currentTimeMillis() + duration.toMillis();
 
       try {
         StepResult output = new StepResult();
@@ -284,18 +285,18 @@ public class StepsDAO {
     }
 
     double currentTime = System.currentTimeMillis();
-    double duration = Math.max(0, endTime - currentTime);
+    double durationms = Math.max(0, endTime - currentTime);
 
     if (!skipSleep) {
       try {
         logger.debug("Sleeping for duration {}", duration);
-        Thread.sleep((long) (duration));
+        Thread.sleep((long) (durationms));
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new RuntimeException("Sleep interrupted", e);
       }
     }
 
-    return duration;
+    return durationms;
   }
 }

@@ -344,12 +344,12 @@ public class DBOS {
    * @param timeoutSeconds time in seconds after which the call times out
    * @return the message if there is one or else null
    */
-  public Object recv(String topic, double timeoutSeconds) {
+  public Object recv(String topic, Duration timeout) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot recv before launch");
     }
-    return executor.recv(topic, timeoutSeconds);
+    return executor.recv(topic, timeout);
   }
 
   /**
@@ -374,10 +374,10 @@ public class DBOS {
    *
    * @param workflowId id of the workflow who data is to be retrieved
    * @param key identifies the data
-   * @param timeOut time in seconds to wait for data
+   * @param timeout time to wait for data before timing out
    * @return the published value or null
    */
-  public Object getEvent(String workflowId, String key, double timeOut) {
+  public Object getEvent(String workflowId, String key, Duration timeout) {
     logger.debug("Received getEvent for {} {}", workflowId, key);
 
     var executor = dbosExecutor.get();
@@ -385,7 +385,7 @@ public class DBOS {
       throw new IllegalStateException("cannot getEvent before launch");
     }
 
-    return executor.getEvent(workflowId, key, timeOut);
+    return executor.getEvent(workflowId, key, timeout);
   }
 
   /**
@@ -395,33 +395,29 @@ public class DBOS {
    *
    * @param seconds in seconds
    */
-  public void sleepmsInst(double mseconds) {
+  public void sleepInst(Duration duration) {
     var executor = dbosExecutor.get();
     if (executor == null) {
       throw new IllegalStateException("cannot sleep before launch");
     }
 
-    executor.sleepms(mseconds);
+    executor.sleep(duration);
   }
 
-  public static void sleepms(double mseconds) {
+  public static void sleep(Duration duration) {
     if (!inWorkflow()) {
       try {
-        Thread.sleep((long) mseconds);
+        Thread.sleep(duration.toMillis());
       } catch (InterruptedException e) {
       }
     } else if (inStep()) {
       try {
-        Thread.sleep((long) mseconds);
+        Thread.sleep(duration.toMillis());
       } catch (InterruptedException e) {
       }
     } else {
-      DBOSContext.dbosInstance().get().sleepmsInst(mseconds);
+      DBOSContext.dbosInstance().get().sleepInst(duration);
     }
-  }
-
-  public static void sleep(Duration dur) {
-    sleepms(dur.toMillis());
   }
 
   public <T, E extends Exception> T runStep(ThrowingSupplier<T, E> stepfunc, StepOptions opts)

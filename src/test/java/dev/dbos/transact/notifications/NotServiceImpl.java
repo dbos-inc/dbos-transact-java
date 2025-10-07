@@ -3,6 +3,7 @@ package dev.dbos.transact.notifications;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.workflow.Workflow;
 
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
@@ -30,9 +31,9 @@ public class NotServiceImpl {
   }
 
   @Workflow(name = "recvWorkflow")
-  public String recvWorkflow(String topic, float timeoutSecond) {
+  public String recvWorkflow(String topic, Duration timeout) {
     recvReadyLatch.countDown();
-    String msg = (String) DBOSContext.dbosInstance().get().recv(topic, timeoutSecond);
+    String msg = (String) DBOSContext.dbosInstance().get().recv(topic, timeout);
     return msg;
   }
 
@@ -40,9 +41,9 @@ public class NotServiceImpl {
   public String recvMultiple(String topic) {
     recvReadyLatch.countDown();
     var dbos = DBOSContext.dbosInstance().get();
-    String msg1 = (String) dbos.recv(topic, 5);
-    String msg2 = (String) dbos.recv(topic, 5);
-    String msg3 = (String) dbos.recv(topic, 5);
+    String msg1 = (String) dbos.recv(topic, Duration.ofSeconds(5));
+    String msg2 = (String) dbos.recv(topic, Duration.ofSeconds(5));
+    String msg3 = (String) dbos.recv(topic, Duration.ofSeconds(5));
     return msg1 + msg2 + msg3;
   }
 
@@ -62,7 +63,8 @@ public class NotServiceImpl {
         }
       } else {
         // Notify the other one
-        String message = (String) DBOSContext.dbosInstance().get().recv(topic, 5);
+        String message =
+            (String) DBOSContext.dbosInstance().get().recv(topic, Duration.ofSeconds(5));
         condition.signalAll();
         return message;
       }
@@ -70,7 +72,7 @@ public class NotServiceImpl {
       lock.unlock();
     }
 
-    String message = (String) DBOSContext.dbosInstance().get().recv(topic, 5);
+    String message = (String) DBOSContext.dbosInstance().get().recv(topic, Duration.ofSeconds(5));
     return message;
   }
 }

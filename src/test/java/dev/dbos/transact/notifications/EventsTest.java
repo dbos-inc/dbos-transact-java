@@ -11,6 +11,7 @@ import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.StepInfo;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -69,12 +70,12 @@ public class EventsTest {
     }
 
     try (var id = new WorkflowOptions("id2").setContext()) {
-      Object event = eventService.getEventWorkflow("id1", "key1", 3);
+      Object event = eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3));
       assertEquals("value1", (String) event);
     }
 
     // outside workflow
-    String val = (String) dbos.getEvent("id1", "key1", 3);
+    String val = (String) dbos.getEvent("id1", "key1", Duration.ofSeconds(3));
     assertEquals("value1", val);
   }
 
@@ -94,12 +95,12 @@ public class EventsTest {
     }
 
     try (var id = new WorkflowOptions("id2").setContext()) {
-      Object event = eventService.getEventWorkflow("id1", "key1", 3);
+      Object event = eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3));
       assertEquals("value1", (String) event);
     }
 
     // outside workflow
-    Double val = (Double) dbos.getEvent("id1", "key2", 3);
+    Double val = (Double) dbos.getEvent("id1", "key2", Duration.ofSeconds(3));
     assertEquals(241.5, val);
   }
 
@@ -117,7 +118,8 @@ public class EventsTest {
     dbos.startWorkflow(
         () -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
     dbos.startWorkflow(
-        () -> eventService.getEventWorkflow("id1", "key1", 3), new StartWorkflowOptions("id2"));
+        () -> eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3)),
+        new StartWorkflowOptions("id2"));
 
     String event = (String) dbos.retrieveWorkflow("id2").getResult();
     assertEquals("value1", event);
@@ -135,7 +137,8 @@ public class EventsTest {
     dbos.launch();
 
     dbos.startWorkflow(
-        () -> eventService.getWithlatch("id1", "key1", 5), new StartWorkflowOptions("id2"));
+        () -> eventService.getWithlatch("id1", "key1", Duration.ofSeconds(5)),
+        new StartWorkflowOptions("id2"));
     dbos.startWorkflow(
         () -> eventService.setWithLatch("key1", "value1"), new StartWorkflowOptions("id1"));
 
@@ -158,7 +161,7 @@ public class EventsTest {
     dbos.launch();
 
     long start = System.currentTimeMillis();
-    dbos.getEvent("nonexistingid", "fake_key", 2);
+    dbos.getEvent("nonexistingid", "fake_key", Duration.ofSeconds(2));
     long elapsed = System.currentTimeMillis() - start;
     assertTrue(elapsed < 3000);
   }
@@ -176,8 +179,10 @@ public class EventsTest {
 
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {
-      Future<Object> future1 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
-      Future<Object> future2 = executor.submit(() -> dbos.getEvent("id1", "key1", 5));
+      Future<Object> future1 =
+          executor.submit(() -> dbos.getEvent("id1", "key1", Duration.ofSeconds(5)));
+      Future<Object> future2 =
+          executor.submit(() -> dbos.getEvent("id1", "key1", Duration.ofSeconds(5)));
 
       String expectedMessage = "test message";
       try (var id = new WorkflowOptions("id1").setContext()) {

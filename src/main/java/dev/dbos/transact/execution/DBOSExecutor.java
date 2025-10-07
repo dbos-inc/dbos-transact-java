@@ -505,17 +505,17 @@ public class DBOSExecutor implements AutoCloseable {
     return new WorkflowHandleDBPoll<R, E>(workflowId, systemDatabase);
   }
 
-  public void sleepms(double mseconds) {
+  public void sleep(Duration duration) {
     // CB TODO: This should be OK outside DBOS
 
     DBOSContext context = DBOSContextHolder.get();
 
     if (context.getWorkflowId() == null) {
-      throw new IllegalStateException("sleepms() must be called from within a workflow");
+      throw new IllegalStateException("sleep() must be called from within a workflow");
     }
 
-    systemDatabase.sleepms(
-        context.getWorkflowId(), context.getAndIncrementFunctionId(), mseconds, false);
+    systemDatabase.sleep(
+        context.getWorkflowId(), context.getAndIncrementFunctionId(), duration, false);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
@@ -595,10 +595,10 @@ public class DBOSExecutor implements AutoCloseable {
    * Get a message sent to a particular topic
    *
    * @param topic the topic whose message to get
-   * @param timeoutSeconds time in seconds after which the call times out
+   * @param timeout duration to wait before the call times out
    * @return the message if there is one or else null
    */
-  public Object recv(String topic, double timeoutSeconds) {
+  public Object recv(String topic, Duration timeout) {
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
       throw new IllegalArgumentException("recv() must be called from a workflow.");
@@ -607,7 +607,7 @@ public class DBOSExecutor implements AutoCloseable {
     int timeoutFunctionId = ctx.getAndIncrementFunctionId();
 
     return systemDatabase.recv(
-        ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeoutSeconds);
+        ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeout);
   }
 
   public void setEvent(String key, Object value) {
@@ -622,7 +622,7 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
   }
 
-  public Object getEvent(String workflowId, String key, double timeOut) {
+  public Object getEvent(String workflowId, String key, Duration timeout) {
     logger.debug("Received getEvent for {} {}", workflowId, key);
 
     DBOSContext ctx = DBOSContextHolder.get();
@@ -632,10 +632,10 @@ public class DBOSExecutor implements AutoCloseable {
       int timeoutFunctionId = ctx.getAndIncrementFunctionId();
       GetWorkflowEventContext callerCtx =
           new GetWorkflowEventContext(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId);
-      return systemDatabase.getEvent(workflowId, key, timeOut, callerCtx);
+      return systemDatabase.getEvent(workflowId, key, timeout, callerCtx);
     }
 
-    return systemDatabase.getEvent(workflowId, key, timeOut, null);
+    return systemDatabase.getEvent(workflowId, key, timeout, null);
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {

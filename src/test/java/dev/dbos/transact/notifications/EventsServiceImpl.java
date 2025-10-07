@@ -3,6 +3,7 @@ package dev.dbos.transact.notifications;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.workflow.Workflow;
 
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 
 public class EventsServiceImpl implements EventsService {
@@ -17,7 +18,7 @@ public class EventsServiceImpl implements EventsService {
   }
 
   @Workflow(name = "getEventWorkflow")
-  public Object getEventWorkflow(String workflowId, String key, float timeOut) {
+  public Object getEventWorkflow(String workflowId, String key, Duration timeOut) {
     return DBOSContext.dbosInstance().get().getEvent(workflowId, key, timeOut);
   }
 
@@ -44,7 +45,7 @@ public class EventsServiceImpl implements EventsService {
   }
 
   @Workflow(name = "getWithlatch")
-  public Object getWithlatch(String workflowId, String key, float timeOut) {
+  public Object getWithlatch(String workflowId, String key, Duration timeOut) {
     getReadyLatch.countDown();
     return DBOSContext.dbosInstance().get().getEvent(workflowId, key, timeOut);
   }
