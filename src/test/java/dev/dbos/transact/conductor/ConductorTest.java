@@ -2,7 +2,6 @@ package dev.dbos.transact.conductor;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -26,7 +25,6 @@ import dev.dbos.transact.conductor.protocol.RetentionRequest;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -752,7 +750,7 @@ public class ConductorTest {
             "test-app-id",
             null));
 
-    when(mockExec.listQueuedWorkflows(any(), anyBoolean())).thenReturn(statuses);
+    when(mockExec.listWorkflows(any())).thenReturn(statuses);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -767,13 +765,13 @@ public class ConductorTest {
       listener.send(req);
       assertTrue(
           listener.messageLatch.await(100000000, TimeUnit.SECONDS), "message latch timed out");
-      ArgumentCaptor<ListQueuedWorkflowsInput> inputCaptor =
-          ArgumentCaptor.forClass(ListQueuedWorkflowsInput.class);
-      verify(mockExec).listQueuedWorkflows(inputCaptor.capture(), eq(false));
-      ListQueuedWorkflowsInput input = inputCaptor.getValue();
-      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.getStartTime());
-      assertEquals("foobarbaz", input.getName());
-      assertNull(input.getLimit());
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockExec).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.startTime());
+      assertEquals("foobarbaz", input.workflowName());
+      assertNull(input.limit());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);

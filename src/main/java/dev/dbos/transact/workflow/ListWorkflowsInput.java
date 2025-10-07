@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public record ListWorkflowsInput(
-    List<String> workflowIDs,
+    List<String> workflowIds,
     String className,
     String instanceName,
     String workflowName,
@@ -14,6 +14,8 @@ public record ListWorkflowsInput(
     OffsetDateTime endTime,
     String status,
     String applicationVersion,
+    String queueName,
+    Boolean queuesOnly,
     Integer limit,
     Integer offset,
     Boolean sortDesc,
@@ -22,11 +24,13 @@ public record ListWorkflowsInput(
     Boolean loadOutput) {
 
   public ListWorkflowsInput() {
-    this(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+    this(
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null);
   }
 
   public static class Builder {
-    private List<String> workflowIDs = new ArrayList<>();
+    private List<String> workflowIds = new ArrayList<>();
     private String workflowName;
     private String className;
     private String instanceName;
@@ -35,6 +39,8 @@ public record ListWorkflowsInput(
     private OffsetDateTime endTime;
     private String status;
     private String applicationVersion;
+    private String queueName;
+    private Boolean queuedOnly;
     private Integer limit;
     private Integer offset;
     private Boolean sortDesc;
@@ -42,13 +48,15 @@ public record ListWorkflowsInput(
     private Boolean loadInput;
     private Boolean loadOutput;
 
-    public Builder workflowID(String workflowID) {
-      this.workflowIDs.add(workflowID);
+    public Builder workflowID(String workflowId) {
+      this.workflowIds.add(workflowId);
       return this;
     }
 
-    public Builder workflowIDs(List<String> workflowIDs) {
-      this.workflowIDs.addAll(workflowIDs);
+    public Builder workflowIDs(List<String> workflowIds) {
+      if (workflowIds != null) {
+        this.workflowIds.addAll(workflowIds);
+      }
       return this;
     }
 
@@ -97,6 +105,16 @@ public record ListWorkflowsInput(
       return this;
     }
 
+    public Builder queueName(String queueName) {
+      this.queueName = queueName;
+      return this;
+    }
+
+    public Builder queuedOnly(Boolean queuedOnly) {
+      this.queuedOnly = queuedOnly;
+      return this;
+    }
+
     public Builder limit(Integer limit) {
       this.limit = limit;
       return this;
@@ -129,7 +147,7 @@ public record ListWorkflowsInput(
 
     public ListWorkflowsInput build() {
       return new ListWorkflowsInput(
-          workflowIDs,
+          workflowIds,
           className,
           instanceName,
           workflowName,
@@ -138,6 +156,8 @@ public record ListWorkflowsInput(
           endTime,
           status,
           applicationVersion,
+          queueName,
+          queuedOnly,
           limit,
           offset,
           sortDesc,
