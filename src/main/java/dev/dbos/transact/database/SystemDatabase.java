@@ -2,7 +2,6 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
-import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -187,14 +186,6 @@ public class SystemDatabase implements AutoCloseable {
     return DbRetry.call(
         () -> {
           return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
-        });
-  }
-
-  public List<WorkflowStatus> listQueuedWorkflows(
-      ListQueuedWorkflowsInput input, boolean loadInput) {
-    return DbRetry.call(
-        () -> {
-          return queuesDAO.getQueuedWorkflows(input, loadInput);
         });
   }
 

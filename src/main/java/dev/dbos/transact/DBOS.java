@@ -10,7 +10,6 @@ import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
-import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
@@ -494,21 +493,5 @@ public class DBOS {
       throw new IllegalStateException("cannot listWorkflowSteps before launch");
     }
     return executor.listWorkflowSteps(workflowId);
-  }
-
-  /**
-   * List workflows queued
-   *
-   * @param query parameters to query by
-   * @param loadInput Whether to load input or not
-   * @return list of workflow statuses {@link WorkflowStatus}
-   */
-  public List<WorkflowStatus> listQueuedWorkflows(
-      ListQueuedWorkflowsInput query, boolean loadInput) {
-    var executor = dbosExecutor.get();
-    if (executor == null) {
-      throw new IllegalStateException("cannot listQueuedWorkflows before launch");
-    }
-    return executor.listQueuedWorkflows(query, loadInput);
   }
 }

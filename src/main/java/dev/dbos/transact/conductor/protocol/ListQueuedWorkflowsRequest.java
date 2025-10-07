@@ -1,9 +1,8 @@
 package dev.dbos.transact.conductor.protocol;
 
-import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.Objects;
 
 public class ListQueuedWorkflowsRequest extends BaseMessage {
@@ -97,25 +96,21 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
     }
   }
 
-  public ListQueuedWorkflowsInput asInput() {
+  public ListWorkflowsInput asInput() {
     Objects.requireNonNull(body);
 
-    ArrayList<String> status = new ArrayList<String>();
-    if (body.status != null) {
-      status.add(body.status);
-    }
+    var builder = new ListWorkflowsInput.Builder();
+    builder.queuedOnly(true);
+    builder.workflowName(body.workflow_name);
+    builder.startTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null);
+    builder.endTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null);
+    builder.status(body.status);
+    builder.queueName(body.queue_name);
+    builder.limit(body.limit);
+    builder.offset(body.offset);
+    builder.sortDesc(body.sort_desc);
+    builder.loadInput(body.load_input);
 
-    ListQueuedWorkflowsInput input = new ListQueuedWorkflowsInput();
-    input.setName(body.workflow_name);
-    input.setStartTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null);
-    input.setEndTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null);
-    input.setStatus(status);
-    input.setQueueName(body.queue_name);
-    input.setLimit(body.limit);
-    input.setOffset(body.offset);
-    if (body.sort_desc != null) {
-      input.setSortDesc(body.sort_desc);
-    }
-    return input;
+    return builder.build();
   }
 }

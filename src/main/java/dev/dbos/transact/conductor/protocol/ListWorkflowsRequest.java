@@ -145,6 +145,8 @@ public class ListWorkflowsRequest extends BaseMessage {
         body.end_time != null ? OffsetDateTime.parse(body.end_time) : null,
         body.status,
         body.application_version,
+        null,
+        null, 
         body.limit,
         body.offset,
         body.sort_desc,
