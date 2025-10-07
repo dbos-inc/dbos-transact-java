@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
 
 public class SystemDatabase implements AutoCloseable {
 
-  private static Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
+  private static final Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
   private final HikariDataSource dataSource;
 
   private final WorkflowDAO workflowDAO;
@@ -44,6 +44,8 @@ public class SystemDatabase implements AutoCloseable {
     notificationService = new NotificationService(dataSource);
     notificationsDAO = new NotificationsDAO(dataSource, notificationService);
   }
+
+
 
   @Override
   public void close() {

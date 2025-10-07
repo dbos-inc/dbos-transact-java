@@ -40,7 +40,7 @@ class RecoveryServiceTest {
   private DBOSExecutor dbosExecutor;
   private ExecutingServiceImpl executingServiceImpl;
   private ExecutingService executingService;
-  Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
   @BeforeAll
   public static void onetimeBefore() {

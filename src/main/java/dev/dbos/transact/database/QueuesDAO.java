@@ -18,7 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class QueuesDAO {
-  Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
+  private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
   private HikariDataSource dataSource;
 
   QueuesDAO(HikariDataSource ds) {
@@ -90,13 +90,12 @@ public class QueuesDAO {
       if (queue.workerConcurrency() > 0 || queue.concurrency() > 0) {
         // Count pending workflows by executor
         String pendingQuery =
-            """
-                        SELECT executor_id, COUNT(*) as task_count
-                        FROM %s.workflow_status
-                        WHERE queue_name = ?
-                        AND status = 'PENDING'
-                        GROUP BY executor_id;
-                        """;
+          """
+            SELECT executor_id, COUNT(*) as task_count
+            FROM %s.workflow_status
+            WHERE queue_name = ? AND status = 'PENDING'
+            GROUP BY executor_id;
+            """;
         pendingQuery = String.format(pendingQuery, Constants.DB_SCHEMA);
 
         Map<String, Integer> pendingWorkflowsDict = new HashMap<>();
@@ -114,13 +113,6 @@ public class QueuesDAO {
 
         // Check worker concurrency limit
         if (queue.workerConcurrency() > 0) {
-          if (localPendingWorkflows > queue.workerConcurrency()) {
-            logger.warn(
-                "The number of local pending workflows ({}) on queue {} exceeds the local concurrency limit ({})",
-                localPendingWorkflows,
-                queue.name(),
-                queue.workerConcurrency());
-          }
           maxTasks = Math.max(0, queue.workerConcurrency() - localPendingWorkflows);
         }
 
@@ -192,7 +184,7 @@ public class QueuesDAO {
       }
 
       if (!dequeuedIds.isEmpty()) {
-        logger.trace(String.format("[%s] dequeueing %d task(s)", queue.name(), dequeuedIds.size()));
+        logger.debug("{} dequeueing {} task(s)", queue.name(), dequeuedIds.size());
       }
 
       List<String> retIds = new ArrayList<>();

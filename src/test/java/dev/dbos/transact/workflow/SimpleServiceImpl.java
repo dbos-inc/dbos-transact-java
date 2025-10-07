@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 
 public class SimpleServiceImpl implements SimpleService {
 
-  Logger logger = LoggerFactory.getLogger(SimpleServiceImpl.class);
+  private static final Logger logger = LoggerFactory.getLogger(SimpleServiceImpl.class);
 
   private SimpleService simpleService;
 

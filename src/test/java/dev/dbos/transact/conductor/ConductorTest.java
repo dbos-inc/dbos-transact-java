@@ -61,7 +61,7 @@ import org.slf4j.LoggerFactory;
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class ConductorTest {
 
-  static Logger logger = LoggerFactory.getLogger(ConductorTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(ConductorTest.class);
 
   SystemDatabase mockDB;
   DBOSExecutor mockExec;

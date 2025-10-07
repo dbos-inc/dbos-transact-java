@@ -38,7 +38,7 @@ import org.slf4j.LoggerFactory;
 
 public class Conductor implements AutoCloseable {
 
-  private static Logger logger = LoggerFactory.getLogger(Conductor.class);
+  private static final Logger logger = LoggerFactory.getLogger(Conductor.class);
   private static final Map<MessageType, BiFunction<Conductor, BaseMessage, BaseResponse>>
       dispatchMap;
 
@@ -189,7 +189,7 @@ public class Conductor implements AutoCloseable {
   }
 
   void setPingInterval() {
-    logger.info("setPingInterval");
+    logger.debug("setPingInterval");
 
     if (pingInterval != null) {
       pingInterval.cancel(false);
@@ -201,11 +201,10 @@ public class Conductor implements AutoCloseable {
                 return;
               }
               try {
-                logger.info("setPingInterval::scheduleAtFixedRate");
                 // Note, checking for null because websocket can connect before websocket
                 // variable is assigned
                 if (webSocket != null && !webSocket.isOutputClosed()) {
-                  logger.info("Sending ping to conductor");
+                  logger.debug("Sending ping to conductor");
 
                   webSocket
                       .sendPing(ByteBuffer.allocate(0))
@@ -228,10 +227,10 @@ public class Conductor implements AutoCloseable {
                           pingTimeoutMs,
                           TimeUnit.MILLISECONDS);
                 } else {
-                  logger.info("NOT Sending ping to conductor");
+                  logger.debug("NOT Sending ping to conductor");
                 }
               } catch (Exception e) {
-                logger.error("setPingInterval::scheduleAtFixedRate catch", e);
+                logger.error("setPingInterval::scheduleAtFixedRate", e);
               }
             },
             0,
@@ -315,7 +314,7 @@ public class Conductor implements AutoCloseable {
                     public CompletionStage<?> onClose(
                         WebSocket webSocket, int statusCode, String reason) {
                       if (isShutdown.get()) {
-                        logger.info("Shutdown Conductor connection");
+                        logger.debug("Shutdown Conductor connection");
                       } else if (reconnectTimeout == null) {
                         logger.warn("onClose: Connection to conductor lost. Reconnecting");
                         resetWebSocket();

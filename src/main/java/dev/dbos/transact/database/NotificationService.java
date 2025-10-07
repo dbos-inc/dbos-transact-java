@@ -22,7 +22,7 @@ public class NotificationService {
     public final Condition condition = lock.newCondition();
   }
 
-  Logger logger = LoggerFactory.getLogger(NotificationService.class);
+  private static final Logger logger = LoggerFactory.getLogger(NotificationService.class);
 
   private final Map<String, LockConditionPair> notificationsMap = new ConcurrentHashMap<>();
   private volatile boolean running = false;
@@ -51,7 +51,7 @@ public class NotificationService {
       notificationListenerThread = new Thread(this::notificationListener, "NotificationListener");
       notificationListenerThread.setDaemon(true);
       notificationListenerThread.start();
-      logger.info("Notification listener started");
+      logger.debug("Notification listener started");
     }
   }
 
@@ -67,7 +67,7 @@ public class NotificationService {
     }
 
     notificationsMap.clear();
-    logger.info("Notification listener stopped");
+    logger.debug("Notification listener stopped");
   }
 
   private void notificationListener() {
@@ -107,7 +107,7 @@ public class NotificationService {
               } else if ("dbos_workflow_events_channel".equals(channel)) {
                 handleNotification(payload, "workflow_events");
               } else {
-                logger.error("Unknown channel: {}", channel);
+                logger.error("Unknown NOTIFY channel: {}", channel);
               }
             }
           }

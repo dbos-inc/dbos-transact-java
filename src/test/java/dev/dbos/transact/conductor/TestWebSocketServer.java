@@ -31,7 +31,7 @@ class TestWebSocketServer extends WebSocketServer {
     default void onClose(WebSocket conn, int code, String reason, boolean remote) {}
   }
 
-  private static Logger logger = LoggerFactory.getLogger(TestWebSocketServer.class);
+  private static final Logger logger = LoggerFactory.getLogger(TestWebSocketServer.class);
   private WebSocketTestListener listener;
   private Semaphore startEvent = new Semaphore(0);
 

@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class WorkflowMgmtTest {
 
-  Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
 
   private static DBOSConfig dbosConfig;
   private DBOS dbos;

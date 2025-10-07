@@ -15,7 +15,7 @@ public class RecoveryService {
 
   private final SystemDatabase systemDatabase;
   private final DBOSExecutor dbosExecutor;
-  public Logger logger = LoggerFactory.getLogger(RecoveryService.class);
+  private static final Logger logger = LoggerFactory.getLogger(RecoveryService.class);
 
   private volatile boolean stopRequested = false;
   private Thread recoveryThread;
@@ -35,17 +35,21 @@ public class RecoveryService {
       return;
     }
 
-    List<GetPendingWorkflowsOutput> workflows = new ArrayList<>();
-
-    workflows =
+    List<GetPendingWorkflowsOutput> workflows =
         systemDatabase.getPendingWorkflows(dbosExecutor.executorId(), dbosExecutor.appVersion());
+
+    if (workflows.size() > 0) {
+      logger.info("Recovering {} workflows for application version {}", workflows.size(), dbosExecutor.appVersion());
+    } else {
+      logger.info("No workflows to recover for application version {}", dbosExecutor.appVersion());
+    }
 
     final List<GetPendingWorkflowsOutput> toRecover = workflows;
     stopRequested = false;
     recoveryThread = new Thread(() -> startupRecoveryThread(toRecover), "RecoveryService-Thread");
     recoveryThread.setDaemon(true);
     recoveryThread.start();
-    logger.info("Recovery service started");
+    logger.debug("Recovery service started");
   }
 
   /**
@@ -68,7 +72,7 @@ public class RecoveryService {
         logger.warn("Interrupted while stopping recovery thread", e);
       }
     }
-    logger.info("Recovery service stopped");
+    logger.debug("Recovery service stopped");
   }
 
   /**
@@ -79,7 +83,7 @@ public class RecoveryService {
     try {
       List<GetPendingWorkflowsOutput> pendingWorkflows = new CopyOnWriteArrayList<>(wToRecover);
 
-      logger.info("Starting recovery thread {} ", pendingWorkflows.size());
+      logger.debug("Starting recovery thread {} ", pendingWorkflows.size());
 
       while (!stopRequested && !pendingWorkflows.isEmpty()) {
         try {
@@ -99,7 +103,7 @@ public class RecoveryService {
             Thread.sleep(1000);
           } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            logger.info("Recovery thread interrupted during sleep");
+            logger.warn("Recovery thread interrupted during sleep");
             break;
           }
         } catch (Exception e) {
@@ -109,13 +113,13 @@ public class RecoveryService {
       }
 
       if (!stopRequested && pendingWorkflows.isEmpty()) {
-        logger.info("All pending workflows recovered successfully");
+        logger.debug("All pending workflows recovered successfully");
       }
 
     } catch (Exception e) {
       logger.error("Unexpected error during workflow recovery", e);
     } finally {
-      logger.info("Exiting recovery thread ");
+      logger.debug("Exiting recovery thread ");
     }
   }
 }

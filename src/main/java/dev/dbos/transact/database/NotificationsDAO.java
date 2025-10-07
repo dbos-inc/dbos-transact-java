@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
 
 public class NotificationsDAO {
 
-  Logger logger = LoggerFactory.getLogger(NotificationsDAO.class);
+  private static final Logger logger = LoggerFactory.getLogger(NotificationsDAO.class);
   private HikariDataSource dataSource;
   private NotificationService notificationService;
 
@@ -67,8 +67,6 @@ public class NotificationsDAO {
             "INSERT INTO %s.notifications (destination_uuid, topic, message) VALUES (?, ?, ?) ";
 
         insertSql = String.format(insertSql, Constants.DB_SCHEMA);
-
-        logger.info(insertSql);
 
         try (PreparedStatement stmt = conn.prepareStatement(insertSql)) {
           stmt.setString(1, destinationUuid);
@@ -180,9 +178,6 @@ public class NotificationsDAO {
             StepsDAO.sleep(dataSource, workflowUuid, timeoutFunctionId, timeoutSeconds, true);
         long timeoutMs = (long) (actualTimeout * 1000);
         lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
-
-      } else {
-        logger.info("We have notification. no need to sleep");
       }
     } finally {
       lockPair.lock.unlock();
@@ -401,7 +396,6 @@ public class NotificationsDAO {
           throw new RuntimeException("Interrupted while waiting for event", e);
         }
 
-        logger.debug("Awoken from await");
         // Read the value from the database after notification
         try (Connection conn = dataSource.getConnection();
             PreparedStatement stmt = conn.prepareStatement(getSql)) {

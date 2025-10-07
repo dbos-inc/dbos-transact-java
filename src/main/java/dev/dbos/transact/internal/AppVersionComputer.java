@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 public class AppVersionComputer {
 
-  static Logger logger = LoggerFactory.getLogger(AppVersionComputer.class);
+  private static Logger logger = LoggerFactory.getLogger(AppVersionComputer.class);
 
   public static String computeAppVersion(List<Class<?>> registeredClasses) {
     try {
@@ -25,6 +25,7 @@ public class AppVersionComputer {
 
       // Hash each unique class
       for (Class<?> clazz : sortedClasses) {
+        logger.debug("hashing {}", clazz.getName());
         String classHash = getClassBytecodeHash(clazz);
         hasher.update((clazz.getName() + ":" + classHash).getBytes("UTF-8"));
       }

@@ -20,7 +20,7 @@ public record DBOSConfig(
     String appVersion,
     String executorId) {
 
-  static Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
+  private static final Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
 
   public static class Builder {
     private String appName;
@@ -105,15 +105,16 @@ public record DBOSConfig(
     public DBOSConfig build() {
       if (appName == null) throw new IllegalArgumentException("Name is required");
 
-      if (dbPassword == null) {
-        dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
-      }
       if (databaseUrl == null) {
-        databaseUrl = System.getenv(Constants.JDBC_URL_ENV_VAR);
-        logger.info("Using db_url env {}", databaseUrl);
+        databaseUrl = System.getenv(Constants.SYSTEM_JDBC_URL_ENV_VAR);
+        logger.debug("retrieved {} database url from {} env var", databaseUrl, Constants.SYSTEM_JDBC_URL_ENV_VAR);
+
       }
       if (dbUser == null) {
         dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);
+      }
+      if (dbPassword == null) {
+        dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
       }
 
       return new DBOSConfig(

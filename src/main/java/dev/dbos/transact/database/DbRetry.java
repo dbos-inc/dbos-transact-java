@@ -16,7 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public final class DbRetry {
-  private static final Logger log = LoggerFactory.getLogger(DbRetry.class);
+  private static final Logger logger = LoggerFactory.getLogger(DbRetry.class);
 
   private DbRetry() {}
 
@@ -81,7 +81,7 @@ public final class DbRetry {
         double jitterFactor = 0.5 + ThreadLocalRandom.current().nextDouble();
         long sleepMillis = Math.max(1L, (long) (backoff.toMillis() * jitterFactor));
 
-        log.warn(
+        logger.warn(
             "DB operation failed (attempt {} of {}): {}. Retrying in {} ms",
             attempt,
             opts.maxAttempts,

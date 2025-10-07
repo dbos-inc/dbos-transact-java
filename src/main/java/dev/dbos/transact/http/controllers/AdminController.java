@@ -61,7 +61,7 @@ public class AdminController {
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public List<String> recovery(List<String> executorIds) {
-    logger.info("Recovering workflows for executors {}", executorIds);
+    logger.debug("Recovering workflows for executors {}", executorIds);
     List<WorkflowHandle<?, ?>> handles = dbosExecutor.recoverPendingWorkflows(executorIds);
     List<String> workflowIds = new ArrayList<>();
     for (WorkflowHandle<?, ?> handle : handles) {
@@ -121,7 +121,7 @@ public class AdminController {
   @Path("/workflows/{workflowId}")
   @Produces(MediaType.APPLICATION_JSON)
   public WorkflowStatus GetWorkflowStatus(@PathParam("workflowId") String workflowId) {
-    logger.info("Get workflow status for workflow {}", workflowId);
+    logger.debug("Get workflow status for workflow {}", workflowId);
     var status = systemDatabase.getWorkflowStatus(workflowId);
     return status.isEmpty() ? null : status.get();
   }
@@ -130,7 +130,7 @@ public class AdminController {
   @Path("/workflows/{workflowId}/steps")
   @Produces(MediaType.APPLICATION_JSON)
   public List<StepInfo> ListSteps(@PathParam("workflowId") String workflowId) {
-    logger.info("Retrieving steps for workflow {}", workflowId);
+    logger.debug("Retrieving steps for workflow {}", workflowId);
     return dbosExecutor.listWorkflowSteps(workflowId);
   }
 
@@ -138,7 +138,7 @@ public class AdminController {
   @Path("/workflows/{workflowId}/restart")
   @Produces(MediaType.APPLICATION_JSON)
   public ForkWorkflowResponse restart(@PathParam("workflowId") String workflowId) {
-    logger.info("Restarting workflow {} with a new ID", workflowId);
+    logger.debug("Restarting workflow {} with a new ID", workflowId);
     WorkflowHandle<?, ?> handle = dbosExecutor.forkWorkflow(workflowId, 0, null);
     return new ForkWorkflowResponse(handle.getWorkflowId());
   }
@@ -147,7 +147,7 @@ public class AdminController {
   @Path("/workflows/{workflowId}/resume")
   @Produces(MediaType.APPLICATION_JSON)
   public Response resume(@PathParam("workflowId") String workflowId) {
-    logger.info("Resuming workflow {}", workflowId);
+    logger.debug("Resuming workflow {}", workflowId);
     dbosExecutor.resumeWorkflow(workflowId);
     return Response.noContent().build();
   }
@@ -162,7 +162,7 @@ public class AdminController {
       request = new ForkWorkflowRequest();
     }
     int startStep = (request.startStep != null) ? request.startStep : 0;
-    logger.info("Forking workflow {} from step {} with a new ID", workflowId, startStep);
+    logger.debug("Forking workflow {} from step {} with a new ID", workflowId, startStep);
 
     Duration timeout = request.timeoutMs != null ? Duration.ofMillis(request.timeoutMs) : null;
     var options = new ForkOptions(request.newWorkflowId, request.applicationVersion, timeout);
@@ -174,7 +174,7 @@ public class AdminController {
   @POST
   @Path("/workflows/{workflowId}/cancel")
   public Response cancel(@PathParam("workflowId") String workflowId) {
-    logger.info("Cancel workflow {}", workflowId);
+    logger.debug("Cancel workflow {}", workflowId);
     dbosExecutor.cancelWorkflow(workflowId);
     return Response.noContent().build();
   }

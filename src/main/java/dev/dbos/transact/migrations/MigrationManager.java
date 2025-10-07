@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
 
 public class MigrationManager {
 
-  static Logger logger = LoggerFactory.getLogger(MigrationManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
   private final DataSource dataSource;
 
   public MigrationManager(DataSource dataSource) {
@@ -56,9 +56,9 @@ public class MigrationManager {
         throw new RuntimeException("Failed to check database", e);
       }
 
+      logger.info("Creating '{}' database", pair.database());
       try (Statement stmt = conn.createStatement()) {
         stmt.executeUpdate("CREATE DATABASE \"" + pair.database() + "\"");
-        logger.info("'{}' database created", pair.database());
       } catch (SQLException e) {
         throw new RuntimeException("Failed to create database", e);
       }
@@ -92,11 +92,10 @@ public class MigrationManager {
       Set<String> appliedMigrations = getAppliedMigrations(conn);
       List<MigrationFile> migrationFiles = loadMigrationFiles();
       for (MigrationFile migrationFile : migrationFiles) {
-        String filename = migrationFile.getFilename().toString();
-        logger.info("processing migration file {}", filename);
-        String version = filename.split("_")[0];
+        String version = migrationFile.getFilename().split("_")[0];
 
         if (!appliedMigrations.contains(version)) {
+          logger.info("Applying migration file {}", migrationFile.getFilename());
           applyMigrationFile(conn, migrationFile.getSql());
           markMigrationApplied(conn, version);
         }

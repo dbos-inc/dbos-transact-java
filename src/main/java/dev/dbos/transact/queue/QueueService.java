@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
 
 public class QueueService {
 
-  Logger logger = LoggerFactory.getLogger(QueueService.class);
+  private static final Logger logger = LoggerFactory.getLogger(QueueService.class);
 
   private List<Queue> queues;
 
@@ -32,7 +32,7 @@ public class QueueService {
   }
 
   private void pollForWorkflows() {
-    logger.info("PollQueuesThread started {}", Thread.currentThread().getId());
+    logger.debug("PollQueuesThread started {}", Thread.currentThread().getId());
 
     double pollingInterval = 1.0;
     double minPollingInterval = 1.0;
@@ -86,7 +86,7 @@ public class QueueService {
 
     } finally {
       shutdownLatch.countDown();
-      logger.info("QueuesPollThread {} has ended. Exiting", Thread.currentThread().getId());
+      logger.debug("QueuesPollThread {} has ended. Exiting", Thread.currentThread().getId());
     }
   }
 
@@ -103,7 +103,7 @@ public class QueueService {
     this.queues = queues;
 
     if (running) {
-      logger.info("QueuesPollThread is already running.");
+      logger.warn("QueuesPollThread is already running.");
       return;
     }
 
@@ -112,14 +112,14 @@ public class QueueService {
     workerThread = new Thread(this::pollForWorkflows, "QueuesPollThread");
     workerThread.setDaemon(true);
     workerThread.start();
-    logger.info("QueuesPollThread started.");
+    logger.debug("QueuesPollThread started.");
   }
 
   public synchronized void stop() {
     logger.debug("stop() called");
 
     if (!running) {
-      logger.info("QueuesPollThread is not running.");
+      logger.warn("QueuesPollThread is not running.");
       return;
     }
     running = false;
@@ -143,7 +143,7 @@ public class QueueService {
     }
 
     this.queues = null;
-    logger.info("QueuePollThread stopped.");
+    logger.debug("QueuePollThread stopped.");
   }
 
   public synchronized boolean isStopped() {

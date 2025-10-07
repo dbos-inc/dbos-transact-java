@@ -10,12 +10,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public class DBOSContext {
-
-  private static final Logger logger = LoggerFactory.getLogger(DBOSContext.class);
 
   // assigned context options
   String nextWorkflowId;

@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 
 public class MgmtServiceImpl implements MgmtService {
 
-  Logger logger = LoggerFactory.getLogger(MgmtServiceImpl.class);
+  private static final Logger logger = LoggerFactory.getLogger(MgmtServiceImpl.class);
 
   private volatile int stepsExecuted;
   CountDownLatch mainThreadEvent;

@@ -81,7 +81,7 @@ public class DBOSInvocationHandler implements InvocationHandler {
     }
 
     var name = step.name().isEmpty() ? method.getName() : step.name();
-    logger.info("Before : Executing step {}", name);
+    logger.debug("Before : Executing step {}", name);
     try {
       Object result =
           executor.runStepInternal(
@@ -91,7 +91,7 @@ public class DBOSInvocationHandler implements InvocationHandler {
               step.intervalSeconds(),
               step.backOffRate(),
               () -> method.invoke(target, args));
-      logger.info("After: Step completed successfully");
+      logger.debug("After: Step completed successfully");
       return result;
     } catch (Exception e) {
       logger.error("Step failed", e);
