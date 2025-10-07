@@ -46,17 +46,9 @@ public class StepsTest {
 
   @Test
   public void workflowWithStepsSync() throws SQLException {
-    ServiceB serviceB =
-        dbos.<ServiceB>Workflow()
-            .interfaceClass(ServiceB.class)
-            .implementation(new ServiceBImpl())
-            .build();
+    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
 
-    ServiceA serviceA =
-        dbos.<ServiceA>Workflow()
-            .interfaceClass(ServiceA.class)
-            .implementation(new ServiceAImpl(serviceB))
-            .build();
+    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
 
     dbos.launch();
 
@@ -90,17 +82,9 @@ public class StepsTest {
 
   @Test
   public void workflowWithStepsSyncError() throws SQLException {
-    ServiceB serviceB =
-        dbos.<ServiceB>Workflow()
-            .interfaceClass(ServiceB.class)
-            .implementation(new ServiceBImpl())
-            .build();
+    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
 
-    ServiceA serviceA =
-        dbos.<ServiceA>Workflow()
-            .interfaceClass(ServiceA.class)
-            .implementation(new ServiceAImpl(serviceB))
-            .build();
+    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
 
     dbos.launch();
 
@@ -124,10 +108,7 @@ public class StepsTest {
   @Test
   public void workflowWithInlineSteps() throws SQLException {
     ServiceWFAndStep service =
-        dbos.<ServiceWFAndStep>Workflow()
-            .interfaceClass(ServiceWFAndStep.class)
-            .implementation(new ServiceWFAndStepImpl())
-            .build();
+        dbos.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
 
     dbos.launch();
 
@@ -150,17 +131,9 @@ public class StepsTest {
 
   @Test
   public void asyncworkflowWithSteps() throws Exception {
-    ServiceB serviceB =
-        dbos.<ServiceB>Workflow()
-            .interfaceClass(ServiceB.class)
-            .implementation(new ServiceBImpl())
-            .build();
+    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
 
-    ServiceA serviceA =
-        dbos.<ServiceA>Workflow()
-            .interfaceClass(ServiceA.class)
-            .implementation(new ServiceAImpl(serviceB))
-            .build();
+    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
 
     dbos.launch();
 
@@ -197,10 +170,7 @@ public class StepsTest {
   @Test
   public void sameInterfaceWorkflowWithSteps() throws Exception {
     ServiceWFAndStep service =
-        dbos.<ServiceWFAndStep>Workflow()
-            .interfaceClass(ServiceWFAndStep.class)
-            .implementation(new ServiceWFAndStepImpl())
-            .build();
+        dbos.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
 
     dbos.launch();
 
@@ -230,11 +200,7 @@ public class StepsTest {
   @Test
   public void stepOutsideWorkflow() throws Exception {
 
-    ServiceB serviceB =
-        dbos.<ServiceB>Workflow()
-            .interfaceClass(ServiceB.class)
-            .implementation(new ServiceBImpl())
-            .build();
+    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
 
     dbos.launch();
 
@@ -254,10 +220,7 @@ public class StepsTest {
   @Test
   public void stepRetryLogic() throws Exception {
     ServiceWFAndStep service =
-        dbos.<ServiceWFAndStep>Workflow()
-            .interfaceClass(ServiceWFAndStep.class)
-            .implementation(new ServiceWFAndStepImpl())
-            .build();
+        dbos.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
 
     dbos.launch();
 

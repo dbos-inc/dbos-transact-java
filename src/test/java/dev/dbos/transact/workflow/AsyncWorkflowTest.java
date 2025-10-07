@@ -51,10 +51,7 @@ public class AsyncWorkflowTest {
   public void sameWorkflowId() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -107,10 +104,7 @@ public class AsyncWorkflowTest {
   @Test
   public void workflowWithError() throws Exception {
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -140,10 +134,7 @@ public class AsyncWorkflowTest {
   public void childWorkflowWithoutSet() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -176,10 +167,7 @@ public class AsyncWorkflowTest {
   public void multipleChildren() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -226,10 +214,7 @@ public class AsyncWorkflowTest {
   public void nestedChildren() throws Exception {
 
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 
@@ -269,10 +254,7 @@ public class AsyncWorkflowTest {
   @Test
   public void startWorkflowClosure() {
     SimpleService simpleService =
-        dbos.<SimpleService>Workflow()
-            .interfaceClass(SimpleService.class)
-            .implementation(new SimpleServiceImpl())
-            .build();
+        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.launch();
 

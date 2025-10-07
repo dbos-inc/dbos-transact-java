@@ -56,27 +56,13 @@ public class MultiInstTest {
     bimpl1 = new BearServiceImpl();
     dbos.Queue("testQueue").build();
 
-    hproxy =
-        dbos.<HawkService>Workflow()
-            .interfaceClass(HawkService.class)
-            .implementation(himpl)
-            .build();
+    hproxy = dbos.registerWorkflows(HawkService.class, himpl);
     himpl.setProxy(hproxy);
 
-    bproxya =
-        dbos.<BearService>Workflow()
-            .interfaceClass(BearService.class)
-            .instanceName("A")
-            .implementation(bimpla)
-            .build();
+    bproxya = dbos.registerWorkflows(BearService.class, bimpla, "A");
     bimpla.setProxy(bproxya);
 
-    bproxy1 =
-        dbos.<BearService>Workflow()
-            .interfaceClass(BearService.class)
-            .instanceName("1")
-            .implementation(bimpl1)
-            .build();
+    bproxy1 = dbos.registerWorkflows(BearService.class, bimpl1, "1");
     bimpl1.setProxy(bproxy1);
 
     dbos.launch();

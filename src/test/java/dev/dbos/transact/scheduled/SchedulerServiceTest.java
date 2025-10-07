@@ -158,8 +158,7 @@ class SchedulerServiceTest {
   @Test
   public void stepsTest() throws Exception {
 
-    Steps steps =
-        dbos.<Steps>Workflow().interfaceClass(Steps.class).implementation(new StepsImpl()).build();
+    Steps steps = dbos.registerWorkflows(Steps.class, new StepsImpl());
 
     WorkflowWithSteps swf = new WorkflowWithSteps(steps);
     dbos.scheduleWorkflow(swf);

@@ -45,8 +45,6 @@ public class SystemDatabase implements AutoCloseable {
     notificationsDAO = new NotificationsDAO(dataSource, notificationService);
   }
 
-
-
   @Override
   public void close() {
     dataSource.close();

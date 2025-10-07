@@ -90,7 +90,7 @@ public class QueuesDAO {
       if (queue.workerConcurrency() > 0 || queue.concurrency() > 0) {
         // Count pending workflows by executor
         String pendingQuery =
-          """
+            """
             SELECT executor_id, COUNT(*) as task_count
             FROM %s.workflow_status
             WHERE queue_name = ? AND status = 'PENDING'
