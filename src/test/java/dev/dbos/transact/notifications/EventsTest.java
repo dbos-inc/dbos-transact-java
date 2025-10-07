@@ -58,11 +58,7 @@ public class EventsTest {
   public void basic_set_get() throws Exception {
 
     EventsService eventService =
-        dbos.<EventsService>Workflow()
-            .interfaceClass(EventsService.class)
-            .implementation(new EventsServiceImpl())
-            .build();
-
+        dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
     dbos.launch();
 
     try (var id = new WorkflowOptions("id1").setContext()) {
@@ -83,11 +79,7 @@ public class EventsTest {
   public void multipleEvents() throws Exception {
 
     EventsService eventService =
-        dbos.<EventsService>Workflow()
-            .interfaceClass(EventsService.class)
-            .implementation(new EventsServiceImpl())
-            .build();
-
+        dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
     dbos.launch();
 
     try (var id = new WorkflowOptions("id1").setContext()) {
@@ -108,11 +100,7 @@ public class EventsTest {
   public void async_set_get() throws Exception {
 
     EventsService eventService =
-        dbos.<EventsService>Workflow()
-            .interfaceClass(EventsService.class)
-            .implementation(new EventsServiceImpl())
-            .build();
-
+        dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
     dbos.launch();
 
     dbos.startWorkflow(
@@ -129,11 +117,7 @@ public class EventsTest {
   public void notification() throws Exception {
 
     EventsService eventService =
-        dbos.<EventsService>Workflow()
-            .interfaceClass(EventsService.class)
-            .implementation(new EventsServiceImpl())
-            .build();
-
+        dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
     dbos.launch();
 
     dbos.startWorkflow(
@@ -170,11 +154,7 @@ public class EventsTest {
   public void concurrency() throws Exception {
 
     EventsService eventService =
-        dbos.<EventsService>Workflow()
-            .interfaceClass(EventsService.class)
-            .implementation(new EventsServiceImpl())
-            .build();
-
+        dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
     dbos.launch();
 
     ExecutorService executor = Executors.newFixedThreadPool(2);

@@ -60,11 +60,7 @@ class DBOSExecutorTest {
   void executeWorkflowById() throws Exception {
 
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
-
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     dbos.launch();
 
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -97,10 +93,7 @@ class DBOSExecutorTest {
   void executeWorkflowByIdNonExistent() throws Exception {
 
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
 
     dbos.launch();
 
@@ -134,10 +127,7 @@ class DBOSExecutorTest {
   void workflowFunctionNotfound() throws Exception {
 
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     dbos.launch();
 
     String result = null;
@@ -173,10 +163,7 @@ class DBOSExecutorTest {
   public void executeWithStep() throws Exception {
 
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     dbos.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
@@ -219,10 +206,7 @@ class DBOSExecutorTest {
   public void ReExecuteWithStepTwoOnly() throws Exception {
 
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     dbos.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
@@ -270,10 +254,7 @@ class DBOSExecutorTest {
   public void sleep() throws SQLException {
 
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     dbos.launch();
 
     // Needed to call the step
@@ -299,10 +280,7 @@ class DBOSExecutorTest {
   public void sleepRecovery() throws Exception {
 
     ExecutingService executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
+        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     dbos.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 

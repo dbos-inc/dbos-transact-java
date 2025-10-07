@@ -67,10 +67,7 @@ public class WorkflowMgmtTest {
     CountDownLatch workLatch = new CountDownLatch(1);
 
     MgmtService mgmtService =
-        dbos.<MgmtService>Workflow()
-            .interfaceClass(MgmtService.class)
-            .implementation(new MgmtServiceImpl(mainLatch, workLatch))
-            .build();
+        dbos.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
     mgmtService.setMgmtService(mgmtService);
 
     dbos.launch();
@@ -114,10 +111,7 @@ public class WorkflowMgmtTest {
     CountDownLatch workLatch = new CountDownLatch(1);
 
     MgmtService mgmtService =
-        dbos.<MgmtService>Workflow()
-            .interfaceClass(MgmtService.class)
-            .implementation(new MgmtServiceImpl(mainLatch, workLatch))
-            .build();
+        dbos.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
     mgmtService.setMgmtService(mgmtService);
 
     Queue myqueue = dbos.Queue("myqueue").build();
@@ -163,10 +157,7 @@ public class WorkflowMgmtTest {
     CountDownLatch workLatch = new CountDownLatch(1);
 
     MgmtService mgmtService =
-        dbos.<MgmtService>Workflow()
-            .interfaceClass(MgmtService.class)
-            .implementation(new MgmtServiceImpl(mainLatch, workLatch))
-            .build();
+        dbos.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
     mgmtService.setMgmtService(mgmtService);
 
     dbos.launch();
@@ -244,8 +235,7 @@ public class WorkflowMgmtTest {
 
     ForkServiceImpl impl = new ForkServiceImpl();
 
-    ForkService forkService =
-        dbos.<ForkService>Workflow().interfaceClass(ForkService.class).implementation(impl).build();
+    ForkService forkService = dbos.registerWorkflows(ForkService.class, impl);
     forkService.setForkService(forkService);
 
     dbos.launch();
@@ -319,8 +309,7 @@ public class WorkflowMgmtTest {
 
     ForkServiceImpl impl = new ForkServiceImpl();
 
-    ForkService forkService =
-        dbos.<ForkService>Workflow().interfaceClass(ForkService.class).implementation(impl).build();
+    ForkService forkService = dbos.registerWorkflows(ForkService.class, impl);
     forkService.setForkService(forkService);
 
     dbos.launch();
@@ -418,8 +407,7 @@ public class WorkflowMgmtTest {
 
     ForkServiceImpl impl = new ForkServiceImpl();
 
-    ForkService forkService =
-        dbos.<ForkService>Workflow().interfaceClass(ForkService.class).implementation(impl).build();
+    ForkService forkService = dbos.registerWorkflows(ForkService.class, impl);
     forkService.setForkService(forkService);
 
     dbos.launch();
@@ -473,8 +461,7 @@ public class WorkflowMgmtTest {
     int numWorkflows = 10;
 
     GCServiceImpl impl = new GCServiceImpl();
-    GCService gcService =
-        dbos.<GCService>Workflow().interfaceClass(GCService.class).implementation(impl).build();
+    GCService gcService = dbos.registerWorkflows(GCService.class, impl);
     gcService.setGCService(gcService);
 
     dbos.launch();
@@ -535,8 +522,7 @@ public class WorkflowMgmtTest {
     int numWorkflows = 10;
 
     GCServiceImpl impl = new GCServiceImpl();
-    GCService gcService =
-        dbos.<GCService>Workflow().interfaceClass(GCService.class).implementation(impl).build();
+    GCService gcService = dbos.registerWorkflows(GCService.class, impl);
     gcService.setGCService(gcService);
 
     dbos.launch();

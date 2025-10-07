@@ -47,8 +47,7 @@ public class StartWorkflowTest {
     DBUtils.recreateDB(dbosConfig);
     dbos = DBOS.initialize(dbosConfig);
     var impl = new HawkServiceImpl();
-    proxy =
-        dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
+    proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
     dbos.launch();

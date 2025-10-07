@@ -47,11 +47,7 @@ public class ClientTest {
     DBUtils.recreateDB(dbosConfig);
     dbos = DBOS.initialize(dbosConfig);
     dbos.Queue("testQueue").build();
-    service =
-        dbos.<ClientService>Workflow()
-            .interfaceClass(ClientService.class)
-            .implementation(new ClientServiceImpl())
-            .build();
+    service = dbos.registerWorkflows(ClientService.class, new ClientServiceImpl());
     dbos.launch();
 
     dataSource = SystemDatabase.createDataSource(dbosConfig);

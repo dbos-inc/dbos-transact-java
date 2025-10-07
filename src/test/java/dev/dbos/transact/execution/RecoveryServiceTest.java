@@ -61,10 +61,8 @@ class RecoveryServiceTest {
 
     dbos = DBOS.initialize(dbosConfig);
     executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(executingServiceImpl = new ExecutingServiceImpl())
-            .build();
+        dbos.registerWorkflows(
+            ExecutingService.class, executingServiceImpl = new ExecutingServiceImpl());
     executingService.setExecutingService(executingService);
 
     testQueue = dbos.Queue("q1").build();
@@ -177,11 +175,7 @@ class RecoveryServiceTest {
     // need to register again
     // towatch: we are registering after launch. could lead to a race condition
     // toimprove : allow registration before launch
-    executingService =
-        dbos.<ExecutingService>Workflow()
-            .interfaceClass(ExecutingService.class)
-            .implementation(new ExecutingServiceImpl())
-            .build();
+    executingService = dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
 
     dbos.launch();
 
