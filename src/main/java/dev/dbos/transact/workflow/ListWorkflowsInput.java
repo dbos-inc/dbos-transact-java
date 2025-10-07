@@ -24,7 +24,9 @@ public record ListWorkflowsInput(
     Boolean loadOutput) {
 
   public ListWorkflowsInput() {
-    this(null, null, null, null,null, null, null, null, null, null, null, null, null, null, null, null, null);
+    this(
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null);
   }
 
   public static class Builder {
@@ -52,7 +54,9 @@ public record ListWorkflowsInput(
     }
 
     public Builder workflowIDs(List<String> workflowIds) {
-      this.workflowIds.addAll(workflowIds);
+      if (workflowIds != null) {
+        this.workflowIds.addAll(workflowIds);
+      }
       return this;
     }
 
@@ -110,6 +114,7 @@ public record ListWorkflowsInput(
       this.queuedOnly = queuedOnly;
       return this;
     }
+
     public Builder limit(Integer limit) {
       this.limit = limit;
       return this;
