@@ -18,7 +18,6 @@ import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.JSONUtil;
-import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
 import dev.dbos.transact.scheduled.SchedulerService;
@@ -652,15 +651,6 @@ public class DBOSExecutor implements AutoCloseable {
           return systemDatabase.listWorkflowSteps(workflowId);
         },
         "DBOS.listWorkflowSteps");
-  }
-
-  public List<WorkflowStatus> listQueuedWorkflows(
-      ListQueuedWorkflowsInput query, boolean loadInput) {
-    return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.listQueuedWorkflows(query, loadInput);
-        },
-        "DBOS.listQueuedWorkflows");
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(

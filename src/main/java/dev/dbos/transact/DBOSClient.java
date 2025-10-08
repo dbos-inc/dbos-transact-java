@@ -3,7 +3,6 @@ package dev.dbos.transact;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSExecutor.ExecuteWorkflowOptions;
-import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -254,11 +253,6 @@ public class DBOSClient implements AutoCloseable {
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return systemDatabase.listWorkflows(input);
-  }
-
-  public List<WorkflowStatus> listQueuedWorkflows(
-      ListQueuedWorkflowsInput input, boolean loadInput) {
-    return systemDatabase.listQueuedWorkflows(input, loadInput);
   }
 
   public List<StepInfo> listWorkflowSteps(String workflowId) {

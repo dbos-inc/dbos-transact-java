@@ -455,10 +455,10 @@ public class WorkflowDAO {
       whereConditions.add("application_version = ?");
       parameters.add(input.applicationVersion());
     }
-    if (input.workflowIDs() != null && !input.workflowIDs().isEmpty()) {
+    if (input.workflowIds() != null && !input.workflowIds().isEmpty()) {
       // Handle IN clause: dynamically generate ? for each ID
       StringJoiner inClausePlaceholders = new StringJoiner(", ", "(", ")");
-      for (String id : input.workflowIDs()) {
+      for (String id : input.workflowIds()) {
         inClausePlaceholders.add("?");
         parameters.add(id);
       }
@@ -468,6 +468,13 @@ public class WorkflowDAO {
       whereConditions.add("workflow_uuid LIKE ?");
       // Append wildcard directly to the parameter value
       parameters.add(input.workflowIdPrefix() + "%");
+    }
+    if (input.queueName() != null) {
+      whereConditions.add("queue_name = ?");
+      parameters.add(input.queueName());
+    }
+    if (input.queuesOnly() != null && input.queuesOnly()) {
+      whereConditions.add("queue_name IS NOT NULL");
     }
 
     // Only append WHERE keyword if there are actual conditions

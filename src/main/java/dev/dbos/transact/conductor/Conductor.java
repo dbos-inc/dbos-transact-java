@@ -4,7 +4,6 @@ import dev.dbos.transact.conductor.protocol.*;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JSONUtil;
-import dev.dbos.transact.queue.ListQueuedWorkflowsInput;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -471,9 +470,8 @@ public class Conductor implements AutoCloseable {
   static BaseResponse handleListQueuedWorkflows(Conductor conductor, BaseMessage message) {
     ListQueuedWorkflowsRequest request = (ListQueuedWorkflowsRequest) message;
     try {
-      ListQueuedWorkflowsInput input = request.asInput();
-      boolean loadInput = request.body.load_input != null ? request.body.load_input : false;
-      List<WorkflowStatus> statuses = conductor.dbosExecutor.listQueuedWorkflows(input, loadInput);
+      ListWorkflowsInput input = request.asInput();
+      List<WorkflowStatus> statuses = conductor.dbosExecutor.listWorkflows(input);
       List<WorkflowsOutput> output =
           statuses.stream().map(s -> new WorkflowsOutput(s)).collect(Collectors.toList());
       return new WorkflowOutputsResponse(request, output);
