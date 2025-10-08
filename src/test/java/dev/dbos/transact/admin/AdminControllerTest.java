@@ -1,53 +1,24 @@
 package dev.dbos.transact.admin;
-// package dev.dbos.transact.http.controllers;
 
-import static org.mockito.ArgumentMatchers.anyInt;
+import static io.restassured.RestAssured.*;
+import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.io.IOException;
-import java.net.ServerSocket;
-
-import static io.restassured.RestAssured.*;
-import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.*;
-
-import java.util.ArrayList;
-import java.util.List;
-
-// import dev.dbos.transact.DBOS;
-// import dev.dbos.transact.config.DBOSConfig;
-// import dev.dbos.transact.context.WorkflowOptions;
-// import dev.dbos.transact.execution.ExecutingService;
-// import dev.dbos.transact.execution.ExecutingServiceImpl;
-// import dev.dbos.transact.utils.DBUtils;
-// import dev.dbos.transact.workflow.ForkService;
-// import dev.dbos.transact.workflow.ForkServiceImpl;
-// import dev.dbos.transact.workflow.SimpleService;
-// import dev.dbos.transact.workflow.SimpleServiceImpl;
-// import dev.dbos.transact.workflow.WorkflowState;
-
-// import java.net.URI;
-// import java.net.http.HttpClient;
-// import java.net.http.HttpRequest;
-// import java.net.http.HttpResponse;
-// import java.sql.Connection;
-// import java.sql.PreparedStatement;
-// import java.sql.SQLException;
-// import java.time.Instant;
-import java.util.concurrent.TimeUnit;
-
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-import org.junitpioneer.jupiter.RetryingTest;
-
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.WorkflowHandle;
+
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 class AdminControllerTest {
@@ -78,22 +49,7 @@ class AdminControllerTest {
           .get("/dbos-healthz")
           .then()
           .statusCode(200)
-          .body(equalTo("healthy"));
-    }
-  }
-
-  @Test
-  public void perf() throws IOException {
-    try (var server = new AdminServer(port, mockExec, mockDB)) {
-      server.start();
-
-      given()
-          .port(port)
-          .when()
-          .get("/dbos-perf")
-          .then()
-          .statusCode(500)
-          .body(equalTo("not implemented"));
+          .body("status", equalTo("healthy"));
     }
   }
 
@@ -161,12 +117,7 @@ class AdminControllerTest {
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
 
-      given()
-          .port(port)
-          .when()
-          .get("/dbos-workflow-recovery")
-          .then()
-          .statusCode(405);
+      given().port(port).when().get("/dbos-workflow-recovery").then().statusCode(405);
     }
   }
 
@@ -195,8 +146,6 @@ class AdminControllerTest {
           .statusCode(415);
     }
   }
-
-
 
   // @Test
   // public void recovery() throws Exception {
