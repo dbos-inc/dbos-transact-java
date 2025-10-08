@@ -103,9 +103,9 @@ public class EventsTest {
         dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
     dbos.launch();
 
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3)),
         new StartWorkflowOptions("id2"));
 
@@ -120,10 +120,10 @@ public class EventsTest {
         dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
     dbos.launch();
 
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> eventService.getWithlatch("id1", "key1", Duration.ofSeconds(5)),
         new StartWorkflowOptions("id2"));
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> eventService.setWithLatch("key1", "value1"), new StartWorkflowOptions("id1"));
 
     String event = (String) dbos.retrieveWorkflow("id2").getResult();

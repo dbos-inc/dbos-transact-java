@@ -73,7 +73,7 @@ public class TimeoutTest {
     String result;
 
     var options = new StartWorkflowOptions(wfid1).withTimeout(3, TimeUnit.SECONDS);
-    var handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
+    var handle = DBOS.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
     result = handle.getResult();
     assertEquals("1234512345", result);
     assertEquals(wfid1, handle.getWorkflowId());
@@ -93,7 +93,7 @@ public class TimeoutTest {
     // make it timeout
     String wfid1 = "wf-125";
     var options = new StartWorkflowOptions(wfid1).withTimeout(1, TimeUnit.SECONDS);
-    var handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
+    var handle = DBOS.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
 
     try {
       handle.getResult();
@@ -126,7 +126,7 @@ public class TimeoutTest {
     var options =
         new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(3, TimeUnit.SECONDS);
     WorkflowHandle<String, ?> handle =
-        dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
+        DBOS.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
 
     result = (String) handle.getResult();
     assertEquals("1234512345", result);
@@ -150,7 +150,7 @@ public class TimeoutTest {
 
     var options =
         new StartWorkflowOptions(wfid1).withQueue(simpleQ).withTimeout(1, TimeUnit.SECONDS);
-    var handle = dbos.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
+    var handle = DBOS.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
 
     try {
       handle.getResult();
@@ -352,7 +352,7 @@ public class TimeoutTest {
     var options = new StartWorkflowOptions(wfid1).withTimeout(2, TimeUnit.SECONDS);
 
     WorkflowHandle<String, ?> handle =
-        dbos.startWorkflow(() -> simpleService.longParent("12345", 3, 0), options);
+        DBOS.startWorkflow(() -> simpleService.longParent("12345", 3, 0), options);
 
     try {
       handle.getResult();

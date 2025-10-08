@@ -76,7 +76,7 @@ public class QueuesTest {
     dbos.launch();
 
     String id = "q1234";
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> serviceQ.simpleQWorkflow("inputq"), new StartWorkflowOptions(id).withQueue(firstQ));
 
     var handle = dbos.retrieveWorkflow(id);
@@ -97,11 +97,11 @@ public class QueuesTest {
     qs.pause();
 
     var options = new StartWorkflowOptions().withQueue(firstQ, "dedupe");
-    dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
+    DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
 
     assertThrows(
         RuntimeException.class,
-        () -> dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("id"), options));
+        () -> DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("id"), options));
   }
 
   @Test
@@ -119,13 +119,13 @@ public class QueuesTest {
     qs.pause();
 
     var o1 = new StartWorkflowOptions().withQueue(firstQ, 100);
-    var h1 = dbos.startWorkflow(() -> serviceQ.priorityWorkflow(100), o1);
+    var h1 = DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(100), o1);
 
     var o2 = new StartWorkflowOptions().withQueue(firstQ, 50);
-    dbos.startWorkflow(() -> serviceQ.priorityWorkflow(50), o2);
+    DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(50), o2);
 
     var o3 = new StartWorkflowOptions().withQueue(firstQ, 10);
-    dbos.startWorkflow(() -> serviceQ.priorityWorkflow(10), o3);
+    DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(10), o3);
 
     qs.unpause();
 
@@ -152,7 +152,7 @@ public class QueuesTest {
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
       var input = "inputq" + i;
-      dbos.startWorkflow(
+      DBOS.startWorkflow(
           () -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
     }
 
@@ -193,7 +193,7 @@ public class QueuesTest {
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
       var input = "inputq" + i;
-      dbos.startWorkflow(
+      DBOS.startWorkflow(
           () -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
       Thread.sleep(100);
     }
@@ -263,10 +263,10 @@ public class QueuesTest {
 
     var options1 = new StartWorkflowOptions(id1).withQueue(firstQ);
     WorkflowHandle<String, ?> handle1 =
-        dbos.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"), options1);
+        DBOS.startWorkflow(() -> serviceQ1.simpleQWorkflow("firstinput"), options1);
 
     var options2 = new StartWorkflowOptions(id2).withQueue(secondQ);
-    WorkflowHandle<Integer, ?> handle2 = dbos.startWorkflow(() -> serviceI.workflowI(25), options2);
+    WorkflowHandle<Integer, ?> handle2 = DBOS.startWorkflow(() -> serviceI.workflowI(25), options2);
 
     assertEquals(id1, handle1.getWorkflowId());
     String result = handle1.getResult();
@@ -303,7 +303,7 @@ public class QueuesTest {
       String id = "id" + i;
       var options = new StartWorkflowOptions(id).withQueue(limitQ);
       WorkflowHandle<Double, ?> handle =
-          dbos.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"), options);
+          DBOS.startWorkflow(() -> serviceQ.limitWorkflow("abc", "123"), options);
       handles.add(handle);
     }
 
@@ -535,7 +535,7 @@ public class QueuesTest {
 
     var option = new StartWorkflowOptions(id).withQueue(firstQ);
     WorkflowHandle<String, ?> handle =
-        dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), option);
+        DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), option);
 
     assertEquals(id, handle.getWorkflowId());
     String result = handle.getResult();
@@ -552,13 +552,13 @@ public class QueuesTest {
     dbos.launch();
 
     var opt1 = new StartWorkflowOptions("wf1").withQueue(queue);
-    var handle1 = dbos.startWorkflow(() -> service.blockedWorkflow(0), opt1);
+    var handle1 = DBOS.startWorkflow(() -> service.blockedWorkflow(0), opt1);
 
     var opt2 = new StartWorkflowOptions("wf2").withQueue(queue);
-    var handle2 = dbos.startWorkflow(() -> service.blockedWorkflow(1), opt2);
+    var handle2 = DBOS.startWorkflow(() -> service.blockedWorkflow(1), opt2);
 
     var opt3 = new StartWorkflowOptions("wf3").withQueue(queue);
-    var handle3 = dbos.startWorkflow(() -> service.noopWorkflow(2), opt3);
+    var handle3 = DBOS.startWorkflow(() -> service.noopWorkflow(2), opt3);
 
     for (Semaphore e : impl.wfSemaphores) {
       e.acquire();

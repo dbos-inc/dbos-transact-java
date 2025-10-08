@@ -350,40 +350,10 @@ public class DBOS {
       return executor.forkWorkflow(workflowId, startStep, options);
     }
 
-    public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
-        ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot startWorkflow before launch");
-      }
-
-      return executor.startWorkflow(supplier, options);
-    }
-
-    public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
-        ThrowingSupplier<T, E> supplier) {
-      return startWorkflow(supplier, new StartWorkflowOptions());
-    }
-
-    public <E extends Exception> WorkflowHandle<Void, E> startWorkflow(
-        ThrowingRunnable<E> runnable, StartWorkflowOptions options) {
-      return startWorkflow(
-          () -> {
-            runnable.execute();
-            return null;
-          },
-          options);
-    }
-
-    public <E extends Exception> WorkflowHandle<Void, E> startWorkflow(
-        ThrowingRunnable<E> runnable) {
-      return startWorkflow(runnable, new StartWorkflowOptions());
-    }
-
     public <T, E extends Exception> WorkflowHandle<T, E> retrieveWorkflow(String workflowId) {
       var executor = dbosExecutor.get();
       if (executor == null) {
-        throw new IllegalStateException("cannot startWorkflow before launch");
+        throw new IllegalStateException("cannot retrieveWorkflow before launch");
       }
 
       return executor.retrieveWorkflow(workflowId);
@@ -519,6 +489,18 @@ public class DBOS {
     return globalInstance;
   }
 
+  static DBOSExecutor executor(String caller) {
+    var inst = instance();
+    if (inst == null)
+      throw new IllegalStateException(
+          String.format("Cannot call %s before DBOS is created", caller));
+    var executor = inst.getDbosExecutor();
+    if (executor == null)
+      throw new IllegalStateException(
+          String.format("Cannot call %s before DBOS is launched", caller));
+    return executor;
+  }
+
   public static String workflowId() {
     return DBOSContext.workflowId();
   }
@@ -549,5 +531,30 @@ public class DBOS {
     } else {
       instance().sleep(duration);
     }
+  }
+
+  public static <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
+      ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
+    return executor("startWorkflow").startWorkflow(supplier, options);
+  }
+
+  public static <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
+      ThrowingSupplier<T, E> supplier) {
+    return startWorkflow(supplier, new StartWorkflowOptions());
+  }
+
+  public static <E extends Exception> WorkflowHandle<Void, E> startWorkflow(
+      ThrowingRunnable<E> runnable, StartWorkflowOptions options) {
+    return startWorkflow(
+        () -> {
+          runnable.execute();
+          return null;
+        },
+        options);
+  }
+
+  public static <E extends Exception> WorkflowHandle<Void, E> startWorkflow(
+      ThrowingRunnable<E> runnable) {
+    return startWorkflow(runnable, new StartWorkflowOptions());
   }
 }

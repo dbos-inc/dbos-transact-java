@@ -95,13 +95,13 @@ class RecoveryServiceTest {
     wfid = "wf-126";
     WorkflowHandle<String, ?> handle6 = null;
     try (var id = new WorkflowOptions(wfid).setContext()) {
-      handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+      handle6 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
     wfid = "wf-127";
     var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
-    var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
+    var handle7 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
     assertEquals("q1", handle7.getStatus().queueName());
     handle7.getResult();
 
@@ -126,12 +126,12 @@ class RecoveryServiceTest {
     executingService.workflowMethod("test-item");
     WorkflowHandle<String, ?> handle6 = null;
     try (var id = new WorkflowOptions("wf-126").setContext()) {
-      handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+      handle6 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
     var options = new StartWorkflowOptions("wf-127").withQueue(testQueue);
-    var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
+    var handle7 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
     assertEquals("q1", handle7.getStatus().queueName());
     assertEquals("wf-126", handle6.getWorkflowId());
     assertEquals("wf-127", handle7.getWorkflowId());

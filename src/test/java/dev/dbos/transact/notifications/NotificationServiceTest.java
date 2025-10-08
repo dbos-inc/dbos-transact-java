@@ -61,12 +61,12 @@ class NotificationServiceTest {
     dbos.launch();
 
     String wfid1 = "recvwf1";
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.recvWorkflow("topic1", Duration.ofSeconds(10)),
         new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "HelloDBOS"),
         new StartWorkflowOptions(wfid2));
 
@@ -96,19 +96,19 @@ class NotificationServiceTest {
     dbos.launch();
 
     String wfid1 = "recvwf1";
-    dbos.startWorkflow(() -> notService.recvMultiple("topic1"), new StartWorkflowOptions(wfid1));
+    DBOS.startWorkflow(() -> notService.recvMultiple("topic1"), new StartWorkflowOptions(wfid1));
 
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "Hello1"),
         new StartWorkflowOptions("send1"));
     dbos.retrieveWorkflow("send1").getResult();
 
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "Hello2"),
         new StartWorkflowOptions("send2"));
     dbos.retrieveWorkflow("send2").getResult();
 
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "Hello3"),
         new StartWorkflowOptions("send3"));
     dbos.retrieveWorkflow("send3").getResult();
@@ -128,12 +128,12 @@ class NotificationServiceTest {
     dbos.launch();
 
     String wfid1 = "recvwf1";
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.recvWorkflow(null, Duration.ofSeconds(5)),
         new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, null, "HelloDBOS"), new StartWorkflowOptions(wfid2));
 
     var handle1 = dbos.retrieveWorkflow(wfid1);
@@ -182,12 +182,12 @@ class NotificationServiceTest {
     dbos.launch();
 
     String wfid1 = "recvwf1";
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)),
         new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", null), new StartWorkflowOptions(wfid2));
 
     var handle1 = dbos.retrieveWorkflow(wfid1);
@@ -263,7 +263,7 @@ class NotificationServiceTest {
     dbos.launch();
 
     String wfid1 = "recvwf1";
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)),
         new StartWorkflowOptions(wfid1));
 
@@ -272,7 +272,7 @@ class NotificationServiceTest {
     // forcing the recv to wait on condition
     Thread.sleep(2000);
 
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "HelloDBOS"),
         new StartWorkflowOptions(wfid2));
 
@@ -306,7 +306,7 @@ class NotificationServiceTest {
 
     var options = new StartWorkflowOptions(wfid1);
     WorkflowHandle<String, ?> handle =
-        dbos.startWorkflow(() -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)), options);
+        DBOS.startWorkflow(() -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)), options);
 
     Thread.sleep(1000);
 

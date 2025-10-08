@@ -66,7 +66,7 @@ public class QueueChildWorkflowTest {
     dbos.launch();
 
     var handle =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> simpleService.workflowWithMultipleChildren("123"),
             new StartWorkflowOptions().withQueue(childQ));
 
@@ -114,7 +114,7 @@ public class QueueChildWorkflowTest {
 
     dbos.launch();
 
-    dbos.startWorkflow(
+    DBOS.startWorkflow(
         () -> simpleService.grandParent("123"),
         new StartWorkflowOptions("wf-123456").withQueue(childQ));
 

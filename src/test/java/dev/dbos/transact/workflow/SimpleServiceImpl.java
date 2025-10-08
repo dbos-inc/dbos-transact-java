@@ -117,7 +117,7 @@ public class SimpleServiceImpl implements SimpleService {
 
       String wid = "child" + i;
       var options = new StartWorkflowOptions(wid).withQueue(childQ);
-      dbos.startWorkflow(() -> simpleService.childWorkflow(wid), options);
+      DBOS.startWorkflow(() -> simpleService.childWorkflow(wid), options);
     }
 
     return "QueuedChildren";
@@ -158,13 +158,12 @@ public class SimpleServiceImpl implements SimpleService {
       throws InterruptedException {
 
     logger.info("In longParent");
-    var dbos = DBOSContext.dbosInstance();
     String workflowId = "childwf";
     var options =
         new StartWorkflowOptions(workflowId).withTimeout(timeoutSeconds, TimeUnit.SECONDS);
 
     var handle =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> simpleService.childWorkflowWithSleep(input, sleepSeconds), options);
 
     String result = handle.getResult();

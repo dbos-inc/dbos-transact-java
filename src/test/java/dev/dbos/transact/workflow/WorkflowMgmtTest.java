@@ -76,7 +76,7 @@ public class WorkflowMgmtTest {
     var options = new StartWorkflowOptions(workflowId);
     int result;
     WorkflowHandle<Integer, ?> h =
-        dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23), options);
+        DBOS.startWorkflow(() -> mgmtService.simpleWorkflow(23), options);
 
     mainLatch.await();
     dbos.cancelWorkflow(workflowId);
@@ -121,7 +121,7 @@ public class WorkflowMgmtTest {
     String workflowId = "wfid1";
     var options = new StartWorkflowOptions(workflowId).withQueue(myqueue);
     int result;
-    dbos.startWorkflow(() -> mgmtService.simpleWorkflow(23), options);
+    DBOS.startWorkflow(() -> mgmtService.simpleWorkflow(23), options);
 
     mainLatch.await();
     dbos.cancelWorkflow(workflowId);
@@ -468,7 +468,7 @@ public class WorkflowMgmtTest {
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // Start one blocked workflow and 10 normal workflows
-    WorkflowHandle<String, ?> handle = dbos.startWorkflow(() -> gcService.gcBlockedWorkflow());
+    WorkflowHandle<String, ?> handle = DBOS.startWorkflow(() -> gcService.gcBlockedWorkflow());
     for (int i = 0; i < numWorkflows; i++) {
       int result = gcService.testWorkflow(i);
       assertEquals(i, result);
@@ -530,7 +530,7 @@ public class WorkflowMgmtTest {
 
     List<WorkflowHandle<String, ?>> handles = new ArrayList<>();
     for (int i = 0; i < numWorkflows; i++) {
-      handles.add(dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow()));
+      handles.add(DBOS.startWorkflow(() -> gcService.timeoutBlockedWorkflow()));
     }
 
     Thread.sleep(1000L);
@@ -538,7 +538,7 @@ public class WorkflowMgmtTest {
     // Wait one second, start one final workflow, then timeout all workflows started
     // more than one second ago
     WorkflowHandle<String, ?> finalHandle =
-        dbos.startWorkflow(() -> gcService.timeoutBlockedWorkflow());
+        DBOS.startWorkflow(() -> gcService.timeoutBlockedWorkflow());
 
     dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);
     for (var handle : handles) {

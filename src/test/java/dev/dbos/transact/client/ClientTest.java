@@ -110,7 +110,7 @@ public class ClientTest {
   @Test
   public void clientSend() throws Exception {
 
-    var handle = dbos.startWorkflow(() -> service.sendTest(42));
+    var handle = DBOS.startWorkflow(() -> service.sendTest(42));
 
     var idempotencyKey = UUID.randomUUID().toString();
 

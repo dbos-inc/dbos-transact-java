@@ -64,7 +64,7 @@ public class StartWorkflowTest {
   @Test
   void startWorkflow() throws Exception {
     var handle =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> {
               return proxy.simpleWorkflow();
             });
@@ -83,7 +83,7 @@ public class StartWorkflowTest {
 
     String workflowId = "startWorkflowWithWorkflowId";
     var options = new StartWorkflowOptions(workflowId);
-    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+    var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
     assertEquals(workflowId, handle.getWorkflowId());
     var result = handle.getResult();
     assertEquals(localDate, result);
@@ -101,7 +101,7 @@ public class StartWorkflowTest {
 
     String workflowId = "startWorkflowWithTimeout";
     var options = new StartWorkflowOptions(workflowId).withTimeout(1, TimeUnit.SECONDS);
-    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+    var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
     assertEquals(workflowId, handle.getWorkflowId());
     var result = handle.getResult();
     assertEquals(localDate, result);

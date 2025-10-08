@@ -110,7 +110,7 @@ public class AsyncWorkflowTest {
 
     String wfid = "abc";
     WorkflowHandle<Void, ?> handle =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> {
               simpleService.workWithError();
               return null;
@@ -141,7 +141,7 @@ public class AsyncWorkflowTest {
     simpleService.setSimpleService(simpleService);
 
     WorkflowHandle<String, ?> handle =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> simpleService.parentWorkflowWithoutSet("123"),
             new StartWorkflowOptions("wf-123456"));
 
@@ -174,7 +174,7 @@ public class AsyncWorkflowTest {
     simpleService.setSimpleService(simpleService);
 
     WorkflowHandle<String, ?> handle =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> simpleService.workflowWithMultipleChildren("123"),
             new StartWorkflowOptions("wf-123456"));
 
@@ -221,7 +221,7 @@ public class AsyncWorkflowTest {
     simpleService.setSimpleService(simpleService);
 
     WorkflowHandle<String, ?> handle =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> simpleService.grandParent("123"), new StartWorkflowOptions("wf-123456"));
 
     assertEquals("p-c-gc-123", handle.getResult());
@@ -259,7 +259,7 @@ public class AsyncWorkflowTest {
     dbos.launch();
 
     WorkflowHandle<String, RuntimeException> handle =
-        dbos.startWorkflow(() -> simpleService.workWithString("test-item"));
+        DBOS.startWorkflow(() -> simpleService.workWithString("test-item"));
 
     String result = handle.getResult();
     assertEquals("Processed: test-item", result);

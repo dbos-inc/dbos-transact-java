@@ -74,7 +74,7 @@ public class UnifiedProxyTest {
     options = new WorkflowOptions(wfid2);
     WorkflowHandle<String, ?> handle = null;
     try (var id = options.setContext()) {
-      handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
+      handle = DBOS.startWorkflow(() -> simpleService.workWithString("test-item-async"));
     }
 
     result = handle.getResult();
@@ -86,7 +86,7 @@ public class UnifiedProxyTest {
     String wfid3 = "wf-125";
     var startOptions = new StartWorkflowOptions(wfid3).withQueue(q);
 
-    dbos.startWorkflow(() -> simpleService.workWithString("test-item-q"), startOptions);
+    DBOS.startWorkflow(() -> simpleService.workWithString("test-item-q"), startOptions);
 
     handle = dbos.retrieveWorkflow(wfid3);
     result = (String) handle.getResult();

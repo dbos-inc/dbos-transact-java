@@ -76,7 +76,7 @@ public class MultiInstTest {
   @Test
   void startWorkflow() throws Exception {
     var bhandlea =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> {
               return bproxya.stepWorkflow();
             });
@@ -90,7 +90,7 @@ public class MultiInstTest {
     assertEquals(1, bimpla.nWfCalls);
 
     var bhandle1 =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> {
               return bproxy1.stepWorkflow();
             });
@@ -104,7 +104,7 @@ public class MultiInstTest {
     assertEquals(1, bimpl1.nWfCalls);
 
     var hhandle =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> {
               return hproxy.stepWorkflow();
             });

@@ -142,7 +142,7 @@ They don't require a separate queueing service or message broker&mdash;just Post
 
 
  public void queuedTasks() {
-     Queue q = dbos.Queue("childQ").build();
+     Queue q = DBOS.Queue("childQ").build();
 
      for (int i = 0; i < 3; i++) {
 
@@ -150,7 +150,7 @@ They don't require a separate queueing service or message broker&mdash;just Post
          DBOSOptions options = new DBOSOptions.Builder(wid).queue(q).build();
          List<WorkflowHandle<String>> handles = new ArrayList<>();
          try (SetDBOSOptions o = new SetDBOSOptions(options)) {
-             handles.add(dbos.startWorkflow(()->simpleService.childWorkflow(wid)));
+             handles.add(DBOS.startWorkflow(()->simpleService.childWorkflow(wid)));
          }
      }
 
@@ -176,31 +176,12 @@ You code can return at a later point and check the status for completion and/or 
 
 
 ```java
-
-
- public void runAsyncWorkflow() {
-
-     WorkflowService asyncExample = dbos.<WorkflowService>Workflow()
-             .interfaceClass(WorkflowService.class)
-             .implementation(new WorkflowServiceImpl())
-             .build();
-
-     StepService steps = dbos.<StepService>Workflow()
-             .interfaceClass(StepService.class)
-             .implementation(new StepServiceImpl())
-             .build();
-
-     syncExample.setStepService(steps);
-
-     String workflowId = "wf-124";
-     options = new DBOSOptions.Builder(workflowId).async().build();
      WorkflowHandle<String> handle = null;
      try (SetDBOSOptions id = new SetDBOSOptions(options)) {
-         handle = dbos.startWorkflow(()->syncExample.exampleWorkflow("HelloDBOS"));
+         handle = DBOS.startWorkflow(()->syncExample.exampleWorkflow("HelloDBOS"));
      }
      
      result = handle.getResult();
- }
 ```
 
 [Read more ↗️](https://docs.dbos.dev/python/tutorials/queue-tutorial)
