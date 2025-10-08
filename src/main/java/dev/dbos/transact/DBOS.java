@@ -11,7 +11,6 @@ import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.RateLimit;
 import dev.dbos.transact.scheduled.SchedulerService;
 import dev.dbos.transact.scheduled.SchedulerService.ScheduledInstance;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
@@ -171,7 +170,7 @@ public class DBOS {
 
     private int concurrency;
     private int workerConcurrency;
-    private RateLimit limit;
+    private Queue.RateLimit limit;
     private boolean priorityEnabled = false;
 
     /**
@@ -195,7 +194,7 @@ public class DBOS {
     }
 
     public QueueBuilder limit(int limit, double period) {
-      this.limit = new RateLimit(limit, period);
+      this.limit = new Queue.RateLimit(limit, period);
       return this;
     }
 
@@ -205,7 +204,7 @@ public class DBOS {
     }
 
     public Queue build() {
-      Queue queue = Queue.createQueue(name, concurrency, workerConcurrency, limit, priorityEnabled);
+      Queue queue = new Queue(name, concurrency, workerConcurrency, priorityEnabled, limit);
       dbos.registerQueue(queue);
       return queue;
     }
