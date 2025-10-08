@@ -88,7 +88,7 @@ public class UnifiedProxyTest {
 
     DBOS.startWorkflow(() -> simpleService.workWithString("test-item-q"), startOptions);
 
-    handle = dbos.retrieveWorkflow(wfid3);
+    handle = DBOS.retrieveWorkflow(wfid3);
     result = (String) handle.getResult();
     assertEquals("Processed: test-item-q", result);
     assertEquals(wfid3, handle.getWorkflowId());
@@ -96,7 +96,7 @@ public class UnifiedProxyTest {
 
     var builder = new ListWorkflowsInput.Builder().workflowIDs(Arrays.asList(wfid3));
     ListWorkflowsInput input = builder.build();
-    List<WorkflowStatus> wfs = dbos.listWorkflows(input);
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
     assertEquals("simpleQ", wfs.get(0).queueName());
   }
 
@@ -121,11 +121,11 @@ public class UnifiedProxyTest {
 
     for (int i = 0; i < 3; i++) {
       String wid = "child" + i;
-      WorkflowHandle<?, ?> h = dbos.retrieveWorkflow(wid);
+      WorkflowHandle<?, ?> h = DBOS.retrieveWorkflow(wid);
       assertEquals(wid, h.getResult());
     }
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.size(), 4);
 
     assertEquals(wfid1, wfs.get(0).workflowId());

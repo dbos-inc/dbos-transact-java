@@ -117,7 +117,7 @@ public class MultiInstTest {
             .format(DateTimeFormatter.ISO_DATE));
 
     var browsa =
-        dbos.listWorkflows(
+        DBOS.listWorkflows(
             new ListWorkflowsInput.Builder().workflowID(bhandlea.getWorkflowId()).build());
     assertEquals(1, browsa.size());
     var browa = browsa.get(0);
@@ -128,7 +128,7 @@ public class MultiInstTest {
     assertEquals("SUCCESS", browa.status());
 
     var brows1 =
-        dbos.listWorkflows(
+        DBOS.listWorkflows(
             new ListWorkflowsInput.Builder().workflowID(bhandle1.getWorkflowId()).build());
     assertEquals(1, brows1.size());
     var brow1 = brows1.get(0);
@@ -139,7 +139,7 @@ public class MultiInstTest {
     assertEquals("SUCCESS", brow1.status());
 
     var hrows =
-        dbos.listWorkflows(
+        DBOS.listWorkflows(
             new ListWorkflowsInput.Builder().workflowID(hhandle.getWorkflowId()).build());
     assertEquals(1, hrows.size());
     var hrow = hrows.get(0);
@@ -151,12 +151,12 @@ public class MultiInstTest {
 
     // All 3 w/ the same WF name
     var allrows =
-        dbos.listWorkflows(new ListWorkflowsInput.Builder().workflowName("stepWorkflow").build());
+        DBOS.listWorkflows(new ListWorkflowsInput.Builder().workflowName("stepWorkflow").build());
     assertEquals(3, allrows.size());
 
     // 2 from BSI
     var brows =
-        dbos.listWorkflows(
+        DBOS.listWorkflows(
             new ListWorkflowsInput.Builder()
                 .workflowName("stepWorkflow")
                 .className("dev.dbos.transact.invocation.BearServiceImpl")
@@ -165,7 +165,7 @@ public class MultiInstTest {
 
     // 2 from BSI
     var browsjust1 =
-        dbos.listWorkflows(
+        DBOS.listWorkflows(
             new ListWorkflowsInput.Builder()
                 .workflowName("stepWorkflow")
                 .className("dev.dbos.transact.invocation.BearServiceImpl")

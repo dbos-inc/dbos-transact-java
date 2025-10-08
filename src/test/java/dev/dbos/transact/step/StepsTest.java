@@ -59,7 +59,7 @@ public class StepsTest {
       assertEquals("hellohello", result);
     }
 
-    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
+    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
 
     assertEquals("step1", stepInfos.get(0).functionName());
@@ -94,7 +94,7 @@ public class StepsTest {
       assertEquals("hellohello", result);
     }
 
-    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
+    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
     assertEquals("step3", stepInfos.get(2).functionName());
     assertEquals(2, stepInfos.get(2).functionId());
@@ -117,10 +117,10 @@ public class StepsTest {
       service.aWorkflowWithInlineSteps("input");
     }
 
-    WorkflowHandle<String, RuntimeException> handle = dbos.retrieveWorkflow(wid);
+    WorkflowHandle<String, RuntimeException> handle = DBOS.retrieveWorkflow(wid);
     assertEquals("input5", (String) handle.getResult());
 
-    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
+    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wid);
     assertEquals(1, stepInfos.size());
 
     assertEquals("stringLength", stepInfos.get(0).functionName());
@@ -143,10 +143,10 @@ public class StepsTest {
       serviceA.workflowWithSteps("hello");
     }
 
-    var handle = dbos.retrieveWorkflow(workflowId);
+    var handle = DBOS.retrieveWorkflow(workflowId);
     assertEquals("hellohello", (String) handle.getResult());
 
-    List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
+    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(workflowId);
     assertEquals(5, stepInfos.size());
 
     assertEquals("step1", stepInfos.get(0).functionName());
@@ -182,10 +182,10 @@ public class StepsTest {
       service.aWorkflow("hello");
     }
 
-    var handle = dbos.retrieveWorkflow(workflowId);
+    var handle = DBOS.retrieveWorkflow(workflowId);
     assertEquals("helloonetwo", (String) handle.getResult());
 
-    List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
+    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(workflowId);
     assertEquals(2, stepInfos.size());
 
     assertEquals("step1", stepInfos.get(0).functionName());
@@ -232,14 +232,14 @@ public class StepsTest {
       service.stepRetryWorkflow("hello");
     }
 
-    var handle = dbos.retrieveWorkflow(workflowId);
+    var handle = DBOS.retrieveWorkflow(workflowId);
     String expectedRes = "2 Retries: 2.  No retry: 1.  Backoff timeout: 2.";
     if (expectedRes != handle.getResult()) {
       System.out.println(handle.getResult());
     }
     assertEquals(expectedRes, (String) handle.getResult());
 
-    List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
+    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(workflowId);
     assertEquals(3, stepInfos.size());
 
     assertEquals("stepWith2Retries", stepInfos.get(0).functionName());

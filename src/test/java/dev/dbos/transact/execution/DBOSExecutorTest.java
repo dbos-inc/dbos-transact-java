@@ -74,7 +74,7 @@ class DBOSExecutorTest {
 
     assertEquals("test-itemtest-item", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
@@ -85,7 +85,7 @@ class DBOSExecutorTest {
     assertEquals("test-itemtest-item", result);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
-    wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
   }
 
@@ -108,7 +108,7 @@ class DBOSExecutorTest {
 
     assertEquals("test-itemtest-item", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
     boolean error = false;
@@ -139,7 +139,7 @@ class DBOSExecutorTest {
 
     assertEquals("test-itemtest-item", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
     dbos.shutdown();
@@ -179,15 +179,15 @@ class DBOSExecutorTest {
 
     assertEquals("test-itemstepOnestepTwo", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
-    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    List<StepInfo> steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(2, steps.size());
 
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     DBUtils.deleteAllStepOutputs(dataSource, wfid);
-    steps = dbos.listWorkflowSteps(wfid);
+    steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(0, steps.size());
 
     WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
@@ -196,9 +196,9 @@ class DBOSExecutorTest {
     assertEquals("test-itemstepOnestepTwo", result);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
-    wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
-    steps = dbos.listWorkflowSteps(wfid);
+    steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(2, steps.size());
   }
 
@@ -224,15 +224,15 @@ class DBOSExecutorTest {
     assertEquals(1, ExecutingServiceImpl.step1Count);
     assertEquals(1, ExecutingServiceImpl.step2Count);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
-    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    List<StepInfo> steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(2, steps.size());
 
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     DBUtils.deleteStepOutput(dataSource, wfid, 1);
-    steps = dbos.listWorkflowSteps(wfid);
+    steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(1, steps.size());
 
     WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
@@ -244,9 +244,9 @@ class DBOSExecutorTest {
 
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
-    wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
-    steps = dbos.listWorkflowSteps(wfid);
+    steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(2, steps.size());
   }
 
@@ -271,7 +271,7 @@ class DBOSExecutorTest {
     assertTrue(duration >= 2000);
     assertTrue(duration < 2200);
 
-    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    List<StepInfo> steps = DBOS.listWorkflowSteps(wfid);
 
     assertEquals("DBOS.sleep", steps.get(0).functionName());
   }
@@ -292,7 +292,7 @@ class DBOSExecutorTest {
       executingService.sleepingWorkflow(.002f);
     }
 
-    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    List<StepInfo> steps = DBOS.listWorkflowSteps(wfid);
 
     assertEquals("DBOS.sleep", steps.get(0).functionName());
 

@@ -122,7 +122,7 @@ public class ConfigTest {
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
       // If we change the internally registered workflows, the expected value will change
-      var expected = "16776e05fc693102206e4b6cb96c05f53e37ba5b6ea62b86d8daa3658263d407";
+      var expected = "4830a3c67c94358eefd00fd86c4936e51a621507ceb7f8bff4cf8968faee7e36";
       assertEquals(expected, dbosExecutor.appVersion());
     } finally {
       dbos.shutdown();

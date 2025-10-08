@@ -79,7 +79,7 @@ public class QueuesTest {
     DBOS.startWorkflow(
         () -> serviceQ.simpleQWorkflow("inputq"), new StartWorkflowOptions(id).withQueue(firstQ));
 
-    var handle = dbos.retrieveWorkflow(id);
+    var handle = DBOS.retrieveWorkflow(id);
     assertEquals(id, handle.getWorkflowId());
     String result = (String) handle.getResult();
     assertEquals("inputqinputq", result);
@@ -157,7 +157,7 @@ public class QueuesTest {
     }
 
     var builder = new ListWorkflowsInput.Builder().queuedOnly(true).loadInput(true);
-    List<WorkflowStatus> wfs = dbos.listWorkflows(builder.build());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(builder.build());
 
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
@@ -171,7 +171,7 @@ public class QueuesTest {
     for (int i = 0; i < 5; i++) {
       String id = "wfid" + i;
 
-      var handle = dbos.retrieveWorkflow(id);
+      var handle = DBOS.retrieveWorkflow(id);
       assertEquals(id, handle.getWorkflowId());
       String result = (String) handle.getResult();
       assertEquals("inputq" + i + "inputq" + i, result);
@@ -199,7 +199,7 @@ public class QueuesTest {
     }
 
     var builder = new ListWorkflowsInput.Builder().queuedOnly(true).loadInput(true);
-    List<WorkflowStatus> wfs = dbos.listWorkflows(builder.build());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(builder.build());
     wfs.sort(
         (a, b) -> {
           return a.workflowId().compareTo(b.workflowId());
@@ -215,35 +215,35 @@ public class QueuesTest {
     builder = new ListWorkflowsInput.Builder().queuedOnly(true).loadInput(true);
     builder.queueName("abc");
 
-    wfs = dbos.listWorkflows(builder.build());
+    wfs = DBOS.listWorkflows(builder.build());
     assertEquals(0, wfs.size());
 
     builder = new ListWorkflowsInput.Builder().queuedOnly(true).loadInput(true);
     builder.queueName("firstQueue");
 
-    wfs = dbos.listWorkflows(builder.build());
+    wfs = DBOS.listWorkflows(builder.build());
     assertEquals(5, wfs.size());
 
     builder = new ListWorkflowsInput.Builder().queuedOnly(true).loadInput(true);
     builder.startTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS));
 
-    wfs = dbos.listWorkflows(builder.build());
+    wfs = DBOS.listWorkflows(builder.build());
     assertEquals(5, wfs.size());
 
     builder = new ListWorkflowsInput.Builder().queuedOnly(true).loadInput(true);
     builder.startTime(OffsetDateTime.now().plus(10, ChronoUnit.SECONDS));
 
-    wfs = dbos.listWorkflows(builder.build());
+    wfs = DBOS.listWorkflows(builder.build());
     assertEquals(0, wfs.size());
 
     builder = new ListWorkflowsInput.Builder().queuedOnly(true).loadInput(true);
     builder.endTime(OffsetDateTime.now());
-    wfs = dbos.listWorkflows(builder.build());
+    wfs = DBOS.listWorkflows(builder.build());
     assertEquals(5, wfs.size());
 
     builder = new ListWorkflowsInput.Builder().queuedOnly(true).loadInput(true);
     builder.endTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS));
-    wfs = dbos.listWorkflows(builder.build());
+    wfs = DBOS.listWorkflows(builder.build());
     assertEquals(0, wfs.size());
   }
 

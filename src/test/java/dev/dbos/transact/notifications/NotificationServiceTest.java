@@ -70,8 +70,8 @@ class NotificationServiceTest {
         () -> notService.sendWorkflow(wfid1, "topic1", "HelloDBOS"),
         new StartWorkflowOptions(wfid2));
 
-    var handle1 = dbos.retrieveWorkflow(wfid1);
-    var handle2 = dbos.retrieveWorkflow(wfid2);
+    var handle1 = DBOS.retrieveWorkflow(wfid1);
+    var handle2 = DBOS.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
@@ -79,12 +79,12 @@ class NotificationServiceTest {
     assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
     assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
 
-    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
+    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wfid1);
 
     // assertEquals(1, stepInfos.size()) ; cannot do this because sleep is a maybe
     assertEquals("DBOS.recv", stepInfos.get(0).functionName());
 
-    stepInfos = dbos.listWorkflowSteps(wfid2);
+    stepInfos = DBOS.listWorkflowSteps(wfid2);
     assertEquals(1, stepInfos.size());
     assertEquals("DBOS.send", stepInfos.get(0).functionName());
   }
@@ -101,19 +101,19 @@ class NotificationServiceTest {
     DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "Hello1"),
         new StartWorkflowOptions("send1"));
-    dbos.retrieveWorkflow("send1").getResult();
+    DBOS.retrieveWorkflow("send1").getResult();
 
     DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "Hello2"),
         new StartWorkflowOptions("send2"));
-    dbos.retrieveWorkflow("send2").getResult();
+    DBOS.retrieveWorkflow("send2").getResult();
 
     DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "Hello3"),
         new StartWorkflowOptions("send3"));
-    dbos.retrieveWorkflow("send3").getResult();
+    DBOS.retrieveWorkflow("send3").getResult();
 
-    var handle1 = dbos.retrieveWorkflow(wfid1);
+    var handle1 = DBOS.retrieveWorkflow(wfid1);
 
     String result = (String) handle1.getResult();
     assertEquals("Hello1Hello2Hello3", result);
@@ -136,8 +136,8 @@ class NotificationServiceTest {
     DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, null, "HelloDBOS"), new StartWorkflowOptions(wfid2));
 
-    var handle1 = dbos.retrieveWorkflow(wfid1);
-    var handle2 = dbos.retrieveWorkflow(wfid2);
+    var handle1 = DBOS.retrieveWorkflow(wfid1);
+    var handle2 = DBOS.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
@@ -151,7 +151,7 @@ class NotificationServiceTest {
 
     dbos.launch();
     try {
-      dbos.recv("someTopic", Duration.ofSeconds(5));
+      DBOS.recv("someTopic", Duration.ofSeconds(5));
       assertTrue(false);
     } catch (IllegalArgumentException e) {
       assertEquals("recv() must be called from a workflow.", e.getMessage());
@@ -190,8 +190,8 @@ class NotificationServiceTest {
     DBOS.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", null), new StartWorkflowOptions(wfid2));
 
-    var handle1 = dbos.retrieveWorkflow(wfid1);
-    var handle2 = dbos.retrieveWorkflow(wfid2);
+    var handle1 = DBOS.retrieveWorkflow(wfid1);
+    var handle2 = DBOS.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertNull(result);
@@ -232,7 +232,7 @@ class NotificationServiceTest {
       Future<String> future2 = executor.submit(() -> testThread(notService, wfuuid, topic));
 
       String expectedMessage = "test message";
-      // dbos.send(wfuuid, expectedMessage, topic);
+      // DBOS.send(wfuuid, expectedMessage, topic);
       try (var id = new WorkflowOptions("send1").setContext()) {
         notService.sendWorkflow(wfuuid, topic, expectedMessage);
       }
@@ -276,8 +276,8 @@ class NotificationServiceTest {
         () -> notService.sendWorkflow(wfid1, "topic1", "HelloDBOS"),
         new StartWorkflowOptions(wfid2));
 
-    var handle1 = dbos.retrieveWorkflow(wfid1);
-    var handle2 = dbos.retrieveWorkflow(wfid2);
+    var handle1 = DBOS.retrieveWorkflow(wfid1);
+    var handle2 = DBOS.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
@@ -285,13 +285,13 @@ class NotificationServiceTest {
     assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
     assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
 
-    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
+    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wfid1);
 
     assertEquals(2, stepInfos.size());
     assertEquals("DBOS.recv", stepInfos.get(0).functionName());
     assertEquals("DBOS.sleep", stepInfos.get(1).functionName());
 
-    stepInfos = dbos.listWorkflowSteps(wfid2);
+    stepInfos = DBOS.listWorkflowSteps(wfid2);
     assertEquals(1, stepInfos.size());
     assertEquals("DBOS.send", stepInfos.get(0).functionName());
   }
@@ -311,13 +311,13 @@ class NotificationServiceTest {
     Thread.sleep(1000);
 
     assertEquals(WorkflowState.PENDING.name(), handle.getStatus().status());
-    dbos.send(wfid1, "hello", "topic1");
+    DBOS.send(wfid1, "hello", "topic1");
 
     assertEquals("hello", handle.getResult());
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
     var input = new ListWorkflowsInput.Builder().build();
-    List<WorkflowStatus> wfs = dbos.listWorkflows(input);
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
     assertEquals(2, wfs.size());
   }
 }

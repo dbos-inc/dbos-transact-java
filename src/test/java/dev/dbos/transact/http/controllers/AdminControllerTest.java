@@ -330,7 +330,7 @@ class AdminControllerTest {
       assertEquals("hellohello", result);
     }
 
-    var handle = dbos.retrieveWorkflow(workflowId);
+    var handle = DBOS.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
     assertEquals(1, impl.step1Count);
@@ -352,7 +352,7 @@ class AdminControllerTest {
             .extract()
             .path("workflowId");
 
-    var newHandle = dbos.retrieveWorkflow(newWorkflowId);
+    var newHandle = DBOS.retrieveWorkflow(newWorkflowId);
     assertEquals("hellohello", newHandle.getResult());
 
     assertEquals(1, impl.step1Count);

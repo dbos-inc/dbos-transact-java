@@ -271,7 +271,7 @@ public class TimeoutTest {
 
     assertEquals("1234512345", result);
 
-    var handle = dbos.retrieveWorkflow(wfid1);
+    var handle = DBOS.retrieveWorkflow(wfid1);
 
     result = (String) handle.getResult();
     assertEquals("1234512345", result);
@@ -301,11 +301,11 @@ public class TimeoutTest {
           }
         });
 
-    var parentStatus = dbos.retrieveWorkflow(wfid1).getStatus();
+    var parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus();
     assertEquals(WorkflowState.ERROR.name(), parentStatus.status());
     assertEquals("Awaited workflow childwf was cancelled.", parentStatus.error().message());
 
-    String childStatus = dbos.retrieveWorkflow("childwf").getStatus().status();
+    String childStatus = DBOS.retrieveWorkflow("childwf").getStatus().status();
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
@@ -330,10 +330,10 @@ public class TimeoutTest {
           }
         });
 
-    String parentStatus = dbos.retrieveWorkflow(wfid1).getStatus().status();
+    String parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus().status();
     assertEquals(WorkflowState.ERROR.name(), parentStatus);
 
-    String childStatus = dbos.retrieveWorkflow("childwf").getStatus().status();
+    String childStatus = DBOS.retrieveWorkflow("childwf").getStatus().status();
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 

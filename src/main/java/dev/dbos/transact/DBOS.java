@@ -105,15 +105,6 @@ public class DBOS {
       return executor.getWorkflow(className, instanceName, workflowName);
     }
 
-    public Optional<Queue> getQueue(String queueName) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot retrieve queue before launch");
-      }
-
-      return executor.getQueue(queueName);
-    }
-
     void registerQueue(Queue queue) {
       if (dbosExecutor.get() != null) {
         throw new IllegalStateException("Cannot build a queue after DBOS is launched");
@@ -175,6 +166,10 @@ public class DBOS {
       }
     }
 
+    public void send(String destinationId, Object message, String topic) {
+      executor("send").send(destinationId, message, topic, internalWorkflowsService);
+    }
+
     /**
      * Scans the class for all methods that have Workflow and Scheduled annotations and schedules
      * them for execution
@@ -209,184 +204,6 @@ public class DBOS {
       }
     }
 
-    /**
-     * Send a message to a workflow
-     *
-     * @param destinationId recipient of the message
-     * @param message message to be sent
-     * @param topic topic to which the message is send
-     */
-    public void send(String destinationId, Object message, String topic) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot send before launch");
-      }
-      executor.send(destinationId, message, topic, internalWorkflowsService);
-    }
-
-    /**
-     * Get a message sent to a particular topic
-     *
-     * @param topic the topic whose message to get
-     * @param timeoutSeconds time in seconds after which the call times out
-     * @return the message if there is one or else null
-     */
-    public Object recv(String topic, Duration timeout) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot recv before launch");
-      }
-      return executor.recv(topic, timeout);
-    }
-
-    /**
-     * Call within a workflow to publish a key value pair
-     *
-     * @param key identifier for published data
-     * @param value data that is published
-     */
-    public void setEvent(String key, Object value) {
-      logger.debug("Received setEvent for key {}", key);
-
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot setEvent before launch");
-      }
-
-      executor.setEvent(key, value);
-    }
-
-    /**
-     * Get the data published by a workflow
-     *
-     * @param workflowId id of the workflow who data is to be retrieved
-     * @param key identifies the data
-     * @param timeout time to wait for data before timing out
-     * @return the published value or null
-     */
-    public Object getEvent(String workflowId, String key, Duration timeout) {
-      logger.debug("Received getEvent for {} {}", workflowId, key);
-
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot getEvent before launch");
-      }
-
-      return executor.getEvent(workflowId, key, timeout);
-    }
-
-    public <T, E extends Exception> T runStep(ThrowingSupplier<T, E> stepfunc, StepOptions opts)
-        throws E {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot runStep before launch");
-      }
-
-      return executor.runStepI(stepfunc, opts);
-    }
-
-    public <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, StepOptions opts)
-        throws E {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot runStep before launch");
-      }
-      executor.runStepI(
-          () -> {
-            stepfunc.execute();
-            return null;
-          },
-          opts);
-    }
-
-    /**
-     * Resume a workflow starting from the step after the last complete step
-     *
-     * @param workflowId id of the workflow
-     * @return A handle to the workflow
-     */
-    public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot resumeWorkflow before launch");
-      }
-
-      return executor.resumeWorkflow(workflowId);
-    }
-
-    /***
-     *
-     * Cancel the workflow. After this function is called, the next step (not the
-     * current one) will not execute
-     *
-     * @param workflowId
-     */
-
-    public void cancelWorkflow(String workflowId) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot cancelWorkflow before launch");
-      }
-
-      executor.cancelWorkflow(workflowId);
-    }
-
-    /**
-     * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
-     * provided step are copied over
-     *
-     * @param workflowId Original workflow Id
-     * @param startStep Start execution from this step. Prior steps copied over
-     * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
-     * @return handle to the workflow
-     */
-    public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
-        String workflowId, int startStep, ForkOptions options) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot forkWorkflow before launch");
-      }
-
-      return executor.forkWorkflow(workflowId, startStep, options);
-    }
-
-    public <T, E extends Exception> WorkflowHandle<T, E> retrieveWorkflow(String workflowId) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot retrieveWorkflow before launch");
-      }
-
-      return executor.retrieveWorkflow(workflowId);
-    }
-
-    /**
-     * List all workflows
-     *
-     * @param input {@link ListWorkflowsInput} parameters to query workflows
-     * @return a list of workflow status {@link WorkflowStatus}
-     */
-    public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot listWorkflows before launch");
-      }
-      return executor.listWorkflows(input);
-    }
-
-    /**
-     * List the steps in the workflow
-     *
-     * @param workflowId Id of the workflow whose steps to return
-     * @return list of step information {@link StepInfo}
-     */
-    public List<StepInfo> listWorkflowSteps(String workflowId) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot listWorkflowSteps before launch");
-      }
-      return executor.listWorkflowSteps(workflowId);
-    }
-
     public void shutdown() {
       var current = dbosExecutor.getAndSet(null);
       if (current != null) {
@@ -394,22 +211,6 @@ public class DBOS {
       }
 
       logger.info("DBOS shut down");
-    }
-
-    /**
-     * Durable sleep. When you are in a workflow, use this instead of Thread.sleep. On restart or
-     * during recovery the original expected wakeup time is honoured as opposed to sleeping all over
-     * again.
-     *
-     * @param seconds in seconds
-     */
-    public void sleep(Duration duration) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot sleep before launch");
-      }
-
-      executor.sleep(duration);
     }
   }
 
@@ -517,6 +318,16 @@ public class DBOS {
     return DBOSContext.inStep();
   }
 
+  public static Optional<Queue> getQueue(String queueName) {
+    return executor("getQueue").getQueue(queueName);
+  }
+
+  /**
+   * Durable sleep. Use this instead of Thread.sleep, especially in workflows. On restart or during
+   * recovery the original expected wakeup time is honoured as opposed to sleeping all over again.
+   *
+   * @param duration amount of time to sleep
+   */
   public static void sleep(Duration duration) {
     if (!inWorkflow()) {
       try {
@@ -529,7 +340,7 @@ public class DBOS {
       } catch (InterruptedException e) {
       }
     } else {
-      instance().sleep(duration);
+      executor("sleep").sleep(duration);
     }
   }
 
@@ -556,5 +367,128 @@ public class DBOS {
   public static <E extends Exception> WorkflowHandle<Void, E> startWorkflow(
       ThrowingRunnable<E> runnable) {
     return startWorkflow(runnable, new StartWorkflowOptions());
+  }
+
+  /**
+   * Send a message to a workflow
+   *
+   * @param destinationId recipient of the message
+   * @param message message to be sent
+   * @param topic topic to which the message is send
+   */
+  public static void send(String destinationId, Object message, String topic) {
+    executor("send").send(destinationId, message, topic, instance().internalWorkflowsService);
+  }
+
+  /**
+   * Get a message sent to a particular topic
+   *
+   * @param topic the topic whose message to get
+   * @param timeoutSeconds time in seconds after which the call times out
+   * @return the message if there is one or else null
+   */
+  public static Object recv(String topic, Duration timeout) {
+    return executor("recv").recv(topic, timeout);
+  }
+
+  /**
+   * Call within a workflow to publish a key value pair
+   *
+   * @param key identifier for published data
+   * @param value data that is published
+   */
+  public static void setEvent(String key, Object value) {
+    executor("setEvent").setEvent(key, value);
+  }
+
+  /**
+   * Get the data published by a workflow
+   *
+   * @param workflowId id of the workflow who data is to be retrieved
+   * @param key identifies the data
+   * @param timeout time to wait for data before timing out
+   * @return the published value or null
+   */
+  public static Object getEvent(String workflowId, String key, Duration timeout) {
+    logger.debug("Received getEvent for {} {}", workflowId, key);
+
+    return executor("getEvent").getEvent(workflowId, key, timeout);
+  }
+
+  public static <T, E extends Exception> T runStep(
+      ThrowingSupplier<T, E> stepfunc, StepOptions opts) throws E {
+
+    return executor("runStep").runStepI(stepfunc, opts);
+  }
+
+  public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, StepOptions opts)
+      throws E {
+    executor("runStep")
+        .runStepI(
+            () -> {
+              stepfunc.execute();
+              return null;
+            },
+            opts);
+  }
+
+  /**
+   * Resume a workflow starting from the step after the last complete step
+   *
+   * @param workflowId id of the workflow
+   * @return A handle to the workflow
+   */
+  public static <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
+    return executor("resumeWorkflow").resumeWorkflow(workflowId);
+  }
+
+  /***
+   *
+   * Cancel the workflow. After this function is called, the next step (not the
+   * current one) will not execute
+   *
+   * @param workflowId
+   */
+
+  public static void cancelWorkflow(String workflowId) {
+    executor("cancelWorkflow").cancelWorkflow(workflowId);
+  }
+
+  /**
+   * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
+   * provided step are copied over
+   *
+   * @param workflowId Original workflow Id
+   * @param startStep Start execution from this step. Prior steps copied over
+   * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
+   * @return handle to the workflow
+   */
+  public static <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
+      String workflowId, int startStep, ForkOptions options) {
+    return executor("forkWorkflow").forkWorkflow(workflowId, startStep, options);
+  }
+
+  public static <T, E extends Exception> WorkflowHandle<T, E> retrieveWorkflow(String workflowId) {
+    return executor("retrieveWorkflow").retrieveWorkflow(workflowId);
+  }
+
+  /**
+   * List all workflows
+   *
+   * @param input {@link ListWorkflowsInput} parameters to query workflows
+   * @return a list of workflow status {@link WorkflowStatus}
+   */
+  public static List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+    return executor("listWorkflows").listWorkflows(input);
+  }
+
+  /**
+   * List the steps in the workflow
+   *
+   * @param workflowId Id of the workflow whose steps to return
+   * @return list of step information {@link StepInfo}
+   */
+  public static List<StepInfo> listWorkflowSteps(String workflowId) {
+    return executor("listWorkflowSteps").listWorkflowSteps(workflowId);
   }
 }

@@ -355,7 +355,7 @@ public class DirectInvocationTest {
     var wf = wfs.get(0);
     assertNotNull(wf.workflowId());
 
-    var steps = dbos.listWorkflowSteps(wf.workflowId());
+    var steps = DBOS.listWorkflowSteps(wf.workflowId());
     assertEquals(1, steps.size());
     var step = steps.get(0);
     assertEquals(0, step.functionId());

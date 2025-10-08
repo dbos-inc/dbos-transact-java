@@ -71,7 +71,7 @@ public class StartWorkflowTest {
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var rows = dbos.listWorkflows(null);
+    var rows = DBOS.listWorkflows(null);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(handle.getWorkflowId(), row.workflowId());
@@ -106,7 +106,7 @@ public class StartWorkflowTest {
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var row = dbos.retrieveWorkflow(workflowId);
+    var row = DBOS.retrieveWorkflow(workflowId);
     assertNotNull(row);
     assertEquals(workflowId, row.getWorkflowId());
     assertEquals("SUCCESS", row.getStatus().status());

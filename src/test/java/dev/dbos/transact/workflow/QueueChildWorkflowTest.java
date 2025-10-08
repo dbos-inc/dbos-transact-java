@@ -72,7 +72,7 @@ public class QueueChildWorkflowTest {
 
     assertEquals("123abcdefghi", (String) handle.getResult());
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(4, wfs.size());
     assertEquals(handle.getWorkflowId(), wfs.get(0).workflowId());
@@ -87,7 +87,7 @@ public class QueueChildWorkflowTest {
     assertEquals("child3", wfs.get(3).workflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).status());
 
-    List<StepInfo> steps = dbos.listWorkflowSteps(handle.getWorkflowId());
+    List<StepInfo> steps = DBOS.listWorkflowSteps(handle.getWorkflowId());
     assertEquals(3, steps.size());
     assertEquals("child1", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
@@ -118,10 +118,10 @@ public class QueueChildWorkflowTest {
         () -> simpleService.grandParent("123"),
         new StartWorkflowOptions("wf-123456").withQueue(childQ));
 
-    var handle = dbos.retrieveWorkflow("wf-123456");
+    var handle = DBOS.retrieveWorkflow("wf-123456");
     assertEquals("p-c-gc-123", handle.getResult());
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(3, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());
@@ -133,13 +133,13 @@ public class QueueChildWorkflowTest {
     assertEquals("child5", wfs.get(2).workflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).status());
 
-    List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
+    List<StepInfo> steps = DBOS.listWorkflowSteps("wf-123456");
     assertEquals(1, steps.size());
     assertEquals("child4", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("childWorkflow4", steps.get(0).functionName());
 
-    steps = dbos.listWorkflowSteps("child4");
+    steps = DBOS.listWorkflowSteps("child4");
     assertEquals(1, steps.size());
     assertEquals("child5", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());

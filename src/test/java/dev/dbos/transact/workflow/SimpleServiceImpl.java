@@ -2,7 +2,6 @@ package dev.dbos.transact.workflow;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.WorkflowOptions;
 
 import java.util.concurrent.TimeUnit;
@@ -50,23 +49,22 @@ public class SimpleServiceImpl implements SimpleService {
 
   @Workflow(name = "workflowWithMultipleChildren")
   public String workflowWithMultipleChildren(String input) throws Exception {
-    var dbos = DBOSContext.dbosInstance();
     String result = input;
 
     try (var id = new WorkflowOptions("child1").setContext()) {
       simpleService.childWorkflow("abc");
     }
-    result = result + dbos.retrieveWorkflow("child1").getResult();
+    result = result + DBOS.retrieveWorkflow("child1").getResult();
 
     try (var id = new WorkflowOptions("child2").setContext()) {
       simpleService.childWorkflow2("def");
     }
-    result = result + dbos.retrieveWorkflow("child2").getResult();
+    result = result + DBOS.retrieveWorkflow("child2").getResult();
 
     try (var id = new WorkflowOptions("child3").setContext()) {
       simpleService.childWorkflow3("ghi");
     }
-    result = result + dbos.retrieveWorkflow("child3").getResult();
+    result = result + DBOS.retrieveWorkflow("child3").getResult();
 
     return result;
   }
@@ -87,7 +85,7 @@ public class SimpleServiceImpl implements SimpleService {
     try (var id = new WorkflowOptions("child5").setContext()) {
       simpleService.grandchildWorkflow(input);
     }
-    result = "c-" + DBOSContext.dbosInstance().retrieveWorkflow("child5").getResult();
+    result = "c-" + DBOS.retrieveWorkflow("child5").getResult();
     return result;
   }
 
@@ -102,7 +100,7 @@ public class SimpleServiceImpl implements SimpleService {
     try (var id = new WorkflowOptions("child4").setContext()) {
       simpleService.childWorkflow4(input);
     }
-    result = "p-" + DBOSContext.dbosInstance().retrieveWorkflow("child4").getResult();
+    result = "p-" + DBOS.retrieveWorkflow("child4").getResult();
     return result;
   }
 
@@ -110,8 +108,7 @@ public class SimpleServiceImpl implements SimpleService {
   public String syncWithQueued() {
 
     System.out.println("In syncWithQueued " + DBOS.workflowId());
-    var dbos = DBOSContext.dbosInstance();
-    var childQ = dbos.getQueue("childQ").get();
+    var childQ = DBOS.getQueue("childQ").get();
 
     for (int i = 0; i < 3; i++) {
 

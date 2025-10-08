@@ -71,7 +71,7 @@ public class EventsTest {
     }
 
     // outside workflow
-    String val = (String) dbos.getEvent("id1", "key1", Duration.ofSeconds(3));
+    String val = (String) DBOS.getEvent("id1", "key1", Duration.ofSeconds(3));
     assertEquals("value1", val);
   }
 
@@ -92,7 +92,7 @@ public class EventsTest {
     }
 
     // outside workflow
-    Double val = (Double) dbos.getEvent("id1", "key2", Duration.ofSeconds(3));
+    Double val = (Double) DBOS.getEvent("id1", "key2", Duration.ofSeconds(3));
     assertEquals(241.5, val);
   }
 
@@ -109,7 +109,7 @@ public class EventsTest {
         () -> eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3)),
         new StartWorkflowOptions("id2"));
 
-    String event = (String) dbos.retrieveWorkflow("id2").getResult();
+    String event = (String) DBOS.retrieveWorkflow("id2").getResult();
     assertEquals("value1", event);
   }
 
@@ -126,14 +126,14 @@ public class EventsTest {
     DBOS.startWorkflow(
         () -> eventService.setWithLatch("key1", "value1"), new StartWorkflowOptions("id1"));
 
-    String event = (String) dbos.retrieveWorkflow("id2").getResult();
+    String event = (String) DBOS.retrieveWorkflow("id2").getResult();
     assertEquals("value1", event);
 
-    List<StepInfo> steps = dbos.listWorkflowSteps("id1");
+    List<StepInfo> steps = DBOS.listWorkflowSteps("id1");
     assertEquals(1, steps.size());
     assertEquals("DBOS.setEvent", steps.get(0).functionName());
 
-    steps = dbos.listWorkflowSteps("id2");
+    steps = DBOS.listWorkflowSteps("id2");
     assertEquals(2, steps.size());
     assertEquals("DBOS.getEvent", steps.get(0).functionName());
     assertEquals("DBOS.sleep", steps.get(1).functionName());
@@ -145,7 +145,7 @@ public class EventsTest {
     dbos.launch();
 
     long start = System.currentTimeMillis();
-    dbos.getEvent("nonexistingid", "fake_key", Duration.ofSeconds(2));
+    DBOS.getEvent("nonexistingid", "fake_key", Duration.ofSeconds(2));
     long elapsed = System.currentTimeMillis() - start;
     assertTrue(elapsed < 3000);
   }
@@ -160,9 +160,9 @@ public class EventsTest {
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {
       Future<Object> future1 =
-          executor.submit(() -> dbos.getEvent("id1", "key1", Duration.ofSeconds(5)));
+          executor.submit(() -> DBOS.getEvent("id1", "key1", Duration.ofSeconds(5)));
       Future<Object> future2 =
-          executor.submit(() -> dbos.getEvent("id1", "key1", Duration.ofSeconds(5)));
+          executor.submit(() -> DBOS.getEvent("id1", "key1", Duration.ofSeconds(5)));
 
       String expectedMessage = "test message";
       try (var id = new WorkflowOptions("id1").setContext()) {

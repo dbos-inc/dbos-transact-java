@@ -179,11 +179,11 @@ class RecoveryServiceTest {
 
     dbos.launch();
 
-    var h = dbos.retrieveWorkflow("wf-123");
+    var h = DBOS.retrieveWorkflow("wf-123");
     h.getResult();
     assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
 
-    h = dbos.retrieveWorkflow("wf-124");
+    h = DBOS.retrieveWorkflow("wf-124");
     h.getResult();
     assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
   }
@@ -199,7 +199,7 @@ class RecoveryServiceTest {
     }
     assertEquals(executingServiceImpl.callsToThrowStep, 1);
     assertEquals(executingServiceImpl.callsToNoReturnStep, 1);
-    var h = dbos.retrieveWorkflow(wfid);
+    var h = DBOS.retrieveWorkflow(wfid);
     assertNull(h.getStatus().error());
     assertNull(h.getResult());
 
