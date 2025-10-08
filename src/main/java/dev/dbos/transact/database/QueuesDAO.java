@@ -39,7 +39,7 @@ public class QueuesDAO {
     long startTimeMs = System.currentTimeMillis();
     Long limiterPeriodMs = null;
     if (queue.hasLimiter()) {
-      limiterPeriodMs = (long) (queue.rateLimit().getPeriod() * 1000);
+      limiterPeriodMs = (long) (queue.rateLimit().period() * 1000);
     }
 
     try (Connection connection = dataSource.getConnection()) {
@@ -76,7 +76,7 @@ public class QueuesDAO {
           }
         }
 
-        if (numRecentQueries >= queue.rateLimit().getLimit()) {
+        if (numRecentQueries >= queue.rateLimit().limit()) {
           return new ArrayList<>();
         }
       }
@@ -208,7 +208,7 @@ public class QueuesDAO {
         for (String id : dequeuedIds) {
           // Check limiter again for each workflow
           if (queue.hasLimiter()) {
-            if (retIds.size() + numRecentQueries >= queue.rateLimit().getLimit()) {
+            if (retIds.size() + numRecentQueries >= queue.rateLimit().limit()) {
               break;
             }
           }
