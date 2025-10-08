@@ -103,14 +103,14 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void workflowRecovery(HttpExchange exchange) throws IOException {
-    if (!ensurePostJson(exchange))
-      return;
+    if (!ensurePostJson(exchange)) return;
 
-    List<String> executorIds = mapper.readValue(exchange.getRequestBody(), new TypeReference<List<String>>() {
-    });
+    List<String> executorIds =
+        mapper.readValue(exchange.getRequestBody(), new TypeReference<List<String>>() {});
     logger.debug("Recovering workflows for executors {}", executorIds);
     var handles = dbosExecutor.recoverPendingWorkflows(executorIds);
-    List<String> workflowIds = handles.stream().map(h -> h.getWorkflowId()).collect(Collectors.toList());
+    List<String> workflowIds =
+        handles.stream().map(h -> h.getWorkflowId()).collect(Collectors.toList());
     sendMappedJson(exchange, 200, workflowIds);
   }
 
@@ -118,40 +118,27 @@ public class AdminServer implements AutoCloseable {
     sendText(exchange, 500, "not implemented");
   }
 
-  private void workflowQueuesMetadata(HttpExchange x) throws IOException {
+  private void workflowQueuesMetadata(HttpExchange x) throws IOException {}
 
+  private void garbageCollect(HttpExchange exchange) throws IOException {}
 
-  }
+  private void globalTimeout(HttpExchange x) throws IOException {}
 
-  private void garbageCollect(HttpExchange exchange) throws IOException {
-  }
+  private void listQueuedWorkflows(HttpExchange x) throws IOException {}
 
-  private void globalTimeout(HttpExchange x) throws IOException {
-  }
+  private void getWorkflow(HttpExchange x, String wfid) throws IOException {}
 
-  private void listQueuedWorkflows(HttpExchange x) throws IOException {
-  }
+  private void cancel(HttpExchange x, String wfid) throws IOException {}
 
-  private void getWorkflow(HttpExchange x, String wfid) throws IOException {
-  }
+  private void fork(HttpExchange x, String wfid) throws IOException {}
 
-  private void cancel(HttpExchange x, String wfid) throws IOException {
-  }
+  private void resume(HttpExchange x, String wfid) throws IOException {}
 
-  private void fork(HttpExchange x, String wfid) throws IOException {
-  }
+  private void restart(HttpExchange x, String wfid) throws IOException {}
 
-  private void resume(HttpExchange x, String wfid) throws IOException {
-  }
+  private void listSteps(HttpExchange x, String wfid) throws IOException {}
 
-  private void restart(HttpExchange x, String wfid) throws IOException {
-  }
-
-  private void listSteps(HttpExchange x, String wfid) throws IOException {
-  }
-
-  private void listWorkflows(HttpExchange x) throws IOException {
-  }
+  private void listWorkflows(HttpExchange x) throws IOException {}
 
   private static void sendText(HttpExchange exchange, int statusCode, String text)
       throws IOException {
@@ -209,15 +196,13 @@ public class AdminServer implements AutoCloseable {
     void handle(HttpExchange exchange, String workflowId) throws IOException;
   }
 
-      record RateLimitMetadata(Integer limit, Double period){}
-    record QueueMetadata(
-        String name,
-        int concurrency,
-        int workerConcurrency,
-        boolean priorityEnabled,
-        RateLimitMetadata rateLimit,
-        int maxTasksPerIteration){
-        }
+  record RateLimitMetadata(Integer limit, Double period) {}
 
-
+  record QueueMetadata(
+      String name,
+      int concurrency,
+      int workerConcurrency,
+      boolean priorityEnabled,
+      RateLimitMetadata rateLimit,
+      int maxTasksPerIteration) {}
 }
