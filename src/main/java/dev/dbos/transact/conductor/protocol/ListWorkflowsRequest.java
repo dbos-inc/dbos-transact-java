@@ -150,6 +150,6 @@ public class ListWorkflowsRequest extends BaseMessage {
             .loadInput(body.load_input)
             .loadOutput(body.load_output);
 
-            return builder.build();
+    return builder.build();
   }
 }

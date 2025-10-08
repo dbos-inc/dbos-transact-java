@@ -3,6 +3,7 @@ package dev.dbos.transact.execution;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.admin.AdminServer;
 import dev.dbos.transact.conductor.Conductor;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
@@ -13,8 +14,6 @@ import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
-import dev.dbos.transact.http.HttpServer;
-import dev.dbos.transact.http.controllers.AdminController;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.JSONUtil;
@@ -36,6 +35,7 @@ import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.Instant;
@@ -72,7 +72,7 @@ public class DBOSExecutor implements AutoCloseable {
   private QueueService queueService;
   private SchedulerService schedulerService;
   private RecoveryService recoveryService;
-  private HttpServer httpServer;
+  private AdminServer adminServer;
   private Conductor conductor;
   private ExecutorService executorService;
   private ScheduledExecutorService timeoutScheduler;
@@ -150,10 +150,12 @@ public class DBOSExecutor implements AutoCloseable {
       }
 
       if (config.adminServer()) {
-        httpServer =
-            HttpServer.getInstance(
-                config.adminServerPort(), new AdminController(this, systemDatabase, queues));
-        httpServer.start();
+        try {
+          adminServer = new AdminServer(config.adminServerPort(), this, systemDatabase);
+          adminServer.start();
+        } catch (IOException e) {
+          logger.error("DBOS Admin Server failed to start", e);
+        }
       }
 
       logger.info("DBOS started");
@@ -167,9 +169,9 @@ public class DBOSExecutor implements AutoCloseable {
   public void close() {
     if (isRunning.compareAndSet(true, false)) {
 
-      if (httpServer != null) {
-        httpServer.stop();
-        httpServer = null;
+      if (adminServer != null) {
+        adminServer.stop();
+        adminServer = null;
       }
 
       if (conductor != null) {
