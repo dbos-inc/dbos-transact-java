@@ -172,7 +172,7 @@ public class NotificationsDAO {
         // Wait for the notification
         // Support OAOO sleep
         double actualTimeout =
-            StepsDAO.sleep(dataSource, workflowUuid, timeoutFunctionId, timeout, true);
+            StepsDAO.sleep(dataSource, workflowUuid, timeoutFunctionId, timeout, true).toMillis();
         long timeoutMs = (long) (actualTimeout);
         lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
       }
@@ -376,12 +376,13 @@ public class NotificationsDAO {
           // Support OAOO sleep for workflows
           actualTimeout =
               StepsDAO.sleep(
-                  dataSource,
-                  callerCtx.getWorkflowId(),
-                  callerCtx.getTimeoutFunctionId(),
-                  timeout,
-                  true // skip_sleep
-                  );
+                      dataSource,
+                      callerCtx.getWorkflowId(),
+                      callerCtx.getTimeoutFunctionId(),
+                      timeout,
+                      true // skip_sleep
+                      )
+                  .toMillis();
         }
 
         try {

@@ -226,6 +226,7 @@ public class SystemDatabase implements AutoCloseable {
           try {
             return notificationsDAO.recv(workflowId, functionId, timeoutFunctionId, topic, timeout);
           } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
             logger.error("recv() was interrupted", ie);
             throw new RuntimeException(ie.getMessage(), ie);
           }
@@ -249,7 +250,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public double sleep(String workflowId, int functionId, Duration duration, boolean skipSleep) {
+  public Duration sleep(String workflowId, int functionId, Duration duration, boolean skipSleep) {
     return DbRetry.call(
         () -> {
           return stepsDAO.sleep(workflowId, functionId, duration, skipSleep);

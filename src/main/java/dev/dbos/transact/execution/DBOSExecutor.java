@@ -474,6 +474,7 @@ public class DBOSExecutor implements AutoCloseable {
       try {
         Thread.sleep((long) (timeBetweenAttemptsSec * 1000));
       } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
       }
       timeBetweenAttemptsSec *= backOffRate;
       ++currAttempts;

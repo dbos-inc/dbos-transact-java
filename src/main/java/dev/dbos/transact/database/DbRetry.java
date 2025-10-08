@@ -134,6 +134,7 @@ public final class DbRetry {
       try {
         Thread.sleep(remaining);
       } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
         // remember and keep sleeping to honor backoff; re-set later
         interrupted = true;
       }

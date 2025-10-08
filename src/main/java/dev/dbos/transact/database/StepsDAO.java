@@ -232,12 +232,12 @@ public class StepsDAO {
     return steps;
   }
 
-  public double sleep(String workflowUuid, int functionId, Duration duration, boolean skipSleep)
+  public Duration sleep(String workflowUuid, int functionId, Duration duration, boolean skipSleep)
       throws SQLException {
     return StepsDAO.sleep(dataSource, workflowUuid, functionId, duration, skipSleep);
   }
 
-  public static double sleep(
+  public static Duration sleep(
       HikariDataSource dataSource,
       String workflowUuid,
       int functionId,
@@ -297,6 +297,6 @@ public class StepsDAO {
       }
     }
 
-    return durationms;
+    return Duration.ofMillis((long) durationms);
   }
 }
