@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class StartWorkflowTest {
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
   private HawkService proxy;
   private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);

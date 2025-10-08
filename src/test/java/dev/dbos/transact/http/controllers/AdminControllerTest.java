@@ -37,7 +37,7 @@ import org.junitpioneer.jupiter.RetryingTest;
 class AdminControllerTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {

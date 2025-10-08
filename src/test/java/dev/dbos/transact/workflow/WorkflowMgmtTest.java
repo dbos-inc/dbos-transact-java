@@ -34,7 +34,7 @@ public class WorkflowMgmtTest {
   private static final Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
 
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {

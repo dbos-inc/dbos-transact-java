@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class MultiInstTest {
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
   HawkServiceImpl himpl;
   BearServiceImpl bimpla;
   BearServiceImpl bimpl1;

@@ -27,7 +27,7 @@ public class QueueChildWorkflowTest {
   private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
 
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {

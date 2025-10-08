@@ -61,7 +61,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private final DBOSConfig config;
 
-  private DBOS dbos;
+  private DBOS.Instance dbos;
   private String appVersion;
   private String executorId;
 
@@ -83,7 +83,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void start(
-      DBOS dbos,
+      DBOS.Instance dbos,
       Map<String, RegisteredWorkflow> workflowMap,
       List<Queue> queues,
       List<ScheduledInstance> scheduledWorkflows) {

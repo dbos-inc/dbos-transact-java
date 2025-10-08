@@ -26,7 +26,7 @@ public class ClientTest {
   private static final String dbUser = "postgres";
   private static final String dbPassword = System.getenv("PGPASSWORD");
 
-  private DBOS dbos;
+  private DBOS.Instance dbos;
   private ClientService service;
   private HikariDataSource dataSource;
 

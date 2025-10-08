@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Timeout;
 class DBOSExecutorTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
   private static DataSource dataSource;
 
   @BeforeAll

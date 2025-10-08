@@ -18,7 +18,7 @@ import org.junit.jupiter.api.*;
 public class StepsTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {

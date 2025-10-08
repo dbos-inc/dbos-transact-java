@@ -34,7 +34,7 @@ class RecoveryServiceTest {
 
   private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
   private Queue testQueue;
   private SystemDatabase systemDatabase;
   private DBOSExecutor dbosExecutor;

@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Timeout;
 class NotificationServiceTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {

@@ -248,11 +248,8 @@ For example, build a reliable billing workflow that durably waits for a notifica
 ```java
 @workflow(name = "billing")
 public void billingWorkflow() {
-    // retrieve DBOS instance from context
-    var dbos = DBOSContext.dbosInstance().get();
-
     // Calculate the charge, then submit the bill to a payments service
-    String payment_status = (String) dbos.recv(PAYMENT_STATUS, timeout = payment_service_timeout);
+    String payment_status = (String) DBOS.recv(PAYMENT_STATUS, timeout = payment_service_timeout);
     if (payment_status.equals("paid")) {
         // handle paid
     } else {
@@ -262,8 +259,7 @@ public void billingWorkflow() {
 
 @workflow(name = "payment") 
 public void payment() {
-    var dbos = DBOSContext.dbosInstance().get();
-    dbos.send(targetWorkflowId, PAYMENT_STATUS, "paid") ;
+    DBOS.send(targetWorkflowId, PAYMENT_STATUS, "paid") ;
 }
       
 ```

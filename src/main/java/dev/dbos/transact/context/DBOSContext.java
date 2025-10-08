@@ -23,7 +23,7 @@ public class DBOSContext {
   // String assumedRole;
 
   // current workflow fields
-  private final DBOS dbos;
+  private final DBOS.Instance dbos;
   private final String workflowId;
   private int functionId;
   private Integer stepFunctionId;
@@ -44,7 +44,11 @@ public class DBOSContext {
   }
 
   public DBOSContext(
-      DBOS dbos, String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
+      DBOS.Instance dbos,
+      String workflowId,
+      WorkflowInfo parent,
+      Duration timeout,
+      Instant deadline) {
     this.dbos = dbos;
     this.workflowId = workflowId;
     this.functionId = 0;
@@ -201,7 +205,7 @@ public class DBOSContext {
     return ctx == null ? null : ctx.stepFunctionId;
   }
 
-  public static DBOS dbosInstance() {
+  public static DBOS.Instance dbosInstance() {
     var ctx = DBOSContextHolder.get();
     return ctx == null ? null : ctx.dbos;
   }

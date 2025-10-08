@@ -20,7 +20,7 @@ import org.junit.jupiter.api.*;
 public class AsyncWorkflowTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {

@@ -40,7 +40,7 @@ public class QueuesTest {
 
   private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
-  private DBOS dbos;
+  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
