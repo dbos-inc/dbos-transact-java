@@ -61,7 +61,6 @@ public class DBOSExecutor implements AutoCloseable {
 
   private final DBOSConfig config;
 
-  private DBOS.Instance dbos;
   private String appVersion;
   private String executorId;
 
@@ -89,7 +88,6 @@ public class DBOSExecutor implements AutoCloseable {
       List<ScheduledInstance> scheduledWorkflows) {
 
     if (isRunning.compareAndSet(false, true)) {
-      this.dbos = dbos;
       this.workflowMap = workflowMap;
       this.queues = queues;
 
@@ -190,7 +188,6 @@ public class DBOSExecutor implements AutoCloseable {
       executorService.shutdownNow();
 
       this.workflowMap = null;
-      this.dbos = null;
     }
   }
 
@@ -890,7 +887,7 @@ public class DBOSExecutor implements AutoCloseable {
                 Objects.requireNonNullElse(options.deadline, Instant.EPOCH).toEpochMilli());
 
             DBOSContextHolder.set(
-                new DBOSContext(dbos, workflowId, parent, options.timeout, options.deadline));
+                new DBOSContext(workflowId, parent, options.timeout, options.deadline));
             T result = workflow.invoke(args);
             postInvokeWorkflowResult(systemDatabase, workflowId, result);
             return result;

@@ -1,6 +1,5 @@
 package dev.dbos.transact.context;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 
 import java.time.Duration;
@@ -23,7 +22,6 @@ public class DBOSContext {
   // String assumedRole;
 
   // current workflow fields
-  private final DBOS.Instance dbos;
   private final String workflowId;
   private int functionId;
   private Integer stepFunctionId;
@@ -35,7 +33,6 @@ public class DBOSContext {
   // private StepStatus stepStatus;
 
   public DBOSContext() {
-    dbos = null;
     workflowId = null;
     functionId = -1;
     parent = null;
@@ -43,13 +40,7 @@ public class DBOSContext {
     deadline = null;
   }
 
-  public DBOSContext(
-      DBOS.Instance dbos,
-      String workflowId,
-      WorkflowInfo parent,
-      Duration timeout,
-      Instant deadline) {
-    this.dbos = dbos;
+  public DBOSContext(String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
@@ -64,7 +55,6 @@ public class DBOSContext {
       CompletableFuture<String> future) {
     this.nextWorkflowId = other.nextWorkflowId;
     this.nextTimeout = other.nextTimeout;
-    this.dbos = other.dbos;
     this.workflowId = other.workflowId;
     this.functionId = functionId == null ? other.functionId : functionId;
     this.stepFunctionId = other.stepFunctionId;
@@ -203,11 +193,6 @@ public class DBOSContext {
   public static Integer stepId() {
     var ctx = DBOSContextHolder.get();
     return ctx == null ? null : ctx.stepFunctionId;
-  }
-
-  public static DBOS.Instance dbosInstance() {
-    var ctx = DBOSContextHolder.get();
-    return ctx == null ? null : ctx.dbos;
   }
 
   public static boolean inWorkflow() {

@@ -285,8 +285,6 @@ public class DBOS {
   }
 
   public static Instance instance() {
-    var inst = DBOSContext.dbosInstance();
-    if (inst != null) return inst;
     return globalInstance;
   }
 

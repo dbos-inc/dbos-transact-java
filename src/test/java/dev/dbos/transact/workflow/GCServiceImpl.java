@@ -31,7 +31,7 @@ public class GCServiceImpl implements GCService {
     try {
       gcLatch.await();
     } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
+      // Thread.currentThread().interrupt();
       throw new RuntimeException(e);
     }
 
