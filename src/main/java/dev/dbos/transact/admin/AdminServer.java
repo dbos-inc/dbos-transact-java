@@ -4,6 +4,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -116,7 +117,7 @@ public class AdminServer implements AutoCloseable {
     logger.debug("Recovering workflows for executors {}", executorIds);
     var handles = dbosExecutor.recoverPendingWorkflows(executorIds);
     List<String> workflowIds =
-        handles.stream().map(h -> h.getWorkflowId()).collect(Collectors.toList());
+        handles.stream().map(WorkflowHandle::getWorkflowId).collect(Collectors.toList());
     sendMappedJson(exchange, 200, workflowIds);
   }
 
@@ -135,7 +136,7 @@ public class AdminServer implements AutoCloseable {
     var request = mapper.readValue(exchange.getRequestBody(), GarbageCollectRequest.class);
 
     systemDatabase.garbageCollect(
-        request.cutoff_epoch_timestamp_ms, Long.valueOf(request.rows_threshold));
+        request.cutoff_epoch_timestamp_ms, (long)request.rows_threshold);
 
     exchange.sendResponseHeaders(204, 0);
   }
@@ -155,7 +156,7 @@ public class AdminServer implements AutoCloseable {
     var request = mapper.readValue(exchange.getRequestBody(), ListWorkflowsRequest.class);
     var input = request.asInput();
     var workflows = systemDatabase.listWorkflows(input);
-    var response = workflows.stream().map(s -> WorkflowsOutput.of(s)).collect(Collectors.toList());
+    var response = workflows.stream().map(WorkflowsOutput::of).collect(Collectors.toList());
     sendMappedJson(exchange, 200, response);
   }
 
@@ -165,7 +166,7 @@ public class AdminServer implements AutoCloseable {
     var request = mapper.readValue(exchange.getRequestBody(), ListWorkflowsRequest.class);
     var input = request.asInput().withQueuesOnly();
     var workflows = systemDatabase.listWorkflows(input);
-    var response = workflows.stream().map(s -> WorkflowsOutput.of(s)).collect(Collectors.toList());
+    var response = workflows.stream().map(WorkflowsOutput::of).collect(Collectors.toList());
     sendMappedJson(exchange, 200, response);
   }
 
@@ -183,7 +184,7 @@ public class AdminServer implements AutoCloseable {
 
   private void listSteps(HttpExchange exchange, String wfid) throws IOException {
     var steps = systemDatabase.listWorkflowSteps(wfid);
-    var response = steps.stream().map(s -> StepOutput.of(s)).collect(Collectors.toList());
+    var response = steps.stream().map(StepOutput::of).collect(Collectors.toList());
     sendMappedJson(exchange, 200, response);
   }
 
