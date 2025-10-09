@@ -238,7 +238,7 @@ class AdminServerTest {
   public void listWorkflows() throws IOException {
 
     List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
-        statuses.add(
+    statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
             .name("WF1")
