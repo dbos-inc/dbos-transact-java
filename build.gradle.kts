@@ -44,12 +44,11 @@ plugins {
 
 group = "dev.dbos"
 
-tasks.withType<JavaCompile> {
-    options.release.set(17) // Targets Java 17 bytecode
-}
-
 java {
     withSourcesJar()
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
 }
 
 spotless {
@@ -91,7 +90,7 @@ dependencies {
     testImplementation("io.rest-assured:rest-assured:5.4.0")
     testImplementation("io.rest-assured:json-path:5.4.0")
     testImplementation("io.rest-assured:xml-path:5.4.0")
-    testImplementation(platform("org.junit:junit-bom:5.10.0"))
+    testImplementation(platform("org.junit:junit-bom:5.12.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.java-websocket:Java-WebSocket:1.5.6")
     testImplementation("org.junit-pioneer:junit-pioneer:2.3.0")
