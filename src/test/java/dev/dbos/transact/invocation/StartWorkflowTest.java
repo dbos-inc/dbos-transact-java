@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class StartWorkflowTest {
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
   private HawkService proxy;
   private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
@@ -45,12 +44,12 @@ public class StartWorkflowTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.initialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
     var impl = new HawkServiceImpl();
-    proxy = dbos.registerWorkflows(HawkService.class, impl);
+    proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    dbos.launch();
+    DBOS.launch();
 
     dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
@@ -58,20 +57,20 @@ public class StartWorkflowTest {
   @AfterEach
   void afterEachTest() throws Exception {
     dataSource.close();
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   void startWorkflow() throws Exception {
     var handle =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> {
               return proxy.simpleWorkflow();
             });
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var rows = dbos.listWorkflows(null);
+    var rows = DBOS.listWorkflows(null);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(handle.getWorkflowId(), row.workflowId());
@@ -83,7 +82,7 @@ public class StartWorkflowTest {
 
     String workflowId = "startWorkflowWithWorkflowId";
     var options = new StartWorkflowOptions(workflowId);
-    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+    var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
     assertEquals(workflowId, handle.getWorkflowId());
     var result = handle.getResult();
     assertEquals(localDate, result);
@@ -101,12 +100,12 @@ public class StartWorkflowTest {
 
     String workflowId = "startWorkflowWithTimeout";
     var options = new StartWorkflowOptions(workflowId).withTimeout(1, TimeUnit.SECONDS);
-    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
+    var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
     assertEquals(workflowId, handle.getWorkflowId());
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var row = dbos.retrieveWorkflow(workflowId);
+    var row = DBOS.retrieveWorkflow(workflowId);
     assertNotNull(row);
     assertEquals(workflowId, row.getWorkflowId());
     assertEquals("SUCCESS", row.getStatus().status());

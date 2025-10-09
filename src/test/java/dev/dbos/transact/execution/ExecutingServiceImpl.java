@@ -1,8 +1,10 @@
 package dev.dbos.transact.execution;
 
-import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
+
+import java.time.Duration;
 
 public class ExecutingServiceImpl implements ExecutingService {
 
@@ -41,8 +43,8 @@ public class ExecutingServiceImpl implements ExecutingService {
   }
 
   @Workflow(name = "sleepingWorkflow")
-  public void sleepingWorkflow(float seconds) {
-    DBOSContext.dbosInstance().get().sleep(seconds);
+  public void sleepingWorkflow(double seconds) {
+    DBOS.sleep(Duration.ofMillis((long) (seconds * 1000)));
   }
 
   public int callsToNoReturnStep = 0;

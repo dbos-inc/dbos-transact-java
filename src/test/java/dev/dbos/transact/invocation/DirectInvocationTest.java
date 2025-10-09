@@ -30,7 +30,6 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class DirectInvocationTest {
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
   private HawkService proxy;
   private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
@@ -50,12 +49,12 @@ public class DirectInvocationTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.initialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
     var impl = new HawkServiceImpl();
-    proxy = dbos.registerWorkflows(HawkService.class, impl);
+    proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    dbos.launch();
+    DBOS.launch();
 
     dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
@@ -63,7 +62,7 @@ public class DirectInvocationTest {
   @AfterEach
   void afterEachTest() throws Exception {
     dataSource.close();
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
@@ -355,7 +354,7 @@ public class DirectInvocationTest {
     var wf = wfs.get(0);
     assertNotNull(wf.workflowId());
 
-    var steps = dbos.listWorkflowSteps(wf.workflowId());
+    var steps = DBOS.listWorkflowSteps(wf.workflowId());
     assertEquals(1, steps.size());
     var step = steps.get(0);
     assertEquals(0, step.functionId());
@@ -413,7 +412,7 @@ public class DirectInvocationTest {
   // dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
   //   impl.setProxy(proxy);
 
-  //   dbos.launch();
+  //   DBOS.launch();
 
   //   var options = new WorkflowOptions(Duration.ofSeconds(1));
   //   try (var _o = options.setContext()) {

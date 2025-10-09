@@ -35,6 +35,7 @@ public class MgmtServiceImpl implements MgmtService {
       service.stepThree();
 
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
       logger.error("simpleWorkflow interrupted", e);
     }
 

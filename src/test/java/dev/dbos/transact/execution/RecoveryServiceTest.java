@@ -34,7 +34,6 @@ class RecoveryServiceTest {
 
   private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
-  private DBOS dbos;
   private Queue testQueue;
   private SystemDatabase systemDatabase;
   private DBOSExecutor dbosExecutor;
@@ -59,22 +58,22 @@ class RecoveryServiceTest {
     DBUtils.recreateDB(dbosConfig);
     RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    dbos = DBOS.initialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
     executingService =
-        dbos.registerWorkflows(
+        DBOS.registerWorkflows(
             ExecutingService.class, executingServiceImpl = new ExecutingServiceImpl());
     executingService.setExecutingService(executingService);
 
-    testQueue = dbos.Queue("q1").build();
+    testQueue = DBOS.Queue("q1").build();
 
-    dbos.launch();
-    systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    DBOS.launch();
+    systemDatabase = DBOSTestAccess.getSystemDatabase();
+    dbosExecutor = DBOSTestAccess.getDbosExecutor();
   }
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
@@ -95,13 +94,13 @@ class RecoveryServiceTest {
     wfid = "wf-126";
     WorkflowHandle<String, ?> handle6 = null;
     try (var id = new WorkflowOptions(wfid).setContext()) {
-      handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+      handle6 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
     wfid = "wf-127";
     var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
-    var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
+    var handle7 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
     assertEquals("q1", handle7.getStatus().queueName());
     handle7.getResult();
 
@@ -126,12 +125,12 @@ class RecoveryServiceTest {
     executingService.workflowMethod("test-item");
     WorkflowHandle<String, ?> handle6 = null;
     try (var id = new WorkflowOptions("wf-126").setContext()) {
-      handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+      handle6 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"));
     }
     handle6.getResult();
 
     var options = new StartWorkflowOptions("wf-127").withQueue(testQueue);
-    var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
+    var handle7 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
     assertEquals("q1", handle7.getStatus().queueName());
     assertEquals("wf-126", handle6.getWorkflowId());
     assertEquals("wf-127", handle7.getWorkflowId());
@@ -167,23 +166,23 @@ class RecoveryServiceTest {
     assertTrue(s.isPresent());
     assertEquals(WorkflowState.PENDING.name(), s.get().status());
 
-    dbos.shutdown();
+    DBOS.shutdown();
 
-    dbos = DBOS.initialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
     // dbos = DBOS.getInstance();
 
     // need to register again
     // towatch: we are registering after launch. could lead to a race condition
     // toimprove : allow registration before launch
-    executingService = dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    executingService = DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
-    var h = dbos.retrieveWorkflow("wf-123");
+    var h = DBOS.retrieveWorkflow("wf-123");
     h.getResult();
     assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
 
-    h = dbos.retrieveWorkflow("wf-124");
+    h = DBOS.retrieveWorkflow("wf-124");
     h.getResult();
     assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
   }
@@ -199,7 +198,7 @@ class RecoveryServiceTest {
     }
     assertEquals(executingServiceImpl.callsToThrowStep, 1);
     assertEquals(executingServiceImpl.callsToNoReturnStep, 1);
-    var h = dbos.retrieveWorkflow(wfid);
+    var h = DBOS.retrieveWorkflow(wfid);
     assertNull(h.getStatus().error());
     assertNull(h.getResult());
 

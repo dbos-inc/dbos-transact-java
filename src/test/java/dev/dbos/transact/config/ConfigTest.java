@@ -31,14 +31,14 @@ public class ConfigTest {
             .executorId("test-executor-id")
             .build();
 
-    var dbos = DBOS.initialize(config);
+    DBOS.reinitialize(config);
     try {
-      dbos.launch();
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      DBOS.launch();
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertEquals("test-app-version", dbosExecutor.appVersion());
       assertEquals("test-executor-id", dbosExecutor.executorId());
     } finally {
-      dbos.shutdown();
+      DBOS.shutdown();
     }
   }
 
@@ -57,14 +57,14 @@ public class ConfigTest {
             .executorId("test-executor-id")
             .build();
 
-    var dbos = DBOS.initialize(config);
+    DBOS.reinitialize(config);
     try {
-      dbos.launch();
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      DBOS.launch();
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertEquals("test-env-app-version", dbosExecutor.appVersion());
       assertEquals("test-env-executor-id", dbosExecutor.executorId());
     } finally {
-      dbos.shutdown();
+      DBOS.shutdown();
     }
   }
 
@@ -77,13 +77,13 @@ public class ConfigTest {
             .dbUser("postgres")
             .build();
 
-    var dbos = DBOS.initialize(config);
+    DBOS.reinitialize(config);
     try {
-      dbos.launch();
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      DBOS.launch();
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertEquals("local", dbosExecutor.executorId());
     } finally {
-      dbos.shutdown();
+      DBOS.shutdown();
     }
   }
 
@@ -97,14 +97,14 @@ public class ConfigTest {
             .conductorKey("test-conductor-key")
             .build();
 
-    var dbos = DBOS.initialize(config);
+    DBOS.reinitialize(config);
     try {
-      dbos.launch();
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      DBOS.launch();
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertNotNull(dbosExecutor.executorId());
       assertDoesNotThrow(() -> UUID.fromString(dbosExecutor.executorId()));
     } finally {
-      dbos.shutdown();
+      DBOS.shutdown();
     }
   }
 
@@ -117,15 +117,15 @@ public class ConfigTest {
             .dbUser("postgres")
             .build();
 
-    var dbos = DBOS.initialize(config);
+    DBOS.reinitialize(config);
     try {
-      dbos.launch();
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      DBOS.launch();
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       // If we change the internally registered workflows, the expected value will change
-      var expected = "2a910c81034c729afb86d4a0c48fcb6d82e00dce8485a042d19e052173df3ff9";
+      var expected = "16776e05fc693102206e4b6cb96c05f53e37ba5b6ea62b86d8daa3658263d407";
       assertEquals(expected, dbosExecutor.appVersion());
     } finally {
-      dbos.shutdown();
+      DBOS.shutdown();
     }
   }
 }

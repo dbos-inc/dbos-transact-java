@@ -26,7 +26,6 @@ public class ClientTest {
   private static final String dbUser = "postgres";
   private static final String dbPassword = System.getenv("PGPASSWORD");
 
-  private DBOS dbos;
   private ClientService service;
   private HikariDataSource dataSource;
 
@@ -45,10 +44,10 @@ public class ClientTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.initialize(dbosConfig);
-    dbos.Queue("testQueue").build();
-    service = dbos.registerWorkflows(ClientService.class, new ClientServiceImpl());
-    dbos.launch();
+    DBOS.reinitialize(dbosConfig);
+    DBOS.Queue("testQueue").build();
+    service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
+    DBOS.launch();
 
     dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
@@ -56,13 +55,13 @@ public class ClientTest {
   @AfterEach
   void afterEachTest() throws Exception {
     dataSource.close();
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void clientEnqueue() throws Exception {
 
-    var qs = DBOSTestAccess.getQueueService(dbos);
+    var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
@@ -91,7 +90,7 @@ public class ClientTest {
 
   @Test
   public void clientEnqueueDeDupe() throws Exception {
-    var qs = DBOSTestAccess.getQueueService(dbos);
+    var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
@@ -110,7 +109,7 @@ public class ClientTest {
   @Test
   public void clientSend() throws Exception {
 
-    var handle = dbos.startWorkflow(() -> service.sendTest(42));
+    var handle = DBOS.startWorkflow(() -> service.sendTest(42));
 
     var idempotencyKey = UUID.randomUUID().toString();
 
@@ -119,7 +118,7 @@ public class ClientTest {
     }
 
     var workflowId = "%s-%s".formatted(handle.getWorkflowId(), idempotencyKey);
-    var sendHandle = dbos.retrieveWorkflow(workflowId);
+    var sendHandle = DBOS.retrieveWorkflow(workflowId);
     assertEquals("SUCCESS", sendHandle.getStatus().status());
 
     assertEquals("42-test.message", handle.getResult());

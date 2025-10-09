@@ -5,9 +5,9 @@ import dev.dbos.transact.workflow.Workflow;
 
 public class InternalWorkflowsServiceImpl implements InternalWorkflowsService {
 
-  private final DBOS dbos;
+  private final DBOS.Instance dbos;
 
-  public InternalWorkflowsServiceImpl(DBOS dbos) {
+  public InternalWorkflowsServiceImpl(DBOS.Instance dbos) {
     this.dbos = dbos;
   }
 

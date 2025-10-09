@@ -13,6 +13,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.*;
+import java.time.Duration;
 import java.util.*;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -218,18 +219,14 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public Object recv(
-      String workflowId,
-      int functionId,
-      int timeoutFunctionId,
-      String topic,
-      double timeoutSeconds) {
+      String workflowId, int functionId, int timeoutFunctionId, String topic, Duration timeout) {
 
     return DbRetry.call(
         () -> {
           try {
-            return notificationsDAO.recv(
-                workflowId, functionId, timeoutFunctionId, topic, timeoutSeconds);
+            return notificationsDAO.recv(workflowId, functionId, timeoutFunctionId, topic, timeout);
           } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
             logger.error("recv() was interrupted", ie);
             throw new RuntimeException(ie.getMessage(), ie);
           }
@@ -245,18 +242,18 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public Object getEvent(
-      String targetId, String key, double timeoutSeconds, GetWorkflowEventContext callerCtx) {
+      String targetId, String key, Duration timeout, GetWorkflowEventContext callerCtx) {
 
     return DbRetry.call(
         () -> {
-          return notificationsDAO.getEvent(targetId, key, timeoutSeconds, callerCtx);
+          return notificationsDAO.getEvent(targetId, key, timeout, callerCtx);
         });
   }
 
-  public double sleep(String workflowId, int functionId, double seconds, boolean skipSleep) {
+  public Duration sleep(String workflowId, int functionId, Duration duration, boolean skipSleep) {
     return DbRetry.call(
         () -> {
-          return stepsDAO.sleep(workflowId, functionId, seconds, skipSleep);
+          return stepsDAO.sleep(workflowId, functionId, duration, skipSleep);
         });
   }
 
