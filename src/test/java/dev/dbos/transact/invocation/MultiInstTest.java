@@ -118,7 +118,7 @@ public class MultiInstTest {
 
     var browsa =
         dbos.listWorkflows(
-            new ListWorkflowsInput.Builder().workflowID(bhandlea.getWorkflowId()).build());
+            new ListWorkflowsInput.Builder().workflowId(bhandlea.getWorkflowId()).build());
     assertEquals(1, browsa.size());
     var browa = browsa.get(0);
     assertEquals(bhandlea.getWorkflowId(), browa.workflowId());
@@ -129,7 +129,7 @@ public class MultiInstTest {
 
     var brows1 =
         dbos.listWorkflows(
-            new ListWorkflowsInput.Builder().workflowID(bhandle1.getWorkflowId()).build());
+            new ListWorkflowsInput.Builder().workflowId(bhandle1.getWorkflowId()).build());
     assertEquals(1, brows1.size());
     var brow1 = brows1.get(0);
     assertEquals(bhandle1.getWorkflowId(), brow1.workflowId());
@@ -140,7 +140,7 @@ public class MultiInstTest {
 
     var hrows =
         dbos.listWorkflows(
-            new ListWorkflowsInput.Builder().workflowID(hhandle.getWorkflowId()).build());
+            new ListWorkflowsInput.Builder().workflowId(hhandle.getWorkflowId()).build());
     assertEquals(1, hrows.size());
     var hrow = hrows.get(0);
     assertEquals(hhandle.getWorkflowId(), hrow.workflowId());
