@@ -2,6 +2,7 @@ package dev.dbos.transact.admin;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 
 import java.io.IOException;
@@ -189,6 +190,8 @@ public class AdminServer implements AutoCloseable {
   private void cancel(HttpExchange exchange, String wfid) throws IOException {
     if (!ensurePost(exchange)) return;
 
+    logger.info("Cancelling workflow {}", wfid);
+
     dbosExecutor.cancelWorkflow(wfid);
     exchange.sendResponseHeaders(204, 0);
   }
@@ -196,11 +199,24 @@ public class AdminServer implements AutoCloseable {
   private void resume(HttpExchange exchange, String wfid) throws IOException {
     if (!ensurePost(exchange)) return;
 
+    logger.info("Resuming workflow {}", wfid);
+
     dbosExecutor.resumeWorkflow(wfid);
     exchange.sendResponseHeaders(204, 0);
   }
 
-  private void fork(HttpExchange exchange, String wfid) throws IOException {}
+  private void fork(HttpExchange exchange, String wfid) throws IOException {
+    if (!ensurePostJson(exchange)) return;
+
+    var request = mapper.readValue(exchange.getRequestBody(), ForkRequest.class);
+    int startStep = request.start_step == null ? 0 : request.start_step;
+    var options = new ForkOptions(request.new_workflow_id, request.application_version, null);
+
+    logger.info("Forking workflow {} at step {}", wfid, startStep);
+    var handle = dbosExecutor.forkWorkflow(wfid, startStep, options);
+    var response = new ForkResponse(handle.getWorkflowId());
+    sendMappedJson(exchange, 200, response);
+  }
 
   private static void sendText(HttpExchange exchange, int statusCode, String text)
       throws IOException {
@@ -269,4 +285,8 @@ public class AdminServer implements AutoCloseable {
   record GarbageCollectRequest(long cutoff_epoch_timestamp_ms, int rows_threshold) {}
 
   record GlobalTimeoutRequest(long cutoff_epoch_timestamp_ms) {}
+
+  record ForkRequest(Integer start_step, String new_workflow_id, String application_version) {}
+
+  record ForkResponse(String workflow_id) {}
 }

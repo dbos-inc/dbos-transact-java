@@ -17,6 +17,7 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ErrorResult;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -122,7 +123,6 @@ class AdminServerTest {
           .body(equalTo(exception.getMessage()));
     }
   }
-
 
   @Test
   public void healthz() throws IOException {
@@ -307,10 +307,10 @@ class AdminServerTest {
           .contentType("application/json")
           .body(
               """
-              {
-          "workflow_id_prefix": "WF",
-          "end_time": "2025-10-09T11:26:05-07:00"
-            } """)
+                      {
+                  "workflow_id_prefix": "WF",
+                  "end_time": "2025-10-09T11:26:05-07:00"
+                    } """)
           .when()
           .post("/workflows")
           .then()
@@ -320,8 +320,7 @@ class AdminServerTest {
           .body("[0].Status", equalTo("PENDING"))
           .body("[0].CreatedAt", equalTo("1754936102215"));
 
-      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
-          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor = ArgumentCaptor.forClass(ListWorkflowsInput.class);
 
       verify(mockDB).listWorkflows(inputCaptor.capture());
       var input = inputCaptor.getValue();
@@ -378,10 +377,10 @@ class AdminServerTest {
           .contentType("application/json")
           .body(
               """
-              {
-          "workflow_id_prefix": "WF",
-          "end_time": "2025-10-09T11:26:05-07:00"
-            } """)
+                      {
+                  "workflow_id_prefix": "WF",
+                  "end_time": "2025-10-09T11:26:05-07:00"
+                    } """)
           .when()
           .post("/queues")
           .then()
@@ -392,8 +391,7 @@ class AdminServerTest {
           .body("[0].CreatedAt", equalTo("1754936102215"))
           .body("[0].QueueName", equalTo("test-queue-name"));
 
-      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
-          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor = ArgumentCaptor.forClass(ListWorkflowsInput.class);
 
       verify(mockDB).listWorkflows(inputCaptor.capture());
       var input = inputCaptor.getValue();
@@ -405,13 +403,13 @@ class AdminServerTest {
   @Test
   public void getWorkflow() throws IOException {
     var status = new WorkflowStatusBuilder("test-wf-id")
-            .status(WorkflowState.PENDING)
-            .name("WF3")
-            .createdAt(1754946202215L)
-            .updatedAt(1754946202215L)
-            .build();
+        .status(WorkflowState.PENDING)
+        .name("WF3")
+        .createdAt(1754946202215L)
+        .updatedAt(1754946202215L)
+        .build();
 
-      when(mockDB.listWorkflows(any())).thenReturn(List.of(status));
+    when(mockDB.listWorkflows(any())).thenReturn(List.of(status));
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
@@ -427,8 +425,7 @@ class AdminServerTest {
           .body("Status", equalTo(status.status().toString()))
           .body("CreatedAt", equalTo("1754946202215"));
 
-      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
-          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor = ArgumentCaptor.forClass(ListWorkflowsInput.class);
 
       verify(mockDB).listWorkflows(inputCaptor.capture());
       var input = inputCaptor.getValue();
@@ -450,8 +447,8 @@ class AdminServerTest {
 
   @Test
   public void getWorkflowNotFound() throws IOException {
-      List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
-      when(mockDB.listWorkflows(any())).thenReturn(statuses);
+    List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+    when(mockDB.listWorkflows(any())).thenReturn(statuses);
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
@@ -474,10 +471,10 @@ class AdminServerTest {
       var step = new StepInfo(i, "step-%d".formatted(i), "output-%d".formatted(i), null, null);
       steps.add(step);
     }
-    steps.add(new StepInfo(3, "step-3", null,null, "child-wfid-3"));
+    steps.add(new StepInfo(3, "step-3", null, null, "child-wfid-3"));
     var error = new RuntimeException("error-4");
     steps.add(new StepInfo(4, "step-4", null, ErrorResult.of(error), null));
-      
+
     when(mockDB.listWorkflowSteps(any())).thenReturn(steps);
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
@@ -492,29 +489,29 @@ class AdminServerTest {
           .extract()
           .response();
 
-        List<Map<String, Object>> stepsReturn = response.jsonPath().getList("");
-        for (var i = 0; i < stepsReturn.size(); i++) {
-          var step = stepsReturn.get(i);
-          assertEquals(i, step.get("function_id"));
-          assertEquals("step-%d".formatted(i), step.get("function_name"));
-          if (i < 3) {
-            assertEquals("\"output-%d\"".formatted(i), step.get("output"));
-            assertNull(step.get("error"));
-            assertNull(step.get("child_workflow_id"));
-          }
-          if (i == 3) {
-            assertNull(step.get("output"));
-            assertNull(step.get("error"));
-            assertEquals("child-wfid-3", step.get("child_workflow_id"));
-          }
-          if (i == 4) {
-            assertNull(step.get("output"));
-            assertNotNull(step.get("error"));
-            var result = JSONUtil.fromJson((String)step.get("error"), ErrorResult.class);
-            assertEquals("error-4", result.message());
-            assertNull(step.get("child_workflow_id"));
-          }
+      List<Map<String, Object>> stepsReturn = response.jsonPath().getList("");
+      for (var i = 0; i < stepsReturn.size(); i++) {
+        var step = stepsReturn.get(i);
+        assertEquals(i, step.get("function_id"));
+        assertEquals("step-%d".formatted(i), step.get("function_name"));
+        if (i < 3) {
+          assertEquals("\"output-%d\"".formatted(i), step.get("output"));
+          assertNull(step.get("error"));
+          assertNull(step.get("child_workflow_id"));
         }
+        if (i == 3) {
+          assertNull(step.get("output"));
+          assertNull(step.get("error"));
+          assertEquals("child-wfid-3", step.get("child_workflow_id"));
+        }
+        if (i == 4) {
+          assertNull(step.get("output"));
+          assertNotNull(step.get("error"));
+          var result = JSONUtil.fromJson((String) step.get("error"), ErrorResult.class);
+          assertEquals("error-4", result.message());
+          assertNull(step.get("child_workflow_id"));
+        }
+      }
     }
   }
 
@@ -551,4 +548,67 @@ class AdminServerTest {
       verify(mockExec).resumeWorkflow(eq("test-wf-id"));
     }
   }
+
+  @Test
+  public void forkWorkflowNoOptions() throws IOException {
+    var newWfId = "test-new-wf-id";
+    var mockHandle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+    when(mockHandle.getWorkflowId()).thenReturn(newWfId);
+    when(mockExec.forkWorkflow(eq("test-wf-id"), eq(0), any())).thenReturn(mockHandle);
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .contentType("application/json")
+          .body("{}")
+          .when()
+          .post("/workflows/test-wf-id/fork")
+          .then()
+          .statusCode(200)
+          .body("workflow_id", equalTo(newWfId));
+
+      ArgumentCaptor<ForkOptions> optionsCaptor = ArgumentCaptor.forClass(ForkOptions.class);
+
+      verify(mockExec).forkWorkflow(eq("test-wf-id"), eq(0), optionsCaptor.capture());
+      var options = optionsCaptor.getValue();
+      assertNull(options.applicationVersion());
+      assertNull(options.forkedWorkflowId());
+      assertNull(options.timeout());
+    }
+  }
+
+  @Test
+  public void forkWorkflowWithOptions() throws IOException {
+    var newWfId = "test-new-wf-id";
+
+    var mockHandle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+    when(mockHandle.getWorkflowId()).thenReturn(newWfId);
+    
+    when(mockExec.forkWorkflow(eq("test-wf-id"), eq(2), any())).thenReturn(mockHandle);
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .contentType("application/json")
+          .body("{\"start_step\": 2, \"new_workflow_id\": \"test-new-wf-id\", \"application_version\": \"test-application_version\"}")
+          .when()
+          .post("/workflows/test-wf-id/fork")
+          .then()
+          .statusCode(200)
+          .body("workflow_id", equalTo(newWfId));
+
+      ArgumentCaptor<ForkOptions> optionsCaptor = ArgumentCaptor.forClass(ForkOptions.class);
+
+      verify(mockExec).forkWorkflow(eq("test-wf-id"), eq(2), optionsCaptor.capture());
+      var options = optionsCaptor.getValue();
+      assertEquals("test-application_version", options.applicationVersion());
+      assertEquals("test-new-wf-id", options.forkedWorkflowId());
+      assertNull(options.timeout());
+    }
+  }
+
 }
