@@ -1,12 +1,10 @@
 package dev.dbos.transact.context;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 
@@ -24,7 +22,6 @@ public class DBOSContext {
   // String assumedRole;
 
   // current workflow fields
-  private final DBOS dbos;
   private final String workflowId;
   private int functionId;
   private Integer stepFunctionId;
@@ -36,7 +33,6 @@ public class DBOSContext {
   // private StepStatus stepStatus;
 
   public DBOSContext() {
-    dbos = null;
     workflowId = null;
     functionId = -1;
     parent = null;
@@ -44,9 +40,7 @@ public class DBOSContext {
     deadline = null;
   }
 
-  public DBOSContext(
-      DBOS dbos, String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
-    this.dbos = dbos;
+  public DBOSContext(String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
@@ -61,7 +55,6 @@ public class DBOSContext {
       CompletableFuture<String> future) {
     this.nextWorkflowId = other.nextWorkflowId;
     this.nextTimeout = other.nextTimeout;
-    this.dbos = other.dbos;
     this.workflowId = other.workflowId;
     this.functionId = functionId == null ? other.functionId : functionId;
     this.stepFunctionId = other.stepFunctionId;
@@ -88,6 +81,10 @@ public class DBOSContext {
 
   public String getWorkflowId() {
     return workflowId;
+  }
+
+  public Integer getStepId() {
+    return stepFunctionId;
   }
 
   public int getAndIncrementFunctionId() {
@@ -188,18 +185,23 @@ public class DBOSContext {
     return this.startWorkflowFuture;
   }
 
-  public static Optional<String> workflowId() {
+  public static String workflowId() {
     var ctx = DBOSContextHolder.get();
-    return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.workflowId);
+    return ctx == null ? null : ctx.workflowId;
   }
 
-  public static Optional<DBOS> dbosInstance() {
+  public static Integer stepId() {
     var ctx = DBOSContextHolder.get();
-    return ctx == null ? Optional.empty() : Optional.ofNullable(ctx.dbos);
+    return ctx == null ? null : ctx.stepFunctionId;
   }
 
   public static boolean inWorkflow() {
     var ctx = DBOSContextHolder.get();
     return ctx == null ? false : ctx.isInWorkflow();
+  }
+
+  public static boolean inStep() {
+    var ctx = DBOSContextHolder.get();
+    return ctx == null ? false : ctx.isInStep();
   }
 }

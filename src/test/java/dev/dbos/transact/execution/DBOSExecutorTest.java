@@ -29,7 +29,6 @@ import org.junit.jupiter.api.Timeout;
 class DBOSExecutorTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
   private static DataSource dataSource;
 
   @BeforeAll
@@ -48,22 +47,22 @@ class DBOSExecutorTest {
     DBUtils.recreateDB(dbosConfig);
     DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    dbos = DBOS.initialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   void executeWorkflowById() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     String result = null;
 
@@ -74,7 +73,7 @@ class DBOSExecutorTest {
 
     assertEquals("test-itemtest-item", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
@@ -85,7 +84,7 @@ class DBOSExecutorTest {
     assertEquals("test-itemtest-item", result);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
-    wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
   }
 
@@ -93,11 +92,11 @@ class DBOSExecutorTest {
   void executeWorkflowByIdNonExistent() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     String result = null;
 
@@ -108,7 +107,7 @@ class DBOSExecutorTest {
 
     assertEquals("test-itemtest-item", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
     boolean error = false;
@@ -127,8 +126,8 @@ class DBOSExecutorTest {
   void workflowFunctionNotfound() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
     String result = null;
 
@@ -139,13 +138,13 @@ class DBOSExecutorTest {
 
     assertEquals("test-itemtest-item", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
-    dbos.shutdown();
-    DBOSTestAccess.clearRegistry(dbos); // clear out the registry
-    dbos.launch(); // restart dbos
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    DBOS.shutdown();
+    DBOSTestAccess.clearRegistry(); // clear out the registry
+    DBOS.launch(); // restart dbos
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     boolean error = false;
     try {
@@ -163,9 +162,9 @@ class DBOSExecutorTest {
   public void executeWithStep() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -179,15 +178,15 @@ class DBOSExecutorTest {
 
     assertEquals("test-itemstepOnestepTwo", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
-    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    List<StepInfo> steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(2, steps.size());
 
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     DBUtils.deleteAllStepOutputs(dataSource, wfid);
-    steps = dbos.listWorkflowSteps(wfid);
+    steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(0, steps.size());
 
     WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
@@ -196,9 +195,9 @@ class DBOSExecutorTest {
     assertEquals("test-itemstepOnestepTwo", result);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
-    wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
-    steps = dbos.listWorkflowSteps(wfid);
+    steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(2, steps.size());
   }
 
@@ -206,9 +205,9 @@ class DBOSExecutorTest {
   public void ReExecuteWithStepTwoOnly() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -224,15 +223,15 @@ class DBOSExecutorTest {
     assertEquals(1, ExecutingServiceImpl.step1Count);
     assertEquals(1, ExecutingServiceImpl.step2Count);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
-    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    List<StepInfo> steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(2, steps.size());
 
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     DBUtils.deleteStepOutput(dataSource, wfid, 1);
-    steps = dbos.listWorkflowSteps(wfid);
+    steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(1, steps.size());
 
     WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
@@ -244,9 +243,9 @@ class DBOSExecutorTest {
 
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
-    wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
-    steps = dbos.listWorkflowSteps(wfid);
+    steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(2, steps.size());
   }
 
@@ -254,8 +253,8 @@ class DBOSExecutorTest {
   public void sleep() throws SQLException {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -271,7 +270,7 @@ class DBOSExecutorTest {
     assertTrue(duration >= 2000);
     assertTrue(duration < 2200);
 
-    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    List<StepInfo> steps = DBOS.listWorkflowSteps(wfid);
 
     assertEquals("DBOS.sleep", steps.get(0).functionName());
   }
@@ -280,9 +279,9 @@ class DBOSExecutorTest {
   public void sleepRecovery() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -292,14 +291,14 @@ class DBOSExecutorTest {
       executingService.sleepingWorkflow(.002f);
     }
 
-    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    List<StepInfo> steps = DBOS.listWorkflowSteps(wfid);
 
     assertEquals("DBOS.sleep", steps.get(0).functionName());
 
     // let us set the state to PENDING and increase the sleep time
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     long currenttime = System.currentTimeMillis();
-    double newEndtime = (currenttime + 2000) / 1000;
+    double newEndtime = (currenttime + 2000);
 
     String endTimeAsJson = JSONUtil.serialize(newEndtime);
 
@@ -310,6 +309,6 @@ class DBOSExecutorTest {
     h.getResult();
 
     long duration = System.currentTimeMillis() - starttime;
-    assertTrue(duration >= 1000);
+    assertTrue(duration >= 1000 && duration < 3000);
   }
 }

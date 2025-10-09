@@ -39,7 +39,6 @@ import org.junitpioneer.jupiter.RetryingTest;
 class AdminControllerTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -58,18 +57,18 @@ class AdminControllerTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.initialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void health() throws Exception {
 
-    dbos.launch();
+    DBOS.launch();
     HttpClient client = HttpClient.newHttpClient();
 
     HttpRequest request =
@@ -87,11 +86,11 @@ class AdminControllerTest {
   @Test
   public void recovery() throws Exception {
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -139,11 +138,11 @@ class AdminControllerTest {
 
   @RetryingTest(3)
   public void queueMetadata() throws Exception {
-    dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
+    DBOS.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
 
-    dbos.Queue("secondQueue").limit(2, 4.5).priorityEnabled(true).build();
+    DBOS.Queue("secondQueue").limit(2, 4.5).priorityEnabled(true).build();
 
-    dbos.launch();
+    DBOS.launch();
 
     given()
         .port(3010)
@@ -166,8 +165,8 @@ class AdminControllerTest {
   @Test
   public void listWorkflowSteps() throws Exception {
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -199,8 +198,8 @@ class AdminControllerTest {
   @Test
   public void getWorkflowStatus() throws Exception {
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -229,10 +228,10 @@ class AdminControllerTest {
   @Test
   public void workflows() throws Exception {
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+    DBOS.launch();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -322,9 +321,9 @@ class AdminControllerTest {
   public void fork() throws Exception {
 
     ForkServiceImpl impl = new ForkServiceImpl();
-    ForkService forkService = dbos.registerWorkflows(ForkService.class, impl);
+    ForkService forkService = DBOS.registerWorkflows(ForkService.class, impl);
     forkService.setForkService(forkService);
-    dbos.launch();
+    DBOS.launch();
 
     String workflowId = "wfid1";
     try (var id = new WorkflowOptions(workflowId).setContext()) {
@@ -332,7 +331,7 @@ class AdminControllerTest {
       assertEquals("hellohello", result);
     }
 
-    var handle = dbos.retrieveWorkflow(workflowId);
+    var handle = DBOS.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
     assertEquals(1, impl.step1Count);
@@ -354,7 +353,7 @@ class AdminControllerTest {
             .extract()
             .path("workflowId");
 
-    var newHandle = dbos.retrieveWorkflow(newWorkflowId);
+    var newHandle = DBOS.retrieveWorkflow(newWorkflowId);
     assertEquals("hellohello", newHandle.getResult());
 
     assertEquals(1, impl.step1Count);

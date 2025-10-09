@@ -10,7 +10,7 @@ public interface ExecutingService {
 
   String stepTwo(String input);
 
-  void sleepingWorkflow(float seconds);
+  void sleepingWorkflow(double seconds);
 
   void setExecutingService(ExecutingService service);
 

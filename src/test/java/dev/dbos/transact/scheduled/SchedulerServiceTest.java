@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Timeout;
 class SchedulerServiceTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -40,23 +39,23 @@ class SchedulerServiceTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.initialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
   void afterEachTest() throws Exception {
     // let scheduled workflows drain
     Thread.sleep(1000);
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void simpleScheduledWorkflow() throws Exception {
 
     EverySecWorkflow swf = new EverySecWorkflow();
-    dbos.scheduleWorkflow(swf);
-    dbos.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
+    DBOS.scheduleWorkflow(swf);
+    DBOS.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
     Thread.sleep(5000);
     schedulerService.stop();
@@ -72,9 +71,9 @@ class SchedulerServiceTest {
   public void ThirdSecWorkflow() throws Exception {
 
     EveryThirdSec swf = new EveryThirdSec();
-    dbos.scheduleWorkflow(swf);
-    dbos.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
+    DBOS.scheduleWorkflow(swf);
+    DBOS.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
     Thread.sleep(5000);
     schedulerService.stop();
@@ -90,9 +89,9 @@ class SchedulerServiceTest {
   public void MultipleWorkflowsTest() throws Exception {
 
     MultipleWorkflows swf = new MultipleWorkflows();
-    dbos.scheduleWorkflow(swf);
-    dbos.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
+    DBOS.scheduleWorkflow(swf);
+    DBOS.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
     Thread.sleep(5000);
     schedulerService.stop();
@@ -111,9 +110,9 @@ class SchedulerServiceTest {
   public void TimedWorkflowsTest() throws Exception {
 
     TimedWorkflow swf = new TimedWorkflow();
-    dbos.scheduleWorkflow(swf);
-    dbos.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
+    DBOS.scheduleWorkflow(swf);
+    DBOS.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
     Thread.sleep(5000);
     schedulerService.stop();
@@ -131,7 +130,7 @@ class SchedulerServiceTest {
     InvalidMethodWorkflow imv = new InvalidMethodWorkflow();
 
     try {
-      dbos.scheduleWorkflow(imv);
+      DBOS.scheduleWorkflow(imv);
       assertTrue(false); // fail if we get here
     } catch (IllegalArgumentException e) {
       assertEquals(
@@ -146,7 +145,7 @@ class SchedulerServiceTest {
     InvalidCronWorkflow icw = new InvalidCronWorkflow();
 
     try {
-      dbos.scheduleWorkflow(icw);
+      DBOS.scheduleWorkflow(icw);
       assertTrue(false); // fail if we get here
     } catch (IllegalArgumentException e) {
 
@@ -158,22 +157,22 @@ class SchedulerServiceTest {
   @Test
   public void stepsTest() throws Exception {
 
-    Steps steps = dbos.registerWorkflows(Steps.class, new StepsImpl());
+    Steps steps = DBOS.registerWorkflows(Steps.class, new StepsImpl());
 
     WorkflowWithSteps swf = new WorkflowWithSteps(steps);
-    dbos.scheduleWorkflow(swf);
-    dbos.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
+    DBOS.scheduleWorkflow(swf);
+    DBOS.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
     Thread.sleep(5000);
     schedulerService.stop();
     Thread.sleep(1000);
 
     var input = new ListWorkflowsInput.Builder().build();
-    List<WorkflowStatus> wfs = dbos.listWorkflows(input);
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
     assertTrue(wfs.size() <= 2);
 
-    List<StepInfo> wsteps = dbos.listWorkflowSteps(wfs.get(0).workflowId());
+    List<StepInfo> wsteps = DBOS.listWorkflowSteps(wfs.get(0).workflowId());
     assertEquals(2, wsteps.size());
   }
 
@@ -181,7 +180,7 @@ class SchedulerServiceTest {
   // @Test
   public void everyMinute() throws Exception {
     EveryMinute em = new EveryMinute();
-    dbos.scheduleWorkflow(em);
+    DBOS.scheduleWorkflow(em);
     Thread.sleep(600000);
   }
 

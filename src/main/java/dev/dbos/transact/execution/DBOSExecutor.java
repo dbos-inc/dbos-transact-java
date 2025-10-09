@@ -62,7 +62,6 @@ public class DBOSExecutor implements AutoCloseable {
 
   private final DBOSConfig config;
 
-  private DBOS dbos;
   private String appVersion;
   private String executorId;
 
@@ -84,13 +83,12 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void start(
-      DBOS dbos,
+      DBOS.Instance dbos,
       Map<String, RegisteredWorkflow> workflowMap,
       List<Queue> queues,
       List<ScheduledInstance> scheduledWorkflows) {
 
     if (isRunning.compareAndSet(false, true)) {
-      this.dbos = dbos;
       this.workflowMap = Collections.unmodifiableMap(workflowMap);
       this.queues = Collections.unmodifiableList(queues);
 
@@ -191,7 +189,6 @@ public class DBOSExecutor implements AutoCloseable {
       executorService.shutdownNow();
 
       this.workflowMap = null;
-      this.dbos = null;
     }
   }
 
@@ -479,6 +476,7 @@ public class DBOSExecutor implements AutoCloseable {
       try {
         Thread.sleep((long) (timeBetweenAttemptsSec * 1000));
       } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
       }
       timeBetweenAttemptsSec *= backOffRate;
       ++currAttempts;
@@ -509,18 +507,17 @@ public class DBOSExecutor implements AutoCloseable {
     return new WorkflowHandleDBPoll<R, E>(workflowId, systemDatabase);
   }
 
-  public void sleep(float seconds) {
+  public void sleep(Duration duration) {
     // CB TODO: This should be OK outside DBOS
 
     DBOSContext context = DBOSContextHolder.get();
-    // context.setDbos(dbos);
 
     if (context.getWorkflowId() == null) {
       throw new IllegalStateException("sleep() must be called from within a workflow");
     }
 
     systemDatabase.sleep(
-        context.getWorkflowId(), context.getAndIncrementFunctionId(), seconds, false);
+        context.getWorkflowId(), context.getAndIncrementFunctionId(), duration, false);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
@@ -600,10 +597,10 @@ public class DBOSExecutor implements AutoCloseable {
    * Get a message sent to a particular topic
    *
    * @param topic the topic whose message to get
-   * @param timeoutSeconds time in seconds after which the call times out
+   * @param timeout duration to wait before the call times out
    * @return the message if there is one or else null
    */
-  public Object recv(String topic, float timeoutSeconds) {
+  public Object recv(String topic, Duration timeout) {
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
       throw new IllegalArgumentException("recv() must be called from a workflow.");
@@ -612,7 +609,7 @@ public class DBOSExecutor implements AutoCloseable {
     int timeoutFunctionId = ctx.getAndIncrementFunctionId();
 
     return systemDatabase.recv(
-        ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeoutSeconds);
+        ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeout);
   }
 
   public void setEvent(String key, Object value) {
@@ -627,7 +624,7 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
   }
 
-  public Object getEvent(String workflowId, String key, float timeOut) {
+  public Object getEvent(String workflowId, String key, Duration timeout) {
     logger.debug("Received getEvent for {} {}", workflowId, key);
 
     DBOSContext ctx = DBOSContextHolder.get();
@@ -637,10 +634,10 @@ public class DBOSExecutor implements AutoCloseable {
       int timeoutFunctionId = ctx.getAndIncrementFunctionId();
       GetWorkflowEventContext callerCtx =
           new GetWorkflowEventContext(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId);
-      return systemDatabase.getEvent(workflowId, key, timeOut, callerCtx);
+      return systemDatabase.getEvent(workflowId, key, timeout, callerCtx);
     }
 
-    return systemDatabase.getEvent(workflowId, key, timeOut, null);
+    return systemDatabase.getEvent(workflowId, key, timeout, null);
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
@@ -895,7 +892,7 @@ public class DBOSExecutor implements AutoCloseable {
                 Objects.requireNonNullElse(options.deadline, Instant.EPOCH).toEpochMilli());
 
             DBOSContextHolder.set(
-                new DBOSContext(dbos, workflowId, parent, options.timeout, options.deadline));
+                new DBOSContext(workflowId, parent, options.timeout, options.deadline));
             T result = workflow.invoke(args);
             postInvokeWorkflowResult(systemDatabase, workflowId, result);
             return result;

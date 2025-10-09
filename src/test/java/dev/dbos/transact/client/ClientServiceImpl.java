@@ -1,7 +1,9 @@
 package dev.dbos.transact.client;
 
-import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.workflow.Workflow;
+
+import java.time.Duration;
 
 public class ClientServiceImpl implements ClientService {
 
@@ -12,8 +14,7 @@ public class ClientServiceImpl implements ClientService {
 
   @Workflow
   public String sendTest(int i) {
-    var dbos = DBOSContext.dbosInstance().get();
-    var message = dbos.recv("test-topic", 10);
+    var message = DBOS.recv("test-topic", Duration.ofSeconds(10));
     return String.format("%d-%s", i, message);
   }
 }

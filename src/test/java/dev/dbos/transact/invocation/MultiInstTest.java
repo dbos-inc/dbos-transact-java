@@ -27,7 +27,6 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class MultiInstTest {
   private static DBOSConfig dbosConfig;
-  private DBOS dbos;
   HawkServiceImpl himpl;
   BearServiceImpl bimpla;
   BearServiceImpl bimpl1;
@@ -50,33 +49,33 @@ public class MultiInstTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.initialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
     himpl = new HawkServiceImpl();
     bimpla = new BearServiceImpl();
     bimpl1 = new BearServiceImpl();
-    dbos.Queue("testQueue").build();
+    DBOS.Queue("testQueue").build();
 
-    hproxy = dbos.registerWorkflows(HawkService.class, himpl);
+    hproxy = DBOS.registerWorkflows(HawkService.class, himpl);
     himpl.setProxy(hproxy);
 
-    bproxya = dbos.registerWorkflows(BearService.class, bimpla, "A");
+    bproxya = DBOS.registerWorkflows(BearService.class, bimpla, "A");
     bimpla.setProxy(bproxya);
 
-    bproxy1 = dbos.registerWorkflows(BearService.class, bimpl1, "1");
+    bproxy1 = DBOS.registerWorkflows(BearService.class, bimpl1, "1");
     bimpl1.setProxy(bproxy1);
 
-    dbos.launch();
+    DBOS.launch();
   }
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   void startWorkflow() throws Exception {
     var bhandlea =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> {
               return bproxya.stepWorkflow();
             });
@@ -90,7 +89,7 @@ public class MultiInstTest {
     assertEquals(1, bimpla.nWfCalls);
 
     var bhandle1 =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> {
               return bproxy1.stepWorkflow();
             });
@@ -104,7 +103,7 @@ public class MultiInstTest {
     assertEquals(1, bimpl1.nWfCalls);
 
     var hhandle =
-        dbos.startWorkflow(
+        DBOS.startWorkflow(
             () -> {
               return hproxy.stepWorkflow();
             });
@@ -117,7 +116,7 @@ public class MultiInstTest {
             .format(DateTimeFormatter.ISO_DATE));
 
     var browsa =
-        dbos.listWorkflows(
+        DBOS.listWorkflows(
             new ListWorkflowsInput.Builder().workflowId(bhandlea.getWorkflowId()).build());
     assertEquals(1, browsa.size());
     var browa = browsa.get(0);
@@ -128,7 +127,7 @@ public class MultiInstTest {
     assertEquals("SUCCESS", browa.status());
 
     var brows1 =
-        dbos.listWorkflows(
+        DBOS.listWorkflows(
             new ListWorkflowsInput.Builder().workflowId(bhandle1.getWorkflowId()).build());
     assertEquals(1, brows1.size());
     var brow1 = brows1.get(0);
@@ -139,7 +138,7 @@ public class MultiInstTest {
     assertEquals("SUCCESS", brow1.status());
 
     var hrows =
-        dbos.listWorkflows(
+        DBOS.listWorkflows(
             new ListWorkflowsInput.Builder().workflowId(hhandle.getWorkflowId()).build());
     assertEquals(1, hrows.size());
     var hrow = hrows.get(0);
@@ -151,12 +150,12 @@ public class MultiInstTest {
 
     // All 3 w/ the same WF name
     var allrows =
-        dbos.listWorkflows(new ListWorkflowsInput.Builder().workflowName("stepWorkflow").build());
+        DBOS.listWorkflows(new ListWorkflowsInput.Builder().workflowName("stepWorkflow").build());
     assertEquals(3, allrows.size());
 
     // 2 from BSI
     var brows =
-        dbos.listWorkflows(
+        DBOS.listWorkflows(
             new ListWorkflowsInput.Builder()
                 .workflowName("stepWorkflow")
                 .className("dev.dbos.transact.invocation.BearServiceImpl")
@@ -165,7 +164,7 @@ public class MultiInstTest {
 
     // 2 from BSI
     var browsjust1 =
-        dbos.listWorkflows(
+        DBOS.listWorkflows(
             new ListWorkflowsInput.Builder()
                 .workflowName("stepWorkflow")
                 .className("dev.dbos.transact.invocation.BearServiceImpl")
@@ -210,7 +209,7 @@ public class MultiInstTest {
           "PENDING",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       var eh = dbosExecutor.executeWorkflowById(handle.getWorkflowId());
       eh.getResult();
       stat = client.getWorkflowStatus(handle.getWorkflowId());
