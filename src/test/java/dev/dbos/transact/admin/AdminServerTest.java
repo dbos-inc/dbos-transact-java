@@ -190,23 +190,22 @@ class AdminServerTest {
 
   @Test
   public void garbageCollect() throws IOException {
-    
+
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
 
       given()
           .port(port)
           .contentType("application/json")
-          .body("""
-    { cutoff_epoch_timestamp_ms: 42, rows_threshold: 37 }
-          """)
+          .body(""" 
+            { "cutoff_epoch_timestamp_ms": 42, "rows_threshold": 37 } """)
           .when()
           .post("/dbos-garbage-collect")
           .then()
           .statusCode(204);
 
-    verify(mockDB).garbageCollect(eq(42L), eq(37L));
-        }
+      verify(mockDB).garbageCollect(eq(42L), eq(37L));
+    }
   }
 
   // @Test

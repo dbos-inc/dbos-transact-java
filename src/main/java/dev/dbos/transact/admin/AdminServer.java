@@ -4,8 +4,10 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -103,14 +105,14 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void workflowRecovery(HttpExchange exchange) throws IOException {
-    if (!ensurePostJson(exchange)) return;
+    if (!ensurePostJson(exchange))
+      return;
 
-    List<String> executorIds =
-        mapper.readValue(exchange.getRequestBody(), new TypeReference<List<String>>() {});
+    List<String> executorIds = mapper.readValue(exchange.getRequestBody(), new TypeReference<>() {
+    });
     logger.debug("Recovering workflows for executors {}", executorIds);
     var handles = dbosExecutor.recoverPendingWorkflows(executorIds);
-    List<String> workflowIds =
-        handles.stream().map(h -> h.getWorkflowId()).collect(Collectors.toList());
+    List<String> workflowIds = handles.stream().map(h -> h.getWorkflowId()).collect(Collectors.toList());
     sendMappedJson(exchange, 200, workflowIds);
   }
 
@@ -124,33 +126,47 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void garbageCollect(HttpExchange exchange) throws IOException {
-    if (!ensurePostJson(exchange)) return;
+    if (!ensurePostJson(exchange))
+      return;
 
-    GarbageCollectRequest request =
-        mapper.readValue(exchange.getRequestBody(), new TypeReference<GarbageCollectRequest>() {});
+    GarbageCollectRequest request = mapper.readValue(exchange.getRequestBody(), GarbageCollectRequest.class);
 
     systemDatabase.garbageCollect(request.cutoff_epoch_timestamp_ms, Long.valueOf(request.rows_threshold));
-    exchange.sendResponseHeaders(204, -1);
-    exchange.close();
+    sendText(exchange, 204, "");
   }
 
-  private void globalTimeout(HttpExchange exchange) throws IOException {}
+  private void globalTimeout(HttpExchange exchange) throws IOException {
+  }
 
-  private void listQueuedWorkflows(HttpExchange exchange) throws IOException {}
+  private void listQueuedWorkflows(HttpExchange exchange) throws IOException {
+  }
 
-  private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {}
+  private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {
+  }
 
-  private void cancel(HttpExchange exchange, String wfid) throws IOException {}
+  private void cancel(HttpExchange exchange, String wfid) throws IOException {
+  }
 
-  private void fork(HttpExchange exchange, String wfid) throws IOException {}
+  private void fork(HttpExchange exchange, String wfid) throws IOException {
+  }
 
-  private void resume(HttpExchange exchange, String wfid) throws IOException {}
+  private void resume(HttpExchange exchange, String wfid) throws IOException {
+  }
 
-  private void restart(HttpExchange exchange, String wfid) throws IOException {}
+  private void restart(HttpExchange exchange, String wfid) throws IOException {
+  }
 
-  private void listSteps(HttpExchange exchange, String wfid) throws IOException {}
+  private void listSteps(HttpExchange exchange, String wfid) throws IOException {
+  }
 
-  private void listWorkflows(HttpExchange exchange) throws IOException {}
+  private void listWorkflows(HttpExchange exchange) throws IOException {
+  }
+
+  private static String readRequestBody(HttpExchange exchange) throws IOException {
+    try (InputStream is = exchange.getRequestBody()) {
+      return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+    }
+  }
 
   private static void sendText(HttpExchange exchange, int statusCode, String text)
       throws IOException {
@@ -208,5 +224,6 @@ public class AdminServer implements AutoCloseable {
     void handle(HttpExchange exchange, String workflowId) throws IOException;
   }
 
-  record GarbageCollectRequest(long cutoff_epoch_timestamp_ms, int rows_threshold) {}
+  record GarbageCollectRequest(long cutoff_epoch_timestamp_ms, int rows_threshold) {
+  }
 }
