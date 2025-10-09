@@ -12,8 +12,10 @@ import static org.mockito.Mockito.when;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.io.IOException;
@@ -236,72 +238,36 @@ class AdminServerTest {
   public void listWorkflows() throws IOException {
 
     List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+        statuses.add(
+        new WorkflowStatusBuilder("wf-1")
+            .status(WorkflowState.PENDING)
+            .name("WF1")
+            .createdAt(1754936102215L)
+            .updatedAt(1754936102215L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build());
     statuses.add(
-        new WorkflowStatus(
-            "wf-1",
-            "PENDING",
-            "WF1",
-            null,
-            null,
-            null,
-            null,
-            null,
-            new Object[0],
-            null,
-            null,
-            1754936102215L,
-            1754936102215L,
-            null,
-            "test-executor",
-            "test-app-ver",
-            null,
-            null,
-            "test-app-id",
-            null));
+        new WorkflowStatusBuilder("wf-2")
+            .status(WorkflowState.PENDING)
+            .name("WF2")
+            .createdAt(1754936722066L)
+            .updatedAt(1754936722066L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build());
     statuses.add(
-        new WorkflowStatus(
-            "wf-2",
-            "PENDING",
-            "WF2",
-            null,
-            null,
-            null,
-            null,
-            null,
-            new Object[0],
-            null,
-            null,
-            1754936722066L,
-            1754936722066L,
-            null,
-            "test-executor",
-            "test-app-ver",
-            null,
-            null,
-            "test-app-id",
-            null));
-    statuses.add(
-        new WorkflowStatus(
-            "wf-3",
-            "PENDING",
-            "WF3",
-            null,
-            null,
-            null,
-            null,
-            null,
-            new Object[0],
-            null,
-            null,
-            1754946202215L,
-            1754946202215L,
-            null,
-            "test-executor",
-            "test-app-ver",
-            null,
-            null,
-            "test-app-id",
-            null));
+        new WorkflowStatusBuilder("wf-3")
+            .status(WorkflowState.PENDING)
+            .name("WF3")
+            .createdAt(1754946202215L)
+            .updatedAt(1754946202215L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build());
 
     when(mockDB.listWorkflows(any())).thenReturn(statuses);
 

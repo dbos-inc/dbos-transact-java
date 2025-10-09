@@ -24,7 +24,7 @@ public record ListWorkflowsRequest(
   public ListWorkflowsInput asInput() {
     var builder =
         new ListWorkflowsInput.Builder()
-            .workflowIDs(workflow_uuids)
+            .workflowIds(workflow_uuids)
             .workflowName(workflow_name)
             .authenticatedUser(authenticated_user)
             .startTime(start_time != null ? OffsetDateTime.parse(start_time) : null)
