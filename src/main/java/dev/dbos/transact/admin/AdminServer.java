@@ -135,8 +135,7 @@ public class AdminServer implements AutoCloseable {
 
     var request = mapper.readValue(exchange.getRequestBody(), GarbageCollectRequest.class);
 
-    systemDatabase.garbageCollect(
-        request.cutoff_epoch_timestamp_ms, (long)request.rows_threshold);
+    systemDatabase.garbageCollect(request.cutoff_epoch_timestamp_ms, (long) request.rows_threshold);
 
     exchange.sendResponseHeaders(204, 0);
   }
