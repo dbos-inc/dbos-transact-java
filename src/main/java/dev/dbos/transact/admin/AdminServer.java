@@ -2,6 +2,7 @@ package dev.dbos.transact.admin;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -168,7 +169,17 @@ public class AdminServer implements AutoCloseable {
     sendMappedJson(exchange, 200, response);
   }
 
-  private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {}
+  private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {
+    var input = new ListWorkflowsInput.Builder().workflowId(wfid).build();
+    var workflows = systemDatabase.listWorkflows(input);
+    if (workflows.size() == 0) {
+      sendText(exchange, 404, "Workflow not found");
+      return;
+    }
+
+    var response = WorkflowsOutput.of(workflows.get(0));
+    sendMappedJson(exchange, 200, response);
+  }
 
   private void cancel(HttpExchange exchange, String wfid) throws IOException {}
 

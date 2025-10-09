@@ -394,4 +394,49 @@ class AdminServerTest {
       assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00"), input.endTime());
     }
   }
+
+  @Test
+  public void getWorkflow() throws IOException {
+    var status = new WorkflowStatusBuilder("test-wf-id")
+            .status(WorkflowState.PENDING)
+            .name("WF3")
+            .createdAt(1754946202215L)
+            .updatedAt(1754946202215L)
+            .build();
+
+      when(mockDB.listWorkflows(any())).thenReturn(List.of(status));
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .when()
+          .get("/workflows/test-wf-id")
+          .then()
+          .statusCode(200)
+          .body("WorkflowUUID", equalTo(status.workflowId()))
+          .body("WorkflowName", equalTo(status.name()))
+          .body("Status", equalTo(status.status().toString()))
+          .body("CreatedAt", equalTo("1754946202215"));
+    }
+  }
+
+  @Test
+  public void getWorkflowNotFound() throws IOException {
+      List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+      when(mockDB.listWorkflows(any())).thenReturn(statuses);
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .when()
+          .get("/workflows/test-wf-id")
+          .then()
+          .statusCode(404)
+          .body(equalTo("Workflow not found"));
+    }
+  }
 }
