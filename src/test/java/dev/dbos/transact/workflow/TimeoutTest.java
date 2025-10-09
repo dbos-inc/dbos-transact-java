@@ -31,7 +31,6 @@ public class TimeoutTest {
 
   private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
-  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -50,7 +49,7 @@ public class TimeoutTest {
     DBUtils.recreateDB(dbosConfig);
     TimeoutTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
@@ -88,7 +87,7 @@ public class TimeoutTest {
     simpleService.setSimpleService(simpleService);
 
     DBOS.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+    var systemDatabase = DBOSTestAccess.getSystemDatabase();
 
     // make it timeout
     String wfid1 = "wf-125";
@@ -114,7 +113,7 @@ public class TimeoutTest {
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
-    Queue simpleQ = dbos.Queue("simpleQ").build();
+    Queue simpleQ = DBOS.Queue("simpleQ").build();
 
     DBOS.launch();
 
@@ -140,10 +139,10 @@ public class TimeoutTest {
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
-    Queue simpleQ = dbos.Queue("simpleQ").build();
+    Queue simpleQ = DBOS.Queue("simpleQ").build();
 
     DBOS.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+    var systemDatabase = DBOSTestAccess.getSystemDatabase();
 
     // make it timeout
     String wfid1 = "wf-127";
@@ -173,7 +172,7 @@ public class TimeoutTest {
     simpleService.setSimpleService(simpleService);
 
     DBOS.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+    var systemDatabase = DBOSTestAccess.getSystemDatabase();
 
     // synchronous
 
@@ -200,7 +199,7 @@ public class TimeoutTest {
     simpleService.setSimpleService(simpleService);
 
     DBOS.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+    var systemDatabase = DBOSTestAccess.getSystemDatabase();
 
     // synchronous
 
@@ -231,7 +230,7 @@ public class TimeoutTest {
     simpleService.setSimpleService(simpleService);
 
     DBOS.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     // synchronous
 

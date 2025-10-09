@@ -29,7 +29,6 @@ import org.junit.jupiter.api.Timeout;
 class DBOSExecutorTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS.Instance dbos;
   private static DataSource dataSource;
 
   @BeforeAll
@@ -48,7 +47,7 @@ class DBOSExecutorTest {
     DBUtils.recreateDB(dbosConfig);
     DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
@@ -63,7 +62,7 @@ class DBOSExecutorTest {
         DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     DBOS.launch();
 
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     String result = null;
 
@@ -97,7 +96,7 @@ class DBOSExecutorTest {
 
     DBOS.launch();
 
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     String result = null;
 
@@ -143,9 +142,9 @@ class DBOSExecutorTest {
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
     DBOS.shutdown();
-    DBOSTestAccess.clearRegistry(dbos); // clear out the registry
+    DBOSTestAccess.clearRegistry(); // clear out the registry
     DBOS.launch(); // restart dbos
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     boolean error = false;
     try {
@@ -165,7 +164,7 @@ class DBOSExecutorTest {
     ExecutingService executingService =
         DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     DBOS.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -208,7 +207,7 @@ class DBOSExecutorTest {
     ExecutingService executingService =
         DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     DBOS.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -282,7 +281,7 @@ class DBOSExecutorTest {
     ExecutingService executingService =
         DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     DBOS.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);

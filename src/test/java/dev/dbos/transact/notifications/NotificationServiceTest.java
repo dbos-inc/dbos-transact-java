@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Timeout;
 class NotificationServiceTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -45,7 +44,7 @@ class NotificationServiceTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach

@@ -26,7 +26,6 @@ public class ClientTest {
   private static final String dbUser = "postgres";
   private static final String dbPassword = System.getenv("PGPASSWORD");
 
-  private DBOS.Instance dbos;
   private ClientService service;
   private HikariDataSource dataSource;
 
@@ -45,8 +44,8 @@ public class ClientTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.reinitialize(dbosConfig);
-    dbos.Queue("testQueue").build();
+    DBOS.reinitialize(dbosConfig);
+    DBOS.Queue("testQueue").build();
     service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
     DBOS.launch();
 
@@ -62,7 +61,7 @@ public class ClientTest {
   @Test
   public void clientEnqueue() throws Exception {
 
-    var qs = DBOSTestAccess.getQueueService(dbos);
+    var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
@@ -91,7 +90,7 @@ public class ClientTest {
 
   @Test
   public void clientEnqueueDeDupe() throws Exception {
-    var qs = DBOSTestAccess.getQueueService(dbos);
+    var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {

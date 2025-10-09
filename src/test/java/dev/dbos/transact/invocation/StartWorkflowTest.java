@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class StartWorkflowTest {
   private static DBOSConfig dbosConfig;
-  private DBOS.Instance dbos;
   private HawkService proxy;
   private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
@@ -45,7 +44,7 @@ public class StartWorkflowTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
     var impl = new HawkServiceImpl();
     proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);

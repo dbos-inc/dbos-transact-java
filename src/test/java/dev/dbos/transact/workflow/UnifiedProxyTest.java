@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Timeout;
 public class UnifiedProxyTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -42,7 +41,7 @@ public class UnifiedProxyTest {
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
 
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
@@ -55,7 +54,7 @@ public class UnifiedProxyTest {
 
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
-    Queue q = dbos.Queue("simpleQ").build();
+    Queue q = DBOS.Queue("simpleQ").build();
 
     DBOS.launch();
 
@@ -106,7 +105,7 @@ public class UnifiedProxyTest {
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.Queue("childQ").build();
+    DBOS.Queue("childQ").build();
     DBOS.launch();
 
     simpleService.setSimpleService(simpleService);

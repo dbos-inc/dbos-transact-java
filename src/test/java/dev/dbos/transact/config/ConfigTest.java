@@ -31,10 +31,10 @@ public class ConfigTest {
             .executorId("test-executor-id")
             .build();
 
-    var dbos = DBOS.reinitialize(config);
+    DBOS.reinitialize(config);
     try {
       DBOS.launch();
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertEquals("test-app-version", dbosExecutor.appVersion());
       assertEquals("test-executor-id", dbosExecutor.executorId());
     } finally {
@@ -57,10 +57,10 @@ public class ConfigTest {
             .executorId("test-executor-id")
             .build();
 
-    var dbos = DBOS.reinitialize(config);
+    DBOS.reinitialize(config);
     try {
       DBOS.launch();
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertEquals("test-env-app-version", dbosExecutor.appVersion());
       assertEquals("test-env-executor-id", dbosExecutor.executorId());
     } finally {
@@ -77,10 +77,10 @@ public class ConfigTest {
             .dbUser("postgres")
             .build();
 
-    var dbos = DBOS.reinitialize(config);
+    DBOS.reinitialize(config);
     try {
       DBOS.launch();
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertEquals("local", dbosExecutor.executorId());
     } finally {
       DBOS.shutdown();
@@ -97,10 +97,10 @@ public class ConfigTest {
             .conductorKey("test-conductor-key")
             .build();
 
-    var dbos = DBOS.reinitialize(config);
+    DBOS.reinitialize(config);
     try {
       DBOS.launch();
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertNotNull(dbosExecutor.executorId());
       assertDoesNotThrow(() -> UUID.fromString(dbosExecutor.executorId()));
     } finally {
@@ -117,10 +117,10 @@ public class ConfigTest {
             .dbUser("postgres")
             .build();
 
-    var dbos = DBOS.reinitialize(config);
+    DBOS.reinitialize(config);
     try {
       DBOS.launch();
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       // If we change the internally registered workflows, the expected value will change
       var expected = "16776e05fc693102206e4b6cb96c05f53e37ba5b6ea62b86d8daa3658263d407";
       assertEquals(expected, dbosExecutor.appVersion());

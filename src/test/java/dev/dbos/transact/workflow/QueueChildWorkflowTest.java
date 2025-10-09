@@ -27,7 +27,6 @@ public class QueueChildWorkflowTest {
   private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
 
   private static DBOSConfig dbosConfig;
-  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -45,7 +44,7 @@ public class QueueChildWorkflowTest {
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
 
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
@@ -56,7 +55,7 @@ public class QueueChildWorkflowTest {
   @Test
   public void multipleChildren() throws Exception {
 
-    Queue childQ = dbos.Queue("childQ").concurrency(5).workerConcurrency(5).build();
+    Queue childQ = DBOS.Queue("childQ").concurrency(5).workerConcurrency(5).build();
 
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
@@ -105,7 +104,7 @@ public class QueueChildWorkflowTest {
   @Test
   public void nestedChildren() throws Exception {
 
-    Queue childQ = dbos.Queue("childQ").concurrency(5).workerConcurrency(5).build();
+    Queue childQ = DBOS.Queue("childQ").concurrency(5).workerConcurrency(5).build();
 
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());

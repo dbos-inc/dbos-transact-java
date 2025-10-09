@@ -37,7 +37,6 @@ import org.junitpioneer.jupiter.RetryingTest;
 class AdminControllerTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -56,7 +55,7 @@ class AdminControllerTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
@@ -137,9 +136,9 @@ class AdminControllerTest {
 
   @RetryingTest(3)
   public void queueMetadata() throws Exception {
-    dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
+    DBOS.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
 
-    dbos.Queue("secondQueue").limit(2, 4.5).priorityEnabled(true).build();
+    DBOS.Queue("secondQueue").limit(2, 4.5).priorityEnabled(true).build();
 
     DBOS.launch();
 

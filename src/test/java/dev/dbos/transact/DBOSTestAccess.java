@@ -8,26 +8,26 @@ import dev.dbos.transact.scheduled.SchedulerService;
 
 // Helper class to retrieve DBOS internals via package private methods
 public class DBOSTestAccess {
-  public static DBOSExecutor getDbosExecutor(DBOS.Instance dbos) {
-    return dbos.getDbosExecutor();
+  public static DBOSExecutor getDbosExecutor() {
+    return DBOS.instance().getDbosExecutor();
   }
 
-  public static void clearRegistry(DBOS.Instance dbos) {
-    dbos.clearRegistry();
+  public static void clearRegistry() {
+    DBOS.instance().clearRegistry();
   }
 
-  public static SystemDatabase getSystemDatabase(DBOS.Instance dbos) {
-    var exec = getDbosExecutor(dbos);
+  public static SystemDatabase getSystemDatabase() {
+    var exec = getDbosExecutor();
     return DBOSExecutorTestAccess.getSystemDatabase(exec);
   }
 
-  public static QueueService getQueueService(DBOS.Instance dbos) {
-    var exec = getDbosExecutor(dbos);
+  public static QueueService getQueueService() {
+    var exec = getDbosExecutor();
     return DBOSExecutorTestAccess.getQueueService(exec);
   }
 
-  public static SchedulerService getSchedulerService(DBOS.Instance dbos) {
-    var exec = getDbosExecutor(dbos);
+  public static SchedulerService getSchedulerService() {
+    var exec = getDbosExecutor();
     return DBOSExecutorTestAccess.getSchedulerService(exec);
   }
 }

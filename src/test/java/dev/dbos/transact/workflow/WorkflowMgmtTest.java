@@ -34,7 +34,6 @@ public class WorkflowMgmtTest {
   private static final Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
 
   private static DBOSConfig dbosConfig;
-  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -52,7 +51,7 @@ public class WorkflowMgmtTest {
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
 
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
@@ -114,7 +113,7 @@ public class WorkflowMgmtTest {
         DBOS.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
     mgmtService.setMgmtService(mgmtService);
 
-    Queue myqueue = dbos.Queue("myqueue").build();
+    Queue myqueue = DBOS.Queue("myqueue").build();
 
     DBOS.launch();
 
@@ -466,7 +465,7 @@ public class WorkflowMgmtTest {
     gcService.setGCService(gcService);
 
     DBOS.launch();
-    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+    var systemDatabase = DBOSTestAccess.getSystemDatabase();
 
     // Start one blocked workflow and 10 normal workflows
     WorkflowHandle<String, ?> handle = DBOS.startWorkflow(() -> gcService.gcBlockedWorkflow());
@@ -527,7 +526,7 @@ public class WorkflowMgmtTest {
     gcService.setGCService(gcService);
 
     DBOS.launch();
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     List<WorkflowHandle<String, ?>> handles = new ArrayList<>();
     for (int i = 0; i < numWorkflows; i++) {

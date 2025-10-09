@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Timeout;
 class SchedulerServiceTest {
 
   private static DBOSConfig dbosConfig;
-  private DBOS.Instance dbos;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -40,7 +39,7 @@ class SchedulerServiceTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
@@ -56,7 +55,7 @@ class SchedulerServiceTest {
     EverySecWorkflow swf = new EverySecWorkflow();
     DBOS.scheduleWorkflow(swf);
     DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
     Thread.sleep(5000);
     schedulerService.stop();
@@ -74,7 +73,7 @@ class SchedulerServiceTest {
     EveryThirdSec swf = new EveryThirdSec();
     DBOS.scheduleWorkflow(swf);
     DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
     Thread.sleep(5000);
     schedulerService.stop();
@@ -92,7 +91,7 @@ class SchedulerServiceTest {
     MultipleWorkflows swf = new MultipleWorkflows();
     DBOS.scheduleWorkflow(swf);
     DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
     Thread.sleep(5000);
     schedulerService.stop();
@@ -113,7 +112,7 @@ class SchedulerServiceTest {
     TimedWorkflow swf = new TimedWorkflow();
     DBOS.scheduleWorkflow(swf);
     DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
     Thread.sleep(5000);
     schedulerService.stop();
@@ -163,7 +162,7 @@ class SchedulerServiceTest {
     WorkflowWithSteps swf = new WorkflowWithSteps(steps);
     DBOS.scheduleWorkflow(swf);
     DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
     Thread.sleep(5000);
     schedulerService.stop();

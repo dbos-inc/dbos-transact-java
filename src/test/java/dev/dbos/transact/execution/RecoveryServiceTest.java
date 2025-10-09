@@ -34,7 +34,6 @@ class RecoveryServiceTest {
 
   private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
-  private DBOS.Instance dbos;
   private Queue testQueue;
   private SystemDatabase systemDatabase;
   private DBOSExecutor dbosExecutor;
@@ -59,17 +58,17 @@ class RecoveryServiceTest {
     DBUtils.recreateDB(dbosConfig);
     RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
     executingService =
         DBOS.registerWorkflows(
             ExecutingService.class, executingServiceImpl = new ExecutingServiceImpl());
     executingService.setExecutingService(executingService);
 
-    testQueue = dbos.Queue("q1").build();
+    testQueue = DBOS.Queue("q1").build();
 
     DBOS.launch();
-    systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
-    dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+    systemDatabase = DBOSTestAccess.getSystemDatabase();
+    dbosExecutor = DBOSTestAccess.getDbosExecutor();
   }
 
   @AfterEach
@@ -169,7 +168,7 @@ class RecoveryServiceTest {
 
     DBOS.shutdown();
 
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
     // dbos = DBOS.getInstance();
 
     // need to register again

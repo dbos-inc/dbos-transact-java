@@ -27,7 +27,6 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class MultiInstTest {
   private static DBOSConfig dbosConfig;
-  private DBOS.Instance dbos;
   HawkServiceImpl himpl;
   BearServiceImpl bimpla;
   BearServiceImpl bimpl1;
@@ -50,11 +49,11 @@ public class MultiInstTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.reinitialize(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
     himpl = new HawkServiceImpl();
     bimpla = new BearServiceImpl();
     bimpl1 = new BearServiceImpl();
-    dbos.Queue("testQueue").build();
+    DBOS.Queue("testQueue").build();
 
     hproxy = DBOS.registerWorkflows(HawkService.class, himpl);
     himpl.setProxy(hproxy);
@@ -210,7 +209,7 @@ public class MultiInstTest {
           "PENDING",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
-      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       var eh = dbosExecutor.executeWorkflowById(handle.getWorkflowId());
       eh.getResult();
       stat = client.getWorkflowStatus(handle.getWorkflowId());
