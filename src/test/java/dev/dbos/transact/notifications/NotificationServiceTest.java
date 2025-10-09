@@ -45,7 +45,7 @@ class NotificationServiceTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.initialize(dbosConfig);
+    dbos = DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach

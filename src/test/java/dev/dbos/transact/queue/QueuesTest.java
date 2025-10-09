@@ -59,7 +59,7 @@ public class QueuesTest {
     DBUtils.recreateDB(dbosConfig);
     dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    dbos = DBOS.initialize(dbosConfig);
+    dbos = DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach

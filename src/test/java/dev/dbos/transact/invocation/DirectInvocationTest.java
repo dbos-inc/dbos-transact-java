@@ -50,7 +50,7 @@ public class DirectInvocationTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.initialize(dbosConfig);
+    dbos = DBOS.reinitialize(dbosConfig);
     var impl = new HawkServiceImpl();
     proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);

@@ -31,7 +31,7 @@ public class ConfigTest {
             .executorId("test-executor-id")
             .build();
 
-    var dbos = DBOS.initialize(config);
+    var dbos = DBOS.reinitialize(config);
     try {
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -57,7 +57,7 @@ public class ConfigTest {
             .executorId("test-executor-id")
             .build();
 
-    var dbos = DBOS.initialize(config);
+    var dbos = DBOS.reinitialize(config);
     try {
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -77,7 +77,7 @@ public class ConfigTest {
             .dbUser("postgres")
             .build();
 
-    var dbos = DBOS.initialize(config);
+    var dbos = DBOS.reinitialize(config);
     try {
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -97,7 +97,7 @@ public class ConfigTest {
             .conductorKey("test-conductor-key")
             .build();
 
-    var dbos = DBOS.initialize(config);
+    var dbos = DBOS.reinitialize(config);
     try {
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -117,7 +117,7 @@ public class ConfigTest {
             .dbUser("postgres")
             .build();
 
-    var dbos = DBOS.initialize(config);
+    var dbos = DBOS.reinitialize(config);
     try {
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);

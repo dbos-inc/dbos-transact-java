@@ -48,7 +48,7 @@ class DBOSExecutorTest {
     DBUtils.recreateDB(dbosConfig);
     DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    dbos = DBOS.initialize(dbosConfig);
+    dbos = DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach

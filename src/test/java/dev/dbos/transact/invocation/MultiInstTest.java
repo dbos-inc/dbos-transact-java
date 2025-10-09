@@ -50,7 +50,7 @@ public class MultiInstTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    dbos = DBOS.initialize(dbosConfig);
+    dbos = DBOS.reinitialize(dbosConfig);
     himpl = new HawkServiceImpl();
     bimpla = new BearServiceImpl();
     bimpl1 = new BearServiceImpl();

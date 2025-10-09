@@ -38,20 +38,17 @@ public class DBOS {
   private static final Logger logger = LoggerFactory.getLogger(DBOS.class);
 
   public static class Instance {
-    // CB: The registry may deserve a different lifecycle
     private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
     private final QueueRegistry queueRegistry = new QueueRegistry();
     private final List<ScheduledInstance> scheduledWorkflows = new ArrayList<>();
 
-    private final DBOSConfig config;
+    private DBOSConfig config;
 
     private InternalWorkflowsService internalWorkflowsService;
 
     private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
 
-    private Instance(DBOSConfig config) {
-      this.config = config;
-
+    private Instance() {
       DBOSContextHolder.clear(); // CB: Why
     }
 
@@ -147,7 +144,17 @@ public class DBOS {
       return dbosExecutor.get();
     }
 
+    public void setConfig(DBOSConfig config) {
+      if (this.config != null) {
+        throw new IllegalStateException("DBOS has already been configured");
+      }
+      this.config = config;
+    }
+
     public void launch() {
+      if (this.config == null) {
+        throw new IllegalStateException("DBOS must be configured before launch()");
+      }
       var pkg = DBOS.class.getPackage();
       var ver = pkg == null ? null : pkg.getImplementationVersion();
       logger.info("Launching DBOS {}", ver == null ? "<unknown version>" : "v" + ver);
@@ -214,21 +221,32 @@ public class DBOS {
   }
 
   /**
-   * Initializes the singleton instance of DBOS with config. Should be called once during app
-   * startup. @DBOSConfig config dbos configuration
+   * Reinitializes the singleton instance of DBOS with config. For use in tests that reinitialize
+   * DBOS @DBOSConfig config dbos configuration
    */
-  public static synchronized Instance initialize(DBOSConfig config, boolean global) {
+  public static synchronized Instance reinitialize(DBOSConfig config) {
     if (config.migrate()) {
       MigrationManager.runMigrations(config);
     }
-    var instance = new Instance(config);
+    var instance = new Instance();
+    instance.setConfig(config);
     instance.registerInternals();
-    if (global) globalInstance = instance;
+    globalInstance = instance;
     return instance;
   }
 
-  public static Instance initialize(DBOSConfig config) {
-    return initialize(config, true);
+  /**
+   * Initializes the singleton instance of DBOS with config. Should be called once during app
+   * startup, before launch. @DBOSConfig config dbos configuration
+   */
+  public static synchronized Instance configure(DBOSConfig config) {
+    var instance = ensureInstance();
+    instance.setConfig(config);
+    instance.registerInternals();
+    if (config.migrate()) {
+      MigrationManager.runMigrations(config);
+    }
+    return instance;
   }
 
   public static class QueueBuilder {
@@ -279,11 +297,14 @@ public class DBOS {
 
   private static Instance globalInstance = null;
 
-  static void setInstance(Instance inst) {
-    globalInstance = inst;
+  public static Instance instance() {
+    return globalInstance;
   }
 
-  public static Instance instance() {
+  private static synchronized Instance ensureInstance() {
+    if (globalInstance == null) {
+      globalInstance = new Instance();
+    }
     return globalInstance;
   }
 
