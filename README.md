@@ -40,29 +40,27 @@ You add durable workflows to your existing Java program by annotating ordinary f
 ```java
 
 public interface WorkflowService {
-    void setStepService(StepService stepService);
     String exampleWorkflow(String input) ;
 }
 
-public interface StepService {
+public interface Steps {
     void stepOne() ;
     void stepTwo() ;
 }
 
 public class WorkflowServiceImpl implements WorkflowService {
 
-    private Stepservice stepService;
-    public void setStepService(StepService stepService) {
-        this.stepService = stepService;
+    private Steps steps;
+    public WorkflowServiceImpl(Steps steps) {
+        this.service = service;
     }
-    
+
     @Workflow(name = "exampleWorkflow")
     public String exampleWorkflow(String input) {
-        stepService.stepOne();
-        stepService.stepTwo();
+        steps.stepOne();
+        steps.stepTwo();
         return input + input;
     }
-    
 }
 
 public class StepServiceImpl implements StepService {
@@ -75,7 +73,6 @@ public class StepServiceImpl implements StepService {
     public void stepTwo() {
         logger.info("Executed stepTwo") ;
     }
-    
 }
 
 public class Demo {
@@ -91,23 +88,17 @@ public class Demo {
                 .build() ;
         // Remember to export the DB password to the env variable PGPASSWORD
 
-        DBOS dbos = DBOS.initialize(dbosConfig);
+        DBOS.configure(dbosConfig);
+        
+        StepService steps = DBOS.registerWorkflows(
+                StepService.class, new StepServiceImpl());
+
+        WorkflowService example = DBOS.registerWorkflows(
+                WorkflowService.class, new WorkflowServiceImpl(steps));
+
         DBOS.launch();
-        
-        WorkflowService syncExample = dbos.<WorkflowService>Workflow()
-                .interfaceClass(WorkflowService.class)
-                .implementation(new WorkflowServiceImpl())
-                .build();
-
-        StepService steps = dbos.<StepService>Workflow()
-                .interfaceClass(StepService.class)
-                .implementation(new StepServiceImpl())
-                .build();
-        
-        syncExample.setStepService(steps);
-
-        String output = syncExample.exampleWorkflow("HelloDBOS") ;
-        System.out.println("Sync result: " + output);
+        String output = example.exampleWorkflow("HelloDBOS") ;
+        System.out.println("Result: " + output);
     }
 }
 
@@ -121,6 +112,25 @@ Workflows are particularly useful for
 - Operating an AI agent, or any application that relies on unreliable or non-deterministic APIs.
 
 [Read more ↗️]()
+
+</details>
+
+<details><summary><strong>📒 Asynchronous execution </strong></summary>
+
+####
+
+DBOS can run your workflows asynchronously without you needing to make any changes to the interface or implementation. 
+
+This is ideal for long-running workflows whose result might not be available immediately. 
+You code can return at a later point and check the status for completion and/or retrive the result.
+
+
+```java
+    var handle = DBOS.startWorkflow(()->syncExample.exampleWorkflow("HelloDBOS"));
+    result = handle.getResult();
+```
+
+[Read more ↗️](https://docs.dbos.dev/python/tutorials/queue-tutorial)
 
 </details>
 
@@ -139,49 +149,22 @@ You can add queues to your workflows in just a couple lines of code.
 They don't require a separate queueing service or message broker&mdash;just Postgres.
 
 ```java
-
-
  public void queuedTasks() {
-     Queue q = DBOS.Queue("childQ").build();
+    var q = DBOS.Queue("childQ").build();
 
-     for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 3; i++) {
 
-         String wid = "child" + i;
-         DBOSOptions options = new DBOSOptions.Builder(wid).queue(q).build();
-         List<WorkflowHandle<String>> handles = new ArrayList<>();
-         try (SetDBOSOptions o = new SetDBOSOptions(options)) {
-             handles.add(DBOS.startWorkflow(()->simpleService.childWorkflow(wid)));
-         }
-     }
+        String wid = "child" + i;
+        var options = new StartWorkflowOptions(wid).withQueue(q);
+        List<WorkflowHandle<String>> handles = new ArrayList<>();
+        handles.add(DBOS.startWorkflow(()->simpleService.childWorkflow(wid), options));
+    }
 
-     for (int i = 0 ; i < 3 ; i++) {
-         String wid = "child"+i;
-         System.out.println(h.getResult());
-     }
- }
-```
-
-[Read more ↗️](https://docs.dbos.dev/python/tutorials/queue-tutorial)
-
-</details>
-
-<details><summary><strong>📒 Asynchronous execution </strong></summary>
-
-####
-
-DBOS can run your workflows asynchronously without you needing to make any changes to the interface or implementation. 
-
-This is ideal for long-running workflows whose result might not be available immediately. 
-You code can return at a later point and check the status for completion and/or retrive the result.
-
-
-```java
-     WorkflowHandle<String> handle = null;
-     try (SetDBOSOptions id = new SetDBOSOptions(options)) {
-         handle = DBOS.startWorkflow(()->syncExample.exampleWorkflow("HelloDBOS"));
-     }
-     
-     result = handle.getResult();
+    for (int i = 0 ; i < 3 ; i++) {
+        String wid = "child"+i;
+        System.out.println(h.getResult());
+    }
+}
 ```
 
 [Read more ↗️](https://docs.dbos.dev/python/tutorials/queue-tutorial)

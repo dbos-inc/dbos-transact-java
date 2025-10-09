@@ -13,10 +13,6 @@ public class WorkflowWithSteps {
     stepService = steps;
   }
 
-  public void setStepService(Steps s) {
-    stepService = s;
-  }
-
   @Workflow(name = "everySecond")
   @Scheduled(cron = "0/4 * * * * ?")
   public void every4Second(Instant schedule, Instant actual) {
