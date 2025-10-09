@@ -132,10 +132,18 @@ public class AdminServer implements AutoCloseable {
     GarbageCollectRequest request = mapper.readValue(exchange.getRequestBody(), GarbageCollectRequest.class);
 
     systemDatabase.garbageCollect(request.cutoff_epoch_timestamp_ms, Long.valueOf(request.rows_threshold));
-    sendText(exchange, 204, "");
+
+    exchange.sendResponseHeaders(204, 0);
   }
 
   private void globalTimeout(HttpExchange exchange) throws IOException {
+    if (!ensurePostJson(exchange))
+      return;
+
+    GlobalTimeoutRequest request = mapper.readValue(exchange.getRequestBody(), GlobalTimeoutRequest.class);
+    dbosExecutor.globalTimeout(request.cutoff_epoch_timestamp_ms);
+
+    exchange.sendResponseHeaders(204, 0);
   }
 
   private void listQueuedWorkflows(HttpExchange exchange) throws IOException {
@@ -225,5 +233,8 @@ public class AdminServer implements AutoCloseable {
   }
 
   record GarbageCollectRequest(long cutoff_epoch_timestamp_ms, int rows_threshold) {
+  }
+
+  record GlobalTimeoutRequest(long cutoff_epoch_timestamp_ms) {
   }
 }

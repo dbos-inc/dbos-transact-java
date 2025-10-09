@@ -208,6 +208,26 @@ class AdminServerTest {
     }
   }
 
+    @Test
+  public void globalTimeout() throws IOException {
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .contentType("application/json")
+          .body(""" 
+            { "cutoff_epoch_timestamp_ms": 42 } """)
+          .when()
+          .post("/dbos-global-timeout")
+          .then()
+          .statusCode(204);
+
+      verify(mockExec).globalTimeout(eq(42L));
+    }
+  }
+
   // @Test
   // public void recovery() throws Exception {
   // ExecutingService executingService =
