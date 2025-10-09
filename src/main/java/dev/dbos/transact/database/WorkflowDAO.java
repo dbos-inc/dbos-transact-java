@@ -406,9 +406,8 @@ public class WorkflowDAO {
           started_at_epoch_ms, deduplication_id, priority
         """);
 
-    var loadInput = input.loadInput() != null && input.loadInput();
-    var loadOutput = input.loadOutput() != null && input.loadOutput();
-
+  var loadInput = input.loadInput() == null || input.loadInput();  
+  var loadOutput = input.loadOutput() == null || input.loadOutput();  
     if (loadInput) {
       sqlBuilder.append(", inputs");
     }
@@ -526,6 +525,7 @@ public class WorkflowDAO {
 
       try (ResultSet rs = pstmt.executeQuery()) {
         while (rs.next()) {
+          var workflow_uuid = rs.getString("workflow_uuid");
           String authenticatedRolesJson = rs.getString("authenticated_roles");
           String serializedInput = loadInput ? rs.getString("inputs") : null;
           String serializedOutput = loadOutput ? rs.getString("output") : null;
@@ -537,12 +537,14 @@ public class WorkflowDAO {
             try {
               throwable = JSONUtil.deserializeAppException(serializedError);
             } catch (Exception e) {
+              throw new RuntimeException(
+                  "Failed to deserialize error for workflow " + workflow_uuid, e);
             }
             err = new ErrorResult(wrapper.type, wrapper.message, serializedError, throwable);
           }
           WorkflowStatus info =
               new WorkflowStatus(
-                  rs.getString("workflow_uuid"),
+                  workflow_uuid,
                   rs.getString("status"),
                   rs.getString("name"),
                   rs.getString("class_name"),

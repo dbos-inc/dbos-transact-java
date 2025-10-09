@@ -116,11 +116,7 @@ public class WorkflowStatusBuilder {
   public WorkflowStatusBuilder error(Throwable error) {
     String errorString = JSONUtil.serializeAppException(error);
     var wrapper = JSONUtil.deserializeAppExceptionWrapper(errorString);
-    Throwable throwable = null;
-    try {
-      throwable = JSONUtil.deserializeAppException(errorString);
-    } catch (Exception e) {
-    }
+    Throwable throwable = JSONUtil.deserializeAppException(errorString);
     this.error = new ErrorResult(wrapper.type, wrapper.message, errorString, throwable);
     return this;
   }
