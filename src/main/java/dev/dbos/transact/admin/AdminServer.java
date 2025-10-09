@@ -41,13 +41,12 @@ public class AdminServer implements AutoCloseable {
     staticRoutes.put("/dbos-workflow-queues-metadata", x -> workflowQueuesMetadata(x));
     staticRoutes.put("/dbos-garbage-collect", x -> garbageCollect(x)); // post
     staticRoutes.put("/dbos-global-timeout", x -> globalTimeout(x)); // post
-    staticRoutes.put("/workflows", x -> listWorkflows(x));
     staticRoutes.put("/queues", x -> listQueuedWorkflows(x));
+    staticRoutes.put("/workflows", x -> listWorkflows(x));
 
     Map<String, WorkflowHandler> workflowRoutes = new HashMap<>();
     workflowRoutes.put("/steps", (x, wfid) -> listSteps(x, wfid));
     workflowRoutes.put("/cancel", (x, wfid) -> cancel(x, wfid));
-    workflowRoutes.put("/restart", (x, wfid) -> restart(x, wfid));
     workflowRoutes.put("/resume", (x, wfid) -> resume(x, wfid));
     workflowRoutes.put("/fork", (x, wfid) -> fork(x, wfid));
 
@@ -181,19 +180,27 @@ public class AdminServer implements AutoCloseable {
     sendMappedJson(exchange, 200, response);
   }
 
-  private void cancel(HttpExchange exchange, String wfid) throws IOException {}
-
-  private void fork(HttpExchange exchange, String wfid) throws IOException {}
-
-  private void resume(HttpExchange exchange, String wfid) throws IOException {}
-
-  private void restart(HttpExchange exchange, String wfid) throws IOException {}
-
   private void listSteps(HttpExchange exchange, String wfid) throws IOException {
     var steps = systemDatabase.listWorkflowSteps(wfid);
     var response = steps.stream().map(s -> StepOutput.of(s)).collect(Collectors.toList());
     sendMappedJson(exchange, 200, response);
   }
+
+  private void cancel(HttpExchange exchange, String wfid) throws IOException {
+    if (!ensurePost(exchange)) return;
+
+    dbosExecutor.cancelWorkflow(wfid);
+    exchange.sendResponseHeaders(204, 0);
+  }
+
+  private void resume(HttpExchange exchange, String wfid) throws IOException {
+    if (!ensurePost(exchange)) return;
+
+    dbosExecutor.resumeWorkflow(wfid);
+    exchange.sendResponseHeaders(204, 0);
+  }
+
+  private void fork(HttpExchange exchange, String wfid) throws IOException {}
 
   private static void sendText(HttpExchange exchange, int statusCode, String text)
       throws IOException {
@@ -225,10 +232,18 @@ public class AdminServer implements AutoCloseable {
     }
   }
 
-  private static boolean ensurePostJson(HttpExchange exchange) throws IOException {
+  private static boolean ensurePost(HttpExchange exchange) throws IOException {
     // Check method
     if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
       exchange.sendResponseHeaders(405, -1); // Method Not Allowed
+      return false;
+    }
+    return true;
+  }
+
+  private static boolean ensurePostJson(HttpExchange exchange) throws IOException {
+    // Check method
+    if (!ensurePost(exchange)) {
       return false;
     }
 

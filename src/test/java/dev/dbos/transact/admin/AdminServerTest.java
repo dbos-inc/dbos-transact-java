@@ -518,4 +518,37 @@ class AdminServerTest {
     }
   }
 
+  @Test
+  public void cancelWorkflow() throws IOException {
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .when()
+          .post("/workflows/test-wf-id/cancel")
+          .then()
+          .statusCode(204);
+
+      verify(mockExec).cancelWorkflow(eq("test-wf-id"));
+    }
+  }
+
+  @Test
+  public void resumeWorkflow() throws IOException {
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .when()
+          .post("/workflows/test-wf-id/resume")
+          .then()
+          .statusCode(204);
+
+      verify(mockExec).resumeWorkflow(eq("test-wf-id"));
+    }
+  }
 }
