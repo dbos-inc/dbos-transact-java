@@ -57,7 +57,7 @@ public class WorkflowMgmtTest {
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
@@ -67,10 +67,10 @@ public class WorkflowMgmtTest {
     CountDownLatch workLatch = new CountDownLatch(1);
 
     MgmtService mgmtService =
-        dbos.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
+        DBOS.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
     mgmtService.setMgmtService(mgmtService);
 
-    dbos.launch();
+    DBOS.launch();
 
     String workflowId = "wfid1";
     var options = new StartWorkflowOptions(workflowId);
@@ -111,12 +111,12 @@ public class WorkflowMgmtTest {
     CountDownLatch workLatch = new CountDownLatch(1);
 
     MgmtService mgmtService =
-        dbos.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
+        DBOS.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
     mgmtService.setMgmtService(mgmtService);
 
     Queue myqueue = dbos.Queue("myqueue").build();
 
-    dbos.launch();
+    DBOS.launch();
 
     String workflowId = "wfid1";
     var options = new StartWorkflowOptions(workflowId).withQueue(myqueue);
@@ -157,10 +157,10 @@ public class WorkflowMgmtTest {
     CountDownLatch workLatch = new CountDownLatch(1);
 
     MgmtService mgmtService =
-        dbos.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
+        DBOS.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
     mgmtService.setMgmtService(mgmtService);
 
-    dbos.launch();
+    DBOS.launch();
 
     ExecutorService e = Executors.newFixedThreadPool(2);
     String workflowId = "wfid1";
@@ -219,7 +219,7 @@ public class WorkflowMgmtTest {
   @Test
   public void forkNonExistent() {
 
-    dbos.launch();
+    DBOS.launch();
 
     try {
       ForkOptions options = new ForkOptions();
@@ -236,10 +236,10 @@ public class WorkflowMgmtTest {
 
     ForkServiceImpl impl = new ForkServiceImpl();
 
-    ForkService forkService = dbos.registerWorkflows(ForkService.class, impl);
+    ForkService forkService = DBOS.registerWorkflows(ForkService.class, impl);
     forkService.setForkService(forkService);
 
-    dbos.launch();
+    DBOS.launch();
 
     String workflowId = "wfid1";
     WorkflowOptions options = new WorkflowOptions(workflowId);
@@ -310,10 +310,10 @@ public class WorkflowMgmtTest {
 
     ForkServiceImpl impl = new ForkServiceImpl();
 
-    ForkService forkService = dbos.registerWorkflows(ForkService.class, impl);
+    ForkService forkService = DBOS.registerWorkflows(ForkService.class, impl);
     forkService.setForkService(forkService);
 
-    dbos.launch();
+    DBOS.launch();
 
     String workflowId = "wfid1";
     WorkflowOptions options = new WorkflowOptions(workflowId);
@@ -408,10 +408,10 @@ public class WorkflowMgmtTest {
 
     ForkServiceImpl impl = new ForkServiceImpl();
 
-    ForkService forkService = dbos.registerWorkflows(ForkService.class, impl);
+    ForkService forkService = DBOS.registerWorkflows(ForkService.class, impl);
     forkService.setForkService(forkService);
 
-    dbos.launch();
+    DBOS.launch();
 
     String workflowId = "wfid1";
     WorkflowOptions options = new WorkflowOptions(workflowId);
@@ -462,10 +462,10 @@ public class WorkflowMgmtTest {
     int numWorkflows = 10;
 
     GCServiceImpl impl = new GCServiceImpl();
-    GCService gcService = dbos.registerWorkflows(GCService.class, impl);
+    GCService gcService = DBOS.registerWorkflows(GCService.class, impl);
     gcService.setGCService(gcService);
 
-    dbos.launch();
+    DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // Start one blocked workflow and 10 normal workflows
@@ -523,10 +523,10 @@ public class WorkflowMgmtTest {
     int numWorkflows = 10;
 
     GCServiceImpl impl = new GCServiceImpl();
-    GCService gcService = dbos.registerWorkflows(GCService.class, impl);
+    GCService gcService = DBOS.registerWorkflows(GCService.class, impl);
     gcService.setGCService(gcService);
 
-    dbos.launch();
+    DBOS.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     List<WorkflowHandle<String, ?>> handles = new ArrayList<>();

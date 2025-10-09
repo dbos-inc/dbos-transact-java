@@ -52,10 +52,10 @@ public class DirectInvocationTest {
     DBUtils.recreateDB(dbosConfig);
     dbos = DBOS.reinitialize(dbosConfig);
     var impl = new HawkServiceImpl();
-    proxy = dbos.registerWorkflows(HawkService.class, impl);
+    proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    dbos.launch();
+    DBOS.launch();
 
     dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
@@ -63,7 +63,7 @@ public class DirectInvocationTest {
   @AfterEach
   void afterEachTest() throws Exception {
     dataSource.close();
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
@@ -413,7 +413,7 @@ public class DirectInvocationTest {
   // dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
   //   impl.setProxy(proxy);
 
-  //   dbos.launch();
+  //   DBOS.launch();
 
   //   var options = new WorkflowOptions(Duration.ofSeconds(1));
   //   try (var _o = options.setContext()) {

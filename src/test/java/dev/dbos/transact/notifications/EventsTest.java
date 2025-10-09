@@ -51,15 +51,15 @@ public class EventsTest {
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void basic_set_get() throws Exception {
 
     EventsService eventService =
-        dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
+    DBOS.launch();
 
     try (var id = new WorkflowOptions("id1").setContext()) {
       eventService.setEventWorkflow("key1", "value1");
@@ -79,8 +79,8 @@ public class EventsTest {
   public void multipleEvents() throws Exception {
 
     EventsService eventService =
-        dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
+    DBOS.launch();
 
     try (var id = new WorkflowOptions("id1").setContext()) {
       eventService.setMultipleEvents();
@@ -100,8 +100,8 @@ public class EventsTest {
   public void async_set_get() throws Exception {
 
     EventsService eventService =
-        dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
+    DBOS.launch();
 
     DBOS.startWorkflow(
         () -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
@@ -117,8 +117,8 @@ public class EventsTest {
   public void notification() throws Exception {
 
     EventsService eventService =
-        dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
+    DBOS.launch();
 
     DBOS.startWorkflow(
         () -> eventService.getWithlatch("id1", "key1", Duration.ofSeconds(5)),
@@ -142,7 +142,7 @@ public class EventsTest {
   @Test
   public void timeout() {
 
-    dbos.launch();
+    DBOS.launch();
 
     long start = System.currentTimeMillis();
     DBOS.getEvent("nonexistingid", "fake_key", Duration.ofSeconds(2));
@@ -154,8 +154,8 @@ public class EventsTest {
   public void concurrency() throws Exception {
 
     EventsService eventService =
-        dbos.registerWorkflows(EventsService.class, new EventsServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
+    DBOS.launch();
 
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {

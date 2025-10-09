@@ -33,12 +33,12 @@ public class ConfigTest {
 
     var dbos = DBOS.reinitialize(config);
     try {
-      dbos.launch();
+      DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
       assertEquals("test-app-version", dbosExecutor.appVersion());
       assertEquals("test-executor-id", dbosExecutor.executorId());
     } finally {
-      dbos.shutdown();
+      DBOS.shutdown();
     }
   }
 
@@ -59,12 +59,12 @@ public class ConfigTest {
 
     var dbos = DBOS.reinitialize(config);
     try {
-      dbos.launch();
+      DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
       assertEquals("test-env-app-version", dbosExecutor.appVersion());
       assertEquals("test-env-executor-id", dbosExecutor.executorId());
     } finally {
-      dbos.shutdown();
+      DBOS.shutdown();
     }
   }
 
@@ -79,11 +79,11 @@ public class ConfigTest {
 
     var dbos = DBOS.reinitialize(config);
     try {
-      dbos.launch();
+      DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
       assertEquals("local", dbosExecutor.executorId());
     } finally {
-      dbos.shutdown();
+      DBOS.shutdown();
     }
   }
 
@@ -99,12 +99,12 @@ public class ConfigTest {
 
     var dbos = DBOS.reinitialize(config);
     try {
-      dbos.launch();
+      DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
       assertNotNull(dbosExecutor.executorId());
       assertDoesNotThrow(() -> UUID.fromString(dbosExecutor.executorId()));
     } finally {
-      dbos.shutdown();
+      DBOS.shutdown();
     }
   }
 
@@ -119,13 +119,13 @@ public class ConfigTest {
 
     var dbos = DBOS.reinitialize(config);
     try {
-      dbos.launch();
+      DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
       // If we change the internally registered workflows, the expected value will change
       var expected = "16776e05fc693102206e4b6cb96c05f53e37ba5b6ea62b86d8daa3658263d407";
       assertEquals(expected, dbosExecutor.appVersion());
     } finally {
-      dbos.shutdown();
+      DBOS.shutdown();
     }
   }
 }

@@ -50,7 +50,7 @@ public class QueueChildWorkflowTest {
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
@@ -59,11 +59,11 @@ public class QueueChildWorkflowTest {
     Queue childQ = dbos.Queue("childQ").concurrency(5).workerConcurrency(5).build();
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
 
     var handle =
         DBOS.startWorkflow(
@@ -108,11 +108,11 @@ public class QueueChildWorkflowTest {
     Queue childQ = dbos.Queue("childQ").concurrency(5).workerConcurrency(5).build();
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
 
     DBOS.startWorkflow(
         () -> simpleService.grandParent("123"),

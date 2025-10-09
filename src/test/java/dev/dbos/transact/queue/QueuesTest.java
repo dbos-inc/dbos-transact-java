@@ -64,7 +64,7 @@ public class QueuesTest {
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
@@ -72,8 +72,8 @@ public class QueuesTest {
 
     Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
 
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
-    dbos.launch();
+    ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    DBOS.launch();
 
     String id = "q1234";
     DBOS.startWorkflow(
@@ -90,8 +90,8 @@ public class QueuesTest {
 
     Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
 
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
-    dbos.launch();
+    ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    DBOS.launch();
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.pause();
@@ -111,9 +111,9 @@ public class QueuesTest {
         dbos.Queue("firstQueue").priorityEnabled(true).concurrency(1).workerConcurrency(1).build();
 
     ServiceQImpl impl = new ServiceQImpl();
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, impl);
+    ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, impl);
 
-    dbos.launch();
+    DBOS.launch();
 
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.pause();
@@ -141,9 +141,9 @@ public class QueuesTest {
   public void testQueuedMultipleWorkflows() throws Exception {
 
     Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     var queueService = DBOSTestAccess.getQueueService(dbos);
     queueService.pause();
@@ -183,9 +183,9 @@ public class QueuesTest {
   void testListQueuedWorkflow() throws Exception {
 
     Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
 
-    dbos.launch();
+    DBOS.launch();
     var queueService = DBOSTestAccess.getQueueService(dbos);
 
     queueService.pause();
@@ -251,12 +251,12 @@ public class QueuesTest {
   public void multipleQueues() throws Exception {
 
     Queue firstQ = dbos.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();
-    ServiceQ serviceQ1 = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ1 = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
 
     Queue secondQ = dbos.Queue("secondQueue").concurrency(1).workerConcurrency(1).build();
-    ServiceI serviceI = dbos.registerWorkflows(ServiceI.class, new ServiceIImpl());
+    ServiceI serviceI = DBOS.registerWorkflows(ServiceI.class, new ServiceIImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     String id1 = "firstQ1234";
     String id2 = "second1234";
@@ -290,9 +290,9 @@ public class QueuesTest {
     Queue limitQ =
         dbos.Queue("limitQueue").limit(limit, period).concurrency(1).workerConcurrency(1).build();
 
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     int numWaves = 3;
     int numTasks = numWaves * limit;
@@ -356,7 +356,7 @@ public class QueuesTest {
     Queue qwithWCLimit =
         dbos.Queue("QwithWCLimit").concurrency(1).workerConcurrency(2).concurrency(3).build();
 
-    dbos.launch();
+    DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var queueService = DBOSTestAccess.getQueueService(dbos);
@@ -438,7 +438,7 @@ public class QueuesTest {
 
     Queue qwithWCLimit =
         dbos.Queue("QwithWCLimit").concurrency(1).workerConcurrency(2).concurrency(3).build();
-    dbos.launch();
+    DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
     var queueService = DBOSTestAccess.getQueueService(dbos);
@@ -527,9 +527,9 @@ public class QueuesTest {
 
     Queue firstQ = dbos.Queue("firstQueue").build();
 
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     String id = "q1234";
 
@@ -547,9 +547,9 @@ public class QueuesTest {
     Queue queue = dbos.Queue("test_queue").concurrency(2).build();
 
     ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
-    ConcurrencyTestService service = dbos.registerWorkflows(ConcurrencyTestService.class, impl);
+    ConcurrencyTestService service = DBOS.registerWorkflows(ConcurrencyTestService.class, impl);
 
-    dbos.launch();
+    DBOS.launch();
 
     var opt1 = new StartWorkflowOptions("wf1").withQueue(queue);
     var handle1 = DBOS.startWorkflow(() -> service.blockedWorkflow(0), opt1);

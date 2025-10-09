@@ -92,7 +92,7 @@ public class Demo {
         // Remember to export the DB password to the env variable PGPASSWORD
 
         DBOS dbos = DBOS.initialize(dbosConfig);
-        dbos.launch();
+        DBOS.launch();
         
         WorkflowService syncExample = dbos.<WorkflowService>Workflow()
                 .interfaceClass(WorkflowService.class)
@@ -209,7 +209,7 @@ public class SchedulerImpl {
 }
 
 // In your main
-// dbos.scheduleWorkflow(new SchedulerImpl());
+// DBOS.scheduleWorkflow(new SchedulerImpl());
 ```
 
 [Read more ↗️](https://docs.dbos.dev/python/tutorials/scheduled-workflows)

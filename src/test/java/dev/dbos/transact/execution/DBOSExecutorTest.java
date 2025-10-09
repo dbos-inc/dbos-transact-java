@@ -53,15 +53,15 @@ class DBOSExecutorTest {
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   void executeWorkflowById() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
@@ -93,9 +93,9 @@ class DBOSExecutorTest {
   void executeWorkflowByIdNonExistent() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
@@ -127,8 +127,8 @@ class DBOSExecutorTest {
   void workflowFunctionNotfound() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
     String result = null;
 
@@ -142,9 +142,9 @@ class DBOSExecutorTest {
     List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
-    dbos.shutdown();
+    DBOS.shutdown();
     DBOSTestAccess.clearRegistry(dbos); // clear out the registry
-    dbos.launch(); // restart dbos
+    DBOS.launch(); // restart dbos
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     boolean error = false;
@@ -163,8 +163,8 @@ class DBOSExecutorTest {
   public void executeWithStep() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     // Needed to call the step
@@ -206,8 +206,8 @@ class DBOSExecutorTest {
   public void ReExecuteWithStepTwoOnly() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     // Needed to call the step
@@ -254,8 +254,8 @@ class DBOSExecutorTest {
   public void sleep() throws SQLException {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -280,8 +280,8 @@ class DBOSExecutorTest {
   public void sleepRecovery() throws Exception {
 
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     // Needed to call the step

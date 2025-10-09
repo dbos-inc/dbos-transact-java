@@ -61,20 +61,20 @@ class RecoveryServiceTest {
 
     dbos = DBOS.reinitialize(dbosConfig);
     executingService =
-        dbos.registerWorkflows(
+        DBOS.registerWorkflows(
             ExecutingService.class, executingServiceImpl = new ExecutingServiceImpl());
     executingService.setExecutingService(executingService);
 
     testQueue = dbos.Queue("q1").build();
 
-    dbos.launch();
+    DBOS.launch();
     systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
     dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
   }
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
@@ -167,7 +167,7 @@ class RecoveryServiceTest {
     assertTrue(s.isPresent());
     assertEquals(WorkflowState.PENDING.name(), s.get().status());
 
-    dbos.shutdown();
+    DBOS.shutdown();
 
     dbos = DBOS.reinitialize(dbosConfig);
     // dbos = DBOS.getInstance();
@@ -175,9 +175,9 @@ class RecoveryServiceTest {
     // need to register again
     // towatch: we are registering after launch. could lead to a race condition
     // toimprove : allow registration before launch
-    executingService = dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    executingService = DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     var h = DBOS.retrieveWorkflow("wf-123");
     h.getResult();

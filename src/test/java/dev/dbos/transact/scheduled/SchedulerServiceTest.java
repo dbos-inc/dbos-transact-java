@@ -47,15 +47,15 @@ class SchedulerServiceTest {
   void afterEachTest() throws Exception {
     // let scheduled workflows drain
     Thread.sleep(1000);
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void simpleScheduledWorkflow() throws Exception {
 
     EverySecWorkflow swf = new EverySecWorkflow();
-    dbos.scheduleWorkflow(swf);
-    dbos.launch();
+    DBOS.scheduleWorkflow(swf);
+    DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
     Thread.sleep(5000);
@@ -72,8 +72,8 @@ class SchedulerServiceTest {
   public void ThirdSecWorkflow() throws Exception {
 
     EveryThirdSec swf = new EveryThirdSec();
-    dbos.scheduleWorkflow(swf);
-    dbos.launch();
+    DBOS.scheduleWorkflow(swf);
+    DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
     Thread.sleep(5000);
@@ -90,8 +90,8 @@ class SchedulerServiceTest {
   public void MultipleWorkflowsTest() throws Exception {
 
     MultipleWorkflows swf = new MultipleWorkflows();
-    dbos.scheduleWorkflow(swf);
-    dbos.launch();
+    DBOS.scheduleWorkflow(swf);
+    DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
     Thread.sleep(5000);
@@ -111,8 +111,8 @@ class SchedulerServiceTest {
   public void TimedWorkflowsTest() throws Exception {
 
     TimedWorkflow swf = new TimedWorkflow();
-    dbos.scheduleWorkflow(swf);
-    dbos.launch();
+    DBOS.scheduleWorkflow(swf);
+    DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
     Thread.sleep(5000);
@@ -131,7 +131,7 @@ class SchedulerServiceTest {
     InvalidMethodWorkflow imv = new InvalidMethodWorkflow();
 
     try {
-      dbos.scheduleWorkflow(imv);
+      DBOS.scheduleWorkflow(imv);
       assertTrue(false); // fail if we get here
     } catch (IllegalArgumentException e) {
       assertEquals(
@@ -146,7 +146,7 @@ class SchedulerServiceTest {
     InvalidCronWorkflow icw = new InvalidCronWorkflow();
 
     try {
-      dbos.scheduleWorkflow(icw);
+      DBOS.scheduleWorkflow(icw);
       assertTrue(false); // fail if we get here
     } catch (IllegalArgumentException e) {
 
@@ -158,11 +158,11 @@ class SchedulerServiceTest {
   @Test
   public void stepsTest() throws Exception {
 
-    Steps steps = dbos.registerWorkflows(Steps.class, new StepsImpl());
+    Steps steps = DBOS.registerWorkflows(Steps.class, new StepsImpl());
 
     WorkflowWithSteps swf = new WorkflowWithSteps(steps);
-    dbos.scheduleWorkflow(swf);
-    dbos.launch();
+    DBOS.scheduleWorkflow(swf);
+    DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
     Thread.sleep(5000);
@@ -181,7 +181,7 @@ class SchedulerServiceTest {
   // @Test
   public void everyMinute() throws Exception {
     EveryMinute em = new EveryMinute();
-    dbos.scheduleWorkflow(em);
+    DBOS.scheduleWorkflow(em);
     Thread.sleep(600000);
   }
 

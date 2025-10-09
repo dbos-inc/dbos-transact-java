@@ -47,8 +47,8 @@ public class ClientTest {
     DBUtils.recreateDB(dbosConfig);
     dbos = DBOS.reinitialize(dbosConfig);
     dbos.Queue("testQueue").build();
-    service = dbos.registerWorkflows(ClientService.class, new ClientServiceImpl());
-    dbos.launch();
+    service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
+    DBOS.launch();
 
     dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
@@ -56,7 +56,7 @@ public class ClientTest {
   @AfterEach
   void afterEachTest() throws Exception {
     dataSource.close();
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test

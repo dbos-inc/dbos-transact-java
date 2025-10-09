@@ -47,10 +47,10 @@ public class StartWorkflowTest {
     DBUtils.recreateDB(dbosConfig);
     dbos = DBOS.reinitialize(dbosConfig);
     var impl = new HawkServiceImpl();
-    proxy = dbos.registerWorkflows(HawkService.class, impl);
+    proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    dbos.launch();
+    DBOS.launch();
 
     dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
@@ -58,7 +58,7 @@ public class StartWorkflowTest {
   @AfterEach
   void afterEachTest() throws Exception {
     dataSource.close();
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test

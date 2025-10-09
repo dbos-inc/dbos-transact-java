@@ -41,16 +41,16 @@ public class StepsTest {
 
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void workflowWithStepsSync() throws SQLException {
-    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
+    ServiceB serviceB = DBOS.registerWorkflows(ServiceB.class, new ServiceBImpl());
 
-    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
+    ServiceA serviceA = DBOS.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
 
-    dbos.launch();
+    DBOS.launch();
 
     String wid = "sync123";
 
@@ -82,11 +82,11 @@ public class StepsTest {
 
   @Test
   public void workflowWithStepsSyncError() throws SQLException {
-    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
+    ServiceB serviceB = DBOS.registerWorkflows(ServiceB.class, new ServiceBImpl());
 
-    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
+    ServiceA serviceA = DBOS.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
 
-    dbos.launch();
+    DBOS.launch();
 
     String wid = "sync123er";
     try (var id = new WorkflowOptions(wid).setContext()) {
@@ -108,9 +108,9 @@ public class StepsTest {
   @Test
   public void workflowWithInlineSteps() throws SQLException {
     ServiceWFAndStep service =
-        dbos.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
+        DBOS.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     String wid = "wfWISwww123";
     try (var id = new WorkflowOptions(wid).setContext()) {
@@ -131,11 +131,11 @@ public class StepsTest {
 
   @Test
   public void asyncworkflowWithSteps() throws Exception {
-    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
+    ServiceB serviceB = DBOS.registerWorkflows(ServiceB.class, new ServiceBImpl());
 
-    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
+    ServiceA serviceA = DBOS.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
 
-    dbos.launch();
+    DBOS.launch();
 
     String workflowId = "wf-1234";
 
@@ -170,9 +170,9 @@ public class StepsTest {
   @Test
   public void sameInterfaceWorkflowWithSteps() throws Exception {
     ServiceWFAndStep service =
-        dbos.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
+        DBOS.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     service.setSelf(service);
 
@@ -200,9 +200,9 @@ public class StepsTest {
   @Test
   public void stepOutsideWorkflow() throws Exception {
 
-    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
+    ServiceB serviceB = DBOS.registerWorkflows(ServiceB.class, new ServiceBImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     String result = serviceB.step2("abcde");
     assertEquals("abcde", result);
@@ -211,7 +211,7 @@ public class StepsTest {
     result = serviceB.step2("hello");
     assertEquals("hello", result);
 
-    dbos.shutdown();
+    DBOS.shutdown();
 
     result = serviceB.step2("pqrstu");
     assertEquals("pqrstu", result);
@@ -220,9 +220,9 @@ public class StepsTest {
   @Test
   public void stepRetryLogic() throws Exception {
     ServiceWFAndStep service =
-        dbos.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
+        DBOS.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     service.setSelf(service);
 

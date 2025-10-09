@@ -61,13 +61,13 @@ class AdminControllerTest {
 
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void health() throws Exception {
 
-    dbos.launch();
+    DBOS.launch();
     HttpClient client = HttpClient.newHttpClient();
 
     HttpRequest request =
@@ -85,11 +85,11 @@ class AdminControllerTest {
   @Test
   public void recovery() throws Exception {
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -141,7 +141,7 @@ class AdminControllerTest {
 
     dbos.Queue("secondQueue").limit(2, 4.5).priorityEnabled(true).build();
 
-    dbos.launch();
+    DBOS.launch();
 
     given()
         .port(3010)
@@ -164,8 +164,8 @@ class AdminControllerTest {
   @Test
   public void listWorkflowSteps() throws Exception {
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -197,8 +197,8 @@ class AdminControllerTest {
   @Test
   public void getWorkflowStatus() throws Exception {
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -227,10 +227,10 @@ class AdminControllerTest {
   @Test
   public void workflows() throws Exception {
     ExecutingService executingService =
-        dbos.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
-    dbos.launch();
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+    DBOS.launch();
 
     // Needed to call the step
     executingService.setExecutingService(executingService);
@@ -320,9 +320,9 @@ class AdminControllerTest {
   public void fork() throws Exception {
 
     ForkServiceImpl impl = new ForkServiceImpl();
-    ForkService forkService = dbos.registerWorkflows(ForkService.class, impl);
+    ForkService forkService = DBOS.registerWorkflows(ForkService.class, impl);
     forkService.setForkService(forkService);
-    dbos.launch();
+    DBOS.launch();
 
     String workflowId = "wfid1";
     try (var id = new WorkflowOptions(workflowId).setContext()) {

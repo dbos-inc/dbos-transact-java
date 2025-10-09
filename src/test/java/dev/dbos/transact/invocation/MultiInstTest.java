@@ -56,21 +56,21 @@ public class MultiInstTest {
     bimpl1 = new BearServiceImpl();
     dbos.Queue("testQueue").build();
 
-    hproxy = dbos.registerWorkflows(HawkService.class, himpl);
+    hproxy = DBOS.registerWorkflows(HawkService.class, himpl);
     himpl.setProxy(hproxy);
 
-    bproxya = dbos.registerWorkflows(BearService.class, bimpla, "A");
+    bproxya = DBOS.registerWorkflows(BearService.class, bimpla, "A");
     bimpla.setProxy(bproxya);
 
-    bproxy1 = dbos.registerWorkflows(BearService.class, bimpl1, "1");
+    bproxy1 = DBOS.registerWorkflows(BearService.class, bimpl1, "1");
     bimpl1.setProxy(bproxy1);
 
-    dbos.launch();
+    DBOS.launch();
   }
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test

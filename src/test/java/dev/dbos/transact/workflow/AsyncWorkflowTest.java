@@ -44,16 +44,16 @@ public class AsyncWorkflowTest {
 
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void sameWorkflowId() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     SimpleServiceImpl.executionCount = 0;
 
@@ -104,9 +104,9 @@ public class AsyncWorkflowTest {
   @Test
   public void workflowWithError() throws Exception {
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     String wfid = "abc";
     WorkflowHandle<Void, ?> handle =
@@ -134,9 +134,9 @@ public class AsyncWorkflowTest {
   public void childWorkflowWithoutSet() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     simpleService.setSimpleService(simpleService);
 
@@ -167,9 +167,9 @@ public class AsyncWorkflowTest {
   public void multipleChildren() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     simpleService.setSimpleService(simpleService);
 
@@ -214,9 +214,9 @@ public class AsyncWorkflowTest {
   public void nestedChildren() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     simpleService.setSimpleService(simpleService);
 
@@ -254,9 +254,9 @@ public class AsyncWorkflowTest {
   @Test
   public void startWorkflowClosure() {
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     WorkflowHandle<String, RuntimeException> handle =
         DBOS.startWorkflow(() -> simpleService.workWithString("test-item"));

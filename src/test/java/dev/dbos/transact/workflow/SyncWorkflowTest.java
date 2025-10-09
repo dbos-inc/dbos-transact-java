@@ -41,16 +41,16 @@ public class SyncWorkflowTest {
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void workflowWithOneInput() throws SQLException {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     String result = simpleService.workWithString("test-item");
     assertEquals("Processed: test-item", result);
@@ -66,9 +66,9 @@ public class SyncWorkflowTest {
   @Test
   public void workflowWithError() throws SQLException {
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     var e = assertThrows(Exception.class, () -> simpleService.workWithError());
     assertEquals("DBOS Test error", e.getMessage());
@@ -85,9 +85,9 @@ public class SyncWorkflowTest {
   public void setWorkflowId() throws SQLException {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     String result = null;
 
@@ -114,9 +114,9 @@ public class SyncWorkflowTest {
   public void sameWorkflowId() throws SQLException {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     String result = null;
     SimpleServiceImpl.executionCount = 0;
@@ -156,9 +156,9 @@ public class SyncWorkflowTest {
   public void childWorkflowWithoutSet() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     simpleService.setSimpleService(simpleService);
 
@@ -190,9 +190,9 @@ public class SyncWorkflowTest {
   public void multipleChildren() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     simpleService.setSimpleService(simpleService);
 
@@ -237,9 +237,9 @@ public class SyncWorkflowTest {
   public void nestedChildren() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    dbos.launch();
+    DBOS.launch();
 
     simpleService.setSimpleService(simpleService);
 

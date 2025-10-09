@@ -47,17 +47,17 @@ public class UnifiedProxyTest {
 
   @AfterEach
   void afterEachTest() {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void optionsWithCall() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     Queue q = dbos.Queue("simpleQ").build();
 
-    dbos.launch();
+    DBOS.launch();
 
     // synchronous
     String wfid1 = "wf-123";
@@ -104,10 +104,10 @@ public class UnifiedProxyTest {
   public void syncParentWithQueuedChildren() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
     dbos.Queue("childQ").build();
-    dbos.launch();
+    DBOS.launch();
 
     simpleService.setSimpleService(simpleService);
 

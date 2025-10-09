@@ -4,7 +4,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
@@ -91,16 +90,6 @@ public class DBOS {
       return name;
     }
 
-    public RegisteredWorkflow getWorkflow(
-        String className, String instanceName, String workflowName) {
-      var executor = dbosExecutor.get();
-      if (executor == null) {
-        throw new IllegalStateException("cannot retrieve workflow before launch");
-      }
-
-      return executor.getWorkflow(className, instanceName, workflowName);
-    }
-
     void registerQueue(Queue queue) {
       if (dbosExecutor.get() != null) {
         throw new IllegalStateException("Cannot build a queue after DBOS is launched");
@@ -176,12 +165,6 @@ public class DBOS {
       executor("send").send(destinationId, message, topic, internalWorkflowsService);
     }
 
-    /**
-     * Scans the class for all methods that have Workflow and Scheduled annotations and schedules
-     * them for execution
-     *
-     * @param implementation instance of a class
-     */
     public void scheduleWorkflow(Object implementation) {
       var expectedParams = new Class<?>[] {Instant.class, Instant.class};
 
@@ -220,6 +203,29 @@ public class DBOS {
     }
   }
 
+  public static <T> T registerWorkflows(Class<T> interfaceClass, T implementation) {
+    return ensureInstance().registerWorkflows(interfaceClass, implementation, "");
+  }
+
+  public static <T> T registerWorkflows(
+      Class<T> interfaceClass, T implementation, String instanceName) {
+    return ensureInstance().registerWorkflows(interfaceClass, implementation, instanceName);
+  }
+
+  /**
+   * Scans the class for all methods that have Workflow and Scheduled annotations and schedules them
+   * for execution
+   *
+   * @param implementation instance of a class
+   */
+  public static void scheduleWorkflow(Object implementation) {
+    ensureInstance().scheduleWorkflow(implementation);
+  }
+
+  public static QueueBuilder Queue(String name) {
+    return ensureInstance().Queue(name);
+  }
+
   /**
    * Reinitializes the singleton instance of DBOS with config. For use in tests that reinitialize
    * DBOS @DBOSConfig config dbos configuration
@@ -247,6 +253,14 @@ public class DBOS {
       MigrationManager.runMigrations(config);
     }
     return instance;
+  }
+
+  public static void launch() {
+    ensureInstance().launch();
+  }
+
+  public static void shutdown() {
+    if (globalInstance != null) globalInstance.shutdown();
   }
 
   public static class QueueBuilder {

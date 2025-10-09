@@ -55,17 +55,17 @@ public class TimeoutTest {
 
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
-    dbos.shutdown();
+    DBOS.shutdown();
   }
 
   @Test
   public void async() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
 
     // asynchronous
 
@@ -84,10 +84,10 @@ public class TimeoutTest {
   public void asyncTimedOut() {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // make it timeout
@@ -112,11 +112,11 @@ public class TimeoutTest {
   public void queued() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
     Queue simpleQ = dbos.Queue("simpleQ").build();
 
-    dbos.launch();
+    DBOS.launch();
 
     // queued
 
@@ -138,11 +138,11 @@ public class TimeoutTest {
   public void queuedTimedOut() {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
     Queue simpleQ = dbos.Queue("simpleQ").build();
 
-    dbos.launch();
+    DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // make it timeout
@@ -169,10 +169,10 @@ public class TimeoutTest {
   public void sync() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // synchronous
@@ -196,10 +196,10 @@ public class TimeoutTest {
   public void syncTimeout() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // synchronous
@@ -227,10 +227,10 @@ public class TimeoutTest {
   public void recovery() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     // synchronous
@@ -253,10 +253,10 @@ public class TimeoutTest {
   public void parentChild() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
 
     // asynchronous
 
@@ -283,10 +283,10 @@ public class TimeoutTest {
   public void parentChildTimeOut() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
 
     String wfid1 = "wf-124";
 
@@ -314,10 +314,10 @@ public class TimeoutTest {
   public void parentTimeoutInheritedByChild() throws Exception {
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
 
     String wfid1 = "wf-124";
 
@@ -342,10 +342,10 @@ public class TimeoutTest {
     // TOFIX : fails at times
 
     SimpleService simpleService =
-        dbos.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
-    dbos.launch();
+    DBOS.launch();
 
     String wfid1 = "wf-124";
 
