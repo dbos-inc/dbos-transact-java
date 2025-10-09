@@ -3,7 +3,6 @@ package dev.dbos.transact.http.controllers;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.QueueMetadata;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -27,12 +26,10 @@ public class AdminController {
 
   private final SystemDatabase systemDatabase;
   private final DBOSExecutor dbosExecutor;
-  private final List<Queue> queues;
 
-  public AdminController(DBOSExecutor exec, SystemDatabase sysDb, List<Queue> queues) {
+  public AdminController(DBOSExecutor exec, SystemDatabase sysDb) {
     this.systemDatabase = sysDb;
     this.dbosExecutor = exec;
-    this.queues = queues;
   }
 
   @GET
@@ -89,12 +86,8 @@ public class AdminController {
   @GET
   @Path("/dbos-workflow-queues-metadata")
   @Produces(MediaType.APPLICATION_JSON)
-  public List<QueueMetadata> workflowQueuesMetadata() {
-    List<QueueMetadata> metadataList = new ArrayList<QueueMetadata>();
-    for (Queue queue : queues) {
-      metadataList.add(new QueueMetadata(queue));
-    }
-    return metadataList;
+  public List<Queue> workflowQueuesMetadata() {
+    return dbosExecutor.getQueues();
   }
 
   @POST

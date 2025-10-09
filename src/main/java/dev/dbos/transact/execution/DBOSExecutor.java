@@ -42,6 +42,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -88,8 +89,8 @@ public class DBOSExecutor implements AutoCloseable {
       List<ScheduledInstance> scheduledWorkflows) {
 
     if (isRunning.compareAndSet(false, true)) {
-      this.workflowMap = workflowMap;
-      this.queues = queues;
+      this.workflowMap = Collections.unmodifiableMap(workflowMap);
+      this.queues = Collections.unmodifiableList(queues);
 
       this.executorId = System.getenv("DBOS__VMID");
       if (this.executorId == null || this.executorId.isEmpty()) {
@@ -150,7 +151,7 @@ public class DBOSExecutor implements AutoCloseable {
       if (config.adminServer()) {
         httpServer =
             HttpServer.getInstance(
-                config.adminServerPort(), new AdminController(this, systemDatabase, queues));
+                config.adminServerPort(), new AdminController(this, systemDatabase));
         httpServer.start();
       }
 
@@ -227,6 +228,10 @@ public class DBOSExecutor implements AutoCloseable {
 
     return workflowMap.get(
         WorkflowRegistry.getFullyQualifiedWFName(className, instanceName, workflowName));
+  }
+
+  public List<Queue> getQueues() {
+    return Collections.unmodifiableList(this.queues);
   }
 
   public Optional<Queue> getQueue(String queueName) {
