@@ -56,31 +56,36 @@ public class AdminServer implements AutoCloseable {
     server.createContext(
         "/",
         exchange -> {
-          var path = exchange.getRequestURI().getPath();
-          var handler = staticRoutes.get(path);
-          if (handler != null) {
-            handler.handle(exchange);
-            return;
-          }
-
-          var matcher = workflowPattern.matcher(path);
-          if (matcher.matches()) {
-            var workflowId = matcher.group(1);
-            var subPath = matcher.group(2);
-
-            if (subPath == null) {
-              getWorkflow(exchange, workflowId);
+          try {
+            var path = exchange.getRequestURI().getPath();
+            var handler = staticRoutes.get(path);
+            if (handler != null) {
+              handler.handle(exchange);
               return;
             }
 
-            var wfhandler = workflowRoutes.get(subPath);
-            if (wfhandler != null) {
-              wfhandler.handle(exchange, workflowId);
-              return;
-            }
-          }
+            var matcher = workflowPattern.matcher(path);
+            if (matcher.matches()) {
+              var workflowId = matcher.group(1);
+              var subPath = matcher.group(2);
 
-          exchange.sendResponseHeaders(404, -1);
+              if (subPath == null) {
+                getWorkflow(exchange, workflowId);
+                return;
+              }
+
+              var wfhandler = workflowRoutes.get(subPath);
+              if (wfhandler != null) {
+                wfhandler.handle(exchange, workflowId);
+                return;
+              }
+            }
+
+            exchange.sendResponseHeaders(404, -1);
+          } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+            sendText(exchange, 500, e.getMessage());
+          }
         });
   }
 
@@ -153,7 +158,15 @@ public class AdminServer implements AutoCloseable {
     sendMappedJson(exchange, 200, response);
   }
 
-  private void listQueuedWorkflows(HttpExchange exchange) throws IOException {}
+  private void listQueuedWorkflows(HttpExchange exchange) throws IOException {
+    if (!ensurePostJson(exchange)) return;
+
+    var request = mapper.readValue(exchange.getRequestBody(), ListWorkflowsRequest.class);
+    var input = request.asInput().withQueuesOnly();
+    var workflows = systemDatabase.listWorkflows(input);
+    var response = workflows.stream().map(s -> WorkflowsOutput.of(s)).collect(Collectors.toList());
+    sendMappedJson(exchange, 200, response);
+  }
 
   private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {}
 

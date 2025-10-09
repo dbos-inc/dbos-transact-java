@@ -30,6 +30,28 @@ public record ListWorkflowsInput(
         null, null, null);
   }
 
+  public ListWorkflowsInput withQueuesOnly() {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        true,
+        executorIds);
+  }
+
   public static class Builder {
     private List<String> workflowIds = new ArrayList<>();
     private List<String> status = new ArrayList<>();

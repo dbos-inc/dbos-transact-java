@@ -301,4 +301,76 @@ class AdminServerTest {
       assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00"), input.endTime());
     }
   }
+
+  @Test
+  public void listQueuedWorkflows() throws IOException {
+
+    List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+    statuses.add(
+        new WorkflowStatusBuilder("wf-1")
+            .status(WorkflowState.PENDING)
+            .name("WF1")
+            .createdAt(1754936102215L)
+            .updatedAt(1754936102215L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .queueName("test-queue-name")
+            .build());
+    statuses.add(
+        new WorkflowStatusBuilder("wf-2")
+            .status(WorkflowState.PENDING)
+            .name("WF2")
+            .createdAt(1754936722066L)
+            .updatedAt(1754936722066L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .queueName("test-queue-name")
+            .build());
+    statuses.add(
+        new WorkflowStatusBuilder("wf-3")
+            .status(WorkflowState.PENDING)
+            .name("WF3")
+            .createdAt(1754946202215L)
+            .updatedAt(1754946202215L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .queueName("test-queue-name")
+            .build());
+
+    when(mockDB.listWorkflows(any())).thenReturn(statuses);
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .contentType("application/json")
+          .body(
+              """
+              {
+          "workflow_id_prefix": "WF",
+          "end_time": "2025-10-09T11:26:05-07:00"
+            } """)
+          .when()
+          .post("/queues")
+          .then()
+          .statusCode(200)
+          .body("size()", equalTo(3))
+          .body("[0].WorkflowUUID", equalTo("wf-1"))
+          .body("[0].Status", equalTo("PENDING"))
+          .body("[0].CreatedAt", equalTo("1754936102215"))
+          .body("[0].QueueName", equalTo("test-queue-name"));
+
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+
+      verify(mockDB).listWorkflows(inputCaptor.capture());
+      var input = inputCaptor.getValue();
+      assertEquals("WF", input.workflowIdPrefix());
+      assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00"), input.endTime());
+    }
+  }
 }

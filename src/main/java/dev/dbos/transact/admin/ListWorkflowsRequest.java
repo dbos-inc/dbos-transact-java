@@ -7,19 +7,19 @@ import java.util.List;
 
 public record ListWorkflowsRequest(
     List<String> workflow_uuids,
-    String workflow_name,
     String authenticated_user,
     String start_time,
     String end_time,
     String status,
     String application_version,
-    String workflow_id_prefix,
-    String queue_name,
+    String workflow_name,
     Integer limit,
     Integer offset,
     Boolean sort_desc,
+    String workflow_id_prefix,
     Boolean load_input,
-    Boolean load_output) {
+    Boolean load_output,
+    String queue_name) {
 
   public ListWorkflowsInput asInput() {
     var builder =
