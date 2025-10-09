@@ -123,7 +123,16 @@ public class AdminServer implements AutoCloseable {
     sendMappedJson(exchange, 200, queues);
   }
 
-  private void garbageCollect(HttpExchange exchange) throws IOException {}
+  private void garbageCollect(HttpExchange exchange) throws IOException {
+    if (!ensurePostJson(exchange)) return;
+
+    GarbageCollectRequest request =
+        mapper.readValue(exchange.getRequestBody(), new TypeReference<GarbageCollectRequest>() {});
+
+    systemDatabase.garbageCollect(request.cutoff_epoch_timestamp_ms, Long.valueOf(request.rows_threshold));
+    exchange.sendResponseHeaders(204, -1);
+    exchange.close();
+  }
 
   private void globalTimeout(HttpExchange exchange) throws IOException {}
 
@@ -199,13 +208,5 @@ public class AdminServer implements AutoCloseable {
     void handle(HttpExchange exchange, String workflowId) throws IOException;
   }
 
-  record RateLimitMetadata(Integer limit, Double period) {}
-
-  record QueueMetadata(
-      String name,
-      int concurrency,
-      int workerConcurrency,
-      boolean priorityEnabled,
-      RateLimitMetadata rateLimit,
-      int maxTasksPerIteration) {}
+  record GarbageCollectRequest(long cutoff_epoch_timestamp_ms, int rows_threshold) {}
 }

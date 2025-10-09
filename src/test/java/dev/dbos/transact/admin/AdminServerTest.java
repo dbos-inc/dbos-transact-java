@@ -4,11 +4,13 @@ import static io.restassured.RestAssured.*;
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.io.IOException;
@@ -20,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.mockito.ArgumentCaptor;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 class AdminServerTest {
@@ -183,6 +186,27 @@ class AdminServerTest {
           .body("[1].rateLimit.limit", equalTo(2))
           .body("[1].rateLimit.period", equalTo(4.0f));
     }
+  }
+
+  @Test
+  public void garbageCollect() throws IOException {
+    
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .contentType("application/json")
+          .body("""
+    { cutoff_epoch_timestamp_ms: 42, rows_threshold: 37 }
+          """)
+          .when()
+          .post("/dbos-garbage-collect")
+          .then()
+          .statusCode(204);
+
+    verify(mockDB).garbageCollect(eq(42L), eq(37L));
+        }
   }
 
   // @Test
