@@ -42,8 +42,8 @@ public class AdminServer implements AutoCloseable {
     staticRoutes.put("/dbos-workflow-queues-metadata", x -> workflowQueuesMetadata(x));
     staticRoutes.put("/dbos-garbage-collect", x -> garbageCollect(x)); // post
     staticRoutes.put("/dbos-global-timeout", x -> globalTimeout(x)); // post
-    staticRoutes.put("/queues", x -> listQueuedWorkflows(x));
     staticRoutes.put("/workflows", x -> listWorkflows(x));
+    staticRoutes.put("/queues", x -> listQueuedWorkflows(x));
 
     Map<String, WorkflowHandler> workflowRoutes = new HashMap<>();
     workflowRoutes.put("steps", (x, wfid) -> listSteps(x, wfid));
@@ -105,14 +105,14 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void workflowRecovery(HttpExchange exchange) throws IOException {
-    if (!ensurePostJson(exchange))
-      return;
+    if (!ensurePostJson(exchange)) return;
 
-    List<String> executorIds = mapper.readValue(exchange.getRequestBody(), new TypeReference<>() {
-    });
+    List<String> executorIds =
+        mapper.readValue(exchange.getRequestBody(), new TypeReference<>() {});
     logger.debug("Recovering workflows for executors {}", executorIds);
     var handles = dbosExecutor.recoverPendingWorkflows(executorIds);
-    List<String> workflowIds = handles.stream().map(h -> h.getWorkflowId()).collect(Collectors.toList());
+    List<String> workflowIds =
+        handles.stream().map(h -> h.getWorkflowId()).collect(Collectors.toList());
     sendMappedJson(exchange, 200, workflowIds);
   }
 
@@ -126,55 +126,48 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void garbageCollect(HttpExchange exchange) throws IOException {
-    if (!ensurePostJson(exchange))
-      return;
+    if (!ensurePostJson(exchange)) return;
 
-    GarbageCollectRequest request = mapper.readValue(exchange.getRequestBody(), GarbageCollectRequest.class);
+    var request = mapper.readValue(exchange.getRequestBody(), GarbageCollectRequest.class);
 
-    systemDatabase.garbageCollect(request.cutoff_epoch_timestamp_ms, Long.valueOf(request.rows_threshold));
+    systemDatabase.garbageCollect(
+        request.cutoff_epoch_timestamp_ms, Long.valueOf(request.rows_threshold));
 
     exchange.sendResponseHeaders(204, 0);
   }
 
   private void globalTimeout(HttpExchange exchange) throws IOException {
-    if (!ensurePostJson(exchange))
-      return;
+    if (!ensurePostJson(exchange)) return;
 
-    GlobalTimeoutRequest request = mapper.readValue(exchange.getRequestBody(), GlobalTimeoutRequest.class);
+    var request = mapper.readValue(exchange.getRequestBody(), GlobalTimeoutRequest.class);
     dbosExecutor.globalTimeout(request.cutoff_epoch_timestamp_ms);
 
     exchange.sendResponseHeaders(204, 0);
   }
 
-  private void listQueuedWorkflows(HttpExchange exchange) throws IOException {
-  }
-
-  private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {
-  }
-
-  private void cancel(HttpExchange exchange, String wfid) throws IOException {
-  }
-
-  private void fork(HttpExchange exchange, String wfid) throws IOException {
-  }
-
-  private void resume(HttpExchange exchange, String wfid) throws IOException {
-  }
-
-  private void restart(HttpExchange exchange, String wfid) throws IOException {
-  }
-
-  private void listSteps(HttpExchange exchange, String wfid) throws IOException {
-  }
-
   private void listWorkflows(HttpExchange exchange) throws IOException {
+    if (!ensurePostJson(exchange)) return;
+
+    var request = mapper.readValue(exchange.getRequestBody(), ListWorkflowsRequest.class);
+    var input = request.asInput();
+    var workflows = systemDatabase.listWorkflows(input);
+    var response = workflows.stream().map(s -> WorkflowsOutput.of(s)).collect(Collectors.toList());
+    sendMappedJson(exchange, 200, response);
   }
 
-  private static String readRequestBody(HttpExchange exchange) throws IOException {
-    try (InputStream is = exchange.getRequestBody()) {
-      return new String(is.readAllBytes(), StandardCharsets.UTF_8);
-    }
-  }
+  private void listQueuedWorkflows(HttpExchange exchange) throws IOException {}
+
+  private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {}
+
+  private void cancel(HttpExchange exchange, String wfid) throws IOException {}
+
+  private void fork(HttpExchange exchange, String wfid) throws IOException {}
+
+  private void resume(HttpExchange exchange, String wfid) throws IOException {}
+
+  private void restart(HttpExchange exchange, String wfid) throws IOException {}
+
+  private void listSteps(HttpExchange exchange, String wfid) throws IOException {}
 
   private static void sendText(HttpExchange exchange, int statusCode, String text)
       throws IOException {
@@ -232,9 +225,7 @@ public class AdminServer implements AutoCloseable {
     void handle(HttpExchange exchange, String workflowId) throws IOException;
   }
 
-  record GarbageCollectRequest(long cutoff_epoch_timestamp_ms, int rows_threshold) {
-  }
+  record GarbageCollectRequest(long cutoff_epoch_timestamp_ms, int rows_threshold) {}
 
-  record GlobalTimeoutRequest(long cutoff_epoch_timestamp_ms) {
-  }
+  record GlobalTimeoutRequest(long cutoff_epoch_timestamp_ms) {}
 }
