@@ -97,6 +97,27 @@ class AdminServerTest {
   }
 
   @Test
+  public void exceptionCatching500() throws IOException {
+    var exception = new RuntimeException("test-exception");
+    when(mockExec.getQueues()).thenThrow(exception);
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .contentType("application/json")
+          .body("[\"local\"]")
+          .when()
+          .post("/dbos-workflow-queues-metadata")
+          .then()
+          .statusCode(500)
+          .body(equalTo(exception.getMessage()));
+    }
+  }
+
+
+  @Test
   public void healthz() throws IOException {
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
