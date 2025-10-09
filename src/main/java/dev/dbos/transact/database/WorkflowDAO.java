@@ -406,8 +406,8 @@ public class WorkflowDAO {
           started_at_epoch_ms, deduplication_id, priority
         """);
 
-  var loadInput = input.loadInput() == null || input.loadInput();  
-  var loadOutput = input.loadOutput() == null || input.loadOutput();  
+    var loadInput = input.loadInput() == null || input.loadInput();
+    var loadOutput = input.loadOutput() == null || input.loadOutput();
     if (loadInput) {
       sqlBuilder.append(", inputs");
     }
