@@ -29,7 +29,7 @@ val branchName: String by lazy {
 // Note, this versioning scheme is fine for preview releases
 // but we'll want something more robust once we want to bump
 // the major or minor version number
-val baseVersion = System.getenv("BASE_VERSION") ?: "0.5"
+val baseVersion = System.getenv("BASE_VERSION") ?: "0.6"
 val safeBranchName = if (branchName == "main" || branchName == "HEAD") "" else ".${branchName.replace("/", "-")}"
 version = "$baseVersion.$commitCount-preview+g$gitHash$safeBranchName"
 
