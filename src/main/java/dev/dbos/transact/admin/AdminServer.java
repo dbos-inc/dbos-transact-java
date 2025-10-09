@@ -45,11 +45,11 @@ public class AdminServer implements AutoCloseable {
     staticRoutes.put("/queues", x -> listQueuedWorkflows(x));
 
     Map<String, WorkflowHandler> workflowRoutes = new HashMap<>();
-    workflowRoutes.put("steps", (x, wfid) -> listSteps(x, wfid));
-    workflowRoutes.put("cancel", (x, wfid) -> cancel(x, wfid));
-    workflowRoutes.put("restart", (x, wfid) -> restart(x, wfid));
-    workflowRoutes.put("resume", (x, wfid) -> resume(x, wfid));
-    workflowRoutes.put("fork", (x, wfid) -> fork(x, wfid));
+    workflowRoutes.put("/steps", (x, wfid) -> listSteps(x, wfid));
+    workflowRoutes.put("/cancel", (x, wfid) -> cancel(x, wfid));
+    workflowRoutes.put("/restart", (x, wfid) -> restart(x, wfid));
+    workflowRoutes.put("/resume", (x, wfid) -> resume(x, wfid));
+    workflowRoutes.put("/fork", (x, wfid) -> fork(x, wfid));
 
     server = HttpServer.create(new InetSocketAddress(port), 0);
     Pattern workflowPattern = Pattern.compile("/workflows/([^/]+)(/[^/]*)?");
@@ -189,7 +189,11 @@ public class AdminServer implements AutoCloseable {
 
   private void restart(HttpExchange exchange, String wfid) throws IOException {}
 
-  private void listSteps(HttpExchange exchange, String wfid) throws IOException {}
+  private void listSteps(HttpExchange exchange, String wfid) throws IOException {
+    var steps = systemDatabase.listWorkflowSteps(wfid);
+    var response = steps.stream().map(s -> StepOutput.of(s)).collect(Collectors.toList());
+    sendMappedJson(exchange, 200, response);
+  }
 
   private static void sendText(HttpExchange exchange, int statusCode, String text)
       throws IOException {

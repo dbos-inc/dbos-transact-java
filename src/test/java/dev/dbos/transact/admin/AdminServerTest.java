@@ -3,6 +3,8 @@ package dev.dbos.transact.admin;
 import static io.restassured.RestAssured.*;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -11,18 +13,23 @@ import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
+import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import io.restassured.response.Response;
 
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -419,6 +426,25 @@ class AdminServerTest {
           .body("WorkflowName", equalTo(status.name()))
           .body("Status", equalTo(status.status().toString()))
           .body("CreatedAt", equalTo("1754946202215"));
+
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+
+      verify(mockDB).listWorkflows(inputCaptor.capture());
+      var input = inputCaptor.getValue();
+      assertEquals(List.of(status.workflowId()), input.workflowIds());
+
+      assertNull(input.authenticatedUser());
+      assertNull(input.queueName());
+      assertNull(input.startTime());
+      assertNull(input.endTime());
+      assertNull(input.workflowIdPrefix());
+      assertNull(input.applicationVersion());
+      assertNull(input.offset());
+      assertNull(input.limit());
+      assertEquals(0, input.status().size());
+      assertEquals(0, input.executorIds().size());
+
     }
   }
 
@@ -439,4 +465,57 @@ class AdminServerTest {
           .body(equalTo("Workflow not found"));
     }
   }
+
+  @Test
+  public void listSteps() throws IOException {
+
+    List<StepInfo> steps = new ArrayList<>();
+    for (int i = 0; i < 3; i++) {
+      var step = new StepInfo(i, "step-%d".formatted(i), "output-%d".formatted(i), null, null);
+      steps.add(step);
+    }
+    steps.add(new StepInfo(3, "step-3", null,null, "child-wfid-3"));
+    var error = new RuntimeException("error-4");
+    steps.add(new StepInfo(4, "step-4", null, ErrorResult.of(error), null));
+      
+    when(mockDB.listWorkflowSteps(any())).thenReturn(steps);
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      Response response = given()
+          .port(port)
+          .when()
+          .get("/workflows/test-wf-id/steps")
+          .then()
+          .statusCode(200)
+          .extract()
+          .response();
+
+        List<Map<String, Object>> stepsReturn = response.jsonPath().getList("");
+        for (var i = 0; i < stepsReturn.size(); i++) {
+          var step = stepsReturn.get(i);
+          assertEquals(i, step.get("function_id"));
+          assertEquals("step-%d".formatted(i), step.get("function_name"));
+          if (i < 3) {
+            assertEquals("\"output-%d\"".formatted(i), step.get("output"));
+            assertNull(step.get("error"));
+            assertNull(step.get("child_workflow_id"));
+          }
+          if (i == 3) {
+            assertNull(step.get("output"));
+            assertNull(step.get("error"));
+            assertEquals("child-wfid-3", step.get("child_workflow_id"));
+          }
+          if (i == 4) {
+            assertNull(step.get("output"));
+            assertNotNull(step.get("error"));
+            var result = JSONUtil.fromJson((String)step.get("error"), ErrorResult.class);
+            assertEquals("error-4", result.message());
+            assertNull(step.get("child_workflow_id"));
+          }
+        }
+    }
+  }
+
 }
