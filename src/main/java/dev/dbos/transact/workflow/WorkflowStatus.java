@@ -15,26 +15,29 @@ public record WorkflowStatus(
     Object[] input,
     Object output,
     ErrorResult error,
+    String executorId,
     Long createdAt,
     Long updatedAt,
-    String queueName,
-    String executorId,
     String appVersion,
-    Long workflowTimeoutMs,
-    Long workflowDeadlineEpochMs,
     String appId,
-    Integer recoveryAttempts) {
+    Integer recoveryAttempts,
+    String queueName,
+    Long timeoutMs,
+    Long deadlineEpochMs,
+    Long startedAtEpochMs,
+    String deduplicationId,
+    Integer priority) {
 
   public Instant getDeadline() {
-    if (workflowDeadlineEpochMs != null) {
-      return Instant.ofEpochMilli(workflowDeadlineEpochMs);
+    if (deadlineEpochMs != null) {
+      return Instant.ofEpochMilli(deadlineEpochMs);
     }
     return null;
   }
 
   public Duration getTimeout() {
-    if (workflowTimeoutMs != null) {
-      return Duration.ofMillis(workflowTimeoutMs);
+    if (timeoutMs != null) {
+      return Duration.ofMillis(timeoutMs);
     }
 
     return null;

@@ -137,7 +137,7 @@ public class ListWorkflowsRequest extends BaseMessage {
   public ListWorkflowsInput asInput() {
     var builder =
         new ListWorkflowsInput.Builder()
-            .workflowIDs(body.workflow_uuids)
+            .workflowIds(body.workflow_uuids)
             .workflowName(body.workflow_name)
             .authenticatedUser(body.authenticated_user)
             .startTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null)

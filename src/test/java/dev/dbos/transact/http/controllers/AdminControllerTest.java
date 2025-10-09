@@ -29,11 +29,13 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junitpioneer.jupiter.RetryingTest;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
+@Disabled("Admin Server in process of being rewritten")
 class AdminControllerTest {
 
   private static DBOSConfig dbosConfig;

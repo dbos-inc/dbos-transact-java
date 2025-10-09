@@ -109,7 +109,7 @@ public class StartWorkflowTest {
     assertNotNull(row);
     assertEquals(workflowId, row.getWorkflowId());
     assertEquals("SUCCESS", row.getStatus().status());
-    assertEquals(1000, row.getStatus().workflowTimeoutMs());
-    assertNotNull(row.getStatus().workflowDeadlineEpochMs());
+    assertEquals(1000, row.getStatus().timeoutMs());
+    assertNotNull(row.getStatus().deadlineEpochMs());
   }
 }
