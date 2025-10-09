@@ -95,7 +95,7 @@ public class QueuesTest {
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
-    var options = new StartWorkflowOptions().withQueue(firstQ, "dedupe");
+    var options = new StartWorkflowOptions().withQueue(firstQ).withDeduplicationId("dedupe");
     DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
 
     assertThrows(
@@ -117,13 +117,13 @@ public class QueuesTest {
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
-    var o1 = new StartWorkflowOptions().withQueue(firstQ, 100);
+    var o1 = new StartWorkflowOptions().withQueue(firstQ).withPriority(100);
     var h1 = DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(100), o1);
 
-    var o2 = new StartWorkflowOptions().withQueue(firstQ, 50);
+    var o2 = new StartWorkflowOptions().withQueue(firstQ).withPriority(50);
     DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(50), o2);
 
-    var o3 = new StartWorkflowOptions().withQueue(firstQ, 10);
+    var o3 = new StartWorkflowOptions().withQueue(firstQ).withPriority(10);
     DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(10), o3);
 
     qs.unpause();
