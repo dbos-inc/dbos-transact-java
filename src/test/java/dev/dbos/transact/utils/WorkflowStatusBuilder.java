@@ -1,6 +1,5 @@
 package dev.dbos.transact.utils;
 
-import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
