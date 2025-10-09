@@ -118,27 +118,30 @@ public class AdminServer implements AutoCloseable {
     sendText(exchange, 500, "not implemented");
   }
 
-  private void workflowQueuesMetadata(HttpExchange x) throws IOException {}
+  private void workflowQueuesMetadata(HttpExchange exchange) throws IOException {
+    var queues = dbosExecutor.getQueues();
+    sendMappedJson(exchange, 200, queues);
+  }
 
   private void garbageCollect(HttpExchange exchange) throws IOException {}
 
-  private void globalTimeout(HttpExchange x) throws IOException {}
+  private void globalTimeout(HttpExchange exchange) throws IOException {}
 
-  private void listQueuedWorkflows(HttpExchange x) throws IOException {}
+  private void listQueuedWorkflows(HttpExchange exchange) throws IOException {}
 
-  private void getWorkflow(HttpExchange x, String wfid) throws IOException {}
+  private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {}
 
-  private void cancel(HttpExchange x, String wfid) throws IOException {}
+  private void cancel(HttpExchange exchange, String wfid) throws IOException {}
 
-  private void fork(HttpExchange x, String wfid) throws IOException {}
+  private void fork(HttpExchange exchange, String wfid) throws IOException {}
 
-  private void resume(HttpExchange x, String wfid) throws IOException {}
+  private void resume(HttpExchange exchange, String wfid) throws IOException {}
 
-  private void restart(HttpExchange x, String wfid) throws IOException {}
+  private void restart(HttpExchange exchange, String wfid) throws IOException {}
 
-  private void listSteps(HttpExchange x, String wfid) throws IOException {}
+  private void listSteps(HttpExchange exchange, String wfid) throws IOException {}
 
-  private void listWorkflows(HttpExchange x) throws IOException {}
+  private void listWorkflows(HttpExchange exchange) throws IOException {}
 
   private static void sendText(HttpExchange exchange, int statusCode, String text)
       throws IOException {

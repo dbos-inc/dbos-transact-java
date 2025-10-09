@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.io.IOException;
@@ -21,7 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
-class AdminControllerTest {
+class AdminServerTest {
 
   int port;
   SystemDatabase mockDB;
@@ -36,6 +37,54 @@ class AdminControllerTest {
 
     mockDB = mock(SystemDatabase.class);
     mockExec = mock(DBOSExecutor.class);
+  }
+
+  @Test
+  public void ensurePostJsonNotPost() throws IOException {
+
+    List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      @SuppressWarnings("unchecked")
+      var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+      when(handle.getWorkflowId()).thenReturn("workflow-00%d".formatted(i));
+      handles.add(handle);
+    }
+
+    List<String> param = List.of("local");
+    when(mockExec.recoverPendingWorkflows(eq(param))).thenReturn(handles);
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given().port(port).when().get("/dbos-workflow-recovery").then().statusCode(405);
+    }
+  }
+
+  @Test
+  public void ensurePostJsonNotJson() throws IOException {
+
+    List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      @SuppressWarnings("unchecked")
+      var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+      when(handle.getWorkflowId()).thenReturn("workflow-00%d".formatted(i));
+      handles.add(handle);
+    }
+
+    List<String> param = List.of("local");
+    when(mockExec.recoverPendingWorkflows(eq(param))).thenReturn(handles);
+
+    try (var server = new AdminServer(port, mockExec, mockDB)) {
+      server.start();
+
+      given()
+          .port(port)
+          .body("[\"local\"]")
+          .when()
+          .post("/dbos-workflow-recovery")
+          .then()
+          .statusCode(415);
+    }
   }
 
   @Test
@@ -73,6 +122,7 @@ class AdminControllerTest {
 
     List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
+      @SuppressWarnings("unchecked")
       var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
       when(handle.getWorkflowId()).thenReturn("workflow-00%d".formatted(i));
       handles.add(handle);
@@ -102,48 +152,36 @@ class AdminControllerTest {
   }
 
   @Test
-  public void ensurePostJsonNotPost() throws IOException {
+  public void queueMetadata() throws IOException {
+    var queue1 = new Queue("test-queue-1", 0, 0, false, null);
+    var queue2 = new Queue("test-queue-2", 10, 5, true, new Queue.RateLimit(2, 4.0));
 
-    List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
-    for (int i = 0; i < 5; i++) {
-      var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-      when(handle.getWorkflowId()).thenReturn("workflow-00%d".formatted(i));
-      handles.add(handle);
-    }
-
-    List<String> param = List.of("local");
-    when(mockExec.recoverPendingWorkflows(eq(param))).thenReturn(handles);
-
-    try (var server = new AdminServer(port, mockExec, mockDB)) {
-      server.start();
-
-      given().port(port).when().get("/dbos-workflow-recovery").then().statusCode(405);
-    }
-  }
-
-  @Test
-  public void ensurePostJsonNotJson() throws IOException {
-
-    List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
-    for (int i = 0; i < 5; i++) {
-      var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-      when(handle.getWorkflowId()).thenReturn("workflow-00%d".formatted(i));
-      handles.add(handle);
-    }
-
-    List<String> param = List.of("local");
-    when(mockExec.recoverPendingWorkflows(eq(param))).thenReturn(handles);
+    when(mockExec.getQueues()).thenReturn(List.of(queue1, queue2));
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
 
       given()
           .port(port)
+          .contentType("application/json")
           .body("[\"local\"]")
           .when()
-          .post("/dbos-workflow-recovery")
+          .post("/dbos-workflow-queues-metadata")
           .then()
-          .statusCode(415);
+          .statusCode(200)
+          .body("size()", equalTo(2))
+          .body("[0].name", equalTo("test-queue-1"))
+          .body("[0].concurrency", equalTo(0))
+          .body("[0].workerConcurrency", equalTo(0))
+          .body("[0].priorityEnabled", equalTo(false))
+          .body("[0].rateLimit", nullValue())
+          .body("[1].name", equalTo("test-queue-2"))
+          .body("[1].concurrency", equalTo(10))
+          .body("[1].workerConcurrency", equalTo(5))
+          .body("[1].priorityEnabled", equalTo(true))
+          .body("[1].rateLimit", notNullValue())
+          .body("[1].rateLimit.limit", equalTo(2))
+          .body("[1].rateLimit.period", equalTo(4.0f));
     }
   }
 
