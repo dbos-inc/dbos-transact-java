@@ -578,17 +578,35 @@ public class ConductorTest {
     testServer.setListener(listener);
     List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
     statuses.add(
-        new WorkflowStatusBuilder("wf-1").status(WorkflowState.PENDING).name("WF1")
-          .createdAt(1754936102215L).updatedAt(1754936102215L).executorId("test-executor")
-          .appVersion("test-app-ver").appId("test-app-id").build());
+        new WorkflowStatusBuilder("wf-1")
+            .status(WorkflowState.PENDING)
+            .name("WF1")
+            .createdAt(1754936102215L)
+            .updatedAt(1754936102215L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build());
     statuses.add(
-        new WorkflowStatusBuilder("wf-2").status(WorkflowState.PENDING).name("WF2")
-          .createdAt(1754936722066L).updatedAt(1754936722066L).executorId("test-executor")
-          .appVersion("test-app-ver").appId("test-app-id").build());
+        new WorkflowStatusBuilder("wf-2")
+            .status(WorkflowState.PENDING)
+            .name("WF2")
+            .createdAt(1754936722066L)
+            .updatedAt(1754936722066L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build());
     statuses.add(
-        new WorkflowStatusBuilder("wf-3").status(WorkflowState.PENDING).name("WF3")
-          .createdAt(1754946202215L).updatedAt(1754946202215L).executorId("test-executor")
-          .appVersion("test-app-ver").appId("test-app-id").build());
+        new WorkflowStatusBuilder("wf-3")
+            .status(WorkflowState.PENDING)
+            .name("WF3")
+            .createdAt(1754946202215L)
+            .updatedAt(1754946202215L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build());
 
     when(mockExec.listWorkflows(any())).thenReturn(statuses);
 
@@ -632,17 +650,35 @@ public class ConductorTest {
     testServer.setListener(listener);
     List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
     statuses.add(
-        new WorkflowStatusBuilder("wf-1").status(WorkflowState.PENDING).name("WF1")
-          .createdAt(1754936102215L).updatedAt(1754936102215L).executorId("test-executor")
-          .appVersion("test-app-ver").appId("test-app-id").build());
+        new WorkflowStatusBuilder("wf-1")
+            .status(WorkflowState.PENDING)
+            .name("WF1")
+            .createdAt(1754936102215L)
+            .updatedAt(1754936102215L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build());
     statuses.add(
-        new WorkflowStatusBuilder("wf-2").status(WorkflowState.PENDING).name("WF2")
-          .createdAt(1754936722066L).updatedAt(1754936722066L).executorId("test-executor")
-          .appVersion("test-app-ver").appId("test-app-id").build());
+        new WorkflowStatusBuilder("wf-2")
+            .status(WorkflowState.PENDING)
+            .name("WF2")
+            .createdAt(1754936722066L)
+            .updatedAt(1754936722066L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build());
     statuses.add(
-        new WorkflowStatusBuilder("wf-3").status(WorkflowState.PENDING).name("WF3")
-          .createdAt(1754946202215L).updatedAt(1754946202215L).executorId("test-executor")
-          .appVersion("test-app-ver").appId("test-app-id").build());
+        new WorkflowStatusBuilder("wf-3")
+            .status(WorkflowState.PENDING)
+            .name("WF3")
+            .createdAt(1754946202215L)
+            .updatedAt(1754946202215L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build());
 
     when(mockExec.listWorkflows(any())).thenReturn(statuses);
 
@@ -687,9 +723,16 @@ public class ConductorTest {
     testServer.setListener(listener);
     String workflowId = "sample-wf-id";
 
-    WorkflowStatus status = new WorkflowStatusBuilder("wf-1").status(WorkflowState.PENDING).name("WF1")
-          .createdAt(1754936102215L).updatedAt(1754936102215L).executorId("test-executor")
-          .appVersion("test-app-ver").appId("test-app-id").build();
+    WorkflowStatus status =
+        new WorkflowStatusBuilder("wf-1")
+            .status(WorkflowState.PENDING)
+            .name("WF1")
+            .createdAt(1754936102215L)
+            .updatedAt(1754936102215L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build();
 
     when(mockDB.getWorkflowStatus(workflowId)).thenReturn(Optional.of(status));
 

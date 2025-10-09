@@ -402,7 +402,7 @@ public class WorkflowDAO {
           SELECT workflow_uuid, status, name, config_name, class_name,
           authenticated_user, assumed_role, authenticated_roles,
           executor_id, created_at, updated_at, application_version, application_id,
-          recovery_attempts, queue_name, workflow_timeout_ms, workflow_deadline_epoch_ms, 
+          recovery_attempts, queue_name, workflow_timeout_ms, workflow_deadline_epoch_ms,
           started_at_epoch_ms, deduplication_id, priority
         """);
 
@@ -475,7 +475,7 @@ public class WorkflowDAO {
       whereConditions.add("executor_id = ANY(?)");
       parameters.add(input.executorIds().toArray());
     }
-    
+
     // Only append WHERE keyword if there are actual conditions
     if (whereConditions.length() > 0) {
       sqlBuilder.append(" WHERE ").append(whereConditions.toString());
@@ -568,8 +568,7 @@ public class WorkflowDAO {
                   rs.getObject("workflow_deadline_epoch_ms", Long.class),
                   rs.getObject("started_at_epoch_ms", Long.class),
                   rs.getString("deduplication_id"),
-                  rs.getObject("priority", Integer.class)
-                  );
+                  rs.getObject("priority", Integer.class));
 
           workflows.add(info);
         }

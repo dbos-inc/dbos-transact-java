@@ -6,11 +6,11 @@ import java.time.Instant;
 public record WorkflowStatus(
     String workflowId,
     String status,
-    String name, 
-    String className, 
-    String instanceName, 
-    String authenticatedUser, 
-    String assumedRole, 
+    String name,
+    String className,
+    String instanceName,
+    String authenticatedUser,
+    String assumedRole,
     String[] authenticatedRoles,
     Object[] input,
     Object output,
@@ -28,7 +28,6 @@ public record WorkflowStatus(
     String deduplicationId,
     Integer priority) {
 
- 
   public Instant getDeadline() {
     if (deadlineEpochMs != null) {
       return Instant.ofEpochMilli(deadlineEpochMs);
