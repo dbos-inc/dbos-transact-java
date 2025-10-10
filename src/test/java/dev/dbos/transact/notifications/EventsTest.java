@@ -5,11 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -18,6 +21,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+
+import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -29,6 +34,7 @@ import org.junit.jupiter.api.Timeout;
 public class EventsTest {
 
   private static DBOSConfig dbosConfig;
+  private static DataSource dataSource;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -47,6 +53,7 @@ public class EventsTest {
     DBUtils.recreateDB(dbosConfig);
 
     DBOS.reinitialize(dbosConfig);
+    EventsTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
@@ -149,19 +156,14 @@ public class EventsTest {
     String res = (String) getwfh.getResult();
     assertEquals("value1value2", res);
 
-    /*
-    String event = (String) DBOS.retrieveWorkflow("id2").getResult();
-    String stepEvent = (String) DBOS.getEvent("id1", "key1-fromstep", Duration.ofMillis(1000));
-    assertEquals("value1", event);
-    assertEquals("value1", stepEvent);
-    assertEquals("value1", setwfh.getResult());
-
-    List<StepInfo> steps = DBOS.listWorkflowSteps(setwfh.getWorkflowId());
-    assertEquals(3, steps.size());
-    assertEquals("DBOS.setEvent", steps.get(0).functionName());
-    assertEquals("stepSetEvent", steps.get(1).functionName());
-    assertEquals("getEventInStep", steps.get(2).functionName());
-    */
+    // See if it stuck
+    impl.resetCounts();
+    impl.advanceGet1();
+    impl.advanceGet2();
+    DBUtils.setWorkflowState(dataSource, getwfh.getWorkflowId(), WorkflowState.PENDING.name());
+    getwfh = DBOSTestAccess.getDbosExecutor().executeWorkflowById(getwfh.getWorkflowId());
+    res = (String) getwfh.getResult();
+    assertEquals("value1value2", res);
   }
 
   @Test

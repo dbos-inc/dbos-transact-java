@@ -59,37 +59,37 @@ public class EventsServiceImpl implements EventsService {
     return DBOS.getEvent(workflowId, key, timeOut);
   }
 
-  private final CountDownLatch advanceSetLatch = new CountDownLatch(1);
+  private CountDownLatch advanceSetLatch = new CountDownLatch(1);
 
   public void advanceSet() {
     advanceSetLatch.countDown();
   }
 
-  private final CountDownLatch advanceGetLatch1 = new CountDownLatch(1);
+  private CountDownLatch advanceGetLatch1 = new CountDownLatch(1);
 
   public void advanceGet1() {
     advanceGetLatch1.countDown();
   }
 
-  private final CountDownLatch advanceGetLatch2 = new CountDownLatch(1);
+  private CountDownLatch advanceGetLatch2 = new CountDownLatch(1);
 
   public void advanceGet2() {
     advanceGetLatch2.countDown();
   }
 
-  private final CountDownLatch doneSetLatch1 = new CountDownLatch(1);
+  private CountDownLatch doneSetLatch1 = new CountDownLatch(1);
 
   public void awaitSetLatch1() throws InterruptedException {
     doneSetLatch1.await();
   }
 
-  private final CountDownLatch doneSetLatch2 = new CountDownLatch(1);
+  private CountDownLatch doneSetLatch2 = new CountDownLatch(1);
 
   public void awaitSetLatch2() throws InterruptedException {
     doneSetLatch2.await();
   }
 
-  private final CountDownLatch doneGetLatch1 = new CountDownLatch(1);
+  private CountDownLatch doneGetLatch1 = new CountDownLatch(1);
 
   public void awaitGetLatch1() throws InterruptedException {
     doneGetLatch1.await();
@@ -112,5 +112,14 @@ public class EventsServiceImpl implements EventsService {
     advanceGetLatch2.await();
     var v2 = (String) DBOS.getEvent(wfid, key, Duration.ofSeconds(0));
     return v1 + v2;
+  }
+
+  public void resetCounts() {
+    advanceGetLatch1 = new CountDownLatch(1);
+    advanceGetLatch2 = new CountDownLatch(1);
+    advanceSetLatch = new CountDownLatch(1);
+    doneGetLatch1 = new CountDownLatch(1);
+    doneSetLatch1 = new CountDownLatch(1);
+    doneSetLatch2 = new CountDownLatch(1);
   }
 }
