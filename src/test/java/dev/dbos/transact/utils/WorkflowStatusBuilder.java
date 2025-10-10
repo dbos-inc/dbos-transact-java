@@ -1,6 +1,5 @@
 package dev.dbos.transact.utils;
 
-import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -114,10 +113,7 @@ public class WorkflowStatusBuilder {
   }
 
   public WorkflowStatusBuilder error(Throwable error) {
-    String errorString = JSONUtil.serializeAppException(error);
-    var wrapper = JSONUtil.deserializeAppExceptionWrapper(errorString);
-    Throwable throwable = JSONUtil.deserializeAppException(errorString);
-    this.error = new ErrorResult(wrapper.type, wrapper.message, errorString, throwable);
+    this.error = ErrorResult.of(error);
     return this;
   }
 
