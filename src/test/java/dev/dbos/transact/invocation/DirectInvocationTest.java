@@ -12,6 +12,11 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 
+import java.io.Serializable;
+import java.lang.invoke.MethodType;
+import java.lang.invoke.SerializedLambda;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -65,6 +70,43 @@ public class DirectInvocationTest {
     DBOS.shutdown();
   }
 
+  <A, R> void starWorkflow(WorkflowCall1<A, R> ref, A p1)
+      throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+
+    var synth = ref.getClass().isSynthetic();
+    var ser = ref instanceof Serializable;
+    var klass = ref.getClass();
+    var writeReplace = klass.getDeclaredMethod("writeReplace");
+    var sl = (SerializedLambda) writeReplace.invoke(ref);
+
+    var a = sl.getImplClass().replace('/', '.');
+    var b = sl.getImplMethodName();
+    var ts =
+        MethodType.fromMethodDescriptorString(
+            sl.getImplMethodSignature(), ClassLoader.getSystemClassLoader());
+
+    var c = sl.getCapturedArg(0);
+    var ih = Proxy.getInvocationHandler(c);
+
+
+    var cclass = c.getClass();
+    var n = cclass.getName();
+
+
+
+    System.err.println();
+    // var writeReplace = ref.getClass().getDeclaredMethod("writeReplace");
+    // var sl = (SerializedLambda)writeReplace.invoke(ref);
+
+  }
+
+  @Test
+  void methodRef() throws Exception {
+    starWorkflow(proxy::sleepWorkflow, 12L);
+
+    System.err.println();
+  }
+
   @Test
   void directInvoke() {
 
@@ -104,7 +146,7 @@ public class DirectInvocationTest {
 
     var options = new WorkflowOptions(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
-      var result = proxy.sleepWorkflow(1);
+      var result = proxy.sleepWorkflow(1L);
       assertEquals(localDate, result);
     }
 
@@ -120,7 +162,7 @@ public class DirectInvocationTest {
 
     var options = new WorkflowOptions(Duration.ZERO);
     try (var _o = options.setContext()) {
-      var result = proxy.sleepWorkflow(1);
+      var result = proxy.sleepWorkflow(1L);
       assertEquals(localDate, result);
     }
 
@@ -137,7 +179,7 @@ public class DirectInvocationTest {
     String workflowId = "directInvokeSetWorkflowIdAndTimeout";
     var options = new WorkflowOptions(workflowId, Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
-      var result = proxy.sleepWorkflow(1);
+      var result = proxy.sleepWorkflow(1L);
       assertEquals(localDate, result);
     }
 
@@ -270,7 +312,7 @@ public class DirectInvocationTest {
 
     var options = new WorkflowOptions(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
-      var result = proxy.parentSleepWorkflow(null, 1);
+      var result = proxy.parentSleepWorkflow(null, 1L);
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
@@ -289,7 +331,7 @@ public class DirectInvocationTest {
   @Test
   void directInvokeParentSetTimeoutParent() {
 
-    var result = proxy.parentSleepWorkflow(5L, 1);
+    var result = proxy.parentSleepWorkflow(5L, 1L);
     assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
 
     var rows = DBUtils.getWorkflowRows(dataSource);
@@ -307,7 +349,7 @@ public class DirectInvocationTest {
 
     var options = new WorkflowOptions(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
-      var result = proxy.parentSleepWorkflow(5L, 1);
+      var result = proxy.parentSleepWorkflow(5L, 1L);
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
@@ -328,7 +370,7 @@ public class DirectInvocationTest {
 
     var options = new WorkflowOptions(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
-      var result = proxy.parentSleepWorkflow(0L, 1);
+      var result = proxy.parentSleepWorkflow(0L, 1L);
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
     }
 
