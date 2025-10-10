@@ -10,6 +10,7 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
 import dev.dbos.transact.database.DbRetry;
+import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
@@ -656,6 +657,14 @@ public class DBOSExecutor implements AutoCloseable {
           return systemDatabase.listWorkflowSteps(workflowId);
         },
         "DBOS.listWorkflowSteps");
+  }
+
+  public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
+    return systemDatabase.getExternalState(service, workflowName, key);
+  }
+
+  public ExternalState upsertExternalState(ExternalState state) {
+    return systemDatabase.upsertExternalState(state);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
