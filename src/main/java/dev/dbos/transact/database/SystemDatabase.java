@@ -13,6 +13,8 @@ import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.sql.*;
 import java.time.Duration;
 import java.util.*;
@@ -302,9 +304,10 @@ public class SystemDatabase implements AutoCloseable {
             try (var rs = stmt.executeQuery()) {
               if (rs.next()) {
                 var value = rs.getString("value");
-                var seq = rs.getObject("update_seq", Long.class);
-                var time = rs.getObject("update_time", Long.class);
-                return Optional.of(new ExternalState(service, workflowName, key, value, seq, time));
+                BigDecimal seqDecimal = rs.getBigDecimal("update_seq");
+                BigInteger seq = seqDecimal != null ? seqDecimal.toBigInteger() : null;
+                BigDecimal time = rs.getBigDecimal("update_time");
+                return Optional.of(new ExternalState(service, workflowName, key, value, time, seq));
               } else {
                 return Optional.empty();
               }
@@ -345,10 +348,11 @@ public class SystemDatabase implements AutoCloseable {
             try (var rs = stmt.executeQuery()) {
               if (rs.next()) {
                 var value = rs.getString("value");
-                var seq = rs.getObject("update_seq", Long.class);
-                var time = rs.getObject("update_time", Long.class);
+                BigDecimal seqDecimal = rs.getBigDecimal("update_seq");
+                BigInteger seq = seqDecimal != null ? seqDecimal.toBigInteger() : null;
+                BigDecimal time = rs.getBigDecimal("update_time");
                 return new ExternalState(
-                    state.service(), state.workflowName(), state.key(), value, seq, time);
+                    state.service(), state.workflowName(), state.key(), value, time, seq);
               } else {
                 throw new RuntimeException(
                     "Attempted to upsert extenal state %s / %s / %s"

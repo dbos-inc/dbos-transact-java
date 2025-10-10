@@ -1,5 +1,7 @@
 package dev.dbos.transact.database;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Objects;
 
 public record ExternalState(
@@ -7,8 +9,8 @@ public record ExternalState(
     String workflowName,
     String key,
     String value,
-    Long updateTime,
-    Long updateSeq) {
+    BigDecimal updateTime,
+    BigInteger updateSeq) {
 
   public ExternalState {
     Objects.requireNonNull(service);
@@ -24,11 +26,11 @@ public record ExternalState(
     return new ExternalState(service, workflowName, key, value, updateTime, updateSeq);
   }
 
-  public ExternalState withUpdateTime(long updateTime) {
+  public ExternalState withUpdateTime(BigDecimal updateTime) {
     return new ExternalState(service, workflowName, key, value, updateTime, updateSeq);
   }
 
-  public ExternalState withUpdateSeq(long updateSeq) {
+  public ExternalState withUpdateSeq(BigInteger updateSeq) {
     return new ExternalState(service, workflowName, key, value, updateTime, updateSeq);
   }
 }
