@@ -233,7 +233,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void setEvent(String workflowId, int functionId, String key, Object message) {
+  public void setEvent(String workflowId, Integer functionId, String key, Object message) {
 
     DbRetry.run(
         () -> {

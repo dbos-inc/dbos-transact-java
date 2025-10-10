@@ -116,6 +116,12 @@ public class EventsTest {
     assertEquals("value1", event);
     assertEquals("value1", stepEvent);
     assertEquals("value1", setwfh.getResult());
+
+    List<StepInfo> steps = DBOS.listWorkflowSteps(setwfh.getWorkflowId());
+    assertEquals(3, steps.size());
+    assertEquals("DBOS.setEvent", steps.get(0).functionName());
+    assertEquals("stepSetEvent", steps.get(1).functionName());
+    assertEquals("getEventInStep", steps.get(2).functionName());
   }
 
   @Test

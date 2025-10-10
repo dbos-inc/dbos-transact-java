@@ -22,7 +22,8 @@ public class EventsServiceImpl implements EventsService {
         "stepSetEvent");
     return DBOS.runStep(
         () -> {
-          return (String) DBOS.getEvent(DBOS.workflowId(), "key", Duration.ofSeconds(0));
+          return (String)
+              DBOS.getEvent(DBOS.workflowId(), key + "-fromstep", Duration.ofSeconds(0));
         },
         "getEventInStep");
   }

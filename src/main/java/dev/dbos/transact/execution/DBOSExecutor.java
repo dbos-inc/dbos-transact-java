@@ -621,9 +621,12 @@ public class DBOSExecutor implements AutoCloseable {
     if (!ctx.isInWorkflow()) {
       throw new IllegalStateException("DBOS.setEvent() must be called from a workflow.");
     }
-    int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-    systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+    if (!ctx.isInStep()) {
+      int stepFunctionId = ctx.getAndIncrementFunctionId();
+      systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+    } else {
+      systemDatabase.setEvent(ctx.getWorkflowId(), null, key, value);
+    }
   }
 
   public Object getEvent(String workflowId, String key, Duration timeout) {
@@ -631,7 +634,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     DBOSContext ctx = DBOSContextHolder.get();
 
-    if (ctx.isInWorkflow()) {
+    if (ctx.isInWorkflow() && !ctx.isInStep()) {
       int stepFunctionId = ctx.getAndIncrementFunctionId();
       int timeoutFunctionId = ctx.getAndIncrementFunctionId();
       GetWorkflowEventContext callerCtx =
