@@ -15,6 +15,11 @@ public class EventsServiceImpl implements EventsService {
   @Workflow(name = "setEventWorkflow")
   public void setEventWorkflow(String key, Object value) {
     DBOS.setEvent(key, value);
+    DBOS.runStep(
+        () -> {
+          DBOS.setEvent(key + "-fromstep", value);
+        },
+        "stepSetEvent");
   }
 
   @Workflow(name = "getEventWorkflow")

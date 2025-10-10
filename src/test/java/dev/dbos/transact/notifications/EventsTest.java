@@ -109,7 +109,9 @@ public class EventsTest {
         new StartWorkflowOptions("id2"));
 
     String event = (String) DBOS.retrieveWorkflow("id2").getResult();
+    String stepEvent = (String) DBOS.getEvent("id1", "key1-fromstep", Duration.ofMillis(1000));
     assertEquals("value1", event);
+    assertEquals("value1", stepEvent);
   }
 
   @Test
@@ -144,9 +146,9 @@ public class EventsTest {
     DBOS.launch();
 
     long start = System.currentTimeMillis();
-    DBOS.getEvent("nonexistingid", "fake_key", Duration.ofSeconds(2));
+    DBOS.getEvent("nonexistingid", "fake_key", Duration.ofMillis(10));
     long elapsed = System.currentTimeMillis() - start;
-    assertTrue(elapsed < 3000);
+    assertTrue(elapsed < 1000);
   }
 
   @Test

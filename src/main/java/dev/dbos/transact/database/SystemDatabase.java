@@ -61,7 +61,7 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * Get workflow result by workflow ID
    *
-   * @param workflowId The workflow UUID
+   * @param workflowId The workflow ID
    * @return Optional containing the raw output string if workflow completed successfully, empty
    *     otherwise
    */
