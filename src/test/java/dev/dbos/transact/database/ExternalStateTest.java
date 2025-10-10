@@ -73,7 +73,7 @@ public class ExternalStateTest {
     assertEquals(now, getState.get().updateTime());
     assertNull(getState.get().updateSeq());
 
-    // upsert older timestampe doesn't change the value
+    // upsert older timestamp doesn't change the value
     var newNowMS = nowMS - 10;
     var newValue = "%d".formatted(newNowMS);
     var newNow = BigDecimal.valueOf(newNowMS).setScale(15);
@@ -134,7 +134,7 @@ public class ExternalStateTest {
     assertEquals(seq, getState.get().updateSeq());
     assertNull(getState.get().updateTime());
 
-    // upsert older timestampe doesn't change the value
+    // upsert older timestamp doesn't change the value
     var newNowMS = nowMS - 10;
     var newValue = "%d".formatted(newNowMS);
     var newSeq = BigInteger.valueOf(newNowMS);

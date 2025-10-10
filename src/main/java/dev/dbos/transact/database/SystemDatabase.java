@@ -355,7 +355,7 @@ public class SystemDatabase implements AutoCloseable {
                     state.service(), state.workflowName(), state.key(), value, time, seq);
               } else {
                 throw new RuntimeException(
-                    "Attempted to upsert extenal state %s / %s / %s"
+                    "Attempted to upsert external state %s / %s / %s"
                         .formatted(state.service(), state.workflowName(), state.key()));
               }
             }
