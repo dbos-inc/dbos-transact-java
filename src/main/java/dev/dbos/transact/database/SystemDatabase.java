@@ -1,5 +1,6 @@
 package dev.dbos.transact.database;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.queue.Queue;
@@ -285,6 +286,80 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
+  public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
+    return DbRetry.call(
+        () -> {
+          String sql =
+              " SELECT value, update_seq, update_time FROM %s.event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ? ";
+          sql = String.format(sql, Constants.DB_SCHEMA);
+
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, Objects.requireNonNull(service));
+            stmt.setString(2, Objects.requireNonNull(workflowName));
+            stmt.setString(3, Objects.requireNonNull(key));
+
+            try (var rs = stmt.executeQuery()) {
+              if (rs.next()) {
+                var value = rs.getString("value");
+                var seq = rs.getObject("update_seq", Long.class);
+                var time = rs.getObject("update_time", Long.class);
+                return Optional.of(new ExternalState(service, workflowName, key, value, seq, time));
+              } else {
+                return Optional.empty();
+              }
+            }
+          }
+        });
+  }
+
+  public ExternalState upsertExternalState(ExternalState state) {
+    return DbRetry.call(
+        () -> {
+          var sql =
+              """
+              INSERT INTO %s.event_dispatch_kv (
+               service_name, workflow_fn_name, key, value, update_time, update_seq)
+              VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT (service_name, workflow_fn_name, key)
+              DO UPDATE SET
+                update_time = GREATEST(EXCLUDED.update_time, event_dispatch_kv.update_time),
+                update_seq =  GREATEST(EXCLUDED.update_seq,  event_dispatch_kv.update_seq),
+                value = CASE WHEN (EXCLUDED.update_time > event_dispatch_kv.update_time
+                   OR EXCLUDED.update_seq > event_dispatch_kv.update_seq
+                   OR (event_dispatch_kv.update_time IS NULL and event_dispatch_kv.update_seq IS NULL)
+                ) THEN EXCLUDED.value ELSE event_dispatch_kv.value END
+              RETURNING value, update_time, update_seq
+                   """;
+          sql = String.format(sql, Constants.DB_SCHEMA);
+
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, Objects.requireNonNull(state.service()));
+            stmt.setString(2, Objects.requireNonNull(state.workflowName()));
+            stmt.setString(3, Objects.requireNonNull(state.key()));
+            stmt.setString(4, state.value());
+            stmt.setObject(5, state.updateTime());
+            stmt.setObject(6, state.updateSeq());
+
+            try (var rs = stmt.executeQuery()) {
+              if (rs.next()) {
+                var value = rs.getString("value");
+                var seq = rs.getObject("update_seq", Long.class);
+                var time = rs.getObject("update_time", Long.class);
+                return new ExternalState(
+                    state.service(), state.workflowName(), state.key(), value, seq, time);
+              } else {
+                throw new RuntimeException(
+                    "Attempted to upsert extenal state %s / %s / %s"
+                        .formatted(state.service(), state.workflowName(), state.key()));
+              }
+            }
+          }
+        });
+  }
+
+  // package public helper for test purposes
   Connection getSysDBConnection() throws SQLException {
     return dataSource.getConnection();
   }
