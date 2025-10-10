@@ -605,7 +605,7 @@ public class DBOSExecutor implements AutoCloseable {
   public Object recv(String topic, Duration timeout) {
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
-      throw new IllegalArgumentException("recv() must be called from a workflow.");
+      throw new IllegalStateException("DBOS.recv() must be called from a workflow.");
     }
     int stepFunctionId = ctx.getAndIncrementFunctionId();
     int timeoutFunctionId = ctx.getAndIncrementFunctionId();
@@ -619,7 +619,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
-      throw new IllegalArgumentException("send must be called from a workflow.");
+      throw new IllegalStateException("DBOS.setEvent() must be called from a workflow.");
     }
     int stepFunctionId = ctx.getAndIncrementFunctionId();
 

@@ -4,7 +4,7 @@ import java.time.Duration;
 
 public interface EventsService {
 
-  void setEventWorkflow(String key, Object value);
+  String setEventWorkflow(String key, String value);
 
   Object getEventWorkflow(String workflowId, String key, Duration timeout);
 

@@ -1,6 +1,7 @@
 package dev.dbos.transact.notifications;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
@@ -72,6 +73,7 @@ public class EventsTest {
     // outside workflow
     String val = (String) DBOS.getEvent("id1", "key1", Duration.ofSeconds(3));
     assertEquals("value1", val);
+    assertThrows(IllegalStateException.class, () -> DBOS.setEvent("a", "b"));
   }
 
   @Test
@@ -102,8 +104,9 @@ public class EventsTest {
         DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
     DBOS.launch();
 
-    DBOS.startWorkflow(
-        () -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
+    var setwfh =
+        DBOS.startWorkflow(
+            () -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
     DBOS.startWorkflow(
         () -> eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3)),
         new StartWorkflowOptions("id2"));
@@ -112,6 +115,7 @@ public class EventsTest {
     String stepEvent = (String) DBOS.getEvent("id1", "key1-fromstep", Duration.ofMillis(1000));
     assertEquals("value1", event);
     assertEquals("value1", stepEvent);
+    assertEquals("value1", setwfh.getResult());
   }
 
   @Test
