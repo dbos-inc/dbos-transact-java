@@ -456,6 +456,12 @@ public class DBOS {
     return executor("runStep").runStepI(stepfunc, opts);
   }
 
+  public static <T, E extends Exception> T runStep(ThrowingSupplier<T, E> stepfunc, String name)
+      throws E {
+
+    return executor("runStep").runStepI(stepfunc, new StepOptions(name));
+  }
+
   public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, StepOptions opts)
       throws E {
     executor("runStep")
@@ -465,6 +471,11 @@ public class DBOS {
               return null;
             },
             opts);
+  }
+
+  public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, String name)
+      throws E {
+    runStep(stepfunc, new StepOptions(name));
   }
 
   /**

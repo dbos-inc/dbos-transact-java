@@ -1,14 +1,18 @@
 package dev.dbos.transact.notifications;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -17,6 +21,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+
+import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -28,6 +34,7 @@ import org.junit.jupiter.api.Timeout;
 public class EventsTest {
 
   private static DBOSConfig dbosConfig;
+  private static DataSource dataSource;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -46,6 +53,7 @@ public class EventsTest {
     DBUtils.recreateDB(dbosConfig);
 
     DBOS.reinitialize(dbosConfig);
+    EventsTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
@@ -72,6 +80,7 @@ public class EventsTest {
     // outside workflow
     String val = (String) DBOS.getEvent("id1", "key1", Duration.ofSeconds(3));
     assertEquals("value1", val);
+    assertThrows(IllegalStateException.class, () -> DBOS.setEvent("a", "b"));
   }
 
   @Test
@@ -102,14 +111,59 @@ public class EventsTest {
         DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
     DBOS.launch();
 
-    DBOS.startWorkflow(
-        () -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
+    var setwfh =
+        DBOS.startWorkflow(
+            () -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
     DBOS.startWorkflow(
         () -> eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3)),
         new StartWorkflowOptions("id2"));
 
     String event = (String) DBOS.retrieveWorkflow("id2").getResult();
+    String stepEvent = (String) DBOS.getEvent("id1", "key1-fromstep", Duration.ofMillis(1000));
     assertEquals("value1", event);
+    assertEquals("value1", stepEvent);
+    assertEquals("value1", setwfh.getResult());
+
+    List<StepInfo> steps = DBOS.listWorkflowSteps(setwfh.getWorkflowId());
+    assertEquals(3, steps.size());
+    assertEquals("DBOS.setEvent", steps.get(0).functionName());
+    assertEquals("stepSetEvent", steps.get(1).functionName());
+    assertEquals("getEventInStep", steps.get(2).functionName());
+  }
+
+  @Test
+  public void set_twice() throws Exception {
+    var impl = new EventsServiceImpl();
+    EventsService eventService = DBOS.registerWorkflows(EventsService.class, impl);
+    DBOS.launch();
+
+    var setwfh =
+        DBOS.startWorkflow(
+            () -> eventService.setEventTwice("key1", "value1", "value2"),
+            new StartWorkflowOptions("id1"));
+    var getwfh =
+        DBOS.startWorkflow(
+            () -> eventService.getEventTwice(setwfh.getWorkflowId(), "key1"),
+            new StartWorkflowOptions("id2"));
+
+    // Make these things both happen
+    impl.awaitSetLatch1();
+    impl.advanceGet1();
+    impl.awaitGetLatch1();
+    impl.advanceSet();
+    impl.awaitSetLatch2();
+    impl.advanceGet2();
+    String res = (String) getwfh.getResult();
+    assertEquals("value1value2", res);
+
+    // See if it stuck
+    impl.resetCounts();
+    impl.advanceGet1();
+    impl.advanceGet2();
+    DBUtils.setWorkflowState(dataSource, getwfh.getWorkflowId(), WorkflowState.PENDING.name());
+    getwfh = DBOSTestAccess.getDbosExecutor().executeWorkflowById(getwfh.getWorkflowId());
+    res = (String) getwfh.getResult();
+    assertEquals("value1value2", res);
   }
 
   @Test
@@ -144,9 +198,9 @@ public class EventsTest {
     DBOS.launch();
 
     long start = System.currentTimeMillis();
-    DBOS.getEvent("nonexistingid", "fake_key", Duration.ofSeconds(2));
+    DBOS.getEvent("nonexistingid", "fake_key", Duration.ofMillis(10));
     long elapsed = System.currentTimeMillis() - start;
-    assertTrue(elapsed < 3000);
+    assertTrue(elapsed < 1000);
   }
 
   @Test

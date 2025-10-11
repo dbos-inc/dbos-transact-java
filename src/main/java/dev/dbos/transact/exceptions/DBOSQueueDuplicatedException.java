@@ -1,30 +1,29 @@
 package dev.dbos.transact.exceptions;
 
 public class DBOSQueueDuplicatedException extends RuntimeException {
-  private final String workflowUUID;
+  private final String workflowId;
   private final String queueName;
-  private final String deduplicationID;
+  private final String deduplicationId;
 
-  public DBOSQueueDuplicatedException(
-      String workflowUUID, String queueName, String deduplicationID) {
+  public DBOSQueueDuplicatedException(String workflowId, String queueName, String deduplicationId) {
     super(
         String.format(
             "Workflow %s (Queue: %s, Deduplication ID: %s) is already enqueued.",
-            workflowUUID, queueName, deduplicationID));
-    this.workflowUUID = workflowUUID;
+            workflowId, queueName, deduplicationId));
+    this.workflowId = workflowId;
     this.queueName = queueName;
-    this.deduplicationID = deduplicationID;
+    this.deduplicationId = deduplicationId;
   }
 
-  public String getWorkflowUUID() {
-    return workflowUUID;
+  public String getWorkflowId() {
+    return workflowId;
   }
 
   public String getQueueName() {
     return queueName;
   }
 
-  public String getDeduplicationID() {
-    return deduplicationID;
+  public String getDeduplicationId() {
+    return deduplicationId;
   }
 }

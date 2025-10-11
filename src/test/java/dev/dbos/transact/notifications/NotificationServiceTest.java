@@ -152,8 +152,8 @@ class NotificationServiceTest {
     try {
       DBOS.recv("someTopic", Duration.ofSeconds(5));
       assertTrue(false);
-    } catch (IllegalArgumentException e) {
-      assertEquals("recv() must be called from a workflow.", e.getMessage());
+    } catch (IllegalStateException e) {
+      assertEquals("DBOS.recv() must be called from a workflow.", e.getMessage());
     }
   }
 

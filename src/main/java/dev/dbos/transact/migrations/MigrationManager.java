@@ -76,7 +76,7 @@ public class MigrationManager {
     var params = qm >= 0 ? url.substring(qm) : "";
     int slash = base.lastIndexOf('/');
     if (slash < "jdbc:postgresql://".length()) {
-      throw new IllegalArgumentException();
+      throw new IllegalArgumentException(String.format("JDBC URL %s is not valid", url));
     }
 
     var newUrl = base.substring(0, slash + 1) + "postgres" + params;

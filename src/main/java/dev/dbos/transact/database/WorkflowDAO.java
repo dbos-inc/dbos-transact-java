@@ -232,7 +232,7 @@ public class WorkflowDAO {
   }
 
   public void updateWorkflowStatus(
-      Connection connection, String workflowID, String status, UpdateWorkflowOptions options)
+      Connection connection, String workflowId, String status, UpdateWorkflowOptions options)
       throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
@@ -270,7 +270,7 @@ public class WorkflowDAO {
       // null
     }
 
-    if (options.getResetDeduplicationID() != null && options.getResetDeduplicationID()) {
+    if (options.getResetDeduplicationId() != null && options.getResetDeduplicationId()) {
       setClauseBuilder.append(", deduplication_id = NULL");
     }
 
@@ -278,7 +278,7 @@ public class WorkflowDAO {
       setClauseBuilder.append(", started_at_epoch_ms = NULL");
     }
 
-    finalOrderedArgs.add(workflowID); // This must be the first parameter in the WHERE
+    finalOrderedArgs.add(workflowId); // This must be the first parameter in the WHERE
     // clause part (for WHERE
     // workflow_uuid = ?)
 
@@ -317,10 +317,10 @@ public class WorkflowDAO {
 
     if (options.getThrowOnFailure() && affectedRows != 1) {
       throw new DBOSWorkflowConflictException(
-          workflowID,
+          workflowId,
           String.format(
               "Attempt to record transition of nonexistent workflow %s (affected rows: %d)",
-              workflowID, affectedRows));
+              workflowId, affectedRows));
     }
   }
 
@@ -339,7 +339,7 @@ public class WorkflowDAO {
 
       UpdateWorkflowOptions options = new UpdateWorkflowOptions();
       options.setOutput(result);
-      options.setResetDeduplicationID(true);
+      options.setResetDeduplicationId(true);
 
       updateWorkflowStatus(connection, workflowId, WorkflowState.SUCCESS.toString(), options);
     }
@@ -360,7 +360,7 @@ public class WorkflowDAO {
 
       UpdateWorkflowOptions options = new UpdateWorkflowOptions();
       options.setError(error);
-      options.setResetDeduplicationID(true);
+      options.setResetDeduplicationId(true);
 
       updateWorkflowStatus(connection, workflowId, WorkflowState.ERROR.toString(), options);
     }

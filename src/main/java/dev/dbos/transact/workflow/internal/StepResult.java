@@ -10,9 +10,9 @@ public class StepResult {
   public StepResult() {}
 
   public StepResult(
-      String workflowId, int functionID, String functionName, String output, String error) {
+      String workflowId, int functionId, String functionName, String output, String error) {
     this.workflowId = workflowId;
-    this.functionId = functionID;
+    this.functionId = functionId;
     this.functionName = functionName;
     this.output = output;
     this.error = error;
@@ -38,12 +38,12 @@ public class StepResult {
     return error;
   }
 
-  public void setWorkflowId(String workflowUUID) {
-    this.workflowId = workflowUUID;
+  public void setWorkflowId(String workflowId) {
+    this.workflowId = workflowId;
   }
 
-  public void setFunctionId(int functionID) {
-    this.functionId = functionID;
+  public void setFunctionId(int functionId) {
+    this.functionId = functionId;
   }
 
   public void setFunctionName(String functionName) {
