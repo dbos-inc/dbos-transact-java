@@ -3,6 +3,7 @@ package dev.dbos.transact;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
@@ -535,5 +536,13 @@ public class DBOS {
    */
   public static List<StepInfo> listWorkflowSteps(String workflowId) {
     return executor("listWorkflowSteps").listWorkflowSteps(workflowId);
+  }
+
+  public static Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
+    return executor("getExternalState").getExternalState(service, workflowName, key);
+  }
+
+  public static ExternalState upsertExternalState(ExternalState state) {
+    return executor("upsertExternalState").upsertExternalState(state);
   }
 }
