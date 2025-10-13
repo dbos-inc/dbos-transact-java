@@ -95,7 +95,9 @@ public record ListWorkflowsInput(
     }
 
     public Builder workflowId(String workflowId) {
-      this.workflowIds.add(workflowId);
+      if (workflowId != null) {
+        this.workflowIds.add(workflowId);
+      }
       return this;
     }
 
@@ -112,7 +114,9 @@ public record ListWorkflowsInput(
     }
 
     public Builder status(String status) {
-      this.status.add(status);
+      if (status != null) {
+        this.status.add(status);
+      }
       return this;
     }
 
@@ -192,7 +196,9 @@ public record ListWorkflowsInput(
     }
 
     public Builder executorId(String executorId) {
-      this.executorIds.add(executorId);
+      if (executorId != null) {
+        this.executorIds.add(executorId);
+      }
       return this;
     }
 
