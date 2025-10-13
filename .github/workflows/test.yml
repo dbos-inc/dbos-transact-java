@@ -66,11 +66,11 @@ jobs:
           show: "fail, skip"
         if: always()
 
-      - name: Upload test results
+      - name: Upload JDK ${{ matrix.jdk-distro }} ${{ matrix.jdk-version }} test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
+          name: test-results-${{ matrix.jdk-version }}-${{ matrix.jdk-distro }}
           path: |
             build/reports/tests/
             build/test-results/
