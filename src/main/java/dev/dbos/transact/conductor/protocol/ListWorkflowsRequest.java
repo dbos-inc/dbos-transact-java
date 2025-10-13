@@ -12,8 +12,6 @@ public class ListWorkflowsRequest extends BaseMessage {
   public static class Body {
     public List<String> workflow_uuids;
     public String workflow_name;
-    // public String class_name; // Future support
-    // public String instance_name;
     public String authenticated_user;
     public String start_time;
     public String end_time;
@@ -29,8 +27,6 @@ public class ListWorkflowsRequest extends BaseMessage {
   public static class Builder {
     private List<String> workflow_uuids = new ArrayList<String>();
     private String workflow_name;
-    // private String class_name;
-    // private String instance_name;
     private String authenticated_user;
     private String start_time;
     private String end_time;
