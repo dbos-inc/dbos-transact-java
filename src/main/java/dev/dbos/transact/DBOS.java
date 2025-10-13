@@ -5,6 +5,7 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
@@ -24,6 +25,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -50,6 +52,10 @@ public class DBOS {
 
     private Instance() {
       DBOSContextHolder.clear(); // CB: Why
+    }
+
+    public Map<String, RegisteredWorkflow> wfReg() {
+      return workflowRegistry.getSnapshot();
     }
 
     private void registerClassWorkflows(

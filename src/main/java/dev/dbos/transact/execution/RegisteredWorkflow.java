@@ -1,6 +1,7 @@
 package dev.dbos.transact.execution;
 
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Objects;
 
 public record RegisteredWorkflow(
@@ -8,6 +9,7 @@ public record RegisteredWorkflow(
     String className,
     String instanceName,
     Object target,
+    Method workflowMethod,
     WorkflowFunctionReflect function,
     int maxRecoveryAttempts) {
 
@@ -23,6 +25,7 @@ public record RegisteredWorkflow(
       String name,
       Object target,
       String instanceName,
+      Method workflowMethod,
       WorkflowFunctionReflect function,
       int maxRecoveryAttempts) {
     this(
@@ -30,6 +33,7 @@ public record RegisteredWorkflow(
         Objects.requireNonNull(target).getClass().getName(),
         instanceName,
         target,
+        workflowMethod,
         function,
         maxRecoveryAttempts);
   }

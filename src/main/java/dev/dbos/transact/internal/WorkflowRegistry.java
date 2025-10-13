@@ -28,7 +28,7 @@ public class WorkflowRegistry {
         registry.putIfAbsent(
             fqName,
             new RegisteredWorkflow(
-                workflowName, target, instanceName, function, maxRecoveryAttempts));
+                workflowName, target, instanceName, method, function, maxRecoveryAttempts));
 
     if (previous != null) {
       throw new IllegalStateException("Workflow already registered with name: " + fqName);
