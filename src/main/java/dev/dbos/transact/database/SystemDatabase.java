@@ -64,7 +64,7 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * Get workflow result by workflow ID
    *
-   * @param workflowId The workflow UUID
+   * @param workflowId The workflow ID
    * @return Optional containing the raw output string if workflow completed successfully, empty
    *     otherwise
    */
@@ -236,7 +236,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void setEvent(String workflowId, int functionId, String key, Object message) {
+  public void setEvent(String workflowId, Integer functionId, String key, Object message) {
 
     DbRetry.run(
         () -> {

@@ -453,18 +453,29 @@ public class DBOS {
   public static <T, E extends Exception> T runStep(
       ThrowingSupplier<T, E> stepfunc, StepOptions opts) throws E {
 
-    return executor("runStep").runStepI(stepfunc, opts);
+    return executor("runStep").runStepInternal(stepfunc, opts);
+  }
+
+  public static <T, E extends Exception> T runStep(ThrowingSupplier<T, E> stepfunc, String name)
+      throws E {
+
+    return executor("runStep").runStepInternal(stepfunc, new StepOptions(name));
   }
 
   public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, StepOptions opts)
       throws E {
     executor("runStep")
-        .runStepI(
+        .runStepInternal(
             () -> {
               stepfunc.execute();
               return null;
             },
             opts);
+  }
+
+  public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, String name)
+      throws E {
+    runStep(stepfunc, new StepOptions(name));
   }
 
   /**

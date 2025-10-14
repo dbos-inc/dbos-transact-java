@@ -361,8 +361,8 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   @SuppressWarnings("unchecked")
-  public <T, E extends Exception> T runStepI(ThrowingSupplier<T, E> stepfunc, StepOptions opts)
-      throws E {
+  public <T, E extends Exception> T runStepInternal(
+      ThrowingSupplier<T, E> stepfunc, StepOptions opts) throws E {
     try {
       return runStepInternal(
           opts.name(),
@@ -606,7 +606,7 @@ public class DBOSExecutor implements AutoCloseable {
   public Object recv(String topic, Duration timeout) {
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
-      throw new IllegalArgumentException("recv() must be called from a workflow.");
+      throw new IllegalStateException("DBOS.recv() must be called from a workflow.");
     }
     int stepFunctionId = ctx.getAndIncrementFunctionId();
     int timeoutFunctionId = ctx.getAndIncrementFunctionId();
@@ -620,11 +620,14 @@ public class DBOSExecutor implements AutoCloseable {
 
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
-      throw new IllegalArgumentException("send must be called from a workflow.");
+      throw new IllegalStateException("DBOS.setEvent() must be called from a workflow.");
     }
-    int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-    systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+    if (!ctx.isInStep()) {
+      int stepFunctionId = ctx.getAndIncrementFunctionId();
+      systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+    } else {
+      systemDatabase.setEvent(ctx.getWorkflowId(), null, key, value);
+    }
   }
 
   public Object getEvent(String workflowId, String key, Duration timeout) {
@@ -632,7 +635,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     DBOSContext ctx = DBOSContextHolder.get();
 
-    if (ctx.isInWorkflow()) {
+    if (ctx.isInWorkflow() && !ctx.isInStep()) {
       int stepFunctionId = ctx.getAndIncrementFunctionId();
       int timeoutFunctionId = ctx.getAndIncrementFunctionId();
       GetWorkflowEventContext callerCtx =

@@ -7,7 +7,7 @@ public class UpdateWorkflowOptions {
   private boolean resetRecoveryAttempts;
   private String queueName;
   private Boolean resetDeadline;
-  private Boolean resetDeduplicationID;
+  private Boolean resetDeduplicationId;
   private Boolean resetStartedAtEpochMs;
 
   private String whereStatus;
@@ -40,8 +40,8 @@ public class UpdateWorkflowOptions {
     return this;
   }
 
-  public UpdateWorkflowOptions withResetDeduplicationID(Boolean resetDeduplicationID) {
-    this.resetDeduplicationID = resetDeduplicationID;
+  public UpdateWorkflowOptions withResetDeduplicationId(Boolean resetDeduplicationId) {
+    this.resetDeduplicationId = resetDeduplicationId;
     return this;
   }
 
@@ -70,8 +70,8 @@ public class UpdateWorkflowOptions {
     return resetDeadline;
   }
 
-  public Boolean getResetDeduplicationID() {
-    return resetDeduplicationID;
+  public Boolean getResetDeduplicationId() {
+    return resetDeduplicationId;
   }
 
   public Boolean getResetStartedAtEpochMs() {
@@ -106,8 +106,8 @@ public class UpdateWorkflowOptions {
     this.resetDeadline = resetDeadline;
   }
 
-  public void setResetDeduplicationID(Boolean resetDeduplicationID) {
-    this.resetDeduplicationID = resetDeduplicationID;
+  public void setResetDeduplicationId(Boolean resetDeduplicationId) {
+    this.resetDeduplicationId = resetDeduplicationId;
   }
 
   public void setResetStartedAtEpochMs(Boolean resetStartedAtEpochMs) {
