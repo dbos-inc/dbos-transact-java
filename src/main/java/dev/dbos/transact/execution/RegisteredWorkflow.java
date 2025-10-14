@@ -27,7 +27,9 @@ public record RegisteredWorkflow(
       int maxRecoveryAttempts) {
     this(
         name,
-        Objects.requireNonNull(target, "workflow target object must not be null").getClass().getName(),
+        Objects.requireNonNull(target, "workflow target object must not be null")
+            .getClass()
+            .getName(),
         instanceName,
         target,
         function,

@@ -38,7 +38,8 @@ public class MigrationManager {
   }
 
   public static void createDatabaseIfNotExists(DBOSConfig config) {
-    var dbUrl = Objects.requireNonNull(config.databaseUrl(), "DBOSConfig databaseUrl must not be null");
+    var dbUrl =
+        Objects.requireNonNull(config.databaseUrl(), "DBOSConfig databaseUrl must not be null");
     var pair = extractDbAndPostgresUrl(dbUrl);
 
     try (var adminDS =
