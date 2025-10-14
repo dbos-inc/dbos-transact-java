@@ -361,8 +361,8 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   @SuppressWarnings("unchecked")
-  public <T, E extends Exception> T runStepI(ThrowingSupplier<T, E> stepfunc, StepOptions opts)
-      throws E {
+  public <T, E extends Exception> T runStepInternal(
+      ThrowingSupplier<T, E> stepfunc, StepOptions opts) throws E {
     try {
       return runStepInternal(
           opts.name(),

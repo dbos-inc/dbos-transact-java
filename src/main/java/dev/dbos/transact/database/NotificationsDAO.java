@@ -85,7 +85,7 @@ public class NotificationsDAO {
         // Record operation result
         StepResult output = new StepResult();
         output.setWorkflowId(workflowUuid);
-        output.setFunctionId(functionId);
+        output.setStepId(functionId);
         output.setFunctionName(functionName);
         output.setOutput(null);
         output.setError(null);
@@ -222,7 +222,7 @@ public class NotificationsDAO {
         // Record operation result
         StepResult output = new StepResult();
         output.setWorkflowId(workflowUuid);
-        output.setFunctionId(functionId);
+        output.setStepId(functionId);
         output.setFunctionName(functionName);
         Object toSave = recvdSermessage == null ? null : recvdSermessage[0];
         output.setOutput(JSONUtil.serialize(toSave));
@@ -291,7 +291,7 @@ public class NotificationsDAO {
           // Create operation result
           StepResult output = new StepResult();
           output.setWorkflowId(workflowId);
-          output.setFunctionId(functionId);
+          output.setStepId(functionId);
           output.setFunctionName(functionName);
           output.setOutput(null);
           output.setError(null);
@@ -422,7 +422,7 @@ public class NotificationsDAO {
       if (callerCtx != null) {
         StepResult output = new StepResult();
         output.setWorkflowId(callerCtx.getWorkflowId());
-        output.setFunctionId(callerCtx.getFunctionId());
+        output.setStepId(callerCtx.getFunctionId());
         output.setFunctionName(functionName);
         output.setOutput(JSONUtil.serialize(value)); // null will be serialized to
         // 'null'
