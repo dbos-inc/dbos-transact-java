@@ -12,11 +12,11 @@ public record RegisteredWorkflow(
     int maxRecoveryAttempts) {
 
   public RegisteredWorkflow {
-    Objects.requireNonNull(name);
-    Objects.requireNonNull(target);
-    Objects.requireNonNull(className);
-    Objects.requireNonNull(instanceName);
-    Objects.requireNonNull(function);
+    Objects.requireNonNull(name, "workflow name must not be null");
+    Objects.requireNonNull(className, "workflow class name must not be null");
+    instanceName = Objects.requireNonNullElse(instanceName, "");
+    Objects.requireNonNull(target, "workflow target object must not be null");
+    Objects.requireNonNull(function, "workflow function must not be null");
   }
 
   public RegisteredWorkflow(
@@ -27,7 +27,9 @@ public record RegisteredWorkflow(
       int maxRecoveryAttempts) {
     this(
         name,
-        Objects.requireNonNull(target).getClass().getName(),
+        Objects.requireNonNull(target, "workflow target object must not be null")
+            .getClass()
+            .getName(),
         instanceName,
         target,
         function,

@@ -253,9 +253,9 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) {
-    Objects.requireNonNull(output);
+    Objects.requireNonNull(output, "output must not be null");
     String workflowId = output.getWorkflowUuid();
-    Objects.requireNonNull(workflowId);
+    Objects.requireNonNull(workflowId, "workflowId must not be null");
     String queue = output.getQueueName();
 
     logger.debug("Recovery executing workflow {}", workflowId);
@@ -819,7 +819,7 @@ public class DBOSExecutor implements AutoCloseable {
       OptionalInt priority) {
 
     public ExecuteWorkflowOptions {
-      if (Objects.requireNonNull(workflowId).isEmpty()) {
+      if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
         throw new IllegalArgumentException("workflowId must not be empty");
       }
 
@@ -976,11 +976,11 @@ public class DBOSExecutor implements AutoCloseable {
       String appVersion,
       SystemDatabase systemDatabase,
       CompletableFuture<String> latch) {
-    var workflowId = Objects.requireNonNull(options.workflowId());
+    var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
     if (workflowId.isEmpty()) {
       throw new IllegalArgumentException("workflowId cannot be empty");
     }
-    var queueName = Objects.requireNonNull(options.queueName());
+    var queueName = Objects.requireNonNull(options.queueName(), "queueName must not be null");
     if (queueName.isEmpty()) {
       throw new IllegalArgumentException("queueName cannot be empty");
     }

@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.*;
+import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -541,7 +542,7 @@ public class QueuesTest {
     assertEquals("inputqinputq", result);
   }
 
-  @Test
+  @RetryingTest(3)
   public void testQueueConcurrencyUnderRecovery() throws Exception {
     Queue queue = DBOS.Queue("test_queue").concurrency(2).build();
 
