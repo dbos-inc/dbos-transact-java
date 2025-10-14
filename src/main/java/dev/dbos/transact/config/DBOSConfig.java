@@ -2,6 +2,8 @@ package dev.dbos.transact.config;
 
 import dev.dbos.transact.Constants;
 
+import java.util.Objects;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,6 +21,13 @@ public record DBOSConfig(
     String conductorDomain,
     String appVersion,
     String executorId) {
+
+  public DBOSConfig {
+    Objects.requireNonNull(appName, "DBOSConfig.appName must not be null");
+    Objects.requireNonNull(databaseUrl, "DBOSConfig.databaseUrl must not be null");
+    Objects.requireNonNull(dbUser, "DBOSConfig.dbUser must not be null");
+    Objects.requireNonNull(dbPassword, "DBOSConfig.dbPassword must not be null");
+  }
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
 
@@ -69,6 +78,11 @@ public record DBOSConfig(
 
     public Builder runAdminServer() {
       this.adminServer = true;
+      return this;
+    }
+
+    public Builder runAdminServer(boolean adminServer) {
+      this.adminServer = adminServer;
       return this;
     }
 

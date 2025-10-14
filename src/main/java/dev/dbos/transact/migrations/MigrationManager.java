@@ -29,7 +29,7 @@ public class MigrationManager {
 
   public static void runMigrations(DBOSConfig config) {
 
-    createDatabaseIfNotExists(Objects.requireNonNull(config));
+    createDatabaseIfNotExists(Objects.requireNonNull(config, "DBOS Config must not be null"));
 
     try (var ds = SystemDatabase.createDataSource(config)) {
       MigrationManager m = new MigrationManager(ds);
@@ -38,7 +38,8 @@ public class MigrationManager {
   }
 
   public static void createDatabaseIfNotExists(DBOSConfig config) {
-    var dbUrl = Objects.requireNonNull(config.databaseUrl());
+    var dbUrl =
+        Objects.requireNonNull(config.databaseUrl(), "DBOSConfig databaseUrl must not be null");
     var pair = extractDbAndPostgresUrl(dbUrl);
 
     try (var adminDS =
@@ -71,12 +72,12 @@ public class MigrationManager {
   public record UrlPair(String url, String database) {}
 
   public static UrlPair extractDbAndPostgresUrl(String url) {
-    int qm = Objects.requireNonNull(url).indexOf('?');
+    int qm = Objects.requireNonNull(url, "database url must not be null").indexOf('?');
     var base = qm >= 0 ? url.substring(0, qm) : url;
     var params = qm >= 0 ? url.substring(qm) : "";
     int slash = base.lastIndexOf('/');
     if (slash < "jdbc:postgresql://".length()) {
-      throw new IllegalArgumentException();
+      throw new IllegalArgumentException(String.format("JDBC URL %s is not valid", url));
     }
 
     var newUrl = base.substring(0, slash + 1) + "postgres" + params;

@@ -253,9 +253,9 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) {
-    Objects.requireNonNull(output);
+    Objects.requireNonNull(output, "output must not be null");
     String workflowId = output.getWorkflowUuid();
-    Objects.requireNonNull(workflowId);
+    Objects.requireNonNull(workflowId, "workflowId must not be null");
     String queue = output.getQueueName();
 
     logger.debug("Recovery executing workflow {}", workflowId);
@@ -361,8 +361,8 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   @SuppressWarnings("unchecked")
-  public <T, E extends Exception> T runStepI(ThrowingSupplier<T, E> stepfunc, StepOptions opts)
-      throws E {
+  public <T, E extends Exception> T runStepInternal(
+      ThrowingSupplier<T, E> stepfunc, StepOptions opts) throws E {
     try {
       return runStepInternal(
           opts.name(),
@@ -587,6 +587,9 @@ public class DBOSExecutor implements AutoCloseable {
       InternalWorkflowsService internalWorkflowsService) {
 
     DBOSContext ctx = DBOSContextHolder.get();
+    if (ctx.isInStep()) {
+      throw new IllegalStateException("DBOS.send() must not be called from within a step.");
+    }
     if (!ctx.isInWorkflow()) {
       internalWorkflowsService.sendWorkflow(destinationId, message, topic);
       return;
@@ -606,7 +609,10 @@ public class DBOSExecutor implements AutoCloseable {
   public Object recv(String topic, Duration timeout) {
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
-      throw new IllegalArgumentException("recv() must be called from a workflow.");
+      throw new IllegalStateException("DBOS.recv() must be called from a workflow.");
+    }
+    if (ctx.isInStep()) {
+      throw new IllegalStateException("DBOS.recv() must not be called from within a step.");
     }
     int stepFunctionId = ctx.getAndIncrementFunctionId();
     int timeoutFunctionId = ctx.getAndIncrementFunctionId();
@@ -620,11 +626,14 @@ public class DBOSExecutor implements AutoCloseable {
 
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
-      throw new IllegalArgumentException("send must be called from a workflow.");
+      throw new IllegalStateException("DBOS.setEvent() must be called from a workflow.");
     }
-    int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-    systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+    if (!ctx.isInStep()) {
+      int stepFunctionId = ctx.getAndIncrementFunctionId();
+      systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
+    } else {
+      systemDatabase.setEvent(ctx.getWorkflowId(), null, key, value);
+    }
   }
 
   public Object getEvent(String workflowId, String key, Duration timeout) {
@@ -632,7 +641,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     DBOSContext ctx = DBOSContextHolder.get();
 
-    if (ctx.isInWorkflow()) {
+    if (ctx.isInWorkflow() && !ctx.isInStep()) {
       int stepFunctionId = ctx.getAndIncrementFunctionId();
       int timeoutFunctionId = ctx.getAndIncrementFunctionId();
       GetWorkflowEventContext callerCtx =
@@ -810,7 +819,7 @@ public class DBOSExecutor implements AutoCloseable {
       OptionalInt priority) {
 
     public ExecuteWorkflowOptions {
-      if (Objects.requireNonNull(workflowId).isEmpty()) {
+      if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
         throw new IllegalArgumentException("workflowId must not be empty");
       }
 
@@ -967,11 +976,11 @@ public class DBOSExecutor implements AutoCloseable {
       String appVersion,
       SystemDatabase systemDatabase,
       CompletableFuture<String> latch) {
-    var workflowId = Objects.requireNonNull(options.workflowId());
+    var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
     if (workflowId.isEmpty()) {
       throw new IllegalArgumentException("workflowId cannot be empty");
     }
-    var queueName = Objects.requireNonNull(options.queueName());
+    var queueName = Objects.requireNonNull(options.queueName(), "queueName must not be null");
     if (queueName.isEmpty()) {
       throw new IllegalArgumentException("queueName cannot be empty");
     }

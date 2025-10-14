@@ -53,7 +53,7 @@ public class StepsDAO {
     try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
       int paramIdx = 1;
       pstmt.setString(paramIdx++, result.getWorkflowId());
-      pstmt.setInt(paramIdx++, result.getFunctionId());
+      pstmt.setInt(paramIdx++, result.getStepId());
       pstmt.setString(paramIdx++, result.getFunctionName());
 
       if (result.getOutput() != null) {
@@ -75,8 +75,7 @@ public class StepsDAO {
         throw new DBOSWorkflowConflictException(
             result.getWorkflowId(),
             String.format(
-                "Workflow %s step %d already exists",
-                result.getWorkflowId(), result.getFunctionId()));
+                "Workflow %s step %d already exists", result.getWorkflowId(), result.getStepId()));
       } else {
         throw e;
       }
@@ -273,7 +272,7 @@ public class StepsDAO {
       try {
         StepResult output = new StepResult();
         output.setWorkflowId(workflowUuid);
-        output.setFunctionId(functionId);
+        output.setStepId(functionId);
         output.setFunctionName(functionName);
         output.setOutput(JSONUtil.serialize(endTime));
         output.setError(null);

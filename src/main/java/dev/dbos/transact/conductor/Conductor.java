@@ -76,9 +76,9 @@ public class Conductor implements AutoCloseable {
   private ScheduledFuture<?> reconnectTimeout;
 
   private Conductor(Builder builder) {
-    Objects.requireNonNull(builder.systemDatabase);
-    Objects.requireNonNull(builder.dbosExecutor);
-    Objects.requireNonNull(builder.conductorKey);
+    Objects.requireNonNull(builder.systemDatabase, "SystemDatabase must not be null");
+    Objects.requireNonNull(builder.dbosExecutor, "DBOSExecutor must not be null");
+    Objects.requireNonNull(builder.conductorKey, "Conductor key must not be null");
 
     this.systemDatabase = builder.systemDatabase;
     this.dbosExecutor = builder.dbosExecutor;

@@ -10,7 +10,7 @@ public record Queue(
     RateLimit rateLimit) {
 
   public Queue {
-    Objects.requireNonNull(name);
+    Objects.requireNonNull(name, "Queue name must not be null");
     if (workerConcurrency > concurrency) {
       throw new IllegalArgumentException(
           String.format(

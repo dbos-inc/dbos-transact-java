@@ -8,6 +8,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk-version: ['17', '21', '25']
+        jdk-distro: ['corretto', 'graalvm', 'microsoft', 'oracle', 'semeru', 'temurin', 'zulu' ]
+        exclude:
+          - jdk-version: 25
+            jdk-distro: microsoft
+          - jdk-version: 17
+            jdk-distro: graalvm
+        include:
+          - jdk-distro: graalvm
+            jdk-version: 17.0.12
+
     services:
       postgres:
         image: sibedge/postgres-plv8:16.3-3.2.2
@@ -25,11 +39,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up OpenJDK 21
+      - name: Set up JDK ${{ matrix.jdk-distro }} ${{ matrix.jdk-version }}
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: ${{ matrix.jdk-version }}
+          distribution: ${{ matrix.jdk-distro }}
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -55,11 +69,11 @@ jobs:
           show: "fail, skip"
         if: always()
 
-      - name: Upload test results
+      - name: Upload JDK ${{ matrix.jdk-distro }} ${{ matrix.jdk-version }} test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
+          name: test-results-${{ matrix.jdk-version }}-${{ matrix.jdk-distro }}
           path: |
             build/reports/tests/
             build/test-results/

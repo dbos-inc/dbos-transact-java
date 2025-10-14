@@ -147,14 +147,29 @@ class NotificationServiceTest {
 
   @Test
   public void noWorkflowRecv() {
-
+    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
     DBOS.launch();
-    try {
-      DBOS.recv("someTopic", Duration.ofSeconds(5));
-      assertTrue(false);
-    } catch (IllegalArgumentException e) {
-      assertEquals("recv() must be called from a workflow.", e.getMessage());
-    }
+    var e1 =
+        assertThrows(
+            IllegalStateException.class,
+            () -> {
+              DBOS.recv("someTopic", Duration.ofSeconds(5));
+            });
+    assertEquals("DBOS.recv() must be called from a workflow.", e1.getMessage());
+    var e2 =
+        assertThrows(
+            IllegalStateException.class,
+            () -> {
+              notService.disallowedRecvInStep();
+            });
+    assertEquals("DBOS.recv() must not be called from within a step.", e2.getMessage());
+    var e3 =
+        assertThrows(
+            IllegalStateException.class,
+            () -> {
+              notService.disallowedSendInStep();
+            });
+    assertEquals("DBOS.send() must not be called from within a step.", e3.getMessage());
   }
 
   @Test

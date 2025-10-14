@@ -60,9 +60,9 @@ public class DBOS {
 
     private void registerClassWorkflows(
         Class<?> interfaceClass, Object implementation, String instanceName) {
-      Objects.requireNonNull(interfaceClass);
-      Objects.requireNonNull(implementation);
-      Objects.requireNonNull(instanceName);
+      Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
+      Objects.requireNonNull(implementation, "implementation must not be null");
+      instanceName = Objects.requireNonNullElse(instanceName, "");
       if (!interfaceClass.isInterface()) {
         throw new IllegalArgumentException("interfaceClass must be an interface");
       }
@@ -459,18 +459,29 @@ public class DBOS {
   public static <T, E extends Exception> T runStep(
       ThrowingSupplier<T, E> stepfunc, StepOptions opts) throws E {
 
-    return executor("runStep").runStepI(stepfunc, opts);
+    return executor("runStep").runStepInternal(stepfunc, opts);
+  }
+
+  public static <T, E extends Exception> T runStep(ThrowingSupplier<T, E> stepfunc, String name)
+      throws E {
+
+    return executor("runStep").runStepInternal(stepfunc, new StepOptions(name));
   }
 
   public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, StepOptions opts)
       throws E {
     executor("runStep")
-        .runStepI(
+        .runStepInternal(
             () -> {
               stepfunc.execute();
               return null;
             },
             opts);
+  }
+
+  public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, String name)
+      throws E {
+    runStep(stepfunc, new StepOptions(name));
   }
 
   /**
@@ -533,7 +544,8 @@ public class DBOS {
     return executor("listWorkflowSteps").listWorkflowSteps(workflowId);
   }
 
-  public static Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
+  public static Optional<ExternalState> getExternalState(
+      String service, String workflowName, String key) {
     return executor("getExternalState").getExternalState(service, workflowName, key);
   }
 

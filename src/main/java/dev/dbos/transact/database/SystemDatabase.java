@@ -64,7 +64,7 @@ public class SystemDatabase implements AutoCloseable {
   /**
    * Get workflow result by workflow ID
    *
-   * @param workflowId The workflow UUID
+   * @param workflowId The workflow ID
    * @return Optional containing the raw output string if workflow completed successfully, empty
    *     otherwise
    */
@@ -236,7 +236,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void setEvent(String workflowId, int functionId, String key, Object message) {
+  public void setEvent(String workflowId, Integer functionId, String key, Object message) {
 
     DbRetry.run(
         () -> {
@@ -297,9 +297,10 @@ public class SystemDatabase implements AutoCloseable {
 
           try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, Objects.requireNonNull(service));
-            stmt.setString(2, Objects.requireNonNull(workflowName));
-            stmt.setString(3, Objects.requireNonNull(key));
+            stmt.setString(1, Objects.requireNonNull(service, "service must not be null"));
+            stmt.setString(
+                2, Objects.requireNonNull(workflowName, "workflowName must not be null"));
+            stmt.setString(3, Objects.requireNonNull(key, "key must not be null"));
 
             try (var rs = stmt.executeQuery()) {
               if (rs.next()) {
@@ -338,9 +339,10 @@ public class SystemDatabase implements AutoCloseable {
 
           try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, Objects.requireNonNull(state.service()));
-            stmt.setString(2, Objects.requireNonNull(state.workflowName()));
-            stmt.setString(3, Objects.requireNonNull(state.key()));
+            stmt.setString(1, Objects.requireNonNull(state.service(), "service must not be null"));
+            stmt.setString(
+                2, Objects.requireNonNull(state.workflowName(), "workflowName must not be null"));
+            stmt.setString(3, Objects.requireNonNull(state.key(), "key must not be null"));
             stmt.setString(4, state.value());
             stmt.setObject(5, state.updateTime());
             stmt.setObject(6, state.updateSeq());
