@@ -33,8 +33,6 @@ public class DBOSClient implements AutoCloseable {
     systemDatabase.close();
   }
 
-  // TODO: add priority + deduplicationId options
-  // (https://github.com/dbos-inc/dbos-transact-java/issues/67)
   public record EnqueueOptions(
       String workflowName,
       String queueName,
@@ -47,15 +45,15 @@ public class DBOSClient implements AutoCloseable {
       OptionalInt priority) {
 
     public EnqueueOptions {
-      if (Objects.requireNonNull(workflowName).isEmpty()) {
+      if (Objects.requireNonNull(workflowName, "EnqueueOptions workflowName must not be null").isEmpty()) {
         throw new IllegalArgumentException("workflowName must not be empty");
       }
 
-      if (Objects.requireNonNull(queueName).isEmpty()) {
+      if (Objects.requireNonNull(queueName, "EnqueueOptions queueName must not be null").isEmpty()) {
         throw new IllegalArgumentException("queueName must not be empty");
       }
 
-      if (Objects.requireNonNull(className).isEmpty()) {
+      if (Objects.requireNonNull(className, "EnqueueOptions className must not be null").isEmpty()) {
         throw new IllegalArgumentException("className must not be empty");
       }
 
@@ -171,15 +169,15 @@ public class DBOSClient implements AutoCloseable {
       EnqueueOptions options, Object[] args) throws Exception {
 
     return DBOSExecutor.enqueueWorkflow(
-        Objects.requireNonNull(options.workflowName()),
-        Objects.requireNonNull(options.className()),
+        Objects.requireNonNull(options.workflowName(), "EnqueueOptions workflowName must not be null"),
+        Objects.requireNonNull(options.className(), "EnqueueOptions className must not be null"),
         Objects.requireNonNullElse(options.instanceName(), ""),
         args,
         new ExecuteWorkflowOptions(
             Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString()),
             options.timeout(),
             null,
-            Objects.requireNonNull(options.queueName()),
+            Objects.requireNonNull(options.queueName(), "EnqueueOptions queueName must not be null"),
             options.deduplicationId,
             options.priority),
         null,

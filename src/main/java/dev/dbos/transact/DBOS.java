@@ -54,9 +54,9 @@ public class DBOS {
 
     private void registerClassWorkflows(
         Class<?> interfaceClass, Object implementation, String instanceName) {
-      Objects.requireNonNull(interfaceClass);
-      Objects.requireNonNull(implementation);
-      Objects.requireNonNull(instanceName);
+      Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
+      Objects.requireNonNull(implementation, "implementation must not be null");
+      instanceName = Objects.requireNonNullElse(instanceName, "");
       if (!interfaceClass.isInterface()) {
         throw new IllegalArgumentException("interfaceClass must be an interface");
       }

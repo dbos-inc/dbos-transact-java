@@ -177,7 +177,7 @@ public class DBOSContext {
                 "more than one workflow called from start workflow lambda: %s %s",
                 workflowId, startedWorkflowId));
       }
-      startedWorkflowId = Objects.requireNonNull(workflowId);
+      startedWorkflowId = Objects.requireNonNull(workflowId, "workflowId must not be null");
     }
   }
 

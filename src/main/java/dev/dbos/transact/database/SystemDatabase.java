@@ -295,24 +295,24 @@ public class SystemDatabase implements AutoCloseable {
               " SELECT value, update_seq, update_time FROM %s.event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ? ";
           sql = String.format(sql, Constants.DB_SCHEMA);
 
-          try (var conn = dataSource.getConnection();
+            try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, Objects.requireNonNull(service));
-            stmt.setString(2, Objects.requireNonNull(workflowName));
-            stmt.setString(3, Objects.requireNonNull(key));
+            stmt.setString(1, Objects.requireNonNull(service, "service must not be null"));
+            stmt.setString(2, Objects.requireNonNull(workflowName, "workflowName must not be null"));
+            stmt.setString(3, Objects.requireNonNull(key, "key must not be null"));
 
             try (var rs = stmt.executeQuery()) {
               if (rs.next()) {
-                var value = rs.getString("value");
-                BigDecimal seqDecimal = rs.getBigDecimal("update_seq");
-                BigInteger seq = seqDecimal != null ? seqDecimal.toBigInteger() : null;
-                BigDecimal time = rs.getBigDecimal("update_time");
-                return Optional.of(new ExternalState(service, workflowName, key, value, time, seq));
+              var value = rs.getString("value");
+              BigDecimal seqDecimal = rs.getBigDecimal("update_seq");
+              BigInteger seq = seqDecimal != null ? seqDecimal.toBigInteger() : null;
+              BigDecimal time = rs.getBigDecimal("update_time");
+              return Optional.of(new ExternalState(service, workflowName, key, value, time, seq));
               } else {
-                return Optional.empty();
+              return Optional.empty();
               }
             }
-          }
+            }
         });
   }
 
@@ -338,9 +338,9 @@ public class SystemDatabase implements AutoCloseable {
 
           try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, Objects.requireNonNull(state.service()));
-            stmt.setString(2, Objects.requireNonNull(state.workflowName()));
-            stmt.setString(3, Objects.requireNonNull(state.key()));
+            stmt.setString(1, Objects.requireNonNull(state.service(), "service must not be null"));
+            stmt.setString(2, Objects.requireNonNull(state.workflowName(), "workflowName must not be null"));
+            stmt.setString(3, Objects.requireNonNull(state.key(), "key must not be null"));
             stmt.setString(4, state.value());
             stmt.setObject(5, state.updateTime());
             stmt.setObject(6, state.updateSeq());

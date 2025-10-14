@@ -13,9 +13,9 @@ public record ExternalState(
     BigInteger updateSeq) {
 
   public ExternalState {
-    Objects.requireNonNull(service);
-    Objects.requireNonNull(workflowName);
-    Objects.requireNonNull(key);
+    Objects.requireNonNull(service, "service must not be null");
+    Objects.requireNonNull(workflowName, "workflowName must not be null");
+    Objects.requireNonNull(key, "key must not be null");
   }
 
   public ExternalState(String service, String workflowName, String key) {
