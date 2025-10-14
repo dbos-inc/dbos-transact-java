@@ -587,6 +587,9 @@ public class DBOSExecutor implements AutoCloseable {
       InternalWorkflowsService internalWorkflowsService) {
 
     DBOSContext ctx = DBOSContextHolder.get();
+    if (ctx.isInStep()) {
+      throw new IllegalStateException("DBOS.send() must not be called from within a step.");
+    }
     if (!ctx.isInWorkflow()) {
       internalWorkflowsService.sendWorkflow(destinationId, message, topic);
       return;
@@ -607,6 +610,9 @@ public class DBOSExecutor implements AutoCloseable {
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
       throw new IllegalStateException("DBOS.recv() must be called from a workflow.");
+    }
+    if (ctx.isInStep()) {
+      throw new IllegalStateException("DBOS.recv() must not be called from within a step.");
     }
     int stepFunctionId = ctx.getAndIncrementFunctionId();
     int timeoutFunctionId = ctx.getAndIncrementFunctionId();
