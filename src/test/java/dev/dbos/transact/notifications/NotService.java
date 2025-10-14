@@ -11,4 +11,8 @@ public interface NotService {
   String recvMultiple(String topic);
 
   String concWorkflow(String topic);
+
+  String disallowedSendInStep();
+
+  String disallowedRecvInStep();
 }

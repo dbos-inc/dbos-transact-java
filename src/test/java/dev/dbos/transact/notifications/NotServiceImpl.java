@@ -73,4 +73,16 @@ public class NotServiceImpl implements NotService {
     String message = (String) DBOS.recv(topic, Duration.ofSeconds(5));
     return message;
   }
+
+  @Workflow(name = "disallowedSend")
+  public String disallowedSendInStep() {
+    DBOS.runStep(() -> DBOS.send("a", "b", "c"), "send");
+    return "Done";
+  }
+
+  @Workflow(name = "disallowedRecv")
+  public String disallowedRecvInStep() {
+    DBOS.runStep(() -> DBOS.recv("a", Duration.ofSeconds(0)), "recv");
+    return "Done";
+  }
 }
