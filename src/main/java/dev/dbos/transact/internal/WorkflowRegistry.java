@@ -1,7 +1,6 @@
 package dev.dbos.transact.internal;
 
 import dev.dbos.transact.execution.RegisteredWorkflow;
-import dev.dbos.transact.execution.WorkflowFunctionReflect;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -22,13 +21,12 @@ public class WorkflowRegistry {
       Method method,
       int maxRecoveryAttempts) {
 
-    WorkflowFunctionReflect function = (t, args) -> method.invoke(t, args);
     var fqName = getFullyQualifiedWFName(className, instanceName, workflowName);
     var previous =
         registry.putIfAbsent(
             fqName,
             new RegisteredWorkflow(
-                workflowName, target, instanceName, method, function, maxRecoveryAttempts));
+                workflowName, target, instanceName, method, maxRecoveryAttempts));
 
     if (previous != null) {
       throw new IllegalStateException("Workflow already registered with name: " + fqName);

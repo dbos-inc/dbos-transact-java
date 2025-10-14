@@ -10,7 +10,6 @@ public record RegisteredWorkflow(
     String instanceName,
     Object target,
     Method workflowMethod,
-    WorkflowFunctionReflect function,
     int maxRecoveryAttempts) {
 
   public RegisteredWorkflow {
@@ -18,7 +17,6 @@ public record RegisteredWorkflow(
     Objects.requireNonNull(className, "workflow class name must not be null");
     instanceName = Objects.requireNonNullElse(instanceName, "");
     Objects.requireNonNull(target, "workflow target object must not be null");
-    Objects.requireNonNull(function, "workflow function must not be null");
   }
 
   public RegisteredWorkflow(
@@ -26,7 +24,6 @@ public record RegisteredWorkflow(
       Object target,
       String instanceName,
       Method workflowMethod,
-      WorkflowFunctionReflect function,
       int maxRecoveryAttempts) {
     this(
         name,
@@ -36,13 +33,12 @@ public record RegisteredWorkflow(
         instanceName,
         target,
         workflowMethod,
-        function,
         maxRecoveryAttempts);
   }
 
   public <T, E extends Exception> T invoke(Object[] args) throws E {
     try {
-      return (T) function.invoke(target, args);
+      return (T) workflowMethod.invoke(target, args);
     } catch (Exception e) {
       while (e instanceof InvocationTargetException) {
         var ite = (InvocationTargetException) e;
