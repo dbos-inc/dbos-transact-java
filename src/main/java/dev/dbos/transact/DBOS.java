@@ -538,7 +538,8 @@ public class DBOS {
     return executor("listWorkflowSteps").listWorkflowSteps(workflowId);
   }
 
-  public static Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
+  public static Optional<ExternalState> getExternalState(
+      String service, String workflowName, String key) {
     return executor("getExternalState").getExternalState(service, workflowName, key);
   }
 
