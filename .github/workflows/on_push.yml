@@ -10,6 +10,7 @@ jobs:
   test:
     uses: ./.github/workflows/test.yml
   publish:
+    needs: test
     uses: ./.github/workflows/publish.yml
     secrets:
       USERNAME_MAVEN: ${{ secrets.USERNAME_MAVEN }}
