@@ -1,5 +1,6 @@
 package dev.dbos.transact.internal;
 
+import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
@@ -71,7 +72,15 @@ public class DBOSInvocationHandler implements InvocationHandler {
     var clsName = target.getClass().getName();
     var wfName = workflow.name().isEmpty() ? method.getName() : workflow.name();
     var handle = executor.invokeWorkflow(clsName, instanceName, wfName, args);
-    return handle.getResult();
+    // This is not really a getResult call - it is part of invocation which will be written
+    //  as its own step entry.
+    var ctx = DBOSContextHolder.get();
+    try {
+      DBOSContextHolder.clear();
+      return handle.getResult();
+    } finally {
+      DBOSContextHolder.set(ctx);
+    }
   }
 
   protected Object handleStep(Method method, Object[] args, Step step) throws Exception {

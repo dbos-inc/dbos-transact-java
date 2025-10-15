@@ -218,18 +218,21 @@ public class SyncWorkflowTest {
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).status());
 
     List<StepInfo> steps = DBOS.listWorkflowSteps("wf-123456");
-    assertEquals(3, steps.size());
+    assertEquals(6, steps.size());
     assertEquals("child1", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("childWorkflow", steps.get(0).functionName());
+    assertEquals("DBOS.getResult", steps.get(1).functionName());
 
-    assertEquals("child2", steps.get(1).childWorkflowId());
-    assertEquals(1, steps.get(1).functionId());
-    assertEquals("childWorkflow2", steps.get(1).functionName());
-
-    assertEquals("child3", steps.get(2).childWorkflowId());
+    assertEquals("child2", steps.get(2).childWorkflowId());
     assertEquals(2, steps.get(2).functionId());
-    assertEquals("childWorkflow3", steps.get(2).functionName());
+    assertEquals("childWorkflow2", steps.get(2).functionName());
+    assertEquals("DBOS.getResult", steps.get(3).functionName());
+
+    assertEquals("child3", steps.get(4).childWorkflowId());
+    assertEquals(4, steps.get(4).functionId());
+    assertEquals("childWorkflow3", steps.get(4).functionName());
+    assertEquals("DBOS.getResult", steps.get(5).functionName());
   }
 
   @Test
@@ -262,15 +265,17 @@ public class SyncWorkflowTest {
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).status());
 
     List<StepInfo> steps = DBOS.listWorkflowSteps("wf-123456");
-    assertEquals(1, steps.size());
+    assertEquals(2, steps.size());
     assertEquals("child4", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("childWorkflow4", steps.get(0).functionName());
+    assertEquals("DBOS.getResult", steps.get(1).functionName());
 
     steps = DBOS.listWorkflowSteps("child4");
-    assertEquals(1, steps.size());
+    assertEquals(2, steps.size());
     assertEquals("child5", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("grandchildWorkflow", steps.get(0).functionName());
+    assertEquals("DBOS.getResult", steps.get(1).functionName());
   }
 }
