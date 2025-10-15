@@ -916,6 +916,9 @@ public class DBOSExecutor implements AutoCloseable {
             T result = workflow.invoke(args);
             postInvokeWorkflowResult(systemDatabase, workflowId, result);
             return result;
+          } catch (DBOSWorkflowExecutionConflictException e) {
+            // don't persist execution conflict exception 
+            throw e;
           } catch (Exception e) {
             Throwable actual = e;
 

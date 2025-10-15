@@ -72,10 +72,7 @@ public class StepsDAO {
 
     } catch (SQLException e) {
       if ("23505".equals(e.getSQLState())) {
-        throw new DBOSWorkflowConflictException(
-            result.getWorkflowId(),
-            String.format(
-                "Workflow %s step %d already exists", result.getWorkflowId(), result.getStepId()));
+        throw new DBOSWorkflowExecutionConflictException(result.getWorkflowId());
       } else {
         throw e;
       }
@@ -278,7 +275,7 @@ public class StepsDAO {
         output.setError(null);
 
         recordStepResultTxn(dataSource, output);
-      } catch (DBOSWorkflowConflictException e) {
+      } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
       }
     }

@@ -1,6 +1,7 @@
 package dev.dbos.transact.workflow.internal;
 
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
@@ -29,6 +30,8 @@ public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHan
   public T getResult() throws E {
     try {
       return futureResult.get();
+    } catch (DBOSWorkflowExecutionConflictException e) {
+      return (T) systemDatabase.awaitWorkflowResult(workflowId);
     } catch (ExecutionException ee) {
       if (ee.getCause() instanceof Exception) {
         throw (E) ee.getCause();

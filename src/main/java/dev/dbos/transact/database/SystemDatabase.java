@@ -81,7 +81,7 @@ public class SystemDatabase implements AutoCloseable {
    * @param initStatus The initial workflow status details.
    * @param maxRetries Optional maximum number of retries.
    * @return An object containing the current status and optionally the deadline epoch milliseconds.
-   * @throws DBOSWorkflowConflictException If a conflicting workflow already exists.
+   * @throws DBOSConflictingWorkflowException If a conflicting workflow already exists.
    * @throws DBOSDeadLetterQueueException If the workflow exceeds max retries.
    */
   public WorkflowInitResult initWorkflowStatus(
