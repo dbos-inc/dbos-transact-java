@@ -404,6 +404,14 @@ public class DBOS {
     return startWorkflow(runnable, new StartWorkflowOptions());
   }
 
+  public static <T, E extends Exception> T getResult(String workflowId) throws E {
+    return executor("getResult").<T, E>getResult(workflowId);
+  }
+
+  public static WorkflowStatus getWorkflowStatus(String workflowId) {
+    return executor("getWorkflowStatus").getWorkflowStatus(workflowId);
+  }
+
   /**
    * Send a message to a workflow
    *

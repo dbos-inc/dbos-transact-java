@@ -103,8 +103,8 @@ public class TimeoutTest {
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
-    assertTrue(s.isPresent());
-    assertEquals(WorkflowState.CANCELLED.name(), s.get().status());
+    assertNotNull(s);
+    assertEquals(WorkflowState.CANCELLED.name(), s.status());
   }
 
   @Test
@@ -160,8 +160,8 @@ public class TimeoutTest {
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
-    assertTrue(s.isPresent());
-    assertEquals(WorkflowState.CANCELLED.name(), s.get().status());
+    assertNotNull(s);
+    assertEquals(WorkflowState.CANCELLED.name(), s.status());
   }
 
   @Test
@@ -187,8 +187,8 @@ public class TimeoutTest {
     assertEquals("1234512345", result);
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
-    assertTrue(s.isPresent());
-    assertEquals(WorkflowState.SUCCESS.name(), s.get().status());
+    assertNotNull(s);
+    assertEquals(WorkflowState.SUCCESS.name(), s.status());
   }
 
   @Test
@@ -218,8 +218,8 @@ public class TimeoutTest {
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
-    assertTrue(s.isPresent());
-    assertEquals(WorkflowState.CANCELLED.name(), s.get().status());
+    assertTrue(s != null);
+    assertEquals(WorkflowState.CANCELLED.name(), s.status());
   }
 
   @Test

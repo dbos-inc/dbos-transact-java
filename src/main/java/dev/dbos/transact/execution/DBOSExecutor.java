@@ -321,7 +321,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /** This does not retry */
-  private <T, E extends Exception> T callFunctionAsStep(
+  public <T, E extends Exception> T callFunctionAsStep(
       ThrowingSupplier<T, E> fn, String functionName) throws E {
     DBOSContext ctx = DBOSContextHolder.get();
 
@@ -507,7 +507,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private static <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(
       String workflowId, SystemDatabase systemDatabase) {
-    return new WorkflowHandleDBPoll<R, E>(workflowId, systemDatabase);
+    return new WorkflowHandleDBPoll<R, E>(workflowId);
   }
 
   public void sleep(Duration duration) {
@@ -676,6 +676,22 @@ public class DBOSExecutor implements AutoCloseable {
     return systemDatabase.upsertExternalState(state);
   }
 
+  public WorkflowStatus getWorkflowStatus(String workflowId) {
+    return this.callFunctionAsStep(
+        () -> {
+          return systemDatabase.getWorkflowStatus(workflowId);
+        },
+        "DBOS.getWorkflowStatus");
+  }
+
+  public <T, E extends Exception> T getResult(String workflowId) throws E {
+    return this.callFunctionAsStep(
+        () -> {
+          return systemDatabase.<T, E>awaitWorkflowResult(workflowId);
+        },
+        "DBOS.getResult");
+  }
+
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
@@ -789,24 +805,22 @@ public class DBOSExecutor implements AutoCloseable {
     logger.debug("executeWorkflowById {}", workflowId);
 
     var status = systemDatabase.getWorkflowStatus(workflowId);
-    if (status.isEmpty()) {
+    if (status == null) {
       logger.error("Workflow not found {}", workflowId);
       throw new DBOSNonExistentWorkflowException(workflowId);
     }
 
-    Object[] inputs = status.get().input();
+    Object[] inputs = status.input();
     var wfName =
         WorkflowRegistry.getFullyQualifiedWFName(
-            status.get().className(), status.get().instanceName(), status.get().name());
+            status.className(), status.instanceName(), status.name());
     RegisteredWorkflow workflow = workflowMap.get(wfName);
 
     if (workflow == null) {
       throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
     }
 
-    var options =
-        new ExecuteWorkflowOptions(
-            workflowId, status.get().getTimeout(), status.get().getDeadline());
+    var options = new ExecuteWorkflowOptions(workflowId, status.getTimeout(), status.getDeadline());
     return executeWorkflow(workflow, inputs, options, null, null);
   }
 
@@ -962,7 +976,7 @@ public class DBOSExecutor implements AutoCloseable {
           TimeUnit.MILLISECONDS);
     }
 
-    return new WorkflowHandleFuture<T, E>(workflowId, future, systemDatabase);
+    return new WorkflowHandleFuture<T, E>(workflowId, future, this);
   }
 
   public static <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflow(

@@ -129,7 +129,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) {
+  public WorkflowStatus getWorkflowStatus(String workflowId) {
     return DbRetry.call(
         () -> {
           return workflowDAO.getWorkflowStatus(workflowId);
