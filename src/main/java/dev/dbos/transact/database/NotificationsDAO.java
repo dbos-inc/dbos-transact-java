@@ -2,7 +2,7 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
-import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
+import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -144,10 +144,8 @@ public class NotificationsDAO {
       lockPair.lock.lock();
       boolean success = notificationService.registerNotificationCondition(payload, lockPair);
       if (!success) {
-        // This should not happen, but if it does, it means the workflow is
-        // executed concurrently
-        throw new DBOSWorkflowConflictException(
-            workflowUuid, "Workflow might be executing concurrently. ");
+        // if this happens, the workflow is executing concurrently
+        throw new DBOSWorkflowExecutionConflictException(workflowUuid);
       }
 
       // Check if the key is already in the database. If not, wait for the

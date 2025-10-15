@@ -89,13 +89,13 @@ public class WorkflowDAO {
               String.format(
                   "Workflow already exists with a different function name: %s, but the provided function name is: %s",
                   resRow.getName(), initStatus.getName());
-          throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(), msg);
+          throw new DBOSConflictingWorkflowException(initStatus.getWorkflowUUID(), msg);
         } else if (!Objects.equals(resRow.getClassName(), initStatus.getClassName())) {
           String msg =
               String.format(
                   "Workflow already exists with a different class name: %s, but the provided class name is: %s",
                   resRow.getClassName(), initStatus.getClassName());
-          throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(), msg);
+          throw new DBOSConflictingWorkflowException(initStatus.getWorkflowUUID(), msg);
         } else if (!Objects.equals(
             resRow.getInstanceName() != null ? resRow.getInstanceName() : "",
             initStatus.getInstanceName() != null ? initStatus.getInstanceName() : "")) {
@@ -103,7 +103,7 @@ public class WorkflowDAO {
               String.format(
                   "Workflow already exists with a different class configuration: %s, but the provided class configuration is: %s",
                   resRow.getInstanceName(), initStatus.getInstanceName());
-          throw new DBOSWorkflowConflictException(initStatus.getWorkflowUUID(), msg);
+          throw new DBOSConflictingWorkflowException(initStatus.getWorkflowUUID(), msg);
         }
 
         final int attempts = resRow.getRecoveryAttempts();
@@ -133,7 +133,7 @@ public class WorkflowDAO {
           logger.error("Rollback failed", rollbackEx);
         }
         throw e; // Re-throw the original SQLException
-      } catch (DBOSWorkflowConflictException | DBOSDeadLetterQueueException e) {
+      } catch (DBOSConflictingWorkflowException | DBOSDeadLetterQueueException e) {
         // Rollback for custom business exceptions
         try {
           connection.rollback();
@@ -316,11 +316,7 @@ public class WorkflowDAO {
     }
 
     if (options.getThrowOnFailure() && affectedRows != 1) {
-      throw new DBOSWorkflowConflictException(
-          workflowId,
-          String.format(
-              "Attempt to record transition of nonexistent workflow %s (affected rows: %d)",
-              workflowId, affectedRows));
+      throw new DBOSWorkflowExecutionConflictException(workflowId);
     }
   }
 
@@ -706,9 +702,7 @@ public class WorkflowDAO {
       }
     } catch (SQLException sqe) {
       if ("23505".equals(sqe.getSQLState())) {
-        throw new DBOSWorkflowConflictException(
-            parentId,
-            String.format("Record exists for parent %s and functionId %d", parentId, functionId));
+        throw new DBOSWorkflowExecutionConflictException(parentId);
       } else {
         throw sqe;
       }
