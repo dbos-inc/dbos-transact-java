@@ -327,8 +327,9 @@ public class DBOSExecutor implements AutoCloseable {
 
     int nextFuncId = 0;
     boolean inWorkflow = ctx != null && ctx.isInWorkflow();
+    boolean inStep = ctx.isInStep();
 
-    if (!inWorkflow) return fn.execute();
+    if (!inWorkflow || inStep) return fn.execute();
 
     nextFuncId = ctx.getAndIncrementFunctionId();
 
@@ -423,7 +424,6 @@ public class DBOSExecutor implements AutoCloseable {
       return function.execute();
     }
 
-    // ctx.setDbos(dbos);
     String workflowId = ctx.getWorkflowId();
 
     logger.debug("Running step {} for workflow {}", stepName, workflowId);

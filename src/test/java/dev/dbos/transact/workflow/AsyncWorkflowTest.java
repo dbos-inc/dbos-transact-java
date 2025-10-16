@@ -293,7 +293,7 @@ public class AsyncWorkflowTest {
 
     var steps = DBOS.listWorkflowSteps(wfhgrs.getWorkflowId());
     assertEquals(1, steps.size());
-    assertEquals("getResultInStep", steps.get(0).functionName());
+    assertEquals("getResInStep", steps.get(0).functionName());
 
     steps = DBOS.listWorkflowSteps(wfhstat.getWorkflowId());
     assertEquals(1, steps.size());
