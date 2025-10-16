@@ -684,10 +684,14 @@ public class DBOSExecutor implements AutoCloseable {
         "DBOS.getWorkflowStatus");
   }
 
+  public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
+    return systemDatabase.<T, E>awaitWorkflowResult(workflowId);
+  }
+
   public <T, E extends Exception> T getResult(String workflowId) throws E {
     return this.callFunctionAsStep(
         () -> {
-          return systemDatabase.<T, E>awaitWorkflowResult(workflowId);
+          return awaitWorkflowResult(workflowId);
         },
         "DBOS.getResult");
   }
@@ -930,6 +934,9 @@ public class DBOSExecutor implements AutoCloseable {
             T result = workflow.invoke(args);
             postInvokeWorkflowResult(systemDatabase, workflowId, result);
             return result;
+          } catch (DBOSWorkflowExecutionConflictException e) {
+            // don't persist execution conflict exception
+            throw e;
           } catch (Exception e) {
             Throwable actual = e;
 
