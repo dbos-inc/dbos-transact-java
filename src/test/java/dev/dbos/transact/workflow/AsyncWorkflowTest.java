@@ -291,6 +291,18 @@ public class AsyncWorkflowTest {
     var wfstat2 = wfhstat2.getResult();
     assertEquals(WorkflowState.SUCCESS.toString(), wfstat2);
 
+    var steps = DBOS.listWorkflowSteps(wfhgrs.getWorkflowId());
+    assertEquals(1, steps.size());
+    assertEquals("getResultInStep", steps.get(0).functionName());
+
+    steps = DBOS.listWorkflowSteps(wfhstat.getWorkflowId());
+    assertEquals(1, steps.size());
+    assertEquals("DBOS.getWorkflowStatus", steps.get(0).functionName());
+
+    steps = DBOS.listWorkflowSteps(wfhstat2.getWorkflowId());
+    assertEquals(1, steps.size());
+    assertEquals("getStatusInStep", steps.get(0).functionName());
+
     var ise = assertThrows(IllegalStateException.class, () -> simpleService.startWfInStep());
     assertEquals("cannot invoke a workflow from a step", ise.getMessage());
     ise =
