@@ -168,4 +168,44 @@ public class SimpleServiceImpl implements SimpleService {
     logger.info("Done with longWorkflow");
     return input + result;
   }
+
+  @Workflow(name = "getResultInStep")
+  public String getResultInStep(String wfid) {
+    return DBOS.runStep(() -> DBOS.getResult(wfid), "getResInStep");
+  }
+
+  @Workflow(name = "getStatus")
+  public String getStatus(String wfid) {
+    return DBOS.getWorkflowStatus(wfid).status();
+  }
+
+  @Workflow(name = "getStatusInStep")
+  public String getStatusInStep(String wfid) {
+    return DBOS.runStep(() -> DBOS.getWorkflowStatus(wfid).status(), "getStatusInStep");
+  }
+
+  @Workflow(name = "startWfInStep")
+  public void startWfInStep() {
+    DBOS.runStep(
+        () -> {
+          DBOS.startWorkflow(
+              () -> {
+                simpleService.childWorkflow("No");
+              });
+        },
+        "startWfInStep");
+  }
+
+  @Workflow(name = "startWfInStepById")
+  public void startWfInStepById(String childId) {
+    DBOS.runStep(
+        () -> {
+          DBOS.startWorkflow(
+              () -> {
+                simpleService.childWorkflow("Maybe");
+              },
+              new StartWorkflowOptions(childId));
+        },
+        "startWfInStepById");
+  }
 }

@@ -34,4 +34,14 @@ public interface SimpleService {
       throws InterruptedException;
 
   String childWorkflowWithSleep(String input, long sleepSeconds) throws InterruptedException;
+
+  String getResultInStep(String wfid);
+
+  String getStatus(String wfid);
+
+  String getStatusInStep(String wfid);
+
+  void startWfInStep();
+
+  void startWfInStepById(String childId);
 }

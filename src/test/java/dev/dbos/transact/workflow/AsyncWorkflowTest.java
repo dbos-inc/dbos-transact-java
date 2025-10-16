@@ -269,4 +269,33 @@ public class AsyncWorkflowTest {
     assertEquals("Processed: test-item", result);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
   }
+
+  @Test
+  public void resAndStatus() throws Exception {
+
+    SimpleService simpleService =
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+
+    DBOS.launch();
+
+    simpleService.setSimpleService(simpleService);
+
+    var wfh = DBOS.startWorkflow(() -> simpleService.childWorkflow("Base"));
+    var wfhgrs = DBOS.startWorkflow(() -> simpleService.getResultInStep(wfh.getWorkflowId()));
+    var wfres = wfhgrs.getResult();
+    assertEquals("Base", wfres);
+    var wfhstat = DBOS.startWorkflow(() -> simpleService.getStatus(wfh.getWorkflowId()));
+    var wfstat = wfhstat.getResult();
+    assertEquals(WorkflowState.SUCCESS.toString(), wfstat);
+    var wfhstat2 = DBOS.startWorkflow(() -> simpleService.getStatusInStep(wfh.getWorkflowId()));
+    var wfstat2 = wfhstat2.getResult();
+    assertEquals(WorkflowState.SUCCESS.toString(), wfstat2);
+
+    var ise = assertThrows(IllegalStateException.class, () -> simpleService.startWfInStep());
+    assertEquals("cannot invoke a workflow from a step", ise.getMessage());
+    ise =
+        assertThrows(
+            IllegalStateException.class, () -> simpleService.startWfInStepById("whatAboutWId?"));
+    assertEquals("cannot invoke a workflow from a step", ise.getMessage());
+  }
 }
