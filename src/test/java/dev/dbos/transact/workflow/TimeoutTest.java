@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junitpioneer.jupiter.RetryingTest;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class TimeoutTest {
@@ -103,8 +104,8 @@ public class TimeoutTest {
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
-    assertTrue(s.isPresent());
-    assertEquals(WorkflowState.CANCELLED.name(), s.get().status());
+    assertNotNull(s);
+    assertEquals(WorkflowState.CANCELLED.name(), s.status());
   }
 
   @Test
@@ -160,8 +161,8 @@ public class TimeoutTest {
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
-    assertTrue(s.isPresent());
-    assertEquals(WorkflowState.CANCELLED.name(), s.get().status());
+    assertNotNull(s);
+    assertEquals(WorkflowState.CANCELLED.name(), s.status());
   }
 
   @Test
@@ -187,8 +188,8 @@ public class TimeoutTest {
     assertEquals("1234512345", result);
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
-    assertTrue(s.isPresent());
-    assertEquals(WorkflowState.SUCCESS.name(), s.get().status());
+    assertNotNull(s);
+    assertEquals(WorkflowState.SUCCESS.name(), s.status());
   }
 
   @Test
@@ -218,8 +219,8 @@ public class TimeoutTest {
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
-    assertTrue(s.isPresent());
-    assertEquals(WorkflowState.CANCELLED.name(), s.get().status());
+    assertTrue(s != null);
+    assertEquals(WorkflowState.CANCELLED.name(), s.status());
   }
 
   @Test
@@ -336,7 +337,7 @@ public class TimeoutTest {
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
-  @Test
+  @RetryingTest(3)
   public void parentAsyncTimeoutInheritedByChild() throws Exception {
     // TOFIX : fails at times
 

@@ -362,7 +362,7 @@ public class WorkflowDAO {
     }
   }
 
-  public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) throws SQLException {
+  public WorkflowStatus getWorkflowStatus(String workflowId) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -371,10 +371,10 @@ public class WorkflowDAO {
     ListWorkflowsInput input = builder.build();
     List<WorkflowStatus> output = listWorkflows(input);
     if (output.size() > 0) {
-      return Optional.of(output.get(0));
+      return output.get(0);
     }
 
-    return Optional.empty();
+    return null;
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
@@ -826,7 +826,7 @@ public class WorkflowDAO {
     }
 
     var status = getWorkflowStatus(originalWorkflowId);
-    if (status.isEmpty()) {
+    if (status == null) {
       throw new DBOSNonExistentWorkflowException(originalWorkflowId);
     }
 
@@ -841,7 +841,7 @@ public class WorkflowDAO {
 
     var timeout = options.timeout();
     if (timeout == null) {
-      timeout = status.get().getTimeout();
+      timeout = status.getTimeout();
     }
     if (timeout == null) {
       timeout = Duration.ZERO;
@@ -853,7 +853,7 @@ public class WorkflowDAO {
       try {
         // Create entry for forked workflow
         insertForkedWorkflowStatus(
-            connection, forkedWorkflowId, status.get(), applicationVersion, timeout.toMillis());
+            connection, forkedWorkflowId, status, applicationVersion, timeout.toMillis());
 
         // Copy operation outputs if starting from step > 0
         if (startStep > 0) {

@@ -38,7 +38,6 @@ import java.net.InetAddress;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -734,7 +733,7 @@ public class ConductorTest {
             .appId("test-app-id")
             .build();
 
-    when(mockDB.getWorkflowStatus(workflowId)).thenReturn(Optional.of(status));
+    when(mockDB.getWorkflowStatus(workflowId)).thenReturn(status);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();

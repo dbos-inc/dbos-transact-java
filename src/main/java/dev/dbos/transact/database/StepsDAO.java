@@ -45,8 +45,8 @@ public class StepsDAO {
         String.format(
             """
                 INSERT INTO %s.operation_outputs
-                    (workflow_uuid, function_id, function_name, output, error)
-                VALUES (?, ?, ?, ?, ?)
+                    (workflow_uuid, function_id, function_name, output, error, child_workflow_id)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
             Constants.DB_SCHEMA);
 
@@ -66,6 +66,12 @@ public class StepsDAO {
         pstmt.setString(paramIdx++, result.getError());
       } else {
         pstmt.setNull(paramIdx++, Types.LONGVARCHAR);
+      }
+
+      if (result.getChildWorkflowId() != null) {
+        pstmt.setString(paramIdx++, result.getChildWorkflowId());
+      } else {
+        pstmt.setNull(paramIdx++, Types.VARCHAR);
       }
 
       pstmt.executeUpdate();
@@ -142,7 +148,7 @@ public class StepsDAO {
           String error = rs.getString("error");
           recordedFunctionName = rs.getString("function_name");
           recordedResult =
-              new StepResult(workflowId, functionId, recordedFunctionName, output, error);
+              new StepResult(workflowId, functionId, recordedFunctionName, output, error, null);
         }
       }
     }
