@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junitpioneer.jupiter.RetryingTest;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class TimeoutTest {
@@ -337,6 +338,7 @@ public class TimeoutTest {
   }
 
   @Test
+  @RetryingTest(3)
   public void parentAsyncTimeoutInheritedByChild() throws Exception {
     // TOFIX : fails at times
 

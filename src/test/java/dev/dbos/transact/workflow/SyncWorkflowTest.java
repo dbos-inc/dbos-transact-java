@@ -223,16 +223,19 @@ public class SyncWorkflowTest {
     assertEquals(0, steps.get(0).functionId());
     assertEquals("childWorkflow", steps.get(0).functionName());
     assertEquals("DBOS.getResult", steps.get(1).functionName());
+    assertEquals("child1", steps.get(1).childWorkflowId());
 
     assertEquals("child2", steps.get(2).childWorkflowId());
     assertEquals(2, steps.get(2).functionId());
     assertEquals("childWorkflow2", steps.get(2).functionName());
     assertEquals("DBOS.getResult", steps.get(3).functionName());
+    assertEquals("child2", steps.get(3).childWorkflowId());
 
     assertEquals("child3", steps.get(4).childWorkflowId());
     assertEquals(4, steps.get(4).functionId());
     assertEquals("childWorkflow3", steps.get(4).functionName());
     assertEquals("DBOS.getResult", steps.get(5).functionName());
+    assertEquals("child3", steps.get(5).childWorkflowId());
   }
 
   @Test
