@@ -322,7 +322,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   /** This does not retry */
   public <T, E extends Exception> T callFunctionAsStep(
-      ThrowingSupplier<T, E> fn, String functionName) throws E {
+      ThrowingSupplier<T, E> fn, String functionName, String childWfId) throws E {
     DBOSContext ctx = DBOSContextHolder.get();
 
     int nextFuncId = 0;
@@ -347,7 +347,8 @@ public class DBOSExecutor implements AutoCloseable {
       if (inWorkflow) {
         String jsonError = JSONUtil.serializeAppException(e);
         StepResult r =
-            new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError);
+            new StepResult(
+                ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError, childWfId);
         systemDatabase.recordStepResultTxn(r);
       }
       throw (E) e;
@@ -355,7 +356,8 @@ public class DBOSExecutor implements AutoCloseable {
 
     // Record the successful result
     String jsonOutput = JSONUtil.serialize(functionResult);
-    StepResult o = new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, jsonOutput, null);
+    StepResult o =
+        new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, jsonOutput, null, childWfId);
     systemDatabase.recordStepResultTxn(o);
 
     return functionResult;
@@ -363,7 +365,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   @SuppressWarnings("unchecked")
   public <T, E extends Exception> T runStepInternal(
-      ThrowingSupplier<T, E> stepfunc, StepOptions opts) throws E {
+      ThrowingSupplier<T, E> stepfunc, StepOptions opts, String childWfId) throws E {
     try {
       return runStepInternal(
           opts.name(),
@@ -371,6 +373,7 @@ public class DBOSExecutor implements AutoCloseable {
           opts.maxAttempts(),
           opts.backOffRate(),
           opts.intervalSeconds(),
+          childWfId,
           () -> {
             var res = stepfunc.execute();
             return res;
@@ -408,6 +411,7 @@ public class DBOSExecutor implements AutoCloseable {
       int maxAttempts,
       double timeBetweenAttemptsSec,
       double backOffRate,
+      String childWfId,
       ThrowingSupplier<T, E> function)
       throws E {
     if (maxAttempts < 1) {
@@ -487,13 +491,18 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (eThrown == null) {
       StepResult stepResult =
-          new StepResult(workflowId, stepFunctionId, stepName, serializedOutput, null);
+          new StepResult(workflowId, stepFunctionId, stepName, serializedOutput, null, childWfId);
       systemDatabase.recordStepResultTxn(stepResult);
       return result;
     } else {
       StepResult stepResult =
           new StepResult(
-              workflowId, stepFunctionId, stepName, null, JSONUtil.serializeAppException(eThrown));
+              workflowId,
+              stepFunctionId,
+              stepName,
+              null,
+              JSONUtil.serializeAppException(eThrown),
+              childWfId);
       systemDatabase.recordStepResultTxn(stepResult);
       throw (E) eThrown;
     }
@@ -531,7 +540,8 @@ public class DBOSExecutor implements AutoCloseable {
           systemDatabase.resumeWorkflow(workflowId);
           return null; // void
         },
-        "DBOS.resumeWorkflow");
+        "DBOS.resumeWorkflow",
+        null);
     return retrieveWorkflow(workflowId);
   }
 
@@ -544,7 +554,8 @@ public class DBOSExecutor implements AutoCloseable {
           systemDatabase.cancelWorkflow(workflowId);
           return null; // void
         },
-        "DBOS.cancelWorkflow");
+        "DBOS.cancelWorkflow",
+        null);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
@@ -557,7 +568,8 @@ public class DBOSExecutor implements AutoCloseable {
 
               return systemDatabase.forkWorkflow(workflowId, startStep, options);
             },
-            "DBOS.forkWorkflow");
+            "DBOS.forkWorkflow",
+            null);
     return retrieveWorkflow(forkedId);
   }
 
@@ -657,7 +669,8 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           return systemDatabase.listWorkflows(input);
         },
-        "DBOS.listWorkflows");
+        "DBOS.listWorkflows",
+        null);
   }
 
   public List<StepInfo> listWorkflowSteps(String workflowId) {
@@ -665,7 +678,8 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           return systemDatabase.listWorkflowSteps(workflowId);
         },
-        "DBOS.listWorkflowSteps");
+        "DBOS.listWorkflowSteps",
+        null);
   }
 
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
@@ -681,7 +695,8 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           return systemDatabase.getWorkflowStatus(workflowId);
         },
-        "DBOS.getWorkflowStatus");
+        "DBOS.getWorkflowStatus",
+        null);
   }
 
   public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
@@ -693,7 +708,8 @@ public class DBOSExecutor implements AutoCloseable {
         () -> {
           return awaitWorkflowResult(workflowId);
         },
-        "DBOS.getResult");
+        "DBOS.getResult",
+        workflowId);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(

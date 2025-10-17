@@ -99,6 +99,7 @@ public class DBOSInvocationHandler implements InvocationHandler {
               step.maxAttempts(),
               step.intervalSeconds(),
               step.backOffRate(),
+              null,
               () -> method.invoke(target, args));
       logger.debug("After: Step completed successfully");
       return result;

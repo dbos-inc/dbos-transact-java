@@ -246,6 +246,7 @@ public class AsyncWorkflowTest {
     assertEquals(0, steps.get(0).functionId());
     assertEquals("childWorkflow4", steps.get(0).functionName());
     assertEquals("DBOS.getResult", steps.get(1).functionName());
+    assertEquals("child4", steps.get(1).childWorkflowId());
 
     steps = DBOS.listWorkflowSteps("child4");
     assertEquals(2, steps.size());
@@ -253,6 +254,7 @@ public class AsyncWorkflowTest {
     assertEquals(0, steps.get(0).functionId());
     assertEquals("grandchildWorkflow", steps.get(0).functionName());
     assertEquals("DBOS.getResult", steps.get(1).functionName());
+    assertEquals("child5", steps.get(1).childWorkflowId());
   }
 
   @Test

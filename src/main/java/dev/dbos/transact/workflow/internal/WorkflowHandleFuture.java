@@ -44,7 +44,8 @@ public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHan
             throw (E) e;
           }
         },
-        "DBOS.getResult");
+        "DBOS.getResult",
+        workflowId);
   }
 
   @Override
