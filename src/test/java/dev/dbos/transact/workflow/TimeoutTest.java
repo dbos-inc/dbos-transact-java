@@ -337,7 +337,6 @@ public class TimeoutTest {
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
-  @Test
   @RetryingTest(3)
   public void parentAsyncTimeoutInheritedByChild() throws Exception {
     // TOFIX : fails at times
