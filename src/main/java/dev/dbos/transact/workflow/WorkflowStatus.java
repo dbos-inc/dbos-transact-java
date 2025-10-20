@@ -3,6 +3,8 @@ package dev.dbos.transact.workflow;
 import java.time.Duration;
 import java.time.Instant;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public record WorkflowStatus(
     String workflowId,
     String status,
@@ -28,6 +30,7 @@ public record WorkflowStatus(
     String deduplicationId,
     Integer priority) {
 
+  @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)
   public Instant getDeadline() {
     if (deadlineEpochMs != null) {
       return Instant.ofEpochMilli(deadlineEpochMs);
@@ -35,6 +38,7 @@ public record WorkflowStatus(
     return null;
   }
 
+  @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)
   public Duration getTimeout() {
     if (timeoutMs != null) {
       return Duration.ofMillis(timeoutMs);

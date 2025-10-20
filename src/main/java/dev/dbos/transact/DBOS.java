@@ -410,6 +410,14 @@ public class DBOS {
     return startWorkflow(runnable, new StartWorkflowOptions());
   }
 
+  public static <T, E extends Exception> T getResult(String workflowId) throws E {
+    return executor("getResult").<T, E>getResult(workflowId);
+  }
+
+  public static WorkflowStatus getWorkflowStatus(String workflowId) {
+    return executor("getWorkflowStatus").getWorkflowStatus(workflowId);
+  }
+
   /**
    * Send a message to a workflow
    *
@@ -459,13 +467,13 @@ public class DBOS {
   public static <T, E extends Exception> T runStep(
       ThrowingSupplier<T, E> stepfunc, StepOptions opts) throws E {
 
-    return executor("runStep").runStepInternal(stepfunc, opts);
+    return executor("runStep").runStepInternal(stepfunc, opts, null);
   }
 
   public static <T, E extends Exception> T runStep(ThrowingSupplier<T, E> stepfunc, String name)
       throws E {
 
-    return executor("runStep").runStepInternal(stepfunc, new StepOptions(name));
+    return executor("runStep").runStepInternal(stepfunc, new StepOptions(name), null);
   }
 
   public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, StepOptions opts)
@@ -476,7 +484,8 @@ public class DBOS {
               stepfunc.execute();
               return null;
             },
-            opts);
+            opts,
+            null);
   }
 
   public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, String name)

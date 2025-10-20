@@ -195,18 +195,21 @@ public class AsyncWorkflowTest {
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).status());
 
     List<StepInfo> steps = DBOS.listWorkflowSteps("wf-123456");
-    assertEquals(3, steps.size());
+    assertEquals(6, steps.size());
     assertEquals("child1", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("childWorkflow", steps.get(0).functionName());
+    assertEquals("DBOS.getResult", steps.get(1).functionName());
 
-    assertEquals("child2", steps.get(1).childWorkflowId());
-    assertEquals(1, steps.get(1).functionId());
-    assertEquals("childWorkflow2", steps.get(1).functionName());
-
-    assertEquals("child3", steps.get(2).childWorkflowId());
+    assertEquals("child2", steps.get(2).childWorkflowId());
     assertEquals(2, steps.get(2).functionId());
-    assertEquals("childWorkflow3", steps.get(2).functionName());
+    assertEquals("childWorkflow2", steps.get(2).functionName());
+    assertEquals("DBOS.getResult", steps.get(3).functionName());
+
+    assertEquals("child3", steps.get(4).childWorkflowId());
+    assertEquals(4, steps.get(4).functionId());
+    assertEquals("childWorkflow3", steps.get(4).functionName());
+    assertEquals("DBOS.getResult", steps.get(5).functionName());
   }
 
   @Test
@@ -238,16 +241,20 @@ public class AsyncWorkflowTest {
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).status());
 
     List<StepInfo> steps = DBOS.listWorkflowSteps("wf-123456");
-    assertEquals(1, steps.size());
+    assertEquals(2, steps.size());
     assertEquals("child4", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("childWorkflow4", steps.get(0).functionName());
+    assertEquals("DBOS.getResult", steps.get(1).functionName());
+    assertEquals("child4", steps.get(1).childWorkflowId());
 
     steps = DBOS.listWorkflowSteps("child4");
-    assertEquals(1, steps.size());
+    assertEquals(2, steps.size());
     assertEquals("child5", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("grandchildWorkflow", steps.get(0).functionName());
+    assertEquals("DBOS.getResult", steps.get(1).functionName());
+    assertEquals("child5", steps.get(1).childWorkflowId());
   }
 
   @Test
@@ -263,5 +270,46 @@ public class AsyncWorkflowTest {
     String result = handle.getResult();
     assertEquals("Processed: test-item", result);
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+  }
+
+  @Test
+  public void resAndStatus() throws Exception {
+
+    SimpleService simpleService =
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+
+    DBOS.launch();
+
+    simpleService.setSimpleService(simpleService);
+
+    var wfh = DBOS.startWorkflow(() -> simpleService.childWorkflow("Base"));
+    var wfhgrs = DBOS.startWorkflow(() -> simpleService.getResultInStep(wfh.getWorkflowId()));
+    var wfres = wfhgrs.getResult();
+    assertEquals("Base", wfres);
+    var wfhstat = DBOS.startWorkflow(() -> simpleService.getStatus(wfh.getWorkflowId()));
+    var wfstat = wfhstat.getResult();
+    assertEquals(WorkflowState.SUCCESS.toString(), wfstat);
+    var wfhstat2 = DBOS.startWorkflow(() -> simpleService.getStatusInStep(wfh.getWorkflowId()));
+    var wfstat2 = wfhstat2.getResult();
+    assertEquals(WorkflowState.SUCCESS.toString(), wfstat2);
+
+    var steps = DBOS.listWorkflowSteps(wfhgrs.getWorkflowId());
+    assertEquals(1, steps.size());
+    assertEquals("getResInStep", steps.get(0).functionName());
+
+    steps = DBOS.listWorkflowSteps(wfhstat.getWorkflowId());
+    assertEquals(1, steps.size());
+    assertEquals("DBOS.getWorkflowStatus", steps.get(0).functionName());
+
+    steps = DBOS.listWorkflowSteps(wfhstat2.getWorkflowId());
+    assertEquals(1, steps.size());
+    assertEquals("getStatusInStep", steps.get(0).functionName());
+
+    var ise = assertThrows(IllegalStateException.class, () -> simpleService.startWfInStep());
+    assertEquals("cannot invoke a workflow from a step", ise.getMessage());
+    ise =
+        assertThrows(
+            IllegalStateException.class, () -> simpleService.startWfInStepById("whatAboutWId?"));
+    assertEquals("cannot invoke a workflow from a step", ise.getMessage());
   }
 }

@@ -248,14 +248,16 @@ public class DirectInvocationTest {
     assertNull(row1.deadlineEpochMs());
 
     var steps = DBUtils.getStepRows(dataSource, row0.workflowId());
-    assertEquals(1, steps.size());
+    assertEquals(2, steps.size());
     var step = steps.get(0);
+    var gr = steps.get(1);
     assertEquals(row0.workflowId(), step.workflowId());
     assertEquals(0, step.functionId());
     assertNull(step.output());
     assertNull(step.error());
     assertEquals("simpleWorkflow", step.functionName());
     assertEquals(row1.workflowId(), step.childWorkflowId());
+    assertEquals("DBOS.getResult", gr.functionName());
   }
 
   @Test

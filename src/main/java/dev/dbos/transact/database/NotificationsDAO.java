@@ -2,7 +2,7 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
-import dev.dbos.transact.exceptions.DBOSWorkflowConflictException;
+import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -64,12 +64,11 @@ public class NotificationsDAO {
         }
 
         // Insert notification
-        String insertSql =
-            "INSERT INTO %s.notifications (destination_uuid, topic, message) VALUES (?, ?, ?) ";
+        final String sql =
+            "INSERT INTO %s.notifications (destination_uuid, topic, message) VALUES (?, ?, ?) "
+                .formatted(Constants.DB_SCHEMA);
 
-        insertSql = String.format(insertSql, Constants.DB_SCHEMA);
-
-        try (PreparedStatement stmt = conn.prepareStatement(insertSql)) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, destinationUuid);
           stmt.setString(2, finalTopic);
           stmt.setString(3, JSONUtil.serialize(message));
@@ -144,22 +143,19 @@ public class NotificationsDAO {
       lockPair.lock.lock();
       boolean success = notificationService.registerNotificationCondition(payload, lockPair);
       if (!success) {
-        // This should not happen, but if it does, it means the workflow is
-        // executed concurrently
-        throw new DBOSWorkflowConflictException(
-            workflowUuid, "Workflow might be executing concurrently. ");
+        // if this happens, the workflow is executing concurrently
+        throw new DBOSWorkflowExecutionConflictException(workflowUuid);
       }
 
       // Check if the key is already in the database. If not, wait for the
       // notification
       boolean hasExistingNotification = false;
       try (Connection conn = dataSource.getConnection()) {
-        String checkSql =
-            " SELECT topic FROM %s.notifications WHERE destination_uuid = ? AND topic = ? ";
+        final String sql =
+            "SELECT topic FROM %s.notifications WHERE destination_uuid = ? AND topic = ? "
+                .formatted(Constants.DB_SCHEMA);
 
-        checkSql = String.format(checkSql, Constants.DB_SCHEMA);
-
-        try (PreparedStatement stmt = conn.prepareStatement(checkSql)) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, workflowUuid);
           stmt.setString(2, finalTopic);
           try (ResultSet rs = stmt.executeQuery()) {
@@ -187,27 +183,25 @@ public class NotificationsDAO {
 
       try {
         // Find and delete the oldest entry for this workflow+topic
-        String deleteAndReturnSql =
+        final String sql =
             """
-                        WITH oldest_entry AS (
-                            SELECT destination_uuid, topic, message, created_at_epoch_ms
-                            FROM %s.notifications
-                            WHERE destination_uuid = ? AND topic = ?
-                            ORDER BY created_at_epoch_ms ASC
-                            LIMIT 1
-                        )
-                        DELETE FROM %s.notifications
-                        WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry)
-                          AND topic = (SELECT topic FROM oldest_entry)
-                          AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry)
-                        RETURNING message
-                        """;
-
-        deleteAndReturnSql =
-            String.format(deleteAndReturnSql, Constants.DB_SCHEMA, Constants.DB_SCHEMA);
+              WITH oldest_entry AS (
+                  SELECT destination_uuid, topic, message, created_at_epoch_ms
+                  FROM %1$s.notifications
+                  WHERE destination_uuid = ? AND topic = ?
+                  ORDER BY created_at_epoch_ms ASC
+                  LIMIT 1
+              )
+              DELETE FROM %1$s.notifications
+              WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry)
+                AND topic = (SELECT topic FROM oldest_entry)
+                AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry)
+              RETURNING message
+              """
+                .formatted(Constants.DB_SCHEMA);
 
         Object[] recvdSermessage = null;
-        try (PreparedStatement stmt = conn.prepareStatement(deleteAndReturnSql)) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, workflowUuid);
           stmt.setString(2, finalTopic);
 
@@ -270,17 +264,16 @@ public class NotificationsDAO {
         String serializedMessage = JSONUtil.serialize(message);
 
         // Insert or update the workflow event using UPSERT
-        String upsertSql =
+        final String sql =
             """
-                        INSERT INTO %s.workflow_events (workflow_uuid, key, value)
-                        VALUES (?, ?, ?)
-                        ON CONFLICT (workflow_uuid, key)
-                        DO UPDATE SET value = EXCLUDED.value
-                        """;
+              INSERT INTO %s.workflow_events (workflow_uuid, key, value)
+              VALUES (?, ?, ?)
+              ON CONFLICT (workflow_uuid, key)
+              DO UPDATE SET value = EXCLUDED.value
+              """
+                .formatted(Constants.DB_SCHEMA);
 
-        upsertSql = String.format(upsertSql, Constants.DB_SCHEMA);
-
-        try (PreparedStatement stmt = conn.prepareStatement(upsertSql)) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, workflowId);
           stmt.setString(2, key);
           stmt.setString(3, serializedMessage);
@@ -352,11 +345,12 @@ public class NotificationsDAO {
       Object value = null;
 
       // Initial database check
-      String getSql = "SELECT value FROM %s.workflow_events WHERE workflow_uuid = ? AND key = ?";
-      getSql = String.format(getSql, Constants.DB_SCHEMA);
+      final String sql =
+          "SELECT value FROM %s.workflow_events WHERE workflow_uuid = ? AND key = ?"
+              .formatted(Constants.DB_SCHEMA);
 
       try (Connection conn = dataSource.getConnection();
-          PreparedStatement stmt = conn.prepareStatement(getSql)) {
+          PreparedStatement stmt = conn.prepareStatement(sql)) {
 
         stmt.setString(1, targetUuid);
         stmt.setString(2, key);
@@ -400,7 +394,7 @@ public class NotificationsDAO {
 
         // Read the value from the database after notification
         try (Connection conn = dataSource.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(getSql)) {
+            PreparedStatement stmt = conn.prepareStatement(sql)) {
 
           stmt.setString(1, targetUuid);
           stmt.setString(2, key);

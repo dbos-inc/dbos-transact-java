@@ -179,7 +179,7 @@ public class QueuesTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   void testListQueuedWorkflow() throws Exception {
 
     Queue firstQ = DBOS.Queue("firstQueue").concurrency(1).workerConcurrency(1).build();

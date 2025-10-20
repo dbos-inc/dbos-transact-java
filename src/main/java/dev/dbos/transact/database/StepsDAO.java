@@ -42,13 +42,12 @@ public class StepsDAO {
       throws SQLException {
 
     String sql =
-        String.format(
-            """
-                INSERT INTO %s.operation_outputs
-                    (workflow_uuid, function_id, function_name, output, error)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-            Constants.DB_SCHEMA);
+        """
+          INSERT INTO %s.operation_outputs
+            (workflow_uuid, function_id, function_name, output, error, child_workflow_id)
+          VALUES (?, ?, ?, ?, ?, ?)
+        """
+            .formatted(Constants.DB_SCHEMA);
 
     try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
       int paramIdx = 1;
@@ -68,14 +67,17 @@ public class StepsDAO {
         pstmt.setNull(paramIdx++, Types.LONGVARCHAR);
       }
 
+      if (result.getChildWorkflowId() != null) {
+        pstmt.setString(paramIdx++, result.getChildWorkflowId());
+      } else {
+        pstmt.setNull(paramIdx++, Types.VARCHAR);
+      }
+
       pstmt.executeUpdate();
 
     } catch (SQLException e) {
       if ("23505".equals(e.getSQLState())) {
-        throw new DBOSWorkflowConflictException(
-            result.getWorkflowId(),
-            String.format(
-                "Workflow %s step %d already exists", result.getWorkflowId(), result.getStepId()));
+        throw new DBOSWorkflowExecutionConflictException(result.getWorkflowId());
       } else {
         throw e;
       }
@@ -101,12 +103,12 @@ public class StepsDAO {
       String workflowId, int functionId, String functionName, Connection connection)
       throws SQLException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
 
-    String workflowStatusSql =
-        String.format(
-            "SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?", Constants.DB_SCHEMA);
+    final String sql =
+        "SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?"
+            .formatted(Constants.DB_SCHEMA);
 
     String workflowStatus = null;
-    try (PreparedStatement pstmt = connection.prepareStatement(workflowStatusSql)) {
+    try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
       pstmt.setString(1, workflowId);
       try (ResultSet rs = pstmt.executeQuery()) {
         if (rs.next()) {
@@ -125,13 +127,12 @@ public class StepsDAO {
     }
 
     String operationOutputSql =
-        String.format(
-            """
-                SELECT output, error, function_name
-                FROM %s.operation_outputs
-                WHERE workflow_uuid = ? AND function_id = ?
-                """,
-            Constants.DB_SCHEMA);
+        """
+        SELECT output, error, function_name
+        FROM %s.operation_outputs
+        WHERE workflow_uuid = ? AND function_id = ?
+        """
+            .formatted(Constants.DB_SCHEMA);
 
     StepResult recordedResult = null;
     String recordedFunctionName = null;
@@ -145,7 +146,7 @@ public class StepsDAO {
           String error = rs.getString("error");
           recordedFunctionName = rs.getString("function_name");
           recordedResult =
-              new StepResult(workflowId, functionId, recordedFunctionName, output, error);
+              new StepResult(workflowId, functionId, recordedFunctionName, output, error, null);
         }
       }
     }
@@ -168,15 +169,14 @@ public class StepsDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
-    String sqlTemplate =
+    final String sql =
         """
-                SELECT function_id, function_name, output, error, child_workflow_id
-                FROM %s.operation_outputs
-                WHERE workflow_uuid = ?
-                ORDER BY function_id;
-                """;
-    final String sql = String.format(sqlTemplate, Constants.DB_SCHEMA);
-    System.out.println(sql);
+        SELECT function_id, function_name, output, error, child_workflow_id
+        FROM %s.operation_outputs
+        WHERE workflow_uuid = ?
+        ORDER BY function_id;
+        """
+            .formatted(Constants.DB_SCHEMA);
 
     List<StepInfo> steps = new ArrayList<>();
 
@@ -278,7 +278,7 @@ public class StepsDAO {
         output.setError(null);
 
         recordStepResultTxn(dataSource, output);
-      } catch (DBOSWorkflowConflictException e) {
+      } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
       }
     }

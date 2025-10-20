@@ -15,15 +15,15 @@ public class DBOSQueueDuplicatedException extends RuntimeException {
     this.deduplicationId = deduplicationId;
   }
 
-  public String getWorkflowId() {
+  public String workflowId() {
     return workflowId;
   }
 
-  public String getQueueName() {
+  public String queueName() {
     return queueName;
   }
 
-  public String getDeduplicationId() {
+  public String deduplicationId() {
     return deduplicationId;
   }
 }

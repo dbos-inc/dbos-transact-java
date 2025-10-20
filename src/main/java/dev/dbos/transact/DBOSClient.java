@@ -9,7 +9,6 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Duration;
@@ -20,6 +19,28 @@ import java.util.OptionalInt;
 import java.util.UUID;
 
 public class DBOSClient implements AutoCloseable {
+  public class WorkflowHandleClient<T, E extends Exception> implements WorkflowHandle<T, E> {
+    private String workflowId;
+
+    public WorkflowHandleClient(String workflowId) {
+      this.workflowId = workflowId;
+    }
+
+    @Override
+    public String getWorkflowId() {
+      return workflowId;
+    }
+
+    @Override
+    public T getResult() throws E {
+      return systemDatabase.awaitWorkflowResult(workflowId);
+    }
+
+    @Override
+    public WorkflowStatus getStatus() {
+      return systemDatabase.getWorkflowStatus(workflowId);
+    }
+  }
 
   private final SystemDatabase systemDatabase;
 
@@ -232,7 +253,7 @@ public class DBOSClient implements AutoCloseable {
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> retrieveWorkflow(String workflowId) {
-    return new WorkflowHandleDBPoll<T, E>(workflowId, systemDatabase);
+    return new WorkflowHandleClient<T, E>(workflowId);
   }
 
   public void cancelWorkflow(String workflowId) {
@@ -251,7 +272,7 @@ public class DBOSClient implements AutoCloseable {
   }
 
   public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) {
-    return systemDatabase.getWorkflowStatus(workflowId);
+    return Optional.ofNullable(systemDatabase.getWorkflowStatus(workflowId));
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {

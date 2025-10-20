@@ -2,6 +2,7 @@ package dev.dbos.transact.workflow.internal;
 
 public class StepResult {
   private String workflowId;
+  private String childWorkflowId;
   private int stepId;
   private String functionName;
   private String output;
@@ -10,16 +11,26 @@ public class StepResult {
   public StepResult() {}
 
   public StepResult(
-      String workflowId, int stepId, String functionName, String output, String error) {
+      String workflowId,
+      int stepId,
+      String functionName,
+      String output,
+      String error,
+      String childWorkflowId) {
     this.workflowId = workflowId;
     this.stepId = stepId;
     this.functionName = functionName;
     this.output = output;
     this.error = error;
+    this.childWorkflowId = childWorkflowId;
   }
 
   public String getWorkflowId() {
     return workflowId;
+  }
+
+  public String getChildWorkflowId() {
+    return childWorkflowId;
   }
 
   public int getStepId() {
@@ -40,6 +51,10 @@ public class StepResult {
 
   public void setWorkflowId(String workflowId) {
     this.workflowId = workflowId;
+  }
+
+  public void setChildWorkflowId(String childWorkflowId) {
+    this.childWorkflowId = childWorkflowId;
   }
 
   public void setStepId(int stepId) {

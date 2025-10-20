@@ -6,7 +6,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.QueuesTest;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
@@ -18,13 +17,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class QueueChildWorkflowTest {
-
-  private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
 
   private static DBOSConfig dbosConfig;
 
@@ -87,18 +82,21 @@ public class QueueChildWorkflowTest {
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).status());
 
     List<StepInfo> steps = DBOS.listWorkflowSteps(handle.getWorkflowId());
-    assertEquals(3, steps.size());
+    assertEquals(6, steps.size());
     assertEquals("child1", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("childWorkflow", steps.get(0).functionName());
+    assertEquals("DBOS.getResult", steps.get(1).functionName());
 
-    assertEquals("child2", steps.get(1).childWorkflowId());
-    assertEquals(1, steps.get(1).functionId());
-    assertEquals("childWorkflow2", steps.get(1).functionName());
-
-    assertEquals("child3", steps.get(2).childWorkflowId());
+    assertEquals("child2", steps.get(2).childWorkflowId());
     assertEquals(2, steps.get(2).functionId());
-    assertEquals("childWorkflow3", steps.get(2).functionName());
+    assertEquals("childWorkflow2", steps.get(2).functionName());
+    assertEquals("DBOS.getResult", steps.get(3).functionName());
+
+    assertEquals("child3", steps.get(4).childWorkflowId());
+    assertEquals(4, steps.get(4).functionId());
+    assertEquals("childWorkflow3", steps.get(4).functionName());
+    assertEquals("DBOS.getResult", steps.get(5).functionName());
   }
 
   @Test
@@ -133,15 +131,17 @@ public class QueueChildWorkflowTest {
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).status());
 
     List<StepInfo> steps = DBOS.listWorkflowSteps("wf-123456");
-    assertEquals(1, steps.size());
+    assertEquals(2, steps.size());
     assertEquals("child4", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("childWorkflow4", steps.get(0).functionName());
+    assertEquals("DBOS.getResult", steps.get(1).functionName());
 
     steps = DBOS.listWorkflowSteps("child4");
-    assertEquals(1, steps.size());
+    assertEquals(2, steps.size());
     assertEquals("child5", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("grandchildWorkflow", steps.get(0).functionName());
+    assertEquals("DBOS.getResult", steps.get(1).functionName());
   }
 }

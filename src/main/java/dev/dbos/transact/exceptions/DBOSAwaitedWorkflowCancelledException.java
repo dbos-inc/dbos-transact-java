@@ -8,7 +8,7 @@ public class DBOSAwaitedWorkflowCancelledException extends RuntimeException {
     this.workflowId = workflowId;
   }
 
-  public String getWorkflowId() {
+  public String workflowId() {
     return workflowId;
   }
 }

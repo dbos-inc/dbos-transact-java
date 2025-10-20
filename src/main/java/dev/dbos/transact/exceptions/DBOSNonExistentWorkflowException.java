@@ -8,7 +8,7 @@ public class DBOSNonExistentWorkflowException extends RuntimeException {
     this.workflowId = workflowId;
   }
 
-  public String getWorkflowId() {
+  public String workflowId() {
     return workflowId;
   }
 }
