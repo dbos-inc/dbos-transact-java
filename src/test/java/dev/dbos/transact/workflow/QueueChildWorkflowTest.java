@@ -6,7 +6,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.QueuesTest;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
@@ -18,13 +17,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class QueueChildWorkflowTest {
-
-  private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
 
   private static DBOSConfig dbosConfig;
 

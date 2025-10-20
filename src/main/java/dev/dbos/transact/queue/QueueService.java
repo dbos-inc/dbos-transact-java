@@ -31,6 +31,7 @@ public class QueueService {
     this.dbosExecutor = dbosExecutor;
   }
 
+  @SuppressWarnings("deprecation") // Thread.currentThread().getId()
   private void pollForWorkflows() {
     logger.debug("PollQueuesThread started {}", Thread.currentThread().getId());
 
