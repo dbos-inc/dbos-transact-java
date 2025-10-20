@@ -12,11 +12,11 @@ public class DBOSDeadLetterQueueException extends RuntimeException {
             workflowId, maxRetries));
   }
 
-  public String getWorkflowId() {
+  public String workflowId() {
     return workflowId;
   }
 
-  public int getMaxRetries() {
+  public int maxRetries() {
     return maxRetries;
   }
 }
