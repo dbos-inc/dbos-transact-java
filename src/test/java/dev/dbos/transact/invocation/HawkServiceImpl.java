@@ -2,7 +2,6 @@ package dev.dbos.transact.invocation;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.workflow.Scheduled;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 
@@ -43,7 +42,6 @@ public class HawkServiceImpl implements HawkService {
     return proxy.simpleWorkflow();
   }
 
-  @Scheduled(cron = "")
   @Workflow
   @Override
   public String parentStartWorkflow() {

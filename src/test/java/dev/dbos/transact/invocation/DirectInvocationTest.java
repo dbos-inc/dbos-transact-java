@@ -11,7 +11,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
-import dev.dbos.transact.workflow.Scheduled;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -68,15 +67,6 @@ public class DirectInvocationTest {
 
   @Test
   void directInvoke() {
-
-    var reg = DBOS.instance().wfReg();
-    for (var wf: reg.values()) {
-      var ann = wf.workflowMethod().getAnnotation(Scheduled.class);
-      System.err.println();
-
-
-    }
-
 
     var result = proxy.simpleWorkflow();
     assertEquals(localDate, result);
