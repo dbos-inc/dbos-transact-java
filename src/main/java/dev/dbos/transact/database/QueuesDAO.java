@@ -54,16 +54,15 @@ public class QueuesDAO {
 
       // Check rate limiter if configured
       if (queue.hasLimiter()) {
-        String limiterQuery =
+        final String limiterQuery =
             """
-                        SELECT COUNT(*)
-                        FROM %s.workflow_status
-                        WHERE queue_name = ?
-                        AND status != 'ENQUEUED'
-                        AND started_at_epoch_ms > ?;
-                        """;
-
-        limiterQuery = String.format(limiterQuery, Constants.DB_SCHEMA);
+              SELECT COUNT(*)
+              FROM %s.workflow_status
+              WHERE queue_name = ?
+              AND status != 'ENQUEUED'
+              AND started_at_epoch_ms > ?;
+              """
+                .formatted(Constants.DB_SCHEMA);
 
         try (PreparedStatement ps = connection.prepareStatement(limiterQuery)) {
           ps.setString(1, queue.name());
@@ -86,14 +85,14 @@ public class QueuesDAO {
 
       if (queue.workerConcurrency() > 0 || queue.concurrency() > 0) {
         // Count pending workflows by executor
-        String pendingQuery =
+        final String pendingQuery =
             """
             SELECT executor_id, COUNT(*) as task_count
             FROM %s.workflow_status
             WHERE queue_name = ? AND status = 'PENDING'
             GROUP BY executor_id;
-            """;
-        pendingQuery = String.format(pendingQuery, Constants.DB_SCHEMA);
+            """
+                .formatted(Constants.DB_SCHEMA);
 
         Map<String, Integer> pendingWorkflowsDict = new HashMap<>();
         try (PreparedStatement ps = connection.prepareStatement(pendingQuery)) {
@@ -135,12 +134,12 @@ public class QueuesDAO {
       StringBuilder queryBuilder =
           new StringBuilder(
               """
-                    SELECT workflow_uuid
-                    FROM %s.workflow_status
-                    WHERE queue_name = ?
-                    AND status = 'ENQUEUED'
-                    AND (application_version = ? OR application_version IS NULL)
-                    """);
+                SELECT workflow_uuid
+                FROM %s.workflow_status
+                WHERE queue_name = ?
+                  AND status = 'ENQUEUED'
+                  AND (application_version = ? OR application_version IS NULL)
+              """);
 
       // Add ordering
       if (queue.priorityEnabled()) {
@@ -161,7 +160,7 @@ public class QueuesDAO {
         queryBuilder.append(" FOR UPDATE SKIP LOCKED");
       }
 
-      String workflowsQuery = String.format(queryBuilder.toString(), Constants.DB_SCHEMA);
+      String workflowsQuery = queryBuilder.toString().formatted(Constants.DB_SCHEMA);
 
       List<String> dequeuedIds = new ArrayList<>();
       try (PreparedStatement ps = connection.prepareStatement(workflowsQuery)) {
@@ -187,22 +186,21 @@ public class QueuesDAO {
       List<String> retIds = new ArrayList<>();
 
       // Update workflow status for each dequeued workflow
-      String updateQuery =
+      final String updateQuery =
           """
-                    UPDATE %s.workflow_status
-                    SET status = 'PENDING',
-                        application_version = ?,
-                        executor_id = ?,
-                        started_at_epoch_ms = ?,
-                        workflow_deadline_epoch_ms = CASE
-                            WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
-                                THEN ? + workflow_timeout_ms
-                            ELSE workflow_deadline_epoch_ms
-                        END
-                    WHERE workflow_uuid = ?;
-                    """;
-
-      updateQuery = String.format(updateQuery, Constants.DB_SCHEMA);
+            UPDATE %s.workflow_status
+            SET status = 'PENDING',
+              application_version = ?,
+              executor_id = ?,
+              started_at_epoch_ms = ?,
+              workflow_deadline_epoch_ms = CASE
+                WHEN workflow_timeout_ms IS NOT NULL AND workflow_deadline_epoch_ms IS NULL
+                THEN ? + workflow_timeout_ms
+                ELSE workflow_deadline_epoch_ms
+              END
+            WHERE workflow_uuid = ?;
+          """
+              .formatted(Constants.DB_SCHEMA);
 
       try (PreparedStatement updatePs = connection.prepareStatement(updateQuery)) {
         for (String id : dequeuedIds) {
@@ -222,8 +220,8 @@ public class QueuesDAO {
           updatePs.addBatch();
           retIds.add(id);
         }
-        // TODO: should we be checking updateCounts?
-        int[] updateCounts = updatePs.executeBatch();
+
+        updatePs.executeBatch();
       }
 
       connection.commit();
@@ -240,13 +238,13 @@ public class QueuesDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
-    String sqlTemplate =
+    final String sql =
         """
-                UPDATE %s.workflow_status
-                SET started_at_epoch_ms = NULL, status = ?
-                WHERE workflow_uuid = ? AND queue_name IS NOT NULL AND status = ?
-                """;
-    final String sql = String.format(sqlTemplate, Constants.DB_SCHEMA);
+          UPDATE %s.workflow_status
+          SET started_at_epoch_ms = NULL, status = ?
+          WHERE workflow_uuid = ? AND queue_name IS NOT NULL AND status = ?
+        """
+            .formatted(Constants.DB_SCHEMA);
     try (Connection connection = dataSource.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, WorkflowState.ENQUEUED.name());

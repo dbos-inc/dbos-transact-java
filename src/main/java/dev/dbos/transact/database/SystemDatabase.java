@@ -291,9 +291,9 @@ public class SystemDatabase implements AutoCloseable {
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return DbRetry.call(
         () -> {
-          String sql =
-              " SELECT value, update_seq, update_time FROM %s.event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ? ";
-          sql = String.format(sql, Constants.DB_SCHEMA);
+          final String sql =
+              " SELECT value, update_seq, update_time FROM %s.event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ? "
+                  .formatted(Constants.DB_SCHEMA);
 
           try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {
@@ -320,7 +320,7 @@ public class SystemDatabase implements AutoCloseable {
   public ExternalState upsertExternalState(ExternalState state) {
     return DbRetry.call(
         () -> {
-          var sql =
+          final var sql =
               """
               INSERT INTO %s.event_dispatch_kv (
                service_name, workflow_fn_name, key, value, update_time, update_seq)
@@ -334,8 +334,8 @@ public class SystemDatabase implements AutoCloseable {
                    OR (event_dispatch_kv.update_time IS NULL and event_dispatch_kv.update_seq IS NULL)
                 ) THEN EXCLUDED.value ELSE event_dispatch_kv.value END
               RETURNING value, update_time, update_seq
-                   """;
-          sql = String.format(sql, Constants.DB_SCHEMA);
+                   """
+                  .formatted(Constants.DB_SCHEMA);
 
           try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {
