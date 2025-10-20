@@ -8,7 +8,7 @@ public class DBOSSystemDatabaseException extends RuntimeException {
     this.underlyingException = e;
   }
 
-  public Throwable getDatabaseException() {
+  public Throwable databaseException() {
     return underlyingException;
   }
 }

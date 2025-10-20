@@ -10,11 +10,11 @@ public class DBOSWorkflowFunctionNotFoundException extends RuntimeException {
     this.workflowId = id;
   }
 
-  public String getWorkflowName() {
+  public String workflowName() {
     return workflowName;
   }
 
-  public String getWorkflowId() {
+  public String workflowId() {
     return workflowId;
   }
 }
