@@ -18,8 +18,19 @@ public class DBOSUnexpectedStepException extends RuntimeException {
     this.recordedName = recordedName;
   }
 
-  public String workflowId() { return this.workflowId; }
-  public int stepId() { return this.stepId; }
-  public String expectedName() { return this.expectedName; }
-  public String recordedName() { return this.recordedName; }
+  public String workflowId() {
+    return this.workflowId;
+  }
+
+  public int stepId() {
+    return this.stepId;
+  }
+
+  public String expectedName() {
+    return this.expectedName;
+  }
+
+  public String recordedName() {
+    return this.recordedName;
+  }
 }

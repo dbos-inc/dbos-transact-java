@@ -8,5 +8,7 @@ public class DBOSConflictingWorkflowException extends RuntimeException {
     this.workflowId = workflowId;
   }
 
-  public String workflowId() { return this.workflowId; }
+  public String workflowId() {
+    return this.workflowId;
+  }
 }
