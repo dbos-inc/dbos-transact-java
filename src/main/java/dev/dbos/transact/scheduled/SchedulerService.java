@@ -4,10 +4,14 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSExecutor.ExecuteWorkflowOptions;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.workflow.Scheduled;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.OptionalInt;
@@ -27,64 +31,89 @@ public class SchedulerService {
 
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
 
-  public record ScheduledInstance(
-      String className, String workflowName, Object instance, Cron cron) {}
-
   private static final Logger logger = LoggerFactory.getLogger(SchedulerService.class);
   private static final CronParser cronParser =
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
-
-  public static ScheduledInstance makeScheduledInstance(
-      String className, String workflowName, Object instance, String cronExpr) {
-    logger.debug("Scheduling wf {}", workflowName);
-    Cron cron = cronParser.parse(cronExpr);
-    return new ScheduledInstance(className, workflowName, instance, cron);
-  }
 
   private final DBOSExecutor dbosExecutor;
   private volatile boolean stop = false;
   private final Queue schedulerQueue;
   private final String schedulerQueueName;
-  private final List<ScheduledInstance> scheduledWorkflows;
 
-  public SchedulerService(
-      DBOSExecutor dbosExecutor, Queue schedulerQueue, List<ScheduledInstance> scheduledWorkflows) {
+  public SchedulerService(DBOSExecutor dbosExecutor, Queue schedulerQueue) {
     this.dbosExecutor = Objects.requireNonNull(dbosExecutor);
     this.schedulerQueue = Objects.requireNonNull(schedulerQueue);
     this.schedulerQueueName = this.schedulerQueue.name();
-    this.scheduledWorkflows = Objects.requireNonNull(scheduledWorkflows);
+  }
+
+  public void start() {
+    startScheduledWorkflows();
+    stop = false;
+  }
+
+  public void stop() {
+    stop = true;
+    List<Runnable> notRun = scheduler.shutdownNow();
+    logger.debug("Shutting down scheduler service. Tasks not run {}", notRun.size());
   }
 
   private void startScheduledWorkflows() {
 
-    for (var wf : this.scheduledWorkflows) {
+    var expectedParams = new Class<?>[] {Instant.class, Instant.class};
 
-      ExecutionTime executionTime = ExecutionTime.forCron(wf.cron);
-
-      RegisteredWorkflow regWF = dbosExecutor.getWorkflow(wf.className, "", wf.workflowName);
-      if (regWF == null) {
-        throw new IllegalStateException(
-            "Workflow not registered: %s/%s".formatted(wf.className, wf.workflowName));
+    // collect all workflows that have an @Scheduled annotation
+    record SceduledWorkflow(RegisteredWorkflow workflow, Cron cron) {}
+    List<SceduledWorkflow> scheduledWorkflows = new ArrayList<>();
+    for (var wf : this.dbosExecutor.getWorkflows()) {
+      var method = wf.workflowMethod();
+      var skedTag = method.getAnnotation(Scheduled.class);
+      if (skedTag == null) {
+        continue;
       }
 
-      Runnable scheduleTask =
+      var paramTypes = method.getParameterTypes();
+      if (!Arrays.equals(paramTypes, expectedParams)) {
+        logger.error(
+            "Scheduled workflow {} has invalid signature, signature must be (Instant, Instant)",
+            wf.fullyQualifiedName());
+        continue;
+      }
+
+      try {
+        var cron = cronParser.parse(skedTag.cron());
+        scheduledWorkflows.add(new SceduledWorkflow(wf, Objects.requireNonNull(cron)));
+      } catch (IllegalArgumentException e) {
+        logger.error(
+            "Scheduled workflow {} has invalid cron expression {}",
+            wf.fullyQualifiedName(),
+            skedTag.cron());
+      }
+    }
+
+    for (var swf : scheduledWorkflows) {
+      ExecutionTime executionTime = ExecutionTime.forCron(swf.cron());
+
+      var wf = swf.workflow();
+
+      var task =
           new Runnable() {
             @Override
             public void run() {
+
               try {
                 ZonedDateTime scheduledTime = ZonedDateTime.now(ZoneOffset.UTC);
                 Object[] args = new Object[2];
                 args[0] = scheduledTime.toInstant();
                 args[1] = ZonedDateTime.now(ZoneOffset.UTC).toInstant();
-                logger.debug("submitting to dbos Executor {}", wf.workflowName);
+                logger.debug("submitting to dbos Executor {}", wf.fullyQualifiedName());
                 String workflowId =
-                    String.format("sched-%s-%s", wf.workflowName, scheduledTime.toString());
+                    String.format("sched-%s-%s", wf.fullyQualifiedName(), scheduledTime.toString());
                 var options =
                     new ExecuteWorkflowOptions(
                         workflowId, null, null, schedulerQueueName, null, OptionalInt.empty());
-                dbosExecutor.executeWorkflow(regWF, args, options, null, null);
+                dbosExecutor.executeWorkflow(wf, args, options, null, null);
               } catch (Exception e) {
-                e.printStackTrace();
+                logger.error("Scheduled task exception {}", wf.fullyQualifiedName(), e);
               }
 
               if (!stop) {
@@ -109,19 +138,8 @@ public class SchedulerService {
           .ifPresent(
               nextTime -> {
                 long initialDelayMs = Duration.between(now, nextTime).toMillis();
-                scheduler.schedule(scheduleTask, initialDelayMs, TimeUnit.MILLISECONDS);
+                scheduler.schedule(task, initialDelayMs, TimeUnit.MILLISECONDS);
               });
     }
-  }
-
-  public void stop() {
-    stop = true;
-    List<Runnable> notRun = scheduler.shutdownNow();
-    logger.debug("Shutting down scheduler service. Tasks not run {}", notRun.size());
-  }
-
-  public void start() {
-    startScheduledWorkflows();
-    stop = false;
   }
 }

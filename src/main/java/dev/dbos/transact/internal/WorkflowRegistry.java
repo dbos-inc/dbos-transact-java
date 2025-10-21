@@ -9,10 +9,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public class WorkflowRegistry {
   private final ConcurrentHashMap<String, RegisteredWorkflow> registry = new ConcurrentHashMap<>();
 
-  public static String getFullyQualifiedWFName(String cls, String instanceName, String wf) {
-    return String.format("%s/%s/%s", cls, instanceName, wf);
-  }
-
   public void register(
       String className,
       String workflowName,
@@ -21,7 +17,7 @@ public class WorkflowRegistry {
       Method method,
       int maxRecoveryAttempts) {
 
-    var fqName = getFullyQualifiedWFName(className, instanceName, workflowName);
+    var fqName = RegisteredWorkflow.fullyQualifiedWFName(className, instanceName, workflowName);
     var previous =
         registry.putIfAbsent(
             fqName,

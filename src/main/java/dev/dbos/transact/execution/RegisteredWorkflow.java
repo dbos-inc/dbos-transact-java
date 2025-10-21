@@ -36,6 +36,15 @@ public record RegisteredWorkflow(
         maxRecoveryAttempts);
   }
 
+  public static String fullyQualifiedWFName(
+      String className, String instanceName, String workflowName) {
+    return String.format("%s/%s/%s", className, instanceName, workflowName);
+  }
+
+  public String fullyQualifiedName() {
+    return fullyQualifiedWFName(className, instanceName, name);
+  }
+
   public <T, E extends Exception> T invoke(Object[] args) throws E {
     try {
       return (T) workflowMethod.invoke(target, args);

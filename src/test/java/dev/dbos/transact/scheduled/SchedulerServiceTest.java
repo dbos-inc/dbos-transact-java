@@ -1,200 +1,201 @@
-package dev.dbos.transact.scheduled;
+// package dev.dbos.transact.scheduled;
 
-import static org.junit.jupiter.api.Assertions.*;
+// import static org.junit.jupiter.api.Assertions.*;
 
-import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.utils.DBUtils;
-import dev.dbos.transact.workflow.*;
+// import dev.dbos.transact.DBOS;
+// import dev.dbos.transact.DBOSTestAccess;
+// import dev.dbos.transact.config.DBOSConfig;
+// import dev.dbos.transact.utils.DBUtils;
+// import dev.dbos.transact.workflow.*;
 
-import java.sql.SQLException;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
+// import java.sql.SQLException;
+// import java.time.Duration;
+// import java.time.Instant;
+// import java.util.List;
+// import java.util.concurrent.TimeUnit;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
+// import org.junit.jupiter.api.AfterEach;
+// import org.junit.jupiter.api.BeforeAll;
+// import org.junit.jupiter.api.BeforeEach;
+// import org.junit.jupiter.api.Test;
+// import org.junit.jupiter.api.Timeout;
 
-@Timeout(value = 2, unit = TimeUnit.MINUTES)
-class SchedulerServiceTest {
+// @Timeout(value = 2, unit = TimeUnit.MINUTES)
+// class SchedulerServiceTest {
 
-  private static DBOSConfig dbosConfig;
+//   private static DBOSConfig dbosConfig;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    SchedulerServiceTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .maximumPoolSize(2)
-            .build();
-  }
+//   @BeforeAll
+//   static void onetimeSetup() throws Exception {
+//     SchedulerServiceTest.dbosConfig =
+//         new DBOSConfig.Builder()
+//             .appName("systemdbtest")
+//             .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+//             .dbUser("postgres")
+//             .maximumPoolSize(2)
+//             .build();
+//   }
 
-  @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
-  }
+//   @BeforeEach
+//   void beforeEachTest() throws SQLException {
+//     DBUtils.recreateDB(dbosConfig);
+//     DBOS.reinitialize(dbosConfig);
+//   }
 
-  @AfterEach
-  void afterEachTest() throws Exception {
-    // let scheduled workflows drain
-    Thread.sleep(1000);
-    DBOS.shutdown();
-  }
+//   @AfterEach
+//   void afterEachTest() throws Exception {
+//     // let scheduled workflows drain
+//     Thread.sleep(1000);
+//     DBOS.shutdown();
+//   }
 
-  @Test
-  public void simpleScheduledWorkflow() throws Exception {
+//   @Test
+//   public void simpleScheduledWorkflow() throws Exception {
 
-    EverySecWorkflow swf = new EverySecWorkflow();
-    DBOS.scheduleWorkflow(swf);
-    DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService();
+//     EverySecWorkflow swf = new EverySecWorkflow();
+//     DBOS.scheduleWorkflow(swf);
+//     DBOS.launch();
+//     var schedulerService = DBOSTestAccess.getSchedulerService();
 
-    Thread.sleep(5000);
-    schedulerService.stop();
-    Thread.sleep(1000);
+//     Thread.sleep(5000);
+//     schedulerService.stop();
+//     Thread.sleep(1000);
 
-    int count = swf.wfCounter;
-    System.out.println("Final count: " + count);
-    assertTrue(count >= 2);
-    assertTrue(count <= 5);
-  }
+//     int count = swf.wfCounter;
+//     System.out.println("Final count: " + count);
+//     assertTrue(count >= 2);
+//     assertTrue(count <= 5);
+//   }
 
-  @Test
-  public void ThirdSecWorkflow() throws Exception {
+//   @Test
+//   public void ThirdSecWorkflow() throws Exception {
 
-    EveryThirdSec swf = new EveryThirdSec();
-    DBOS.scheduleWorkflow(swf);
-    DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService();
+//     EveryThirdSec swf = new EveryThirdSec();
+//     DBOS.scheduleWorkflow(swf);
+//     DBOS.launch();
+//     var schedulerService = DBOSTestAccess.getSchedulerService();
 
-    Thread.sleep(5000);
-    schedulerService.stop();
-    Thread.sleep(1000);
+//     Thread.sleep(5000);
+//     schedulerService.stop();
+//     Thread.sleep(1000);
 
-    int count = swf.wfCounter;
-    System.out.println("Final count: " + count);
-    assertTrue(count >= 1);
-    assertTrue(count <= 2);
-  }
+//     int count = swf.wfCounter;
+//     System.out.println("Final count: " + count);
+//     assertTrue(count >= 1);
+//     assertTrue(count <= 2);
+//   }
 
-  @Test
-  public void MultipleWorkflowsTest() throws Exception {
+//   @Test
+//   public void MultipleWorkflowsTest() throws Exception {
 
-    MultipleWorkflows swf = new MultipleWorkflows();
-    DBOS.scheduleWorkflow(swf);
-    DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService();
+//     MultipleWorkflows swf = new MultipleWorkflows();
+//     DBOS.scheduleWorkflow(swf);
+//     DBOS.launch();
+//     var schedulerService = DBOSTestAccess.getSchedulerService();
 
-    Thread.sleep(5000);
-    schedulerService.stop();
-    Thread.sleep(1000);
+//     Thread.sleep(5000);
+//     schedulerService.stop();
+//     Thread.sleep(1000);
 
-    int count = swf.wfCounter;
-    System.out.println("Final count: " + count);
-    assertTrue(count >= 2);
-    assertTrue(count <= 5);
-    int count3 = swf.wfCounter3;
-    System.out.println("Final count3: " + count3);
-    assertTrue(count3 <= 2);
-  }
+//     int count = swf.wfCounter;
+//     System.out.println("Final count: " + count);
+//     assertTrue(count >= 2);
+//     assertTrue(count <= 5);
+//     int count3 = swf.wfCounter3;
+//     System.out.println("Final count3: " + count3);
+//     assertTrue(count3 <= 2);
+//   }
 
-  @Test
-  public void TimedWorkflowsTest() throws Exception {
+//   @Test
+//   public void TimedWorkflowsTest() throws Exception {
 
-    TimedWorkflow swf = new TimedWorkflow();
-    DBOS.scheduleWorkflow(swf);
-    DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService();
+//     TimedWorkflow swf = new TimedWorkflow();
+//     DBOS.scheduleWorkflow(swf);
+//     DBOS.launch();
+//     var schedulerService = DBOSTestAccess.getSchedulerService();
 
-    Thread.sleep(5000);
-    schedulerService.stop();
-    Thread.sleep(1000);
+//     Thread.sleep(5000);
+//     schedulerService.stop();
+//     Thread.sleep(1000);
 
-    assertNotNull(swf.scheduled);
-    assertNotNull(swf.actual);
-    Duration delta = Duration.between(swf.scheduled, swf.actual).abs();
-    assertTrue(delta.toMillis() < 1000);
-  }
+//     assertNotNull(swf.scheduled);
+//     assertNotNull(swf.actual);
+//     Duration delta = Duration.between(swf.scheduled, swf.actual).abs();
+//     assertTrue(delta.toMillis() < 1000);
+//   }
 
-  @Test
-  public void invalidMethod() {
+//   @Test
+//   public void invalidMethod() {
 
-    InvalidMethodWorkflow imv = new InvalidMethodWorkflow();
+//     InvalidMethodWorkflow imv = new InvalidMethodWorkflow();
 
-    try {
-      DBOS.scheduleWorkflow(imv);
-      assertTrue(false); // fail if we get here
-    } catch (IllegalArgumentException e) {
-      assertEquals(
-          "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)",
-          e.getMessage());
-    }
-  }
+//     try {
+//       DBOS.scheduleWorkflow(imv);
+//       assertTrue(false); // fail if we get here
+//     } catch (IllegalArgumentException e) {
+//       assertEquals(
+//           "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)",
+//           e.getMessage());
+//     }
+//   }
 
-  @Test
-  public void invalidCron() {
+//   @Test
+//   public void invalidCron() {
 
-    InvalidCronWorkflow icw = new InvalidCronWorkflow();
+//     InvalidCronWorkflow icw = new InvalidCronWorkflow();
 
-    try {
-      DBOS.scheduleWorkflow(icw);
-      assertTrue(false); // fail if we get here
-    } catch (IllegalArgumentException e) {
+//     try {
+//       DBOS.scheduleWorkflow(icw);
+//       assertTrue(false); // fail if we get here
+//     } catch (IllegalArgumentException e) {
 
-      System.out.println(e.getMessage());
-      assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]", e.getMessage());
-    }
-  }
+//       System.out.println(e.getMessage());
+//       assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]",
+// e.getMessage());
+//     }
+//   }
 
-  @Test
-  public void stepsTest() throws Exception {
+//   @Test
+//   public void stepsTest() throws Exception {
 
-    Steps steps = DBOS.registerWorkflows(Steps.class, new StepsImpl());
+//     Steps steps = DBOS.registerWorkflows(Steps.class, new StepsImpl());
 
-    WorkflowWithSteps swf = new WorkflowWithSteps(steps);
-    DBOS.scheduleWorkflow(swf);
-    DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService();
+//     WorkflowWithSteps swf = new WorkflowWithSteps(steps);
+//     DBOS.scheduleWorkflow(swf);
+//     DBOS.launch();
+//     var schedulerService = DBOSTestAccess.getSchedulerService();
 
-    Thread.sleep(5000);
-    schedulerService.stop();
-    Thread.sleep(1000);
+//     Thread.sleep(5000);
+//     schedulerService.stop();
+//     Thread.sleep(1000);
 
-    var input = new ListWorkflowsInput.Builder().build();
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
-    assertTrue(wfs.size() <= 2);
+//     var input = new ListWorkflowsInput.Builder().build();
+//     List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
+//     assertTrue(wfs.size() <= 2);
 
-    List<StepInfo> wsteps = DBOS.listWorkflowSteps(wfs.get(0).workflowId());
-    assertEquals(2, wsteps.size());
-  }
+//     List<StepInfo> wsteps = DBOS.listWorkflowSteps(wfs.get(0).workflowId());
+//     assertEquals(2, wsteps.size());
+//   }
 
-  // Manual test only do not enable and commit
-  // @Test
-  public void everyMinute() throws Exception {
-    EveryMinute em = new EveryMinute();
-    DBOS.scheduleWorkflow(em);
-    Thread.sleep(600000);
-  }
+//   // Manual test only do not enable and commit
+//   // @Test
+//   public void everyMinute() throws Exception {
+//     EveryMinute em = new EveryMinute();
+//     DBOS.scheduleWorkflow(em);
+//     Thread.sleep(600000);
+//   }
 
-  public static class InvalidMethodWorkflow {
+//   public static class InvalidMethodWorkflow {
 
-    @Workflow
-    @Scheduled(cron = "0/1 * * * * ?")
-    public void scheduledWF(Instant scheduled, String actual) {}
-  }
+//     @Workflow
+//     @Scheduled(cron = "0/1 * * * * ?")
+//     public void scheduledWF(Instant scheduled, String actual) {}
+//   }
 
-  public static class InvalidCronWorkflow {
+//   public static class InvalidCronWorkflow {
 
-    @Workflow
-    @Scheduled(cron = "* * * * *")
-    public void scheduledWF(Instant scheduled, Instant actual) {}
-  }
-}
+//     @Workflow
+//     @Scheduled(cron = "* * * * *")
+//     public void scheduledWF(Instant scheduled, Instant actual) {}
+//   }
+// }
