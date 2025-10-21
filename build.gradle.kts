@@ -39,6 +39,7 @@ plugins {
     id("java")
     id("java-library")
     id("maven-publish")
+    id("pmd")
     id("com.diffplug.spotless") version "6.25.0"
 }
 
@@ -58,6 +59,20 @@ spotless {
         removeUnusedImports()
         trimTrailingWhitespace()
         endWithNewline()
+    }
+}
+
+pmd {
+    ruleSets = listOf() // disable defaults
+    ruleSetFiles = files("config/pmd/ruleset.xml")
+    isConsoleOutput = true
+    toolVersion = "7.16.0"
+}
+
+tasks.withType<Pmd> {
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
     }
 }
 
