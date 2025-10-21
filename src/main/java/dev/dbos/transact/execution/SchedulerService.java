@@ -1,8 +1,6 @@
-package dev.dbos.transact.scheduled;
+package dev.dbos.transact.execution;
 
-import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSExecutor.ExecuteWorkflowOptions;
-import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.workflow.Scheduled;
 

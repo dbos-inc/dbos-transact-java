@@ -19,7 +19,6 @@ import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.queue.QueueService;
-import dev.dbos.transact.scheduled.SchedulerService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
