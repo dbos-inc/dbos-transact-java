@@ -115,7 +115,7 @@ public class SchedulerService {
               }
 
               if (!stop) {
-                logger.debug("Scheduling the next execution");
+                logger.debug("Scheduling the next execution {}", wf.fullyQualifiedName());
                 ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
                 executionTime
                     .nextExecution(now)

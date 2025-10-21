@@ -1,128 +1,128 @@
-// package dev.dbos.transact.scheduled;
+package dev.dbos.transact.scheduled;
 
-// import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.*;
 
-// import dev.dbos.transact.DBOS;
-// import dev.dbos.transact.DBOSTestAccess;
-// import dev.dbos.transact.config.DBOSConfig;
-// import dev.dbos.transact.utils.DBUtils;
-// import dev.dbos.transact.workflow.*;
+import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 
-// import java.sql.SQLException;
-// import java.time.Duration;
-// import java.time.Instant;
-// import java.util.List;
-// import java.util.concurrent.TimeUnit;
+import java.sql.SQLException;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
-// import org.junit.jupiter.api.AfterEach;
-// import org.junit.jupiter.api.BeforeAll;
-// import org.junit.jupiter.api.BeforeEach;
-// import org.junit.jupiter.api.Test;
-// import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
-// @Timeout(value = 2, unit = TimeUnit.MINUTES)
-// class SchedulerServiceTest {
+@Timeout(value = 2, unit = TimeUnit.MINUTES)
+class SchedulerServiceTest {
 
-//   private static DBOSConfig dbosConfig;
+  private static DBOSConfig dbosConfig;
 
-//   @BeforeAll
-//   static void onetimeSetup() throws Exception {
-//     SchedulerServiceTest.dbosConfig =
-//         new DBOSConfig.Builder()
-//             .appName("systemdbtest")
-//             .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-//             .dbUser("postgres")
-//             .maximumPoolSize(2)
-//             .build();
-//   }
+  @BeforeAll
+  static void onetimeSetup() throws Exception {
+    SchedulerServiceTest.dbosConfig =
+        new DBOSConfig.Builder()
+            .appName("systemdbtest")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .dbUser("postgres")
+            .maximumPoolSize(2)
+            .build();
+  }
 
-//   @BeforeEach
-//   void beforeEachTest() throws SQLException {
-//     DBUtils.recreateDB(dbosConfig);
-//     DBOS.reinitialize(dbosConfig);
-//   }
+  @BeforeEach
+  void beforeEachTest() throws SQLException {
+    DBUtils.recreateDB(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
+  }
 
-//   @AfterEach
-//   void afterEachTest() throws Exception {
-//     // let scheduled workflows drain
-//     Thread.sleep(1000);
-//     DBOS.shutdown();
-//   }
+  @AfterEach
+  void afterEachTest() throws Exception {
+    // let scheduled workflows drain
+    Thread.sleep(1000);
+    DBOS.shutdown();
+  }
 
-//   @Test
-//   public void simpleScheduledWorkflow() throws Exception {
+  @Test
+  public void simpleScheduledWorkflow() throws Exception {
 
-//     EverySecWorkflow swf = new EverySecWorkflow();
-//     DBOS.scheduleWorkflow(swf);
-//     DBOS.launch();
-//     var schedulerService = DBOSTestAccess.getSchedulerService();
+    var impl = new SkedServiceImpl();
+    DBOS.registerWorkflows(SkedService.class, impl);
 
-//     Thread.sleep(5000);
-//     schedulerService.stop();
-//     Thread.sleep(1000);
+    DBOS.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
-//     int count = swf.wfCounter;
-//     System.out.println("Final count: " + count);
-//     assertTrue(count >= 2);
-//     assertTrue(count <= 5);
-//   }
+    Thread.sleep(5000);
+    schedulerService.stop();
+    Thread.sleep(1000);
 
-//   @Test
-//   public void ThirdSecWorkflow() throws Exception {
+    int count = impl.everySecondCounter;
+    System.out.println("Final count: " + count);
+    assertTrue(count >= 2);
+    assertTrue(count <= 5);
+  }
 
-//     EveryThirdSec swf = new EveryThirdSec();
-//     DBOS.scheduleWorkflow(swf);
-//     DBOS.launch();
-//     var schedulerService = DBOSTestAccess.getSchedulerService();
+  @Test
+  public void ThirdSecWorkflow() throws Exception {
 
-//     Thread.sleep(5000);
-//     schedulerService.stop();
-//     Thread.sleep(1000);
+    var impl = new SkedServiceImpl();
+    DBOS.registerWorkflows(SkedService.class, impl);
 
-//     int count = swf.wfCounter;
-//     System.out.println("Final count: " + count);
-//     assertTrue(count >= 1);
-//     assertTrue(count <= 2);
-//   }
+    DBOS.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
-//   @Test
-//   public void MultipleWorkflowsTest() throws Exception {
+    Thread.sleep(5000);
+    schedulerService.stop();
+    Thread.sleep(1000);
 
-//     MultipleWorkflows swf = new MultipleWorkflows();
-//     DBOS.scheduleWorkflow(swf);
-//     DBOS.launch();
-//     var schedulerService = DBOSTestAccess.getSchedulerService();
+    int count = impl.everyThirdCounter;
+    System.out.println("Final count: " + count);
+    assertTrue(count >= 1);
+    assertTrue(count <= 2);
+  }
 
-//     Thread.sleep(5000);
-//     schedulerService.stop();
-//     Thread.sleep(1000);
+  @Test
+  public void MultipleWorkflowsTest() throws Exception {
 
-//     int count = swf.wfCounter;
-//     System.out.println("Final count: " + count);
-//     assertTrue(count >= 2);
-//     assertTrue(count <= 5);
-//     int count3 = swf.wfCounter3;
-//     System.out.println("Final count3: " + count3);
-//     assertTrue(count3 <= 2);
-//   }
+    var impl = new SkedServiceImpl();
+    DBOS.registerWorkflows(SkedService.class, impl);
+    DBOS.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
-//   @Test
-//   public void TimedWorkflowsTest() throws Exception {
+    Thread.sleep(5000);
+    schedulerService.stop();
+    Thread.sleep(1000);
 
-//     TimedWorkflow swf = new TimedWorkflow();
-//     DBOS.scheduleWorkflow(swf);
-//     DBOS.launch();
-//     var schedulerService = DBOSTestAccess.getSchedulerService();
+    int count = impl.everySecondCounter;
+    System.out.println("Final count: " + count);
+    assertTrue(count >= 2);
+    assertTrue(count <= 5);
+    int count3 = impl.everyThirdCounter;
+    System.out.println("Final count3: " + count3);
+    assertTrue(count3 <= 2);
+  }
 
-//     Thread.sleep(5000);
-//     schedulerService.stop();
-//     Thread.sleep(1000);
+  @Test
+  public void TimedWorkflowsTest() throws Exception {
 
-//     assertNotNull(swf.scheduled);
-//     assertNotNull(swf.actual);
-//     Duration delta = Duration.between(swf.scheduled, swf.actual).abs();
-//     assertTrue(delta.toMillis() < 1000);
-//   }
+    var impl = new SkedServiceImpl();
+    DBOS.registerWorkflows(SkedService.class, impl);
+    DBOS.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService();
+
+    Thread.sleep(5000);
+    schedulerService.stop();
+    Thread.sleep(1000);
+
+    assertNotNull(impl.scheduled);
+    assertNotNull(impl.actual);
+    Duration delta = Duration.between(impl.scheduled, impl.actual).abs();
+    assertTrue(delta.toMillis() < 1000);
+  }
 
 //   @Test
 //   public void invalidMethod() {
@@ -155,27 +155,25 @@
 //     }
 //   }
 
-//   @Test
-//   public void stepsTest() throws Exception {
+  @Test
+  public void stepsTest() throws Exception {
 
-//     Steps steps = DBOS.registerWorkflows(Steps.class, new StepsImpl());
+    var impl = new SkedServiceImpl();
+    DBOS.registerWorkflows(SkedService.class, impl);
+    DBOS.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService();
 
-//     WorkflowWithSteps swf = new WorkflowWithSteps(steps);
-//     DBOS.scheduleWorkflow(swf);
-//     DBOS.launch();
-//     var schedulerService = DBOSTestAccess.getSchedulerService();
+    Thread.sleep(5000);
+    schedulerService.stop();
+    Thread.sleep(1000);
 
-//     Thread.sleep(5000);
-//     schedulerService.stop();
-//     Thread.sleep(1000);
+    var input = new ListWorkflowsInput.Builder().workflowName("withSteps").build();
+    var workflows = DBOS.listWorkflows(input);
+    assertTrue(workflows.size() <= 2);
 
-//     var input = new ListWorkflowsInput.Builder().build();
-//     List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
-//     assertTrue(wfs.size() <= 2);
-
-//     List<StepInfo> wsteps = DBOS.listWorkflowSteps(wfs.get(0).workflowId());
-//     assertEquals(2, wsteps.size());
-//   }
+    var steps = DBOS.listWorkflowSteps(workflows.get(0).workflowId());
+    assertEquals(2, steps.size());
+  }
 
 //   // Manual test only do not enable and commit
 //   // @Test
@@ -198,4 +196,4 @@
 //     @Scheduled(cron = "* * * * *")
 //     public void scheduledWF(Instant scheduled, Instant actual) {}
 //   }
-// }
+}
