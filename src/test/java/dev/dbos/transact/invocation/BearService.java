@@ -9,4 +9,6 @@ public interface BearService {
   Instant nowStep();
 
   Instant stepWorkflow();
+
+  String listSteps(String wfid);
 }

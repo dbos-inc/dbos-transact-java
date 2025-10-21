@@ -220,4 +220,18 @@ public class MultiInstTest {
       assertEquals(2, bimpla.nWfCalls);
     }
   }
+
+  @Test
+  void listSteps() throws Exception {
+    var bh = DBOS.startWorkflow(() -> bproxya.stepWorkflow());
+    bh.getResult();
+    var sh = DBOS.startWorkflow(() -> bproxya.listSteps(bh.getWorkflowId()));
+    var ss = sh.getResult();
+    assertEquals("1 1", ss);
+
+    var steps = DBOS.listWorkflowSteps(sh.getWorkflowId());
+    assertEquals(2, steps.size());
+    assertEquals("DBOS.listWorkflows", steps.get(0).functionName());
+    assertEquals("DBOS.listWorkflowSteps", steps.get(1).functionName());
+  }
 }
