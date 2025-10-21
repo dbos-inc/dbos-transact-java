@@ -396,15 +396,11 @@ public class QueuesTest {
             "{\"orderId\":\"ORD-12345\"}");
 
     for (int i = 0; i < 4; i++) {
-
-      try (Connection conn = dataSource.getConnection()) {
-
-        String wfid = "id" + i;
-        wfStatusInternal.setWorkflowUUID(wfid);
-        wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
-        wfStatusInternal.setDeduplicationId("dedup" + i);
-        systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
-      }
+      String wfid = "id" + i;
+      wfStatusInternal.setWorkflowUUID(wfid);
+      wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
+      wfStatusInternal.setDeduplicationId("dedup" + i);
+      systemDatabase.initWorkflowStatus(wfStatusInternal, null);
     }
 
     List<String> idsToRun =
@@ -479,15 +475,11 @@ public class QueuesTest {
 
     // executor1
     for (int i = 0; i < 2; i++) {
-
-      try (Connection conn = dataSource.getConnection()) {
-
-        String wfid = "id" + i;
-        wfStatusInternal.setWorkflowUUID(wfid);
-        wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
-        wfStatusInternal.setDeduplicationId("dedup" + i);
-        systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
-      }
+      String wfid = "id" + i;
+      wfStatusInternal.setWorkflowUUID(wfid);
+      wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
+      wfStatusInternal.setDeduplicationId("dedup" + i);
+      systemDatabase.initWorkflowStatus(wfStatusInternal, null);
     }
 
     // executor2
@@ -495,15 +487,12 @@ public class QueuesTest {
     String executor2 = "remote";
     for (int i = 2; i < 5; i++) {
 
-      try (Connection conn = dataSource.getConnection()) {
-
-        String wfid = "id" + i;
-        wfStatusInternal.setWorkflowUUID(wfid);
-        wfStatusInternal.setStatus(WorkflowState.PENDING);
-        wfStatusInternal.setDeduplicationId("dedup" + i);
-        wfStatusInternal.setExecutorId(executor2);
-        systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
-      }
+      String wfid = "id" + i;
+      wfStatusInternal.setWorkflowUUID(wfid);
+      wfStatusInternal.setStatus(WorkflowState.PENDING);
+      wfStatusInternal.setDeduplicationId("dedup" + i);
+      wfStatusInternal.setExecutorId(executor2);
+      systemDatabase.initWorkflowStatus(wfStatusInternal, null);
     }
 
     List<String> idsToRun =

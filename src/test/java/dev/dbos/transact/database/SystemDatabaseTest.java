@@ -2,11 +2,11 @@ package dev.dbos.transact.database;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.WorkflowState;
-import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.Connection;
@@ -79,17 +79,16 @@ class SystemDatabaseTest {
             "{\"orderId\":\"ORD-12345\"}");
 
     try (Connection conn = systemDatabase.getSysDBConnection()) {
-      InsertWorkflowResult result = systemDatabase.insertWorkflowStatus(conn, wfStatusInternal);
+      var result = systemDatabase.initWorkflowStatus(wfStatusInternal, null);
+      var nstat = systemDatabase.getWorkflowStatus(workflowId);
 
       assertNotNull(result);
-      assertEquals(0, result.getRecoveryAttempts());
       assertEquals(wfStatusInternal.getStatus().toString(), result.getStatus());
-      assertEquals(wfStatusInternal.getName(), result.getName());
-      assertEquals(wfStatusInternal.getClassName(), result.getClassName());
-      assertEquals(wfStatusInternal.getInstanceName(), result.getInstanceName());
-      assertEquals(wfStatusInternal.getQueueName(), result.getQueueName());
-      assertEquals(
-          wfStatusInternal.getWorkflowDeadlineEpochMs(), result.getWorkflowDeadlineEpochMs());
+      assertEquals(wfStatusInternal.getName(), nstat.name());
+      assertEquals(wfStatusInternal.getClassName(), nstat.className());
+      assertEquals(wfStatusInternal.getInstanceName(), nstat.instanceName());
+      assertEquals(wfStatusInternal.getQueueName(), nstat.queueName());
+      assertEquals(wfStatusInternal.getWorkflowDeadlineEpochMs(), nstat.deadlineEpochMs());
     }
   }
 }

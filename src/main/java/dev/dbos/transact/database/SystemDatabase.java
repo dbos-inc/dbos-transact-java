@@ -9,7 +9,6 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
-import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
@@ -90,17 +89,6 @@ public class SystemDatabase implements AutoCloseable {
         () -> {
           return workflowDAO.initWorkflowStatus(initStatus, maxRetries);
         });
-  }
-
-  /**
-   * Insert into the workflow_status table
-   *
-   * @param status @WorkflowStatusInternal holds the data for a workflow_status row
-   * @return @InsertWorkflowResult some of the column inserted
-   */
-  public InsertWorkflowResult insertWorkflowStatus(
-      Connection connection, WorkflowStatusInternal status) throws SQLException {
-    return workflowDAO.insertWorkflowStatus(connection, status);
   }
 
   /**
