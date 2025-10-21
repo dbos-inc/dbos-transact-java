@@ -1,12 +1,12 @@
 package dev.dbos.transact.internal;
 
-import dev.dbos.transact.queue.Queue;
-
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import dev.dbos.transact.workflow.Queue;
 
 public class QueueRegistry {
   private final ConcurrentHashMap<String, Queue> registry = new ConcurrentHashMap<>();

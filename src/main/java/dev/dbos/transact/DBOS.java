@@ -11,7 +11,6 @@ import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
-import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;

@@ -1,10 +1,10 @@
 package dev.dbos.transact;
 
-import dev.dbos.transact.queue.Queue;
-
 import java.time.Duration;
 import java.util.OptionalInt;
 import java.util.concurrent.TimeUnit;
+
+import dev.dbos.transact.workflow.Queue;
 
 public record StartWorkflowOptions(
     String workflowId,

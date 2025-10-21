@@ -1,10 +1,10 @@
-package dev.dbos.transact.queue;
+package dev.dbos.transact.execution;
 
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.workflow.Queue;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;

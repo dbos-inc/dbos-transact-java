@@ -1,4 +1,4 @@
-package dev.dbos.transact.queue;
+package dev.dbos.transact.workflow;
 
 import java.util.Objects;
 

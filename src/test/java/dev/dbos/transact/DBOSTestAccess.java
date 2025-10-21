@@ -3,8 +3,8 @@ package dev.dbos.transact;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSExecutorTestAccess;
+import dev.dbos.transact.execution.QueueService;
 import dev.dbos.transact.execution.SchedulerService;
-import dev.dbos.transact.queue.QueueService;
 
 // Helper class to retrieve DBOS internals via package private methods
 public class DBOSTestAccess {
