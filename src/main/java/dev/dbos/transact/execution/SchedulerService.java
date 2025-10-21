@@ -44,6 +44,24 @@ public class SchedulerService {
     this.schedulerQueueName = this.schedulerQueue.name();
   }
 
+  public static void validateScheduledWorkflow(RegisteredWorkflow workflow) {
+    var method = workflow.workflowMethod();
+    var skedTag = method.getAnnotation(Scheduled.class);
+    if (skedTag == null) {
+      return;
+    }
+
+    var expectedParams = new Class<?>[] {Instant.class, Instant.class};
+    var paramTypes = method.getParameterTypes();
+    if (!Arrays.equals(paramTypes, expectedParams)) {
+      throw new IllegalArgumentException(
+          "Invalid signature for Scheduled workflow %s. Signature must be (Instant, Instant)"
+              .formatted(workflow.fullyQualifiedName()));
+    }
+
+    cronParser.parse(skedTag.cron());
+  }
+
   public void start() {
     startScheduledWorkflows();
     stop = false;

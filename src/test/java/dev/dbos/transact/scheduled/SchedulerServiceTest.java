@@ -124,36 +124,25 @@ class SchedulerServiceTest {
     assertTrue(delta.toMillis() < 1000);
   }
 
-//   @Test
-//   public void invalidMethod() {
+  @Test
+  public void invalidSignature() {
+    var e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> DBOS.registerWorkflows(InvalidSig.class, new InvalidSigImpl()));
+    assertEquals(
+        "Invalid signature for Scheduled workflow dev.dbos.transact.scheduled.InvalidSigImpl//scheduledWF. Signature must be (Instant, Instant)",
+        e.getMessage());
+  }
 
-//     InvalidMethodWorkflow imv = new InvalidMethodWorkflow();
-
-//     try {
-//       DBOS.scheduleWorkflow(imv);
-//       assertTrue(false); // fail if we get here
-//     } catch (IllegalArgumentException e) {
-//       assertEquals(
-//           "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)",
-//           e.getMessage());
-//     }
-//   }
-
-//   @Test
-//   public void invalidCron() {
-
-//     InvalidCronWorkflow icw = new InvalidCronWorkflow();
-
-//     try {
-//       DBOS.scheduleWorkflow(icw);
-//       assertTrue(false); // fail if we get here
-//     } catch (IllegalArgumentException e) {
-
-//       System.out.println(e.getMessage());
-//       assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]",
-// e.getMessage());
-//     }
-//   }
+  @Test
+  public void invalidCron() {
+    var e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> DBOS.registerWorkflows(InvalidCron.class, new InvalidCronImpl()));
+    assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]", e.getMessage());
+  }
 
   @Test
   public void stepsTest() throws Exception {
@@ -174,26 +163,4 @@ class SchedulerServiceTest {
     var steps = DBOS.listWorkflowSteps(workflows.get(0).workflowId());
     assertEquals(2, steps.size());
   }
-
-//   // Manual test only do not enable and commit
-//   // @Test
-//   public void everyMinute() throws Exception {
-//     EveryMinute em = new EveryMinute();
-//     DBOS.scheduleWorkflow(em);
-//     Thread.sleep(600000);
-//   }
-
-//   public static class InvalidMethodWorkflow {
-
-//     @Workflow
-//     @Scheduled(cron = "0/1 * * * * ?")
-//     public void scheduledWF(Instant scheduled, String actual) {}
-//   }
-
-//   public static class InvalidCronWorkflow {
-
-//     @Workflow
-//     @Scheduled(cron = "* * * * *")
-//     public void scheduledWF(Instant scheduled, Instant actual) {}
-//   }
 }

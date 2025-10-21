@@ -1,6 +1,7 @@
 package dev.dbos.transact.internal;
 
 import dev.dbos.transact.execution.RegisteredWorkflow;
+import dev.dbos.transact.execution.SchedulerService;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -18,12 +19,11 @@ public class WorkflowRegistry {
       int maxRecoveryAttempts) {
 
     var fqName = RegisteredWorkflow.fullyQualifiedWFName(className, instanceName, workflowName);
-    var previous =
-        registry.putIfAbsent(
-            fqName,
-            new RegisteredWorkflow(
-                workflowName, target, instanceName, method, maxRecoveryAttempts));
+    var regWorkflow =
+        new RegisteredWorkflow(workflowName, target, instanceName, method, maxRecoveryAttempts);
+    SchedulerService.validateScheduledWorkflow(regWorkflow);
 
+    var previous = registry.putIfAbsent(fqName, regWorkflow);
     if (previous != null) {
       throw new IllegalStateException("Workflow already registered with name: " + fqName);
     }
