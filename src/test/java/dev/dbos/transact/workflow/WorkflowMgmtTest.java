@@ -264,7 +264,7 @@ public class WorkflowMgmtTest {
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertTrue(rstatHandle.getWorkflowId() != workflowId);
+    assertNotEquals(rstatHandle.getWorkflowId(), workflowId);
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -281,7 +281,7 @@ public class WorkflowMgmtTest {
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertTrue(rstatHandle.getWorkflowId() != workflowId);
+    assertNotEquals(rstatHandle.getWorkflowId(), workflowId);
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -295,7 +295,7 @@ public class WorkflowMgmtTest {
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertTrue(rstatHandle.getWorkflowId() != workflowId);
+    assertNotEquals(rstatHandle.getWorkflowId(), workflowId);
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -440,7 +440,7 @@ public class WorkflowMgmtTest {
 
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertTrue(rstatHandle.getWorkflowId() != workflowId);
+    assertNotEquals(rstatHandle.getWorkflowId(), workflowId);
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);

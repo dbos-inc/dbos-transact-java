@@ -128,7 +128,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       Queue schedulerQueue = null;
       for (var queue : queues) {
-        if (queue.name() == Constants.DBOS_SCHEDULER_QUEUE) {
+        if (queue.name().equals(Constants.DBOS_SCHEDULER_QUEUE)) {
           schedulerQueue = queue;
         }
       }
@@ -244,7 +244,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     for (var queue : queues) {
-      if (queue.name() == queueName) {
+      if (queue.name().equals(queueName)) {
         return Optional.of(queue);
       }
     }

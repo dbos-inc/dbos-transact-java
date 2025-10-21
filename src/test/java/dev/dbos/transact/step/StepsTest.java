@@ -233,9 +233,6 @@ public class StepsTest {
 
     var handle = DBOS.retrieveWorkflow(workflowId);
     String expectedRes = "2 Retries: 2.  No retry: 1.  Backoff timeout: 2.";
-    if (expectedRes != handle.getResult()) {
-      System.out.println(handle.getResult());
-    }
     assertEquals(expectedRes, (String) handle.getResult());
 
     List<StepInfo> stepInfos = DBOS.listWorkflowSteps(workflowId);

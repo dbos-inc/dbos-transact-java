@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<ruleset name="Custom rules"
+         xmlns="https://pmd.github.io/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="https://pmd.github.io/ruleset/2.0.0 https://pmd.github.io/ruleset_2_0_0.xsd">
+  <description>Custom PMD rules for my project.</description>
+
+  <!-- Detect use of '==' for String equality -->
+  <rule ref="category/java/errorprone.xml/UseEqualsToCompareStrings"/>
+
+  <!-- Examples of other handy rules -->
+  <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod"/>
+</ruleset>
+
