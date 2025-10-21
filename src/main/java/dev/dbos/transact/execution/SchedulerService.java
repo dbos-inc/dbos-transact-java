@@ -78,8 +78,8 @@ public class SchedulerService {
     var expectedParams = new Class<?>[] {Instant.class, Instant.class};
 
     // collect all workflows that have an @Scheduled annotation
-    record SceduledWorkflow(RegisteredWorkflow workflow, Cron cron) {}
-    List<SceduledWorkflow> scheduledWorkflows = new ArrayList<>();
+    record ScheduledWorkflow(RegisteredWorkflow workflow, Cron cron) {}
+    List<ScheduledWorkflow> scheduledWorkflows = new ArrayList<>();
     for (var wf : this.dbosExecutor.getWorkflows()) {
       var method = wf.workflowMethod();
       var skedTag = method.getAnnotation(Scheduled.class);
@@ -97,7 +97,7 @@ public class SchedulerService {
 
       try {
         var cron = cronParser.parse(skedTag.cron());
-        scheduledWorkflows.add(new SceduledWorkflow(wf, Objects.requireNonNull(cron)));
+        scheduledWorkflows.add(new ScheduledWorkflow(wf, Objects.requireNonNull(cron)));
       } catch (IllegalArgumentException e) {
         logger.error(
             "Scheduled workflow {} has invalid cron expression {}",
