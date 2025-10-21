@@ -31,7 +31,7 @@ class SkedServiceImpl implements SkedService {
 
   @Override
   @Workflow
-  @Scheduled(cron = "0/1 * * * * ?")
+  @Scheduled(cron = "0/1 * * * * *")
   public void everySecond(Instant scheduled, Instant actual) {
     logger.info("Executing everySecond {} {} {}", everySecondCounter, scheduled, actual);
     ++everySecondCounter;
@@ -39,7 +39,7 @@ class SkedServiceImpl implements SkedService {
 
   @Override
   @Workflow
-  @Scheduled(cron = "0/3 * * * * ?")
+  @Scheduled(cron = "0/3 * * * * *")
   public void everyThird(Instant scheduled, Instant actual) {
     logger.info("Executing everyThird {} {} {}", everyThirdCounter, scheduled, actual);
     ++everyThirdCounter;
@@ -47,7 +47,7 @@ class SkedServiceImpl implements SkedService {
 
   @Override
   @Workflow
-  @Scheduled(cron = "0/4 * * * * ?")
+  @Scheduled(cron = "0/4 * * * * *")
   public void timed(Instant scheduled, Instant actual) {
     logger.info("Executing timed {} {}", scheduled, actual);
     this.scheduled = Objects.requireNonNull(scheduled);
@@ -56,7 +56,7 @@ class SkedServiceImpl implements SkedService {
 
   @Override
   @Workflow
-  @Scheduled(cron = "0/4 * * * * ?")
+  @Scheduled(cron = "0/4 * * * * *")
   public void withSteps(Instant scheduled, Instant actual) {
     logger.info("Executing withSteps {} {}", scheduled, actual);
     DBOS.runStep(() -> {}, "stepOne");

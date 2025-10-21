@@ -31,7 +31,7 @@ public class SchedulerService {
 
   private static final Logger logger = LoggerFactory.getLogger(SchedulerService.class);
   private static final CronParser cronParser =
-      new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ));
+      new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING53));
 
   private final DBOSExecutor dbosExecutor;
   private volatile boolean stop = false;

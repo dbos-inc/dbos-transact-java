@@ -141,7 +141,7 @@ class SchedulerServiceTest {
         assertThrows(
             IllegalArgumentException.class,
             () -> DBOS.registerWorkflows(InvalidCron.class, new InvalidCronImpl()));
-    assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]", e.getMessage());
+    assertEquals("Cron expression contains 5 parts but we expect one of [6]", e.getMessage());
   }
 
   @Test
