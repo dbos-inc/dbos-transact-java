@@ -110,38 +110,28 @@ public class WorkflowDAO {
         final int attempts = resRow.getRecoveryAttempts();
         if (maxRetries != null && attempts > maxRetries + 1) {
 
-          UpdateWorkflowOptions options = new UpdateWorkflowOptions();
-          options.setWhereStatus(WorkflowState.PENDING.toString());
-          options.setThrowOnFailure(false);
+          var sql = """
+              UPDATE %s.workflow_status
+              SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL
+              WHERE workflow_uuid = ? AND status = ?
+              """.formatted(Constants.DB_SCHEMA);
 
-          updateWorkflowStatus(
-              connection,
-              initStatus.getWorkflowUUID(),
-              WorkflowState.RETRIES_EXCEEDED.toString(),
-              options);
-          throw new DBOSDeadLetterQueueException(initStatus.getWorkflowUUID(), maxRetries);
+          try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.toString());
+            stmt.setString(2, initStatus.getWorkflowUUID());
+            stmt.setString(3, WorkflowState.PENDING.toString());
+            
+            stmt.executeUpdate();
+          }
+
+          throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.getWorkflowUUID(), maxRetries);
         }
 
-        connection.commit(); // Commit transaction on success
         return new WorkflowInitResult(
             initStatus.getWorkflowUUID(), resRow.getStatus(), resRow.getWorkflowDeadlineEpochMs());
 
-      } catch (SQLException e) {
-
-        try {
-          connection.rollback();
-        } catch (SQLException rollbackEx) {
-          logger.error("Rollback failed", rollbackEx);
-        }
-        throw e; // Re-throw the original SQLException
-      } catch (DBOSConflictingWorkflowException | DBOSDeadLetterQueueException e) {
-        // Rollback for custom business exceptions
-        try {
-          connection.rollback();
-        } catch (SQLException rollbackEx) {
-          logger.error("Rollback failed", rollbackEx);
-        }
-        throw e; // Re-throw the custom exception
+      } finally {
+        connection.commit();
       }
     } // end try with resources connection closed
   }
@@ -220,7 +210,6 @@ public class WorkflowDAO {
         }
 
       } catch (SQLException e) {
-
         if ("23505".equals(e.getSQLState())) {
           throw new DBOSQueueDuplicatedException(
               status.getWorkflowUUID(),
@@ -233,92 +222,31 @@ public class WorkflowDAO {
     }
   }
 
-  public void updateWorkflowStatus(
-      Connection connection, String workflowId, String status, UpdateWorkflowOptions options)
-      throws SQLException {
+  public void updateWorkflowOutcome(Connection connection, String workflowId, WorkflowState status, String output, String error) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
-    StringBuilder setClauseBuilder = new StringBuilder("SET status = ?, updated_at = ?");
-    StringBuilder whereClauseBuilder = new StringBuilder("WHERE workflow_uuid = ?");
+    // Note that transitions from CANCELLED to SUCCESS or ERROR are forbidden
+    var sql = """
+      UPDATE %s.workflow_status
+      SET status = ?, output = ?, error = ?, updated_at = ?, deduplication_id = NULL
+      WHERE workflow_uuid = ? AND NOT (status = ? AND ? in (?, ?))
+      """.formatted(Constants.DB_SCHEMA);
 
-    List<Object> finalOrderedArgs = new ArrayList<>();
+    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+      stmt.setString(1, status.toString());
+      stmt.setString(2, output);
+      stmt.setString(3, error);
+      stmt.setLong(4, Instant.now().toEpochMilli());
+      stmt.setString(5, workflowId);
+      stmt.setString(6, WorkflowState.CANCELLED.toString());
+      stmt.setString(7, status.toString());
+      stmt.setString(8, WorkflowState.SUCCESS.toString());
+      stmt.setString(9, WorkflowState.ERROR.toString());
+      
+      stmt.executeUpdate();
 
-    finalOrderedArgs.add(status);
-    finalOrderedArgs.add(Instant.now().toEpochMilli());
-
-    if (options.getOutput() != null) {
-      setClauseBuilder.append(", output = ?");
-      finalOrderedArgs.add(options.getOutput());
-    }
-
-    if (options.getError() != null) {
-      setClauseBuilder.append(", error = ?");
-      finalOrderedArgs.add(options.getError());
-    }
-
-    if (options.getResetRecoveryAttempts() != null && options.getResetRecoveryAttempts()) {
-      setClauseBuilder.append(", recovery_attempts = 0");
-    }
-
-    if (options.getResetDeadline() != null && options.getResetDeadline()) {
-      setClauseBuilder.append(", workflow_deadline_epoch_ms = NULL");
-    }
-
-    if (options.getQueueName() != null) {
-      setClauseBuilder.append(", queue_name = ?");
-      finalOrderedArgs.add(options.getQueueName()); // This handles both String and
-      // null
-    }
-
-    if (options.getResetDeduplicationId() != null && options.getResetDeduplicationId()) {
-      setClauseBuilder.append(", deduplication_id = NULL");
-    }
-
-    if (options.getResetStartedAtEpochMs() != null && options.getResetStartedAtEpochMs()) {
-      setClauseBuilder.append(", started_at_epoch_ms = NULL");
-    }
-
-    finalOrderedArgs.add(workflowId); // This must be the first parameter in the WHERE
-    // clause part (for WHERE
-    // workflow_uuid = ?)
-
-    if (options.getWhereStatus() != null) {
-      whereClauseBuilder.append(" AND status = ?");
-      finalOrderedArgs.add(options.getWhereStatus());
-    }
-
-    // Construct the final SQL query
-    String sql =
-        "UPDATE %s.workflow_status %s %s"
-            .formatted(
-                Constants.DB_SCHEMA, setClauseBuilder.toString(), whereClauseBuilder.toString());
-
-    int affectedRows;
-    try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-      // Bind all parameters in order
-      for (int i = 0; i < finalOrderedArgs.size(); i++) {
-        Object arg = finalOrderedArgs.get(i);
-        if (arg == null) {
-          pstmt.setNull(i + 1, Types.VARCHAR); // Default to VARCHAR for null
-          // strings
-        } else if (arg instanceof String) {
-          pstmt.setString(i + 1, (String) arg);
-        } else if (arg instanceof Long) {
-          pstmt.setLong(i + 1, (Long) arg);
-        } else if (arg instanceof Integer) {
-          pstmt.setInt(i + 1, (Integer) arg);
-        } else {
-          pstmt.setObject(i + 1, arg); // Fallback for other types
-        }
-      }
-
-      affectedRows = pstmt.executeUpdate();
-    }
-
-    if (options.getThrowOnFailure() && affectedRows != 1) {
-      throw new DBOSWorkflowExecutionConflictException(workflowId);
     }
   }
 
@@ -334,12 +262,7 @@ public class WorkflowDAO {
     }
 
     try (Connection connection = dataSource.getConnection()) {
-
-      UpdateWorkflowOptions options = new UpdateWorkflowOptions();
-      options.setOutput(result);
-      options.setResetDeduplicationId(true);
-
-      updateWorkflowStatus(connection, workflowId, WorkflowState.SUCCESS.toString(), options);
+      updateWorkflowOutcome(connection, workflowId, WorkflowState.SUCCESS, result, null);
     }
   }
 
@@ -355,12 +278,7 @@ public class WorkflowDAO {
     }
 
     try (Connection connection = dataSource.getConnection()) {
-
-      UpdateWorkflowOptions options = new UpdateWorkflowOptions();
-      options.setError(error);
-      options.setResetDeduplicationId(true);
-
-      updateWorkflowStatus(connection, workflowId, WorkflowState.ERROR.toString(), options);
+      updateWorkflowOutcome(connection, workflowId, WorkflowState.ERROR, null, error);
     }
   }
 

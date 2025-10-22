@@ -320,7 +320,7 @@ public class TimeoutTest {
         Exception.class,
         () -> {
           try (var id = options.setContext()) {
-            simpleService.longParent("12345", 3, 0);
+            simpleService.longParent("12345", 10, 0);
           }
         });
 
@@ -343,7 +343,7 @@ public class TimeoutTest {
     var options = new StartWorkflowOptions(wfid1).withTimeout(2, TimeUnit.SECONDS);
 
     WorkflowHandle<String, ?> handle =
-        DBOS.startWorkflow(() -> simpleService.longParent("12345", 3, 0), options);
+        DBOS.startWorkflow(() -> simpleService.longParent("12345", 10, 0), options);
 
     assertThrows(DBOSAwaitedWorkflowCancelledException.class, () -> handle.getResult());
   }
