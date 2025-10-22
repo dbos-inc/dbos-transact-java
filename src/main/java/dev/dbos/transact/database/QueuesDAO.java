@@ -1,7 +1,7 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.*;

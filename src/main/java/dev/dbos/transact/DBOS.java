@@ -11,18 +11,12 @@ import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
-import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.scheduled.SchedulerService;
-import dev.dbos.transact.scheduled.SchedulerService.ScheduledInstance;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -40,7 +34,6 @@ public class DBOS {
   public static class Instance {
     private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
     private final QueueRegistry queueRegistry = new QueueRegistry();
-    private final List<ScheduledInstance> scheduledWorkflows = new ArrayList<>();
 
     private DBOSConfig config;
 
@@ -124,7 +117,6 @@ public class DBOS {
     void clearRegistry() {
       workflowRegistry.clear();
       queueRegistry.clear();
-      scheduledWorkflows.clear();
 
       registerInternals();
     }
@@ -153,45 +145,13 @@ public class DBOS {
         var executor = new DBOSExecutor(config);
 
         if (dbosExecutor.compareAndSet(null, executor)) {
-          executor.start(
-              this,
-              workflowRegistry.getSnapshot(),
-              queueRegistry.getSnapshot(),
-              List.copyOf(scheduledWorkflows));
+          executor.start(this, workflowRegistry.getSnapshot(), queueRegistry.getSnapshot());
         }
       }
     }
 
     public void send(String destinationId, Object message, String topic) {
       executor("send").send(destinationId, message, topic, internalWorkflowsService);
-    }
-
-    public void scheduleWorkflow(Object implementation) {
-      var expectedParams = new Class<?>[] {Instant.class, Instant.class};
-
-      for (Method method : implementation.getClass().getDeclaredMethods()) {
-        Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-        if (wfAnnotation == null) {
-          continue;
-        }
-
-        Scheduled scheduled = method.getAnnotation(Scheduled.class);
-        if (scheduled == null) {
-          continue;
-        }
-
-        var paramTypes = method.getParameterTypes();
-        if (!Arrays.equals(paramTypes, expectedParams)) {
-          throw new IllegalArgumentException(
-              "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)");
-        }
-
-        String wfName = registerWorkflowMethod(wfAnnotation, implementation, "", method);
-        var scheduledWF =
-            SchedulerService.makeScheduledInstance(
-                implementation.getClass().getName(), wfName, implementation, scheduled.cron());
-        this.scheduledWorkflows.add(scheduledWF);
-      }
     }
 
     public void shutdown() {
@@ -211,16 +171,6 @@ public class DBOS {
   public static <T> T registerWorkflows(
       Class<T> interfaceClass, T implementation, String instanceName) {
     return ensureInstance().registerWorkflows(interfaceClass, implementation, instanceName);
-  }
-
-  /**
-   * Scans the class for all methods that have Workflow and Scheduled annotations and schedules them
-   * for execution
-   *
-   * @param implementation instance of a class
-   */
-  public static void scheduleWorkflow(Object implementation) {
-    ensureInstance().scheduleWorkflow(implementation);
   }
 
   public static QueueBuilder Queue(String name) {

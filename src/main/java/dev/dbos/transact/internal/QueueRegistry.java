@@ -1,6 +1,6 @@
 package dev.dbos.transact.internal;
 
-import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.workflow.Queue;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;

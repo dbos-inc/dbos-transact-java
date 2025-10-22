@@ -6,12 +6,10 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
-import dev.dbos.transact.workflow.*;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 
 import java.sql.SQLException;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
@@ -52,8 +50,9 @@ class SchedulerServiceTest {
   @Test
   public void simpleScheduledWorkflow() throws Exception {
 
-    EverySecWorkflow swf = new EverySecWorkflow();
-    DBOS.scheduleWorkflow(swf);
+    var impl = new SkedServiceImpl();
+    DBOS.registerWorkflows(SkedService.class, impl);
+
     DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService();
 
@@ -61,7 +60,7 @@ class SchedulerServiceTest {
     schedulerService.stop();
     Thread.sleep(1000);
 
-    int count = swf.wfCounter;
+    int count = impl.everySecondCounter;
     System.out.println("Final count: " + count);
     assertTrue(count >= 2);
     assertTrue(count <= 5);
@@ -70,8 +69,9 @@ class SchedulerServiceTest {
   @Test
   public void ThirdSecWorkflow() throws Exception {
 
-    EveryThirdSec swf = new EveryThirdSec();
-    DBOS.scheduleWorkflow(swf);
+    var impl = new SkedServiceImpl();
+    DBOS.registerWorkflows(SkedService.class, impl);
+
     DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService();
 
@@ -79,7 +79,7 @@ class SchedulerServiceTest {
     schedulerService.stop();
     Thread.sleep(1000);
 
-    int count = swf.wfCounter;
+    int count = impl.everyThirdCounter;
     System.out.println("Final count: " + count);
     assertTrue(count >= 1);
     assertTrue(count <= 2);
@@ -88,8 +88,8 @@ class SchedulerServiceTest {
   @Test
   public void MultipleWorkflowsTest() throws Exception {
 
-    MultipleWorkflows swf = new MultipleWorkflows();
-    DBOS.scheduleWorkflow(swf);
+    var impl = new SkedServiceImpl();
+    DBOS.registerWorkflows(SkedService.class, impl);
     DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService();
 
@@ -97,11 +97,11 @@ class SchedulerServiceTest {
     schedulerService.stop();
     Thread.sleep(1000);
 
-    int count = swf.wfCounter;
+    int count = impl.everySecondCounter;
     System.out.println("Final count: " + count);
     assertTrue(count >= 2);
     assertTrue(count <= 5);
-    int count3 = swf.wfCounter3;
+    int count3 = impl.everyThirdCounter;
     System.out.println("Final count3: " + count3);
     assertTrue(count3 <= 2);
   }
@@ -109,8 +109,8 @@ class SchedulerServiceTest {
   @Test
   public void TimedWorkflowsTest() throws Exception {
 
-    TimedWorkflow swf = new TimedWorkflow();
-    DBOS.scheduleWorkflow(swf);
+    var impl = new SkedServiceImpl();
+    DBOS.registerWorkflows(SkedService.class, impl);
     DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService();
 
@@ -118,49 +118,37 @@ class SchedulerServiceTest {
     schedulerService.stop();
     Thread.sleep(1000);
 
-    assertNotNull(swf.scheduled);
-    assertNotNull(swf.actual);
-    Duration delta = Duration.between(swf.scheduled, swf.actual).abs();
+    assertNotNull(impl.scheduled);
+    assertNotNull(impl.actual);
+    Duration delta = Duration.between(impl.scheduled, impl.actual).abs();
     assertTrue(delta.toMillis() < 1000);
   }
 
   @Test
-  public void invalidMethod() {
-
-    InvalidMethodWorkflow imv = new InvalidMethodWorkflow();
-
-    try {
-      DBOS.scheduleWorkflow(imv);
-      assertTrue(false); // fail if we get here
-    } catch (IllegalArgumentException e) {
-      assertEquals(
-          "Scheduled workflow must have parameters (Instant scheduledTime, Instant actualTime)",
-          e.getMessage());
-    }
+  public void invalidSignature() {
+    var e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> DBOS.registerWorkflows(InvalidSig.class, new InvalidSigImpl()));
+    assertEquals(
+        "Invalid signature for Scheduled workflow dev.dbos.transact.scheduled.InvalidSigImpl//scheduledWF. Signature must be (Instant, Instant)",
+        e.getMessage());
   }
 
   @Test
   public void invalidCron() {
-
-    InvalidCronWorkflow icw = new InvalidCronWorkflow();
-
-    try {
-      DBOS.scheduleWorkflow(icw);
-      assertTrue(false); // fail if we get here
-    } catch (IllegalArgumentException e) {
-
-      System.out.println(e.getMessage());
-      assertEquals("Cron expression contains 5 parts but we expect one of [6, 7]", e.getMessage());
-    }
+    var e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> DBOS.registerWorkflows(InvalidCron.class, new InvalidCronImpl()));
+    assertEquals("Cron expression contains 5 parts but we expect one of [6]", e.getMessage());
   }
 
   @Test
   public void stepsTest() throws Exception {
 
-    Steps steps = DBOS.registerWorkflows(Steps.class, new StepsImpl());
-
-    WorkflowWithSteps swf = new WorkflowWithSteps(steps);
-    DBOS.scheduleWorkflow(swf);
+    var impl = new SkedServiceImpl();
+    DBOS.registerWorkflows(SkedService.class, impl);
     DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService();
 
@@ -168,33 +156,11 @@ class SchedulerServiceTest {
     schedulerService.stop();
     Thread.sleep(1000);
 
-    var input = new ListWorkflowsInput.Builder().build();
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
-    assertTrue(wfs.size() <= 2);
+    var input = new ListWorkflowsInput.Builder().workflowName("withSteps").build();
+    var workflows = DBOS.listWorkflows(input);
+    assertTrue(workflows.size() <= 2);
 
-    List<StepInfo> wsteps = DBOS.listWorkflowSteps(wfs.get(0).workflowId());
-    assertEquals(2, wsteps.size());
-  }
-
-  // Manual test only do not enable and commit
-  // @Test
-  public void everyMinute() throws Exception {
-    EveryMinute em = new EveryMinute();
-    DBOS.scheduleWorkflow(em);
-    Thread.sleep(600000);
-  }
-
-  public static class InvalidMethodWorkflow {
-
-    @Workflow
-    @Scheduled(cron = "0/1 * * * * ?")
-    public void scheduledWF(Instant scheduled, String actual) {}
-  }
-
-  public static class InvalidCronWorkflow {
-
-    @Workflow
-    @Scheduled(cron = "* * * * *")
-    public void scheduledWF(Instant scheduled, Instant actual) {}
+    var steps = DBOS.listWorkflowSteps(workflows.get(0).workflowId());
+    assertEquals(2, steps.size());
   }
 }
