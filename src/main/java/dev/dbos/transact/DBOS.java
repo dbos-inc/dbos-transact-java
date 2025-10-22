@@ -134,6 +134,7 @@ public class DBOS {
       if (this.config != null) {
         throw new IllegalStateException("DBOS has already been configured");
       }
+      config.validate();
       this.config = config;
     }
 

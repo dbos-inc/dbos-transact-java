@@ -23,6 +23,7 @@ public class ConfigTest {
   @Test
   public void setExecutorAndAppVersionViaConfig() throws Exception {
     var config =
+        // Test builder vs. withers
         new DBOSConfig.Builder()
             .appName("config-test")
             .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
@@ -49,13 +50,11 @@ public class ConfigTest {
     envVars.set("DBOS__APPVERSION", "test-env-app-version");
 
     var config =
-        new DBOSConfig.Builder()
-            .appName("config-test")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .appVersion("test-app-version")
-            .executorId("test-executor-id")
-            .build();
+        DBOSConfig.defaultsFromEnv("config-test")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withDbUser("postgres")
+            .withAppVersion("test-app-version")
+            .withExecutorId("test-executor-id");
 
     DBOS.reinitialize(config);
     try {
@@ -90,12 +89,10 @@ public class ConfigTest {
   @Test
   public void conductorExecutorId() throws Exception {
     var config =
-        new DBOSConfig.Builder()
-            .appName("config-test")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .conductorKey("test-conductor-key")
-            .build();
+        DBOSConfig.defaultsFromEnv("config-test")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withDbUser("postgres")
+            .withConductorKey("test-conductor-key");
 
     DBOS.reinitialize(config);
     try {

@@ -33,13 +33,11 @@ public class ClientTest {
   @BeforeAll
   static void onetimeSetup() throws Exception {
     dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl(dbUrl)
-            .dbUser(dbUser)
-            .dbPassword(dbPassword)
-            .maximumPoolSize(2)
-            .build();
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl(dbUrl)
+            .withDbUser(dbUser)
+            .withDbPassword(dbPassword)
+            .withMaximumPoolSize(2);
   }
 
   @BeforeEach

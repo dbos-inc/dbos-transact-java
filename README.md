@@ -79,14 +79,8 @@ public class Demo {
     
     public static void main(String[] args) {
         
-        DBOSConfig dbosConfig = new DBOSConfig.Builder()
-                .name("demo")
-                .dbHost("localhost")
-                .dbPort(5432)
-                .dbUser("postgres")
-                .sysDbName("demo_dbos_sys")
-                .build() ;
         // Remember to export the DB password to the env variable PGPASSWORD
+        var dbosConfig = DBOSConfig.defaultsFromEnv("demo");
 
         DBOS.configure(dbosConfig);
         

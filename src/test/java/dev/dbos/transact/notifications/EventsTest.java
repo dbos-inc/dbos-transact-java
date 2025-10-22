@@ -40,12 +40,10 @@ public class EventsTest {
   static void onetimeSetup() throws Exception {
 
     EventsTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .maximumPoolSize(2)
-            .build();
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withDbUser("postgres")
+            .withMaximumPoolSize(2);
   }
 
   @BeforeEach
