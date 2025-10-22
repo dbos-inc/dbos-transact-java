@@ -11,7 +11,7 @@ public sealed interface Timeout permits Timeout.Inherit, Timeout.None, Timeout.E
 
   record Explicit(Duration value) implements Timeout {
     public Explicit {
-        Objects.requireNonNull(value);
+      Objects.requireNonNull(value, "timeout duration must not be null");
     }
   }
 

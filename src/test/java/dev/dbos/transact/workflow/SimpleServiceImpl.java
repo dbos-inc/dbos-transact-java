@@ -161,7 +161,9 @@ public class SimpleServiceImpl implements SimpleService {
       options = options.withTimeout(timeoutSeconds, TimeUnit.SECONDS);
     }
 
-    var handle = DBOS.startWorkflow(() -> simpleService.childWorkflowWithSleep(input, sleepSeconds), options);
+    var handle =
+        DBOS.startWorkflow(
+            () -> simpleService.childWorkflowWithSleep(input, sleepSeconds), options);
 
     String result = handle.getResult();
 

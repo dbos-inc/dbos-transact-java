@@ -53,9 +53,10 @@ public class HawkServiceImpl implements HawkService {
   @Workflow
   @Override
   public String parentSleepWorkflow(Long timeoutSec, long sleepSec) {
-    var duration = timeoutSec == null 
-      ? Timeout.inherit() 
-      : timeoutSec == 0L ? Timeout.none() : Timeout.of(Duration.ofSeconds(timeoutSec));
+    var duration =
+        timeoutSec == null
+            ? Timeout.inherit()
+            : timeoutSec == 0L ? Timeout.none() : Timeout.of(Duration.ofSeconds(timeoutSec));
     var options = new WorkflowOptions().withTimeout(duration);
     try (var o = options.setContext()) {
       return proxy.sleepWorkflow(sleepSec);

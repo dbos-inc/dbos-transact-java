@@ -10,7 +10,7 @@ public record WorkflowOptions(String workflowId, Timeout timeout) {
   public WorkflowOptions {
     if (timeout != null && timeout instanceof Timeout.Explicit explicit) {
       if (explicit.value().isNegative() || explicit.value().isZero()) {
-        throw new IllegalArgumentException("timeout must be positive");
+        throw new IllegalArgumentException("timeout must be a positive non-zero duration");
       }
     }
   }
