@@ -1,6 +1,7 @@
 package dev.dbos.transact;
 
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.util.OptionalInt;
@@ -8,14 +9,16 @@ import java.util.concurrent.TimeUnit;
 
 public record StartWorkflowOptions(
     String workflowId,
-    Duration timeout,
+    Timeout timeout,
     String queueName,
     String deduplicationId,
     OptionalInt priority) {
 
   public StartWorkflowOptions {
-    if (timeout != null && timeout.isNegative()) {
-      throw new IllegalArgumentException("timeout must not be negative");
+    if (timeout instanceof Timeout.Explicit explicit) {
+      if (explicit.value().isNegative() || explicit.value().isZero()) {
+        throw new IllegalArgumentException("timeout must be positive");
+      }
     }
   }
 
@@ -32,15 +35,22 @@ public record StartWorkflowOptions(
         workflowId, this.timeout, this.queueName, this.deduplicationId, this.priority);
   }
 
-  public StartWorkflowOptions withTimeout(Duration timeout) {
+  public StartWorkflowOptions withTimeout(Timeout timeout) {
     return new StartWorkflowOptions(
         this.workflowId, timeout, this.queueName, this.deduplicationId, this.priority);
   }
 
+  public StartWorkflowOptions withTimeout(Duration timeout) {
+    return withTimeout(Timeout.of(timeout));
+  }
+
   public StartWorkflowOptions withTimeout(long value, TimeUnit unit) {
-    var timeout = Duration.ofNanos(unit.toNanos(value));
+    return withTimeout(Duration.ofNanos(unit.toNanos(value)));
+  }
+
+  public StartWorkflowOptions withNoTimeout() {
     return new StartWorkflowOptions(
-        this.workflowId, timeout, this.queueName, this.deduplicationId, this.priority);
+        this.workflowId, Timeout.none(), this.queueName, this.deduplicationId, this.priority);
   }
 
   public StartWorkflowOptions withQueue(Queue queue) {
