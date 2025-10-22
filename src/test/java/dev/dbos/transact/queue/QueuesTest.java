@@ -127,14 +127,16 @@ public class QueuesTest {
     var h1 = DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(100), o1);
 
     var o2 = new StartWorkflowOptions().withQueue(firstQ).withPriority(50);
-    DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(50), o2);
+    var h2 = DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(50), o2);
 
     var o3 = new StartWorkflowOptions().withQueue(firstQ).withPriority(10);
-    DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(10), o3);
+    var h3 = DBOS.startWorkflow(() -> serviceQ.priorityWorkflow(10), o3);
 
     qs.unpause();
 
     h1.getResult();
+    h2.getResult();
+    h3.getResult();
 
     assertEquals(3, impl.queue.size());
     assertEquals(10, impl.queue.remove());

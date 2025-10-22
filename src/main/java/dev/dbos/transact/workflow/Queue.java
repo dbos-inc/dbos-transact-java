@@ -11,6 +11,12 @@ public record Queue(
 
   public Queue {
     Objects.requireNonNull(name, "Queue name must not be null");
+    if (concurrency != null && concurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue concurrency must be greater than zero");
+    if (workerConcurrency != null && workerConcurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue workerConcurrency must be greater than zero");
   }
 
   public Queue(String name) {

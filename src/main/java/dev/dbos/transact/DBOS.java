@@ -126,7 +126,12 @@ public class DBOS {
       if (this.config != null) {
         throw new IllegalStateException("DBOS has already been configured");
       }
-      config.validate();
+
+      Objects.requireNonNull(config.appName(), "DBOSConfig.appName must not be null");
+      Objects.requireNonNull(config.databaseUrl(), "DBOSConfig.databaseUrl must not be null");
+      Objects.requireNonNull(config.dbUser(), "DBOSConfig.dbUser must not be null");
+      Objects.requireNonNull(config.dbPassword(), "DBOSConfig.dbPassword must not be null");
+
       this.config = config;
     }
 
