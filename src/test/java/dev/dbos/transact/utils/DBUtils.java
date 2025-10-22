@@ -214,6 +214,25 @@ public class DBUtils {
     }
   }
 
+  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId) {
+    var sql = "SELECT * FROM dbos.workflow_status WHERE workflow_uuid = ?";
+
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          return new WorkflowStatusRow(rs);
+        } else {
+          return null;
+        }
+      }
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   public static List<OperationOutputRow> getStepRows(DataSource ds, String workflowId) {
     var sql = "SELECT * FROM dbos.operation_outputs WHERE workflow_uuid = ? ORDER BY function_id";
     try (var conn = ds.getConnection();
