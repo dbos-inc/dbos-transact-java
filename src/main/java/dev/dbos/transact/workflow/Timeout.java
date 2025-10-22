@@ -24,7 +24,7 @@ public sealed interface Timeout permits Timeout.Inherit, Timeout.None, Timeout.E
   }
 
   static Timeout of(Duration d) {
-    return new Explicit(Objects.requireNonNull(d, "timeout explicit duration"));
+    return new Explicit(Objects.requireNonNull(d, "Explicit timeout duration must not be null"));
   }
 
   static Timeout of(long value, TimeUnit unit) {

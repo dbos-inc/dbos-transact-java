@@ -110,21 +110,24 @@ public class WorkflowDAO {
         final int attempts = resRow.getRecoveryAttempts();
         if (maxRetries != null && attempts > maxRetries + 1) {
 
-          var sql = """
+          var sql =
+              """
               UPDATE %s.workflow_status
               SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL
               WHERE workflow_uuid = ? AND status = ?
-              """.formatted(Constants.DB_SCHEMA);
+              """
+                  .formatted(Constants.DB_SCHEMA);
 
           try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.toString());
             stmt.setString(2, initStatus.getWorkflowUUID());
             stmt.setString(3, WorkflowState.PENDING.toString());
-            
+
             stmt.executeUpdate();
           }
 
-          throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.getWorkflowUUID(), maxRetries);
+          throw new DBOSMaxRecoveryAttemptsExceededException(
+              initStatus.getWorkflowUUID(), maxRetries);
         }
 
         return new WorkflowInitResult(
@@ -222,17 +225,21 @@ public class WorkflowDAO {
     }
   }
 
-  public void updateWorkflowOutcome(Connection connection, String workflowId, WorkflowState status, String output, String error) throws SQLException {
+  public void updateWorkflowOutcome(
+      Connection connection, String workflowId, WorkflowState status, String output, String error)
+      throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
     // Note that transitions from CANCELLED to SUCCESS or ERROR are forbidden
-    var sql = """
+    var sql =
+        """
       UPDATE %s.workflow_status
       SET status = ?, output = ?, error = ?, updated_at = ?, deduplication_id = NULL
       WHERE workflow_uuid = ? AND NOT (status = ? AND ? in (?, ?))
-      """.formatted(Constants.DB_SCHEMA);
+      """
+            .formatted(Constants.DB_SCHEMA);
 
     try (PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, status.toString());
@@ -244,9 +251,8 @@ public class WorkflowDAO {
       stmt.setString(7, status.toString());
       stmt.setString(8, WorkflowState.SUCCESS.toString());
       stmt.setString(9, WorkflowState.ERROR.toString());
-      
-      stmt.executeUpdate();
 
+      stmt.executeUpdate();
     }
   }
 
