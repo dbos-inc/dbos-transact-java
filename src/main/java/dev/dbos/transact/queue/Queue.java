@@ -4,8 +4,8 @@ import java.util.Objects;
 
 public record Queue(
     String name,
-    int concurrency,
-    int workerConcurrency,
+    Integer concurrency,
+    Integer workerConcurrency,
     boolean priorityEnabled,
     RateLimit rateLimit) {
 
@@ -14,7 +14,7 @@ public record Queue(
   }
 
   public Queue(String name) {
-    this(name, -1, -1, false, null);
+    this(name, null, null, false, null);
   }
 
   public boolean hasLimiter() {
@@ -27,11 +27,11 @@ public record Queue(
     return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
   }
 
-  public Queue withConcurrency(int concurrency) {
+  public Queue withConcurrency(Integer concurrency) {
     return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
   }
 
-  public Queue withWorkerConcurrency(int workerConcurrency) {
+  public Queue withWorkerConcurrency(Integer workerConcurrency) {
     return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
   }
 
