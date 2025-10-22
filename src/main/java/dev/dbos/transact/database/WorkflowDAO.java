@@ -441,7 +441,7 @@ public class WorkflowDAO {
       // Append wildcard directly to the parameter value
       parameters.add(input.workflowIdPrefix() + "%");
     }
-    if (input.workflowIds() != null && !input.workflowIds().isEmpty()) {
+    if (input.workflowIds() != null) {
       whereConditions.add("workflow_uuid = ANY(?)");
       parameters.add(input.workflowIds().toArray());
     }
@@ -459,7 +459,7 @@ public class WorkflowDAO {
       // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
       parameters.add(input.endTime().toInstant().toEpochMilli());
     }
-    if (input.status() != null && !input.status().isEmpty()) {
+    if (input.status() != null) {
       whereConditions.add("status = ANY(?)");
       parameters.add(input.status().toArray());
     }
@@ -467,7 +467,7 @@ public class WorkflowDAO {
       whereConditions.add("application_version = ?");
       parameters.add(input.applicationVersion());
     }
-    if (input.executorIds() != null && !input.executorIds().isEmpty()) {
+    if (input.executorIds() != null) {
       whereConditions.add("executor_id = ANY(?)");
       parameters.add(input.executorIds().toArray());
     }
