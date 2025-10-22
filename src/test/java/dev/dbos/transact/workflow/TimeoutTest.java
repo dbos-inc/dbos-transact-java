@@ -114,7 +114,8 @@ public class TimeoutTest {
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
-    Queue simpleQ = DBOS.Queue("simpleQ").build();
+    Queue simpleQ = DBOS.Queue("simpleQ");
+    DBOS.registerQueue(simpleQ);
 
     DBOS.launch();
 
@@ -140,7 +141,8 @@ public class TimeoutTest {
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
-    Queue simpleQ = DBOS.Queue("simpleQ").build();
+    Queue simpleQ = DBOS.Queue("simpleQ");
+    DBOS.registerQueue(simpleQ);
 
     DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase();

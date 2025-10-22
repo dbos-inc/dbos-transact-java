@@ -110,15 +110,11 @@ public class DBOS {
           interfaceClass, implementation, instanceName, () -> this.dbosExecutor.get());
     }
 
-    public QueueBuilder Queue(String name) {
-      return new QueueBuilder(this, name);
-    }
-
     private void registerInternals() {
       internalWorkflowsService =
           registerWorkflows(InternalWorkflowsService.class, new InternalWorkflowsServiceImpl(this));
-      this.Queue(Constants.DBOS_INTERNAL_QUEUE).build();
-      this.Queue(Constants.DBOS_SCHEDULER_QUEUE).build();
+      this.registerQueue(new Queue(Constants.DBOS_INTERNAL_QUEUE));
+      this.registerQueue(new Queue(Constants.DBOS_SCHEDULER_QUEUE));
     }
 
     void clearRegistry() {
@@ -223,8 +219,13 @@ public class DBOS {
     ensureInstance().scheduleWorkflow(implementation);
   }
 
-  public static QueueBuilder Queue(String name) {
-    return ensureInstance().Queue(name);
+  public static Queue Queue(String name) {
+    return new Queue(name);
+  }
+
+  public static Queue registerQueue(Queue queue) {
+    ensureInstance().registerQueue(queue);
+    return queue;
   }
 
   /**
@@ -262,52 +263,6 @@ public class DBOS {
 
   public static void shutdown() {
     if (globalInstance != null) globalInstance.shutdown();
-  }
-
-  public static class QueueBuilder {
-    private final Instance dbos;
-    private final String name;
-
-    private int concurrency;
-    private int workerConcurrency;
-    private Queue.RateLimit limit;
-    private boolean priorityEnabled = false;
-
-    /**
-     * Constructor for the Builder, taking the required 'name' field.
-     *
-     * @param name The name of the queue.
-     */
-    QueueBuilder(Instance dbos, String name) {
-      this.dbos = dbos;
-      this.name = name;
-    }
-
-    public QueueBuilder concurrency(Integer concurrency) {
-      this.concurrency = concurrency;
-      return this;
-    }
-
-    public QueueBuilder workerConcurrency(Integer workerConcurrency) {
-      this.workerConcurrency = workerConcurrency;
-      return this;
-    }
-
-    public QueueBuilder limit(int limit, double period) {
-      this.limit = new Queue.RateLimit(limit, period);
-      return this;
-    }
-
-    public QueueBuilder priorityEnabled(boolean priorityEnabled) {
-      this.priorityEnabled = priorityEnabled;
-      return this;
-    }
-
-    public Queue build() {
-      Queue queue = new Queue(name, concurrency, workerConcurrency, priorityEnabled, limit);
-      dbos.registerQueue(queue);
-      return queue;
-    }
   }
 
   private static Instance globalInstance = null;

@@ -14,6 +14,13 @@ public class QueueRegistry {
   private static final Logger logger = LoggerFactory.getLogger(QueueRegistry.class);
 
   public void register(Queue queue) {
+    if (queue.concurrency() > 0 && queue.workerConcurrency() > queue.concurrency()) {
+      throw new IllegalArgumentException(
+          String.format(
+              "workerConcurrency must be less than or equal to concurrency for queue %s",
+              queue.name()));
+    }
+
     var queueName = queue.name();
     var previous = registry.putIfAbsent(queueName, queue);
 

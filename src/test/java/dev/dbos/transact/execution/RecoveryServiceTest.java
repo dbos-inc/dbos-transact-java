@@ -64,7 +64,8 @@ class RecoveryServiceTest {
             ExecutingService.class, executingServiceImpl = new ExecutingServiceImpl());
     executingService.setExecutingService(executingService);
 
-    testQueue = DBOS.Queue("q1").build();
+    testQueue = DBOS.Queue("q1");
+    DBOS.registerQueue(testQueue);
 
     DBOS.launch();
     systemDatabase = DBOSTestAccess.getSystemDatabase();

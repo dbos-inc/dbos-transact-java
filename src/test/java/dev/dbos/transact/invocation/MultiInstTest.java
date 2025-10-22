@@ -53,7 +53,7 @@ public class MultiInstTest {
     himpl = new HawkServiceImpl();
     bimpla = new BearServiceImpl();
     bimpl1 = new BearServiceImpl();
-    DBOS.Queue("testQueue").build();
+    DBOS.registerQueue(DBOS.Queue("testQueue"));
 
     hproxy = DBOS.registerWorkflows(HawkService.class, himpl);
     himpl.setProxy(hproxy);

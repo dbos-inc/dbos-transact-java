@@ -45,7 +45,7 @@ public class ClientTest {
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
     DBOS.reinitialize(dbosConfig);
-    DBOS.Queue("testQueue").build();
+    DBOS.registerQueue(DBOS.Queue("testQueue"));
     service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
     DBOS.launch();
 

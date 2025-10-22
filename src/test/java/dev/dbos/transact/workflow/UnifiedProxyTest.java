@@ -53,7 +53,8 @@ public class UnifiedProxyTest {
 
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
-    Queue q = DBOS.Queue("simpleQ").build();
+    Queue q = DBOS.Queue("simpleQ");
+    DBOS.registerQueue(q);
 
     DBOS.launch();
 
@@ -103,7 +104,7 @@ public class UnifiedProxyTest {
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    DBOS.Queue("childQ").build();
+    DBOS.registerQueue(DBOS.Queue("childQ"));
     DBOS.launch();
 
     simpleService.setSimpleService(simpleService);

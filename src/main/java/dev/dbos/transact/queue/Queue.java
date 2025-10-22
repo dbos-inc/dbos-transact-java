@@ -11,16 +11,39 @@ public record Queue(
 
   public Queue {
     Objects.requireNonNull(name, "Queue name must not be null");
-    if (workerConcurrency > concurrency) {
-      throw new IllegalArgumentException(
-          String.format(
-              "workerConcurrency must be less than or equal to concurrency for queue %s", name));
-    }
+  }
+
+  public Queue(String name) {
+    this(name, -1, -1, false, null);
   }
 
   public boolean hasLimiter() {
     return rateLimit != null;
   }
 
-  public record RateLimit(int limit, double period) {}
+  public static record RateLimit(int limit, double period) {}
+
+  public Queue withName(String name) {
+    return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
+  }
+
+  public Queue withConcurrency(int concurrency) {
+    return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
+  }
+
+  public Queue withWorkerConcurrency(int workerConcurrency) {
+    return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
+  }
+
+  public Queue withPriorityEnabled(boolean priorityEnabled) {
+    return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
+  }
+
+  public Queue withRateLimit(RateLimit rateLimit) {
+    return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
+  }
+
+  public Queue withRateLimit(int limit, double period) {
+    return withRateLimit(new RateLimit(limit, period));
+  }
 }
