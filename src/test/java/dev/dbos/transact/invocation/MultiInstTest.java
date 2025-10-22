@@ -116,8 +116,7 @@ public class MultiInstTest {
             .format(DateTimeFormatter.ISO_DATE));
 
     var browsa =
-        DBOS.listWorkflows(
-            new ListWorkflowsInput.Builder().workflowId(bhandlea.getWorkflowId()).build());
+        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId(bhandlea.getWorkflowId()));
     assertEquals(1, browsa.size());
     var browa = browsa.get(0);
     assertEquals(bhandlea.getWorkflowId(), browa.workflowId());
@@ -127,8 +126,7 @@ public class MultiInstTest {
     assertEquals("SUCCESS", browa.status());
 
     var brows1 =
-        DBOS.listWorkflows(
-            new ListWorkflowsInput.Builder().workflowId(bhandle1.getWorkflowId()).build());
+        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId(bhandle1.getWorkflowId()));
     assertEquals(1, brows1.size());
     var brow1 = brows1.get(0);
     assertEquals(bhandle1.getWorkflowId(), brow1.workflowId());
@@ -138,8 +136,7 @@ public class MultiInstTest {
     assertEquals("SUCCESS", brow1.status());
 
     var hrows =
-        DBOS.listWorkflows(
-            new ListWorkflowsInput.Builder().workflowId(hhandle.getWorkflowId()).build());
+        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId(hhandle.getWorkflowId()));
     assertEquals(1, hrows.size());
     var hrow = hrows.get(0);
     assertEquals(hhandle.getWorkflowId(), hrow.workflowId());
@@ -149,27 +146,24 @@ public class MultiInstTest {
     assertEquals("SUCCESS", hrow.status());
 
     // All 3 w/ the same WF name
-    var allrows =
-        DBOS.listWorkflows(new ListWorkflowsInput.Builder().workflowName("stepWorkflow").build());
+    var allrows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("stepWorkflow"));
     assertEquals(3, allrows.size());
 
     // 2 from BSI
     var brows =
         DBOS.listWorkflows(
-            new ListWorkflowsInput.Builder()
-                .workflowName("stepWorkflow")
-                .className("dev.dbos.transact.invocation.BearServiceImpl")
-                .build());
+            new ListWorkflowsInput()
+                .withWorkflowName("stepWorkflow")
+                .withClassName("dev.dbos.transact.invocation.BearServiceImpl"));
     assertEquals(2, brows.size());
 
     // 2 from BSI
     var browsjust1 =
         DBOS.listWorkflows(
-            new ListWorkflowsInput.Builder()
-                .workflowName("stepWorkflow")
-                .className("dev.dbos.transact.invocation.BearServiceImpl")
-                .instanceName("1")
-                .build());
+            new ListWorkflowsInput()
+                .withWorkflowName("stepWorkflow")
+                .withClassName("dev.dbos.transact.invocation.BearServiceImpl")
+                .withInstanceName("1"));
     assertEquals(1, browsjust1.size());
   }
 

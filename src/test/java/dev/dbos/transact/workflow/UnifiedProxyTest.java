@@ -10,7 +10,6 @@ import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -93,8 +92,7 @@ public class UnifiedProxyTest {
     assertEquals(wfid3, handle.getWorkflowId());
     assertEquals("SUCCESS", handle.getStatus().status());
 
-    var builder = new ListWorkflowsInput.Builder().workflowIds(Arrays.asList(wfid3));
-    ListWorkflowsInput input = builder.build();
+    ListWorkflowsInput input = new ListWorkflowsInput().withWorkflowId(wfid3);
     List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
     assertEquals("simpleQ", wfs.get(0).queueName());
   }

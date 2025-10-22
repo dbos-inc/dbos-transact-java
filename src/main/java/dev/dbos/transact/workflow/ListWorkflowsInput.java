@@ -89,6 +89,13 @@ public record ListWorkflowsInput(
     return withWorkflowIds(stats);
   }
 
+  public ListWorkflowsInput withStatus(WorkflowState stat) {
+    if (stat == null) return withStatuses(null);
+    List<String> stats = new ArrayList<>();
+    stats.add(stat.name());
+    return withWorkflowIds(stats);
+  }
+
   public ListWorkflowsInput withStartTime(OffsetDateTime startTime) {
     return new ListWorkflowsInput(
         workflowIds,

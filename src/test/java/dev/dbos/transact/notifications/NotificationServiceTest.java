@@ -330,8 +330,7 @@ class NotificationServiceTest {
     assertEquals("hello", handle.getResult());
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
-    var input = new ListWorkflowsInput.Builder().build();
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(null);
     assertEquals(2, wfs.size());
   }
 }

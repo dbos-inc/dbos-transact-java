@@ -369,8 +369,7 @@ public class WorkflowDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
-    var builder = new ListWorkflowsInput.Builder().workflowIds(Arrays.asList(workflowId));
-    ListWorkflowsInput input = builder.build();
+    var input = new ListWorkflowsInput().withWorkflowId(workflowId);
     List<WorkflowStatus> output = listWorkflows(input);
     if (output.size() > 0) {
       return output.get(0);
@@ -385,7 +384,7 @@ public class WorkflowDAO {
     }
 
     if (input == null) {
-      input = new ListWorkflowsInput.Builder().build();
+      input = new ListWorkflowsInput();
     }
 
     List<WorkflowStatus> workflows = new ArrayList<>();
