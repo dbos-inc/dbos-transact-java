@@ -1,7 +1,7 @@
 package dev.dbos.transact.internal;
 
 import dev.dbos.transact.execution.RegisteredWorkflow;
-import dev.dbos.transact.execution.WorkflowFunctionReflect;
+import dev.dbos.transact.execution.SchedulerService;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -9,10 +9,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class WorkflowRegistry {
   private final ConcurrentHashMap<String, RegisteredWorkflow> registry = new ConcurrentHashMap<>();
-
-  public static String getFullyQualifiedWFName(String cls, String instanceName, String wf) {
-    return String.format("%s/%s/%s", cls, instanceName, wf);
-  }
 
   public void register(
       String className,
@@ -22,14 +18,12 @@ public class WorkflowRegistry {
       Method method,
       int maxRecoveryAttempts) {
 
-    WorkflowFunctionReflect function = (t, args) -> method.invoke(t, args);
-    var fqName = getFullyQualifiedWFName(className, instanceName, workflowName);
-    var previous =
-        registry.putIfAbsent(
-            fqName,
-            new RegisteredWorkflow(
-                workflowName, target, instanceName, function, maxRecoveryAttempts));
+    var fqName = RegisteredWorkflow.fullyQualifiedWFName(className, instanceName, workflowName);
+    var regWorkflow =
+        new RegisteredWorkflow(workflowName, target, instanceName, method, maxRecoveryAttempts);
+    SchedulerService.validateScheduledWorkflow(regWorkflow);
 
+    var previous = registry.putIfAbsent(fqName, regWorkflow);
     if (previous != null) {
       throw new IllegalStateException("Workflow already registered with name: " + fqName);
     }

@@ -1,6 +1,7 @@
 package dev.dbos.transact.execution;
 
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Objects;
 
 public record RegisteredWorkflow(
@@ -8,7 +9,7 @@ public record RegisteredWorkflow(
     String className,
     String instanceName,
     Object target,
-    WorkflowFunctionReflect function,
+    Method workflowMethod,
     int maxRecoveryAttempts) {
 
   public RegisteredWorkflow {
@@ -16,14 +17,14 @@ public record RegisteredWorkflow(
     Objects.requireNonNull(className, "workflow class name must not be null");
     instanceName = Objects.requireNonNullElse(instanceName, "");
     Objects.requireNonNull(target, "workflow target object must not be null");
-    Objects.requireNonNull(function, "workflow function must not be null");
+    Objects.requireNonNull(workflowMethod, "workflow method must not be null");
   }
 
   public RegisteredWorkflow(
       String name,
       Object target,
       String instanceName,
-      WorkflowFunctionReflect function,
+      Method workflowMethod,
       int maxRecoveryAttempts) {
     this(
         name,
@@ -32,13 +33,22 @@ public record RegisteredWorkflow(
             .getName(),
         instanceName,
         target,
-        function,
+        workflowMethod,
         maxRecoveryAttempts);
+  }
+
+  public static String fullyQualifiedWFName(
+      String className, String instanceName, String workflowName) {
+    return String.format("%s/%s/%s", className, instanceName, workflowName);
+  }
+
+  public String fullyQualifiedName() {
+    return fullyQualifiedWFName(className, instanceName, name);
   }
 
   public <T, E extends Exception> T invoke(Object[] args) throws E {
     try {
-      return (T) function.invoke(target, args);
+      return (T) workflowMethod.invoke(target, args);
     } catch (Exception e) {
       while (e instanceof InvocationTargetException) {
         var ite = (InvocationTargetException) e;

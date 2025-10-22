@@ -16,15 +16,11 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.AppVersionComputer;
-import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.JSONUtil;
-import dev.dbos.transact.queue.Queue;
-import dev.dbos.transact.queue.QueueService;
-import dev.dbos.transact.scheduled.SchedulerService;
-import dev.dbos.transact.scheduled.SchedulerService.ScheduledInstance;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -43,6 +39,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -84,10 +81,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void start(
-      DBOS.Instance dbos,
-      Map<String, RegisteredWorkflow> workflowMap,
-      List<Queue> queues,
-      List<ScheduledInstance> scheduledWorkflows) {
+      DBOS.Instance dbos, Map<String, RegisteredWorkflow> workflowMap, List<Queue> queues) {
 
     if (isRunning.compareAndSet(false, true)) {
       this.workflowMap = Collections.unmodifiableMap(workflowMap);
@@ -132,7 +126,7 @@ public class DBOSExecutor implements AutoCloseable {
           schedulerQueue = queue;
         }
       }
-      schedulerService = new SchedulerService(this, schedulerQueue, scheduledWorkflows);
+      schedulerService = new SchedulerService(this, schedulerQueue);
       schedulerService.start();
 
       recoveryService = new RecoveryService(this, systemDatabase);
@@ -224,17 +218,16 @@ public class DBOSExecutor implements AutoCloseable {
 
   public RegisteredWorkflow getWorkflow(
       String className, String instanceName, String workflowName) {
-    if (workflowMap == null) {
-      throw new IllegalStateException(
-          "attempted to retrieve workflow from executor when DBOS not launched");
-    }
-
     return workflowMap.get(
-        WorkflowRegistry.getFullyQualifiedWFName(className, instanceName, workflowName));
+        RegisteredWorkflow.fullyQualifiedWFName(className, instanceName, workflowName));
+  }
+
+  public Collection<RegisteredWorkflow> getWorkflows() {
+    return this.workflowMap.values();
   }
 
   public List<Queue> getQueues() {
-    return Collections.unmodifiableList(this.queues);
+    return this.queues;
   }
 
   public Optional<Queue> getQueue(String queueName) {
@@ -832,7 +825,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     Object[] inputs = status.input();
     var wfName =
-        WorkflowRegistry.getFullyQualifiedWFName(
+        RegisteredWorkflow.fullyQualifiedWFName(
             status.className(), status.instanceName(), status.name());
     RegisteredWorkflow workflow = workflowMap.get(wfName);
 

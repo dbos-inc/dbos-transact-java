@@ -1,6 +1,6 @@
 package dev.dbos.transact;
 
-import dev.dbos.transact.queue.Queue;
+import dev.dbos.transact.workflow.Queue;
 
 import java.time.Duration;
 import java.util.OptionalInt;
