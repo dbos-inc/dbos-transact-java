@@ -150,7 +150,7 @@ They don't require a separate queueing service or message broker&mdash;just Post
 
 ```java
  public void queuedTasks() {
-    var q = DBOS.Queue("childQ");
+    var q = new Queue("childQ");
     DBOS.registerQueue(q);
     DBOS.launch();
 

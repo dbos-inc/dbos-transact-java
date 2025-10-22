@@ -113,7 +113,7 @@ public class WorkflowMgmtTest {
         DBOS.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
     mgmtService.setMgmtService(mgmtService);
 
-    Queue myqueue = DBOS.Queue("myqueue");
+    Queue myqueue = new Queue("myqueue");
     DBOS.registerQueue(myqueue);
 
     DBOS.launch();

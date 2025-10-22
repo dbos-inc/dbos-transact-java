@@ -50,7 +50,7 @@ public class QueueChildWorkflowTest {
   @Test
   public void multipleChildren() throws Exception {
 
-    Queue childQ = DBOS.Queue("childQ").withConcurrency(5).withWorkerConcurrency(5);
+    Queue childQ = new Queue("childQ").withConcurrency(5).withWorkerConcurrency(5);
     DBOS.registerQueue(childQ);
 
     SimpleService simpleService =
@@ -103,7 +103,7 @@ public class QueueChildWorkflowTest {
   @Test
   public void nestedChildren() throws Exception {
 
-    Queue childQ = DBOS.Queue("childQ").withConcurrency(5).withWorkerConcurrency(5);
+    Queue childQ = new Queue("childQ").withConcurrency(5).withWorkerConcurrency(5);
     DBOS.registerQueue(childQ);
 
     SimpleService simpleService =

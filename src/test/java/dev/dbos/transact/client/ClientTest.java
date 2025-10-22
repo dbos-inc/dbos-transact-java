@@ -10,6 +10,7 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
@@ -45,7 +46,7 @@ public class ClientTest {
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
     DBOS.reinitialize(dbosConfig);
-    DBOS.registerQueue(DBOS.Queue("testQueue"));
+    DBOS.registerQueue(new Queue("testQueue"));
     service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
     DBOS.launch();
 

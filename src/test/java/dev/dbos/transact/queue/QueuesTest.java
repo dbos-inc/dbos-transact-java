@@ -70,7 +70,7 @@ public class QueuesTest {
   @Test
   public void testQueuedWorkflow() throws Exception {
 
-    Queue firstQ = DBOS.Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
+    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     DBOS.registerQueue(firstQ);
 
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
@@ -89,7 +89,7 @@ public class QueuesTest {
   @Test
   public void testDedupeId() throws Exception {
 
-    Queue firstQ = DBOS.Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
+    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     DBOS.registerQueue(firstQ);
 
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
@@ -110,7 +110,7 @@ public class QueuesTest {
   public void testPriority() throws Exception {
 
     Queue firstQ =
-        DBOS.Queue("firstQueue")
+        new Queue("firstQueue")
             .withPriorityEnabled(true)
             .withConcurrency(1)
             .withWorkerConcurrency(1);
@@ -146,7 +146,7 @@ public class QueuesTest {
   @Test
   public void testQueuedMultipleWorkflows() throws Exception {
 
-    Queue firstQ = DBOS.Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
+    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     DBOS.registerQueue(firstQ);
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
 
@@ -189,7 +189,7 @@ public class QueuesTest {
   @RetryingTest(3)
   void testListQueuedWorkflow() throws Exception {
 
-    Queue firstQ = DBOS.Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
+    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     DBOS.registerQueue(firstQ);
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
 
@@ -244,11 +244,11 @@ public class QueuesTest {
   @Test
   public void multipleQueues() throws Exception {
 
-    Queue firstQ = DBOS.Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
+    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     DBOS.registerQueue(firstQ);
     ServiceQ serviceQ1 = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
 
-    Queue secondQ = DBOS.Queue("secondQueue").withConcurrency(1).withWorkerConcurrency(1);
+    Queue secondQ = new Queue("secondQueue").withConcurrency(1).withWorkerConcurrency(1);
     DBOS.registerQueue(secondQ);
     ServiceI serviceI = DBOS.registerWorkflows(ServiceI.class, new ServiceIImpl());
 
@@ -284,7 +284,7 @@ public class QueuesTest {
     double period = 1.8; //
 
     Queue limitQ =
-        DBOS.Queue("limitQueue")
+        new Queue("limitQueue")
             .withRateLimit(limit, period)
             .withConcurrency(1)
             .withWorkerConcurrency(1);
@@ -354,7 +354,7 @@ public class QueuesTest {
   public void testWorkerConcurrency() throws Exception {
 
     Queue qwithWCLimit =
-        DBOS.Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
+        new Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
     DBOS.registerQueue(qwithWCLimit);
 
     DBOS.launch();
@@ -434,7 +434,7 @@ public class QueuesTest {
   public void testGlobalConcurrency() throws Exception {
 
     Queue qwithWCLimit =
-        DBOS.Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
+        new Queue("QwithWCLimit").withConcurrency(1).withWorkerConcurrency(2).withConcurrency(3);
     DBOS.registerQueue(qwithWCLimit);
     DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase();
@@ -516,7 +516,7 @@ public class QueuesTest {
   @Test
   public void testenQueueWF() throws Exception {
 
-    Queue firstQ = DBOS.Queue("firstQueue");
+    Queue firstQ = new Queue("firstQueue");
     DBOS.registerQueue(firstQ);
 
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
@@ -536,7 +536,7 @@ public class QueuesTest {
 
   @RetryingTest(3)
   public void testQueueConcurrencyUnderRecovery() throws Exception {
-    Queue queue = DBOS.Queue("test_queue").withConcurrency(2);
+    Queue queue = new Queue("test_queue").withConcurrency(2);
     DBOS.registerQueue(queue);
 
     ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();

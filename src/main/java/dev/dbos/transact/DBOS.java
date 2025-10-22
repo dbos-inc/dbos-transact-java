@@ -219,10 +219,6 @@ public class DBOS {
     ensureInstance().scheduleWorkflow(implementation);
   }
 
-  public static Queue Queue(String name) {
-    return new Queue(name);
-  }
-
   public static Queue registerQueue(Queue queue) {
     ensureInstance().registerQueue(queue);
     return queue;

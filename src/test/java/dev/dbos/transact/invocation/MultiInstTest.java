@@ -7,6 +7,7 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.queue.Queue;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -53,7 +54,7 @@ public class MultiInstTest {
     himpl = new HawkServiceImpl();
     bimpla = new BearServiceImpl();
     bimpl1 = new BearServiceImpl();
-    DBOS.registerQueue(DBOS.Queue("testQueue"));
+    DBOS.registerQueue(new Queue("testQueue"));
 
     hproxy = DBOS.registerWorkflows(HawkService.class, himpl);
     himpl.setProxy(hproxy);
