@@ -131,21 +131,18 @@ public class ListWorkflowsRequest extends BaseMessage {
   }
 
   public ListWorkflowsInput asInput() {
-    var builder =
-        new ListWorkflowsInput.Builder()
-            .workflowIds(body.workflow_uuids)
-            .workflowName(body.workflow_name)
-            .authenticatedUser(body.authenticated_user)
-            .startTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null)
-            .endTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null)
-            .status(body.status)
-            .applicationVersion(body.application_version)
-            .limit(body.limit)
-            .offset(body.offset)
-            .sortDesc(body.sort_desc)
-            .loadInput(body.load_input)
-            .loadOutput(body.load_output);
-
-    return builder.build();
+    return new ListWorkflowsInput()
+        .withWorkflowIds(body.workflow_uuids)
+        .withWorkflowName(body.workflow_name)
+        .withAuthenticatedUser(body.authenticated_user)
+        .withStartTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null)
+        .withEndTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null)
+        .withStatus(body.status)
+        .withApplicationVersion(body.application_version)
+        .withLimit(body.limit)
+        .withOffset(body.offset)
+        .withSortDesc(body.sort_desc)
+        .withLoadInput(body.load_input)
+        .withLoadOutput(body.load_output);
   }
 }

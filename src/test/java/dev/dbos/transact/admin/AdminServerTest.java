@@ -443,8 +443,8 @@ class AdminServerTest {
       assertNull(input.applicationVersion());
       assertNull(input.offset());
       assertNull(input.limit());
-      assertEquals(0, input.status().size());
-      assertEquals(0, input.executorIds().size());
+      assertNull(input.status());
+      assertNull(input.executorIds());
     }
   }
 
