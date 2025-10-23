@@ -24,15 +24,12 @@ public class ConfigTest {
   @Test
   public void setExecutorAndAppVersionViaConfig() throws Exception {
     var config =
-        // Test builder vs. withers
-        new DBOSConfig.Builder()
-            .appName("config-test")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .dbPassword(System.getenv("PGPASSWORD"))
-            .appVersion("test-app-version")
-            .executorId("test-executor-id")
-            .build();
+        DBOSConfig.defaults("config-test")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withDbUser("postgres")
+            .withDbPassword(System.getenv("PGPASSWORD"))
+            .withAppVersion("test-app-version")
+            .withExecutorId("test-executor-id");
 
     DBOS.reinitialize(config);
     try {
@@ -73,12 +70,10 @@ public class ConfigTest {
   @Test
   public void localExecutorId() throws Exception {
     var config =
-        new DBOSConfig.Builder()
-            .appName("config-test")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .dbPassword(System.getenv("PGPASSWORD"))
-            .build();
+        DBOSConfig.defaults("config-test")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withDbUser("postgres")
+            .withDbPassword(System.getenv("PGPASSWORD"));
 
     DBOS.reinitialize(config);
     try {
@@ -111,12 +106,10 @@ public class ConfigTest {
   @Test
   public void calcAppVersion() throws Exception {
     var config =
-        new DBOSConfig.Builder()
-            .appName("config-test")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .dbPassword(System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR))
-            .build();
+        DBOSConfig.defaults("config-test")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withDbUser("postgres")
+            .withDbPassword(System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR));
 
     DBOS.reinitialize(config);
     try {
