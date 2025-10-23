@@ -32,12 +32,9 @@ class NotificationServiceTest {
   static void onetimeSetup() throws Exception {
 
     NotificationServiceTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .maximumPoolSize(2)
-            .build();
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2);
   }
 
   @BeforeEach
@@ -329,8 +326,7 @@ class NotificationServiceTest {
     assertEquals("hello", handle.getResult());
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
-    var input = new ListWorkflowsInput.Builder().build();
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(null);
     assertEquals(2, wfs.size());
   }
 }

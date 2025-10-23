@@ -25,12 +25,9 @@ class SchedulerServiceTest {
   @BeforeAll
   static void onetimeSetup() throws Exception {
     SchedulerServiceTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .maximumPoolSize(2)
-            .build();
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2);
   }
 
   @BeforeEach
@@ -155,8 +152,7 @@ class SchedulerServiceTest {
     schedulerService.stop();
     Thread.sleep(1000);
 
-    var input = new ListWorkflowsInput.Builder().workflowName("withSteps").build();
-    var workflows = DBOS.listWorkflows(input);
+    var workflows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("withSteps"));
     assertTrue(workflows.size() <= 2);
 
     var steps = DBOS.listWorkflowSteps(workflows.get(0).workflowId());

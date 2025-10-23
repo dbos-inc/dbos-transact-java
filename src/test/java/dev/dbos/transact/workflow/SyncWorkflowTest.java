@@ -22,13 +22,10 @@ public class SyncWorkflowTest {
   static void onetimeSetup() throws Exception {
 
     SyncWorkflowTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .maximumPoolSize(2)
-            .runAdminServer()
-            .build();
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2)
+            .withAdminServer(true);
   }
 
   @BeforeEach
@@ -149,6 +146,9 @@ public class SyncWorkflowTest {
     wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(2, wfs.size());
     assertEquals("wf-124", wfs.get(1).workflowId());
+
+    wfs = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowIds(List.of()));
+    assertEquals(0, wfs.size());
   }
 
   @Test

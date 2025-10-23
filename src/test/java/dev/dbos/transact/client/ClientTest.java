@@ -11,6 +11,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.Queue;
 
 import java.sql.SQLException;
 import java.util.UUID;
@@ -32,20 +33,18 @@ public class ClientTest {
   @BeforeAll
   static void onetimeSetup() throws Exception {
     dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl(dbUrl)
-            .dbUser(dbUser)
-            .dbPassword(dbPassword)
-            .maximumPoolSize(2)
-            .build();
+        DBOSConfig.defaults("systemdbtest")
+            .withDatabaseUrl(dbUrl)
+            .withDbUser(dbUser)
+            .withDbPassword(dbPassword)
+            .withMaximumPoolSize(2);
   }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
     DBOS.reinitialize(dbosConfig);
-    DBOS.Queue("testQueue").build();
+    DBOS.registerQueue(new Queue("testQueue"));
     service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
     DBOS.launch();
 

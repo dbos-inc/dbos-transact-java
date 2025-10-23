@@ -44,12 +44,9 @@ class RecoveryServiceTest {
   public static void onetimeBefore() {
 
     RecoveryServiceTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .maximumPoolSize(2)
-            .build();
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2);
   }
 
   @BeforeEach
@@ -63,7 +60,8 @@ class RecoveryServiceTest {
             ExecutingService.class, executingServiceImpl = new ExecutingServiceImpl());
     executingService.setExecutingService(executingService);
 
-    testQueue = DBOS.Queue("q1").build();
+    testQueue = new Queue("q1");
+    DBOS.registerQueue(testQueue);
 
     DBOS.launch();
     systemDatabase = DBOSTestAccess.getSystemDatabase();
