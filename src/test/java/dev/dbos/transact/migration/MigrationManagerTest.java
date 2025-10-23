@@ -34,7 +34,6 @@ class MigrationManagerTest {
     MigrationManagerTest.dbosConfig =
         DBOSConfig.defaultsFromEnv("migrationtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys_mm_test")
-            .withDbUser("postgres")
             .withMaximumPoolSize(3);
 
     DBUtils.recreateDB(MigrationManagerTest.dbosConfig);

@@ -80,7 +80,11 @@ public class Demo {
     public static void main(String[] args) {
         
         // Remember to export the DB password to the env variable PGPASSWORD
-        var dbosConfig = DBOSConfig.defaultsFromEnv("demo");
+        var dbosConfig = DBOSConfig
+            .defaults("demo")
+            .withDatabaseUrl(System.getenv("DBOS_SYSTEM_JDBC_URL"))
+            .withDbUser(System.getenv("PGUSER"))
+            .withDbPassword(System.getenv("PGPASSWORD"));
 
         DBOS.configure(dbosConfig);
         

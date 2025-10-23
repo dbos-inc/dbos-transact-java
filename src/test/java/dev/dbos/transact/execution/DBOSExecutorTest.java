@@ -36,7 +36,6 @@ class DBOSExecutorTest {
     DBOSExecutorTest.dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withDbUser("postgres")
             .withMaximumPoolSize(2);
   }
 

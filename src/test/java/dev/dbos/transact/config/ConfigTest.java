@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 
@@ -28,6 +29,7 @@ public class ConfigTest {
             .appName("config-test")
             .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
+            .dbPassword(System.getenv("PGPASSWORD"))
             .appVersion("test-app-version")
             .executorId("test-executor-id")
             .build();
@@ -50,9 +52,10 @@ public class ConfigTest {
     envVars.set("DBOS__APPVERSION", "test-env-app-version");
 
     var config =
-        DBOSConfig.defaultsFromEnv("config-test")
+        DBOSConfig.defaults("config-test")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .withDbUser("postgres")
+            .withDbPassword(System.getenv("PGPASSWORD"))
             .withAppVersion("test-app-version")
             .withExecutorId("test-executor-id");
 
@@ -74,6 +77,7 @@ public class ConfigTest {
             .appName("config-test")
             .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
+            .dbPassword(System.getenv("PGPASSWORD"))
             .build();
 
     DBOS.reinitialize(config);
@@ -91,7 +95,6 @@ public class ConfigTest {
     var config =
         DBOSConfig.defaultsFromEnv("config-test")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withDbUser("postgres")
             .withConductorKey("test-conductor-key");
 
     DBOS.reinitialize(config);
@@ -112,6 +115,7 @@ public class ConfigTest {
             .appName("config-test")
             .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
+            .dbPassword(System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR))
             .build();
 
     DBOS.reinitialize(config);

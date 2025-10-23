@@ -33,7 +33,7 @@ public class ClientTest {
   @BeforeAll
   static void onetimeSetup() throws Exception {
     dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
+        DBOSConfig.defaults("systemdbtest")
             .withDatabaseUrl(dbUrl)
             .withDbUser(dbUser)
             .withDbPassword(dbPassword)

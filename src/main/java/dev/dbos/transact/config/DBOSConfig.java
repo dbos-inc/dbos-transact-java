@@ -22,24 +22,25 @@ public record DBOSConfig(
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
 
-  public static DBOSConfig defaultsFromEnv(String appName) {
-    String databaseUrl = System.getenv(Constants.SYSTEM_JDBC_URL_ENV_VAR);
-    String dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);
-    String dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
+  public static DBOSConfig defaults(String appName) {
     return new DBOSConfig(
-        appName,
-        databaseUrl,
-        dbUser,
-        dbPassword,
-        3, // maximumPoolSize default
+        appName, null, null, null, 3, // maximumPoolSize default
         30000, // connectionTimeout default
         false, // adminServer
         3001, // adminServerPort
         true, // migrate
-        null,
-        null,
-        null,
-        null);
+        null, null, null, null);
+  }
+
+  public static DBOSConfig defaultsFromEnv(String appName) {
+    String databaseUrl = System.getenv(Constants.SYSTEM_JDBC_URL_ENV_VAR);
+    String dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);
+    if (dbUser == null || dbUser.isEmpty()) dbUser = "postgres";
+    String dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
+    return defaults(appName)
+        .withDatabaseUrl(databaseUrl)
+        .withDbUser(dbUser)
+        .withDbPassword(dbPassword);
   }
 
   public static class Builder {
@@ -127,18 +128,9 @@ public record DBOSConfig(
       return this;
     }
 
-    /** Load missing JDBC/PG creds from env if absent. */
-    public Builder defaultsFromEnv() {
-      if (databaseUrl == null) databaseUrl = System.getenv(Constants.SYSTEM_JDBC_URL_ENV_VAR);
-      if (dbUser == null) dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);
-      if (dbPassword == null) dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
-      return this;
-    }
-
     /** Prefer: pure build() (no env reads, no logs). */
     public DBOSConfig build() {
       if (appName == null) throw new IllegalArgumentException("Name is required");
-      defaultsFromEnv();
       return new DBOSConfig(
           appName,
           databaseUrl,
