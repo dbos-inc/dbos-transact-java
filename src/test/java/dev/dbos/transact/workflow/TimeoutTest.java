@@ -21,12 +21,9 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-import org.junitpioneer.jupiter.RetryingTest;
 
-@Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class TimeoutTest {
 
   private static DBOSConfig dbosConfig;
@@ -308,11 +305,9 @@ public class TimeoutTest {
   }
 
   @Test
-  @Disabled("setting timeout to zero clears the deadline, logic of this test incorrect")
   public void parentTimeoutInheritedByChild() throws Exception {
 
-    SimpleService simpleService =
-        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+    var simpleService = DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     DBOS.launch();
@@ -324,23 +319,20 @@ public class TimeoutTest {
         Exception.class,
         () -> {
           try (var id = options.setContext()) {
-            simpleService.longParent("12345", 3, 0);
+            simpleService.longParent("12345", 10, 0);
           }
         });
 
     String parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus().status();
-    assertEquals(WorkflowState.ERROR.name(), parentStatus);
+    assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
 
     String childStatus = DBOS.retrieveWorkflow("childwf").getStatus().status();
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
-  @RetryingTest(3)
+  @Test
   public void parentAsyncTimeoutInheritedByChild() throws Exception {
-    // TOFIX : fails at times
-
-    SimpleService simpleService =
-        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+    var simpleService = DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
 
     DBOS.launch();
@@ -350,16 +342,9 @@ public class TimeoutTest {
     var options = new StartWorkflowOptions(wfid1).withTimeout(2, TimeUnit.SECONDS);
 
     WorkflowHandle<String, ?> handle =
-        DBOS.startWorkflow(() -> simpleService.longParent("12345", 3, 0), options);
+        DBOS.startWorkflow(() -> simpleService.longParent("12345", 10, 0), options);
 
-    try {
-      handle.getResult();
-    } catch (Exception e) {
-      System.out.println(e.getClass().getName());
-      assertTrue(e instanceof DBOSAwaitedWorkflowCancelledException);
-    } catch (Throwable t) {
-      System.out.println("a throwable " + t.getClass().getName());
-    }
+    assertThrows(DBOSAwaitedWorkflowCancelledException.class, () -> handle.getResult());
   }
 
   private void setDelayEpoch(DataSource ds, String workflowId) throws SQLException {

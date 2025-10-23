@@ -3,6 +3,7 @@ package dev.dbos.transact.invocation;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.workflow.Step;
+import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Duration;
@@ -52,8 +53,11 @@ public class HawkServiceImpl implements HawkService {
   @Workflow
   @Override
   public String parentSleepWorkflow(Long timeoutSec, long sleepSec) {
-    var duration = timeoutSec == null ? null : Duration.ofSeconds(timeoutSec);
-    var options = new WorkflowOptions(null, duration);
+    var duration =
+        timeoutSec == null
+            ? Timeout.inherit()
+            : timeoutSec == 0L ? Timeout.none() : Timeout.of(Duration.ofSeconds(timeoutSec));
+    var options = new WorkflowOptions().withTimeout(duration);
     try (var o = options.setContext()) {
       return proxy.sleepWorkflow(sleepSec);
     }

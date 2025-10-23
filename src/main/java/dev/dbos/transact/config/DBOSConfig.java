@@ -2,9 +2,6 @@ package dev.dbos.transact.config;
 
 import dev.dbos.transact.Constants;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public record DBOSConfig(
     String appName,
     String databaseUrl,
@@ -19,8 +16,6 @@ public record DBOSConfig(
     String conductorDomain,
     String appVersion,
     String executorId) {
-
-  private static final Logger logger = LoggerFactory.getLogger(DBOSConfig.class);
 
   public static DBOSConfig defaults(String appName) {
     return new DBOSConfig(

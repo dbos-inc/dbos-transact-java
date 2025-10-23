@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.*;
 
-@Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class SyncWorkflowTest {
 
   private static DBOSConfig dbosConfig;

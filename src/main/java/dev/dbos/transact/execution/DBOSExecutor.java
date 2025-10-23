@@ -23,6 +23,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
+import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -786,18 +787,19 @@ public class DBOSExecutor implements AutoCloseable {
             ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString());
 
     var nextTimeout = ctx.getNextTimeout();
-    var timeout =
-        nextTimeout == null
-            ? ctx.getTimeout()
-            // zero timeout is a marker for "no timeout"
-            : nextTimeout.isZero() ? null : nextTimeout;
-    var deadline =
-        nextTimeout == null
-            ? ctx.getDeadline()
-            // zero timeout is a marker for "no timeout"
-            : nextTimeout.isZero()
-                ? null
-                : Instant.ofEpochMilli(System.currentTimeMillis() + nextTimeout.toMillis());
+
+    // default to context timeout & deadline if nextTimeout is null or Inherit
+    Duration timeout = ctx.getTimeout();
+    Instant deadline = ctx.getDeadline();
+    if (nextTimeout instanceof Timeout.None) {
+      // clear timeout and deadline to null if nextTimeout is None
+      timeout = null;
+      deadline = null;
+    } else if (nextTimeout instanceof Timeout.Explicit e) {
+      // set the timeout and deadline if nextTimeout is Explicit
+      timeout = e.value();
+      deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
+    }
 
     try {
       var options =
@@ -1069,7 +1071,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
-    Long timeoutMS = timeout != null ? timeout.toMillis() : null;
+    Long timeoutMs = timeout != null ? timeout.toMillis() : null;
     Long deadlineEpochMs =
         queueName != null ? null : deadline != null ? deadline.toEpochMilli() : null;
 
@@ -1080,23 +1082,24 @@ public class DBOSExecutor implements AutoCloseable {
             workflowName,
             className,
             instanceName,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
             queueName,
+            deduplicationId,
+            priority.orElse(0),
+            null,
+            null,
+            null,
+            inputString,
+            null,
+            null,
             executorId,
             appVersion,
             null,
-            0,
-            timeoutMS,
-            deadlineEpochMs,
-            deduplicationId,
-            priority.orElse(0),
-            inputString);
+            null,
+            null,
+            null,
+            null,
+            timeoutMs,
+            deadlineEpochMs);
 
     WorkflowInitResult[] initResult = {null};
     DbRetry.run(
