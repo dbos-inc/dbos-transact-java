@@ -54,30 +54,7 @@ public class SystemDatabaseTest {
   @Test
   public void testRetries() throws Exception {
     var wfid = "wfid-1";
-    var status =
-        new WorkflowStatusInternal(
-            wfid,
-            WorkflowState.PENDING,
-            "wf-name",
-            null, 
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            1,
-            null,
-            null,
-            null,
-            0,
-            "wf-input");
+    var status = new WorkflowStatusInternal(wfid, WorkflowState.PENDING).withName("wf-name").withInputs("wf-inputs");
 
     for (var i = 1; i <= 6; i++) {
       var result1 = sysdb.initWorkflowStatus(status, 5);
@@ -90,6 +67,7 @@ public class SystemDatabaseTest {
       assertEquals(i, row.recoveryAttempts());
     }
 
-    assertThrows(DBOSMaxRecoveryAttemptsExceededException.class, () -> sysdb.initWorkflowStatus(status, 5));
+    assertThrows(
+        DBOSMaxRecoveryAttemptsExceededException.class, () -> sysdb.initWorkflowStatus(status, 5));
   }
 }

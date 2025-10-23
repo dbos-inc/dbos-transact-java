@@ -8,5 +8,4 @@ public record InsertWorkflowResult(
     String instanceName,
     String queueName,
     Long timeoutMs,
-    Long deadlineEpochMs) {
-}
+    Long deadlineEpochMs) {}

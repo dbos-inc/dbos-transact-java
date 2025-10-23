@@ -1071,34 +1071,25 @@ public class DBOSExecutor implements AutoCloseable {
 
     WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
-    Long timeoutMS = timeout != null ? timeout.toMillis() : null;
+    Long timeoutMs = timeout != null ? timeout.toMillis() : null;
     Long deadlineEpochMs =
         queueName != null ? null : deadline != null ? deadline.toEpochMilli() : null;
 
-    WorkflowStatusInternal workflowStatusInternal =
+    WorkflowStatusInternal workflowStatusInternal = 
         new WorkflowStatusInternal(
             workflowId,
             status,
             workflowName,
             className,
             instanceName,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
             queueName,
-            executorId,
-            appVersion,
-            null,
-            0,
-            timeoutMS,
-            deadlineEpochMs,
             deduplicationId,
             priority.orElse(0),
-            inputString);
+            null, null, null,
+            inputString, null, null,
+            executorId, appVersion, null,
+            null, null, null,
+            null, timeoutMs, deadlineEpochMs);
 
     WorkflowInitResult[] initResult = {null};
     DbRetry.run(

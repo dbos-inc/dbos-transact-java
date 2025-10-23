@@ -85,26 +85,26 @@ public class WorkflowDAO {
 
         InsertWorkflowResult resRow = insertWorkflowStatus(connection, initStatus);
 
-        if (!Objects.equals(resRow.name(), initStatus.getName())) {
+        if (!Objects.equals(resRow.name(), initStatus.name())) {
           String msg =
               String.format(
                   "Workflow already exists with a different function name: %s, but the provided function name is: %s",
-                  resRow.name(), initStatus.getName());
-          throw new DBOSConflictingWorkflowException(initStatus.getWorkflowUUID(), msg);
-        } else if (!Objects.equals(resRow.className(), initStatus.getClassName())) {
+                  resRow.name(), initStatus.name());
+          throw new DBOSConflictingWorkflowException(initStatus.workflowId(), msg);
+        } else if (!Objects.equals(resRow.className(), initStatus.className())) {
           String msg =
               String.format(
                   "Workflow already exists with a different class name: %s, but the provided class name is: %s",
-                  resRow.className(), initStatus.getClassName());
-          throw new DBOSConflictingWorkflowException(initStatus.getWorkflowUUID(), msg);
+                  resRow.className(), initStatus.className());
+          throw new DBOSConflictingWorkflowException(initStatus.workflowId(), msg);
         } else if (!Objects.equals(
             resRow.instanceName() != null ? resRow.instanceName() : "",
-            initStatus.getInstanceName() != null ? initStatus.getInstanceName() : "")) {
+            initStatus.instanceName() != null ? initStatus.instanceName() : "")) {
           String msg =
               String.format(
                   "Workflow already exists with a different class configuration: %s, but the provided class configuration is: %s",
-                  resRow.instanceName(), initStatus.getInstanceName());
-          throw new DBOSConflictingWorkflowException(initStatus.getWorkflowUUID(), msg);
+                  resRow.instanceName(), initStatus.instanceName());
+          throw new DBOSConflictingWorkflowException(initStatus.workflowId(), msg);
         }
 
         final int attempts = resRow.recoveryAttempts();
@@ -120,18 +120,18 @@ public class WorkflowDAO {
 
           try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.toString());
-            stmt.setString(2, initStatus.getWorkflowUUID());
+            stmt.setString(2, initStatus.workflowId());
             stmt.setString(3, WorkflowState.PENDING.toString());
 
             stmt.executeUpdate();
           }
 
           throw new DBOSMaxRecoveryAttemptsExceededException(
-              initStatus.getWorkflowUUID(), maxRetries);
+              initStatus.workflowId(), maxRetries);
         }
 
         return new WorkflowInitResult(
-            initStatus.getWorkflowUUID(), resRow.status(), resRow.deadlineEpochMs());
+            initStatus.workflowId(), resRow.status(), resRow.deadlineEpochMs());
 
       } finally {
         connection.commit();
@@ -166,13 +166,13 @@ public class WorkflowDAO {
         ON CONFLICT (workflow_uuid)
           DO UPDATE SET
             recovery_attempts = CASE
-                WHEN EXCLUDED.status != 'ENQUEUED' 
+                WHEN EXCLUDED.status != 'ENQUEUED'
                   THEN workflow_status.recovery_attempts + 1
                   ELSE workflow_status.recovery_attempts
             END,
             updated_at = EXCLUDED.updated_at,
             executor_id = CASE
-                WHEN EXCLUDED.status = 'ENQUEUED' 
+                WHEN EXCLUDED.status = 'ENQUEUED'
                   THEN workflow_status.executor_id
                   ELSE EXCLUDED.executor_id
             END
@@ -183,34 +183,35 @@ public class WorkflowDAO {
     try (PreparedStatement stmt = connection.prepareStatement(insertSQL)) {
 
       var now = Instant.now().toEpochMilli();
-      var recoveryAttempts = status.getStatus() == WorkflowState.ENQUEUED ? 0 : 1;
+      var recoveryAttempts = status.status() == WorkflowState.ENQUEUED ? 0 : 1;
+      int priority = status.priority() == null ? 0 : status.priority();
 
-      stmt.setString(1, status.getWorkflowUUID());
-      stmt.setString(2, status.getStatus().toString());
-      stmt.setString(3, status.getInputs());
+      stmt.setString(1, status.workflowId());
+      stmt.setString(2, status.status().toString());
+      stmt.setString(3, status.inputs());
 
-      stmt.setString(4, status.getName());
-      stmt.setString(5, status.getClassName());
-      stmt.setString(6, status.getInstanceName());
+      stmt.setString(4, status.name());
+      stmt.setString(5, status.className());
+      stmt.setString(6, status.instanceName());
 
-      stmt.setString(7, status.getQueueName());
-      stmt.setString(8, status.getDeduplicationId());
-      stmt.setInt(9, status.getPriority());
+      stmt.setString(7, status.queueName());
+      stmt.setString(8, status.deduplicationId());
+      stmt.setInt(9, priority);
 
-      stmt.setString(10, status.getAuthenticatedUser());
-      stmt.setString(11, status.getAssumedRole());
-      stmt.setString(12, status.getAuthenticatedRoles());
+      stmt.setString(10, status.authenticatedUser());
+      stmt.setString(11, status.assumedRole());
+      stmt.setString(12, status.authenticatedRoles());
 
-      stmt.setString(13, status.getExecutorId());
-      stmt.setString(14, status.getAppVersion());
-      stmt.setString(15, status.getAppId());
+      stmt.setString(13, status.executorId());
+      stmt.setString(14, status.appVersion());
+      stmt.setString(15, status.appId());
 
       stmt.setLong(16, now); // created_at
       stmt.setLong(17, now); // updated_at
       stmt.setInt(18, recoveryAttempts);
 
-      stmt.setObject(19, status.getWorkflowTimeoutMs());
-      stmt.setObject(20, status.getWorkflowDeadlineEpochMs());
+      stmt.setObject(19, status.timeoutMs());
+      stmt.setObject(20, status.deadlineEpochMs());
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -229,16 +230,16 @@ public class WorkflowDAO {
         } else {
           throw new RuntimeException(
               "Attempt to insert workflow "
-                  + status.getWorkflowUUID()
+                  + status.workflowId()
                   + " failed: No rows returned.");
         }
 
       } catch (SQLException e) {
         if ("23505".equals(e.getSQLState())) {
           throw new DBOSQueueDuplicatedException(
-              status.getWorkflowUUID(),
-              status.getQueueName() != null ? status.getQueueName() : "",
-              status.getDeduplicationId() != null ? status.getDeduplicationId() : "");
+              status.workflowId(),
+              status.queueName() != null ? status.queueName() : "",
+              status.deduplicationId() != null ? status.deduplicationId() : "");
         }
         // Re-throw other SQL exceptions
         throw e;
