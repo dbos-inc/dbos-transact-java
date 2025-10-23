@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 
-@Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class ClientTest {
   private static DBOSConfig dbosConfig;
   private static final String dbUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
@@ -118,7 +118,10 @@ public class ClientTest {
 
     var workflowId = "%s-%s".formatted(handle.getWorkflowId(), idempotencyKey);
     var sendHandle = DBOS.retrieveWorkflow(workflowId);
-    assertEquals("SUCCESS", sendHandle.getStatus().status());
+    assertNotNull(sendHandle);
+    var status = sendHandle.getStatus();
+    assertNotNull(status);
+    assertEquals("SUCCESS", status.status());
 
     assertEquals("42-test.message", handle.getResult());
   }

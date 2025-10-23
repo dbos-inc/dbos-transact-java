@@ -1,13 +1,17 @@
 package dev.dbos.transact.context;
 
+import dev.dbos.transact.workflow.Timeout;
+
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
-public record WorkflowOptions(String workflowId, Duration timeout) {
+public record WorkflowOptions(String workflowId, Timeout timeout) {
 
   public WorkflowOptions {
-    if (timeout != null && timeout.isNegative()) {
-      throw new IllegalArgumentException("timeout must not be negative");
+    if (timeout != null && timeout instanceof Timeout.Explicit explicit) {
+      if (explicit.value().isNegative() || explicit.value().isZero()) {
+        throw new IllegalArgumentException("timeout must be a positive non-zero duration");
+      }
     }
   }
 
@@ -19,24 +23,24 @@ public record WorkflowOptions(String workflowId, Duration timeout) {
     this(workflowId, null);
   }
 
-  public WorkflowOptions(Duration timeout) {
-    this(null, timeout);
-  }
-
-  public WorkflowOptions(long value, TimeUnit unit) {
-    this(Duration.ofNanos(unit.toNanos(value)));
-  }
-
   public WorkflowOptions withWorkflowId(String workflowId) {
     return new WorkflowOptions(workflowId, this.timeout);
   }
 
-  public WorkflowOptions withTimeout(Duration timeout) {
+  public WorkflowOptions withTimeout(Timeout timeout) {
     return new WorkflowOptions(this.workflowId, timeout);
+  }
+
+  public WorkflowOptions withTimeout(Duration timeout) {
+    return new WorkflowOptions(this.workflowId, Timeout.of(timeout));
   }
 
   public WorkflowOptions withTimeout(long value, TimeUnit unit) {
     return withTimeout(Duration.ofNanos(unit.toNanos(value)));
+  }
+
+  public WorkflowOptions withNoTimeout() {
+    return new WorkflowOptions(this.workflowId, Timeout.none());
   }
 
   @Override
@@ -62,7 +66,7 @@ public record WorkflowOptions(String workflowId, Duration timeout) {
 
     private final DBOSContext ctx;
     private final String nextWorkflowId;
-    private final Duration timeout;
+    private final Timeout timeout;
 
     public Guard(DBOSContext ctx) {
       this.ctx = ctx;

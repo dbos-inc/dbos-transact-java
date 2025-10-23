@@ -35,7 +35,7 @@ import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class QueuesTest {
 
   private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
@@ -45,7 +45,6 @@ public class QueuesTest {
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
-
     QueuesTest.dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
@@ -372,36 +371,34 @@ public class QueuesTest {
     }
 
     WorkflowStatusInternal wfStatusInternal =
-        new WorkflowStatusInternal(
-            "xxx",
-            WorkflowState.SUCCESS,
-            "OrderProcessingWorkflow",
-            "com.example.workflows.OrderWorkflow",
-            "prod-config",
-            "user123@example.com",
-            "admin",
-            "admin,operator",
-            "{\"result\":\"success\"}",
-            null,
-            System.currentTimeMillis() - 3600000,
-            System.currentTimeMillis(),
-            "QwithWCLimit",
-            executorId,
-            appVersion,
-            "order-app-123",
-            0,
-            300000l,
-            System.currentTimeMillis() + 2400000,
-            "dedup-112233",
-            1,
-            "{\"orderId\":\"ORD-12345\"}");
+        new WorkflowStatusInternal()
+            .withName("OrderProcessingWorkflow")
+            .withClassName("com.example.workflows.OrderWorkflow")
+            .withInstanceName("prod-config")
+            .withAuthenticatedUser("user123@example.com")
+            .withAssumedRole("admin")
+            .withAuthenticatedRoles("admin,operator")
+            .withOutput("{\"result\":\"success\"}")
+            .withCreatedAt(System.currentTimeMillis() - 3600000)
+            .withUpdatedAt(System.currentTimeMillis())
+            .withQueueName("QwithWCLimit")
+            .withExecutorId(executorId)
+            .withAppVersion(appVersion)
+            .withAppId("order-app-123")
+            .withRecoveryAttempts(0L)
+            .withTimeoutMs(300000l)
+            .withDeadlineEpochMs(System.currentTimeMillis() + 2400000)
+            .withPriority(1)
+            .withInputs("{\"orderId\":\"ORD-12345\"}");
 
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
-      wfStatusInternal.setWorkflowUUID(wfid);
-      wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
-      wfStatusInternal.setDeduplicationId("dedup" + i);
-      systemDatabase.initWorkflowStatus(wfStatusInternal, null);
+      var status =
+          wfStatusInternal
+              .withWorkflowid(wfid)
+              .withStatus(WorkflowState.ENQUEUED)
+              .withDeduplicationId("dedup" + i);
+      systemDatabase.initWorkflowStatus(status, null);
     }
 
     List<String> idsToRun =
@@ -451,50 +448,49 @@ public class QueuesTest {
     }
 
     WorkflowStatusInternal wfStatusInternal =
-        new WorkflowStatusInternal(
-            "xxx",
-            WorkflowState.SUCCESS,
-            "OrderProcessingWorkflow",
-            "com.example.workflows.OrderWorkflow",
-            "prod-config",
-            "user123@example.com",
-            "admin",
-            "admin,operator",
-            "{\"result\":\"success\"}",
-            null,
-            System.currentTimeMillis() - 3600000,
-            System.currentTimeMillis(),
-            "QwithWCLimit",
-            executorId,
-            appVersion,
-            "order-app-123",
-            0,
-            300000l,
-            System.currentTimeMillis() + 2400000,
-            "dedup-112233",
-            1,
-            "{\"orderId\":\"ORD-12345\"}");
+        new WorkflowStatusInternal()
+            .withName("OrderProcessingWorkflow")
+            .withClassName("com.example.workflows.OrderWorkflow")
+            .withInstanceName("prod-config")
+            .withAuthenticatedUser("user123@example.com")
+            .withAssumedRole("admin")
+            .withAuthenticatedRoles("admin,operator")
+            .withOutput("{\"result\":\"success\"}")
+            .withCreatedAt(System.currentTimeMillis() - 3600000)
+            .withUpdatedAt(System.currentTimeMillis())
+            .withQueueName("QwithWCLimit")
+            .withExecutorId(executorId)
+            .withAppVersion(appVersion)
+            .withAppId("order-app-123")
+            .withRecoveryAttempts(0L)
+            .withTimeoutMs(300000l)
+            .withDeadlineEpochMs(System.currentTimeMillis() + 2400000)
+            .withPriority(1)
+            .withInputs("{\"orderId\":\"ORD-12345\"}");
 
     // executor1
     for (int i = 0; i < 2; i++) {
       String wfid = "id" + i;
-      wfStatusInternal.setWorkflowUUID(wfid);
-      wfStatusInternal.setStatus(WorkflowState.ENQUEUED);
-      wfStatusInternal.setDeduplicationId("dedup" + i);
-      systemDatabase.initWorkflowStatus(wfStatusInternal, null);
+      var status =
+          wfStatusInternal
+              .withWorkflowid(wfid)
+              .withStatus(WorkflowState.ENQUEUED)
+              .withDeduplicationId("dedup" + i);
+      systemDatabase.initWorkflowStatus(status, null);
     }
 
     // executor2
-
     String executor2 = "remote";
     for (int i = 2; i < 5; i++) {
 
       String wfid = "id" + i;
-      wfStatusInternal.setWorkflowUUID(wfid);
-      wfStatusInternal.setStatus(WorkflowState.PENDING);
-      wfStatusInternal.setDeduplicationId("dedup" + i);
-      wfStatusInternal.setExecutorId(executor2);
-      systemDatabase.initWorkflowStatus(wfStatusInternal, null);
+      var status =
+          wfStatusInternal
+              .withWorkflowid(wfid)
+              .withStatus(WorkflowState.PENDING)
+              .withDeduplicationId("dedup" + i)
+              .withExecutorId(executor2);
+      systemDatabase.initWorkflowStatus(status, null);
     }
 
     List<String> idsToRun =

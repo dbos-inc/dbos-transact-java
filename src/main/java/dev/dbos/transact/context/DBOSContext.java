@@ -1,6 +1,7 @@
 package dev.dbos.transact.context;
 
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -12,7 +13,7 @@ public class DBOSContext {
 
   // assigned context options
   String nextWorkflowId;
-  Duration nextTimeout;
+  Timeout nextTimeout;
   StartWorkflowOptions startOptions;
   String startedWorkflowId;
 
@@ -120,7 +121,7 @@ public class DBOSContext {
     return workflowId;
   }
 
-  public Duration getNextTimeout() {
+  public Timeout getNextTimeout() {
     if (startOptions != null && startOptions.timeout() != null) {
       return startOptions.timeout();
     }

@@ -21,7 +21,7 @@ import javax.sql.DataSource;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 
-@Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class MigrationManagerTest {
 

@@ -11,6 +11,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.Timeout;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -25,9 +26,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
-@Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class DirectInvocationTest {
   private static DBOSConfig dbosConfig;
   private HawkService proxy;
@@ -99,7 +99,7 @@ public class DirectInvocationTest {
   @Test
   void directInvokeSetTimeout() {
 
-    var options = new WorkflowOptions(Duration.ofSeconds(10));
+    var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
       var result = proxy.sleepWorkflow(1);
       assertEquals(localDate, result);
@@ -115,7 +115,7 @@ public class DirectInvocationTest {
   @Test
   void directInvokeSetZeroTimeout() {
 
-    var options = new WorkflowOptions(Duration.ZERO);
+    var options = new WorkflowOptions().withTimeout(Timeout.none());
     try (var _o = options.setContext()) {
       var result = proxy.sleepWorkflow(1);
       assertEquals(localDate, result);
@@ -132,7 +132,7 @@ public class DirectInvocationTest {
   void directInvokeSetWorkflowIdAndTimeout() {
 
     String workflowId = "directInvokeSetWorkflowIdAndTimeout";
-    var options = new WorkflowOptions(workflowId, Duration.ofSeconds(10));
+    var options = new WorkflowOptions(workflowId).withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
       var result = proxy.sleepWorkflow(1);
       assertEquals(localDate, result);
@@ -149,7 +149,7 @@ public class DirectInvocationTest {
   @Test
   void directInvokeTimeoutCancellation() {
 
-    var options = new WorkflowOptions(Duration.ofSeconds(1));
+    var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(1));
     try (var _o = options.setContext()) {
       assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
     }
@@ -166,7 +166,7 @@ public class DirectInvocationTest {
   void directInvokeSetWorkflowIdTimeoutCancellation() {
 
     var workflowId = "directInvokeSetWorkflowIdTimeoutCancellation";
-    var options = new WorkflowOptions(workflowId, Duration.ofSeconds(1));
+    var options = new WorkflowOptions(workflowId).withTimeout(Duration.ofSeconds(1));
     try (var _o = options.setContext()) {
       assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
     }
@@ -267,7 +267,7 @@ public class DirectInvocationTest {
   @Test
   void directInvokeParentSetTimeout() {
 
-    var options = new WorkflowOptions(Duration.ofSeconds(10));
+    var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
       var result = proxy.parentSleepWorkflow(null, 1);
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
@@ -304,7 +304,7 @@ public class DirectInvocationTest {
   @Test
   void directInvokeParentSetTimeoutParent2() {
 
-    var options = new WorkflowOptions(Duration.ofSeconds(10));
+    var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
       var result = proxy.parentSleepWorkflow(5L, 1);
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
@@ -325,7 +325,7 @@ public class DirectInvocationTest {
   @Test
   void directInvokeParentSetTimeoutParent3() {
 
-    var options = new WorkflowOptions(Duration.ofSeconds(10));
+    var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
       var result = proxy.parentSleepWorkflow(0L, 1);
       assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);

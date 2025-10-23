@@ -215,37 +215,15 @@ public class DBOSClient implements AutoCloseable {
 
   public void send(String destinationId, Object message, String topic, String idempotencyKey) {
     var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
-    var now = System.currentTimeMillis();
     if (idempotencyKey == null) {
       idempotencyKey = UUID.randomUUID().toString();
     }
 
     var status =
-        new WorkflowStatusInternal(
-            workflowId,
-            WorkflowState.SUCCESS,
-            "temp_workflow-send-client",
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            now,
-            now,
-            null,
-            null,
-            null,
-            null,
-            0,
-            null,
-            null,
-            null,
-            0,
-            null);
+        new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS)
+            .withName("temp_workflow-send-client");
     systemDatabase.initWorkflowStatus(status, null);
-    systemDatabase.send(status.getWorkflowUUID(), 0, destinationId, message, topic);
+    systemDatabase.send(status.workflowId(), 0, destinationId, message, topic);
   }
 
   public Object getEvent(String targetId, String key, Duration timeout) {
