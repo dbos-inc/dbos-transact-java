@@ -83,8 +83,8 @@ public class Demo {
         var dbosConfig = DBOSConfig
             .defaults("demo")
             .withDatabaseUrl(System.getenv("DBOS_SYSTEM_JDBC_URL"))
-            .withDbUser(System.getenv("PGUSER"))
-            .withDbPassword(System.getenv("PGPASSWORD"));
+            .withDbUser(Objects.requireNonNullElse(System.getenv("PGUSER"), "postgres"))
+            .withDbPassword(Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos"))
 
         DBOS.configure(dbosConfig);
         
