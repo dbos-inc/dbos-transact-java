@@ -3,6 +3,7 @@ package dev.dbos.transact.database;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
@@ -65,11 +66,16 @@ public class SystemDatabaseTest {
 
             var row = DBUtils.getWorkflowRow(dataSource, wfid);
             assertNotNull(row);
+            assertEquals("PENDING", row.status());
             assertEquals(i, row.recoveryAttempts());
         }
 
         assertThrows(
                 DBOSMaxRecoveryAttemptsExceededException.class, () -> sysdb.initWorkflowStatus(status, 5));
+        var row = DBUtils.getWorkflowRow(dataSource, wfid);
+        assertNotNull(row);
+        assertEquals("MAX_RECOVERY_ATTEMPTS_EXCEEDED", row.status());
+        assertEquals(7, row.recoveryAttempts());
     }
 
     @Test
@@ -83,6 +89,10 @@ public class SystemDatabaseTest {
         assertEquals(wfid, result1.getWorkflowId());
         assertEquals(0, result1.getDeadlineEpochMS());
 
+        var before = DBUtils.getWorkflowRow(dataSource, wfid);
         assertThrows(DBOSQueueDuplicatedException.class, () -> sysdb.initWorkflowStatus(status.withWorkflowid("wfid-2"), 5));
+        var after = DBUtils.getWorkflowRow(dataSource, wfid);
+
+        assertTrue(before.equals(after));
     }
 }
