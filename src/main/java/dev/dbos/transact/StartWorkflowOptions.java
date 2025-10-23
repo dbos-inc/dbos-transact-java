@@ -43,9 +43,13 @@ public record StartWorkflowOptions(
         this.workflowId, timeout, this.queueName, this.deduplicationId, this.priority);
   }
 
-  public StartWorkflowOptions withQueue(Queue queue) {
+  public StartWorkflowOptions withQueue(String queue) {
     return new StartWorkflowOptions(
-        this.workflowId, this.timeout, queue.name(), this.deduplicationId, this.priority);
+        this.workflowId, this.timeout, queue, this.deduplicationId, this.priority);
+  }
+
+  public StartWorkflowOptions withQueue(Queue queue) {
+    return withQueue(queue.name());
   }
 
   public StartWorkflowOptions withDeduplicationId(String deduplicationId) {

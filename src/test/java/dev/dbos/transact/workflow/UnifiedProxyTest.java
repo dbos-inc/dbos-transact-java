@@ -9,7 +9,6 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -28,12 +27,9 @@ public class UnifiedProxyTest {
   static void onetimeSetup() throws Exception {
 
     UnifiedProxyTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .maximumPoolSize(2)
-            .build();
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2);
   }
 
   @BeforeEach
@@ -53,7 +49,8 @@ public class UnifiedProxyTest {
 
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
-    Queue q = DBOS.Queue("simpleQ").build();
+    Queue q = new Queue("simpleQ");
+    DBOS.registerQueue(q);
 
     DBOS.launch();
 
@@ -92,8 +89,7 @@ public class UnifiedProxyTest {
     assertEquals(wfid3, handle.getWorkflowId());
     assertEquals("SUCCESS", handle.getStatus().status());
 
-    var builder = new ListWorkflowsInput.Builder().workflowIds(Arrays.asList(wfid3));
-    ListWorkflowsInput input = builder.build();
+    ListWorkflowsInput input = new ListWorkflowsInput().withWorkflowId(wfid3);
     List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
     assertEquals("simpleQ", wfs.get(0).queueName());
   }
@@ -104,7 +100,7 @@ public class UnifiedProxyTest {
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
 
-    DBOS.Queue("childQ").build();
+    DBOS.registerQueue(new Queue("childQ"));
     DBOS.launch();
 
     simpleService.setSimpleService(simpleService);

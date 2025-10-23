@@ -4,23 +4,52 @@ import java.util.Objects;
 
 public record Queue(
     String name,
-    int concurrency,
-    int workerConcurrency,
+    Integer concurrency,
+    Integer workerConcurrency,
     boolean priorityEnabled,
     RateLimit rateLimit) {
 
   public Queue {
     Objects.requireNonNull(name, "Queue name must not be null");
-    if (workerConcurrency > concurrency) {
+    if (concurrency != null && concurrency <= 0)
       throw new IllegalArgumentException(
-          String.format(
-              "workerConcurrency must be less than or equal to concurrency for queue %s", name));
-    }
+          "If specified, queue concurrency must be greater than zero");
+    if (workerConcurrency != null && workerConcurrency <= 0)
+      throw new IllegalArgumentException(
+          "If specified, queue workerConcurrency must be greater than zero");
+  }
+
+  public Queue(String name) {
+    this(name, null, null, false, null);
   }
 
   public boolean hasLimiter() {
     return rateLimit != null;
   }
 
-  public record RateLimit(int limit, double period) {}
+  public static record RateLimit(int limit, double period) {}
+
+  public Queue withName(String name) {
+    return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
+  }
+
+  public Queue withConcurrency(Integer concurrency) {
+    return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
+  }
+
+  public Queue withWorkerConcurrency(Integer workerConcurrency) {
+    return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
+  }
+
+  public Queue withPriorityEnabled(boolean priorityEnabled) {
+    return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
+  }
+
+  public Queue withRateLimit(RateLimit rateLimit) {
+    return new Queue(name, concurrency, workerConcurrency, priorityEnabled, rateLimit);
+  }
+
+  public Queue withRateLimit(int limit, double period) {
+    return withRateLimit(new RateLimit(limit, period));
+  }
 }

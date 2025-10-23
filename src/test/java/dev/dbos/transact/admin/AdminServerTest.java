@@ -190,7 +190,7 @@ class AdminServerTest {
 
   @Test
   public void queueMetadata() throws IOException {
-    var queue1 = new Queue("test-queue-1", 0, 0, false, null);
+    var queue1 = new Queue("test-queue-1", null, null, false, null);
     var queue2 = new Queue("test-queue-2", 10, 5, true, new Queue.RateLimit(2, 4.0));
 
     when(mockExec.getQueues()).thenReturn(List.of(queue1, queue2));
@@ -208,8 +208,8 @@ class AdminServerTest {
           .statusCode(200)
           .body("size()", equalTo(2))
           .body("[0].name", equalTo("test-queue-1"))
-          .body("[0].concurrency", equalTo(0))
-          .body("[0].workerConcurrency", equalTo(0))
+          .body("[0].concurrency", nullValue())
+          .body("[0].workerConcurrency", nullValue())
           .body("[0].priorityEnabled", equalTo(false))
           .body("[0].rateLimit", nullValue())
           .body("[1].name", equalTo("test-queue-2"))
@@ -443,8 +443,8 @@ class AdminServerTest {
       assertNull(input.applicationVersion());
       assertNull(input.offset());
       assertNull(input.limit());
-      assertEquals(0, input.status().size());
-      assertEquals(0, input.executorIds().size());
+      assertNull(input.status());
+      assertNull(input.executorIds());
     }
   }
 

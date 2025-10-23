@@ -38,12 +38,9 @@ public class WorkflowMgmtTest {
   static void onetimeSetup() throws Exception {
 
     WorkflowMgmtTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .maximumPoolSize(2)
-            .build();
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2);
   }
 
   @BeforeEach
@@ -112,7 +109,8 @@ public class WorkflowMgmtTest {
         DBOS.registerWorkflows(MgmtService.class, new MgmtServiceImpl(mainLatch, workLatch));
     mgmtService.setMgmtService(mgmtService);
 
-    Queue myqueue = DBOS.Queue("myqueue").build();
+    Queue myqueue = new Queue("myqueue");
+    DBOS.registerQueue(myqueue);
 
     DBOS.launch();
 

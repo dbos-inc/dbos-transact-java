@@ -22,23 +22,25 @@ public record ListWorkflowsRequest(
     String queue_name) {
 
   public ListWorkflowsInput asInput() {
-    var builder =
-        new ListWorkflowsInput.Builder()
-            .workflowIds(workflow_uuids)
-            .workflowName(workflow_name)
-            .authenticatedUser(authenticated_user)
-            .startTime(start_time != null ? OffsetDateTime.parse(start_time) : null)
-            .endTime(end_time != null ? OffsetDateTime.parse(end_time) : null)
-            .status(status)
-            .applicationVersion(application_version)
-            .workflowIdPrefix(workflow_id_prefix)
-            .queueName(queue_name)
-            .limit(limit)
-            .offset(offset)
-            .sortDesc(sort_desc)
-            .loadInput(load_input)
-            .loadOutput(load_output);
-
-    return builder.build();
+    return new ListWorkflowsInput(
+        workflow_uuids,
+        status != null ? List.of(status) : null,
+        start_time != null ? OffsetDateTime.parse(start_time) : null,
+        end_time != null ? OffsetDateTime.parse(end_time) : null,
+        workflow_name,
+        null, // class_name,
+        null, // instance_name
+        application_version,
+        authenticated_user,
+        limit,
+        offset,
+        sort_desc,
+        workflow_id_prefix,
+        load_input,
+        load_output,
+        queue_name,
+        queue_name != null ? true : false,
+        null // Executor IDs
+        );
   }
 }

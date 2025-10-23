@@ -83,7 +83,7 @@ public class QueuesDAO {
       // Calculate max tasks based on concurrency limits
       int maxTasks = 100;
 
-      if (queue.workerConcurrency() > 0 || queue.concurrency() > 0) {
+      if (queue.workerConcurrency() != null || queue.concurrency() != null) {
         // Count pending workflows by executor
         final String pendingQuery =
             """
@@ -108,12 +108,12 @@ public class QueuesDAO {
         int localPendingWorkflows = pendingWorkflowsDict.getOrDefault(executorId, 0);
 
         // Check worker concurrency limit
-        if (queue.workerConcurrency() > 0) {
+        if (queue.workerConcurrency() != null) {
           maxTasks = Math.max(0, queue.workerConcurrency() - localPendingWorkflows);
         }
 
         // Check global concurrency limit
-        if (queue.concurrency() > 0) {
+        if (queue.concurrency() != null) {
           int globalPendingWorkflows =
               pendingWorkflowsDict.values().stream().mapToInt(Integer::intValue).sum();
 
@@ -154,7 +154,7 @@ public class QueuesDAO {
       }
 
       // Add FOR UPDATE NOWAIT or SKIP Locked
-      if (queue.concurrency() > 0) {
+      if (queue.concurrency() != null) {
         queryBuilder.append(" FOR UPDATE NOWAIT");
       } else {
         queryBuilder.append(" FOR UPDATE SKIP LOCKED");

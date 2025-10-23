@@ -36,12 +36,9 @@ public class TimeoutTest {
   static void onetimeSetup() throws Exception {
 
     TimeoutTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .maximumPoolSize(2)
-            .build();
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2);
   }
 
   @BeforeEach
@@ -113,7 +110,8 @@ public class TimeoutTest {
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
-    Queue simpleQ = DBOS.Queue("simpleQ").build();
+    Queue simpleQ = new Queue("simpleQ");
+    DBOS.registerQueue(simpleQ);
 
     DBOS.launch();
 
@@ -139,7 +137,8 @@ public class TimeoutTest {
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
     simpleService.setSimpleService(simpleService);
-    Queue simpleQ = DBOS.Queue("simpleQ").build();
+    Queue simpleQ = new Queue("simpleQ");
+    DBOS.registerQueue(simpleQ);
 
     DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase();

@@ -79,14 +79,12 @@ public class Demo {
     
     public static void main(String[] args) {
         
-        DBOSConfig dbosConfig = new DBOSConfig.Builder()
-                .name("demo")
-                .dbHost("localhost")
-                .dbPort(5432)
-                .dbUser("postgres")
-                .sysDbName("demo_dbos_sys")
-                .build() ;
         // Remember to export the DB password to the env variable PGPASSWORD
+        var dbosConfig = DBOSConfig
+            .defaults("demo")
+            .withDatabaseUrl(System.getenv("DBOS_SYSTEM_JDBC_URL"))
+            .withDbUser(Objects.requireNonNullElse(System.getenv("PGUSER"), "postgres"))
+            .withDbPassword(Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos"))
 
         DBOS.configure(dbosConfig);
         
@@ -150,7 +148,9 @@ They don't require a separate queueing service or message broker&mdash;just Post
 
 ```java
  public void queuedTasks() {
-    var q = DBOS.Queue("childQ").build();
+    var q = new Queue("childQ");
+    DBOS.registerQueue(q);
+    DBOS.launch();
 
     for (int i = 0; i < 3; i++) {
 

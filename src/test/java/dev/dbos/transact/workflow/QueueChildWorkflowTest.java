@@ -26,12 +26,9 @@ public class QueueChildWorkflowTest {
   static void onetimeSetup() throws Exception {
 
     QueueChildWorkflowTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("systemdbtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .maximumPoolSize(2)
-            .build();
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2);
   }
 
   @BeforeEach
@@ -49,7 +46,8 @@ public class QueueChildWorkflowTest {
   @Test
   public void multipleChildren() throws Exception {
 
-    Queue childQ = DBOS.Queue("childQ").concurrency(5).workerConcurrency(5).build();
+    Queue childQ = new Queue("childQ").withConcurrency(5).withWorkerConcurrency(5);
+    DBOS.registerQueue(childQ);
 
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
@@ -101,7 +99,8 @@ public class QueueChildWorkflowTest {
   @Test
   public void nestedChildren() throws Exception {
 
-    Queue childQ = DBOS.Queue("childQ").concurrency(5).workerConcurrency(5).build();
+    Queue childQ = new Queue("childQ").withConcurrency(5).withWorkerConcurrency(5);
+    DBOS.registerQueue(childQ);
 
     SimpleService simpleService =
         DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());

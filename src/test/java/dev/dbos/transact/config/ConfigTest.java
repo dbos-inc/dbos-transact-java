@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 
@@ -23,10 +24,12 @@ public class ConfigTest {
   @Test
   public void setExecutorAndAppVersionViaConfig() throws Exception {
     var config =
+        // Test builder vs. withers
         new DBOSConfig.Builder()
             .appName("config-test")
             .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
+            .dbPassword(System.getenv("PGPASSWORD"))
             .appVersion("test-app-version")
             .executorId("test-executor-id")
             .build();
@@ -49,13 +52,12 @@ public class ConfigTest {
     envVars.set("DBOS__APPVERSION", "test-env-app-version");
 
     var config =
-        new DBOSConfig.Builder()
-            .appName("config-test")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .appVersion("test-app-version")
-            .executorId("test-executor-id")
-            .build();
+        DBOSConfig.defaults("config-test")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withDbUser("postgres")
+            .withDbPassword(System.getenv("PGPASSWORD"))
+            .withAppVersion("test-app-version")
+            .withExecutorId("test-executor-id");
 
     DBOS.reinitialize(config);
     try {
@@ -75,6 +77,7 @@ public class ConfigTest {
             .appName("config-test")
             .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
+            .dbPassword(System.getenv("PGPASSWORD"))
             .build();
 
     DBOS.reinitialize(config);
@@ -90,12 +93,9 @@ public class ConfigTest {
   @Test
   public void conductorExecutorId() throws Exception {
     var config =
-        new DBOSConfig.Builder()
-            .appName("config-test")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .dbUser("postgres")
-            .conductorKey("test-conductor-key")
-            .build();
+        DBOSConfig.defaultsFromEnv("config-test")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withConductorKey("test-conductor-key");
 
     DBOS.reinitialize(config);
     try {
@@ -115,6 +115,7 @@ public class ConfigTest {
             .appName("config-test")
             .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .dbUser("postgres")
+            .dbPassword(System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR))
             .build();
 
     DBOS.reinitialize(config);

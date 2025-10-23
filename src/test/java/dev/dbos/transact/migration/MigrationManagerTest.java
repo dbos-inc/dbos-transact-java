@@ -32,12 +32,9 @@ class MigrationManagerTest {
   static void setup() throws Exception {
 
     MigrationManagerTest.dbosConfig =
-        new DBOSConfig.Builder()
-            .appName("migrationtest")
-            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys_mm_test")
-            .dbUser("postgres")
-            .maximumPoolSize(3)
-            .build();
+        DBOSConfig.defaultsFromEnv("migrationtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys_mm_test")
+            .withMaximumPoolSize(3);
 
     DBUtils.recreateDB(MigrationManagerTest.dbosConfig);
     testDataSource = SystemDatabase.createDataSource(dbosConfig);

@@ -99,18 +99,16 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
   public ListWorkflowsInput asInput() {
     Objects.requireNonNull(body);
 
-    var builder = new ListWorkflowsInput.Builder();
-    builder.queuedOnly(true);
-    builder.workflowName(body.workflow_name);
-    builder.startTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null);
-    builder.endTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null);
-    builder.status(body.status);
-    builder.queueName(body.queue_name);
-    builder.limit(body.limit);
-    builder.offset(body.offset);
-    builder.sortDesc(body.sort_desc);
-    builder.loadInput(body.load_input);
-
-    return builder.build();
+    return new ListWorkflowsInput()
+        .withQueuesOnly(true)
+        .withWorkflowName(body.workflow_name)
+        .withStartTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null)
+        .withEndTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null)
+        .withStatus(body.status)
+        .withQueueName(body.queue_name)
+        .withLimit(body.limit)
+        .withOffset(body.offset)
+        .withSortDesc(body.sort_desc)
+        .withLoadInput(body.load_input);
   }
 }
