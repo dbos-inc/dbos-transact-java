@@ -24,75 +24,84 @@ import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class SystemDatabaseTest {
-    private static DBOSConfig config;
-    private SystemDatabase sysdb;
-    private HikariDataSource dataSource;
+  private static DBOSConfig config;
+  private SystemDatabase sysdb;
+  private HikariDataSource dataSource;
 
-    @BeforeAll
-    static void onetimeSetup() throws Exception {
-        config = new DBOSConfig.Builder()
-                .appName("systemdbtest")
-                .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-                .dbUser("postgres")
-                .maximumPoolSize(3)
-                .build();
+  @BeforeAll
+  static void onetimeSetup() throws Exception {
+    config =
+        new DBOSConfig.Builder()
+            .appName("systemdbtest")
+            .databaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .dbUser("postgres")
+            .maximumPoolSize(3)
+            .build();
+  }
+
+  @BeforeEach
+  void beforeEachTest() throws SQLException {
+    DBUtils.recreateDB(config);
+    MigrationManager.runMigrations(config);
+    sysdb = new SystemDatabase(config);
+    dataSource = SystemDatabase.createDataSource(config);
+  }
+
+  @AfterEach
+  void afterEachTest() throws Exception {
+    dataSource.close();
+    sysdb.close();
+  }
+
+  @Test
+  public void testRetries() throws Exception {
+    var wfid = "wfid-1";
+    var status =
+        new WorkflowStatusInternal(wfid, WorkflowState.PENDING)
+            .withName("wf-name")
+            .withInputs("wf-inputs");
+
+    for (var i = 1; i <= 6; i++) {
+      var result1 = sysdb.initWorkflowStatus(status, 5);
+      assertEquals(WorkflowState.PENDING.toString(), result1.getStatus());
+      assertEquals(wfid, result1.getWorkflowId());
+      assertEquals(0, result1.getDeadlineEpochMS());
+
+      var row = DBUtils.getWorkflowRow(dataSource, wfid);
+      assertNotNull(row);
+      assertEquals("PENDING", row.status());
+      assertEquals(i, row.recoveryAttempts());
     }
 
-    @BeforeEach
-    void beforeEachTest() throws SQLException {
-        DBUtils.recreateDB(config);
-        MigrationManager.runMigrations(config);
-        sysdb = new SystemDatabase(config);
-        dataSource = SystemDatabase.createDataSource(config);
-    }
+    assertThrows(
+        DBOSMaxRecoveryAttemptsExceededException.class, () -> sysdb.initWorkflowStatus(status, 5));
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertNotNull(row);
+    assertEquals("MAX_RECOVERY_ATTEMPTS_EXCEEDED", row.status());
+    assertEquals(7, row.recoveryAttempts());
+  }
 
-    @AfterEach
-    void afterEachTest() throws Exception {
-        dataSource.close();
-        sysdb.close();
-    }
+  @Test
+  public void testDedupeId() throws Exception {
+    var wfid = "wfid-1";
+    var status =
+        new WorkflowStatusInternal(wfid, WorkflowState.PENDING)
+            .withName("wf-name")
+            .withInputs("wf-inputs")
+            .withQueueName("queue-name")
+            .withDeduplicationId("dedupe-id");
 
-    @Test
-    public void testRetries() throws Exception {
-        var wfid = "wfid-1";
-        var status = new WorkflowStatusInternal(wfid, WorkflowState.PENDING).withName("wf-name")
-                .withInputs("wf-inputs");
+    var result1 = sysdb.initWorkflowStatus(status, 5);
+    assertEquals(WorkflowState.PENDING.toString(), result1.getStatus());
+    assertEquals(wfid, result1.getWorkflowId());
+    assertEquals(0, result1.getDeadlineEpochMS());
 
-        for (var i = 1; i <= 6; i++) {
-            var result1 = sysdb.initWorkflowStatus(status, 5);
-            assertEquals(WorkflowState.PENDING.toString(), result1.getStatus());
-            assertEquals(wfid, result1.getWorkflowId());
-            assertEquals(0, result1.getDeadlineEpochMS());
+    var before = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertThrows(
+        DBOSQueueDuplicatedException.class,
+        () -> sysdb.initWorkflowStatus(status.withWorkflowid("wfid-2"), 5));
+    var after = DBUtils.getWorkflowRow(dataSource, wfid);
 
-            var row = DBUtils.getWorkflowRow(dataSource, wfid);
-            assertNotNull(row);
-            assertEquals("PENDING", row.status());
-            assertEquals(i, row.recoveryAttempts());
-        }
-
-        assertThrows(
-                DBOSMaxRecoveryAttemptsExceededException.class, () -> sysdb.initWorkflowStatus(status, 5));
-        var row = DBUtils.getWorkflowRow(dataSource, wfid);
-        assertNotNull(row);
-        assertEquals("MAX_RECOVERY_ATTEMPTS_EXCEEDED", row.status());
-        assertEquals(7, row.recoveryAttempts());
-    }
-
-    @Test
-    public void testDedupeId() throws Exception {
-        var wfid = "wfid-1";
-        var status = new WorkflowStatusInternal(wfid, WorkflowState.PENDING).withName("wf-name")
-                .withInputs("wf-inputs").withQueueName("queue-name").withDeduplicationId("dedupe-id");
-
-        var result1 = sysdb.initWorkflowStatus(status, 5);
-        assertEquals(WorkflowState.PENDING.toString(), result1.getStatus());
-        assertEquals(wfid, result1.getWorkflowId());
-        assertEquals(0, result1.getDeadlineEpochMS());
-
-        var before = DBUtils.getWorkflowRow(dataSource, wfid);
-        assertThrows(DBOSQueueDuplicatedException.class, () -> sysdb.initWorkflowStatus(status.withWorkflowid("wfid-2"), 5));
-        var after = DBUtils.getWorkflowRow(dataSource, wfid);
-
-        assertTrue(before.equals(after));
-    }
+    assertTrue(before.equals(after));
+  }
 }

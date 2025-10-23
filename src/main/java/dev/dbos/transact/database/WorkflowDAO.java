@@ -126,8 +126,7 @@ public class WorkflowDAO {
             stmt.executeUpdate();
           }
 
-          throw new DBOSMaxRecoveryAttemptsExceededException(
-              initStatus.workflowId(), maxRetries);
+          throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
         }
 
         return new WorkflowInitResult(
@@ -229,9 +228,7 @@ public class WorkflowDAO {
           return result;
         } else {
           throw new RuntimeException(
-              "Attempt to insert workflow "
-                  + status.workflowId()
-                  + " failed: No rows returned.");
+              "Attempt to insert workflow " + status.workflowId() + " failed: No rows returned.");
         }
 
       } catch (SQLException e) {
