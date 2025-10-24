@@ -26,13 +26,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Facade for context-based access to DBOS.
- * `DBOS` is responsible for:
- *   Lifecycle - configuring, launching, and shutting down DBOS
- *   Starting, enqueuing, and managing workflows
- *   Interacting with workflows - getting status, results, events, and messages
- *   Accessing the workflow context
- *   Etc.
+ * Facade for context-based access to DBOS. `DBOS` is responsible for: Lifecycle - configuring,
+ * launching, and shutting down DBOS Starting, enqueuing, and managing workflows Interacting with
+ * workflows - getting status, results, events, and messages Accessing the workflow context Etc.
  */
 public class DBOS {
   private DBOS() {}
@@ -176,6 +172,7 @@ public class DBOS {
 
   /**
    * Register all workflows and steps in the provided class instance
+   *
    * @param <T> The interface type for the instance
    * @param interfaceClass The interface class for the workflows
    * @param implementation An implementation instance providing the workflow and step function code
@@ -187,10 +184,12 @@ public class DBOS {
 
   /**
    * Register all workflows and steps in the provided class instance
+   *
    * @param <T> The interface type for the instance
    * @param interfaceClass The interface class for the workflows
    * @param implementation An implementation instance providing the workflow and step function code
-   * @param instanceName Name of the instance, allowing multiple instances of the same class to be registered
+   * @param instanceName Name of the instance, allowing multiple instances of the same class to be
+   *     registered
    * @return A proxy, with interface <T>, that provides durability for the workflow functions
    */
   public static <T> T registerWorkflows(
@@ -199,8 +198,9 @@ public class DBOS {
   }
 
   /**
-   * Register a DBOS queue.
-   * This must be called on each queue prior to launch, so that recovery has the queue options available.
+   * Register a DBOS queue. This must be called on each queue prior to launch, so that recovery has
+   * the queue options available.
+   *
    * @param queue `Queue` to register
    * @return input queue
    */
@@ -239,16 +239,16 @@ public class DBOS {
   }
 
   /**
-   * Launch DBOS, and start recovery.
-   *   All workflows, queues, and other objects should be registered before launch
+   * Launch DBOS, and start recovery. All workflows, queues, and other objects should be registered
+   * before launch
    */
   public static void launch() {
     ensureInstance().launch();
   }
 
   /**
-   * Shut down DBOS.
-   *   This method should only be used in test environments, where DBOS is used multiple times in the same JVM.
+   * Shut down DBOS. This method should only be used in test environments, where DBOS is used
+   * multiple times in the same JVM.
    */
   public static void shutdown() {
     if (globalInstance != null) globalInstance.shutdown();
@@ -281,6 +281,7 @@ public class DBOS {
 
   /**
    * Get the ID of the current running workflow, or `null` if a workflow is not in progress
+   *
    * @return Current workflow ID
    */
   public static String workflowId() {
@@ -289,6 +290,7 @@ public class DBOS {
 
   /**
    * Get the ID of the current running step, or `null` if a workflow step is not in progress
+   *
    * @return Current step ID number
    */
   public static Integer stepId() {
@@ -311,6 +313,7 @@ public class DBOS {
 
   /**
    * Retrieve a queue definition
+   *
    * @param queueName Name of the queue
    * @return Queue definition for given `queueName`
    */
@@ -344,6 +347,7 @@ public class DBOS {
 
   /**
    * Start or enqueue a workflow with a return value
+   *
    * @param <T> Return type of the workflow
    * @param <E> Type of checked exception thrown by the workflow, if any
    * @param supplier A lambda that calls exactly one workflow function
@@ -357,6 +361,7 @@ public class DBOS {
 
   /**
    * Start or enqueue a workflow with default options
+   *
    * @param <T> Return type of the workflow
    * @param <E> Type of checked exception thrown by the workflow, if any
    * @param supplier A lambda that calls exactly one workflow function
@@ -369,6 +374,7 @@ public class DBOS {
 
   /**
    * Start or enqueue a workflow with no return value
+   *
    * @param <E> Type of checked exception thrown by the workflow, if any
    * @param runnable A lambda that calls exactly one workflow function
    * @param options Start workflow options
@@ -386,6 +392,7 @@ public class DBOS {
 
   /**
    * Start or enqueue a workflow with no return value, using default options
+   *
    * @param <E> Type of checked exception thrown by the workflow, if any
    * @param runnable A lambda that calls exactly one workflow function
    * @return A handle to the enqueued or running workflow
@@ -397,6 +404,7 @@ public class DBOS {
 
   /**
    * Get the result of a workflow, or rethrow the exception thrown by the workflow
+   *
    * @param <T> Return type of the workflow
    * @param <E> Checked exception type, if any, thrown by the workflow
    * @param workflowId ID of the workflow to retrieve
@@ -409,6 +417,7 @@ public class DBOS {
 
   /**
    * Get the status of a workflow
+   *
    * @param workflowId ID of the workflow to query
    * @return Current workflow status for the provided workflowId, or null.
    */
@@ -464,6 +473,7 @@ public class DBOS {
 
   /**
    * Run the provided function as a step; this variant is for functions with a return value
+   *
    * @param <E> Checked exception thrown by the step, if any
    * @param stepfunc function or lambda to run
    * @param opts step name, and retry options for running the step
@@ -477,6 +487,7 @@ public class DBOS {
 
   /**
    * Run the provided function as a step; this variant is for functions with a return value
+   *
    * @param <E> Checked exception thrown by the step, if any
    * @param stepfunc function or lambda to run
    * @param name name of the step, for tracing and to record in the system database
@@ -490,6 +501,7 @@ public class DBOS {
 
   /**
    * Run the provided function as a step; this variant is for functions with no return value
+   *
    * @param <E> Checked exception thrown by the step, if any
    * @param stepfunc function or lambda to run
    * @param opts step name, and retry options for running the step
@@ -509,6 +521,7 @@ public class DBOS {
 
   /**
    * Run the provided function as a step; this variant is for functions with no return value
+   *
    * @param <E> Checked exception thrown by the step, if any
    * @param stepfunc function or lambda to run
    * @param name Name of the step, for tracing and recording in the system database
@@ -559,9 +572,9 @@ public class DBOS {
   }
 
   /**
-   * Retrieve a handle to a workflow, given its ID.
-   *   Note that a handle is always returned, whether the workflow exists or not;
-   *    getStatus() can be used to tell the difference
+   * Retrieve a handle to a workflow, given its ID. Note that a handle is always returned, whether
+   * the workflow exists or not; getStatus() can be used to tell the difference
+   *
    * @param <T> Return type of the workflow function
    * @param <E> Checked exception thrown by the workflow function, if any
    * @param workflowId ID of the workflow to retrieve
@@ -592,10 +605,11 @@ public class DBOS {
   }
 
   /**
-   * Get a system database record stored by an external service
-   *   A unique value is stored per combination of service, workflowName, and key
+   * Get a system database record stored by an external service A unique value is stored per
+   * combination of service, workflowName, and key
+   *
    * @param service Identity of the service maintaining the record
-   * @param workflowName Fully qualified name of the workflow 
+   * @param workflowName Fully qualified name of the workflow
    * @param key Key assigned within the service+workflow
    * @return Value associated with the service+workflow+key combination
    */
@@ -605,11 +619,12 @@ public class DBOS {
   }
 
   /**
-   * Insert or update a system database record stored by an external service
-   *   A timestamped unique value is stored per combination of service, workflowName, and key
+   * Insert or update a system database record stored by an external service A timestamped unique
+   * value is stored per combination of service, workflowName, and key
+   *
    * @param state ExternalState containing the service, workflow, key, and value to store
    * @return Value associated with the service+workflow+key combination, in case the stored value
-   *   already had a higher version or timestamp
+   *     already had a higher version or timestamp
    */
   public static ExternalState upsertExternalState(ExternalState state) {
     return executor("upsertExternalState").upsertExternalState(state);

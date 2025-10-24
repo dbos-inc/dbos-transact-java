@@ -9,7 +9,6 @@ public record StepOptions(
   public static final double DEFAULT_INTERVAL_SECONDS = 1.0;
   public static final double DEFAULT_BACKOFF = 2.0;
 
-  // --- Ctors - Overloads to simulate "default args"
   public StepOptions(String name) {
     this(name, false, 1, StepOptions.DEFAULT_INTERVAL_SECONDS, StepOptions.DEFAULT_BACKOFF);
   }
@@ -45,12 +44,10 @@ public record StepOptions(
     this.backOffRate = backOffRate;
   }
 
-  // --- Static factories (nice at call sites)
   public static StepOptions of(String name) {
     return new StepOptions(name);
   }
 
-  // --- Withers for chaining (immutability preserved)
   public StepOptions withRetriesAllowed(boolean b) {
     return new StepOptions(this.name, b, this.maxAttempts, this.intervalSeconds, this.backOffRate);
   }
@@ -68,7 +65,6 @@ public record StepOptions(
         this.name, this.retriesAllowed, this.maxAttempts, this.intervalSeconds, t);
   }
 
-  // Optional sugar for very common tweaks
   public StepOptions noRetries() {
     return withRetriesAllowed(false).withMaxAttempts(1);
   }
