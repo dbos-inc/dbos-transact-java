@@ -219,12 +219,15 @@ class NotificationServiceTest {
     String wfid1 = "recvwf1";
 
     long start = System.currentTimeMillis();
+    String rv;
     try (var id = new WorkflowOptions(wfid1).setContext()) {
-      notService.recvWorkflow("topic1", Duration.ofSeconds(3));
+      rv = notService.recvWorkflow("topic1", Duration.ofSeconds(1));
     }
 
+    assertNull(rv);
+
     long elapsed = System.currentTimeMillis() - start;
-    assertTrue(elapsed < 4000, "Call should return in under 4 seconds");
+    assertTrue(elapsed < 3000, "Call should return in under 3 seconds");
   }
 
   @Test
