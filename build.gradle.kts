@@ -1,19 +1,25 @@
-// Get the short Git hash
 val gitHash: String by lazy {
     providers.exec {
         commandLine("git", "rev-parse", "--short", "HEAD")
     }.standardOutput.asText.get().trim()
 }
 
-// Get the commit count
+val gitTag: String? by lazy {
+    runCatching {
+        providers.exec {
+            commandLine("git", "describe", "--abbrev=0", "--tags")
+        }.standardOutput.asText.get().trim()
+    }.getOrNull()
+}
+
 val commitCount: String by lazy {
+    val range = if (gitTag.isNullOrEmpty()) "HEAD" else "$gitTag..HEAD"
     providers.exec {
-        commandLine("git", "rev-list", "--count", "HEAD")
+        commandLine("git", "rev-list", "--count", range)
     }.standardOutput.asText.get().trim()
 }
 
-// Get the current branch name
-val branchName: String by lazy {
+val branch: String by lazy {
     // First, try GitHub Actions environment variable
     val githubBranch = System.getenv("GITHUB_REF_NAME")
     if (!githubBranch.isNullOrBlank()) githubBranch
@@ -26,13 +32,50 @@ val branchName: String by lazy {
     }
 }
 
-// Note, this versioning scheme is fine for preview releases
-// but we'll want something more robust once we want to bump
-// the major or minor version number
-val baseVersion = System.getenv("BASE_VERSION") ?: "0.5"
-val safeBranchName = if (branchName == "main" || branchName == "HEAD") "" else ".${branchName.replace("/", "-")}"
-version = "$baseVersion.$commitCount-preview+g$gitHash$safeBranchName"
+fun parseTag(tag: String): Triple<Int, Int, Int>? {
+    val regex = Regex("""v?(\d+)\.(\d+)\.(\d+)""")
+    val match = regex.matchEntire(tag.trim()) ?: return null
+    val (major, minor, patch) = match.destructured
+    return Triple(major.toInt(), minor.toInt(), patch.toInt())
+}
 
+fun ensureCurrentCommitHasTag(expectedTag: String) {
+    val result = runCatching {
+        providers.exec {
+            commandLine("git", "tag", "--points-at", "HEAD")
+        }.standardOutput.asText.get().trim()
+    }.getOrNull() ?: ""
+
+
+    val tags = result.split("\n").map { it.trim() }
+
+    if (expectedTag !in tags) {
+        throw IllegalStateException(
+            "Current commit does not have the expected tag '$expectedTag'. " +
+            "Tags on HEAD: ${tags.joinToString(", ")}"
+        )
+    }
+}
+
+fun calcVersion(): String {
+    var (major, minor, patch) = parseTag(gitTag ?: "") ?: Triple(0, 1, 0)
+
+    if (branch == "main") {
+        return "$major.${minor + 1}.$patch-m$commitCount"
+    }
+
+    if (branch.startsWith("release/v")) {
+        if (branch != "release/v$major.$minor.$patch") {
+            throw IllegalArgumentException("Expected branch 'release/v$major.$minor.$patch', but got '$branch'") 
+        }
+        ensureCurrentCommitHasTag("$major.$minor.$patch")
+        return "$major.$minor.$patch"
+    }
+
+    return "$major.${minor + 1}.$patch-a$commitCount-g$gitHash"
+}
+
+version = calcVersion()
 println("Project version: $version") // prints when Gradle evaluates the build
 
 plugins {
@@ -40,7 +83,7 @@ plugins {
     id("java-library")
     id("maven-publish")
     id("pmd")
-    id("com.diffplug.spotless") version "6.25.0"
+    id("com.diffplug.spotless") version "8.0.0"
 }
 
 group = "dev.dbos"
