@@ -70,8 +70,7 @@ class MigrationManagerTest {
     // Running migrations again
     assertDoesNotThrow(
         () -> {
-          MigrationManager migrationManager = new MigrationManager(testDataSource);
-          migrationManager.migrate();
+          MigrationManager.runMigrations(dbosConfig);
         },
         "Migrations should run successfully multiple times");
   }
