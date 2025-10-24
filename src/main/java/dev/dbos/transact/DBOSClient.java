@@ -15,7 +15,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.UUID;
 
 public class DBOSClient implements AutoCloseable {
@@ -63,7 +62,7 @@ public class DBOSClient implements AutoCloseable {
       String appVersion,
       Duration timeout,
       String deduplicationId,
-      OptionalInt priority) {
+      Integer priority) {
 
     public EnqueueOptions {
       if (Objects.requireNonNull(workflowName, "EnqueueOptions workflowName must not be null")
@@ -89,7 +88,7 @@ public class DBOSClient implements AutoCloseable {
     }
 
     public EnqueueOptions(String className, String workflowName, String queueName) {
-      this(workflowName, queueName, className, "", null, null, null, null, OptionalInt.empty());
+      this(workflowName, queueName, className, "", null, null, null, null, null);
     }
 
     public EnqueueOptions withClassName(String className) {
@@ -170,7 +169,7 @@ public class DBOSClient implements AutoCloseable {
           this.priority);
     }
 
-    public EnqueueOptions withPriority(int priority) {
+    public EnqueueOptions withPriority(Integer priority) {
       return new EnqueueOptions(
           this.workflowName,
           this.queueName,
@@ -180,7 +179,7 @@ public class DBOSClient implements AutoCloseable {
           this.appVersion,
           this.timeout,
           this.deduplicationId,
-          OptionalInt.of(priority));
+          priority);
     }
 
     @Override

@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.OptionalInt;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -126,7 +125,7 @@ public class SchedulerService {
                     String.format("sched-%s-%s", wf.fullyQualifiedName(), scheduledTime.toString());
                 var options =
                     new ExecuteWorkflowOptions(
-                        workflowId, null, null, schedulerQueueName, null, OptionalInt.empty());
+                        workflowId, null, null, schedulerQueueName, null, null);
                 dbosExecutor.executeWorkflow(wf, args, options, null, null);
               } catch (Exception e) {
                 logger.error("Scheduled task exception {}", wf.fullyQualifiedName(), e);

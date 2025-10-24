@@ -52,12 +52,17 @@ public record ListWorkflowsInput(
         executorIds);
   }
 
+  /**
+   * Restrict listWorkflows results to a single workflow ID Specifying `null` for workflowId removes
+   * the filter
+   *
+   * @param workflowId Workflow ID to use for filtering workflows
+   * @return a new ListWorkflowsInput record with the workflowId list set
+   */
   public ListWorkflowsInput withWorkflowId(String workflowId) {
     if (workflowId == null) return withWorkflowIds(null);
 
-    List<String> ids = new ArrayList<>();
-    ids.add(workflowId);
-    return withWorkflowIds(ids);
+    return withWorkflowIds(List.of(workflowId));
   }
 
   public ListWorkflowsInput withStatuses(List<String> status) {
