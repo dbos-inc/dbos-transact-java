@@ -18,12 +18,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * DBOSClient allows external programs to interact with DBOS apps via
- *   direct system database access.
- * Example interactions:
- *   Start/enqueue a workflow, and get the result
- *   Get events and send messages to the workflow
- *   Manage workflows - list, fork, cancel, etc.
+ * DBOSClient allows external programs to interact with DBOS apps via direct system database access.
+ * Example interactions: Start/enqueue a workflow, and get the result Get events and send messages
+ * to the workflow Manage workflows - list, fork, cancel, etc.
  */
 public class DBOSClient implements AutoCloseable {
   private class WorkflowHandleClient<T, E extends Exception> implements WorkflowHandle<T, E> {
@@ -53,6 +50,7 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * Construct a DBOSClient, by providing system database access credentials
+   *
    * @param url System database JDBC URL
    * @param user System database user
    * @param password System database credential / password
@@ -68,11 +66,9 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Options for enqueuing a workflow.
-   * It is necessary to specify the class and name of the workflow to enqueue,
-   *   as well as the queue to use.
-   * Other options, such as the workflow ID, queue options, and app version, are optional,
-   *  and should be set with `with` functions.
+   * Options for enqueuing a workflow. It is necessary to specify the class and name of the workflow
+   * to enqueue, as well as the queue to use. Other options, such as the workflow ID, queue options,
+   * and app version, are optional, and should be set with `with` functions.
    */
   public record EnqueueOptions(
       String workflowName,
@@ -115,6 +111,7 @@ public class DBOSClient implements AutoCloseable {
 
     /**
      * Specify the Java classname for the class containing the workflow to enqueue
+     *
      * @param className Class containing the workflow to enqueue
      * @return New `EnqueueOptions` with the class name set
      */
@@ -132,8 +129,9 @@ public class DBOSClient implements AutoCloseable {
     }
 
     /**
-     * Specify the workflow ID for the workflow to be enqueued.  This is an
-     *  idempotency key for running the workflow.
+     * Specify the workflow ID for the workflow to be enqueued. This is an idempotency key for
+     * running the workflow.
+     *
      * @param workflowId Workflow idempotency ID to use
      * @return New `EnqueueOptions` with the workflow ID set
      */
@@ -151,9 +149,9 @@ public class DBOSClient implements AutoCloseable {
     }
 
     /**
-     * Specify the app version for the workflow to be enqueued.  The
-     *   workflow will be executed by an executor with this app version.
-     * If not specified, the current app version will be used.
+     * Specify the app version for the workflow to be enqueued. The workflow will be executed by an
+     * executor with this app version. If not specified, the current app version will be used.
+     *
      * @param appVersion Application version to use for executing the workflow
      * @return New `EnqueueOptions` with the app version set
      */
@@ -171,8 +169,9 @@ public class DBOSClient implements AutoCloseable {
     }
 
     /**
-     * Specify a timeout for the workflow to be enqueued.
-     *   Timeout begins once the workflow is running; if it exceeds this it will be canceled.
+     * Specify a timeout for the workflow to be enqueued. Timeout begins once the workflow is
+     * running; if it exceeds this it will be canceled.
+     *
      * @param timeout Duration of time, from start, before the workflow is canceled.
      * @return New `EnqueueOptions` with the timeout set
      */
@@ -190,8 +189,9 @@ public class DBOSClient implements AutoCloseable {
     }
 
     /**
-     * Specify a queue deduplication ID for the workflow to be enqueued.
-     *   Queue requests with the same deduplication ID will be rejected.
+     * Specify a queue deduplication ID for the workflow to be enqueued. Queue requests with the
+     * same deduplication ID will be rejected.
+     *
      * @param deduplicationId Queue deduplication ID
      * @return New `EnqueueOptions` with the deduplication ID set
      */
@@ -209,9 +209,9 @@ public class DBOSClient implements AutoCloseable {
     }
 
     /**
-     * Specify an object instance name to execute the workflow.
-     *   If workflow objects are named, this must be specified to direct processing
-     *   to the correct instance.
+     * Specify an object instance name to execute the workflow. If workflow objects are named, this
+     * must be specified to direct processing to the correct instance.
+     *
      * @param instName Instance name registered within `DBOS.registerWorkflows`
      * @return New `EnqueueOptions` with the target instance name set
      */
@@ -229,8 +229,8 @@ public class DBOSClient implements AutoCloseable {
     }
 
     /**
-     * Specify priority.
-     *   Priority must be enabled on the queue for this to be effective.
+     * Specify priority. Priority must be enabled on the queue for this to be effective.
+     *
      * @param priority Queue priority; if `null`, priority '0' will be used.
      * @return New `EnqueueOptions` with the priority set
      */
@@ -249,6 +249,7 @@ public class DBOSClient implements AutoCloseable {
 
     /**
      * Get the workflow ID that will be used
+     *
      * @return The workflow idemptence ID
      */
     @Override
@@ -259,6 +260,7 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * Enqueue a workflow.
+   *
    * @param <T> Return type of workflow function
    * @param <E> Exception thrown by workflow function
    * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
@@ -292,6 +294,7 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * Send a message to a workflow
+   *
    * @param destinationId workflowId of the workflow to receive the message
    * @param message Message contents
    * @param topic Topic for the message
@@ -312,6 +315,7 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * Get event from a workflow, or null if the operation times out
+   *
    * @param targetId ID of the workflow setting the event
    * @param key Key for the event
    * @param timeout Maximum time duration to wait before returning `null`
@@ -322,8 +326,9 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Create a handle for a workflow.
-   *   This call does not ensure that the workflow exists; use the returned handle's `getStatus()`.
+   * Create a handle for a workflow. This call does not ensure that the workflow exists; use the
+   * returned handle's `getStatus()`.
+   *
    * @param <T> Type of the workflow's return value
    * @param <E> Type of any checked exception thrown by the workflow
    * @param workflowId ID of the workflow to retrieve
@@ -335,6 +340,7 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * Cancel a worflow
+   *
    * @param workflowId ID of the workflow to cancel
    */
   public void cancelWorkflow(String workflowId) {
@@ -343,6 +349,7 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * Resume a canceled workflow, providing a handle to the workflow
+   *
    * @param <T> Type of the workflow's return value
    * @param <E> Type of any checked exception thrown by the workflow
    * @param workflowId ID of the workflow to resume
@@ -355,11 +362,13 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * Fork a workflow, providing a handle to the new workflow
+   *
    * @param <T> Type of the workflow's return value
    * @param <E> Type of any checked exception thrown by the workflow
    * @param originalWorkflowId ID of the workflow to fork
-   * @param startStep Step number for starting the new fork of the workflow; if zero start from the beginning
-   * @param options Options for forking; 
+   * @param startStep Step number for starting the new fork of the workflow; if zero start from the
+   *     beginning
+   * @param options Options for forking;
    * @return `WorkflowHandle` for the new workflow
    */
   public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
@@ -370,6 +379,7 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * Get the status of a workflow
+   *
    * @param workflowId ID of the workflow to query for status
    * @return WorkflowStatus of the workflow, or empty if the workflow does not exist
    */
@@ -379,6 +389,7 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * List workflows matching the supplied input filter criteria
+   *
    * @param input Filter criteria to use for listing workflows
    * @return list of workflows matching the `ListWorkflowsInput` criteria
    */
@@ -388,6 +399,7 @@ public class DBOSClient implements AutoCloseable {
 
   /**
    * List the steps executed by a workflow
+   *
    * @param workflowId ID of the workflow to list
    * @return List of steps executed by the workflow
    */
