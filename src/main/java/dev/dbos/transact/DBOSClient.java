@@ -191,7 +191,7 @@ public class DBOSClient implements AutoCloseable {
 
     /**
      * Specify a queue deduplication ID for the workflow to be enqueued.
-     *   Queue requests with the same deduplication ID will be consolidated.
+     *   Queue requests with the same deduplication ID will be rejected.
      * @param deduplicationId Queue deduplication ID
      * @return New `EnqueueOptions` with the deduplication ID set
      */
