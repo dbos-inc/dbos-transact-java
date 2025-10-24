@@ -120,7 +120,7 @@ public class EventsTest {
     assertEquals("value1", stepEvent);
     assertEquals("value1", setwfh.getResult());
 
-    List<StepInfo> steps = DBOS.listWorkflowSteps(setwfh.getWorkflowId());
+    List<StepInfo> steps = DBOS.listWorkflowSteps(setwfh.workflowId());
     assertEquals(3, steps.size());
     assertEquals("DBOS.setEvent", steps.get(0).functionName());
     assertEquals("stepSetEvent", steps.get(1).functionName());
@@ -139,7 +139,7 @@ public class EventsTest {
             new StartWorkflowOptions("id1"));
     var getwfh =
         DBOS.startWorkflow(
-            () -> eventService.getEventTwice(setwfh.getWorkflowId(), "key1"),
+            () -> eventService.getEventTwice(setwfh.workflowId(), "key1"),
             new StartWorkflowOptions("id2"));
 
     // Make these things both happen
@@ -156,8 +156,8 @@ public class EventsTest {
     impl.resetCounts();
     impl.advanceGet1();
     impl.advanceGet2();
-    DBUtils.setWorkflowState(dataSource, getwfh.getWorkflowId(), WorkflowState.PENDING.name());
-    getwfh = DBOSTestAccess.getDbosExecutor().executeWorkflowById(getwfh.getWorkflowId());
+    DBUtils.setWorkflowState(dataSource, getwfh.workflowId(), WorkflowState.PENDING.name());
+    getwfh = DBOSTestAccess.getDbosExecutor().executeWorkflowById(getwfh.workflowId());
     res = (String) getwfh.getResult();
     assertEquals("value1value2", res);
   }

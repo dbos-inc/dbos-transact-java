@@ -73,7 +73,7 @@ public class UnifiedProxyTest {
 
     result = handle.getResult();
     assertEquals("Processed: test-item-async", result);
-    assertEquals(wfid2, handle.getWorkflowId());
+    assertEquals(wfid2, handle.workflowId());
     assertEquals("SUCCESS", handle.getStatus().status());
 
     // Queued
@@ -85,7 +85,7 @@ public class UnifiedProxyTest {
     handle = DBOS.retrieveWorkflow(wfid3);
     result = (String) handle.getResult();
     assertEquals("Processed: test-item-q", result);
-    assertEquals(wfid3, handle.getWorkflowId());
+    assertEquals(wfid3, handle.workflowId());
     assertEquals("SUCCESS", handle.getStatus().status());
 
     ListWorkflowsInput input = new ListWorkflowsInput().withWorkflowId(wfid3);

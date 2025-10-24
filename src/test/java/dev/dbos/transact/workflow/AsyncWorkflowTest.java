@@ -61,7 +61,7 @@ public class AsyncWorkflowTest {
     var handle = DBOS.retrieveWorkflow(wfid);
     String result = (String) handle.getResult();
     assertEquals("Processed: test-item", result);
-    assertEquals(wfid, handle.getWorkflowId());
+    assertEquals(wfid, handle.workflowId());
 
     List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
@@ -76,7 +76,7 @@ public class AsyncWorkflowTest {
     result = (String) handle.getResult();
     assertEquals(1, SimpleServiceImpl.executionCount);
     assertEquals("Processed: test-item", result);
-    assertEquals("wf-123", handle.getWorkflowId());
+    assertEquals("wf-123", handle.workflowId());
 
     wfs = DBOS.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
@@ -89,7 +89,7 @@ public class AsyncWorkflowTest {
 
     handle = DBOS.retrieveWorkflow(wfid2);
     result = (String) handle.getResult();
-    assertEquals("wf-124", handle.getWorkflowId());
+    assertEquals("wf-124", handle.workflowId());
 
     assertEquals(2, SimpleServiceImpl.executionCount);
     wfs = DBOS.listWorkflows(new ListWorkflowsInput());
@@ -120,7 +120,7 @@ public class AsyncWorkflowTest {
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).name(), "workError");
     assertNotNull(wfs.get(0).workflowId());
-    assertEquals(wfs.get(0).workflowId(), handle.getWorkflowId());
+    assertEquals(wfs.get(0).workflowId(), handle.workflowId());
     assertEquals("java.lang.Exception", handle.getStatus().error().className());
     assertEquals("DBOS Test error", handle.getStatus().error().message());
     assertEquals(WorkflowState.ERROR.name(), handle.getStatus().status());
@@ -280,25 +280,25 @@ public class AsyncWorkflowTest {
     simpleService.setSimpleService(simpleService);
 
     var wfh = DBOS.startWorkflow(() -> simpleService.childWorkflow("Base"));
-    var wfhgrs = DBOS.startWorkflow(() -> simpleService.getResultInStep(wfh.getWorkflowId()));
+    var wfhgrs = DBOS.startWorkflow(() -> simpleService.getResultInStep(wfh.workflowId()));
     var wfres = wfhgrs.getResult();
     assertEquals("Base", wfres);
-    var wfhstat = DBOS.startWorkflow(() -> simpleService.getStatus(wfh.getWorkflowId()));
+    var wfhstat = DBOS.startWorkflow(() -> simpleService.getStatus(wfh.workflowId()));
     var wfstat = wfhstat.getResult();
     assertEquals(WorkflowState.SUCCESS.toString(), wfstat);
-    var wfhstat2 = DBOS.startWorkflow(() -> simpleService.getStatusInStep(wfh.getWorkflowId()));
+    var wfhstat2 = DBOS.startWorkflow(() -> simpleService.getStatusInStep(wfh.workflowId()));
     var wfstat2 = wfhstat2.getResult();
     assertEquals(WorkflowState.SUCCESS.toString(), wfstat2);
 
-    var steps = DBOS.listWorkflowSteps(wfhgrs.getWorkflowId());
+    var steps = DBOS.listWorkflowSteps(wfhgrs.workflowId());
     assertEquals(1, steps.size());
     assertEquals("getResInStep", steps.get(0).functionName());
 
-    steps = DBOS.listWorkflowSteps(wfhstat.getWorkflowId());
+    steps = DBOS.listWorkflowSteps(wfhstat.workflowId());
     assertEquals(1, steps.size());
     assertEquals("DBOS.getWorkflowStatus", steps.get(0).functionName());
 
-    steps = DBOS.listWorkflowSteps(wfhstat2.getWorkflowId());
+    steps = DBOS.listWorkflowSteps(wfhstat2.workflowId());
     assertEquals(1, steps.size());
     assertEquals("getStatusInStep", steps.get(0).functionName());
 

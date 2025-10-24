@@ -31,7 +31,7 @@ public class DBOSClient implements AutoCloseable {
     }
 
     @Override
-    public String getWorkflowId() {
+    public String workflowId() {
       return workflowId;
     }
 

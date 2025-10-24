@@ -260,7 +260,7 @@ public class WorkflowMgmtTest {
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertNotEquals(rstatHandle.getWorkflowId(), workflowId);
+    assertNotEquals(rstatHandle.workflowId(), workflowId);
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -268,7 +268,7 @@ public class WorkflowMgmtTest {
     assertEquals(2, impl.step4Count);
     assertEquals(2, impl.step5Count);
 
-    List<StepInfo> steps = DBOS.listWorkflowSteps(rstatHandle.getWorkflowId());
+    List<StepInfo> steps = DBOS.listWorkflowSteps(rstatHandle.workflowId());
     assertEquals(5, steps.size());
 
     logger.info("first fork done . starting 2nd fork ");
@@ -277,7 +277,7 @@ public class WorkflowMgmtTest {
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertNotEquals(rstatHandle.getWorkflowId(), workflowId);
+    assertNotEquals(rstatHandle.workflowId(), workflowId);
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -291,7 +291,7 @@ public class WorkflowMgmtTest {
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertNotEquals(rstatHandle.getWorkflowId(), workflowId);
+    assertNotEquals(rstatHandle.workflowId(), workflowId);
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -337,7 +337,7 @@ public class WorkflowMgmtTest {
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertEquals(rstatHandle.getWorkflowId(), "f1");
+    assertEquals(rstatHandle.workflowId(), "f1");
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -345,7 +345,7 @@ public class WorkflowMgmtTest {
     assertEquals(1, impl.child2Count);
     assertEquals(2, impl.step5Count);
 
-    List<StepInfo> steps = DBOS.listWorkflowSteps(rstatHandle.getWorkflowId());
+    List<StepInfo> steps = DBOS.listWorkflowSteps(rstatHandle.workflowId());
     assertEquals(5, steps.size());
 
     assertTrue(stepsRun0.get(2).childWorkflowId().equals(steps.get(2).childWorkflowId()));
@@ -358,7 +358,7 @@ public class WorkflowMgmtTest {
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertEquals(rstatHandle.getWorkflowId(), "f2");
+    assertEquals(rstatHandle.workflowId(), "f2");
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -366,7 +366,7 @@ public class WorkflowMgmtTest {
     assertEquals(1, impl.child2Count);
     assertEquals(3, impl.step5Count);
 
-    steps = DBOS.listWorkflowSteps(rstatHandle.getWorkflowId());
+    steps = DBOS.listWorkflowSteps(rstatHandle.workflowId());
     assertEquals(5, steps.size());
 
     logger.info(stepsRun0.get(2).childWorkflowId());
@@ -381,7 +381,7 @@ public class WorkflowMgmtTest {
     result = rstatHandle.getResult();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertEquals(rstatHandle.getWorkflowId(), "f3");
+    assertEquals(rstatHandle.workflowId(), "f3");
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -389,7 +389,7 @@ public class WorkflowMgmtTest {
     assertEquals(1, impl.child2Count);
     assertEquals(4, impl.step5Count);
 
-    steps = DBOS.listWorkflowSteps(rstatHandle.getWorkflowId());
+    steps = DBOS.listWorkflowSteps(rstatHandle.workflowId());
     assertEquals(5, steps.size());
 
     assertTrue(stepsRun0.get(2).childWorkflowId().equals(steps.get(2).childWorkflowId()));
@@ -436,7 +436,7 @@ public class WorkflowMgmtTest {
 
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
-    assertNotEquals(rstatHandle.getWorkflowId(), workflowId);
+    assertNotEquals(rstatHandle.workflowId(), workflowId);
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);
@@ -445,7 +445,7 @@ public class WorkflowMgmtTest {
     // did not copy the step
     assertEquals(2, impl.step5Count);
 
-    List<StepInfo> steps = DBOS.listWorkflowSteps(rstatHandle.getWorkflowId());
+    List<StepInfo> steps = DBOS.listWorkflowSteps(rstatHandle.workflowId());
     assertEquals(5, steps.size());
 
     assertTrue(stepsRun0.get(2).childWorkflowId().equals(steps.get(2).childWorkflowId()));
@@ -476,17 +476,17 @@ public class WorkflowMgmtTest {
     systemDatabase.garbageCollect(null, 1L);
     statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
     assertEquals(2, statusList.size());
-    assertEquals(handle.getWorkflowId(), statusList.get(0).workflowId());
+    assertEquals(handle.workflowId(), statusList.get(0).workflowId());
 
     // Garbage collect all completed workflows
     systemDatabase.garbageCollect(System.currentTimeMillis(), null);
     statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, statusList.size());
-    assertEquals(handle.getWorkflowId(), statusList.get(0).workflowId());
+    assertEquals(handle.workflowId(), statusList.get(0).workflowId());
 
     // Finish the blocked workflow, garbage collect everything
     impl.gcLatch.countDown();
-    assertEquals(handle.getWorkflowId(), handle.getResult());
+    assertEquals(handle.workflowId(), handle.getResult());
     systemDatabase.garbageCollect(System.currentTimeMillis(), null);
     statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
     assertEquals(0, statusList.size());
@@ -541,6 +541,6 @@ public class WorkflowMgmtTest {
       assertEquals(WorkflowState.CANCELLED.toString(), handle.getStatus().status());
     }
     impl.timeoutLatch.countDown();
-    assertEquals(finalHandle.getWorkflowId(), finalHandle.getResult());
+    assertEquals(finalHandle.workflowId(), finalHandle.getResult());
   }
 }

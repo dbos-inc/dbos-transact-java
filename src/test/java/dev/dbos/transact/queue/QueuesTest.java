@@ -78,7 +78,7 @@ public class QueuesTest {
         () -> serviceQ.simpleQWorkflow("inputq"), new StartWorkflowOptions(id).withQueue(firstQ));
 
     var handle = DBOS.retrieveWorkflow(id);
-    assertEquals(id, handle.getWorkflowId());
+    assertEquals(id, handle.workflowId());
     String result = (String) handle.getResult();
     assertEquals("inputqinputq", result);
   }
@@ -178,7 +178,7 @@ public class QueuesTest {
       String id = "wfid" + i;
 
       var handle = DBOS.retrieveWorkflow(id);
-      assertEquals(id, handle.getWorkflowId());
+      assertEquals(id, handle.workflowId());
       String result = (String) handle.getResult();
       assertEquals("inputq" + i + "inputq" + i, result);
       assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
@@ -263,13 +263,13 @@ public class QueuesTest {
     var options2 = new StartWorkflowOptions(id2).withQueue(secondQ);
     WorkflowHandle<Integer, ?> handle2 = DBOS.startWorkflow(() -> serviceI.workflowI(25), options2);
 
-    assertEquals(id1, handle1.getWorkflowId());
+    assertEquals(id1, handle1.workflowId());
     String result = handle1.getResult();
     assertEquals("firstQueue", handle1.getStatus().queueName());
     assertEquals("firstinputfirstinput", result);
     assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
 
-    assertEquals(id2, handle2.getWorkflowId());
+    assertEquals(id2, handle2.workflowId());
     Integer result2 = (Integer) handle2.getResult();
     assertEquals("secondQueue", handle2.getStatus().queueName());
     assertEquals(50, result2);
@@ -525,7 +525,7 @@ public class QueuesTest {
     WorkflowHandle<String, ?> handle =
         DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), option);
 
-    assertEquals(id, handle.getWorkflowId());
+    assertEquals(id, handle.workflowId());
     String result = handle.getResult();
     assertEquals("inputqinputq", result);
   }
@@ -580,14 +580,14 @@ public class QueuesTest {
     assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().status());
     assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().status());
     assertEquals(1, otherHandles.size());
-    assertEquals(otherHandles.get(0).getWorkflowId(), handle3.getWorkflowId());
+    assertEquals(otherHandles.get(0).workflowId(), handle3.workflowId());
     assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().status());
 
     List<WorkflowHandle<?, ?>> localHandles = executor.recoverPendingWorkflows(List.of("local"));
     assertEquals(2, localHandles.size());
-    List<String> expectedWorkflowIds = List.of(handle1.getWorkflowId(), handle2.getWorkflowId());
-    assertTrue(expectedWorkflowIds.contains(localHandles.get(0).getWorkflowId()));
-    assertTrue(expectedWorkflowIds.contains(localHandles.get(1).getWorkflowId()));
+    List<String> expectedWorkflowIds = List.of(handle1.workflowId(), handle2.workflowId());
+    assertTrue(expectedWorkflowIds.contains(localHandles.get(0).workflowId()));
+    assertTrue(expectedWorkflowIds.contains(localHandles.get(1).workflowId()));
 
     for (int i = 0; i < impl.wfSemaphores.size(); i++) {
       logger.info("acquire {} semaphore", i);

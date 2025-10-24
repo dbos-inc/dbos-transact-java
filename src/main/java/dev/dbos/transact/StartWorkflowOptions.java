@@ -75,8 +75,8 @@ public record StartWorkflowOptions(
   }
 
   /**
-   * Produces a new StartWorkflowOptions that assigns a queue deduplication ID.
-   *  Note that the queue must also be specified.
+   * Produces a new StartWorkflowOptions that assigns a queue deduplication ID. Note that the queue
+   * must also be specified.
    */
   public StartWorkflowOptions withDeduplicationId(String deduplicationId) {
     return new StartWorkflowOptions(
@@ -84,8 +84,8 @@ public record StartWorkflowOptions(
   }
 
   /**
-   * Produces a new StartWorkflowOptions that assigns a queue priority.
-   *  Note that the queue must also be specified and have prioritization enabled
+   * Produces a new StartWorkflowOptions that assigns a queue priority. Note that the queue must
+   * also be specified and have prioritization enabled
    */
   public StartWorkflowOptions withPriority(Integer priority) {
     return new StartWorkflowOptions(

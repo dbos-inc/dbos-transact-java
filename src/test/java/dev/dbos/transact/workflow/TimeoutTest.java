@@ -69,7 +69,7 @@ public class TimeoutTest {
     var handle = DBOS.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
     result = handle.getResult();
     assertEquals("1234512345", result);
-    assertEquals(wfid1, handle.getWorkflowId());
+    assertEquals(wfid1, handle.workflowId());
     assertEquals("SUCCESS", handle.getStatus().status());
   }
 
@@ -124,7 +124,7 @@ public class TimeoutTest {
 
     result = (String) handle.getResult();
     assertEquals("1234512345", result);
-    assertEquals(wfid1, handle.getWorkflowId());
+    assertEquals(wfid1, handle.workflowId());
     assertEquals("SUCCESS", handle.getStatus().status());
   }
 
@@ -270,7 +270,7 @@ public class TimeoutTest {
 
     result = (String) handle.getResult();
     assertEquals("1234512345", result);
-    assertEquals(wfid1, handle.getWorkflowId());
+    assertEquals(wfid1, handle.workflowId());
     assertEquals("SUCCESS", handle.getStatus().status());
   }
 

@@ -129,8 +129,8 @@ class RecoveryServiceTest {
     var options = new StartWorkflowOptions("wf-127").withQueue(testQueue);
     var handle7 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
     assertEquals("q1", handle7.getStatus().queueName());
-    assertEquals("wf-126", handle6.getWorkflowId());
-    assertEquals("wf-127", handle7.getWorkflowId());
+    assertEquals("wf-126", handle6.workflowId());
+    assertEquals("wf-127", handle7.workflowId());
 
     handle7.getResult();
 

@@ -62,7 +62,7 @@ class AdminServerTest {
     for (int i = 0; i < 5; i++) {
       @SuppressWarnings("unchecked")
       var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-      when(handle.getWorkflowId()).thenReturn("workflow-00%d".formatted(i));
+      when(handle.workflowId()).thenReturn("workflow-00%d".formatted(i));
       handles.add(handle);
     }
 
@@ -83,7 +83,7 @@ class AdminServerTest {
     for (int i = 0; i < 5; i++) {
       @SuppressWarnings("unchecked")
       var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-      when(handle.getWorkflowId()).thenReturn("workflow-00%d".formatted(i));
+      when(handle.workflowId()).thenReturn("workflow-00%d".formatted(i));
       handles.add(handle);
     }
 
@@ -160,7 +160,7 @@ class AdminServerTest {
     for (int i = 0; i < 5; i++) {
       @SuppressWarnings("unchecked")
       var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-      when(handle.getWorkflowId()).thenReturn("workflow-00%d".formatted(i));
+      when(handle.workflowId()).thenReturn("workflow-00%d".formatted(i));
       handles.add(handle);
     }
 
@@ -546,7 +546,7 @@ class AdminServerTest {
   public void forkWorkflowNoOptions() throws IOException {
     var newWfId = "test-new-wf-id";
     var mockHandle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-    when(mockHandle.getWorkflowId()).thenReturn(newWfId);
+    when(mockHandle.workflowId()).thenReturn(newWfId);
     when(mockExec.forkWorkflow(eq("test-wf-id"), eq(0), any())).thenReturn(mockHandle);
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
@@ -577,7 +577,7 @@ class AdminServerTest {
     var newWfId = "test-new-wf-id";
 
     var mockHandle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-    when(mockHandle.getWorkflowId()).thenReturn(newWfId);
+    when(mockHandle.workflowId()).thenReturn(newWfId);
 
     when(mockExec.forkWorkflow(eq("test-wf-id"), eq(2), any())).thenReturn(mockHandle);
 
