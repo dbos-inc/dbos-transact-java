@@ -112,31 +112,28 @@ public class MultiInstTest {
             .toLocalDate()
             .format(DateTimeFormatter.ISO_DATE));
 
-    var browsa =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId(bhandlea.getWorkflowId()));
+    var browsa = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId(bhandlea.workflowId()));
     assertEquals(1, browsa.size());
     var browa = browsa.get(0);
-    assertEquals(bhandlea.getWorkflowId(), browa.workflowId());
+    assertEquals(bhandlea.workflowId(), browa.workflowId());
     assertEquals("stepWorkflow", browa.name());
     assertEquals("A", browa.instanceName());
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", browa.className());
     assertEquals("SUCCESS", browa.status());
 
-    var brows1 =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId(bhandle1.getWorkflowId()));
+    var brows1 = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId(bhandle1.workflowId()));
     assertEquals(1, brows1.size());
     var brow1 = brows1.get(0);
-    assertEquals(bhandle1.getWorkflowId(), brow1.workflowId());
+    assertEquals(bhandle1.workflowId(), brow1.workflowId());
     assertEquals("stepWorkflow", brow1.name());
     assertEquals("1", brow1.instanceName());
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", brow1.className());
     assertEquals("SUCCESS", brow1.status());
 
-    var hrows =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId(hhandle.getWorkflowId()));
+    var hrows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId(hhandle.workflowId()));
     assertEquals(1, hrows.size());
     var hrow = hrows.get(0);
-    assertEquals(hhandle.getWorkflowId(), hrow.workflowId());
+    assertEquals(hhandle.workflowId(), hrow.workflowId());
     assertEquals("stepWorkflow", hrow.name());
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", hrow.className());
     assertEquals("", hrow.instanceName());
@@ -188,22 +185,22 @@ public class MultiInstTest {
       assertEquals(1, bimpla.nWfCalls);
       assertEquals(0, bimpl1.nWfCalls);
 
-      var stat = client.getWorkflowStatus(handle.getWorkflowId());
+      var stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(
           "SUCCESS",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var dataSource = SystemDatabase.createDataSource(dbosConfig);
-      DBUtils.setWorkflowState(dataSource, handle.getWorkflowId(), WorkflowState.PENDING.name());
-      stat = client.getWorkflowStatus(handle.getWorkflowId());
+      DBUtils.setWorkflowState(dataSource, handle.workflowId(), WorkflowState.PENDING.name());
+      stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(
           "PENDING",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
-      var eh = dbosExecutor.executeWorkflowById(handle.getWorkflowId());
+      var eh = dbosExecutor.executeWorkflowById(handle.workflowId());
       eh.getResult();
-      stat = client.getWorkflowStatus(handle.getWorkflowId());
+      stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(
           "SUCCESS",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
@@ -216,11 +213,11 @@ public class MultiInstTest {
   void listSteps() throws Exception {
     var bh = DBOS.startWorkflow(() -> bproxya.stepWorkflow());
     bh.getResult();
-    var sh = DBOS.startWorkflow(() -> bproxya.listSteps(bh.getWorkflowId()));
+    var sh = DBOS.startWorkflow(() -> bproxya.listSteps(bh.workflowId()));
     var ss = sh.getResult();
     assertEquals("1 1", ss);
 
-    var steps = DBOS.listWorkflowSteps(sh.getWorkflowId());
+    var steps = DBOS.listWorkflowSteps(sh.workflowId());
     assertEquals(2, steps.size());
     assertEquals("DBOS.listWorkflows", steps.get(0).functionName());
     assertEquals("DBOS.listWorkflowSteps", steps.get(1).functionName());

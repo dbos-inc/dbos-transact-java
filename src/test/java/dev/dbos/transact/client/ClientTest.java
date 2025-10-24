@@ -71,7 +71,7 @@ public class ClientTest {
       var rows = DBUtils.getWorkflowRows(dataSource);
       assertEquals(1, rows.size());
       var row = rows.get(0);
-      assertEquals(handle.getWorkflowId(), row.workflowId());
+      assertEquals(handle.workflowId(), row.workflowId());
       assertEquals("ENQUEUED", row.status());
 
       qs.unpause();
@@ -80,7 +80,7 @@ public class ClientTest {
       assertTrue(result instanceof String);
       assertEquals("42-spam", result);
 
-      var stat = client.getWorkflowStatus(handle.getWorkflowId());
+      var stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(
           "SUCCESS",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
@@ -113,10 +113,10 @@ public class ClientTest {
     var idempotencyKey = UUID.randomUUID().toString();
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
-      client.send(handle.getWorkflowId(), "test.message", "test-topic", idempotencyKey);
+      client.send(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
     }
 
-    var workflowId = "%s-%s".formatted(handle.getWorkflowId(), idempotencyKey);
+    var workflowId = "%s-%s".formatted(handle.workflowId(), idempotencyKey);
     var sendHandle = DBOS.retrieveWorkflow(workflowId);
     assertNotNull(sendHandle);
     var status = sendHandle.getStatus();

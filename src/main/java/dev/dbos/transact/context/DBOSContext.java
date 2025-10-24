@@ -6,7 +6,6 @@ import dev.dbos.transact.workflow.Timeout;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 
 public class DBOSContext {
@@ -151,11 +150,11 @@ public class DBOSContext {
     return null;
   }
 
-  public OptionalInt getPriority() {
+  public Integer getPriority() {
     if (startOptions != null) {
       return startOptions.priority();
     }
-    return OptionalInt.empty();
+    return null;
   }
 
   public void setStartOptions(StartWorkflowOptions options, CompletableFuture<String> future) {

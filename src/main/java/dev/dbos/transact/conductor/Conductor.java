@@ -446,7 +446,7 @@ public class Conductor implements AutoCloseable {
       WorkflowHandle<?, ?> handle =
           conductor.dbosExecutor.forkWorkflow(
               request.body.workflow_id, request.body.start_step, options);
-      return new ForkWorkflowResponse(request, handle.getWorkflowId());
+      return new ForkWorkflowResponse(request, handle.workflowId());
     } catch (Exception e) {
       logger.error("Exception encountered when forking workflow {}", request, e);
       return new ForkWorkflowResponse(request, e);

@@ -286,7 +286,7 @@ For example, in DBOS you can write a durable workflow that enqueues a thousand t
 DBOS checkpoints the workflow and each of its tasks in Postgres, guaranteeing that even if failures or interruptions occur, the tasks will complete and the workflow will collect their results.
 By contrast, Celery/BullMQ are Redis-backed and don't provide workflows, so they provide fewer guarantees but better performance.
 
-**When to use DBOS:** You need the reliability of enqueueing tasks from durable workflows.
+**When to use DBOS:** You need the reliability of enqueuing tasks from durable workflows.
 
 **When to use Celery/BullMQ**: You don't need durability, or you need very high throughput beyond what your Postgres server can support.
 </details>

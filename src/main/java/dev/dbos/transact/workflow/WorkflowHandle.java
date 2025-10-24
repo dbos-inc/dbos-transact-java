@@ -3,12 +3,11 @@ package dev.dbos.transact.workflow;
 public interface WorkflowHandle<T, E extends Exception> {
 
   /**
-   * Return the applicable workflow ID. Corresponds to the 'workflow_id' attribute and
-   * 'get_workflow_id' method in Python.
+   * Return the handle's workflow ID
    *
    * @return The workflow ID.
    */
-  String getWorkflowId();
+  String workflowId();
 
   /**
    * Return the result of the workflow function invocation, waiting if necessary. This method blocks

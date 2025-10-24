@@ -69,7 +69,7 @@ public class StartWorkflowTest {
     var rows = DBOS.listWorkflows(null);
     assertEquals(1, rows.size());
     var row = rows.get(0);
-    assertEquals(handle.getWorkflowId(), row.workflowId());
+    assertEquals(handle.workflowId(), row.workflowId());
     assertEquals("SUCCESS", row.status());
   }
 
@@ -79,7 +79,7 @@ public class StartWorkflowTest {
     String workflowId = "startWorkflowWithWorkflowId";
     var options = new StartWorkflowOptions(workflowId);
     var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
-    assertEquals(workflowId, handle.getWorkflowId());
+    assertEquals(workflowId, handle.workflowId());
     var result = handle.getResult();
     assertEquals(localDate, result);
 
@@ -97,13 +97,13 @@ public class StartWorkflowTest {
     String workflowId = "startWorkflowWithTimeout";
     var options = new StartWorkflowOptions(workflowId).withTimeout(1, TimeUnit.SECONDS);
     var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
-    assertEquals(workflowId, handle.getWorkflowId());
+    assertEquals(workflowId, handle.workflowId());
     var result = handle.getResult();
     assertEquals(localDate, result);
 
     var row = DBOS.retrieveWorkflow(workflowId);
     assertNotNull(row);
-    assertEquals(workflowId, row.getWorkflowId());
+    assertEquals(workflowId, row.workflowId());
     assertEquals("SUCCESS", row.getStatus().status());
     assertEquals(1000, row.getStatus().timeoutMs());
     assertNotNull(row.getStatus().deadlineEpochMs());

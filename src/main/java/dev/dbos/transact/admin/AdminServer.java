@@ -117,7 +117,7 @@ public class AdminServer implements AutoCloseable {
     logger.debug("Recovering workflows for executors {}", executorIds);
     var handles = dbosExecutor.recoverPendingWorkflows(executorIds);
     List<String> workflowIds =
-        handles.stream().map(WorkflowHandle::getWorkflowId).collect(Collectors.toList());
+        handles.stream().map(WorkflowHandle::workflowId).collect(Collectors.toList());
     sendMappedJson(exchange, 200, workflowIds);
   }
 
@@ -214,7 +214,7 @@ public class AdminServer implements AutoCloseable {
 
     logger.info("Forking workflow {} at step {}", wfid, startStep);
     var handle = dbosExecutor.forkWorkflow(wfid, startStep, options);
-    var response = new ForkResponse(handle.getWorkflowId());
+    var response = new ForkResponse(handle.workflowId());
     sendMappedJson(exchange, 200, response);
   }
 

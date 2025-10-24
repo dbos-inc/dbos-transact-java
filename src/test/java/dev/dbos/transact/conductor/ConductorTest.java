@@ -504,7 +504,7 @@ public class ConductorTest {
 
     @SuppressWarnings("unchecked")
     var mockHandle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
-    when(mockHandle.getWorkflowId()).thenReturn(newWorkflowId);
+    when(mockHandle.workflowId()).thenReturn(newWorkflowId);
     when(mockExec.forkWorkflow(eq(workflowId), anyInt(), any())).thenReturn(mockHandle);
 
     try (Conductor conductor = builder.build()) {

@@ -102,7 +102,7 @@ public class SyncWorkflowTest {
     WorkflowHandle<String, SQLException> handle = DBOS.retrieveWorkflow(wfid);
     String hresult = (String) handle.getResult();
     assertEquals("Processed: test-item", hresult);
-    assertEquals("wf-123", handle.getWorkflowId());
+    assertEquals("wf-123", handle.workflowId());
     assertEquals("SUCCESS", handle.getStatus().status());
   }
 

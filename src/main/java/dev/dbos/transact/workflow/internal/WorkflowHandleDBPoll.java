@@ -12,7 +12,7 @@ public class WorkflowHandleDBPoll<T, E extends Exception> implements WorkflowHan
   }
 
   @Override
-  public String getWorkflowId() {
+  public String workflowId() {
     return workflowId;
   }
 

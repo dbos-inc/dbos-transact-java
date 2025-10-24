@@ -65,7 +65,7 @@ public class QueueChildWorkflowTest {
     List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(4, wfs.size());
-    assertEquals(handle.getWorkflowId(), wfs.get(0).workflowId());
+    assertEquals(handle.workflowId(), wfs.get(0).workflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).status());
 
     assertEquals("child1", wfs.get(1).workflowId());
@@ -77,7 +77,7 @@ public class QueueChildWorkflowTest {
     assertEquals("child3", wfs.get(3).workflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).status());
 
-    List<StepInfo> steps = DBOS.listWorkflowSteps(handle.getWorkflowId());
+    List<StepInfo> steps = DBOS.listWorkflowSteps(handle.workflowId());
     assertEquals(6, steps.size());
     assertEquals("child1", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());

@@ -46,7 +46,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -845,7 +844,7 @@ public class DBOSExecutor implements AutoCloseable {
       Instant deadline,
       String queueName,
       String deduplicationId,
-      OptionalInt priority) {
+      Integer priority) {
 
     public ExecuteWorkflowOptions {
       if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
@@ -907,7 +906,7 @@ public class DBOSExecutor implements AutoCloseable {
               workflowId,
               null,
               null,
-              OptionalInt.empty(),
+              null,
               executorId(),
               appVersion(),
               parent,
@@ -1057,7 +1056,7 @@ public class DBOSExecutor implements AutoCloseable {
       String workflowId,
       String queueName,
       String deduplicationId,
-      OptionalInt priority,
+      Integer priority,
       String executorId,
       String appVersion,
       WorkflowInfo parentWorkflow,
@@ -1084,7 +1083,7 @@ public class DBOSExecutor implements AutoCloseable {
             instanceName,
             queueName,
             deduplicationId,
-            priority.orElse(0),
+            priority == null ? 0 : priority,
             null,
             null,
             null,
