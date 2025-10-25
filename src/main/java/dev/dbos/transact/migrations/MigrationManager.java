@@ -18,20 +18,24 @@ public class MigrationManager {
 
     createDatabaseIfNotExists(Objects.requireNonNull(config, "DBOS Config must not be null"));
 
-    try (var ds = SystemDatabase.createDataSource(config); var conn = ds.getConnection()) {
+    try (var ds = SystemDatabase.createDataSource(config);
+        var conn = ds.getConnection()) {
       ensureDbosSchema(conn, Constants.DB_SCHEMA);
       ensureMigrationTable(conn, Constants.DB_SCHEMA);
-      runDbosMigrations(conn, Constants.DB_SCHEMA);
+      var migrations = getMigrations(Constants.DB_SCHEMA);
+      runDbosMigrations(conn, Constants.DB_SCHEMA, migrations);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
     }
   }
 
   public static void createDatabaseIfNotExists(DBOSConfig config) {
-    var dbUrl = Objects.requireNonNull(config.databaseUrl(), "DBOSConfig databaseUrl must not be null");
+    var dbUrl =
+        Objects.requireNonNull(config.databaseUrl(), "DBOSConfig databaseUrl must not be null");
     var pair = extractDbAndPostgresUrl(dbUrl);
 
-    try (var adminDS = SystemDatabase.createDataSource(pair.url(), config.dbUser(), config.dbPassword());
+    try (var adminDS =
+            SystemDatabase.createDataSource(pair.url(), config.dbUser(), config.dbPassword());
         var conn = adminDS.getConnection()) {
       try (var stmt = conn.prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
         stmt.setString(1, pair.database());
@@ -57,8 +61,7 @@ public class MigrationManager {
     }
   }
 
-  public record UrlPair(String url, String database) {
-  }
+  public record UrlPair(String url, String database) {}
 
   public static UrlPair extractDbAndPostgresUrl(String url) {
     int qm = Objects.requireNonNull(url, "database url must not be null").indexOf('?');
@@ -97,7 +100,8 @@ public class MigrationManager {
 
   public static void ensureMigrationTable(Connection conn, String schema) {
     Objects.requireNonNull(schema);
-    var sql = "SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name = 'dbos_migrations'";
+    var sql =
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name = 'dbos_migrations'";
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, schema);
       try (var rs = stmt.executeQuery()) {
@@ -110,13 +114,15 @@ public class MigrationManager {
     }
 
     try (var stmt = conn.createStatement()) {
-      stmt.execute("CREATE TABLE %s.dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)".formatted(schema));
+      stmt.execute(
+          "CREATE TABLE %s.dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)"
+              .formatted(schema));
     } catch (SQLException e) {
       throw new RuntimeException("Failed to create dbos migration table", e);
     }
   }
 
-  public static void runDbosMigrations(Connection conn, String schema) {
+  public static void runDbosMigrations(Connection conn, String schema, List<String> migrations) {
     Objects.requireNonNull(schema);
 
     long lastApplied = 0;
@@ -130,39 +136,41 @@ public class MigrationManager {
       throw new RuntimeException("Failed to retrieve migration version", e);
     }
 
-    var migrations = getMigrations(schema);
     for (var i = 0; i < migrations.size(); i++) {
-      if (i <= lastApplied) {
+      var migrationIndex = i + 1;
+      if (migrationIndex <= lastApplied) {
         continue;
       }
 
-      logger.info("Applying DBOS system database schema migration {}", i);
+      logger.info("Applying DBOS system database schema migration {}", migrationIndex);
       try (var stmt = conn.createStatement()) {
         stmt.execute(migrations.get(i));
       } catch (SQLException e) {
-        throw new RuntimeException("Failed to run migration %d".formatted(i), e);
+        throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
       }
 
-      var sql = "INSERT INTO dbos_migrations (version) VALUES (?) ON CONFLICT (version) DO UPDATE SET version = EXCLUDED.version";
-      try (var stmt = conn.prepareStatement(sql)) {
-        stmt.setLong(1, i);
+      var sql =
+          lastApplied == 0
+              ? "INSERT INTO %s.dbos_migrations (version) VALUES (?)"
+              : "UPDATE %s.dbos_migrations SET version = ?";
+      try (var stmt = conn.prepareStatement(sql.formatted(schema))) {
+        stmt.setLong(1, migrationIndex);
         stmt.executeUpdate();
       } catch (SQLException e) {
-        throw new RuntimeException("Failed to save migration %d".formatted(i), e);
+        throw new RuntimeException("Failed to save migration %d".formatted(migrationIndex), e);
       }
 
-      lastApplied = i;
+      lastApplied = migrationIndex;
     }
   }
 
   public static List<String> getMigrations(String schema) {
     Objects.requireNonNull(schema);
-    return List.of(
-        migrationOne.formatted(schema),
-        migrationTwo.formatted(schema));
+    return List.of(migrationOne.formatted(schema), migrationTwo.formatted(schema));
   }
 
-  final static String migrationOne = """
+  static final String migrationOne =
+      """
       CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
       CREATE TABLE %1$s.workflow_status (
@@ -283,6 +291,6 @@ public class MigrationManager {
       );
       """;
 
-  final static String migrationTwo = "ALTER TABLE %1$s.workflow_status ADD COLUMN queue_partition_key TEXT;";
-
+  static final String migrationTwo =
+      "ALTER TABLE %1$s.workflow_status ADD COLUMN queue_partition_key TEXT;";
 }

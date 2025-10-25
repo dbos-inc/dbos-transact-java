@@ -2,18 +2,16 @@ package dev.dbos.transact.migration;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
@@ -38,6 +36,11 @@ class MigrationManagerTest {
 
     DBUtils.recreateDB(MigrationManagerTest.dbosConfig);
     testDataSource = SystemDatabase.createDataSource(dbosConfig);
+  }
+
+  @AfterAll
+  static void cleanup() throws Exception {
+    ((HikariDataSource) testDataSource).close();
   }
 
   @Test
@@ -78,31 +81,17 @@ class MigrationManagerTest {
   @Test
   @Order(3)
   void testAddingNewMigration() throws Exception {
-    // Create a new dummy migration file in test/resources/db/migrations
-    URL testMigrations = getClass().getClassLoader().getResource("db/migrations");
-    Assertions.assertNotNull(testMigrations, "Test migration path not found.");
+    var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
+    migrations.add("CREATE TABLE dummy_table(id SERIAL PRIMARY KEY);");
 
-    Path migrationDir = Paths.get(testMigrations.toURI());
-    Path newMigration = migrationDir.resolve("999__create_dummy_table.sql");
-
-    String sql = "CREATE TABLE IF NOT EXISTS dummy_table(id SERIAL PRIMARY KEY);";
-    Files.writeString(newMigration, sql);
-
-    // Run migrations again
-    MigrationManager.runMigrations(dbosConfig);
+    try (var conn = testDataSource.getConnection()) {
+      MigrationManager.runDbosMigrations(conn, Constants.DB_SCHEMA, migrations);
+    }
 
     // Validate the dummy_table was created
     try (Connection conn = testDataSource.getConnection();
         ResultSet rs = conn.getMetaData().getTables(null, null, "dummy_table", null)) {
       Assertions.assertTrue(rs.next(), "Expected 'dummy_table' to exist after new migration.");
     }
-
-    // Clean up test file
-    Files.deleteIfExists(newMigration);
-  }
-
-  @AfterAll
-  static void cleanup() throws Exception {
-    ((HikariDataSource) testDataSource).close();
   }
 }
