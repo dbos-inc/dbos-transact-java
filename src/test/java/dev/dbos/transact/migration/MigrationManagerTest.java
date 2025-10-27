@@ -58,12 +58,26 @@ class MigrationManagerTest {
       assertTableExists(metaData, "workflow_status");
       assertTableExists(metaData, "notifications");
       assertTableExists(metaData, "workflow_events");
+
+      var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
+      try (var stmt = conn.createStatement();
+          var rs = stmt.executeQuery("SELECT version FROM dbos.dbos_migrations")) {
+        assertTrue(rs.next());
+        assertEquals(migrations.size(), rs.getInt("version"));
+        assertFalse(rs.next());
+      }
     }
   }
 
-  private void assertTableExists(DatabaseMetaData metaData, String tableName) throws Exception {
-    try (ResultSet rs = metaData.getTables(null, "dbos", tableName, null)) {
-      assertTrue(rs.next(), "Table " + tableName + " should exist in schema dbos");
+  public static void assertTableExists(DatabaseMetaData metaData, String tableName)
+      throws Exception {
+    assertTableExists(metaData, tableName, Constants.DB_SCHEMA);
+  }
+
+  public static void assertTableExists(
+      DatabaseMetaData metaData, String tableName, String schemaName) throws Exception {
+    try (ResultSet rs = metaData.getTables(null, schemaName, tableName, null)) {
+      assertTrue(rs.next(), "Table %s should exist in schema %s".formatted(tableName, schemaName));
     }
   }
 
@@ -79,7 +93,7 @@ class MigrationManagerTest {
   }
 
   @Test
-  @Order(3)
+  @Order(4)
   void testAddingNewMigration() throws Exception {
     var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
     migrations.add("CREATE TABLE dummy_table(id SERIAL PRIMARY KEY);");
@@ -93,5 +107,14 @@ class MigrationManagerTest {
         ResultSet rs = conn.getMetaData().getTables(null, null, "dummy_table", null)) {
       Assertions.assertTrue(rs.next(), "Expected 'dummy_table' to exist after new migration.");
     }
+  }
+
+  @Test
+  public void extractDbAndPostgresUrl() {
+    var originalUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys?user=alice&ssl=true";
+    var pair = MigrationManager.extractDbAndPostgresUrl(originalUrl);
+
+    assertEquals("dbos_java_sys", pair.database());
+    assertEquals("jdbc:postgresql://localhost:5432/postgres?user=alice&ssl=true", pair.url());
   }
 }

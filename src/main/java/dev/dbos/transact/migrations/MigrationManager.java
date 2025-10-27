@@ -13,6 +13,16 @@ import org.slf4j.LoggerFactory;
 public class MigrationManager {
 
   private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
+  private static final List<String> IGNORABLE_SQL_STATES =
+      List.of(
+          // Relation / object already exists
+          "42P07", // duplicate_table
+          "42710", // duplicate_object (e.g., index)
+          "42701", // duplicate_column
+          "42P06", // duplicate_schema
+          // Uniqueness (e.g., insert seed rows twice)
+          "23505" // unique_violation
+          );
 
   public static void runMigrations(DBOSConfig config) {
 
@@ -146,18 +156,33 @@ public class MigrationManager {
       try (var stmt = conn.createStatement()) {
         stmt.execute(migrations.get(i));
       } catch (SQLException e) {
-        throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
+        if (IGNORABLE_SQL_STATES.contains(e.getSQLState())) {
+          logger.warn(
+              "Ignoring migration {} error; Migration was likely already applied. Occurred while executing {}",
+              migrationIndex,
+              migrations.get(i));
+        } else {
+          throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
+        }
       }
 
-      var sql =
-          lastApplied == 0
-              ? "INSERT INTO %s.dbos_migrations (version) VALUES (?)"
-              : "UPDATE %s.dbos_migrations SET version = ?";
-      try (var stmt = conn.prepareStatement(sql.formatted(schema))) {
+      int rowCount = 0;
+      var sql = "UPDATE %s.dbos_migrations SET version = ?".formatted(schema);
+      try (var stmt = conn.prepareStatement(sql)) {
         stmt.setLong(1, migrationIndex);
-        stmt.executeUpdate();
+        rowCount = stmt.executeUpdate();
       } catch (SQLException e) {
         throw new RuntimeException("Failed to save migration %d".formatted(migrationIndex), e);
+      }
+
+      if (rowCount == 0) {
+        var insertSql = "INSERT INTO %s.dbos_migrations (version) VALUES (?)".formatted(schema);
+        try (var stmt = conn.prepareStatement(insertSql)) {
+          stmt.setLong(1, migrationIndex);
+          stmt.executeUpdate();
+        } catch (SQLException e) {
+          throw new RuntimeException("Failed to save migration %d".formatted(migrationIndex), e);
+        }
       }
 
       lastApplied = migrationIndex;
