@@ -57,18 +57,17 @@ public class MigrationManager {
           }
         }
       } catch (SQLException e) {
-        throw new RuntimeException("Failed to check database", e);
+        logger.warn("SQLException thrown looking for {} database", pair.database(), e);
       }
 
       logger.info("Creating '{}' database", pair.database());
       try (Statement stmt = conn.createStatement()) {
         stmt.executeUpdate("CREATE DATABASE \"" + pair.database() + "\"");
       } catch (SQLException e) {
-        throw new RuntimeException("Failed to create database", e);
+        logger.warn("SQLException thrown creating {} database", pair.database(), e);
       }
     } catch (SQLException e) {
-      var msg = "Failed to connect to database {}".formatted(pair.url());
-      throw new RuntimeException(msg, e);
+      logger.warn("Failed to connect to database {}", pair.url());
     }
   }
 
