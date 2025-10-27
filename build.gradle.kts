@@ -1,22 +1,32 @@
+fun Project.runCommand(vararg args: String): String {
+    val process = ProcessBuilder(*args)
+        .directory(projectDir)
+        .redirectErrorStream(true)
+        .start()
+    
+    val output = process.inputStream.bufferedReader().readText()
+    val exitCode = process.waitFor()
+    
+    if (exitCode != 0) {
+        throw GradleException("Command failed with exit code $exitCode: ${args.joinToString(" ")}")
+    }
+    
+    return output.trim()
+}
+
 val gitHash: String by lazy {
-    providers.exec {
-        commandLine("git", "rev-parse", "--short", "HEAD")
-    }.standardOutput.asText.get().trim()
+    runCommand("git", "rev-parse", "--short", "HEAD")
 }
 
 val gitTag: String? by lazy {
     runCatching {
-        providers.exec {
-            commandLine("git", "describe", "--abbrev=0", "--tags")
-        }.standardOutput.asText.get().trim()
+        runCommand("git", "describe", "--abbrev=0", "--tags")
     }.getOrNull()
 }
 
 val commitCount: String by lazy {
     val range = if (gitTag.isNullOrEmpty()) "HEAD" else "$gitTag..HEAD"
-    providers.exec {
-        commandLine("git", "rev-list", "--count", range)
-    }.standardOutput.asText.get().trim()
+    runCommand("git", "rev-list", "--count", range)
 }
 
 val branch: String by lazy {
@@ -26,10 +36,20 @@ val branch: String by lazy {
     
     // Fallback to local git command
     else {
-        providers.exec {
-            commandLine("git", "rev-parse", "--abbrev-ref", "HEAD")
-        }.standardOutput.asText.get().trim()
+        runCommand("git", "rev-parse", "--abbrev-ref", "HEAD")
     }
+}
+
+val isGitDirty: Boolean by lazy {
+    providers.exec {
+        commandLine("git", "status", "--porcelain")
+    }.standardOutput.toString().isNotBlank()
+}
+
+fun hasTag(tag: String): Boolean {
+    return providers.exec {
+        commandLine("git", "tag", "-l", tag)
+    }.standardOutput.toString().trim().isNotEmpty()
 }
 
 fun parseTag(tag: String): Triple<Int, Int, Int>? {
@@ -55,6 +75,46 @@ fun calcVersion(): String {
 
 version = calcVersion()
 println("Project version: $version") // prints when Gradle evaluates the build
+
+tasks.register("printGitStatus") {
+    doLast {
+        val status = project.runCommand("git", "status", "--porcelain")
+        println("Git status:\n$status")
+    }
+}
+
+tasks.register("createRelease") {
+    group = "release"
+    description = "Create a release branch and git tag"
+
+    if (isGitDirty) {
+        throw GradleException("Local git repository is not clean")
+    }
+    if (branch != "main") {
+        throw GradleException("Can only make a release from main")
+    }
+
+    val local = runCommand("git", "rev-parse", "HEAD")
+    val remote = runCommand("git", "rev-parse", "origin/$branch")
+    if (local != remote) {
+        throw GradleException("your local branch $branch is not up to date with origin")
+    }
+
+    val (major, minor, patch) = parseTag(gitTag ?: "") ?: Triple(0, 1, 0)
+    val releaseVersion = project.findProperty("releaseVersion")?.toString() ?: "$major.${minor + 1}.$patch"
+    val releaseBranch = "release/v$releaseVersion"
+
+    if (!Regex("""\d+\.\d+\.\d+""").matches(releaseVersion)) {
+        throw GradleException("Invalid version numbe: $releaseVersion")
+    }
+
+    doLast {
+        runCommand("git", "tag", releaseVersion)
+        runCommand("git", "push", "origin", releaseVersion)
+        runCommand("git", "branch", releaseBranch)
+        runCommand("git", "push", "origin", releaseBranch)
+    }
+}
 
 plugins {
     id("java")
