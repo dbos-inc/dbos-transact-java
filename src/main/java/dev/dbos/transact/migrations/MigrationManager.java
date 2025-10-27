@@ -40,6 +40,7 @@ public class MigrationManager {
   }
 
   public static void createDatabaseIfNotExists(DBOSConfig config) {
+    Objects.requireNonNull(config, "DBOS Config must not be null");
     var dbUrl =
         Objects.requireNonNull(config.databaseUrl(), "DBOSConfig databaseUrl must not be null");
     var pair = extractDbAndPostgresUrl(dbUrl);
@@ -88,7 +89,7 @@ public class MigrationManager {
   }
 
   public static void ensureDbosSchema(Connection conn, String schema) {
-    Objects.requireNonNull(schema);
+    Objects.requireNonNull(schema, "schema must not be null");
     var sql = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = ?";
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, schema);
@@ -109,7 +110,7 @@ public class MigrationManager {
   }
 
   public static void ensureMigrationTable(Connection conn, String schema) {
-    Objects.requireNonNull(schema);
+    Objects.requireNonNull(schema, "schema must not be null");
     var sql =
         "SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name = 'dbos_migrations'";
     try (var stmt = conn.prepareStatement(sql)) {
@@ -133,6 +134,7 @@ public class MigrationManager {
   }
 
   public static int getCurrentSysDbVersion(Connection conn, String schema) {
+    Objects.requireNonNull(schema, "schema must not be null");
     var sql =
         "SELECT version FROM %s.dbos_migrations ORDER BY version DESC limit 1".formatted(schema);
     try (var stmt = conn.createStatement();
@@ -148,7 +150,8 @@ public class MigrationManager {
   }
 
   public static void runDbosMigrations(Connection conn, String schema, List<String> migrations) {
-    var lastApplied = getCurrentSysDbVersion(conn, Objects.requireNonNull(schema));
+    Objects.requireNonNull(schema, "schema must not be null");
+    var lastApplied = getCurrentSysDbVersion(conn, schema);
 
     for (var i = 0; i < migrations.size(); i++) {
       var migrationIndex = i + 1;
