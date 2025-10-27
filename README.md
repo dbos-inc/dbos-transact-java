@@ -128,7 +128,7 @@ You code can return at a later point and check the status for completion and/or 
     result = handle.getResult();
 ```
 
-[Read more ↗️](https://docs.dbos.dev/python/tutorials/queue-tutorial)
+[Read more ↗️](https://docs.dbos.dev/java/tutorials/workflow-tutorial#starting-workflows-in-the-background)
 
 </details>
 
@@ -167,7 +167,7 @@ They don't require a separate queueing service or message broker&mdash;just Post
 }
 ```
 
-[Read more ↗️](https://docs.dbos.dev/python/tutorials/queue-tutorial)
+[Read more ↗️](https://docs.dbos.dev/java/tutorials/queue-tutorial)
 
 </details>
 
@@ -182,7 +182,7 @@ You can schedule a workflow using a single annotation:
 
 ```java
 
-public class SchedulerImpl {
+public class SchedulerImpl implements Scheduler {
     
     @Workflow(name = "every5Second")
     @Scheduled(cron = "0/5 * * * * ?")
@@ -192,10 +192,10 @@ public class SchedulerImpl {
 }
 
 // In your main
-// DBOS.scheduleWorkflow(new SchedulerImpl());
+// DBOS.registerWorkflows(Scheduler.class, new SchedulerImpl());
 ```
 
-[Read more ↗️](https://docs.dbos.dev/python/tutorials/scheduled-workflows)
+[Read more ↗️](https://docs.dbos.dev/java/tutorials/scheduled-workflows)
 
 </details>
 
@@ -210,19 +210,19 @@ Set durable timeouts when waiting for events, so you can wait for as long as you
 For example, build a reliable billing workflow that durably waits for a notification from a payments service, processing it exactly-once:
 
 ```java
-@workflow(name = "billing")
+@Workflow(name = "billing")
 public void billingWorkflow() {
     // Calculate the charge, then submit the bill to a payments service
-    String payment_status = (String) DBOS.recv(PAYMENT_STATUS, timeout = payment_service_timeout);
-    if (payment_status.equals("paid")) {
+    String paymentStatus = (String) DBOS.recv(PAYMENT_STATUS, paymentServiceTimeout);
+    if (paymentStatus.equals("paid")) {
         // handle paid
     } else {
         // handle not paid
     }
 }
 
-@workflow(name = "payment") 
-public void payment() {
+@Workflow(name = "payment") 
+public void payment(String targetWorkflowId) {
     DBOS.send(targetWorkflowId, PAYMENT_STATUS, "paid") ;
 }
       
@@ -233,7 +233,7 @@ public void payment() {
 ## Getting Started
 
 To get started, follow the [quickstart](https://docs.dbos.dev/quickstart) to install this open-source library and connect it to a Postgres database.
-Then, check out the [programming guide](https://docs.dbos.dev/python/programming-guide) to learn how to build with durable workflows and queues.
+Then, check out the [programming guide](https://docs.dbos.dev/java/programming-guide) to learn how to build with durable workflows and queues.
 
 ## Documentation
 
