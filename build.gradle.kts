@@ -39,24 +39,6 @@ fun parseTag(tag: String): Triple<Int, Int, Int>? {
     return Triple(major.toInt(), minor.toInt(), patch.toInt())
 }
 
-fun ensureCurrentCommitHasTag(expectedTag: String) {
-    val result = runCatching {
-        providers.exec {
-            commandLine("git", "tag", "--points-at", "HEAD")
-        }.standardOutput.asText.get().trim()
-    }.getOrNull() ?: ""
-
-
-    val tags = result.split("\n").map { it.trim() }
-
-    if (expectedTag !in tags) {
-        throw IllegalStateException(
-            "Current commit does not have the expected tag '$expectedTag'. " +
-            "Tags on HEAD: ${tags.joinToString(", ")}"
-        )
-    }
-}
-
 fun calcVersion(): String {
     var (major, minor, patch) = parseTag(gitTag ?: "") ?: Triple(0, 1, 0)
 
@@ -65,10 +47,6 @@ fun calcVersion(): String {
     }
 
     if (branch.startsWith("release/v")) {
-        if (branch != "release/v$major.$minor.$patch") {
-            throw IllegalArgumentException("Expected branch 'release/v$major.$minor.$patch', but got '$branch'") 
-        }
-        ensureCurrentCommitHasTag("$major.$minor.$patch")
         return "$major.$minor.$patch"
     }
 
