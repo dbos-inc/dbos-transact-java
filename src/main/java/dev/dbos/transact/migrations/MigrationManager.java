@@ -98,13 +98,13 @@ public class MigrationManager {
         }
       }
     } catch (SQLException e) {
-      throw new RuntimeException("Failed to check dbos schema", e);
+      logger.warn("SQLException thrown looking for {} schema", schema, e);
     }
 
     try (var stmt = conn.createStatement()) {
-      stmt.execute("CREATE SCHEMA %s".formatted(schema));
+      stmt.execute("CREATE SCHEMA IF NOT EXISTS %s".formatted(schema));
     } catch (SQLException e) {
-      throw new RuntimeException("Failed to create dbos schema", e);
+      logger.warn("SQLException thrown creating the {} schema", schema, e);
     }
   }
 
@@ -120,31 +120,35 @@ public class MigrationManager {
         }
       }
     } catch (SQLException e) {
-      throw new RuntimeException("Failed to check dbos migration table", e);
+      logger.warn("SQLException thrown looking for dbos_migrations table", e);
     }
 
     try (var stmt = conn.createStatement()) {
       stmt.execute(
-          "CREATE TABLE %s.dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)"
+          "CREATE TABLE IF NOT EXISTS %s.dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)"
               .formatted(schema));
     } catch (SQLException e) {
-      throw new RuntimeException("Failed to create dbos migration table", e);
+      logger.warn("SQLException thrown creating the dbos_migrations table", e);
     }
   }
 
-  public static void runDbosMigrations(Connection conn, String schema, List<String> migrations) {
-    Objects.requireNonNull(schema);
-
-    long lastApplied = 0;
-    try (var stmt = conn.createStatement()) {
-      try (var rs = stmt.executeQuery("SELECT version FROM %s.dbos_migrations".formatted(schema))) {
-        if (rs.next()) {
-          lastApplied = rs.getLong("version");
-        }
+  public static int getCurrentSysDbVersion(Connection conn, String schema) {
+    var sql =
+        "SELECT version FROM %s.dbos_migrations ORDER BY version DESC limit 1".formatted(schema);
+    try (var stmt = conn.createStatement();
+        var rs = stmt.executeQuery(sql)) {
+      if (rs.next()) {
+        return rs.getInt("version");
       }
     } catch (SQLException e) {
-      throw new RuntimeException("Failed to retrieve migration version", e);
+      logger.warn("SQLException thrown querying dbos_migrations table", e);
     }
+
+    return 0;
+  }
+
+  public static void runDbosMigrations(Connection conn, String schema, List<String> migrations) {
+    var lastApplied = getCurrentSysDbVersion(conn, Objects.requireNonNull(schema));
 
     for (var i = 0; i < migrations.size(); i++) {
       var migrationIndex = i + 1;
@@ -166,23 +170,23 @@ public class MigrationManager {
         }
       }
 
-      int rowCount = 0;
-      var sql = "UPDATE %s.dbos_migrations SET version = ?".formatted(schema);
-      try (var stmt = conn.prepareStatement(sql)) {
-        stmt.setLong(1, migrationIndex);
-        rowCount = stmt.executeUpdate();
-      } catch (SQLException e) {
-        throw new RuntimeException("Failed to save migration %d".formatted(migrationIndex), e);
-      }
-
-      if (rowCount == 0) {
-        var insertSql = "INSERT INTO %s.dbos_migrations (version) VALUES (?)".formatted(schema);
-        try (var stmt = conn.prepareStatement(insertSql)) {
+      try {
+        int rowCount = 0;
+        var updateSQL = "UPDATE %s.dbos_migrations SET version = ?".formatted(schema);
+        try (var stmt = conn.prepareStatement(updateSQL)) {
           stmt.setLong(1, migrationIndex);
-          stmt.executeUpdate();
-        } catch (SQLException e) {
-          throw new RuntimeException("Failed to save migration %d".formatted(migrationIndex), e);
+          rowCount = stmt.executeUpdate();
         }
+
+        if (rowCount == 0) {
+          var insertSql = "INSERT INTO %s.dbos_migrations (version) VALUES (?)".formatted(schema);
+          try (var stmt = conn.prepareStatement(insertSql)) {
+            stmt.setLong(1, migrationIndex);
+            stmt.executeUpdate();
+          }
+        }
+      } catch (SQLException e) {
+        throw new RuntimeException("Failed to update dbos migration version", e);
       }
 
       lastApplied = migrationIndex;
