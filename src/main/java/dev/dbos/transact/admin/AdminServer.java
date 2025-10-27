@@ -105,7 +105,10 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void healthCheck(HttpExchange exchange) throws IOException {
-    sendJson(exchange, 200, """
+    sendJson(
+        exchange,
+        200,
+        """
         {"status":"healthy"}""");
   }
 
