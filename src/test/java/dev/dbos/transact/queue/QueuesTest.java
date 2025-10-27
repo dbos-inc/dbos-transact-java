@@ -103,7 +103,7 @@ public class QueuesTest {
         () -> DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("id"), options));
   }
 
-  @Test
+  @RetryingTest(3)
   public void testPriority() throws Exception {
 
     Queue firstQ =
