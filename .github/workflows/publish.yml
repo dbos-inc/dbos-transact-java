@@ -7,10 +7,12 @@ on:
       required: true
     TOKEN_MAVEN:
       required: true
+  workflow_dispatch:
 
 jobs:
-  build:
+  public:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/v')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
