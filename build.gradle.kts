@@ -61,7 +61,9 @@ fun calcVersion(): String {
     return "$major.${minor + 1}.$patch-a$commitCount-g$gitHash"
 }
 
+group = "dev.dbos"
 version = calcVersion()
+
 println("Project version: $version") // prints when Gradle evaluates the build
 
 plugins {
@@ -71,8 +73,6 @@ plugins {
     id("pmd")
     id("com.diffplug.spotless") version "8.0.0"
 }
-
-group = "dev.dbos"
 
 java {
     withSourcesJar()
@@ -167,35 +167,13 @@ tasks.test {
     environment("DBOS_SYSTEM_DATABASE_URL", "jdbc:postgresql://localhost:5432/dbos_java_sys")
 }
 
-tasks.jar {
-    archiveBaseName.set("transact")
-    // Will produce: build/libs/transact-1.0.0.jar
-
-    manifest {
-        attributes["Implementation-Version"] = project.version.toString()
-    }
-}
-
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
-            artifactId = "transact"
-            groupId = project.group.toString()
-            version = project.version.toString()
         }
     }
     repositories {
         mavenLocal()
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/dbos-inc/dbos-transact-java") // replace OWNER/REPO
-            credentials {
-                username = project.findProperty("gpr.user")?.toString()
-                    ?: System.getenv("USERNAME_MAVEN")
-                password = project.findProperty("gpr.token")?.toString()
-                    ?: System.getenv("TOKEN_MAVEN")
-            }
-        }
     }
 }
