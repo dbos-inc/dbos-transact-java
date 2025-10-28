@@ -358,6 +358,7 @@ public class DBOSExecutor implements AutoCloseable {
     return functionResult;
   }
 
+  @SuppressWarnings("unchecked")
   public <T, E extends Exception> T runStepInternal(
       ThrowingSupplier<T, E> stepfunc, StepOptions opts, String childWfId) throws E {
     try {
@@ -377,6 +378,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  @SuppressWarnings("unchecked")
   private <T, E extends Exception> T handleExistingResult(StepResult result, String functionName)
       throws E {
     if (result.getOutput() != null) {

@@ -495,6 +495,7 @@ public class ConductorTest {
     }
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void canFork() throws Exception {
     MessageListener listener = new MessageListener();
