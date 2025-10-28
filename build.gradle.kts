@@ -69,13 +69,12 @@ println("Project version: $version") // prints when Gradle evaluates the build
 plugins {
     id("java")
     id("java-library")
-    id("maven-publish")
     id("pmd")
     id("com.diffplug.spotless") version "8.0.0"
+    id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
 java {
-    withSourcesJar()
     withJavadocJar()
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17))
@@ -167,13 +166,32 @@ tasks.test {
     environment("DBOS_SYSTEM_DATABASE_URL", "jdbc:postgresql://localhost:5432/dbos_java_sys")
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            from(components["java"])
+mavenPublishing {
+    pom {
+        name.set("DBOS Transact")
+        description.set("DBOS Transact Java SDK for lightweight durable workflows")
+        inceptionYear.set("2025")
+        url.set("https://github.com/dbos-inc/dbos-transact-java")
+        
+        licenses {
+            license {
+                name.set("MIT License")
+                url.set("https://opensource.org/licenses/MIT")
+            }
         }
-    }
-    repositories {
-        mavenLocal()
+        
+        developers {
+            developer {
+                id.set("dbos-inc")
+                name.set("DBOS Inc")
+                email.set("support@dbos.dev")
+            }
+        }
+        
+        scm {
+            connection.set("scm:git:git://github.com/dbos-inc/dbos-transact-java.git")
+            developerConnection.set("scm:git:ssh://github.com:dbos-inc/dbos-transact-java.git")
+            url.set("https://github.com/dbos-inc/dbos-transact-java/tree/main")
+        }
     }
 }
