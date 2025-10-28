@@ -83,6 +83,7 @@ group = "dev.dbos"
 
 java {
     withSourcesJar()
+    withJavadocJar()
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17))
     }
@@ -109,6 +110,20 @@ tasks.withType<Pmd> {
     reports {
         xml.required.set(true)
         html.required.set(true)
+    }
+}
+
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("-Xlint:unchecked")    // warn about unchecked operations
+    options.compilerArgs.add("-Xlint:deprecation")  // warn about deprecated APIs
+    options.compilerArgs.add("-Xlint:rawtypes")     // warn about raw types
+    options.compilerArgs.add("-Werror")             // treat all warnings as errors
+}
+
+tasks.withType<Javadoc> {
+    (options as StandardJavadocDocletOptions).apply {
+        addStringOption("Xdoclint:all,-missing", "-quiet")  // hide warnings for missing javadoc comments
+        encoding = "UTF-8"                                  // optional, ensures UTF-8 for docs
     }
 }
 
