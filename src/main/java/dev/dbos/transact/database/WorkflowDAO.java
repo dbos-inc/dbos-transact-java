@@ -141,8 +141,8 @@ public class WorkflowDAO {
   /**
    * Insert into the workflow_status table
    *
-   * @param status @WorkflowStatusInternal holds the data for a workflow_status row
-   * @return @InsertWorkflowResult some of the column inserted
+   * @param status WorkflowStatusInternal holds the data for a workflow_status row
+   * @return InsertWorkflowResult some of the column inserted
    * @throws SQLException
    */
   public InsertWorkflowResult insertWorkflowStatus(

@@ -266,7 +266,6 @@ public class DBOSClient implements AutoCloseable {
    * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
    * @param args Arguments to pass to the workflow function
    * @return WorkflowHandle for retrieving workflow ID, status, and results
-   * @throws Exception
    */
   public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflow(
       EnqueueOptions options, Object[] args) {
@@ -301,10 +300,10 @@ public class DBOSClient implements AutoCloseable {
    * @param idempotencyKey If specified, use the value to ensure exactly-once send semantics
    */
   public void send(String destinationId, Object message, String topic, String idempotencyKey) {
-    var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
     if (idempotencyKey == null) {
       idempotencyKey = UUID.randomUUID().toString();
     }
+    var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
 
     var status =
         new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS)

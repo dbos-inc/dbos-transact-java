@@ -109,7 +109,7 @@ public class DBOS {
 
     private void registerInternals() {
       internalWorkflowsService =
-          registerWorkflows(InternalWorkflowsService.class, new InternalWorkflowsServiceImpl(this));
+          registerWorkflows(InternalWorkflowsService.class, new InternalWorkflowsServiceImpl());
       this.registerQueue(new Queue(Constants.DBOS_INTERNAL_QUEUE));
       this.registerQueue(new Queue(Constants.DBOS_SCHEDULER_QUEUE));
     }
@@ -156,10 +156,6 @@ public class DBOS {
       }
     }
 
-    public void send(String destinationId, Object message, String topic) {
-      executor("send").send(destinationId, message, topic, internalWorkflowsService);
-    }
-
     public void shutdown() {
       var current = dbosExecutor.getAndSet(null);
       if (current != null) {
@@ -176,7 +172,7 @@ public class DBOS {
    * @param <T> The interface type for the instance
    * @param interfaceClass The interface class for the workflows
    * @param implementation An implementation instance providing the workflow and step function code
-   * @return A proxy, with interface <T>, that provides durability for the workflow functions
+   * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow functions
    */
   public static <T> T registerWorkflows(Class<T> interfaceClass, T implementation) {
     return ensureInstance().registerWorkflows(interfaceClass, implementation, "");
@@ -190,7 +186,7 @@ public class DBOS {
    * @param implementation An implementation instance providing the workflow and step function code
    * @param instanceName Name of the instance, allowing multiple instances of the same class to be
    *     registered
-   * @return A proxy, with interface <T>, that provides durability for the workflow functions
+   * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow functions
    */
   public static <T> T registerWorkflows(
       Class<T> interfaceClass, T implementation, String instanceName) {
@@ -431,16 +427,31 @@ public class DBOS {
    * @param destinationId recipient of the message
    * @param message message to be sent
    * @param topic topic to which the message is send
+   * @param idempotencyKey optional idempotency key for exactly-once send
+   */
+  public static void send(
+      String destinationId, Object message, String topic, String idempotencyKey) {
+    executor("send")
+        .send(destinationId, message, topic, instance().internalWorkflowsService, idempotencyKey);
+  }
+
+  /**
+   * Send a message to a workflow
+   *
+   * @param destinationId recipient of the message
+   * @param message message to be sent
+   * @param topic topic to which the message is send
+   * @param idempotencyKey optional idempotency key for exactly-once send
    */
   public static void send(String destinationId, Object message, String topic) {
-    executor("send").send(destinationId, message, topic, instance().internalWorkflowsService);
+    DBOS.send(destinationId, message, topic, null);
   }
 
   /**
    * Get a message sent to a particular topic
    *
    * @param topic the topic whose message to get
-   * @param timeoutSeconds time in seconds after which the call times out
+   * @param timeout duration after which the call times out
    * @return the message if there is one or else null
    */
   public static Object recv(String topic, Duration timeout) {

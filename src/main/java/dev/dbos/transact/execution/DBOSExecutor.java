@@ -9,6 +9,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
+import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.DbRetry;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetWorkflowEventContext;
@@ -513,8 +514,6 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void sleep(Duration duration) {
-    // CB TODO: This should be OK outside DBOS
-
     DBOSContext context = DBOSContextHolder.get();
 
     if (context.getWorkflowId() == null) {
@@ -589,15 +588,25 @@ public class DBOSExecutor implements AutoCloseable {
       String destinationId,
       Object message,
       String topic,
-      InternalWorkflowsService internalWorkflowsService) {
+      InternalWorkflowsService internalWorkflowsService,
+      String idempotencyKey) {
 
     DBOSContext ctx = DBOSContextHolder.get();
     if (ctx.isInStep()) {
       throw new IllegalStateException("DBOS.send() must not be called from within a step.");
     }
     if (!ctx.isInWorkflow()) {
-      internalWorkflowsService.sendWorkflow(destinationId, message, topic);
+      var sendWfid =
+          idempotencyKey == null ? null : "%s-%s".formatted(destinationId, idempotencyKey);
+      try (var wfid = new WorkflowOptions(sendWfid).setContext()) {
+        internalWorkflowsService.sendWorkflow(destinationId, message, topic);
+      }
       return;
+    }
+
+    if (idempotencyKey != null) {
+      throw new IllegalArgumentException(
+          "Invalid call to `DBOS.send` with an idempotency key from within a workflow");
     }
     int stepFunctionId = ctx.getAndIncrementFunctionId();
 
