@@ -112,6 +112,10 @@ tasks.withType<Pmd> {
     }
 }
 
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("-Xlint:unchecked")
+}
+
 repositories {
     gradlePluginPortal()
     mavenCentral()

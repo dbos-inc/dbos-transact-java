@@ -502,7 +502,6 @@ public class ConductorTest {
     String workflowId = "sample-wf-id";
     String newWorkflowId = "new-" + workflowId;
 
-    @SuppressWarnings("unchecked")
     var mockHandle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
     when(mockHandle.workflowId()).thenReturn(newWorkflowId);
     when(mockExec.forkWorkflow(eq(workflowId), anyInt(), any())).thenReturn(mockHandle);
