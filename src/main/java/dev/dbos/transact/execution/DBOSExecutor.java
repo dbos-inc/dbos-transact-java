@@ -596,7 +596,9 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalStateException("DBOS.send() must not be called from within a step.");
     }
     if (!ctx.isInWorkflow()) {
-      try (var wfid = new WorkflowOptions(idempotencyKey).setContext()) {
+      var sendWfid =
+          idempotencyKey == null ? null : "%s-%s".formatted(destinationId, idempotencyKey);
+      try (var wfid = new WorkflowOptions(sendWfid).setContext()) {
         internalWorkflowsService.sendWorkflow(destinationId, message, topic);
       }
       return;
