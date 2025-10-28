@@ -64,13 +64,6 @@ fun calcVersion(): String {
 version = calcVersion()
 println("Project version: $version") // prints when Gradle evaluates the build
 
-tasks.register("printGitStatus") {
-    doLast {
-        val status = project.runCommand("git", "status", "--porcelain")
-        println("Git status:\n$status")
-    }
-}
-
 plugins {
     id("java")
     id("java-library")
