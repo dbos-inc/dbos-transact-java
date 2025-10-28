@@ -16,11 +16,6 @@ public class DBOSContext {
   StartWorkflowOptions startOptions;
   String startedWorkflowId;
 
-  // TODO: auth support
-  // String authenticatedUser;
-  // List<String> authenticatedRoles;
-  // String assumedRole;
-
   // current workflow fields
   private final String workflowId;
   private int functionId;

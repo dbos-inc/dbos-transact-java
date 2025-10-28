@@ -288,7 +288,6 @@ public class TimeoutTest {
 
     WorkflowOptions options = new WorkflowOptions(wfid1);
 
-    // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/86
     assertThrows(
         Exception.class,
         () -> {
