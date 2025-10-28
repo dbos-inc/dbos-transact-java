@@ -514,8 +514,6 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void sleep(Duration duration) {
-    // CB TODO: This should be OK outside DBOS
-
     DBOSContext context = DBOSContextHolder.get();
 
     if (context.getWorkflowId() == null) {
