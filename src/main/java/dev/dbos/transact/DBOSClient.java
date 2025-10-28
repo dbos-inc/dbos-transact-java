@@ -301,10 +301,10 @@ public class DBOSClient implements AutoCloseable {
    * @param idempotencyKey If specified, use the value to ensure exactly-once send semantics
    */
   public void send(String destinationId, Object message, String topic, String idempotencyKey) {
-    var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
     if (idempotencyKey == null) {
       idempotencyKey = UUID.randomUUID().toString();
     }
+    var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
 
     var status =
         new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS)

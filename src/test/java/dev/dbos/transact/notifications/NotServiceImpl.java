@@ -14,7 +14,7 @@ public class NotServiceImpl implements NotService {
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition condition = lock.newCondition();
   private final AtomicInteger counter = new AtomicInteger(0);
-  private final CountDownLatch recvReadyLatch = new CountDownLatch(1);
+  final CountDownLatch recvReadyLatch = new CountDownLatch(1);
 
   @Workflow(name = "sendWorkflow")
   public void sendWorkflow(String target, String topic, String msg) {
@@ -44,6 +44,22 @@ public class NotServiceImpl implements NotService {
     String msg2 = (String) DBOS.recv(topic, Duration.ofSeconds(5));
     String msg3 = (String) DBOS.recv(topic, Duration.ofSeconds(5));
     return msg1 + msg2 + msg3;
+  }
+
+  @Workflow(name = "recvCount")
+  public int recvCount(String topic) {
+    try {
+      recvReadyLatch.await();
+    } catch (InterruptedException e) {
+    }
+    String msg1 = (String) DBOS.recv(topic, Duration.ofSeconds(0));
+    String msg2 = (String) DBOS.recv(topic, Duration.ofSeconds(0));
+    String msg3 = (String) DBOS.recv(topic, Duration.ofSeconds(0));
+    int rc = 0;
+    if (msg1 != null) ++rc;
+    if (msg2 != null) ++rc;
+    if (msg3 != null) ++rc;
+    return rc;
   }
 
   @Workflow(name = "concWorkflow")
