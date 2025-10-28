@@ -230,7 +230,8 @@ class AdminServerTest {
       given()
           .port(port)
           .contentType("application/json")
-          .body("""
+          .body(
+              """
               { "cutoff_epoch_timestamp_ms": 42, "rows_threshold": 37 } """)
           .when()
           .post("/dbos-garbage-collect")
@@ -250,7 +251,8 @@ class AdminServerTest {
       given()
           .port(port)
           .contentType("application/json")
-          .body("""
+          .body(
+              """
               { "cutoff_epoch_timestamp_ms": 42 } """)
           .when()
           .post("/dbos-global-timeout")
