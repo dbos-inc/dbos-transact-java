@@ -315,6 +315,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   /** This does not retry */
+  @SuppressWarnings("unchecked")
   public <T, E extends Exception> T callFunctionAsStep(
       ThrowingSupplier<T, E> fn, String functionName, String childWfId) throws E {
     DBOSContext ctx = DBOSContextHolder.get();

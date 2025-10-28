@@ -557,6 +557,7 @@ public class WorkflowDAO {
     return results;
   }
 
+  @SuppressWarnings("unchecked")
   public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");

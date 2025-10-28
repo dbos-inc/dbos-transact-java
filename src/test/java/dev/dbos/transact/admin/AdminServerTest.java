@@ -55,12 +55,12 @@ class AdminServerTest {
     mockExec = mock(DBOSExecutor.class);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void ensurePostJsonNotPost() throws IOException {
 
     List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
-      @SuppressWarnings("unchecked")
       var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
       when(handle.workflowId()).thenReturn("workflow-00%d".formatted(i));
       handles.add(handle);
@@ -76,12 +76,12 @@ class AdminServerTest {
     }
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void ensurePostJsonNotJson() throws IOException {
 
     List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
-      @SuppressWarnings("unchecked")
       var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
       when(handle.workflowId()).thenReturn("workflow-00%d".formatted(i));
       handles.add(handle);
@@ -153,12 +153,12 @@ class AdminServerTest {
     }
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void workflowRecovery() throws IOException {
 
     List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
-      @SuppressWarnings("unchecked")
       var handle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
       when(handle.workflowId()).thenReturn("workflow-00%d".formatted(i));
       handles.add(handle);
@@ -544,6 +544,7 @@ class AdminServerTest {
     }
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void forkWorkflowNoOptions() throws IOException {
     var newWfId = "test-new-wf-id";
@@ -574,6 +575,7 @@ class AdminServerTest {
     }
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void forkWorkflowWithOptions() throws IOException {
     var newWfId = "test-new-wf-id";

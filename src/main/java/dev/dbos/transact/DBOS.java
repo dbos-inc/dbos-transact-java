@@ -172,7 +172,8 @@ public class DBOS {
    * @param <T> The interface type for the instance
    * @param interfaceClass The interface class for the workflows
    * @param implementation An implementation instance providing the workflow and step function code
-   * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow functions
+   * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
+   *     functions
    */
   public static <T> T registerWorkflows(Class<T> interfaceClass, T implementation) {
     return ensureInstance().registerWorkflows(interfaceClass, implementation, "");
@@ -186,7 +187,8 @@ public class DBOS {
    * @param implementation An implementation instance providing the workflow and step function code
    * @param instanceName Name of the instance, allowing multiple instances of the same class to be
    *     registered
-   * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow functions
+   * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
+   *     functions
    */
   public static <T> T registerWorkflows(
       Class<T> interfaceClass, T implementation, String instanceName) {
@@ -441,7 +443,6 @@ public class DBOS {
    * @param destinationId recipient of the message
    * @param message message to be sent
    * @param topic topic to which the message is send
-   * @param idempotencyKey optional idempotency key for exactly-once send
    */
   public static void send(String destinationId, Object message, String topic) {
     DBOS.send(destinationId, message, topic, null);

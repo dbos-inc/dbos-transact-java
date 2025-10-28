@@ -46,6 +46,7 @@ public record RegisteredWorkflow(
     return fullyQualifiedWFName(className, instanceName, name);
   }
 
+  @SuppressWarnings("unchecked")
   public <T, E extends Exception> T invoke(Object[] args) throws E {
     try {
       return (T) workflowMethod.invoke(target, args);
