@@ -266,7 +266,6 @@ public class DBOSClient implements AutoCloseable {
    * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
    * @param args Arguments to pass to the workflow function
    * @return WorkflowHandle for retrieving workflow ID, status, and results
-   * @throws Exception
    */
   public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflow(
       EnqueueOptions options, Object[] args) {

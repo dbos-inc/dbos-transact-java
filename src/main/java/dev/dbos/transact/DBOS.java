@@ -176,7 +176,7 @@ public class DBOS {
    * @param <T> The interface type for the instance
    * @param interfaceClass The interface class for the workflows
    * @param implementation An implementation instance providing the workflow and step function code
-   * @return A proxy, with interface <T>, that provides durability for the workflow functions
+   * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow functions
    */
   public static <T> T registerWorkflows(Class<T> interfaceClass, T implementation) {
     return ensureInstance().registerWorkflows(interfaceClass, implementation, "");
@@ -190,7 +190,7 @@ public class DBOS {
    * @param implementation An implementation instance providing the workflow and step function code
    * @param instanceName Name of the instance, allowing multiple instances of the same class to be
    *     registered
-   * @return A proxy, with interface <T>, that provides durability for the workflow functions
+   * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow functions
    */
   public static <T> T registerWorkflows(
       Class<T> interfaceClass, T implementation, String instanceName) {
@@ -440,7 +440,7 @@ public class DBOS {
    * Get a message sent to a particular topic
    *
    * @param topic the topic whose message to get
-   * @param timeoutSeconds time in seconds after which the call times out
+   * @param timeout duration after which the call times out
    * @return the message if there is one or else null
    */
   public static Object recv(String topic, Duration timeout) {
