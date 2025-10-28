@@ -65,7 +65,7 @@ Release branch builds are published to Maven Central.
 To create a new release, run
 
 ```shell
-./gradlew createRelease -PreleaseVersion=1.2.3
+java scripts/createRelease 1.2.3
 ```
 
 This command tags the latest commit with the version number and creates a release branch for it.
