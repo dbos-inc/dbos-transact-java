@@ -443,7 +443,6 @@ public class DBOS {
    * @param destinationId recipient of the message
    * @param message message to be sent
    * @param topic topic to which the message is send
-   * @param idempotencyKey optional idempotency key for exactly-once send
    */
   public static void send(String destinationId, Object message, String topic) {
     DBOS.send(destinationId, message, topic, null);
