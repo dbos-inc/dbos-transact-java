@@ -109,7 +109,7 @@ public class DBOS {
 
     private void registerInternals() {
       internalWorkflowsService =
-          registerWorkflows(InternalWorkflowsService.class, new InternalWorkflowsServiceImpl(this));
+          registerWorkflows(InternalWorkflowsService.class, new InternalWorkflowsServiceImpl());
       this.registerQueue(new Queue(Constants.DBOS_INTERNAL_QUEUE));
       this.registerQueue(new Queue(Constants.DBOS_SCHEDULER_QUEUE));
     }
@@ -154,10 +154,6 @@ public class DBOS {
           executor.start(this, workflowRegistry.getSnapshot(), queueRegistry.getSnapshot());
         }
       }
-    }
-
-    public void send(String destinationId, Object message, String topic) {
-      executor("send").send(destinationId, message, topic, internalWorkflowsService);
     }
 
     public void shutdown() {
@@ -431,9 +427,24 @@ public class DBOS {
    * @param destinationId recipient of the message
    * @param message message to be sent
    * @param topic topic to which the message is send
+   * @param idempotencyKey optional idempotency key for exactly-once send
+   */
+  public static void send(
+      String destinationId, Object message, String topic, String idempotencyKey) {
+    executor("send")
+        .send(destinationId, message, topic, instance().internalWorkflowsService, idempotencyKey);
+  }
+
+  /**
+   * Send a message to a workflow
+   *
+   * @param destinationId recipient of the message
+   * @param message message to be sent
+   * @param topic topic to which the message is send
+   * @param idempotencyKey optional idempotency key for exactly-once send
    */
   public static void send(String destinationId, Object message, String topic) {
-    executor("send").send(destinationId, message, topic, instance().internalWorkflowsService);
+    DBOS.send(destinationId, message, topic, null);
   }
 
   /**

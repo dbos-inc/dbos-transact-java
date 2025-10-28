@@ -117,6 +117,24 @@ class NotificationServiceTest {
   }
 
   @Test
+  public void send_oaoo() throws Exception {
+    var simpl = new NotServiceImpl();
+    NotService notService = DBOS.registerWorkflows(NotService.class, simpl);
+    DBOS.launch();
+
+    String wfid1 = "recvwfc";
+    var handle1 =
+        DBOS.startWorkflow(() -> notService.recvCount("topic1"), new StartWorkflowOptions(wfid1));
+
+    DBOS.send(wfid1, "hi", "topic1", "dothisonce");
+    DBOS.send(wfid1, "hi", "topic1", "dothisonce");
+    DBOS.send(wfid1, "hi", "topic1", "dothisonce");
+    simpl.recvReadyLatch.countDown();
+
+    assertEquals(1, handle1.getResult());
+  }
+
+  @Test
   public void notopic() throws Exception {
 
     NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
