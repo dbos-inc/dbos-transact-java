@@ -13,7 +13,7 @@
 DBOS provides lightweight durable workflows built on top of Postgres.
 Instead of managing your own workflow orchestrator or task queue system, you can use DBOS to add durable workflows and queues to your program in just a few lines of code.
 
-To get started, follow the [quickstart](https://docs.dbos.dev/quickstart) to install this open-source library and connect it to a Postgres database.
+To get started, follow the [quickstart](https://docs.dbos.dev/quickstart?language=java) to install this open-source library and connect it to a Postgres database.
 Then, annotate workflows and steps in your program to make it durable!
 That's all you need to do&mdash;DBOS is entirely contained in this open-source library, there's no additional infrastructure for you to configure or manage.
 
@@ -45,11 +45,16 @@ public interface WorkflowService {
 
 public interface Steps {
     void stepOne() ;
-    void stepTwo() ;
+}
+
+public class StepServiceImpl implements StepService {
+    @Step(name = "stepOne")
+    public void stepOne() {
+        logger.info("Executed stepOne") ;
+    }
 }
 
 public class WorkflowServiceImpl implements WorkflowService {
-
     private Steps steps;
     public WorkflowServiceImpl(Steps steps) {
         this.service = service;
@@ -58,20 +63,8 @@ public class WorkflowServiceImpl implements WorkflowService {
     @Workflow(name = "exampleWorkflow")
     public String exampleWorkflow(String input) {
         steps.stepOne();
-        steps.stepTwo();
+        DBOS.runStep(()->{logger.info("Executed stepTwo");}, "stepTwo");
         return input + input;
-    }
-}
-
-public class StepServiceImpl implements StepService {
-
-    @Step(name = "stepOne")
-    public void stepOne() {
-        logger.info("Executed stepOne") ;
-    }
-    @Step(name = "stepTwo")
-    public void stepTwo() {
-        logger.info("Executed stepTwo") ;
     }
 }
 
@@ -124,7 +117,7 @@ You code can return at a later point and check the status for completion and/or 
 
 
 ```java
-    var handle = DBOS.startWorkflow(()->syncExample.exampleWorkflow("HelloDBOS"));
+    var handle = DBOS.startWorkflow(()->example.exampleWorkflow("HelloDBOS"));
     result = handle.getResult();
 ```
 
@@ -153,15 +146,15 @@ They don't require a separate queueing service or message broker&mdash;just Post
     DBOS.launch();
 
     for (int i = 0; i < 3; i++) {
-
-        String wid = "child" + i;
-        var options = new StartWorkflowOptions(wid).withQueue(q);
+        String workflowId = "child" + i;
+        var options = new StartWorkflowOptions(workflowId).withQueue(q);
         List<WorkflowHandle<String>> handles = new ArrayList<>();
-        handles.add(DBOS.startWorkflow(()->simpleService.childWorkflow(wid), options));
+        handles.add(DBOS.startWorkflow(()->simpleService.childWorkflow(workflowId), options));
     }
 
     for (int i = 0 ; i < 3 ; i++) {
-        String wid = "child"+i;
+        String workflowId = "child"+i;
+        var h = DBOS.retrieveWorkflow(workflowId);
         System.out.println(h.getResult());
     }
 }
@@ -192,7 +185,7 @@ public class SchedulerImpl implements Scheduler {
 }
 
 // In your main
-// DBOS.registerWorkflows(Scheduler.class, new SchedulerImpl());
+DBOS.registerWorkflows(Scheduler.class, new SchedulerImpl());
 ```
 
 [Read more ↗️](https://docs.dbos.dev/java/tutorials/scheduled-workflows)
@@ -232,7 +225,7 @@ public void payment(String targetWorkflowId) {
 
 ## Getting Started
 
-To get started, follow the [quickstart](https://docs.dbos.dev/quickstart) to install this open-source library and connect it to a Postgres database.
+To get started, follow the [quickstart](https://docs.dbos.dev/quickstart?language=java) to install this open-source library and connect it to a Postgres database.
 Then, check out the [programming guide](https://docs.dbos.dev/java/programming-guide) to learn how to build with durable workflows and queues.
 
 ## Documentation
