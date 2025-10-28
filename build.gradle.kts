@@ -75,7 +75,6 @@ plugins {
 }
 
 java {
-    withJavadocJar()
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17))
     }
@@ -167,6 +166,9 @@ tasks.test {
 }
 
 mavenPublishing {
+    publishToMavenCentral()
+    signAllPublications()
+
     pom {
         name.set("DBOS Transact")
         description.set("DBOS Transact Java SDK for lightweight durable workflows")
