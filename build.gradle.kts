@@ -118,6 +118,10 @@ tasks.withType<Javadoc> {
     }
 }
 
+tasks.named("build") {
+    dependsOn("javadoc")
+}
+
 repositories {
     gradlePluginPortal()
     mavenCentral()
@@ -162,12 +166,15 @@ tasks.test {
             }
         }))
     }
-    environment("DBOS_SYSTEM_DATABASE_URL", "jdbc:postgresql://localhost:5432/dbos_java_sys")
 }
+
+val publishingToMavenCentral = gradle.startParameter.taskNames.any { it.contains("publishToMavenCentral") }
 
 mavenPublishing {
     publishToMavenCentral()
-    signAllPublications()
+    if (publishingToMavenCentral) {
+        signAllPublications()
+    }
 
     pom {
         name.set("DBOS Transact")
