@@ -150,6 +150,16 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
+tasks.jar {
+    manifest {
+        attributes["Implementation-Version"] = project.version
+        attributes["Implementation-Title"] = project.name
+        attributes["Implementation-Vendor"] = "DBOS, Inc"
+        attributes["Implementation-Vendor-Id"] = project.group
+        attributes["SCM-Revision"] = gitHash
+    }
+}
+
 tasks.test {
     useJUnitPlatform()
     testLogging {
