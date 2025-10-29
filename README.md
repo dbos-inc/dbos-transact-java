@@ -38,51 +38,58 @@ If your program ever fails, when it restarts all your workflows will automatical
 You add durable workflows to your existing Java program by annotating ordinary functions as workflows and steps:
 
 ```java
+package com.example;
 
-public interface WorkflowService {
-    String exampleWorkflow(String input) ;
-}
+import java.util.Objects;
 
-public interface Steps {
-    void stepOne() ;
-}
+import dev.dbos.transact.DBOS;
+import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.workflow.Step;
+import dev.dbos.transact.workflow.Workflow;
 
-public class StepServiceImpl implements StepService {
-    @Step(name = "stepOne")
-    public void stepOne() {
-        logger.info("Executed stepOne") ;
-    }
-}
-
-public class WorkflowServiceImpl implements WorkflowService {
-    private Steps steps;
-    public WorkflowServiceImpl(Steps steps) {
-        this.service = service;
+public class App {
+    public interface WorkflowService {
+        public String exampleWorkflow(String input) ;
     }
 
-    @Workflow(name = "exampleWorkflow")
-    public String exampleWorkflow(String input) {
-        steps.stepOne();
-        DBOS.runStep(()->{logger.info("Executed stepTwo");}, "stepTwo");
-        return input + input;
+    public interface Steps {
+        public void stepOne() ;
     }
-}
 
-public class Demo {
-    
+    public static class StepServiceImpl implements Steps {
+        @Step(name = "stepOne")
+        public void stepOne() {
+            System.out.println("Executed stepOne") ;
+        }
+    }
+
+    public static class WorkflowServiceImpl implements WorkflowService {
+        private Steps steps;
+        public WorkflowServiceImpl(Steps steps) {
+            this.steps = steps;
+        }
+
+        @Workflow(name = "exampleWorkflow")
+        public String exampleWorkflow(String input) {
+            steps.stepOne();
+            DBOS.runStep(()->{System.out.println("Executed stepTwo");}, "stepTwo");
+            return input + input;
+        }
+    }
+
     public static void main(String[] args) {
-        
+
         // Remember to export the DB password to the env variable PGPASSWORD
         var dbosConfig = DBOSConfig
             .defaults("demo")
             .withDatabaseUrl(System.getenv("DBOS_SYSTEM_JDBC_URL"))
             .withDbUser(Objects.requireNonNullElse(System.getenv("PGUSER"), "postgres"))
-            .withDbPassword(Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos"))
+            .withDbPassword(Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos"));
 
         DBOS.configure(dbosConfig);
-        
-        StepService steps = DBOS.registerWorkflows(
-                StepService.class, new StepServiceImpl());
+
+        Steps steps = DBOS.registerWorkflows(
+                Steps.class, new StepServiceImpl());
 
         WorkflowService example = DBOS.registerWorkflows(
                 WorkflowService.class, new WorkflowServiceImpl(steps));
@@ -90,10 +97,9 @@ public class Demo {
         DBOS.launch();
         String output = example.exampleWorkflow("HelloDBOS") ;
         System.out.println("Result: " + output);
+        DBOS.shutdown();
     }
 }
-
-
 ```
 
 Workflows are particularly useful for
