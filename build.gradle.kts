@@ -61,29 +61,20 @@ fun calcVersion(): String {
     return "$major.${minor + 1}.$patch-a$commitCount-g$gitHash"
 }
 
+group = "dev.dbos"
 version = calcVersion()
-println("Project version: $version") // prints when Gradle evaluates the build
 
-tasks.register("printGitStatus") {
-    doLast {
-        val status = project.runCommand("git", "status", "--porcelain")
-        println("Git status:\n$status")
-    }
-}
+println("Project version: $version") // prints when Gradle evaluates the build
 
 plugins {
     id("java")
     id("java-library")
-    id("maven-publish")
     id("pmd")
     id("com.diffplug.spotless") version "8.0.0"
+    id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
-group = "dev.dbos"
-
 java {
-    withSourcesJar()
-    withJavadocJar()
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17))
     }
@@ -125,6 +116,10 @@ tasks.withType<Javadoc> {
         addStringOption("Xdoclint:all,-missing", "-quiet")  // hide warnings for missing javadoc comments
         encoding = "UTF-8"                                  // optional, ensures UTF-8 for docs
     }
+}
+
+tasks.named("build") {
+    dependsOn("javadoc")
 }
 
 repositories {
@@ -171,38 +166,41 @@ tasks.test {
             }
         }))
     }
-    environment("DBOS_SYSTEM_DATABASE_URL", "jdbc:postgresql://localhost:5432/dbos_java_sys")
 }
 
-tasks.jar {
-    archiveBaseName.set("transact")
-    // Will produce: build/libs/transact-1.0.0.jar
+val publishingToMavenCentral = gradle.startParameter.taskNames.any { it.contains("publishToMavenCentral") }
 
-    manifest {
-        attributes["Implementation-Version"] = project.version.toString()
+mavenPublishing {
+    publishToMavenCentral(automaticRelease = true)
+    if (publishingToMavenCentral) {
+        signAllPublications()
     }
-}
 
-publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            from(components["java"])
-            artifactId = "transact"
-            groupId = project.group.toString()
-            version = project.version.toString()
-        }
-    }
-    repositories {
-        mavenLocal()
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/dbos-inc/dbos-transact-java") // replace OWNER/REPO
-            credentials {
-                username = project.findProperty("gpr.user")?.toString()
-                    ?: System.getenv("USERNAME_MAVEN")
-                password = project.findProperty("gpr.token")?.toString()
-                    ?: System.getenv("TOKEN_MAVEN")
+    pom {
+        name.set("DBOS Transact")
+        description.set("DBOS Transact Java SDK for lightweight durable workflows")
+        inceptionYear.set("2025")
+        url.set("https://github.com/dbos-inc/dbos-transact-java")
+        
+        licenses {
+            license {
+                name.set("MIT License")
+                url.set("https://opensource.org/licenses/MIT")
             }
+        }
+        
+        developers {
+            developer {
+                id.set("dbos-inc")
+                name.set("DBOS Inc")
+                email.set("support@dbos.dev")
+            }
+        }
+        
+        scm {
+            connection.set("scm:git:git://github.com/dbos-inc/dbos-transact-java.git")
+            developerConnection.set("scm:git:ssh://github.com:dbos-inc/dbos-transact-java.git")
+            url.set("https://github.com/dbos-inc/dbos-transact-java/tree/main")
         }
     }
 }

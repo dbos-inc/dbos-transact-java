@@ -9,9 +9,11 @@ on:
 jobs:
   test:
     uses: ./.github/workflows/test.yml
-  # publish:
-  #   needs: test
-  #   uses: ./.github/workflows/publish.yml
-  #   secrets:
-  #     USERNAME_MAVEN: ${{ secrets.USERNAME_MAVEN }}
-  #     TOKEN_MAVEN: ${{ secrets.TOKEN_MAVEN }}
+  publish:
+    needs: test
+    uses: ./.github/workflows/publish.yml
+    secrets:
+      MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+      MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+      SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+      SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
