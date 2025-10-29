@@ -171,7 +171,7 @@ tasks.test {
 val publishingToMavenCentral = gradle.startParameter.taskNames.any { it.contains("publishToMavenCentral") }
 
 mavenPublishing {
-    publishToMavenCentral()
+    publishToMavenCentral(automaticRelease = true)
     if (publishingToMavenCentral) {
         signAllPublications()
     }
