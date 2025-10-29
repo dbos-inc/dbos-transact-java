@@ -109,6 +109,8 @@ public class DBOSExecutor implements AutoCloseable {
         this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
       }
 
+      logger.info("System Database: {}", this.config.databaseUrl());
+      logger.info("System Database User name: {}", this.config.dbUser());
       logger.info("Executor ID: {}", this.executorId);
       logger.info("Application Version: {}", this.appVersion);
 
