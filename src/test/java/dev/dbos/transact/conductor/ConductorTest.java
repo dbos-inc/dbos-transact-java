@@ -319,8 +319,7 @@ public class ConductorTest {
       Map<String, Object> message = Map.of("unknown-field", "unknown-field-value");
       listener.send(MessageType.EXECUTOR_INFO, "12345", message);
 
-      assertTrue(
-          listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -732,8 +731,7 @@ public class ConductorTest {
       Map<String, Object> message = Map.of("body", body);
       listener.send(MessageType.LIST_QUEUED_WORKFLOWS, "12345", message);
 
-      assertTrue(
-          listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       ArgumentCaptor<ListWorkflowsInput> inputCaptor =
           ArgumentCaptor.forClass(ListWorkflowsInput.class);
       verify(mockExec).listWorkflows(inputCaptor.capture());
