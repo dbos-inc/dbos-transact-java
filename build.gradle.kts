@@ -58,7 +58,7 @@ fun calcVersion(): String {
         if (commitCount == 0) {
             return "$major.$minor.$patch"
         } else {
-            return "$major.$minor.$patch-m$commitCount"
+            return "$major.$minor.$patch-rc$commitCount"
         }
     }
 
