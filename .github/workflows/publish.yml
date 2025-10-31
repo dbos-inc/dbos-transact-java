@@ -33,10 +33,10 @@ jobs:
         id: get_version
         run: |
           VERSION=$(./gradlew properties -q | grep '^version:' | awk '{print $2}')
-          COMMIT_COUNT=$(./gradlew properties -q | grep '^^commitCount:' | awk '{print $2}')
+          COMMIT_COUNT=$(./gradlew properties -q | grep '^commitCount:' | awk '{print $2}')
           echo "Project version: $VERSION, commit Count: $COMMIT_COUNT"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "commit_count=$COMMIT_COUNT" > >> $GITHUB_OUTPUT
+          echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
 
       - name: Publish
         run: ./gradlew publishToMavenCentral
