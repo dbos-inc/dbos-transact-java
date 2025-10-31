@@ -5,9 +5,12 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 public class ListQueuedWorkflowsRequest extends BaseMessage {
   public Body body;
 
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public static class Body {
     public String workflow_name;
     public String start_time;

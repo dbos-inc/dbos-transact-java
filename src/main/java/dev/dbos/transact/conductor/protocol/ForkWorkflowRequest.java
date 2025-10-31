@@ -1,5 +1,7 @@
 package dev.dbos.transact.conductor.protocol;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 public class ForkWorkflowRequest extends BaseMessage {
   public ForkWorkflowBody body;
 
@@ -20,6 +22,7 @@ public class ForkWorkflowRequest extends BaseMessage {
     this(requestId, workflowId, startStep, null, null);
   }
 
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public static class ForkWorkflowBody {
     public String workflow_id;
     public Integer start_step;
