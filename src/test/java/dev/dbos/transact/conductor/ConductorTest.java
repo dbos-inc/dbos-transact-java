@@ -9,19 +9,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
-import dev.dbos.transact.conductor.protocol.BaseMessage;
-import dev.dbos.transact.conductor.protocol.CancelRequest;
-import dev.dbos.transact.conductor.protocol.ExecutorInfoRequest;
-import dev.dbos.transact.conductor.protocol.ExistPendingWorkflowsRequest;
-import dev.dbos.transact.conductor.protocol.ForkWorkflowRequest;
-import dev.dbos.transact.conductor.protocol.GetWorkflowRequest;
-import dev.dbos.transact.conductor.protocol.ListQueuedWorkflowsRequest;
-import dev.dbos.transact.conductor.protocol.ListStepsRequest;
-import dev.dbos.transact.conductor.protocol.ListWorkflowsRequest;
-import dev.dbos.transact.conductor.protocol.RecoveryRequest;
-import dev.dbos.transact.conductor.protocol.RestartRequest;
-import dev.dbos.transact.conductor.protocol.ResumeRequest;
-import dev.dbos.transact.conductor.protocol.RetentionRequest;
+import dev.dbos.transact.conductor.protocol.MessageType;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -37,7 +25,10 @@ import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import java.net.InetAddress;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -240,7 +231,13 @@ public class ConductorTest {
       messageLatch.countDown();
     }
 
-    public void send(BaseMessage message) throws Exception {
+    public void send(MessageType type, String requestId, Map<String, Object> fields)
+        throws Exception {
+
+      Map<String, Object> message = new HashMap<>(fields);
+      message.put("type", Objects.requireNonNull(type).getValue());
+      message.put("request_id", Objects.requireNonNull(requestId));
+
       String json = ConductorTest.mapper.writeValueAsString(message);
       this.webSocket.send(json);
     }
@@ -257,8 +254,9 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      RecoveryRequest req = new RecoveryRequest("12345", executorIds);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of("executor_ids", executorIds, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.RECOVERY, "12345", message);
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       // Verify that resumeWorkflow was called with the correct argument
@@ -287,8 +285,10 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      RecoveryRequest req = new RecoveryRequest("12345", executorIds);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of("executor_ids", executorIds, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.RECOVERY, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       // Verify that resumeWorkflow was called with the correct argument
@@ -316,10 +316,11 @@ public class ConductorTest {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      ExecutorInfoRequest req = new ExecutorInfoRequest("12345");
-      listener.send(req);
+      Map<String, Object> message = Map.of("unknown-field", "unknown-field-value");
+      listener.send(MessageType.EXECUTOR_INFO, "12345", message);
+
       assertTrue(
-          listener.messageLatch.await(1000000000, TimeUnit.SECONDS), "message latch timed out");
+          listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -343,8 +344,10 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      CancelRequest req = new CancelRequest("12345", workflowId);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.CANCEL, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       // Verify that resumeWorkflow was called with the correct argument
@@ -374,8 +377,10 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      CancelRequest req = new CancelRequest("12345", workflowId);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.CANCEL, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       verify(mockExec).cancelWorkflow(workflowId);
 
@@ -399,8 +404,10 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      ResumeRequest req = new ResumeRequest("12345", workflowId);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.RESUME, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       verify(mockExec).resumeWorkflow(workflowId);
 
@@ -428,8 +435,10 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      ResumeRequest req = new ResumeRequest("12345", workflowId);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.RESUME, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       verify(mockExec).resumeWorkflow(workflowId);
 
@@ -452,8 +461,10 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      RestartRequest req = new RestartRequest("12345", workflowId);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.RESTART, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       verify(mockExec).forkWorkflow(eq(workflowId), eq(0), any());
 
@@ -481,8 +492,10 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      RestartRequest req = new RestartRequest("12345", workflowId);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.RESTART, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       verify(mockExec).forkWorkflow(eq(workflowId), eq(0), any());
 
@@ -512,10 +525,22 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(50000, TimeUnit.SECONDS), "open latch timed out");
 
-      ForkWorkflowRequest req =
-          new ForkWorkflowRequest("12345", workflowId, 2, "appver-12345", newWorkflowId);
-      listener.send(req);
-      assertTrue(listener.messageLatch.await(10000, TimeUnit.SECONDS), "message latch timed out");
+      Map<String, Object> body =
+          Map.of(
+              "workflow_id",
+              workflowId,
+              "start_step",
+              2,
+              "application_version",
+              "appver-12345",
+              "new_workflow_id",
+              newWorkflowId,
+              "unknown-field",
+              "unknown-field-value");
+      Map<String, Object> message = Map.of("body", body);
+      listener.send(MessageType.FORK_WORKFLOW, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       ArgumentCaptor<ForkOptions> optionsCaptor = ArgumentCaptor.forClass(ForkOptions.class);
       verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
       ForkOptions capturedOptions = optionsCaptor.getValue();
@@ -549,9 +574,21 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      ForkWorkflowRequest req =
-          new ForkWorkflowRequest("12345", workflowId, 2, "appver-12345", "new-wf-id");
-      listener.send(req);
+      Map<String, Object> body =
+          Map.of(
+              "workflow_id",
+              workflowId,
+              "start_step",
+              2,
+              "application_version",
+              "appver-12345",
+              "new_workflow_id",
+              "new-wf-id",
+              "unknown-field",
+              "unknown-field-value");
+      Map<String, Object> message = Map.of("body", body);
+      listener.send(MessageType.FORK_WORKFLOW, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       ArgumentCaptor<ForkOptions> optionsCaptor = ArgumentCaptor.forClass(ForkOptions.class);
       verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
@@ -613,12 +650,14 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      ListWorkflowsRequest req =
-          new ListWorkflowsRequest.Builder()
-              .startTime("2024-06-01T12:34:56Z")
-              .workflowName("foobarbaz")
-              .build("12345");
-      listener.send(req);
+      Map<String, Object> body =
+          Map.of(
+              "start_time", "2024-06-01T12:34:56Z",
+              "workflow_name", "foobarbaz",
+              "unknown-field", "unknown-field-value");
+      Map<String, Object> message = Map.of("body", body);
+      listener.send(MessageType.LIST_WORKFLOWS, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       ArgumentCaptor<ListWorkflowsInput> inputCaptor =
           ArgumentCaptor.forClass(ListWorkflowsInput.class);
@@ -685,14 +724,16 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      ListQueuedWorkflowsRequest req =
-          new ListQueuedWorkflowsRequest.Builder()
-              .startTime("2024-06-01T12:34:56Z")
-              .workflowName("foobarbaz")
-              .build("12345");
-      listener.send(req);
+      Map<String, Object> body =
+          Map.of(
+              "start_time", "2024-06-01T12:34:56Z",
+              "workflow_name", "foobarbaz",
+              "unknown-field", "unknown-field-value");
+      Map<String, Object> message = Map.of("body", body);
+      listener.send(MessageType.LIST_QUEUED_WORKFLOWS, "12345", message);
+
       assertTrue(
-          listener.messageLatch.await(100000000, TimeUnit.SECONDS), "message latch timed out");
+          listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       ArgumentCaptor<ListWorkflowsInput> inputCaptor =
           ArgumentCaptor.forClass(ListWorkflowsInput.class);
       verify(mockExec).listWorkflows(inputCaptor.capture());
@@ -739,8 +780,9 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      GetWorkflowRequest req = new GetWorkflowRequest("12345", workflowId);
-      listener.send(req);
+      Map<String, Object> message = Map.of("workflow_id", workflowId);
+      listener.send(MessageType.GET_WORKFLOW, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB).getWorkflowStatus(workflowId);
 
@@ -773,9 +815,10 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      ExistPendingWorkflowsRequest req =
-          new ExistPendingWorkflowsRequest("12345", executorId, appVersion);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of("executor_id", executorId, "application_version", appVersion);
+      listener.send(MessageType.EXIST_PENDING_WORKFLOWS, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB).getPendingWorkflows(executorId, appVersion);
 
@@ -802,9 +845,16 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      ExistPendingWorkflowsRequest req =
-          new ExistPendingWorkflowsRequest("12345", executorId, appVersion);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of(
+              "executor_id",
+              executorId,
+              "application_version",
+              appVersion,
+              "unknown-field",
+              "unknown-field-value");
+      listener.send(MessageType.EXIST_PENDING_WORKFLOWS, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB).getPendingWorkflows(executorId, appVersion);
 
@@ -836,8 +886,10 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      ListStepsRequest req = new ListStepsRequest("12345", workflowId);
-      listener.send(req);
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.LIST_STEPS, "12345", message);
+
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       verify(mockExec).listWorkflowSteps(workflowId);
 
@@ -862,8 +914,19 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      RetentionRequest req = new RetentionRequest("12345", 1L, 2L, 3L);
-      listener.send(req);
+      Map<String, Object> body =
+          Map.of(
+              "gc_cutoff_epoch_ms",
+              1L,
+              "gc_rows_threshold",
+              2L,
+              "timeout_cutoff_epoch_ms",
+              3L,
+              "unknown-field",
+              "unknown-field-value");
+      Map<String, Object> message = Map.of("body", body, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.RETENTION, "12345", message);
+
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB).garbageCollect(1L, 2L);
       verify(mockExec).globalTimeout(3L);
@@ -887,8 +950,16 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      RetentionRequest req = new RetentionRequest("12345", 1L, 2L, null);
-      listener.send(req);
+      // Note, Map.of doesn't support null values
+      Map<String, Object> body = new HashMap<>();
+      body.put("gc_cutoff_epoch_ms", 1L);
+      body.put("gc_rows_threshold", 2L);
+      body.put("timeout_cutoff_epoch_ms", null);
+      body.put("unknown-field", "unknown-field-value");
+
+      Map<String, Object> message = Map.of("body", body, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.RETENTION, "12345", message);
+
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB).garbageCollect(1L, 2L);
       verify(mockExec, never()).globalTimeout(anyLong());
@@ -915,8 +986,19 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      RetentionRequest req = new RetentionRequest("12345", 1L, 2L, 3L);
-      listener.send(req);
+      Map<String, Object> body =
+          Map.of(
+              "gc_cutoff_epoch_ms",
+              1L,
+              "gc_rows_threshold",
+              2L,
+              "timeout_cutoff_epoch_ms",
+              3L,
+              "unknown-field",
+              "unknown-field-value");
+      Map<String, Object> message = Map.of("body", body, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.RETENTION, "12345", message);
+
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB).garbageCollect(1L, 2L);
       verify(mockExec, never()).globalTimeout(anyLong());
@@ -943,8 +1025,19 @@ public class ConductorTest {
 
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      RetentionRequest req = new RetentionRequest("12345", 1L, 2L, 3L);
-      listener.send(req);
+      Map<String, Object> body =
+          Map.of(
+              "gc_cutoff_epoch_ms",
+              1L,
+              "gc_rows_threshold",
+              2L,
+              "timeout_cutoff_epoch_ms",
+              3L,
+              "unknown-field",
+              "unknown-field-value");
+      Map<String, Object> message = Map.of("body", body, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.RETENTION, "12345", message);
+
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
       verify(mockDB).garbageCollect(1L, 2L);
       verify(mockExec).globalTimeout(3L);

@@ -6,9 +6,12 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 public class ListWorkflowsRequest extends BaseMessage {
   public Body body;
 
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public static class Body {
     public List<String> workflow_uuids;
     public String workflow_name;

@@ -21,6 +21,7 @@ import com.fasterxml.jackson.annotation.*;
   @JsonSubTypes.Type(value = ListStepsRequest.class, name = "list_steps"),
   @JsonSubTypes.Type(value = RetentionRequest.class, name = "retention"),
 })
+@JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class BaseMessage {
   public String type;
   public String request_id;
