@@ -29,6 +29,13 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      - name: Get Gradle project version
+        id: get_version
+        run: |
+          VERSION=$(./gradlew properties -q | grep '^version:' | awk '{print $2}')
+          echo "Project version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Publish
         run: ./gradlew publishToMavenCentral
         env:
@@ -42,5 +49,6 @@ jobs:
         uses: marvinpinto/action-automatic-releases@latest
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          title: ${{ steps.get_version.outputs.version }}
           files: |
             build/libs/*.jar
