@@ -114,7 +114,6 @@ public class createRelease {
                 throw new RuntimeException(String.format("exit code %d %s", result.exitCode()));
             }
             _branch = result.stdout();
-            _branch = "release/v0.6";
         }
 
         return Objects.requireNonNull(_branch);
