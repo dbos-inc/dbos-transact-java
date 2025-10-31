@@ -320,7 +320,7 @@ public class ConductorTest {
       listener.send(MessageType.EXECUTOR_INFO, "12345", message);
 
       assertTrue(
-          listener.messageLatch.await(1000000000, TimeUnit.SECONDS), "message latch timed out");
+          listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -540,7 +540,7 @@ public class ConductorTest {
       Map<String, Object> message = Map.of("body", body);
       listener.send(MessageType.FORK_WORKFLOW, "12345", message);
 
-      assertTrue(listener.messageLatch.await(10000, TimeUnit.SECONDS), "message latch timed out");
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       ArgumentCaptor<ForkOptions> optionsCaptor = ArgumentCaptor.forClass(ForkOptions.class);
       verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
       ForkOptions capturedOptions = optionsCaptor.getValue();
@@ -733,7 +733,7 @@ public class ConductorTest {
       listener.send(MessageType.LIST_QUEUED_WORKFLOWS, "12345", message);
 
       assertTrue(
-          listener.messageLatch.await(100000000, TimeUnit.SECONDS), "message latch timed out");
+          listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
       ArgumentCaptor<ListWorkflowsInput> inputCaptor =
           ArgumentCaptor.forClass(ListWorkflowsInput.class);
       verify(mockExec).listWorkflows(inputCaptor.capture());
