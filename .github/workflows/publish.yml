@@ -14,9 +14,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  public:
+  publish:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/v')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,6 +29,15 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      - name: Get Gradle project version
+        id: get_version
+        run: |
+          VERSION=$(./gradlew properties -q | grep '^version:' | awk '{print $2}')
+          COMMIT_COUNT=$(./gradlew properties -q | grep '^commitCount:' | awk '{print $2}')
+          echo "Project version: $VERSION, commit Count: $COMMIT_COUNT"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+
       - name: Publish
         run: ./gradlew publishToMavenCentral
         env:
@@ -36,3 +45,13 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+
+      - name: Github Release
+        if: startsWith(github.ref, 'refs/heads/release/v')
+        uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          title: ${{ steps.get_version.outputs.version }}
+          prerelease: ${{ steps.get_version.outputs.commit_count != '0' }}
+          files: |
+            build/libs/*.jar
