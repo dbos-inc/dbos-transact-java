@@ -67,6 +67,7 @@ fun calcVersion(): String {
 
 group = "dev.dbos"
 version = calcVersion()
+extra["commitCount"] = "$commitCount"
 
 println("Project version: $version") // prints when Gradle evaluates the build
 
