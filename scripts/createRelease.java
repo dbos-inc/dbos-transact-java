@@ -8,43 +8,8 @@ import java.util.regex.Pattern;
 
 public class createRelease {
 
-    public static void createNewRelease(ProgramOptions opts) throws IOException, InterruptedException {
-
-    }
-
-    public static void createPatchRelease(ProgramOptions opts) throws IOException, InterruptedException {
-
-    }
-
-    public static void main(String[] args) throws IOException, InterruptedException {
-
-        var opts = ProgramOptions.parseArguments(args);
-
-        if (branch().equals("main")) {
-
-        } else if (branch().startsWith("release/v")) {
-            
-        }
-
-
-        var branch = branch();
-        if (!opts.force() && !branch.equals("main")) {
-            System.err.println("CreateRelease failed: Can only make a release from main branch, currently on %s branch"
-                    .formatted(branch));
-            System.exit(1);
-        }
-
-        if (!opts.force() && !isClean()) {
-            System.err.println("CreateRelease failed: local git repo not clean");
-            System.exit(1);
-        }
-
-        var local = commitHash("HEAD");
-        var remote = commitHash(String.format("origin/%s", branch));
-        if (!opts.force() && !local.equals(remote)) {
-            System.err.println("CreateRelease failed: local branch %1$s not equal to origin/%1$s".formatted(branch));
-            System.exit(1);
-        }
+    public static void createNewRelease(ProgramOptions opts, String local) throws IOException, InterruptedException {
+        assert (branch().equals("main"));
 
         Version releaseVersion;
         if (opts.version() == null) {
@@ -74,6 +39,62 @@ public class createRelease {
         }
     }
 
+    public static void createPatchRelease(ProgramOptions opts, String local) throws IOException, InterruptedException {
+        assert (branch().startsWith("release/v"));
+
+        if (opts.version() != null) {
+            throw new IllegalArgumentException("can't specify version argument when creating a patch release");
+        }
+
+        var tagVer = Version.parseVersion(getLatestTag());
+        Version releaseVersion = new Version(tagVer.major, tagVer.minor, tagVer.patch + 1);
+
+        if (opts.dryRun()) {
+            System.out.println(
+                    "dry run: createRelease would have created %s tag on commit %s".formatted(releaseVersion, local));
+        } else {
+            System.out.println("Creating release tag %s".formatted(releaseVersion));
+            CommandResult.runCommand("git", "tag", "-a", releaseVersion.toString(), "-m",
+                    "Release version %s".formatted(releaseVersion));
+
+            if (opts.pushOrigin()) {
+                System.out.println("pushing %s tag to origin".formatted(releaseVersion));
+                CommandResult.runCommand("git", "push", "origin", releaseVersion.toString());
+            }
+        }
+    }
+
+    public static void main(String[] args) throws IOException, InterruptedException {
+
+        var opts = ProgramOptions.parseArguments(args);
+
+        try {
+            if (!opts.force() && !isClean()) {
+                throw new IllegalArgumentException("local git repo not clean");
+            }
+
+            var branch = branch();
+            var local = commitHash("HEAD");
+            var remote = commitHash(String.format("origin/%s", branch));
+            if (!opts.force() && !local.equals(remote)) {
+                throw new IllegalArgumentException("local branch %1$s not equal to origin/%1$s".formatted(branch));
+            }
+
+            if (opts.main() || branch.equals("main")) {
+                createNewRelease(opts, local);
+            } else if (opts.release() || branch.startsWith("release/v")) {
+                createPatchRelease(opts, local);
+            } else {
+                throw new IllegalArgumentException(
+                        "Can only create releases from main or release branch, currently on %s branch"
+                                .formatted(branch));
+            }
+        } catch (IllegalArgumentException e) {
+            System.err.println("createRelease failed: %s".formatted(e.getMessage()));
+            System.exit(1);
+        }
+    }
+
     private static Boolean _isClean;
 
     public static boolean isClean() throws IOException, InterruptedException {
@@ -93,6 +114,7 @@ public class createRelease {
                 throw new RuntimeException(String.format("exit code %d %s", result.exitCode()));
             }
             _branch = result.stdout();
+            _branch = "release/v0.6";
         }
 
         return Objects.requireNonNull(_branch);
@@ -114,30 +136,39 @@ public class createRelease {
     public static String commitHash(String commit) throws IOException, InterruptedException {
         var result = CommandResult.runCommand("git", "rev-parse", commit);
         if (result.exitCode() != 0) {
-            throw new RuntimeException(String.format("exit code %d %s", result.exitCode(), result.stderr()));
+            System.err.println("commitHash failed %d %s".formatted(result.exitCode(), result.stderr()));
+            return null;
         }
         return result.stdout();
     }
 
     record ProgramOptions(
+            boolean main,
+            boolean release,
             boolean dryRun,
             boolean pushOrigin,
             boolean force,
             String version) {
 
         public static ProgramOptions parseArguments(String[] args) {
+
+            boolean main = false;
+            boolean release = false;
             boolean dryRun = false;
-            boolean pushOrigin = true;
+            boolean pushOrigin = false;
             boolean force = false;
             String version = null;
 
             for (int i = 0; i < args.length; i++) {
                 switch (args[i]) {
+                    case "--main":
+                        main = true;
+                        break;
+                    case "--release":
+                        release = true;
+                        break;
                     case "--dry-run":
                         dryRun = true;
-                        break;
-                    case "--no-push":
-                        pushOrigin = false;
                         break;
                     case "--push":
                         pushOrigin = true;
@@ -151,7 +182,7 @@ public class createRelease {
                 }
             }
 
-            return new ProgramOptions(dryRun, pushOrigin, force, version);
+            return new ProgramOptions(main, release, dryRun, pushOrigin, force, version);
         }
     }
 
