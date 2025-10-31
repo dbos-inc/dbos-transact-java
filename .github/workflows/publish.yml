@@ -29,9 +29,6 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Build
-        run: ./gradlew build plainJavadocJar -x test
-
       - name: Publish
         run: ./gradlew publishToMavenCentral
         env:

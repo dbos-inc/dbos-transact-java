@@ -58,7 +58,7 @@ jobs:
           PGPASSWORD: dbos
 
       - name: Run tests
-        run: ./gradlew clean :pmdMain :pmdTest test
+        run: ./gradlew clean build
         env:
           PGPASSWORD: dbos
 
