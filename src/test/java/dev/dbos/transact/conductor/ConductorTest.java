@@ -214,6 +214,8 @@ public class ConductorTest {
   }
 
   class MessageListener implements WebSocketTestListener {
+    private static final Logger logger = LoggerFactory.getLogger(MessageListener.class);
+
     WebSocket webSocket;
     CountDownLatch openLatch = new CountDownLatch(1);
     String message;
@@ -233,6 +235,7 @@ public class ConductorTest {
 
     public void send(MessageType type, String requestId, Map<String, Object> fields)
         throws Exception {
+      logger.debug("sending {}", type.getValue());
 
       Map<String, Object> message = new HashMap<>(fields);
       message.put("type", Objects.requireNonNull(type).getValue());

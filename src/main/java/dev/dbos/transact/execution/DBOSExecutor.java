@@ -720,6 +720,8 @@ public class DBOSExecutor implements AutoCloseable {
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
+    logger.debug("startWorkflow {}", options);
+
     var ctx = DBOSContextHolder.get();
     Integer functionId = null;
 
@@ -764,6 +766,12 @@ public class DBOSExecutor implements AutoCloseable {
 
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
       String clsName, String instName, String wfName, Object[] args) {
+
+    logger.debug(
+        "invokeWorkflow {}({})",
+        RegisteredWorkflow.fullyQualifiedWFName(clsName, instName, wfName),
+        args);
+
     var workflow = getWorkflow(clsName, instName, wfName);
     if (workflow == null) {
       throw new IllegalStateException(
@@ -898,6 +906,8 @@ public class DBOSExecutor implements AutoCloseable {
           latch);
     }
 
+    logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
+
     var workflowId = options.workflowId();
     WorkflowInitResult initResult = null;
     try {
@@ -1019,6 +1029,13 @@ public class DBOSExecutor implements AutoCloseable {
       String appVersion,
       SystemDatabase systemDatabase,
       CompletableFuture<String> latch) {
+
+    logger.debug(
+        "enqueueWorkflow {}({}) {}",
+        RegisteredWorkflow.fullyQualifiedWFName(className, instanceName, name),
+        args,
+        options);
+
     var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
     if (workflowId.isEmpty()) {
       throw new IllegalArgumentException("workflowId cannot be empty");

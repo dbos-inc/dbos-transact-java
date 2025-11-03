@@ -187,7 +187,7 @@ public class Conductor implements AutoCloseable {
     }
   }
 
-  void setPingInterval() {
+  void setPingInterval(WebSocket webSocket) {
     logger.debug("setPingInterval");
 
     if (pingInterval != null) {
@@ -200,34 +200,37 @@ public class Conductor implements AutoCloseable {
                 return;
               }
               try {
-                // Note, checking for null because websocket can connect before websocket
-                // variable is assigned
-                if (webSocket != null && !webSocket.isOutputClosed()) {
-                  logger.debug("Sending ping to conductor");
-
-                  webSocket
-                      .sendPing(ByteBuffer.allocate(0))
-                      .exceptionally(
-                          ex -> {
-                            logger.error("Failed to send ping to conductor", ex);
-                            resetWebSocket();
-                            return null;
-                          });
-
-                  pingTimeout =
-                      scheduler.schedule(
-                          () -> {
-                            if (!isShutdown.get()) {
-                              logger.warn(
-                                  "pingTimeout: Connection to conductor lost. Reconnecting.");
-                              resetWebSocket();
-                            }
-                          },
-                          pingTimeoutMs,
-                          TimeUnit.MILLISECONDS);
-                } else {
-                  logger.debug("NOT Sending ping to conductor");
+                // Check for null in case webSocket connects before webSocket variable is assigned
+                if (webSocket == null) {
+                  logger.debug("webSocket null, NOT sending ping to conductor");
+                  return;
                 }
+
+                if (webSocket.isOutputClosed()) {
+                  logger.debug("webSocket closed, NOT sending ping to conductor");
+                  return;
+                }
+
+                logger.debug("Sending ping to conductor");
+                webSocket
+                    .sendPing(ByteBuffer.allocate(0))
+                    .exceptionally(
+                        ex -> {
+                          logger.error("Failed to send ping to conductor", ex);
+                          resetWebSocket();
+                          return null;
+                        });
+
+                pingTimeout =
+                    scheduler.schedule(
+                        () -> {
+                          if (!isShutdown.get()) {
+                            logger.warn("pingTimeout: Connection to conductor lost. Reconnecting.");
+                            resetWebSocket();
+                          }
+                        },
+                        pingTimeoutMs,
+                        TimeUnit.MILLISECONDS);
               } catch (Exception e) {
                 logger.error("setPingInterval::scheduleAtFixedRate", e);
               }
@@ -295,7 +298,7 @@ public class Conductor implements AutoCloseable {
                     public void onOpen(WebSocket webSocket) {
                       logger.debug("Opened connection to DBOS conductor");
                       webSocket.request(1);
-                      setPingInterval();
+                      setPingInterval(webSocket);
                     }
 
                     @Override
