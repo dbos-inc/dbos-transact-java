@@ -1,7 +1,18 @@
 <configuration>
+
+    <!-- Suppress Hikari logs by default -->
     <logger name="com.zaxxer.hikari" level="WARN" />
 
+    <!-- Minimal console appender -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Root logger uses the console appender -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
     </root>
+
 </configuration>
