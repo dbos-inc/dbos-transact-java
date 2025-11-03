@@ -1,0 +1,7 @@
+<configuration>
+    <logger name="com.zaxxer.hikari" level="WARN" />
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
