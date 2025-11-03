@@ -200,7 +200,7 @@ public class Conductor implements AutoCloseable {
                 return;
               }
               try {
-                // Check for null in case websocket connects before websocket variable is assigned
+                // Check for null in case webSocket connects before webSocket variable is assigned
                 if (webSocket == null) {
                   logger.debug("webSocket null, NOT sending ping to conductor");
                   return;
