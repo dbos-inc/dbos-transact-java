@@ -767,7 +767,10 @@ public class DBOSExecutor implements AutoCloseable {
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
       String clsName, String instName, String wfName, Object[] args) {
 
-    logger.debug("invokeWorkflow {}({})", RegisteredWorkflow.fullyQualifiedWFName(clsName, instName, wfName), args);
+    logger.debug(
+        "invokeWorkflow {}({})",
+        RegisteredWorkflow.fullyQualifiedWFName(clsName, instName, wfName),
+        args);
 
     var workflow = getWorkflow(clsName, instName, wfName);
     if (workflow == null) {
@@ -1027,7 +1030,11 @@ public class DBOSExecutor implements AutoCloseable {
       SystemDatabase systemDatabase,
       CompletableFuture<String> latch) {
 
-    logger.debug("enqueueWorkflow {}({}) {}", RegisteredWorkflow.fullyQualifiedWFName(className, instanceName, name), args, options);
+    logger.debug(
+        "enqueueWorkflow {}({}) {}",
+        RegisteredWorkflow.fullyQualifiedWFName(className, instanceName, name),
+        args,
+        options);
 
     var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
     if (workflowId.isEmpty()) {
