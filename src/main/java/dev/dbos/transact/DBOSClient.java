@@ -17,6 +17,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.zaxxer.hikari.HikariDataSource;
+
 /**
  * DBOSClient allows external programs to interact with DBOS apps via direct system database access.
  * Example interactions: Start/enqueue a workflow, and get the result Get events and send messages
@@ -57,6 +59,15 @@ public class DBOSClient implements AutoCloseable {
    */
   public DBOSClient(String url, String user, String password) {
     var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
+    systemDatabase = new SystemDatabase(dataSource);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing a configured data source
+   *
+   * @param dataSource System database data source
+   */
+  public DBOSClient(HikariDataSource dataSource) {
     systemDatabase = new SystemDatabase(dataSource);
   }
 

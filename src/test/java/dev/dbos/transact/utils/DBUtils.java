@@ -183,11 +183,14 @@ public class DBUtils {
   }
 
   public static void recreateDB(DBOSConfig config) throws SQLException {
+    recreateDB(config.databaseUrl(), config.dbUser(), config.dbPassword());
+  }
 
-    var pair = MigrationManager.extractDbAndPostgresUrl(config.databaseUrl());
+  public static void recreateDB(String url, String user, String password) throws SQLException {
+    var pair = MigrationManager.extractDbAndPostgresUrl(url);
     var dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", pair.database());
     var createDbSql = String.format("CREATE DATABASE %s", pair.database());
-    try (var conn = DriverManager.getConnection(pair.url(), config.dbUser(), config.dbPassword());
+    try (var conn = DriverManager.getConnection(pair.url(), user, password);
         var stmt = conn.createStatement()) {
       stmt.execute(dropDbSql);
       stmt.execute(createDbSql);

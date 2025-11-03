@@ -47,6 +47,10 @@ public class SystemDatabase implements AutoCloseable {
     notificationsDAO = new NotificationsDAO(dataSource, notificationService);
   }
 
+  HikariConfig getConfig() {
+    return dataSource;
+  }
+
   @Override
   public void close() {
     dataSource.close();
@@ -377,6 +381,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public static HikariDataSource createDataSource(DBOSConfig config) {
+    if (config.dataSource() != null) {
+      return config.dataSource();
+    }
+
     var dburl = config.databaseUrl();
     var dbUser = config.dbUser();
     var dbPassword = config.dbPassword();
