@@ -1,8 +1,11 @@
 package dev.dbos.transact.conductor.protocol;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 public class RetentionRequest extends BaseMessage {
   public RetentionBody body;
 
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public static class RetentionBody {
     public Long gc_cutoff_epoch_ms;
     public Long gc_rows_threshold;
