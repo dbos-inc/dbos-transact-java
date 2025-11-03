@@ -24,9 +24,9 @@ val gitTag: String? by lazy {
     }.getOrNull()
 }
 
-val commitCount: String by lazy {
+val commitCount: Int by lazy {
     val range = if (gitTag.isNullOrEmpty()) "HEAD" else "$gitTag..HEAD"
-    runCommand("git", "rev-list", "--count", range)
+    runCommand("git", "rev-list", "--count", range).toInt()
 }
 
 val branch: String by lazy {
@@ -55,7 +55,11 @@ fun calcVersion(): String {
     }
 
     if (branch.startsWith("release/v")) {
-        return "$major.$minor.$patch"
+        if (commitCount == 0) {
+            return "$major.$minor.$patch"
+        } else {
+            return "$major.$minor.${patch + 1}-rc$commitCount"
+        }
     }
 
     return "$major.${minor + 1}.$patch-a$commitCount-g$gitHash"
@@ -63,6 +67,7 @@ fun calcVersion(): String {
 
 group = "dev.dbos"
 version = calcVersion()
+extra["commitCount"] = "$commitCount"
 
 println("Project version: $version") // prints when Gradle evaluates the build
 

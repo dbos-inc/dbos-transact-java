@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  public:
+  publish:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/v')
     steps:
