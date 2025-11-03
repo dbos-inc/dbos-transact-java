@@ -45,13 +45,3 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
-
-      - name: Github Release
-        if: startsWith(github.ref, 'refs/heads/release/v')
-        uses: marvinpinto/action-automatic-releases@latest
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          title: ${{ steps.get_version.outputs.version }}
-          prerelease: ${{ steps.get_version.outputs.commit_count != '0' }}
-          files: |
-            build/libs/*.jar
