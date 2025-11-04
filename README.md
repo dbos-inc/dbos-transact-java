@@ -1,7 +1,6 @@
 <div align="center">
 
 # DBOS Transact: Lightweight Durable Workflows
-# Java version in preview + under active development
 
 #### [Documentation](https://docs.dbos.dev/) &nbsp;&nbsp;•&nbsp;&nbsp;  [Examples](https://docs.dbos.dev/examples) &nbsp;&nbsp;•&nbsp;&nbsp; [Github](https://github.com/dbos-inc) &nbsp;&nbsp;•&nbsp;&nbsp; [Discord](https://discord.com/invite/jsmC6pXGgX)
 </div>
@@ -11,20 +10,17 @@
 ## What is DBOS?
 
 DBOS provides lightweight durable workflows built on top of Postgres.
-Instead of managing your own workflow orchestrator or task queue system, you can use DBOS to add durable workflows and queues to your program in just a few lines of code.
+Essentially, it helps you write long-lived, reliable code that can survive crashes, restarts, and failures without losing state or duplicating work.
 
-To get started, follow the [quickstart](https://docs.dbos.dev/quickstart?language=java) to install this open-source library and connect it to a Postgres database.
-Then, annotate workflows and steps in your program to make it durable!
-That's all you need to do&mdash;DBOS is entirely contained in this open-source library, there's no additional infrastructure for you to configure or manage.
+As your workflows run, DBOS checkpoints each step they take in a Postgres database.
+When a process stops (fails, intentionally suspends, or a machine dies), your program can recover from those checkpoints to restore its exact state and continue from where it left off, as if nothing happened.
 
-## When Should I Use DBOS?
+In practice, this makes it easier to build reliable systems for use cases like AI agents, payments, data synchronization, or anything that takes minutes, days, or weeks to complete.
+Rather than bolting on ad-hoc retry logic and database checkpoints, durable workflows give you one consistent model for ensuring progress without duplicate execution.
 
-You should consider using DBOS if your application needs to **reliably handle failures**.
-For example, you might be building a payments service that must reliably process transactions even if servers crash mid-operation, or a long-running data pipeline that needs to resume seamlessly from checkpoints rather than restart from the beginning when interrupted.
-
-Handling failures is costly and complicated, requiring complex state management and recovery logic as well as heavyweight tools like external orchestration services.
-DBOS makes it simpler: annotate your code to checkpoint it in Postgres and automatically recover from any failure.
-DBOS also provides powerful Postgres-backed primitives that makes it easier to write and operate reliable code, including durable queues, notifications, scheduling, event processing, and programmatic workflow management.
+This library contains all you need to add durable workflows to your program: there's no separate service or orchestrator or any external dependencies except Postgres.
+Because it's just a library, you can incrementally add it to your projects and it works out of the box with frameworks like Spring.
+And because it's built on Postgres, it natively supports all the tooling you're familiar with (backups, GUIs, CLI tools) and works with any Postgres provider.
 
 ## Features
 
@@ -32,7 +28,7 @@ DBOS also provides powerful Postgres-backed primitives that makes it easier to w
 
 ####
 
-DBOS workflows make your program **durable** by checkpointing its state in Postgres.
+Durable  workflows make your program **durable** by checkpointing its state in Postgres.
 If your program ever fails, when it restarts all your workflows will automatically resume from the last completed step.
 
 You add durable workflows to your existing Java program by annotating ordinary functions as workflows and steps:
