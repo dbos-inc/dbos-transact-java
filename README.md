@@ -19,7 +19,7 @@ In practice, this makes it easier to build reliable systems for use cases like A
 Rather than bolting on ad-hoc retry logic and database checkpoints, durable workflows give you one consistent model for ensuring progress without duplicate execution.
 
 This library contains all you need to add durable workflows to your program: there's no separate service or orchestrator or any external dependencies except Postgres.
-Because it's just a library, you can incrementally add it to your projects and it works out of the box with frameworks like Spring.
+Because it's just a library, you can incrementally add it to your projects, and it works out of the box with frameworks like Spring.
 And because it's built on Postgres, it natively supports all the tooling you're familiar with (backups, GUIs, CLI tools) and works with any Postgres provider.
 
 ## Features
@@ -31,7 +31,7 @@ And because it's built on Postgres, it natively supports all the tooling you're 
 Durable  workflows make your program **durable** by checkpointing its state in Postgres.
 If your program ever fails, when it restarts all your workflows will automatically resume from the last completed step.
 
-You add durable workflows to your existing Java program by registering ordinary functions as workflows and steps:
+You add durable workflows to your existing Java program in just a few lines of code by registering ordinary functions as workflows and steps:
 
 ```java
 
