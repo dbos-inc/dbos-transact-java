@@ -28,19 +28,28 @@ public class MigrationManager {
 
     createDatabaseIfNotExists(Objects.requireNonNull(config, "DBOS Config must not be null"));
 
-    try (var ds = SystemDatabase.createDataSource(config);
-        var conn = ds.getConnection()) {
+    var ds = SystemDatabase.createDataSource(config);
+    try (var conn = ds.getConnection()) {
       ensureDbosSchema(conn, Constants.DB_SCHEMA);
       ensureMigrationTable(conn, Constants.DB_SCHEMA);
       var migrations = getMigrations(Constants.DB_SCHEMA);
       runDbosMigrations(conn, Constants.DB_SCHEMA, migrations);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
+    } finally {
+      // Close the data source if it was not provided by config
+      if (config.dataSource() == null) {
+        ds.close();
+      }
     }
   }
 
   public static void createDatabaseIfNotExists(DBOSConfig config) {
     Objects.requireNonNull(config, "DBOS Config must not be null");
+    if (config.dataSource() != null) {
+      logger.debug("DBOSConfig specifies data source, skipping createDatabaseIfNotExists");
+      return;
+    }
     var dbUrl =
         Objects.requireNonNull(config.databaseUrl(), "DBOSConfig databaseUrl must not be null");
     var pair = extractDbAndPostgresUrl(dbUrl);

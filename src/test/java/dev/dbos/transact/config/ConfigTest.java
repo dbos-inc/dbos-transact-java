@@ -2,14 +2,23 @@ package dev.dbos.transact.config;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.database.DBTestAccess;
+import dev.dbos.transact.invocation.HawkService;
+import dev.dbos.transact.invocation.HawkServiceImpl;
+import dev.dbos.transact.utils.DBUtils;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
@@ -118,6 +127,53 @@ public class ConfigTest {
       // If we change the internally registered workflows, the expected value will change
       var expected = "6482a0dde9a452189b20c5f5e0d00a661ea8f160d58244cfc0a99cc5f13dbcad";
       assertEquals(expected, dbosExecutor.appVersion());
+    } finally {
+      DBOS.shutdown();
+    }
+  }
+
+  @Test
+  public void configDataSource() throws Exception {
+
+    var poolName = "dbos-configDataSource";
+    var url = "jdbc:postgresql://localhost:5432/dbos_java_sys";
+    var user = "postgres";
+    var password = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
+
+    DBUtils.recreateDB(url, user, password);
+
+    HikariConfig hikariConfig = new HikariConfig();
+    hikariConfig.setJdbcUrl(url);
+    hikariConfig.setUsername(user);
+    hikariConfig.setPassword(password);
+    hikariConfig.setPoolName(poolName);
+
+    var dataSource = new HikariDataSource(hikariConfig);
+    assertFalse(dataSource.isClosed());
+    var config =
+        DBOSConfig.defaults("config-test")
+            .withDataSource(dataSource)
+            .withDatabaseUrl("completely-invalid-url")
+            .withDbUser("invalid-user")
+            .withDbPassword("invalid-password");
+
+    DBOS.reinitialize(config);
+    assertFalse(dataSource.isClosed());
+
+    var impl = new HawkServiceImpl();
+    var proxy = DBOS.registerWorkflows(HawkService.class, impl);
+    impl.setProxy(proxy);
+
+    try {
+      DBOS.launch();
+
+      var sysdb = DBOSTestAccess.getSystemDatabase();
+      var dbConfig = DBTestAccess.getHikariConfig(sysdb);
+      assertEquals(poolName, dbConfig.getPoolName());
+
+      var result = proxy.simpleWorkflow();
+      assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
+
     } finally {
       DBOS.shutdown();
     }
