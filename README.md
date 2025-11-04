@@ -28,7 +28,7 @@ And because it's built on Postgres, it natively supports all the tooling you're 
 
 ####
 
-Durable  workflows make your program **durable** by checkpointing its state in Postgres.
+Workflows make your program **durable** by checkpointing its state in Postgres.
 If your program ever fails, when it restarts all your workflows will automatically resume from the last completed step.
 
 You add durable workflows to your existing Java program in just a few lines of code by registering ordinary functions as workflows and steps:
