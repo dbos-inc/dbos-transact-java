@@ -49,7 +49,7 @@ class ExampleImpl implements Example {
         System.out.println("Step two completed!");
     }
 
-    @Workflow(name = "workflow")
+    @Workflow()
     public void workflow() {
         DBOS.runStep(() -> stepOne(), "stepOne");
         DBOS.runStep(() -> stepTwo(), "stepTwo");
