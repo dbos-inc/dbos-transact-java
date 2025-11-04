@@ -159,11 +159,11 @@ public class DBOS {
     }
 
     public void shutdown() {
-      var current = dbosExecutor.getAndSet(null);
+      var current = dbosExecutor.get();
       if (current != null) {
         current.close();
       }
-
+      dbosExecutor.compareAndSet(current, null);
       logger.info("DBOS shut down");
     }
   }
