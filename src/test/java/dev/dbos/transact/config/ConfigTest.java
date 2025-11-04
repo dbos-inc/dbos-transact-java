@@ -150,7 +150,11 @@ public class ConfigTest {
 
     var dataSource = new HikariDataSource(hikariConfig);
     assertFalse(dataSource.isClosed());
-    var config = DBOSConfig.defaults("config-test").withDataSource(dataSource);
+    var config = DBOSConfig.defaults("config-test")
+      .withDataSource(dataSource)
+      .withDatabaseUrl("completely-invalid-url")
+      .withDbUser("invalid-user")
+      .withDbPassword("invalid-password");
 
     DBOS.reinitialize(config);
     assertFalse(dataSource.isClosed());
