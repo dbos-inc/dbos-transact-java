@@ -162,7 +162,9 @@ public class DBOS {
       var current = dbosExecutor.get();
       if (current != null) {
         current.close();
-        dbosExecutor.compareAndSet(current, null);
+        if (!dbosExecutor.compareAndSet(current, null)) {
+          logger.error("failed to set DBOS executor to null on shut down");
+        }
       }
       logger.info("DBOS shut down");
     }
