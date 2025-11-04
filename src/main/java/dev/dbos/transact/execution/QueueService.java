@@ -64,14 +64,13 @@ public class QueueService {
         }
 
         for (Queue queue : queues) {
-
           try {
-
             List<String> workflowIds =
                 systemDatabase.getAndStartQueuedWorkflows(
                     queue, dbosExecutor.executorId(), dbosExecutor.appVersion());
 
             for (String id : workflowIds) {
+              logger.debug("Starting workflow {} from queue {}", id, queue.name());
               dbosExecutor.executeWorkflowById(id);
             }
 
