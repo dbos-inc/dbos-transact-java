@@ -162,8 +162,8 @@ public class DBOS {
       var current = dbosExecutor.get();
       if (current != null) {
         current.close();
+        dbosExecutor.compareAndSet(current, null);
       }
-      dbosExecutor.compareAndSet(current, null);
       logger.info("DBOS shut down");
     }
   }
