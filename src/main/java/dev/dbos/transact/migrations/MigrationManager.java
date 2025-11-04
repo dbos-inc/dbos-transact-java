@@ -37,6 +37,7 @@ public class MigrationManager {
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
     } finally {
+      // Close the data source if it was not provided by config
       if (config.dataSource() == null) {
         ds.close();
       }
