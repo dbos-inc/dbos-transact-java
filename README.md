@@ -31,7 +31,7 @@ And because it's built on Postgres, it natively supports all the tooling you're 
 Durable  workflows make your program **durable** by checkpointing its state in Postgres.
 If your program ever fails, when it restarts all your workflows will automatically resume from the last completed step.
 
-You add durable workflows to your existing Java program by annotating ordinary functions as workflows and steps:
+You add durable workflows to your existing Java program by registering ordinary functions as workflows and steps:
 
 ```java
 
@@ -196,6 +196,24 @@ Then, check out the [programming guide](https://docs.dbos.dev/java/programming-g
 ## Examples
 
 [https://docs.dbos.dev/examples](https://docs.dbos.dev/examples)
+
+## DBOS vs. Other Systems
+
+<details><summary><strong>DBOS vs. Temporal</strong></summary>
+
+####
+
+Both DBOS and Temporal provide durable execution, but DBOS is implemented in a lightweight Postgres-backed library whereas Temporal is implemented in an externally orchestrated server.
+
+You can add DBOS to your program by installing this open-source library, connecting it to Postgres, and registering workflows and steps.
+By contrast, to add Temporal to your program, you must rearchitect your program to move your workflows and steps (activities) to a Temporal worker, configure a Temporal server to orchestrate those workflows, and access your workflows only through a Temporal client.
+[This blog post](https://www.dbos.dev/blog/durable-execution-coding-comparison) makes the comparison in more detail.
+
+**When to use DBOS:** You need to add durable workflows to your applications with minimal rearchitecting, or you are using Postgres.
+
+**When to use Temporal:** You don't want to add Postgres to your stack, or you need a language DBOS doesn't support yet.
+
+</details>
 
 ## Community
 
