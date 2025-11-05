@@ -160,9 +160,9 @@ public final class DbRetry {
 
         if (state.startsWith("08")) return true; // connection exception
         if (state.startsWith("40")) return true; // transaction rollback (deadlock, serialization)
+        if (state.startsWith("57")) return true; // cancel, connection close, backend crash, etc
         if (state.equals("55P03")) return true; // lock_not_available (Postgres)
         if (state.equals("53300")) return true; // too_many_connections (Postgres)
-        if (state.equals("57014")) return true; // query_canceled (often transient)
         if (state.equals("40001")) return true; // serialization_failure (explicit)
         if (state.equals("40P01")) return true; // deadlock_detected (explicit)
       }
