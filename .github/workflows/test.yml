@@ -65,7 +65,7 @@ jobs:
       - name: Test Summary
         uses: test-summary/action@v2
         with:
-          paths: "build/test-results/test/TEST-*.xml"
+          paths: "transact/build/test-results/test/TEST-*.xml"
           show: "fail, skip"
         if: always()
 
@@ -75,5 +75,5 @@ jobs:
         with:
           name: test-results-${{ matrix.jdk-version }}-${{ matrix.jdk-distro }}
           path: |
-            build/reports/tests/
-            build/test-results/
+            transact/build/reports/tests/
+            transact/build/test-results/
