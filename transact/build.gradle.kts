@@ -1,5 +1,5 @@
 group = "dev.dbos"
-version =  rootProject.extra["calculatedVersion"] as String
+version = rootProject.extra["calculatedVersion"] as String
 
 plugins {
     id("java")
