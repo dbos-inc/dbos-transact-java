@@ -254,4 +254,20 @@ public class DBUtils {
       throw new RuntimeException(e);
     }
   }
+
+  public static void causeChaos(DataSource ds) {
+    try (Connection conn = ds.getConnection();
+        Statement st = conn.createStatement()) {
+
+      st.execute(
+          """
+            SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+            WHERE pid <> pg_backend_pid()
+              AND datname = current_database();
+        """);
+    } catch (SQLException e) {
+      throw new RuntimeException("Could not cause chaos, credentials insufficient?", e);
+    }
+  }
 }

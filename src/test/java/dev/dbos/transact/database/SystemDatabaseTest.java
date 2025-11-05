@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
@@ -99,5 +100,27 @@ public class SystemDatabaseTest {
     var after = DBUtils.getWorkflowRow(dataSource, wfid);
 
     assertTrue(before.equals(after));
+  }
+
+  @Test
+  public void testSysDbWfDisruption() throws Exception {
+    var dsvci = new DisruptiveServiceImpl();
+    dsvci.setDS(dataSource);
+    var dsvc = DBOS.registerWorkflows(DisruptiveService.class, dsvci);
+    dsvci.setSelf(dsvc);
+    DBOS.launch();
+    try {
+      assertEquals("Hehehe", dsvc.dbLossBetweenSteps());
+
+      assertEquals("Hehehe", dsvc.runChildWf());
+
+      var h1 = DBOS.startWorkflow(() -> dsvc.wfPart1());
+      var h2 = DBOS.startWorkflow(() -> dsvc.wfPart2(h1.workflowId()));
+
+      assertEquals("Part1hello1", h1.getResult());
+      assertEquals("Part2v1", h2.getResult());
+    } finally {
+      DBOS.shutdown();
+    }
   }
 }
