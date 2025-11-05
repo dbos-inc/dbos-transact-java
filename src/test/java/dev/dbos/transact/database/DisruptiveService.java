@@ -7,4 +7,8 @@ public interface DisruptiveService {
   String dbLossBetweenSteps();
 
   String runChildWf();
+
+  String wfPart1();
+
+  String wfPart2(String id1);
 }

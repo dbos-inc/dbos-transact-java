@@ -113,6 +113,12 @@ public class SystemDatabaseTest {
       assertEquals("Hehehe", dsvc.dbLossBetweenSteps());
 
       assertEquals("Hehehe", dsvc.runChildWf());
+
+      var h1 = DBOS.startWorkflow(() -> dsvc.wfPart1());
+      var h2 = DBOS.startWorkflow(() -> dsvc.wfPart2(h1.workflowId()));
+
+      assertEquals("Part1hello1", h1.getResult());
+      assertEquals("Part2v1", h2.getResult());
     } finally {
       DBOS.shutdown();
     }

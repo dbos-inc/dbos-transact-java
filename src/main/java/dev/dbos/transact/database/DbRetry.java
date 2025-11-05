@@ -27,7 +27,7 @@ public final class DbRetry {
       Predicate<Throwable> retriablePredicate) {
     public static Options defaults() {
       return new Options(
-          Duration.ofSeconds(1), Duration.ofSeconds(60), 10, DbRetry::isRetriableSql);
+          Duration.ofSeconds(1), Duration.ofSeconds(60), 20, DbRetry::isRetriableSql);
     }
 
     public Options withInitialBackoff(Duration d) {
@@ -150,13 +150,17 @@ public final class DbRetry {
    */
   private static boolean isRetriableSql(Throwable t) {
     // Walk cause chain to find an SQLException and check each along the way
+    boolean sawSQLExceptionWithNoState = false;
     for (Throwable cur = t; cur != null; cur = cur.getCause()) {
       if (cur instanceof SQLTransientException || cur instanceof SQLRecoverableException) {
         return true;
       }
       if (cur instanceof SQLException sqlEx) {
         String state = sqlEx.getSQLState();
-        if (state == null) continue;
+        if (state == null) {
+          sawSQLExceptionWithNoState = true;
+          continue;
+        }
 
         if (state.startsWith("08")) return true; // connection exception
         if (state.startsWith("40")) return true; // transaction rollback (deadlock, serialization)
@@ -167,6 +171,6 @@ public final class DbRetry {
         if (state.equals("40P01")) return true; // deadlock_detected (explicit)
       }
     }
-    return false;
+    return sawSQLExceptionWithNoState;
   }
 }

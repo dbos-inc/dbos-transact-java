@@ -4,6 +4,8 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Workflow;
 
+import java.time.Duration;
+
 import javax.sql.DataSource;
 
 import org.slf4j.Logger;
@@ -58,5 +60,27 @@ public class DisruptiveServiceImpl implements DisruptiveService {
     var wfh = DBOS.startWorkflow(() -> self.dbLossBetweenSteps());
     DBUtils.causeChaos(ds);
     return wfh.getResult();
+  }
+
+  @Override
+  @Workflow()
+  public String wfPart1() {
+    DBUtils.causeChaos(ds);
+    var r = (String) DBOS.recv("topic", Duration.ofSeconds(5));
+    DBUtils.causeChaos(ds);
+    DBOS.setEvent("key", "v1");
+    DBUtils.causeChaos(ds);
+    return "Part1" + r;
+  }
+
+  @Override
+  @Workflow()
+  public String wfPart2(String id1) {
+    DBUtils.causeChaos(ds);
+    DBOS.send(id1, "hello1", "topic");
+    DBUtils.causeChaos(ds);
+    var v1 = (String) DBOS.getEvent(id1, "key", Duration.ofSeconds(5));
+    DBUtils.causeChaos(ds);
+    return "Part2" + v1;
   }
 }
