@@ -3,15 +3,16 @@ version = rootProject.extra["calculatedVersion"] as String
 
 plugins {
     application
+    id("com.gradleup.shadow") version "9.2.2"
 }
 
 application {
-    mainClass.set("dev.dbos.transact.cli.Main")
+    mainClass.set("dev.dbos.transact.cli.DBOSCommandLine")
 }
 
 repositories {
-    gradlePluginPortal()
     mavenCentral()
+    gradlePluginPortal()
 }
 
 dependencies {
