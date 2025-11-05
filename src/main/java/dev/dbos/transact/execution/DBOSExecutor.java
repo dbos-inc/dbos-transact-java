@@ -1062,6 +1062,9 @@ public class DBOSExecutor implements AutoCloseable {
           options.timeout(),
           options.deadline());
       return retrieveWorkflow(workflowId, systemDatabase);
+    } catch (DBOSWorkflowExecutionConflictException e) {
+      logger.debug("Workflow execution conflict for workflowId {}", workflowId);
+      return retrieveWorkflow(workflowId, systemDatabase);
     } catch (Throwable e) {
       var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
       logger.error("enqueueWorkflow", actual);
