@@ -1,7 +1,6 @@
 <div align="center">
 
 # DBOS Transact: Lightweight Durable Workflows
-# Java version in preview + under active development
 
 #### [Documentation](https://docs.dbos.dev/) &nbsp;&nbsp;•&nbsp;&nbsp;  [Examples](https://docs.dbos.dev/examples) &nbsp;&nbsp;•&nbsp;&nbsp; [Github](https://github.com/dbos-inc) &nbsp;&nbsp;•&nbsp;&nbsp; [Discord](https://discord.com/invite/jsmC6pXGgX)
 </div>
@@ -11,20 +10,17 @@
 ## What is DBOS?
 
 DBOS provides lightweight durable workflows built on top of Postgres.
-Instead of managing your own workflow orchestrator or task queue system, you can use DBOS to add durable workflows and queues to your program in just a few lines of code.
+Essentially, it helps you write long-lived, reliable code that can survive crashes, restarts, and failures without losing state or duplicating work.
 
-To get started, follow the [quickstart](https://docs.dbos.dev/quickstart?language=java) to install this open-source library and connect it to a Postgres database.
-Then, annotate workflows and steps in your program to make it durable!
-That's all you need to do&mdash;DBOS is entirely contained in this open-source library, there's no additional infrastructure for you to configure or manage.
+As your workflows run, DBOS checkpoints each step they take in a Postgres database.
+When a process stops (fails, intentionally suspends, or a machine dies), your program can recover from those checkpoints to restore its exact state and continue from where it left off, as if nothing happened.
 
-## When Should I Use DBOS?
+In practice, this makes it easier to build reliable systems for use cases like AI agents, payments, data synchronization, or anything that takes minutes, days, or weeks to complete.
+Rather than bolting on ad-hoc retry logic and database checkpoints, durable workflows give you one consistent model for ensuring progress without duplicate execution.
 
-You should consider using DBOS if your application needs to **reliably handle failures**.
-For example, you might be building a payments service that must reliably process transactions even if servers crash mid-operation, or a long-running data pipeline that needs to resume seamlessly from checkpoints rather than restart from the beginning when interrupted.
-
-Handling failures is costly and complicated, requiring complex state management and recovery logic as well as heavyweight tools like external orchestration services.
-DBOS makes it simpler: annotate your code to checkpoint it in Postgres and automatically recover from any failure.
-DBOS also provides powerful Postgres-backed primitives that makes it easier to write and operate reliable code, including durable queues, notifications, scheduling, event processing, and programmatic workflow management.
+This library contains all you need to add durable workflows to your program: there's no separate service or orchestrator or any external dependencies except Postgres.
+Because it's just a library, you can incrementally add it to your projects, and it works out of the box with frameworks like Spring.
+And because it's built on Postgres, it natively supports all the tooling you're familiar with (backups, GUIs, CLI tools) and works with any Postgres provider.
 
 ## Features
 
@@ -32,72 +28,31 @@ DBOS also provides powerful Postgres-backed primitives that makes it easier to w
 
 ####
 
-DBOS workflows make your program **durable** by checkpointing its state in Postgres.
+Workflows make your program **durable** by checkpointing its state in Postgres.
 If your program ever fails, when it restarts all your workflows will automatically resume from the last completed step.
 
-You add durable workflows to your existing Java program by annotating ordinary functions as workflows and steps:
+You add durable workflows to your existing Java program in just a few lines of code by registering ordinary functions as workflows and steps:
 
 ```java
-package com.example;
 
-import java.util.Objects;
+interface Example {
+    public void workflow();
+}
 
-import dev.dbos.transact.DBOS;
-import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.workflow.Step;
-import dev.dbos.transact.workflow.Workflow;
+class ExampleImpl implements Example {
 
-public class App {
-    public interface WorkflowService {
-        public String exampleWorkflow(String input) ;
+    private void stepOne() {
+        System.out.println("Step one completed!");
     }
 
-    public interface Steps {
-        public void stepOne() ;
+    private void stepTwo() {
+        System.out.println("Step two completed!");
     }
 
-    public static class StepServiceImpl implements Steps {
-        @Step(name = "stepOne")
-        public void stepOne() {
-            System.out.println("Executed stepOne") ;
-        }
-    }
-
-    public static class WorkflowServiceImpl implements WorkflowService {
-        private Steps steps;
-        public WorkflowServiceImpl(Steps steps) {
-            this.steps = steps;
-        }
-
-        @Workflow(name = "exampleWorkflow")
-        public String exampleWorkflow(String input) {
-            steps.stepOne();
-            DBOS.runStep(()->{System.out.println("Executed stepTwo");}, "stepTwo");
-            return input + input;
-        }
-    }
-
-    public static void main(String[] args) {
-
-        // Remember to export the DB password to the env variable PGPASSWORD
-        var dbosConfig = DBOSConfig
-            .defaults("demo")
-            .withDatabaseUrl(System.getenv("DBOS_SYSTEM_JDBC_URL"))
-            .withDbUser(Objects.requireNonNullElse(System.getenv("PGUSER"), "postgres"))
-            .withDbPassword(Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos"));
-
-        DBOS.configure(dbosConfig);
-
-        Steps steps = DBOS.registerWorkflows(
-                Steps.class, new StepServiceImpl());
-
-        WorkflowService example = DBOS.registerWorkflows(
-                WorkflowService.class, new WorkflowServiceImpl(steps));
-
-        DBOS.launch();
-        String output = example.exampleWorkflow("HelloDBOS") ;
-        System.out.println("Result: " + output);
-        DBOS.shutdown();
+    @Workflow()
+    public void workflow() {
+        DBOS.runStep(() -> stepOne(), "stepOne");
+        DBOS.runStep(() -> stepTwo(), "stepTwo");
     }
 }
 ```
@@ -250,7 +205,7 @@ Then, check out the [programming guide](https://docs.dbos.dev/java/programming-g
 
 Both DBOS and Temporal provide durable execution, but DBOS is implemented in a lightweight Postgres-backed library whereas Temporal is implemented in an externally orchestrated server.
 
-You can add DBOS to your program by installing this open-source library, connecting it to Postgres, and annotating workflows and steps.
+You can add DBOS to your program by installing this open-source library, connecting it to Postgres, and registering workflows and steps.
 By contrast, to add Temporal to your program, you must rearchitect your program to move your workflows and steps (activities) to a Temporal worker, configure a Temporal server to orchestrate those workflows, and access your workflows only through a Temporal client.
 [This blog post](https://www.dbos.dev/blog/durable-execution-coding-comparison) makes the comparison in more detail.
 
@@ -258,36 +213,6 @@ By contrast, to add Temporal to your program, you must rearchitect your program 
 
 **When to use Temporal:** You don't want to add Postgres to your stack, or you need a language DBOS doesn't support yet.
 
-</details>
-
-<details><summary><strong>DBOS vs. Airflow</strong></summary>
-
-####
-
-DBOS and Airflow both provide workflow abstractions.
-Airflow is targeted at data science use cases, providing many out-of-the-box connectors but requiring workflows be written as explicit DAGs and externally orchestrating them from an Airflow cluster.
-Airflow is designed for batch operations and does not provide good performance for streaming or real-time use cases.
-DBOS is general-purpose, but is often used for data pipelines, allowing developers to write workflows as code and requiring no infrastructure except Postgres.
-
-**When to use DBOS:** You need the flexibility of writing workflows as code, or you need higher performance than Airflow is capable of (particularly for streaming or real-time use cases).
-
-**When to use Airflow:** You need Airflow's ecosystem of connectors.
-
-</details>
-
-<details><summary><strong>DBOS vs. Celery/BullMQ</strong></summary>
-
-####
-
-DBOS provides a similar queue abstraction to dedicated queueing systems like Celery or BullMQ: you can declare queues, submit tasks to them, and control their flow with concurrency limits, rate limits, timeouts, prioritization, etc.
-However, DBOS queues are **durable and Postgres-backed** and integrate with durable workflows.
-For example, in DBOS you can write a durable workflow that enqueues a thousand tasks and waits for their results.
-DBOS checkpoints the workflow and each of its tasks in Postgres, guaranteeing that even if failures or interruptions occur, the tasks will complete and the workflow will collect their results.
-By contrast, Celery/BullMQ are Redis-backed and don't provide workflows, so they provide fewer guarantees but better performance.
-
-**When to use DBOS:** You need the reliability of enqueuing tasks from durable workflows.
-
-**When to use Celery/BullMQ**: You don't need durability, or you need very high throughput beyond what your Postgres server can support.
 </details>
 
 ## Community
