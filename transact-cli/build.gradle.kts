@@ -17,6 +17,7 @@ repositories {
 
 dependencies {
     implementation(project(":transact"))
+    implementation("info.picocli:picocli:4.7.7")
 }
 
 java {
