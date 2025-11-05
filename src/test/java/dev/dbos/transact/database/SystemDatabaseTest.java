@@ -111,6 +111,8 @@ public class SystemDatabaseTest {
     DBOS.launch();
     try {
       assertEquals("Hehehe", dsvc.dbLossBetweenSteps());
+
+      assertEquals("Hehehe", dsvc.runChildWf());
     } finally {
       DBOS.shutdown();
     }

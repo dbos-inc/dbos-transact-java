@@ -50,4 +50,13 @@ public class DisruptiveServiceImpl implements DisruptiveService {
         "D");
     return "Hehehe";
   }
+
+  @Override
+  @Workflow()
+  public String runChildWf() {
+    DBUtils.causeChaos(ds);
+    var wfh = DBOS.startWorkflow(() -> self.dbLossBetweenSteps());
+    DBUtils.causeChaos(ds);
+    return wfh.getResult();
+  }
 }
