@@ -1,8 +1,6 @@
 group = "dev.dbos"
 version =  rootProject.extra["calculatedVersion"] as String
 
-println("Project version: $version") // prints when Gradle evaluates the build
-
 plugins {
     id("java")
     id("java-library")

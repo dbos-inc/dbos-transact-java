@@ -82,7 +82,13 @@ fun calcVersion(): String {
     return "$major.${minor + 1}.$patch-a$commitCount-g$gitHash"
 }
 
+val calculatedVersion: String by lazy {
+    calcVersion()
+}
+
+println("Transact version: $calculatedVersion") // prints when Gradle evaluates the build
+
 gradle.rootProject {
-    extra["calculatedVersion"] = calcVersion()
+    extra["calculatedVersion"] = calculatedVersion
     extra["gitHash"] = gitHash
 }
