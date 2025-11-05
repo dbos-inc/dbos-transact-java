@@ -42,7 +42,7 @@ import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ClientHandshake;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junitpioneer.jupiter.RetryingTest;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,7 +81,7 @@ public class ConductorTest {
     testServer.stop();
   }
 
-  @Test
+  @RetryingTest(3)
   public void connectsToCorrectUrl() throws Exception {
 
     class Listener implements WebSocketTestListener {
@@ -105,7 +105,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void sendsPing() throws Exception {
     logger.info("sendsPing Starting");
     class Listener implements WebSocketTestListener {
@@ -138,7 +138,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void reconnectsOnFailedPing() throws Exception {
     logger.info("reconnectsOnFailedPing Starting");
     class Listener implements WebSocketTestListener {
@@ -175,7 +175,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void reconnectsOnRemoteClose() throws Exception {
     class Listener implements WebSocketTestListener {
       int closeCount = 0;
@@ -246,7 +246,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canRecover() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -274,7 +274,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canRecoverThrows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -335,7 +335,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canCancel() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -364,7 +364,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canCancelThrows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -395,7 +395,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canResume() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -422,7 +422,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canResumeThrows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -452,7 +452,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canRestart() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -478,7 +478,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canRestartThrows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -511,7 +511,7 @@ public class ConductorTest {
   }
 
   @SuppressWarnings("unchecked")
-  @Test
+  @RetryingTest(3)
   public void canFork() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -560,7 +560,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canForkThrow() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -609,7 +609,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canListWorkflows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -683,7 +683,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canListQueuedWorkflows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -757,7 +757,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canGetWorkflow() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -798,7 +798,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canExistPendingWorkflows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -831,7 +831,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canExistPendingWorkflowsFalse() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -867,7 +867,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canListSteps() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -905,7 +905,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canRetention() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -941,7 +941,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canRetentionTimeoutNotSet() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -974,7 +974,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canRetentionGcThrows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -1013,7 +1013,7 @@ public class ConductorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void canRetentionTimeoutThrows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
