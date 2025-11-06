@@ -644,9 +644,10 @@ public class DBOS {
   }
 
   /**
-   * Execute a workflow based on registration and arguments.
-   * This is expected to be used by generic callers, not app code.
-   * @param regWorkflow Registration of the workflow.  @see getRegisteredWorkflows
+   * Execute a workflow based on registration and arguments. This is expected to be used by generic
+   * callers, not app code.
+   *
+   * @param regWorkflow Registration of the workflow. @see getRegisteredWorkflows
    * @param args Workflow function arguments
    * @param options Execution options, such as ID, queue, and timeout/deadline
    * @return WorkflowHandle to the executed workflow

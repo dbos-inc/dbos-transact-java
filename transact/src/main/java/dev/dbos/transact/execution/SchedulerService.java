@@ -2,7 +2,6 @@ package dev.dbos.transact.execution;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.execution.DBOSExecutor.ExecuteWorkflowOptions;
-import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Scheduled;
 
 import java.time.Duration;
@@ -33,15 +32,11 @@ public class SchedulerService {
   private static final CronParser cronParser =
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING53));
 
-  private final DBOSExecutor dbosExecutor;
   private volatile boolean stop = false;
-  private final Queue schedulerQueue;
   private final String schedulerQueueName;
 
-  public SchedulerService(DBOSExecutor dbosExecutor, Queue schedulerQueue) {
-    this.dbosExecutor = Objects.requireNonNull(dbosExecutor);
-    this.schedulerQueue = Objects.requireNonNull(schedulerQueue);
-    this.schedulerQueueName = this.schedulerQueue.name();
+  public SchedulerService(String defSchedulerQueue) {
+    this.schedulerQueueName = Objects.requireNonNull(defSchedulerQueue);
   }
 
   public static void validateScheduledWorkflow(RegisteredWorkflow workflow) {
