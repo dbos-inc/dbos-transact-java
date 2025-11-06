@@ -892,11 +892,14 @@ public class DBOSExecutor implements AutoCloseable {
       WorkflowInfo parent,
       CompletableFuture<String> latch) {
 
+    Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
+
     if (options.queueName != null) {
       return enqueueWorkflow(
           workflow.name(),
           workflow.className(),
           workflow.instanceName(),
+          maxRetries,
           args,
           options,
           parent,
@@ -924,6 +927,7 @@ public class DBOSExecutor implements AutoCloseable {
               workflow.name(),
               workflow.className(),
               workflow.instanceName(),
+              maxRetries,
               args,
               workflowId,
               null,
@@ -1022,6 +1026,7 @@ public class DBOSExecutor implements AutoCloseable {
       String name,
       String className,
       String instanceName,
+      Integer maxRetries,
       Object[] args,
       ExecuteWorkflowOptions options,
       WorkflowInfo parent,
@@ -1051,6 +1056,7 @@ public class DBOSExecutor implements AutoCloseable {
           name,
           className,
           instanceName,
+          maxRetries,
           args,
           workflowId,
           queueName,
@@ -1084,6 +1090,7 @@ public class DBOSExecutor implements AutoCloseable {
       String workflowName,
       String className,
       String instanceName,
+      Integer maxRetries,
       Object[] inputs,
       String workflowId,
       String queueName,
@@ -1106,6 +1113,7 @@ public class DBOSExecutor implements AutoCloseable {
     Long deadlineEpochMs =
         queueName != null ? null : deadline != null ? deadline.toEpochMilli() : null;
 
+    final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
     WorkflowStatusInternal workflowStatusInternal =
         new WorkflowStatusInternal(
             workflowId,
@@ -1135,7 +1143,7 @@ public class DBOSExecutor implements AutoCloseable {
     WorkflowInitResult[] initResult = {null};
     DbRetry.run(
         () -> {
-          initResult[0] = systemDatabase.initWorkflowStatus(workflowStatusInternal, 3);
+          initResult[0] = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
         });
 
     if (parentWorkflow != null) {

@@ -8,12 +8,7 @@ import java.time.Duration;
 
 import javax.sql.DataSource;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public class DisruptiveServiceImpl implements DisruptiveService {
-
-  private static final Logger logger = LoggerFactory.getLogger(DisruptiveServiceImpl.class);
 
   private DisruptiveService self;
   private DataSource ds;
