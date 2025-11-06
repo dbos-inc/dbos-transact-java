@@ -65,6 +65,7 @@ public class DBOSExecutor implements AutoCloseable {
   private String executorId;
 
   private Map<String, RegisteredWorkflow> workflowMap;
+  private Map<String, RegisteredWorkflowInstance> instanceMap;
   private List<Queue> queues;
 
   private SystemDatabase systemDatabase;
@@ -82,10 +83,14 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void start(
-      DBOS.Instance dbos, Map<String, RegisteredWorkflow> workflowMap, List<Queue> queues) {
+      DBOS.Instance dbos,
+      Map<String, RegisteredWorkflow> workflowMap,
+      Map<String, RegisteredWorkflowInstance> instanceMap,
+      List<Queue> queues) {
 
     if (isRunning.compareAndSet(false, true)) {
       this.workflowMap = Collections.unmodifiableMap(workflowMap);
+      this.instanceMap = Collections.unmodifiableMap(instanceMap);
       this.queues = Collections.unmodifiableList(queues);
 
       this.executorId = System.getenv("DBOS__VMID");
@@ -189,6 +194,7 @@ public class DBOSExecutor implements AutoCloseable {
       executorService.shutdownNow();
 
       this.workflowMap = null;
+      this.instanceMap = null;
     }
   }
 
@@ -227,6 +233,10 @@ public class DBOSExecutor implements AutoCloseable {
 
   public Collection<RegisteredWorkflow> getWorkflows() {
     return this.workflowMap.values();
+  }
+
+  public Collection<RegisteredWorkflowInstance> getInstances() {
+    return this.instanceMap.values();
   }
 
   public List<Queue> getQueues() {

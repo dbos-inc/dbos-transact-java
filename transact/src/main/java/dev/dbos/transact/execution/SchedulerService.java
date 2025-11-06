@@ -1,5 +1,6 @@
 package dev.dbos.transact.execution;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.execution.DBOSExecutor.ExecuteWorkflowOptions;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Scheduled;
@@ -79,7 +80,7 @@ public class SchedulerService {
     // collect all workflows that have an @Scheduled annotation
     record ScheduledWorkflow(RegisteredWorkflow workflow, Cron cron) {}
     List<ScheduledWorkflow> scheduledWorkflows = new ArrayList<>();
-    for (var wf : this.dbosExecutor.getWorkflows()) {
+    for (var wf : DBOS.getRegisteredWorkflows()) {
       var method = wf.workflowMethod();
       var skedTag = method.getAnnotation(Scheduled.class);
       if (skedTag == null) {

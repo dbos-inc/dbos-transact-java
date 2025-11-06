@@ -5,6 +5,8 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.RegisteredWorkflow;
+import dev.dbos.transact.execution.RegisteredWorkflowInstance;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
@@ -17,6 +19,7 @@ import dev.dbos.transact.workflow.*;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -151,7 +154,11 @@ public class DBOS {
         var executor = new DBOSExecutor(config);
 
         if (dbosExecutor.compareAndSet(null, executor)) {
-          executor.start(this, workflowRegistry.getSnapshot(), queueRegistry.getSnapshot());
+          executor.start(
+              this,
+              workflowRegistry.getWorkflowSnapshot(),
+              workflowRegistry.getInstanceSnapshot(),
+              queueRegistry.getSnapshot());
         }
       }
     }
@@ -616,6 +623,24 @@ public class DBOS {
    */
   public static List<StepInfo> listWorkflowSteps(String workflowId) {
     return executor("listWorkflowSteps").listWorkflowSteps(workflowId);
+  }
+
+  /**
+   * Get all workflows registered with DBOS.
+   *
+   * @return list of all registered workflow methods
+   */
+  public static Collection<RegisteredWorkflow> getRegisteredWorkflows() {
+    return executor("getRegisteredWorkflows").getWorkflows();
+  }
+
+  /**
+   * Get all workflow classes registered with DBOS.
+   *
+   * @return list of all class instances containing registered workflow methods
+   */
+  public static Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
+    return executor("getRegisteredWorkflowInstances").getInstances();
   }
 
   /**

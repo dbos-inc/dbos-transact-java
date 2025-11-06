@@ -47,7 +47,11 @@ public class WorkflowRegistry {
     wfRegistry.clear();
   }
 
-  public Map<String, RegisteredWorkflow> getSnapshot() {
+  public Map<String, RegisteredWorkflow> getWorkflowSnapshot() {
     return Map.copyOf(wfRegistry);
+  }
+
+  public Map<String, RegisteredWorkflowInstance> getInstanceSnapshot() {
+    return Map.copyOf(wfInstRegistry);
   }
 }
