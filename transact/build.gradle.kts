@@ -27,7 +27,7 @@ spotless {
 
 pmd {
     ruleSets = listOf() // disable defaults
-    ruleSetFiles = files("config/pmd/ruleset.xml")
+    ruleSetFiles = files("${rootDir}/config/pmd/ruleset.xml")
     isConsoleOutput = true
     toolVersion = "7.16.0"
 }
