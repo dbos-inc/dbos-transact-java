@@ -1,5 +1,7 @@
 package dev.dbos.transact.scheduled;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.workflow.Scheduled;
 import dev.dbos.transact.workflow.Workflow;
@@ -33,6 +35,7 @@ class SkedServiceImpl implements SkedService {
   @Workflow
   @Scheduled(cron = "0/1 * * * * *")
   public void everySecond(Instant scheduled, Instant actual) {
+    assertTrue(DBOS.inWorkflow());
     logger.info("Executing everySecond {} {} {}", everySecondCounter, scheduled, actual);
     ++everySecondCounter;
   }

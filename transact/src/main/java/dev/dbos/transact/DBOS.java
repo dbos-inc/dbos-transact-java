@@ -61,30 +61,28 @@ public class DBOS {
         throw new IllegalStateException("Cannot register workflow after DBOS is launched");
       }
 
+      String className = implementation.getClass().getName();
+      workflowRegistry.register(interfaceClass, implementation, className, instanceName);
+
       Method[] methods = implementation.getClass().getDeclaredMethods();
       for (Method method : methods) {
         Workflow wfAnnotation = method.getAnnotation(Workflow.class);
         if (wfAnnotation != null) {
           method.setAccessible(true); // In case it's not public
-          registerWorkflowMethod(wfAnnotation, implementation, instanceName, method);
+          registerWorkflowMethod(wfAnnotation, implementation, className, instanceName, method);
         }
       }
     }
 
     private String registerWorkflowMethod(
-        Workflow wfTag, Object target, String instanceName, Method method) {
+        Workflow wfTag, Object target, String className, String instanceName, Method method) {
       if (dbosExecutor.get() != null) {
         throw new IllegalStateException("Cannot register workflow after DBOS is launched");
       }
 
       String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
       workflowRegistry.register(
-          target.getClass().getName(),
-          name,
-          target,
-          instanceName,
-          method,
-          wfTag.maxRecoveryAttempts());
+          className, name, target, instanceName, method, wfTag.maxRecoveryAttempts());
       return name;
     }
 
