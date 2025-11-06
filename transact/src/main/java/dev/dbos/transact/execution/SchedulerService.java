@@ -73,7 +73,7 @@ public class SchedulerService {
     var expectedParams = new Class<?>[] {Instant.class, Instant.class};
 
     // collect all workflows that have an @Scheduled annotation
-    record ScheduledWorkflow(RegisteredWorkflow workflow, Cron cron) {}
+    record ScheduledWorkflow(RegisteredWorkflow workflow, Cron cron, String queue) {}
     List<ScheduledWorkflow> scheduledWorkflows = new ArrayList<>();
     for (var wf : DBOS.getRegisteredWorkflows()) {
       var method = wf.workflowMethod();
@@ -90,9 +90,20 @@ public class SchedulerService {
         continue;
       }
 
+      String queue =
+          skedTag.queue() != null && !skedTag.queue().isEmpty()
+              ? skedTag.queue()
+              : this.schedulerQueueName;
+      var q = DBOS.getQueue(queue);
+      if (!q.isPresent()) {
+        logger.error(
+            "Scheduled workflow {} refers to undefined queue {}", wf.fullyQualifiedName(), queue);
+        queue = this.schedulerQueueName;
+      }
+
       try {
         var cron = cronParser.parse(skedTag.cron());
-        scheduledWorkflows.add(new ScheduledWorkflow(wf, Objects.requireNonNull(cron)));
+        scheduledWorkflows.add(new ScheduledWorkflow(wf, Objects.requireNonNull(cron), queue));
       } catch (IllegalArgumentException e) {
         logger.error(
             "Scheduled workflow {} has invalid cron expression {}",
@@ -120,8 +131,7 @@ public class SchedulerService {
                 String workflowId =
                     String.format("sched-%s-%s", wf.fullyQualifiedName(), scheduledTime.toString());
                 var options =
-                    new ExecuteWorkflowOptions(
-                        workflowId, null, null, schedulerQueueName, null, null);
+                    new ExecuteWorkflowOptions(workflowId, null, null, swf.queue(), null, null);
                 DBOS.executeWorkflow(wf, args, options);
               } catch (Exception e) {
                 logger.error("Scheduled task exception {}", wf.fullyQualifiedName(), e);

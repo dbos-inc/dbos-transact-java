@@ -42,7 +42,7 @@ class SkedServiceImpl implements SkedService {
 
   @Override
   @Workflow
-  @Scheduled(cron = "0/3 * * * * *")
+  @Scheduled(cron = "0/3 * * * * *", queue = "q2")
   public void everyThird(Instant scheduled, Instant actual) {
     logger.info("Executing everyThird {} {} {}", everyThirdCounter, scheduled, actual);
     ++everyThirdCounter;

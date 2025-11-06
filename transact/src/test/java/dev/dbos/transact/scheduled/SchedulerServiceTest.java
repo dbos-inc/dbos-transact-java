@@ -7,6 +7,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.Queue;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -48,77 +49,39 @@ class SchedulerServiceTest {
   public void simpleScheduledWorkflow() throws Exception {
 
     var impl = new SkedServiceImpl();
+    var q = new Queue("q2").withConcurrency(1);
+    DBOS.registerQueue(q);
     DBOS.registerWorkflows(SkedService.class, impl);
 
     DBOS.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService();
 
+    // Run all sched WFs for 5 seconds(ish)
     Thread.sleep(5000);
     schedulerService.stop();
     Thread.sleep(1000);
 
-    int count = impl.everySecondCounter;
-    System.out.println("Final count: " + count);
-    assertTrue(count >= 2);
-    assertTrue(count <= 5); // Flaky, have seen 6
-  }
+    // All checks for all WFs
+    int count1 = impl.everySecondCounter;
+    System.out.println("Final count (1s): " + count1);
+    assertTrue(count1 >= 2);
+    assertTrue(count1 <= 5); // Flaky, have seen 6
 
-  @Test
-  public void ThirdSecWorkflow() throws Exception {
-
-    var impl = new SkedServiceImpl();
-    DBOS.registerWorkflows(SkedService.class, impl);
-
-    DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService();
-
-    Thread.sleep(5000);
-    schedulerService.stop();
-    Thread.sleep(1000);
-
-    int count = impl.everyThirdCounter;
-    System.out.println("Final count: " + count);
-    assertTrue(count >= 1);
-    assertTrue(count <= 2);
-  }
-
-  @Test
-  public void MultipleWorkflowsTest() throws Exception {
-
-    var impl = new SkedServiceImpl();
-    DBOS.registerWorkflows(SkedService.class, impl);
-    DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService();
-
-    Thread.sleep(5000);
-    schedulerService.stop();
-    Thread.sleep(1000);
-
-    int count = impl.everySecondCounter;
-    System.out.println("Final count: " + count);
-    assertTrue(count >= 2);
-    assertTrue(count <= 5);
     int count3 = impl.everyThirdCounter;
-    System.out.println("Final count3: " + count3);
+    System.out.println("Final count (3s): " + count3);
+    assertTrue(count3 >= 1);
     assertTrue(count3 <= 2);
-  }
-
-  @Test
-  public void TimedWorkflowsTest() throws Exception {
-
-    var impl = new SkedServiceImpl();
-    DBOS.registerWorkflows(SkedService.class, impl);
-    DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService();
-
-    Thread.sleep(5000);
-    schedulerService.stop();
-    Thread.sleep(1000);
 
     assertNotNull(impl.scheduled);
     assertNotNull(impl.actual);
     Duration delta = Duration.between(impl.scheduled, impl.actual).abs();
     assertTrue(delta.toMillis() < 1000);
+
+    var workflows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("withSteps"));
+    assertTrue(workflows.size() <= 2);
+
+    var steps = DBOS.listWorkflowSteps(workflows.get(0).workflowId());
+    assertEquals(2, steps.size());
   }
 
   @Test
@@ -139,24 +102,5 @@ class SchedulerServiceTest {
             IllegalArgumentException.class,
             () -> DBOS.registerWorkflows(InvalidCron.class, new InvalidCronImpl()));
     assertEquals("Cron expression contains 5 parts but we expect one of [6]", e.getMessage());
-  }
-
-  @Test
-  public void stepsTest() throws Exception {
-
-    var impl = new SkedServiceImpl();
-    DBOS.registerWorkflows(SkedService.class, impl);
-    DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService();
-
-    Thread.sleep(5000);
-    schedulerService.stop();
-    Thread.sleep(1000);
-
-    var workflows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("withSteps"));
-    assertTrue(workflows.size() <= 2);
-
-    var steps = DBOS.listWorkflowSteps(workflows.get(0).workflowId());
-    assertEquals(2, steps.size());
   }
 }
