@@ -2,7 +2,7 @@ package dev.dbos.transact;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.DBOSExecutor.ExecuteWorkflowOptions;
+import dev.dbos.transact.execution.ExecuteWorkflowOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;

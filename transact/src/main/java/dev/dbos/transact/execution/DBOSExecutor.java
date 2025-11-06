@@ -862,33 +862,6 @@ public class DBOSExecutor implements AutoCloseable {
     return executeWorkflow(workflow, inputs, options, null, null);
   }
 
-  public static record ExecuteWorkflowOptions(
-      String workflowId,
-      Duration timeout,
-      Instant deadline,
-      String queueName,
-      String deduplicationId,
-      Integer priority) {
-
-    public ExecuteWorkflowOptions {
-      if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
-        throw new IllegalArgumentException("workflowId must not be empty");
-      }
-
-      if (timeout != null && timeout.isNegative()) {
-        throw new IllegalStateException("negative timeout");
-      }
-    }
-
-    public ExecuteWorkflowOptions(String workflowId, Duration timeout, Instant deadline) {
-      this(workflowId, timeout, deadline, null, null, null);
-    }
-
-    public long getTimeoutMillis() {
-      return Objects.requireNonNullElse(timeout, Duration.ZERO).toMillis();
-    }
-  }
-
   public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
       RegisteredWorkflow workflow,
       Object[] args,
@@ -896,7 +869,7 @@ public class DBOSExecutor implements AutoCloseable {
       WorkflowInfo parent,
       CompletableFuture<String> latch) {
 
-    if (options.queueName != null) {
+    if (options.queueName() != null) {
       return enqueueWorkflow(
           workflow.name(),
           workflow.className(),
@@ -952,7 +925,7 @@ public class DBOSExecutor implements AutoCloseable {
       throw e;
     } finally {
       if (latch != null) {
-        latch.complete(options.workflowId);
+        latch.complete(options.workflowId());
       }
     }
 
@@ -962,11 +935,11 @@ public class DBOSExecutor implements AutoCloseable {
           try {
             logger.debug(
                 "executeWorkflow task {} {}",
-                Objects.requireNonNullElse(options.timeout, Duration.ZERO).toMillis(),
-                Objects.requireNonNullElse(options.deadline, Instant.EPOCH).toEpochMilli());
+                (Objects.requireNonNullElse(options.timeout(), Duration.ZERO).toMillis()),
+                Objects.requireNonNullElse(options.deadline(), Instant.EPOCH).toEpochMilli());
 
             DBOSContextHolder.set(
-                new DBOSContext(workflowId, parent, options.timeout, options.deadline));
+                new DBOSContext(workflowId, parent, options.timeout(), options.deadline()));
             T result = workflow.invoke(args);
             postInvokeWorkflowResult(systemDatabase, workflowId, result);
             return result;

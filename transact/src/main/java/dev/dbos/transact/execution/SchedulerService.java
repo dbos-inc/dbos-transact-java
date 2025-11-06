@@ -1,7 +1,6 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.execution.DBOSExecutor.ExecuteWorkflowOptions;
 import dev.dbos.transact.workflow.Scheduled;
 
 import java.time.Duration;
