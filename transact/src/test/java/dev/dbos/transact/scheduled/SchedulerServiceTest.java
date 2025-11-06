@@ -2,6 +2,7 @@ package dev.dbos.transact.scheduled;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
@@ -79,9 +80,14 @@ class SchedulerServiceTest {
 
     var workflows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("withSteps"));
     assertTrue(workflows.size() <= 2);
+    assertEquals(Constants.DBOS_SCHEDULER_QUEUE, workflows.get(0).queueName());
 
     var steps = DBOS.listWorkflowSteps(workflows.get(0).workflowId());
     assertEquals(2, steps.size());
+
+    var q2workflows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("everyThird"));
+    assertTrue(q2workflows.size() >= 1);
+    assertEquals("q2", q2workflows.get(0).queueName());
   }
 
   @Test
