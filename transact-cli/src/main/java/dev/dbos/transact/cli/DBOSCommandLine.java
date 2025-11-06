@@ -1,9 +1,19 @@
 package dev.dbos.transact.cli;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.json.JSONUtil.JsonRuntimeException;
+import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 
+import java.time.OffsetDateTime;
 import java.util.Objects;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.IVersionProvider;
@@ -23,9 +33,21 @@ import picocli.CommandLine.Parameters;
     versionProvider = DBOSCommandLine.class)
 public class DBOSCommandLine implements Runnable, IVersionProvider {
 
+  static final Logger logger = LoggerFactory.getLogger(DBOSCommandLine.class);
+
   public static void main(String[] args) {
     var exitCode = new CommandLine(new DBOSCommandLine()).execute(args);
     System.exit(exitCode);
+  }
+
+  public static String prettyPrint(Object object) {
+    var mapper = new ObjectMapper();
+    var writer = mapper.writerWithDefaultPrettyPrinter();
+    try {
+      return writer.writeValueAsString(Objects.requireNonNull(object));
+    } catch (JsonProcessingException e) {
+      throw new JsonRuntimeException(e);
+    }
   }
 
   @Override
@@ -44,21 +66,35 @@ public class DBOSCommandLine implements Runnable, IVersionProvider {
 
   public static class DatabaseOptions {
     @Option(
-        names = {"-s", "--sys-db-url"},
-        description = "DBOS system database URL")
-    String sysDbUrl;
+        names = {"-D", "--db-url"},
+        description = "Your DBOS system database URL (defaults to DBOS_SYSTEM_JDBC_URL env var)")
+    String url;
 
     @Option(
-        names = {"-u", "--user"},
-        description = "DBOS system database URL")
-    String sysDbUser;
+        names = {"-U", "--db-user"},
+        description = "user name for your DBOS system database (defaults to PGUSER env var)")
+    String user;
 
     @Option(
-        names = {"-p", "--password"},
-        description = "Passphrase",
+        names = {"-P", "--db-password"},
+        description = "password for your DBOS system database (defaults to PGPASSWORD env var)",
         arity = "0..1",
         interactive = true)
-    String sysDbPassword;
+    String password;
+
+    public DBOSClient createClient() {
+      var url =
+          Objects.requireNonNullElseGet(
+              this.url, () -> System.getenv(Constants.SYSTEM_JDBC_URL_ENV_VAR));
+      var user =
+          Objects.requireNonNullElseGet(
+              this.user, () -> System.getenv(Constants.POSTGRES_USER_ENV_VAR));
+      var password =
+          Objects.requireNonNullElseGet(
+              this.password, () -> System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR));
+
+      return new DBOSClient(url, user, password);
+    }
   }
 }
 
@@ -95,8 +131,7 @@ class ResetCommand implements Runnable {
   @Override
   public void run() {
     System.out.println(
-        "ResetCommand.run %s %s %s"
-            .formatted(dbOptions.sysDbUrl, dbOptions.sysDbUser, dbOptions.sysDbPassword));
+        "ResetCommand.run %s %s %s".formatted(dbOptions.url, dbOptions.user, dbOptions.password));
   }
 }
 
@@ -109,7 +144,6 @@ class ResetCommand implements Runnable {
       WorfklowCancelCommand.class,
       WorfklowResumeCommand.class,
       WorfklowForkCommand.class,
-      WorfklowQueueCommand.class
     })
 class WorfklowCommand implements Runnable {
 
@@ -121,21 +155,109 @@ class WorfklowCommand implements Runnable {
   }
 }
 
-@Command(name = "list")
+@Command(name = "list", description = "List workflows for your application")
 class WorfklowListCommand implements Runnable {
 
-  @Parameters(index = "0")
-  String workflowId;
+  @Option(
+      names = {"-s", "--start-time"},
+      description = "Retrieve workflows starting after this timestamp (ISO 8601 format)")
+  String startTime;
+
+  @Option(
+      names = {"-e", "--end-time"},
+      description = "Retrieve workflows starting befor this timestamp (ISO 8601 format)")
+  String endTime;
+
+  @Option(
+      names = {"-S", "--status"},
+      description =
+          "Retrieve workflows with this status (PENDING, SUCCESS, ERROR, ENQUEUED, CANCELLED, or MAX_RECOVERY_ATTEMPTS_EXCEEDED)")
+  String status;
+
+  @Option(
+      names = {"-n", "--name"},
+      description = "Retrieve workflows with this name")
+  String name;
+
+  @Option(
+      names = {"-v", "--app-version"},
+      description = "Retrieve workflows with this application version")
+  String appVersion;
+
+  @Option(
+      names = {"-q", "--queue"},
+      description = "Retrieve workflows on this queue")
+  String queue;
+
+  // @Option(
+  //     names = {"-u", "--user"},
+  //     description = "Retrieve workflows run by this user")
+  // String user;
+
+  @Option(
+      names = {"-d", "--sort-desc"},
+      description = "Sort the results in descending order (older first)")
+  boolean sortDescending;
+
+  @Option(
+      names = {"-l", "--limit"},
+      description = "Limit the results returned",
+      defaultValue = "10")
+  int limit;
+
+  @Option(
+      names = {"-o", "--offset"},
+      description = "Offset for pagination",
+      defaultValue = "0")
+  int offset;
+
+  @Option(
+      names = {"-Q", "--queues-only"},
+      description = "Retrieve only queued workflows")
+  boolean queuesOnly;
 
   @Mixin DBOSCommandLine.DatabaseOptions dbOptions;
 
   @Override
   public void run() {
-    System.out.println("WorfklowListCommand.run");
+    var input = new ListWorkflowsInput();
+    input =
+        input
+            .withLimit(limit)
+            .withOffset(offset)
+            .withSortDesc(sortDescending)
+            .withQueuesOnly(queuesOnly)
+            .withLoadInput(false)
+            .withLoadOutput(false);
+    if (status != null) {
+      input = input.withAddedStatus(status);
+    }
+    if (name != null) {
+      input = input.withWorkflowName(name);
+    }
+    if (appVersion != null) {
+      input = input.withApplicationVersion(appVersion);
+    }
+    if (queue != null) {
+      input = input.withQueueName(queue);
+    }
+    if (this.startTime != null) {
+      var startTime = OffsetDateTime.parse(this.startTime);
+      input = input.withStartTime(startTime);
+    }
+    if (this.endTime != null) {
+      var endTime = OffsetDateTime.parse(this.endTime);
+      input = input.withEndTime(endTime);
+    }
+
+    var client = dbOptions.createClient();
+    var workflows = client.listWorkflows(input);
+    var json = DBOSCommandLine.prettyPrint(workflows);
+    System.out.println(json);
   }
 }
 
-@Command(name = "get")
+@Command(name = "get", description = "Retrieve the status of a workflow")
 class WorfklowGetCommand implements Runnable {
 
   @Parameters(index = "0")
@@ -145,11 +267,24 @@ class WorfklowGetCommand implements Runnable {
 
   @Override
   public void run() {
-    System.out.println("WorfklowGetCommand.run");
+    Objects.requireNonNull(workflowId, "workflowId parameter cannot be null");
+    var input =
+        new ListWorkflowsInput()
+            .withAddedWorkflowId(workflowId)
+            .withLoadInput(false)
+            .withLoadOutput(false);
+    var client = dbOptions.createClient();
+    var workflows = client.listWorkflows(input);
+    if (workflows.size() == 0) {
+      System.err.println("Failed to retrieve workflow %s".formatted(workflowId));
+    } else {
+      var json = DBOSCommandLine.prettyPrint(workflows.get(0));
+      System.out.println(json);
+    }
   }
 }
 
-@Command(name = "steps")
+@Command(name = "steps", description = "List the steps of a workflow")
 class WorfklowStepsCommand implements Runnable {
 
   @Parameters(index = "0")
@@ -159,11 +294,18 @@ class WorfklowStepsCommand implements Runnable {
 
   @Override
   public void run() {
-    System.out.println("WorfklowStepsCommand.run");
+    var client = dbOptions.createClient();
+    var steps =
+        client.listWorkflowSteps(
+            Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
+    var json = DBOSCommandLine.prettyPrint(steps);
+    System.out.println(json);
   }
 }
 
-@Command(name = "cancel")
+@Command(
+    name = "cancel",
+    description = "Cancel a workflow so it is no longer automatically retried or restarted")
 class WorfklowCancelCommand implements Runnable {
 
   @Parameters(index = "0")
@@ -173,11 +315,14 @@ class WorfklowCancelCommand implements Runnable {
 
   @Override
   public void run() {
-    System.out.println("WorfklowCancelCommand.run");
+    var client = dbOptions.createClient();
+    client.cancelWorkflow(
+        Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
+    DBOSCommandLine.logger.info("successfully cancelled workflow {}", workflowId);
   }
 }
 
-@Command(name = "resume")
+@Command(name = "resume", description = "Resume a workflow that has been cancelled")
 class WorfklowResumeCommand implements Runnable {
 
   @Parameters(index = "0")
@@ -187,28 +332,33 @@ class WorfklowResumeCommand implements Runnable {
 
   @Override
   public void run() {
-    System.out.println("WorfklowResumeCommand.run");
+    var client = dbOptions.createClient();
+    var handle =
+        client.resumeWorkflow(
+            Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
+    var json = DBOSCommandLine.prettyPrint(handle.getStatus());
+    System.out.println(json);
   }
 }
 
-@Command(name = "fork")
+@Command(name = "fork", description = "Fork a workflow from the beginning or from a specific step")
 class WorfklowForkCommand implements Runnable {
 
-  @Parameters(index = "0")
+  @Parameters(index = "0", description = "Workflow ID to fork")
   String workflowId;
 
   @Option(
       names = {"-f", "--forked-workflow-id"},
-      description = "Workflow ID for the forked workflow")
+      description = "Custom workflow ID for the forked workflow")
   String forkedWorkflowId;
 
   @Option(
       names = {"-v", "--application-version"},
-      description = "application version for the forked workflow")
+      description = "Application version for the forked workflow")
   String appVersion;
 
   @Option(
-      names = {"-S", "--step"},
+      names = {"-s", "--step"},
       description = "Restart from this step [default: 1]",
       defaultValue = "1")
   Integer step;
@@ -217,28 +367,17 @@ class WorfklowForkCommand implements Runnable {
 
   @Override
   public void run() {
-    System.out.println("WorfklowForkCommand.run");
-  }
-}
-
-@Command(
-    name = "queue",
-    subcommands = {WorfklowQueueListCommand.class})
-class WorfklowQueueCommand implements Runnable {
-
-  @Override
-  public void run() {
-    System.out.println("WorfklowQueueCommand.run");
-  }
-}
-
-@Command(name = "list")
-class WorfklowQueueListCommand implements Runnable {
-
-  @Mixin DBOSCommandLine.DatabaseOptions dbOptions;
-
-  @Override
-  public void run() {
-    System.out.println("WorfklowQueueListCommand.run");
+    int step = this.step == null ? 1 : this.step;
+    var client = dbOptions.createClient();
+    var options = new ForkOptions();
+    if (forkedWorkflowId != null) {
+      options = options.withForkedWorkflowId(forkedWorkflowId);
+    }
+    if (appVersion != null) {
+      options = options.withApplicationVersion(appVersion);
+    }
+    var handle = client.forkWorkflow(forkedWorkflowId, step, options);
+    var json = DBOSCommandLine.prettyPrint(handle.getStatus());
+    System.out.println(json);
   }
 }
