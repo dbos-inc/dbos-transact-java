@@ -868,7 +868,7 @@ public class DBOSExecutor implements AutoCloseable {
     return executeWorkflow(workflow, inputs, options, null, null);
   }
 
-  public record ExecuteWorkflowOptions(
+  public static record ExecuteWorkflowOptions(
       String workflowId,
       Duration timeout,
       Instant deadline,

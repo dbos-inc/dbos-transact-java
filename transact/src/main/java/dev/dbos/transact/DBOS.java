@@ -644,6 +644,19 @@ public class DBOS {
   }
 
   /**
+   * Execute a workflow based on registration and arguments.
+   * This is expected to be used by generic callers, not app code.
+   * @param regWorkflow Registration of the workflow.  @see getRegisteredWorkflows
+   * @param args Workflow function arguments
+   * @param options Execution options, such as ID, queue, and timeout/deadline
+   * @return WorkflowHandle to the executed workflow
+   */
+  public static WorkflowHandle<?, ?> executeWorkflow(
+      RegisteredWorkflow regWorkflow, Object[] args, DBOSExecutor.ExecuteWorkflowOptions options) {
+    return executor("executeWorkflow").executeWorkflow(regWorkflow, args, options, null, null);
+  }
+
+  /**
    * Get a system database record stored by an external service A unique value is stored per
    * combination of service, workflowName, and key
    *

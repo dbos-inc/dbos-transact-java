@@ -127,7 +127,7 @@ public class SchedulerService {
                 var options =
                     new ExecuteWorkflowOptions(
                         workflowId, null, null, schedulerQueueName, null, null);
-                dbosExecutor.executeWorkflow(wf, args, options, null, null);
+                DBOS.executeWorkflow(wf, args, options);
               } catch (Exception e) {
                 logger.error("Scheduled task exception {}", wf.fullyQualifiedName(), e);
               }
