@@ -95,7 +95,7 @@ public class DBOSExecutor implements AutoCloseable {
       this.workflowMap = Collections.unmodifiableMap(workflowMap);
       this.instanceMap = Collections.unmodifiableMap(instanceMap);
       this.queues = Collections.unmodifiableList(queues);
-      this.listeners = Collections.unmodifiableSet(listenerSet);
+      this.listeners = listenerSet;
 
       this.executorId = System.getenv("DBOS__VMID");
       if (this.executorId == null || this.executorId.isEmpty()) {
