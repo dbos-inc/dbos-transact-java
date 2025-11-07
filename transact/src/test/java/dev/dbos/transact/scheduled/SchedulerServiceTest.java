@@ -59,7 +59,7 @@ class SchedulerServiceTest {
 
     // Run all sched WFs for 5 seconds(ish)
     Thread.sleep(5000);
-    schedulerService.stop();
+    schedulerService.dbosShutDown();
     Thread.sleep(1000);
 
     // All checks for all WFs
