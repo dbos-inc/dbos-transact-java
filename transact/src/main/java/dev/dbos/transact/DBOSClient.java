@@ -286,6 +286,7 @@ public class DBOSClient implements AutoCloseable {
             options.workflowName(), "EnqueueOptions workflowName must not be null"),
         Objects.requireNonNull(options.className(), "EnqueueOptions className must not be null"),
         Objects.requireNonNullElse(options.instanceName(), ""),
+        null,
         args,
         new ExecuteWorkflowOptions(
             Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString()),
