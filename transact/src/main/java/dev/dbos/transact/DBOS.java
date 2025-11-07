@@ -96,7 +96,8 @@ public class DBOS {
 
     void registerLifecycleListener(DBOSLifecycleListener l) {
       if (dbosExecutor.get() != null) {
-        throw new IllegalStateException("Cannot register lifecycle listener after DBOS is launched");
+        throw new IllegalStateException(
+            "Cannot register lifecycle listener after DBOS is launched");
       }
 
       lifecycleRegistry.add(l);
@@ -233,6 +234,7 @@ public class DBOS {
 
   /**
    * Register a lifecycle listener that receives callbacks when DBOS is launched or shut down
+   *
    * @param listener
    */
   public static void registerLifecycleListener(DBOSLifecycleListener listener) {
