@@ -22,6 +22,7 @@ import dev.dbos.transact.workflow.*;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -171,7 +172,7 @@ public class DBOS {
         if (dbosExecutor.compareAndSet(null, executor)) {
           executor.start(
               this,
-              Set.copyOf(this.lifecycleRegistry),
+              new HashSet<DBOSLifecycleListener>(this.lifecycleRegistry),
               workflowRegistry.getWorkflowSnapshot(),
               workflowRegistry.getInstanceSnapshot(),
               queueRegistry.getSnapshot());
