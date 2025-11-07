@@ -362,9 +362,6 @@ public class NotificationsDAO {
             value = valueArray == null ? null : valueArray[0];
           }
         }
-      } catch (SQLException e) {
-        logger.error("Database error in getEvent initial check", e);
-        throw new RuntimeException("Failed to check event", e);
       }
 
       if (value == null) {
@@ -406,9 +403,6 @@ public class NotificationsDAO {
               value = valueArray == null ? null : valueArray[0];
             }
           }
-        } catch (SQLException e) {
-          logger.error("Database error in getEvent final check", e);
-          throw new RuntimeException("Failed to read event after notification", e);
         }
       }
 
