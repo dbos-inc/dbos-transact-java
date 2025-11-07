@@ -18,12 +18,7 @@ import java.util.Scanner;
 import java.util.concurrent.Callable;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.IVersionProvider;
@@ -42,8 +37,6 @@ import picocli.CommandLine.Parameters;
     },
     versionProvider = DBOSCommandLine.class)
 public class DBOSCommandLine implements Runnable, IVersionProvider {
-
-  static final Logger logger = LoggerFactory.getLogger(DBOSCommandLine.class);
 
   public static void main(String[] args) {
     var exitCode = new CommandLine(new DBOSCommandLine()).execute(args);
@@ -147,37 +140,111 @@ class PostgresCommand implements Runnable {
     System.out.println("MigrateCommand.run");
   }
 
+  static boolean checkDockerInstalled() throws Exception {
+    var result = CommandResult.execute("docker version --format json");
+    return result.exitCode() == 0;
+  }
+
+  static String inspectContainerStatus(String containerName) throws Exception {
+    var result = CommandResult.execute("docker inspect %s".formatted(containerName));
+    if (result.exitCode() == 0) {
+      var mapper = new ObjectMapper();
+      var root = mapper.readTree(result.stdout());
+      return root.get(0).get("State").get("Status").asText();
+    } else {
+      return null;
+    }
+  }
+
   @Command(name = "start", description = "Start a local Postgres database Docker container")
-  class StartCommand implements Runnable {
+  class StartCommand implements Callable<Integer> {
 
     @Override
-    public void run() {
-      if (checkDockerInstalled()) {
-        var mapper = new ObjectMapper();
-        ObjectNode poolConfig = mapper.createObjectNode();
-        poolConfig.put("host", "localhost");
-        poolConfig.put("port", 5432);
-        poolConfig.put("pssword", Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos"));
-        poolConfig.put("user", "postgres");
-        poolConfig.put("database", "postgres");
-        poolConfig.put("connect_timeout", "2");
-
-      } else {
-        DBOSCommandLine.logger.warn("Docker not installed locally");
+    public Integer call() throws Exception {
+      if (!checkDockerInstalled()) {
+        System.out.println("Docker not installed locally");
+        return 1;
       }
+
+      var containerName = "dbos-db";
+      var imageName = "pgvector/pgvector:pg16";
+      var port = 5432;
+      var password = Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos");
+      startDockerPostgres(containerName, imageName, password, port);
+
+      var msg =
+          "Postgres available at postgresql://postgres:%s@localhost:%d".formatted(password, port);
+      System.out.println(msg);
+      return 0;
     }
 
-    static boolean startDockerPostgres(JsonNode poolConfig) {
-      return false;
+    static void startDockerPostgres(
+        String containerName, String imageName, String password, int port) throws Exception {
+      var pgData = "/var/lib/postgresql/data";
 
-    } 
+      System.out.println("Starting a Postgres Docker container...");
 
-    static boolean checkDockerInstalled() {
       try {
-        var result = CommandResult.execute("docker version --format json");
-        return result.exitCode() == 0;
+        var status = inspectContainerStatus(containerName);
+        if (status.equals("running")) {
+          System.out.println("Container %s is already running".formatted(containerName));
+          return;
+        }
+        if (status.equals("exited")) {
+          CommandResult.checkExecute("docker start %s".formatted(containerName));
+          System.out.println(
+              "Container %s was stopped and has been restarted".formatted(containerName));
+          return;
+        }
       } catch (Exception e) {
-        return false;
+        // ignore exception, proceed with creation
+      }
+
+      var queryImagesResult = CommandResult.execute("docker images -q %s".formatted(imageName));
+      if (queryImagesResult.stdout().trim().isEmpty()) {
+        System.out.println("Pulling docker image %s".formatted(imageName));
+        CommandResult.checkExecute("docker pull %s".formatted(imageName));
+      }
+
+      var runResult =
+          CommandResult.checkExecute(
+              "docker run -d",
+              "--name %s".formatted(containerName),
+              "-e POSTGRES_PASSWORD=%s".formatted(password),
+              "-e PGDATA=%s".formatted(pgData),
+              "-p %d:5432".formatted(port),
+              "-v %1$s:%1$s".formatted(pgData),
+              "--rm",
+              imageName);
+
+      System.out.println("created container %s".formatted(runResult.trim()));
+
+      var url = "jdbc:postgresql://localhost:%d/postgres".formatted(port);
+      var user = "postgres";
+      for (var i = 0; i < 30; i++) {
+        if (i % 5 == 0) {
+          System.out.println("Waiting for Postgres Docker container to start...");
+        }
+        var result = checkConnectivity(url, user, password);
+        if (result == null) {
+          return;
+        }
+        Thread.sleep(1000);
+      }
+
+      var msg =
+          "Failed to start Docker container: Container %s did not start in time."
+              .formatted(containerName);
+      throw new RuntimeException(msg);
+    }
+
+    static SQLException checkConnectivity(String url, String user, String password) {
+      try (var conn = DriverManager.getConnection(url, user, password);
+          var stmt = conn.createStatement()) {
+        stmt.execute("SELECT 1");
+        return null;
+      } catch (SQLException e) {
+        return e;
       }
     }
   }
@@ -186,39 +253,22 @@ class PostgresCommand implements Runnable {
   class StopCommand implements Callable<Integer> {
 
     @Override
-    public Integer call() {
+    public Integer call() throws Exception {
       var containerName = "dbos-db";
 
-      try {
-        var result = CommandResult.execute("docker inspect %s".formatted(containerName));
-        if (result.exitCode() == 0) {
-
-          var mapper = new ObjectMapper();
-          var root = mapper.readTree(result.stdout());
-          var status = root.get(0).get("State").get("Status").asText();
-          if (status.equals("running")) {
-            result = CommandResult.execute("docker stop %s".formatted(containerName));
-            if (result.exitCode() == 0) {
-              System.out.println(
-                  "Successfully stopped Docker Postgres container %s".formatted(containerName));
-            } else {
-              System.err.println(
-                  "Stopping Docker Postgres container %s failed: %s"
-                      .formatted(containerName, result.stderr()));
-            }
-          } else {
-            System.out.println("Container %s exists but is not running".formatted(containerName));
-          }
-        } else {
-          System.out.println("Container %s does not exist".formatted(containerName));
-        }
-        return 0;
-      } catch (Exception e) {
-        System.err.println(
-            "Failed to stop Docker Postgres container %s: %s"
-                .formatted(containerName, e.getMessage()));
-        return 1;
+      System.out.println("Stopping Docker Postgres container %s".formatted(containerName));
+      var status = inspectContainerStatus(containerName);
+      if (status == null) {
+        System.out.println("Container %s does not exist".formatted(containerName));
+      } else if (status.equals("running")) {
+        CommandResult.checkExecute("docker stop %s".formatted(containerName));
+        System.out.println(
+            "Successfully stopped Docker Postgres container %s".formatted(containerName));
+      } else {
+        System.out.println("Container %s exists but is not running".formatted(containerName));
       }
+
+      return 0;
     }
   }
 }
@@ -240,7 +290,7 @@ class ResetCommand implements Callable<Integer> {
       String prompt =
           "This command resets your DBOS system database, deleting metadata about past workflows and steps. Are you sure you want to proceed?";
       if (!DBOSCommandLine.confirm(prompt)) {
-        DBOSCommandLine.logger.info("System database reset cancelled");
+        System.out.println("System database reset cancelled");
         return 0;
       }
     }
@@ -252,12 +302,9 @@ class ResetCommand implements Callable<Integer> {
         var stmt = conn.createStatement()) {
       stmt.execute(dropDbSql);
       stmt.execute(createDbSql);
-      DBOSCommandLine.logger.info(
-          "System database has been reset successfully {}", pair.database());
+      System.out.println(
+          "System database has been reset successfully %s".formatted(pair.database()));
       return 0;
-    } catch (SQLException e) {
-      System.err.println("Database Error {}".formatted(e.getMessage()));
-      return 1;
     }
   }
 }
@@ -445,7 +492,7 @@ class WorfklowCommand implements Runnable {
       var client = dbOptions.createClient();
       client.cancelWorkflow(
           Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
-      DBOSCommandLine.logger.info("successfully cancelled workflow {}", workflowId);
+      System.out.println("successfully cancelled workflow %s".formatted(workflowId));
     }
   }
 
@@ -521,5 +568,16 @@ record CommandResult(int exitCode, String stdout, String stderr) {
     var stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
 
     return new CommandResult(exitCode, stdout, stderr);
+  }
+
+  public static String checkExecute(String... command) throws IOException, InterruptedException {
+    var process = new ProcessBuilder(command).start();
+    int exitCode = process.waitFor();
+    if (exitCode != 0) {
+      var stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+      throw new RuntimeException(stderr);
+    }
+    var stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    return stdout;
   }
 }
