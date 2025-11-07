@@ -23,7 +23,7 @@ import com.cronutils.parser.CronParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SchedulerService {
+public class SchedulerService implements DBOSLifecycleListener {
 
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
 
@@ -56,12 +56,12 @@ public class SchedulerService {
     cronParser.parse(skedTag.cron());
   }
 
-  public void start() {
+  public void dbosLaunched() {
     startScheduledWorkflows();
     stop = false;
   }
 
-  public void stop() {
+  public void dbosShutDown() {
     stop = true;
     List<Runnable> notRun = scheduler.shutdownNow();
     logger.debug("Shutting down scheduler service. Tasks not run {}", notRun.size());

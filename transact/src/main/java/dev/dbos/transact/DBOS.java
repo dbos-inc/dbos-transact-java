@@ -5,6 +5,7 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.DBOSLifecycleListener;
 import dev.dbos.transact.execution.ExecuteWorkflowOptions;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
@@ -24,6 +25,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
@@ -42,6 +45,7 @@ public class DBOS {
   public static class Instance {
     private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
     private final QueueRegistry queueRegistry = new QueueRegistry();
+    private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
 
     private DBOSConfig config;
 
@@ -90,6 +94,14 @@ public class DBOS {
       return name;
     }
 
+    void registerLifecycleListener(DBOSLifecycleListener l) {
+      if (dbosExecutor.get() != null) {
+        throw new IllegalStateException("Cannot register lifecycle listener after DBOS is launched");
+      }
+
+      lifecycleRegistry.add(l);
+    }
+
     void registerQueue(Queue queue) {
       if (dbosExecutor.get() != null) {
         throw new IllegalStateException("Cannot build a queue after DBOS is launched");
@@ -119,6 +131,7 @@ public class DBOS {
     void clearRegistry() {
       workflowRegistry.clear();
       queueRegistry.clear();
+      lifecycleRegistry.clear();
 
       registerInternals();
     }
@@ -157,6 +170,7 @@ public class DBOS {
         if (dbosExecutor.compareAndSet(null, executor)) {
           executor.start(
               this,
+              Set.copyOf(this.lifecycleRegistry),
               workflowRegistry.getWorkflowSnapshot(),
               workflowRegistry.getInstanceSnapshot(),
               queueRegistry.getSnapshot());
@@ -215,6 +229,14 @@ public class DBOS {
   public static Queue registerQueue(Queue queue) {
     ensureInstance().registerQueue(queue);
     return queue;
+  }
+
+  /**
+   * Register a lifecycle listener that receives callbacks when DBOS is launched or shut down
+   * @param listener
+   */
+  public static void registerLifecycleListener(DBOSLifecycleListener listener) {
+    ensureInstance().registerLifecycleListener(listener);
   }
 
   /**

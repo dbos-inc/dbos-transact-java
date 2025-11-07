@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -64,6 +65,7 @@ public class DBOSExecutor implements AutoCloseable {
   private String appVersion;
   private String executorId;
 
+  private Set<DBOSLifecycleListener> listeners;
   private Map<String, RegisteredWorkflow> workflowMap;
   private Map<String, RegisteredWorkflowInstance> instanceMap;
   private List<Queue> queues;
@@ -84,6 +86,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void start(
       DBOS.Instance dbos,
+      Set<DBOSLifecycleListener> listenerSet,
       Map<String, RegisteredWorkflow> workflowMap,
       Map<String, RegisteredWorkflowInstance> instanceMap,
       List<Queue> queues) {
@@ -92,6 +95,7 @@ public class DBOSExecutor implements AutoCloseable {
       this.workflowMap = Collections.unmodifiableMap(workflowMap);
       this.instanceMap = Collections.unmodifiableMap(instanceMap);
       this.queues = Collections.unmodifiableList(queues);
+      this.listeners = Collections.unmodifiableSet(listenerSet);
 
       this.executorId = System.getenv("DBOS__VMID");
       if (this.executorId == null || this.executorId.isEmpty()) {
@@ -129,7 +133,11 @@ public class DBOSExecutor implements AutoCloseable {
       queueService.start(queues);
 
       schedulerService = new SchedulerService(Constants.DBOS_SCHEDULER_QUEUE);
-      schedulerService.start();
+      listeners.add(schedulerService);
+
+      for (var listener : listeners) {
+        listener.dbosLaunched();
+      }
 
       recoveryService = new RecoveryService(this, systemDatabase);
       recoveryService.start();
@@ -177,8 +185,15 @@ public class DBOSExecutor implements AutoCloseable {
 
       recoveryService.stop();
       recoveryService = null;
-      schedulerService.stop();
-      schedulerService = null;
+
+      for (var listener : listeners) {
+        try {
+          listener.dbosShutDown();
+        } catch (Exception e) {
+          logger.warn("Exception from shutdown", e);
+        }
+      }
+
       queueService.stop();
       queueService = null;
       systemDatabase.stop();
