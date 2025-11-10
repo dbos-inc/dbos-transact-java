@@ -77,7 +77,9 @@ public class SchedulerService implements DBOSLifecycleListener {
     if (swf.ignoreMissed()) {
       now = ZonedDateTime.now();
     } else {
-      var extstate = DBOS.getExternalState("DBOS.SchedulerService", "wf", "lastTime");
+      var extstate =
+          DBOS.getExternalState(
+              "DBOS.SchedulerService", swf.workflow().fullyQualifiedName(), "lastTime");
       if (extstate.isPresent()) {
         now = ZonedDateTime.parse(extstate.get().value());
       } else {
@@ -91,7 +93,7 @@ public class SchedulerService implements DBOSLifecycleListener {
     var nes =
         new ExternalState(
             "DBOS.SchedulerService",
-            "wf",
+            swf.workflow().fullyQualifiedName(),
             "lastTime",
             lastTime.toString(),
             null,
@@ -171,18 +173,20 @@ public class SchedulerService implements DBOSLifecycleListener {
               }
 
               if (!stop) {
-                logger.debug("Scheduling the next execution {}", wf.fullyQualifiedName());
                 ZonedDateTime now =
                     swf.ignoreMissed()
                         ? ZonedDateTime.now(ZoneOffset.UTC)
                         : setLastTime(swf, scheduledTime);
+                logger.debug(
+                    "Scheduling the next execution {} {}", wf.fullyQualifiedName(), now.toString());
                 executionTime
                     .nextExecution(now)
                     .ifPresent(
                         nextTime -> {
                           logger.debug("Next execution time {}", nextTime);
                           long delayMs = Duration.between(now, nextTime).toMillis();
-                          scheduler.schedule(this, delayMs, TimeUnit.MILLISECONDS);
+                          scheduler.schedule(
+                              this, delayMs < 0 ? 0 : delayMs, TimeUnit.MILLISECONDS);
                         });
               }
             }

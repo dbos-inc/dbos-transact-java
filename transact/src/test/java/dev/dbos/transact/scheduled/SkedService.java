@@ -20,6 +20,10 @@ interface SkedService {
   void timed(Instant schedule, Instant actual);
 
   void withSteps(Instant schedule, Instant actual);
+
+  void everySecondIgnoreMissed(Instant schedule, Instant actual);
+
+  void everySecondDontIgnoreMissed(Instant schedule, Instant actual);
 }
 
 class SkedServiceImpl implements SkedService {
@@ -30,6 +34,9 @@ class SkedServiceImpl implements SkedService {
   public volatile int everyThirdCounter = 0;
   public volatile Instant scheduled;
   public volatile Instant actual;
+
+  public volatile int everySecondCounterIgnoreMissed = 0;
+  public volatile int everySecondCounterDontIgnoreMissed = 0;
 
   @Override
   @Workflow
@@ -64,5 +71,38 @@ class SkedServiceImpl implements SkedService {
     logger.info("Executing withSteps {} {}", scheduled, actual);
     DBOS.runStep(() -> {}, "stepOne");
     DBOS.runStep(() -> {}, "stepTwo");
+  }
+
+  @Override
+  @Workflow
+  @Scheduled(cron = "0/1 * * * * *", ignoreMissed = true)
+  public void everySecondIgnoreMissed(Instant scheduled, Instant actual) {
+    if (everySecondCounterIgnoreMissed == 0) {
+      try {
+        Thread.sleep(3000);
+      } catch (Exception e) {
+      }
+    }
+    logger.info(
+        "Executing everySecond ignore missed {} {} {}", everySecondCounter, scheduled, actual);
+    ++everySecondCounterIgnoreMissed;
+  }
+
+  @Override
+  @Workflow
+  @Scheduled(cron = "0/1 * * * * *", ignoreMissed = false)
+  public void everySecondDontIgnoreMissed(Instant scheduled, Instant actual) {
+    if (everySecondCounterDontIgnoreMissed == 0) {
+      try {
+        Thread.sleep(3000);
+      } catch (Exception e) {
+      }
+    }
+    logger.info(
+        "Executing everySecond do not ignore missed {} {} {}",
+        everySecondCounter,
+        scheduled,
+        actual);
+    ++everySecondCounterDontIgnoreMissed;
   }
 }
