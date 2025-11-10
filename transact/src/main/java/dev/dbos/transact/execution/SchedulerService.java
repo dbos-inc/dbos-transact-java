@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
 
 public class SchedulerService implements DBOSLifecycleListener {
 
-  private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
+  private ScheduledExecutorService scheduler;
 
   private static final Logger logger = LoggerFactory.getLogger(SchedulerService.class);
   private static final CronParser cronParser =
@@ -60,6 +60,7 @@ public class SchedulerService implements DBOSLifecycleListener {
   }
 
   public void dbosLaunched() {
+    scheduler = Executors.newScheduledThreadPool(4);
     startScheduledWorkflows();
     stop = false;
   }
@@ -68,6 +69,7 @@ public class SchedulerService implements DBOSLifecycleListener {
     stop = true;
     List<Runnable> notRun = scheduler.shutdownNow();
     logger.debug("Shutting down scheduler service. Tasks not run {}", notRun.size());
+    scheduler = null;
   }
 
   record ScheduledWorkflow(
@@ -76,7 +78,7 @@ public class SchedulerService implements DBOSLifecycleListener {
   private ZonedDateTime getNextTime(ScheduledWorkflow swf) {
     ZonedDateTime now = null;
     if (swf.ignoreMissed()) {
-      now = ZonedDateTime.now();
+      now = ZonedDateTime.now().withNano(0);
     } else {
       var extstate =
           DBOS.getExternalState(
@@ -84,7 +86,7 @@ public class SchedulerService implements DBOSLifecycleListener {
       if (extstate.isPresent()) {
         now = ZonedDateTime.parse(extstate.get().value());
       } else {
-        now = ZonedDateTime.now(ZoneOffset.UTC);
+        now = ZonedDateTime.now(ZoneOffset.UTC).withNano(0);
       }
     }
     return now;
@@ -181,7 +183,7 @@ public class SchedulerService implements DBOSLifecycleListener {
               if (!stop) {
                 ZonedDateTime now =
                     swf.ignoreMissed()
-                        ? ZonedDateTime.now(ZoneOffset.UTC)
+                        ? ZonedDateTime.now(ZoneOffset.UTC).withNano(0)
                         : setLastTime(swf, scheduledTime);
                 logger.debug(
                     "Scheduling the next execution {} {}", wf.fullyQualifiedName(), now.toString());
@@ -206,7 +208,8 @@ public class SchedulerService implements DBOSLifecycleListener {
           .ifPresent(
               nextTime -> {
                 task.curNow = nextTime;
-                long initialDelayMs = Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime).toMillis();
+                long initialDelayMs =
+                    Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime).toMillis();
                 scheduler.schedule(
                     task, initialDelayMs < 0 ? 0 : initialDelayMs, TimeUnit.MILLISECONDS);
               });

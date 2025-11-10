@@ -7,6 +7,7 @@ import dev.dbos.transact.workflow.Scheduled;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 import org.slf4j.Logger;
@@ -43,6 +44,7 @@ class SkedServiceImpl implements SkedService {
   @Scheduled(cron = "0/1 * * * * *")
   public void everySecond(Instant scheduled, Instant actual) {
     assertTrue(DBOS.inWorkflow());
+    assert scheduled.equals(scheduled.truncatedTo(ChronoUnit.SECONDS));
     logger.info("Executing everySecond {} {} {}", everySecondCounter, scheduled, actual);
     ++everySecondCounter;
   }

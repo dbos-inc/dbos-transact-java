@@ -60,6 +60,7 @@ class SchedulerServiceTest {
     // Run all sched WFs for 5 seconds(ish)
     Thread.sleep(5000);
     schedulerService.dbosShutDown();
+    var timeAsOfShutdown = System.currentTimeMillis();
     Thread.sleep(1000);
 
     // All checks for all WFs
@@ -69,12 +70,12 @@ class SchedulerServiceTest {
     assertTrue(count1 <= 6); // Flaky, have seen 6
 
     int count1im = impl.everySecondCounterIgnoreMissed;
-    System.out.println("Final count (1s ignore 3s missed): " + count1im);
+    System.out.println("Final count (1s ignore missed): " + count1im);
     assertTrue(count1im >= 3);
     assertTrue(count1im <= 6);
 
     int count1dim = impl.everySecondCounterDontIgnoreMissed;
-    System.out.println("Final count (1s do not ignore 3s missed): " + count1dim);
+    System.out.println("Final count (1s do not ignore missed): " + count1dim);
     assertTrue(count1dim >= 3);
     assertTrue(count1dim <= 6);
 
@@ -98,6 +99,22 @@ class SchedulerServiceTest {
     var q2workflows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("everyThird"));
     assertTrue(q2workflows.size() >= 1);
     assertEquals("q2", q2workflows.get(0).queueName());
+
+    // See about makeup work (ignore missed)
+    var timeToSleep = 5000 - (System.currentTimeMillis() - timeAsOfShutdown);
+    Thread.sleep(timeToSleep < 0 ? 0 : timeToSleep);
+    schedulerService.dbosLaunched();
+    Thread.sleep(2000);
+
+    int count1imb = impl.everySecondCounterIgnoreMissed;
+    System.out.println("Final count (1s ignore missed, after resume): " + count1imb);
+    assertTrue(count1imb >= 4);
+    assertTrue(count1imb <= 9);
+
+    int count1dimb = impl.everySecondCounterDontIgnoreMissed;
+    System.out.println("Final count (1s do not ignore missed, after resume): " + count1dimb);
+    assertTrue(count1dimb >= 10);
+    assertTrue(count1dimb <= 14);
   }
 
   @Test
