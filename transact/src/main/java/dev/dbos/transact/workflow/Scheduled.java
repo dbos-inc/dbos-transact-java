@@ -11,4 +11,6 @@ public @interface Scheduled {
   String cron();
 
   String queue() default "";
+
+  boolean ignoreMissed() default true;
 }
