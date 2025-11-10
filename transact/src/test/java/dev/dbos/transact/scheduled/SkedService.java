@@ -77,7 +77,7 @@ class SkedServiceImpl implements SkedService {
   @Workflow
   @Scheduled(cron = "0/1 * * * * *", ignoreMissed = true)
   public void everySecondIgnoreMissed(Instant scheduled, Instant actual) {
-    if (everySecondCounterIgnoreMissed == 0) {
+    if (everySecondCounterIgnoreMissed++ == 0) {
       try {
         Thread.sleep(3000);
       } catch (Exception e) {
@@ -85,14 +85,13 @@ class SkedServiceImpl implements SkedService {
     }
     logger.info(
         "Executing everySecond ignore missed {} {} {}", everySecondCounter, scheduled, actual);
-    ++everySecondCounterIgnoreMissed;
   }
 
   @Override
   @Workflow
   @Scheduled(cron = "0/1 * * * * *", ignoreMissed = false)
   public void everySecondDontIgnoreMissed(Instant scheduled, Instant actual) {
-    if (everySecondCounterDontIgnoreMissed == 0) {
+    if (everySecondCounterDontIgnoreMissed++ == 0) {
       try {
         Thread.sleep(3000);
       } catch (Exception e) {
@@ -103,6 +102,5 @@ class SkedServiceImpl implements SkedService {
         everySecondCounter,
         scheduled,
         actual);
-    ++everySecondCounterDontIgnoreMissed;
   }
 }

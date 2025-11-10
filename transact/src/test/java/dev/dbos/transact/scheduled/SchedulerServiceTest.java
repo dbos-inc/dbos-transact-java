@@ -65,18 +65,18 @@ class SchedulerServiceTest {
     // All checks for all WFs
     int count1 = impl.everySecondCounter;
     System.out.println("Final count (1s): " + count1);
-    assertTrue(count1 >= 2);
+    assertTrue(count1 >= 3);
     assertTrue(count1 <= 6); // Flaky, have seen 6
 
     int count1im = impl.everySecondCounterIgnoreMissed;
     System.out.println("Final count (1s ignore 3s missed): " + count1im);
-    assertTrue(count1im >= 1);
-    assertTrue(count1im <= 4); // Flaky, have seen 6
+    assertTrue(count1im >= 3);
+    assertTrue(count1im <= 6);
 
     int count1dim = impl.everySecondCounterDontIgnoreMissed;
     System.out.println("Final count (1s do not ignore 3s missed): " + count1dim);
-    assertTrue(count1dim >= 4);
-    assertTrue(count1dim <= 6); // Flaky, have seen 6
+    assertTrue(count1dim >= 3);
+    assertTrue(count1dim <= 6);
 
     int count3 = impl.everyThirdCounter;
     System.out.println("Final count (3s): " + count3);

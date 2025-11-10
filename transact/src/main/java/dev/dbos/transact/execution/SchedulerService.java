@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -99,7 +100,7 @@ public class SchedulerService implements DBOSLifecycleListener {
             null,
             BigInteger.valueOf(lastTime.toInstant().toEpochMilli()));
     var upstate = DBOS.upsertExternalState(nes);
-    return ZonedDateTime.parse(upstate.value());
+    return ZonedDateTime.parse(upstate.value()).plus(1, ChronoUnit.MILLIS);
   }
 
   private void startScheduledWorkflows() {
@@ -151,12 +152,17 @@ public class SchedulerService implements DBOSLifecycleListener {
 
       var wf = swf.workflow();
 
+      // Kick off the first run (but only scheduled at the next proper time)
+      ZonedDateTime cnow = getNextTime(swf);
+
       var task =
           new Runnable() {
+            ZonedDateTime curNow = cnow;
+
             @Override
             public void run() {
 
-              ZonedDateTime scheduledTime = getNextTime(swf);
+              ZonedDateTime scheduledTime = curNow;
               try {
                 Object[] args = new Object[2];
                 args[0] = scheduledTime.toInstant();
@@ -184,7 +190,10 @@ public class SchedulerService implements DBOSLifecycleListener {
                     .ifPresent(
                         nextTime -> {
                           logger.debug("Next execution time {}", nextTime);
-                          long delayMs = Duration.between(now, nextTime).toMillis();
+                          curNow = nextTime;
+                          long delayMs =
+                              Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime)
+                                  .toMillis();
                           scheduler.schedule(
                               this, delayMs < 0 ? 0 : delayMs, TimeUnit.MILLISECONDS);
                         });
@@ -192,13 +201,12 @@ public class SchedulerService implements DBOSLifecycleListener {
             }
           };
 
-      // Kick off the first run (but only scheduled at the next proper time)
-      ZonedDateTime cnow = getNextTime(swf);
       executionTime
-          .nextExecution(cnow)
+          .nextExecution(task.curNow)
           .ifPresent(
               nextTime -> {
-                long initialDelayMs = Duration.between(cnow, nextTime).toMillis();
+                task.curNow = nextTime;
+                long initialDelayMs = Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime).toMillis();
                 scheduler.schedule(
                     task, initialDelayMs < 0 ? 0 : initialDelayMs, TimeUnit.MILLISECONDS);
               });
