@@ -9,7 +9,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 
-@Command(name = "reset")
+@Command(name = "reset", description = "Reset the DBOS system database")
 public class ResetCommand implements Callable<Integer> {
 
   @Option(
