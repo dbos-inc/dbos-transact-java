@@ -1,6 +1,8 @@
 package dev.dbos.transact.cli;
 
+import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Objects;
@@ -27,7 +29,7 @@ public class PostgresCommand implements Runnable {
   }
 
   public static String inspectContainerStatus(String containerName) throws Exception {
-    var result = CommandResult.execute("docker inspect %s".formatted(containerName));
+    var result = CommandResult.execute("docker", "inspect", containerName);
     if (result.exitCode() == 0) {
       var mapper = new ObjectMapper();
       var root = mapper.readTree(result.stdout());
@@ -61,12 +63,15 @@ class StartCommand implements Callable<Integer> {
     var password = Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos");
     startDockerPostgres(out, containerName, imageName, password, port);
 
-    out.format("Postgres available at postgresql://postgres:%s@localhost:%d", password, port);
+    out.format(
+        "Postgres available at jdbc:postgresql://localhost:%d/postgres with user=postgres and password=%s\n",
+        port, password);
+    // postgresql://postgres:%s@localhost:%d\n", password, port);
     return 0;
   }
 
   static boolean checkDockerInstalled() throws Exception {
-    var result = CommandResult.execute("docker version --format json");
+    var result = CommandResult.execute("docker", "version", "--format", "json");
     return result.exitCode() == 0;
   }
 
@@ -80,42 +85,49 @@ class StartCommand implements Callable<Integer> {
     try {
       var status = PostgresCommand.inspectContainerStatus(containerName);
       if (status.equals("running")) {
-        out.format("Container %s is already running", containerName);
+        out.format("Container %s is already running\n", containerName);
         return;
       }
       if (status.equals("exited")) {
-        CommandResult.checkExecute("docker start %s".formatted(containerName));
-        out.format("Container %s was stopped and has been restarted", containerName);
+        CommandResult.checkExecute("docker", "start", containerName);
+        out.format("Container %s was stopped and has been restarted\n", containerName);
         return;
       }
     } catch (Exception e) {
       // ignore exception, proceed with creation
     }
 
-    var queryImagesResult = CommandResult.execute("docker images -q %s".formatted(imageName));
+    var queryImagesResult = CommandResult.execute("docker", "images -q", imageName);
     if (queryImagesResult.stdout().trim().isEmpty()) {
-      out.format("Pulling docker image %s", imageName);
-      CommandResult.checkExecute("docker pull", imageName);
+      out.format("Pulling docker image %s\n", imageName);
+      CommandResult.checkExecute("docker", "pull", imageName);
     }
 
     var runResult =
         CommandResult.checkExecute(
-            "docker run -d",
-            "--name %s".formatted(containerName),
-            "-e POSTGRES_PASSWORD=%s".formatted(password),
-            "-e PGDATA=%s".formatted(pgData),
-            "-p %d:5432".formatted(port),
-            "-v %1$s:%1$s".formatted(pgData),
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            containerName,
+            "-e",
+            "POSTGRES_PASSWORD=%s".formatted(password),
+            "-e",
+            "PGDATA=%s".formatted(pgData),
+            "-p",
+            "%d:5432".formatted(port),
+            "-v",
+            "%1$s:%1$s".formatted(pgData),
             "--rm",
             imageName);
 
-    out.format("created container %s", runResult.trim());
+    out.format("created container %s\n", runResult.trim());
 
     var url = "jdbc:postgresql://localhost:%d/postgres".formatted(port);
     var user = "postgres";
     for (var i = 0; i < 30; i++) {
       if (i % 5 == 0) {
-        out.format("Waiting for Postgres Docker container to start...");
+        out.println("Waiting for Postgres Docker container to start...");
       }
       var result = checkConnectivity(url, user, password);
       if (result == null) {
@@ -155,17 +167,40 @@ class StopCommand implements Callable<Integer> {
 
     var containerName = "dbos-db";
 
-    out.format("Stopping Docker Postgres container %s", containerName);
+    out.format("Stopping Docker Postgres container %s\n", containerName);
     var status = PostgresCommand.inspectContainerStatus(containerName);
     if (status == null) {
-      out.format("Container %s does not exist", containerName);
+      out.format("Container %s does not exist\n", containerName);
     } else if (status.equals("running")) {
-      CommandResult.checkExecute("docker stop %s", containerName);
-      out.format("Successfully stopped Docker Postgres container %s", containerName);
+      CommandResult.checkExecute("docker", "stop", containerName);
+      out.format("Successfully stopped Docker Postgres container %s\n", containerName);
     } else {
-      out.format("Container %s exists but is not running", containerName);
+      out.format("Container %s exists but is not running\n", containerName);
     }
 
     return 0;
+  }
+}
+
+record CommandResult(int exitCode, String stdout, String stderr) {
+  public static CommandResult execute(String... command) throws IOException, InterruptedException {
+    var process = new ProcessBuilder(command).start();
+    int exitCode = process.waitFor();
+
+    var stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    var stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+
+    return new CommandResult(exitCode, stdout, stderr);
+  }
+
+  public static String checkExecute(String... command) throws IOException, InterruptedException {
+    var process = new ProcessBuilder(command).start();
+    int exitCode = process.waitFor();
+    if (exitCode != 0) {
+      var stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+      throw new RuntimeException(stderr);
+    }
+    var stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    return stdout;
   }
 }

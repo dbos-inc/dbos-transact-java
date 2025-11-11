@@ -225,7 +225,7 @@ class CancelCommand implements Runnable {
     var client = dbOptions.createClient();
     client.cancelWorkflow(
         Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
-    out.format("successfully cancelled workflow %s\n", workflowId);
+    out.format("Successfully cancelled workflow %s\n", workflowId);
   }
 }
 

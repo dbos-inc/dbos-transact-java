@@ -46,7 +46,7 @@ public class ResetCommand implements Callable<Integer> {
         var stmt = conn.createStatement()) {
       stmt.execute(dropDbSql);
       stmt.execute(createDbSql);
-      out.format("System database %s has been reset successfully", pair.database());
+      out.format("System database %s has been reset successfully\n", pair.database());
       return 0;
     }
   }

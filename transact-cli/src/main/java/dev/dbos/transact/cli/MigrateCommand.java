@@ -31,9 +31,9 @@ public class MigrateCommand implements Callable<Integer> {
   @Override
   public Integer call() throws Exception {
     var out = spec.commandLine().getOut();
-    out.format("Starting DBOS migrations");
-    out.format("  System Database: %s", dbOptions.url);
-    out.format("  System Database User: %s", dbOptions.user);
+    out.println("Starting DBOS migrations");
+    out.format("  System Database: %s\n", dbOptions.url);
+    out.format("  System Database User: %s\n", dbOptions.user);
 
     MigrationManager.runMigrations(dbOptions.url, dbOptions.user, dbOptions.password);
     grantDBOSSchemaPermissions(out);
@@ -48,7 +48,7 @@ public class MigrateCommand implements Callable<Integer> {
     }
 
     out.format(
-        "Granting permissions for the %s schema to %s in database %s",
+        "Granting permissions for the %s schema to %s in database %s\n",
         schema, appRole, dbOptions.url);
 
     String[] queries = {
