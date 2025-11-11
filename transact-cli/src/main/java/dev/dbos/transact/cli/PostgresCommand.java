@@ -1,5 +1,6 @@
 package dev.dbos.transact.cli;
 
+import java.io.PrintWriter;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Objects;
@@ -8,6 +9,8 @@ import java.util.concurrent.Callable;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Spec;
 
 @Command(
     name = "postgres",
@@ -41,10 +44,14 @@ public class PostgresCommand implements Runnable {
     mixinStandardHelpOptions = true)
 class StartCommand implements Callable<Integer> {
 
+  @Spec CommandSpec spec;
+
   @Override
   public Integer call() throws Exception {
+    var out = spec.commandLine().getOut();
+
     if (!checkDockerInstalled()) {
-      System.out.println("Docker not installed locally");
+      out.println("Docker not installed locally");
       return 1;
     }
 
@@ -52,11 +59,9 @@ class StartCommand implements Callable<Integer> {
     var imageName = "pgvector/pgvector:pg16";
     var port = 5432;
     var password = Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos");
-    startDockerPostgres(containerName, imageName, password, port);
+    startDockerPostgres(out, containerName, imageName, password, port);
 
-    var msg =
-        "Postgres available at postgresql://postgres:%s@localhost:%d".formatted(password, port);
-    System.out.println(msg);
+    out.format("Postgres available at postgresql://postgres:%s@localhost:%d", password, port);
     return 0;
   }
 
@@ -65,22 +70,22 @@ class StartCommand implements Callable<Integer> {
     return result.exitCode() == 0;
   }
 
-  static void startDockerPostgres(String containerName, String imageName, String password, int port)
+  static void startDockerPostgres(
+      PrintWriter out, String containerName, String imageName, String password, int port)
       throws Exception {
     var pgData = "/var/lib/postgresql/data";
 
-    System.out.println("Starting a Postgres Docker container...");
+    out.println("Starting a Postgres Docker container...");
 
     try {
       var status = PostgresCommand.inspectContainerStatus(containerName);
       if (status.equals("running")) {
-        System.out.println("Container %s is already running".formatted(containerName));
+        out.format("Container %s is already running", containerName);
         return;
       }
       if (status.equals("exited")) {
         CommandResult.checkExecute("docker start %s".formatted(containerName));
-        System.out.println(
-            "Container %s was stopped and has been restarted".formatted(containerName));
+        out.format("Container %s was stopped and has been restarted", containerName);
         return;
       }
     } catch (Exception e) {
@@ -89,8 +94,8 @@ class StartCommand implements Callable<Integer> {
 
     var queryImagesResult = CommandResult.execute("docker images -q %s".formatted(imageName));
     if (queryImagesResult.stdout().trim().isEmpty()) {
-      System.out.println("Pulling docker image %s".formatted(imageName));
-      CommandResult.checkExecute("docker pull %s".formatted(imageName));
+      out.format("Pulling docker image %s", imageName);
+      CommandResult.checkExecute("docker pull", imageName);
     }
 
     var runResult =
@@ -104,13 +109,13 @@ class StartCommand implements Callable<Integer> {
             "--rm",
             imageName);
 
-    System.out.println("created container %s".formatted(runResult.trim()));
+    out.format("created container %s", runResult.trim());
 
     var url = "jdbc:postgresql://localhost:%d/postgres".formatted(port);
     var user = "postgres";
     for (var i = 0; i < 30; i++) {
       if (i % 5 == 0) {
-        System.out.println("Waiting for Postgres Docker container to start...");
+        out.format("Waiting for Postgres Docker container to start...");
       }
       var result = checkConnectivity(url, user, password);
       if (result == null) {
@@ -142,20 +147,23 @@ class StartCommand implements Callable<Integer> {
     mixinStandardHelpOptions = true)
 class StopCommand implements Callable<Integer> {
 
+  @Spec CommandSpec spec;
+
   @Override
   public Integer call() throws Exception {
+    var out = spec.commandLine().getOut();
+
     var containerName = "dbos-db";
 
-    System.out.println("Stopping Docker Postgres container %s".formatted(containerName));
+    out.format("Stopping Docker Postgres container %s", containerName);
     var status = PostgresCommand.inspectContainerStatus(containerName);
     if (status == null) {
-      System.out.println("Container %s does not exist".formatted(containerName));
+      out.format("Container %s does not exist", containerName);
     } else if (status.equals("running")) {
-      CommandResult.checkExecute("docker stop %s".formatted(containerName));
-      System.out.println(
-          "Successfully stopped Docker Postgres container %s".formatted(containerName));
+      CommandResult.checkExecute("docker stop %s", containerName);
+      out.format("Successfully stopped Docker Postgres container %s", containerName);
     } else {
-      System.out.println("Container %s exists but is not running".formatted(containerName));
+      out.format("Container %s exists but is not running", containerName);
     }
 
     return 0;

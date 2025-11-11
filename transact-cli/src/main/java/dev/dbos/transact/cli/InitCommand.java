@@ -1,6 +1,8 @@
 package dev.dbos.transact.cli;
 
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Spec;
 
 @Command(
     name = "init",
@@ -8,8 +10,11 @@ import picocli.CommandLine.Command;
     mixinStandardHelpOptions = true)
 public class InitCommand implements Runnable {
 
+  @Spec CommandSpec spec;
+
   @Override
   public void run() {
-    System.out.println("InitCommand.run");
+    var out = spec.commandLine().getOut();
+    out.println("InitCommand.run");
   }
 }

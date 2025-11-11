@@ -9,8 +9,10 @@ import java.util.Objects;
 import picocli.CommandLine;
 import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
+import picocli.CommandLine.Spec;
 
 @Command(
     name = "workflow",
@@ -101,8 +103,12 @@ class ListCommand implements Runnable {
   @ArgGroup(heading = "System Database Options:%n")
   DatabaseOptions dbOptions;
 
+  @Spec CommandSpec spec;
+
   @Override
   public void run() {
+    var out = spec.commandLine().getOut();
+
     var input = new ListWorkflowsInput();
     input =
         input
@@ -136,7 +142,7 @@ class ListCommand implements Runnable {
     var client = dbOptions.createClient();
     var workflows = client.listWorkflows(input);
     var json = DBOSCommand.prettyPrint(workflows);
-    System.out.println(json);
+    out.println(json);
   }
 }
 
@@ -152,8 +158,12 @@ class GetCommand implements Runnable {
   @ArgGroup(heading = "System Database Options:%n")
   DatabaseOptions dbOptions;
 
+  @Spec CommandSpec spec;
+
   @Override
   public void run() {
+    var out = spec.commandLine().getOut();
+
     Objects.requireNonNull(workflowId, "workflowId parameter cannot be null");
     var input =
         new ListWorkflowsInput()
@@ -166,7 +176,7 @@ class GetCommand implements Runnable {
       System.err.println("Failed to retrieve workflow %s".formatted(workflowId));
     } else {
       var json = DBOSCommand.prettyPrint(workflows.get(0));
-      System.out.println(json);
+      out.println(json);
     }
   }
 }
@@ -183,14 +193,18 @@ class StepsCommand implements Runnable {
   @ArgGroup(heading = "System Database Options:%n")
   DatabaseOptions dbOptions;
 
+  @Spec CommandSpec spec;
+
   @Override
   public void run() {
+    var out = spec.commandLine().getOut();
+
     var client = dbOptions.createClient();
     var steps =
         client.listWorkflowSteps(
             Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
     var json = DBOSCommand.prettyPrint(steps);
-    System.out.println(json);
+    out.println(json);
   }
 }
 
@@ -206,12 +220,16 @@ class CancelCommand implements Runnable {
   @ArgGroup(heading = "System Database Options:%n")
   DatabaseOptions dbOptions;
 
+  @Spec CommandSpec spec;
+
   @Override
   public void run() {
+    var out = spec.commandLine().getOut();
+
     var client = dbOptions.createClient();
     client.cancelWorkflow(
         Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
-    System.out.println("successfully cancelled workflow %s".formatted(workflowId));
+    out.format("successfully cancelled workflow %s\n", workflowId);
   }
 }
 
@@ -227,14 +245,18 @@ class ResumeCommand implements Runnable {
   @ArgGroup(heading = "System Database Options:%n")
   DatabaseOptions dbOptions;
 
+  @Spec CommandSpec spec;
+
   @Override
   public void run() {
+    var out = spec.commandLine().getOut();
+
     var client = dbOptions.createClient();
     var handle =
         client.resumeWorkflow(
             Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
     var json = DBOSCommand.prettyPrint(handle.getStatus());
-    System.out.println(json);
+    out.println(json);
   }
 }
 
@@ -266,8 +288,12 @@ class ForkCommand implements Runnable {
   @ArgGroup(heading = "System Database Options:%n")
   DatabaseOptions dbOptions;
 
+  @Spec CommandSpec spec;
+
   @Override
   public void run() {
+    var out = spec.commandLine().getOut();
+
     int step = this.step == null ? 1 : this.step;
     var client = dbOptions.createClient();
     var options = new ForkOptions();
@@ -279,6 +305,6 @@ class ForkCommand implements Runnable {
     }
     var handle = client.forkWorkflow(forkedWorkflowId, step, options);
     var json = DBOSCommand.prettyPrint(handle.getStatus());
-    System.out.println(json);
+    out.println(json);
   }
 }

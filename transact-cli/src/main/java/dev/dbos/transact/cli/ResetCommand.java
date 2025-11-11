@@ -7,7 +7,9 @@ import java.util.concurrent.Callable;
 
 import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Spec;
 
 @Command(
     name = "reset",
@@ -23,14 +25,17 @@ public class ResetCommand implements Callable<Integer> {
   @ArgGroup(heading = "System Database Options:%n")
   DatabaseOptions dbOptions;
 
+  @Spec CommandSpec spec;
+
   @Override
   public Integer call() throws Exception {
+    var out = spec.commandLine().getOut();
 
     if (!skipConfirmation) {
       String prompt =
           "This command resets your DBOS system database, deleting metadata about past workflows and steps. Are you sure you want to proceed?";
       if (!DBOSCommand.confirm(prompt)) {
-        System.out.println("System database reset cancelled");
+        out.println("System database reset cancelled");
         return 0;
       }
     }
@@ -42,8 +47,7 @@ public class ResetCommand implements Callable<Integer> {
         var stmt = conn.createStatement()) {
       stmt.execute(dropDbSql);
       stmt.execute(createDbSql);
-      System.out.println(
-          "System database has been reset successfully %s".formatted(pair.database()));
+      out.format("System database %s has been reset successfully", pair.database());
       return 0;
     }
   }
