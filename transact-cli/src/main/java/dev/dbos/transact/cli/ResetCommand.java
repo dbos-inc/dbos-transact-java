@@ -3,6 +3,7 @@ package dev.dbos.transact.cli;
 import dev.dbos.transact.migrations.MigrationManager;
 
 import java.sql.DriverManager;
+import java.util.Scanner;
 import java.util.concurrent.Callable;
 
 import picocli.CommandLine.Command;
@@ -35,8 +36,8 @@ public class ResetCommand implements Callable<Integer> {
 
     if (!skipConfirmation) {
       String prompt =
-          "This command resets your DBOS system database, deleting metadata about past workflows and steps. Are you sure you want to proceed?";
-      if (!DBOSCommand.confirm(prompt)) {
+          "This command resets your DBOS system database, deleting metadata about past workflows and steps. Are you sure you want to proceed?\n";
+      if (!confirm(prompt)) {
         out.println("System database reset cancelled");
         return 0;
       }
@@ -52,6 +53,14 @@ public class ResetCommand implements Callable<Integer> {
       stmt.execute(createDbSql);
       out.format("System database %s has been reset successfully\n", pair.database());
       return 0;
+    }
+  }
+
+  public static boolean confirm(String prompt) {
+    try (var scanner = new Scanner(System.in)) {
+      System.out.print(prompt);
+      String input = scanner.nextLine();
+      return input.equalsIgnoreCase("y") || input.equalsIgnoreCase("yes");
     }
   }
 }

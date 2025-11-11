@@ -1,11 +1,14 @@
 package dev.dbos.transact.cli;
 
+import dev.dbos.transact.json.JSONUtil.JsonRuntimeException;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 
 import java.time.OffsetDateTime;
 import java.util.Objects;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
@@ -38,6 +41,16 @@ public class WorfklowCommand implements Runnable {
   public void run() {
     CommandLine cmd = new CommandLine(this);
     cmd.usage(System.out);
+  }
+
+  public static String prettyPrint(Object object) {
+    var mapper = new ObjectMapper();
+    var writer = mapper.writerWithDefaultPrettyPrinter();
+    try {
+      return writer.writeValueAsString(Objects.requireNonNull(object));
+    } catch (JsonProcessingException e) {
+      throw new JsonRuntimeException(e);
+    }
   }
 }
 
@@ -148,7 +161,7 @@ class ListCommand implements Runnable {
 
     var client = dbOptions.createClient();
     var workflows = client.listWorkflows(input);
-    var json = DBOSCommand.prettyPrint(workflows);
+    var json = WorfklowCommand.prettyPrint(workflows);
     out.println(json);
   }
 }
@@ -184,7 +197,7 @@ class GetCommand implements Runnable {
     if (workflows.size() == 0) {
       System.err.println("Failed to retrieve workflow %s".formatted(workflowId));
     } else {
-      var json = DBOSCommand.prettyPrint(workflows.get(0));
+      var json = WorfklowCommand.prettyPrint(workflows.get(0));
       out.println(json);
     }
   }
@@ -214,7 +227,7 @@ class StepsCommand implements Runnable {
     var steps =
         client.listWorkflowSteps(
             Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
-    var json = DBOSCommand.prettyPrint(steps);
+    var json = WorfklowCommand.prettyPrint(steps);
     out.println(json);
   }
 }
@@ -272,7 +285,7 @@ class ResumeCommand implements Runnable {
     var handle =
         client.resumeWorkflow(
             Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
-    var json = DBOSCommand.prettyPrint(handle.getStatus());
+    var json = WorfklowCommand.prettyPrint(handle.getStatus());
     out.println(json);
   }
 }
@@ -323,7 +336,7 @@ class ForkCommand implements Runnable {
       options = options.withApplicationVersion(appVersion);
     }
     var handle = client.forkWorkflow(forkedWorkflowId, step, options);
-    var json = DBOSCommand.prettyPrint(handle.getStatus());
+    var json = WorfklowCommand.prettyPrint(handle.getStatus());
     out.println(json);
   }
 }
