@@ -5,8 +5,8 @@ import dev.dbos.transact.migrations.MigrationManager;
 import java.sql.DriverManager;
 import java.util.concurrent.Callable;
 
-import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
@@ -22,8 +22,7 @@ public class ResetCommand implements Callable<Integer> {
       description = "Skip confirmation prompt")
   boolean skipConfirmation;
 
-  @ArgGroup(heading = "System Database Options:%n")
-  DatabaseOptions dbOptions;
+  @Mixin DatabaseOptions dbOptions;
 
   @Spec CommandSpec spec;
 

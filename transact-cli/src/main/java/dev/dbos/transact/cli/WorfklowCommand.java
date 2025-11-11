@@ -7,8 +7,8 @@ import java.time.OffsetDateTime;
 import java.util.Objects;
 
 import picocli.CommandLine;
-import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -100,8 +100,7 @@ class ListCommand implements Runnable {
       description = "Retrieve only queued workflows")
   boolean queuesOnly;
 
-  @ArgGroup(heading = "System Database Options:%n")
-  DatabaseOptions dbOptions;
+  @Mixin DatabaseOptions dbOptions;
 
   @Spec CommandSpec spec;
 
@@ -155,8 +154,7 @@ class GetCommand implements Runnable {
   @Parameters(index = "0", description = "Workflow ID to retrieve")
   String workflowId;
 
-  @ArgGroup(heading = "System Database Options:%n")
-  DatabaseOptions dbOptions;
+  @Mixin DatabaseOptions dbOptions;
 
   @Spec CommandSpec spec;
 
@@ -190,8 +188,7 @@ class StepsCommand implements Runnable {
   @Parameters(index = "0", description = "Workflow ID to list steps for")
   String workflowId;
 
-  @ArgGroup(heading = "System Database Options:%n")
-  DatabaseOptions dbOptions;
+  @Mixin DatabaseOptions dbOptions;
 
   @Spec CommandSpec spec;
 
@@ -217,8 +214,7 @@ class CancelCommand implements Runnable {
   @Parameters(index = "0", description = "Workflow ID to cancel")
   String workflowId;
 
-  @ArgGroup(heading = "System Database Options:%n")
-  DatabaseOptions dbOptions;
+  @Mixin DatabaseOptions dbOptions;
 
   @Spec CommandSpec spec;
 
@@ -242,8 +238,7 @@ class ResumeCommand implements Runnable {
   @Parameters(index = "0", description = "Workflow ID to resume")
   String workflowId;
 
-  @ArgGroup(heading = "System Database Options:%n")
-  DatabaseOptions dbOptions;
+  @Mixin DatabaseOptions dbOptions;
 
   @Spec CommandSpec spec;
 
@@ -285,8 +280,7 @@ class ForkCommand implements Runnable {
       defaultValue = "1")
   Integer step;
 
-  @ArgGroup(heading = "System Database Options:%n")
-  DatabaseOptions dbOptions;
+  @Mixin DatabaseOptions dbOptions;
 
   @Spec CommandSpec spec;
 
