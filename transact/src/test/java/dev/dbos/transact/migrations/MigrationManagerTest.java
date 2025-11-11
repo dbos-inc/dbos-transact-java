@@ -1,11 +1,10 @@
-package dev.dbos.transact.migration;
+package dev.dbos.transact.migrations;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.Connection;
