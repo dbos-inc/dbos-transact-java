@@ -12,4 +12,5 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.0") // json
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.0")
     implementation("info.picocli:picocli:4.7.7")
+    runtimeOnly("org.slf4j:slf4j-simple:2.0.13")
 }
