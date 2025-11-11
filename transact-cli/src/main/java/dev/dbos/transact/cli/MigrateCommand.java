@@ -32,10 +32,10 @@ public class MigrateCommand implements Callable<Integer> {
   public Integer call() throws Exception {
     var out = spec.commandLine().getOut();
     out.println("Starting DBOS migrations");
-    out.format("  System Database: %s\n", dbOptions.url);
-    out.format("  System Database User: %s\n", dbOptions.user);
+    out.format("  System Database: %s\n", dbOptions.url());
+    out.format("  System Database User: %s\n", dbOptions.user());
 
-    MigrationManager.runMigrations(dbOptions.url, dbOptions.user, dbOptions.password);
+    MigrationManager.runMigrations(dbOptions.url(), dbOptions.user(), dbOptions.password());
     grantDBOSSchemaPermissions(out);
     return 0;
   }
@@ -49,7 +49,7 @@ public class MigrateCommand implements Callable<Integer> {
 
     out.format(
         "Granting permissions for the %s schema to %s in database %s\n",
-        schema, appRole, dbOptions.url);
+        schema, appRole, dbOptions.url());
 
     String[] queries = {
       "GRANT USAGE ON SCHEMA %s TO %s",
@@ -60,7 +60,8 @@ public class MigrateCommand implements Callable<Integer> {
       "ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL ON SEQUENCES TO %s",
       "ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT EXECUTE ON FUNCTIONS TO %s"
     };
-    try (var conn = DriverManager.getConnection(dbOptions.url, dbOptions.user, dbOptions.password);
+    try (var conn =
+            DriverManager.getConnection(dbOptions.url(), dbOptions.user(), dbOptions.password());
         var stmt = conn.createStatement()) {
       for (var query : queries) {
         query = query.formatted(schema, appRole);

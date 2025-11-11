@@ -39,10 +39,11 @@ public class ResetCommand implements Callable<Integer> {
       }
     }
 
-    var pair = MigrationManager.extractDbAndPostgresUrl(dbOptions.url);
+    var pair = MigrationManager.extractDbAndPostgresUrl(dbOptions.url());
     var dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", pair.database());
     var createDbSql = String.format("CREATE DATABASE %s", pair.database());
-    try (var conn = DriverManager.getConnection(pair.url(), dbOptions.user, dbOptions.password);
+    try (var conn =
+            DriverManager.getConnection(pair.url(), dbOptions.user(), dbOptions.password());
         var stmt = conn.createStatement()) {
       stmt.execute(dropDbSql);
       stmt.execute(createDbSql);
