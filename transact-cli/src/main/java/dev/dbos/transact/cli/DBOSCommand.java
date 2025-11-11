@@ -17,8 +17,8 @@ import picocli.CommandLine.IVersionProvider;
     description = "DBOS CLI is a command-line interface for managing DBOS workflows",
     mixinStandardHelpOptions = true,
     subcommands = {
-      InitCommand.class,
       MigrateCommand.class,
+      PostgresCommand.class,
       ResetCommand.class,
       WorfklowCommand.class
     },
