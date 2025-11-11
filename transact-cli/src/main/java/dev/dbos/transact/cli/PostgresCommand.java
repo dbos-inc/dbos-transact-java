@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
 
 @Command(
@@ -48,6 +49,18 @@ class StartCommand implements Callable<Integer> {
 
   @Spec CommandSpec spec;
 
+  @Option(
+      names = {"-c", "--container-name"},
+      defaultValue = "dbos-db",
+      description = "Container name (defaults to dbos-db)")
+  String containerName;
+
+  @Option(
+      names = {"-i", "--image-name"},
+      defaultValue = "pgvector/pgvector:pg16",
+      description = "Image name (defaults to pgvector/pgvector:pg16)")
+  String imageName;
+
   @Override
   public Integer call() throws Exception {
     var out = spec.commandLine().getOut();
@@ -57,8 +70,6 @@ class StartCommand implements Callable<Integer> {
       return 1;
     }
 
-    var containerName = "dbos-db";
-    var imageName = "pgvector/pgvector:pg16";
     var port = 5432;
     var password = Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos");
     startDockerPostgres(out, containerName, imageName, password, port);
@@ -159,13 +170,17 @@ class StartCommand implements Callable<Integer> {
     mixinStandardHelpOptions = true)
 class StopCommand implements Callable<Integer> {
 
+  @Option(
+      names = {"-c", "--container-name"},
+      defaultValue = "dbos-db",
+      description = "Container name (defaults to dbos-db)")
+  String containerName;
+
   @Spec CommandSpec spec;
 
   @Override
   public Integer call() throws Exception {
     var out = spec.commandLine().getOut();
-
-    var containerName = "dbos-db";
 
     out.format("Stopping Docker Postgres container %s\n", containerName);
     var status = PostgresCommand.inspectContainerStatus(containerName);
