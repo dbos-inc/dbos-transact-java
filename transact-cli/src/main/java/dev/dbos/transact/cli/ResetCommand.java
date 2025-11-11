@@ -5,11 +5,14 @@ import dev.dbos.transact.migrations.MigrationManager;
 import java.sql.DriverManager;
 import java.util.concurrent.Callable;
 
+import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 
-@Command(name = "reset", description = "Reset the DBOS system database")
+@Command(
+    name = "reset",
+    description = "Reset the DBOS system database",
+    mixinStandardHelpOptions = true)
 public class ResetCommand implements Callable<Integer> {
 
   @Option(
@@ -17,7 +20,8 @@ public class ResetCommand implements Callable<Integer> {
       description = "Skip confirmation prompt")
   boolean skipConfirmation;
 
-  @Mixin DatabaseOptions dbOptions;
+  @ArgGroup(heading = "System Database Options:%n")
+  DatabaseOptions dbOptions;
 
   @Override
   public Integer call() throws Exception {
@@ -25,7 +29,7 @@ public class ResetCommand implements Callable<Integer> {
     if (!skipConfirmation) {
       String prompt =
           "This command resets your DBOS system database, deleting metadata about past workflows and steps. Are you sure you want to proceed?";
-      if (!DBOSCommandLine.confirm(prompt)) {
+      if (!DBOSCommand.confirm(prompt)) {
         System.out.println("System database reset cancelled");
         return 0;
       }

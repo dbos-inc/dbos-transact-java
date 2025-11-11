@@ -1,12 +1,22 @@
 package dev.dbos.transact.cli;
 
+import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.Mixin;
+import picocli.CommandLine.Option;
 
-@Command(name = "migrate", description = "Create DBOS system tables")
+@Command(
+    name = "migrate",
+    description = "Create DBOS system tables",
+    mixinStandardHelpOptions = true)
 public class MigrateCommand implements Runnable {
 
-  @Mixin DatabaseOptions dbOptions;
+  @ArgGroup(heading = "System Database Options:%n")
+  DatabaseOptions dbOptions;
+
+  @Option(
+      names = {"-r", "--app-role"},
+      description = "The role with which you will run your DBOS application")
+  String appRole;
 
   @Override
   public void run() {

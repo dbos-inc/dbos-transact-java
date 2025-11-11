@@ -4,7 +4,7 @@ plugins {
 }
 
 application {
-    mainClass.set("dev.dbos.transact.cli.DBOSCommandLine")
+    mainClass.set("dev.dbos.transact.cli.Main")
 }
 
 dependencies {

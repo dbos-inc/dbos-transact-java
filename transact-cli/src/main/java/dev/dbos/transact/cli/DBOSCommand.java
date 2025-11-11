@@ -14,6 +14,7 @@ import picocli.CommandLine.IVersionProvider;
 
 @Command(
     name = "dbos",
+    description = "DBOS CLI is a command-line interface for managing DBOS workflows",
     mixinStandardHelpOptions = true,
     subcommands = {
       InitCommand.class,
@@ -21,17 +22,13 @@ import picocli.CommandLine.IVersionProvider;
       ResetCommand.class,
       WorfklowCommand.class
     },
-    versionProvider = DBOSCommandLine.class)
-public class DBOSCommandLine implements Runnable, IVersionProvider {
-
-  public static void main(String[] args) {
-    var exitCode = new CommandLine(new DBOSCommandLine()).execute(args);
-    System.exit(exitCode);
-  }
+    versionProvider = DBOSCommand.class)
+public class DBOSCommand implements Runnable, IVersionProvider {
 
   @Override
   public void run() {
-    System.out.println("Hello, World!");
+    CommandLine cmd = new CommandLine(this);
+    cmd.usage(System.out);
   }
 
   @Override

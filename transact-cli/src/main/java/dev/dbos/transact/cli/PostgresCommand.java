@@ -6,17 +6,21 @@ import java.util.Objects;
 import java.util.concurrent.Callable;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
 @Command(
     name = "postgres",
+    aliases = {"pg"},
     description = "Manage local Postgres database with Docker",
+    mixinStandardHelpOptions = true,
     subcommands = {StartCommand.class, StopCommand.class})
 public class PostgresCommand implements Runnable {
 
   @Override
   public void run() {
-    System.out.println("MigrateCommand.run");
+    CommandLine cmd = new CommandLine(this);
+    cmd.usage(System.out);
   }
 
   public static String inspectContainerStatus(String containerName) throws Exception {
@@ -31,7 +35,10 @@ public class PostgresCommand implements Runnable {
   }
 }
 
-@Command(name = "start", description = "Start a local Postgres database Docker container")
+@Command(
+    name = "start",
+    description = "Start a local Postgres database Docker container",
+    mixinStandardHelpOptions = true)
 class StartCommand implements Callable<Integer> {
 
   @Override
@@ -129,7 +136,10 @@ class StartCommand implements Callable<Integer> {
   }
 }
 
-@Command(name = "stop", description = "Stop the local Postgres database Docker container")
+@Command(
+    name = "stop",
+    description = "Stop the local Postgres database Docker container",
+    mixinStandardHelpOptions = true)
 class StopCommand implements Callable<Integer> {
 
   @Override

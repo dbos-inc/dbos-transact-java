@@ -6,14 +6,17 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 
+import picocli.CommandLine;
+import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 @Command(
-    name = "worfklow",
+    name = "workflow",
+    aliases = {"wf"},
     description = "Manage DBOS workflows",
+    mixinStandardHelpOptions = true,
     subcommands = {
       ListCommand.class,
       GetCommand.class,
@@ -24,15 +27,17 @@ import picocli.CommandLine.Parameters;
     })
 public class WorfklowCommand implements Runnable {
 
-  @Mixin DatabaseOptions dbOptions;
-
   @Override
   public void run() {
-    System.out.println("WorfklowCommand.run");
+    CommandLine cmd = new CommandLine(this);
+    cmd.usage(System.out);
   }
 }
 
-@Command(name = "list", description = "List workflows for your application")
+@Command(
+    name = "list",
+    description = "List workflows for your application",
+    mixinStandardHelpOptions = true)
 class ListCommand implements Runnable {
 
   @Option(
@@ -93,7 +98,8 @@ class ListCommand implements Runnable {
       description = "Retrieve only queued workflows")
   boolean queuesOnly;
 
-  @Mixin DatabaseOptions dbOptions;
+  @ArgGroup(heading = "System Database Options:%n")
+  DatabaseOptions dbOptions;
 
   @Override
   public void run() {
@@ -129,18 +135,22 @@ class ListCommand implements Runnable {
 
     var client = dbOptions.createClient();
     var workflows = client.listWorkflows(input);
-    var json = DBOSCommandLine.prettyPrint(workflows);
+    var json = DBOSCommand.prettyPrint(workflows);
     System.out.println(json);
   }
 }
 
-@Command(name = "get", description = "Retrieve the status of a workflow")
+@Command(
+    name = "get",
+    description = "Retrieve the status of a workflow",
+    mixinStandardHelpOptions = true)
 class GetCommand implements Runnable {
 
-  @Parameters(index = "0")
+  @Parameters(index = "0", description = "Workflow ID to retrieve")
   String workflowId;
 
-  @Mixin DatabaseOptions dbOptions;
+  @ArgGroup(heading = "System Database Options:%n")
+  DatabaseOptions dbOptions;
 
   @Override
   public void run() {
@@ -155,19 +165,23 @@ class GetCommand implements Runnable {
     if (workflows.size() == 0) {
       System.err.println("Failed to retrieve workflow %s".formatted(workflowId));
     } else {
-      var json = DBOSCommandLine.prettyPrint(workflows.get(0));
+      var json = DBOSCommand.prettyPrint(workflows.get(0));
       System.out.println(json);
     }
   }
 }
 
-@Command(name = "steps", description = "List the steps of a workflow")
+@Command(
+    name = "steps",
+    description = "List the steps of a workflow",
+    mixinStandardHelpOptions = true)
 class StepsCommand implements Runnable {
 
-  @Parameters(index = "0")
+  @Parameters(index = "0", description = "Workflow ID to list steps for")
   String workflowId;
 
-  @Mixin DatabaseOptions dbOptions;
+  @ArgGroup(heading = "System Database Options:%n")
+  DatabaseOptions dbOptions;
 
   @Override
   public void run() {
@@ -175,20 +189,22 @@ class StepsCommand implements Runnable {
     var steps =
         client.listWorkflowSteps(
             Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
-    var json = DBOSCommandLine.prettyPrint(steps);
+    var json = DBOSCommand.prettyPrint(steps);
     System.out.println(json);
   }
 }
 
 @Command(
     name = "cancel",
-    description = "Cancel a workflow so it is no longer automatically retried or restarted")
+    description = "Cancel a workflow so it is no longer automatically retried or restarted",
+    mixinStandardHelpOptions = true)
 class CancelCommand implements Runnable {
 
-  @Parameters(index = "0")
+  @Parameters(index = "0", description = "Workflow ID to cancel")
   String workflowId;
 
-  @Mixin DatabaseOptions dbOptions;
+  @ArgGroup(heading = "System Database Options:%n")
+  DatabaseOptions dbOptions;
 
   @Override
   public void run() {
@@ -199,13 +215,17 @@ class CancelCommand implements Runnable {
   }
 }
 
-@Command(name = "resume", description = "Resume a workflow that has been cancelled")
+@Command(
+    name = "resume",
+    description = "Resume a workflow that has been cancelled",
+    mixinStandardHelpOptions = true)
 class ResumeCommand implements Runnable {
 
-  @Parameters(index = "0")
+  @Parameters(index = "0", description = "Workflow ID to resume")
   String workflowId;
 
-  @Mixin DatabaseOptions dbOptions;
+  @ArgGroup(heading = "System Database Options:%n")
+  DatabaseOptions dbOptions;
 
   @Override
   public void run() {
@@ -213,12 +233,15 @@ class ResumeCommand implements Runnable {
     var handle =
         client.resumeWorkflow(
             Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
-    var json = DBOSCommandLine.prettyPrint(handle.getStatus());
+    var json = DBOSCommand.prettyPrint(handle.getStatus());
     System.out.println(json);
   }
 }
 
-@Command(name = "fork", description = "Fork a workflow from the beginning or from a specific step")
+@Command(
+    name = "fork",
+    description = "Fork a workflow from the beginning or from a specific step",
+    mixinStandardHelpOptions = true)
 class ForkCommand implements Runnable {
 
   @Parameters(index = "0", description = "Workflow ID to fork")
@@ -240,7 +263,8 @@ class ForkCommand implements Runnable {
       defaultValue = "1")
   Integer step;
 
-  @Mixin DatabaseOptions dbOptions;
+  @ArgGroup(heading = "System Database Options:%n")
+  DatabaseOptions dbOptions;
 
   @Override
   public void run() {
@@ -254,7 +278,7 @@ class ForkCommand implements Runnable {
       options = options.withApplicationVersion(appVersion);
     }
     var handle = client.forkWorkflow(forkedWorkflowId, step, options);
-    var json = DBOSCommandLine.prettyPrint(handle.getStatus());
+    var json = DBOSCommand.prettyPrint(handle.getStatus());
     System.out.println(json);
   }
 }
