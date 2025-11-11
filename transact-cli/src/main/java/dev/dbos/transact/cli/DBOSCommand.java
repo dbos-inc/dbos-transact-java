@@ -16,7 +16,7 @@ import picocli.CommandLine.IVersionProvider;
       MigrateCommand.class,
       PostgresCommand.class,
       ResetCommand.class,
-      WorfklowCommand.class
+      WorkflowCommand.class
     },
     versionProvider = DBOSCommand.class)
 public class DBOSCommand implements Runnable, IVersionProvider {

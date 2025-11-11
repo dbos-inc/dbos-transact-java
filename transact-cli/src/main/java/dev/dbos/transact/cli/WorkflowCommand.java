@@ -29,7 +29,7 @@ import picocli.CommandLine.Spec;
       ResumeCommand.class,
       ForkCommand.class,
     })
-public class WorfklowCommand implements Runnable {
+public class WorkflowCommand implements Runnable {
 
   @Option(
       names = {"-h", "--help"},
@@ -64,7 +64,7 @@ class ListCommand implements Runnable {
 
   @Option(
       names = {"-e", "--end-time"},
-      description = "Retrieve workflows starting befor this timestamp (ISO 8601 format)")
+      description = "Retrieve workflows starting before this timestamp (ISO 8601 format)")
   String endTime;
 
   @Option(
@@ -161,7 +161,7 @@ class ListCommand implements Runnable {
 
     var client = dbOptions.createClient();
     var workflows = client.listWorkflows(input);
-    var json = WorfklowCommand.prettyPrint(workflows);
+    var json = WorkflowCommand.prettyPrint(workflows);
     out.println(json);
   }
 }
@@ -197,7 +197,7 @@ class GetCommand implements Runnable {
     if (workflows.size() == 0) {
       System.err.println("Failed to retrieve workflow %s".formatted(workflowId));
     } else {
-      var json = WorfklowCommand.prettyPrint(workflows.get(0));
+      var json = WorkflowCommand.prettyPrint(workflows.get(0));
       out.println(json);
     }
   }
@@ -227,7 +227,7 @@ class StepsCommand implements Runnable {
     var steps =
         client.listWorkflowSteps(
             Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
-    var json = WorfklowCommand.prettyPrint(steps);
+    var json = WorkflowCommand.prettyPrint(steps);
     out.println(json);
   }
 }
@@ -285,7 +285,7 @@ class ResumeCommand implements Runnable {
     var handle =
         client.resumeWorkflow(
             Objects.requireNonNull(workflowId, "workflowId parameter cannot be null"));
-    var json = WorfklowCommand.prettyPrint(handle.getStatus());
+    var json = WorkflowCommand.prettyPrint(handle.getStatus());
     out.println(json);
   }
 }
@@ -335,8 +335,8 @@ class ForkCommand implements Runnable {
     if (appVersion != null) {
       options = options.withApplicationVersion(appVersion);
     }
-    var handle = client.forkWorkflow(forkedWorkflowId, step, options);
-    var json = WorfklowCommand.prettyPrint(handle.getStatus());
+    var handle = client.forkWorkflow(workflowId, step, options);
+    var json = WorkflowCommand.prettyPrint(handle.getStatus());
     out.println(json);
   }
 }
