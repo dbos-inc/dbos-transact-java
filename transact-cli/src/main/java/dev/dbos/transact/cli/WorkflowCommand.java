@@ -308,7 +308,7 @@ class ForkCommand implements Runnable {
 
   @Option(
       names = {"-s", "--step"},
-      description = "Restart from this step [default: 1]",
+      description = "Restart from this step [default: ${DEFAULT-VALUE}]",
       defaultValue = "1")
   Integer step;
 

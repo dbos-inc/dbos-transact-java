@@ -51,15 +51,13 @@ class StartCommand implements Callable<Integer> {
 
   @Option(
       names = {"-c", "--container-name"},
-      defaultValue = "dbos-db",
-      description = "Container name (defaults to dbos-db)")
-  String containerName;
+      description = "Container name [default: ${DEFAULT-VALUE}]")
+  String containerName = "dbos-db";
 
   @Option(
       names = {"-i", "--image-name"},
-      defaultValue = "pgvector/pgvector:pg16",
-      description = "Image name (defaults to pgvector/pgvector:pg16)")
-  String imageName;
+      description = "Image name [default: ${DEFAULT-VALUE}]")
+  String imageName = "pgvector/pgvector:pg16";
 
   @Option(
       names = {"-h", "--help"},
@@ -177,9 +175,8 @@ class StopCommand implements Callable<Integer> {
 
   @Option(
       names = {"-c", "--container-name"},
-      defaultValue = "dbos-db",
-      description = "Container name (defaults to dbos-db)")
-  String containerName;
+      description = "Container name [default: ${DEFAULT-VALUE}]")
+  String containerName = "dbos-db";
 
   @Option(
       names = {"-h", "--help"},
