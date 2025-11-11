@@ -1,6 +1,7 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.StartWorkflowOptions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,9 +52,7 @@ public class TestLifecycleService implements DBOSLifecycleListener {
     int total = 0;
     for (var wf : wfs) {
       Object[] args = {nInstances, nWfs};
-      var h =
-          DBOS.startWorkflow(
-              wf, args, new ExecuteWorkflowOptions(UUID.randomUUID().toString(), null, null));
+      var h = DBOS.startWorkflow(wf, args, new StartWorkflowOptions(UUID.randomUUID().toString()));
       total += (Integer) h.getResult();
     }
     return total;

@@ -841,13 +841,13 @@ public class DBOSExecutor implements AutoCloseable {
 
     try {
       var options =
-          new ExecuteWorkflowOptions(
+          new StartWorkflowOptions(
               workflowId,
-              timeout,
-              deadline,
+              Timeout.ofOrNone(timeout),
               ctx.getQueueName(),
               ctx.getDeduplicationId(),
-              ctx.getPriority());
+              ctx.getPriority(),
+              deadline);
       return executeWorkflow(workflow, args, options, parent, ctx.getStartWorkflowFuture());
     } finally {
       ctx.setStartedWorkflowId(workflowId);
@@ -873,14 +873,17 @@ public class DBOSExecutor implements AutoCloseable {
       throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
     }
 
-    var options = new ExecuteWorkflowOptions(workflowId, status.getTimeout(), status.getDeadline());
+    var options =
+        new StartWorkflowOptions(workflowId)
+            .withTimeoutOrNull(status.getTimeout())
+            .withDeadline(status.getDeadline());
     return executeWorkflow(workflow, inputs, options, null, null);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
       RegisteredWorkflow workflow,
       Object[] args,
-      ExecuteWorkflowOptions options,
+      StartWorkflowOptions options,
       WorkflowInfo parent,
       CompletableFuture<String> latch) {
 
@@ -928,7 +931,7 @@ public class DBOSExecutor implements AutoCloseable {
               executorId(),
               appVersion(),
               parent,
-              options.timeout(),
+              options.getTimeoutDuration(),
               options.deadline());
       if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
         return retrieveWorkflow(workflowId);
@@ -954,11 +957,13 @@ public class DBOSExecutor implements AutoCloseable {
           try {
             logger.debug(
                 "executeWorkflow task {} {}",
-                (Objects.requireNonNullElse(options.timeout(), Duration.ZERO).toMillis()),
+                (Objects.requireNonNullElse(options.getTimeoutDuration(), Duration.ZERO)
+                    .toMillis()),
                 Objects.requireNonNullElse(options.deadline(), Instant.EPOCH).toEpochMilli());
 
             DBOSContextHolder.set(
-                new DBOSContext(workflowId, parent, options.timeout(), options.deadline()));
+                new DBOSContext(
+                    workflowId, parent, options.getTimeoutDuration(), options.deadline()));
             T result = workflow.invoke(args);
             postInvokeWorkflowResult(systemDatabase, workflowId, result);
             return result;
@@ -1020,7 +1025,7 @@ public class DBOSExecutor implements AutoCloseable {
       String instanceName,
       Integer maxRetries,
       Object[] args,
-      ExecuteWorkflowOptions options,
+      StartWorkflowOptions options,
       WorkflowInfo parent,
       String executorId,
       String appVersion,
@@ -1057,7 +1062,7 @@ public class DBOSExecutor implements AutoCloseable {
           executorId,
           appVersion,
           parent,
-          options.timeout(),
+          options.getTimeoutDuration(),
           options.deadline());
       return retrieveWorkflow(workflowId, systemDatabase);
     } catch (DBOSWorkflowExecutionConflictException e) {

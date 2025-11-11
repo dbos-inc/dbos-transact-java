@@ -2,10 +2,10 @@ package dev.dbos.transact;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.ExecuteWorkflowOptions;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -288,14 +288,14 @@ public class DBOSClient implements AutoCloseable {
         Objects.requireNonNullElse(options.instanceName(), ""),
         null,
         args,
-        new ExecuteWorkflowOptions(
+        new StartWorkflowOptions(
             Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString()),
-            options.timeout(),
-            null,
+            Timeout.ofOrNone(options.timeout()),
             Objects.requireNonNull(
                 options.queueName(), "EnqueueOptions queueName must not be null"),
             options.deduplicationId,
-            options.priority),
+            options.priority,
+            null),
         null,
         null,
         options.appVersion,

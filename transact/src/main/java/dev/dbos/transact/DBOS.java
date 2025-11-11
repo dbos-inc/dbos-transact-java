@@ -6,7 +6,6 @@ import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
-import dev.dbos.transact.execution.ExecuteWorkflowOptions;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
 import dev.dbos.transact.execution.ThrowingRunnable;
@@ -679,7 +678,7 @@ public class DBOS {
    * @return WorkflowHandle to the executed workflow
    */
   public static WorkflowHandle<?, ?> startWorkflow(
-      RegisteredWorkflow regWorkflow, Object[] args, ExecuteWorkflowOptions options) {
+      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
     return executor("executeWorkflow").executeWorkflow(regWorkflow, args, options, null, null);
   }
 

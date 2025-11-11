@@ -1,6 +1,7 @@
 package dev.dbos.transact.execution;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.workflow.Scheduled;
 
@@ -172,8 +173,7 @@ public class SchedulerService implements DBOSLifecycleListener {
                 logger.debug("submitting to dbos Executor {}", wf.fullyQualifiedName());
                 String workflowId =
                     String.format("sched-%s-%s", wf.fullyQualifiedName(), scheduledTime.toString());
-                var options =
-                    new ExecuteWorkflowOptions(workflowId, null, null, swf.queue(), null, null);
+                var options = new StartWorkflowOptions(workflowId).withQueue(swf.queue());
                 DBOS.startWorkflow(wf, args, options);
 
               } catch (Exception e) {
