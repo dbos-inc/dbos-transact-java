@@ -19,9 +19,14 @@ import picocli.CommandLine.Spec;
     name = "postgres",
     aliases = {"pg"},
     description = "Manage local Postgres database with Docker",
-    mixinStandardHelpOptions = true,
     subcommands = {StartCommand.class, StopCommand.class})
 public class PostgresCommand implements Runnable {
+
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
 
   @Override
   public void run() {
@@ -41,13 +46,8 @@ public class PostgresCommand implements Runnable {
   }
 }
 
-@Command(
-    name = "start",
-    description = "Start a local Postgres database Docker container",
-    mixinStandardHelpOptions = true)
+@Command(name = "start", description = "Start a local Postgres database Docker container")
 class StartCommand implements Callable<Integer> {
-
-  @Spec CommandSpec spec;
 
   @Option(
       names = {"-c", "--container-name"},
@@ -60,6 +60,14 @@ class StartCommand implements Callable<Integer> {
       defaultValue = "pgvector/pgvector:pg16",
       description = "Image name (defaults to pgvector/pgvector:pg16)")
   String imageName;
+
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
+
+  @Spec CommandSpec spec;
 
   @Override
   public Integer call() throws Exception {
@@ -164,10 +172,7 @@ class StartCommand implements Callable<Integer> {
   }
 }
 
-@Command(
-    name = "stop",
-    description = "Stop the local Postgres database Docker container",
-    mixinStandardHelpOptions = true)
+@Command(name = "stop", description = "Stop the local Postgres database Docker container")
 class StopCommand implements Callable<Integer> {
 
   @Option(
@@ -175,6 +180,12 @@ class StopCommand implements Callable<Integer> {
       defaultValue = "dbos-db",
       description = "Container name (defaults to dbos-db)")
   String containerName;
+
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
 
   @Spec CommandSpec spec;
 

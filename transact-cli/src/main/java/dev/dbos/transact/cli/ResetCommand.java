@@ -11,10 +11,7 @@ import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
 
-@Command(
-    name = "reset",
-    description = "Reset the DBOS system database",
-    mixinStandardHelpOptions = true)
+@Command(name = "reset", description = "Reset the DBOS system database")
 public class ResetCommand implements Callable<Integer> {
 
   @Option(
@@ -23,6 +20,12 @@ public class ResetCommand implements Callable<Integer> {
   boolean skipConfirmation;
 
   @Mixin DatabaseOptions dbOptions;
+
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
 
   @Spec CommandSpec spec;
 

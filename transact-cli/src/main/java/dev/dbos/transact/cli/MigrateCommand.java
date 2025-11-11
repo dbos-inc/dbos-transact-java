@@ -13,18 +13,21 @@ import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
 
-@Command(
-    name = "migrate",
-    description = "Create DBOS system tables",
-    mixinStandardHelpOptions = true)
+@Command(name = "migrate", description = "Create DBOS system tables")
 public class MigrateCommand implements Callable<Integer> {
-
-  @Mixin DatabaseOptions dbOptions;
 
   @Option(
       names = {"-r", "--app-role"},
       description = "The role with which you will run your DBOS application")
   String appRole;
+
+  @Mixin DatabaseOptions dbOptions;
+
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
 
   @Spec CommandSpec spec;
 

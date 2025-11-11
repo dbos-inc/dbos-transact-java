@@ -18,7 +18,6 @@ import picocli.CommandLine.Spec;
     name = "workflow",
     aliases = {"wf"},
     description = "Manage DBOS workflows",
-    mixinStandardHelpOptions = true,
     subcommands = {
       ListCommand.class,
       GetCommand.class,
@@ -29,6 +28,12 @@ import picocli.CommandLine.Spec;
     })
 public class WorfklowCommand implements Runnable {
 
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
+
   @Override
   public void run() {
     CommandLine cmd = new CommandLine(this);
@@ -36,10 +41,7 @@ public class WorfklowCommand implements Runnable {
   }
 }
 
-@Command(
-    name = "list",
-    description = "List workflows for your application",
-    mixinStandardHelpOptions = true)
+@Command(name = "list", description = "List workflows for your application")
 class ListCommand implements Runnable {
 
   @Option(
@@ -102,6 +104,12 @@ class ListCommand implements Runnable {
 
   @Mixin DatabaseOptions dbOptions;
 
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
+
   @Spec CommandSpec spec;
 
   @Override
@@ -145,16 +153,19 @@ class ListCommand implements Runnable {
   }
 }
 
-@Command(
-    name = "get",
-    description = "Retrieve the status of a workflow",
-    mixinStandardHelpOptions = true)
+@Command(name = "get", description = "Retrieve the status of a workflow")
 class GetCommand implements Runnable {
 
   @Parameters(index = "0", description = "Workflow ID to retrieve")
   String workflowId;
 
   @Mixin DatabaseOptions dbOptions;
+
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
 
   @Spec CommandSpec spec;
 
@@ -179,16 +190,19 @@ class GetCommand implements Runnable {
   }
 }
 
-@Command(
-    name = "steps",
-    description = "List the steps of a workflow",
-    mixinStandardHelpOptions = true)
+@Command(name = "steps", description = "List the steps of a workflow")
 class StepsCommand implements Runnable {
 
   @Parameters(index = "0", description = "Workflow ID to list steps for")
   String workflowId;
 
   @Mixin DatabaseOptions dbOptions;
+
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
 
   @Spec CommandSpec spec;
 
@@ -207,14 +221,19 @@ class StepsCommand implements Runnable {
 
 @Command(
     name = "cancel",
-    description = "Cancel a workflow so it is no longer automatically retried or restarted",
-    mixinStandardHelpOptions = true)
+    description = "Cancel a workflow so it is no longer automatically retried or restarted")
 class CancelCommand implements Runnable {
 
   @Parameters(index = "0", description = "Workflow ID to cancel")
   String workflowId;
 
   @Mixin DatabaseOptions dbOptions;
+
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
 
   @Spec CommandSpec spec;
 
@@ -229,16 +248,19 @@ class CancelCommand implements Runnable {
   }
 }
 
-@Command(
-    name = "resume",
-    description = "Resume a workflow that has been cancelled",
-    mixinStandardHelpOptions = true)
+@Command(name = "resume", description = "Resume a workflow that has been cancelled")
 class ResumeCommand implements Runnable {
 
   @Parameters(index = "0", description = "Workflow ID to resume")
   String workflowId;
 
   @Mixin DatabaseOptions dbOptions;
+
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
 
   @Spec CommandSpec spec;
 
@@ -255,10 +277,7 @@ class ResumeCommand implements Runnable {
   }
 }
 
-@Command(
-    name = "fork",
-    description = "Fork a workflow from the beginning or from a specific step",
-    mixinStandardHelpOptions = true)
+@Command(name = "fork", description = "Fork a workflow from the beginning or from a specific step")
 class ForkCommand implements Runnable {
 
   @Parameters(index = "0", description = "Workflow ID to fork")
@@ -281,6 +300,12 @@ class ForkCommand implements Runnable {
   Integer step;
 
   @Mixin DatabaseOptions dbOptions;
+
+  @Option(
+      names = {"-h", "--help"},
+      usageHelp = true,
+      description = "Display this help message")
+  boolean help;
 
   @Spec CommandSpec spec;
 
