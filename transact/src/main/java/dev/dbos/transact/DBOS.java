@@ -678,7 +678,7 @@ public class DBOS {
    * @param options Execution options, such as ID, queue, and timeout/deadline
    * @return WorkflowHandle to the executed workflow
    */
-  public static WorkflowHandle<?, ?> executeWorkflow(
+  public static WorkflowHandle<?, ?> startWorkflow(
       RegisteredWorkflow regWorkflow, Object[] args, ExecuteWorkflowOptions options) {
     return executor("executeWorkflow").executeWorkflow(regWorkflow, args, options, null, null);
   }

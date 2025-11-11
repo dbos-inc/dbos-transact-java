@@ -174,7 +174,7 @@ public class SchedulerService implements DBOSLifecycleListener {
                     String.format("sched-%s-%s", wf.fullyQualifiedName(), scheduledTime.toString());
                 var options =
                     new ExecuteWorkflowOptions(workflowId, null, null, swf.queue(), null, null);
-                DBOS.executeWorkflow(wf, args, options);
+                DBOS.startWorkflow(wf, args, options);
 
               } catch (Exception e) {
                 logger.error("Scheduled task exception {}", wf.fullyQualifiedName(), e);
