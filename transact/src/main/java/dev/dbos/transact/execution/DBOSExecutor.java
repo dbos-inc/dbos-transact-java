@@ -825,11 +825,14 @@ public class DBOSExecutor implements AutoCloseable {
             ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString());
 
     var nextTimeout = ctx.getNextTimeout();
+    var nextDeadline = ctx.getNextDeadline();
 
     // default to context timeout & deadline if nextTimeout is null or Inherit
     Duration timeout = ctx.getTimeout();
     Instant deadline = ctx.getDeadline();
-    if (nextTimeout instanceof Timeout.None) {
+    if (nextDeadline != null) {
+      deadline = nextDeadline;
+    } else if (nextTimeout instanceof Timeout.None) {
       // clear timeout and deadline to null if nextTimeout is None
       timeout = null;
       deadline = null;

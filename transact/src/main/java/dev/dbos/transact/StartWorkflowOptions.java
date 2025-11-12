@@ -9,7 +9,20 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Options for starting a workflow, including: Assigning the workflow idempotency ID Enqueuing, with
- * options Setting a timeout
+ * options Setting a timeout.
+ *
+ * @param workflowId The unique identifier for the workflow instance. Used for idempotency and
+ *     tracking.
+ * @param timeout The timeout configuration specifying how long the workflow may run before
+ *     expiring; this is promoted to a deadline at execution time.
+ * @param deadline The absolute time by which the workflow must start or complete before being
+ *     canceled, if timeout is also set the deadline is derived from the timeout.
+ * @param queueName An optional name of the queue to which the workflow should be enqueued for
+ *     execution.
+ * @param deduplicationId If `queueName` is specified, an optional ID used to prevent duplicate
+ *     enqueued workflows.
+ * @param priority If `queueName` is specified and refers to a queue with priority enabled, the
+ *     priority to assign.
  */
 public record StartWorkflowOptions(
     String workflowId,
@@ -50,6 +63,10 @@ public record StartWorkflowOptions(
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
   public StartWorkflowOptions withTimeout(Timeout timeout) {
+    if (timeout != null && deadline != null) {
+      throw new IllegalArgumentException(
+          "should not specify a timeout if the deadline is already set");
+    }
     return new StartWorkflowOptions(
         this.workflowId,
         timeout,

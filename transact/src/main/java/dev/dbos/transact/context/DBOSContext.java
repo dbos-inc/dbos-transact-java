@@ -127,6 +127,14 @@ public class DBOSContext {
     return timeout;
   }
 
+  public Instant getNextDeadline() {
+    if (startOptions != null && startOptions.deadline() != null) {
+      return startOptions.deadline();
+    }
+
+    return null;
+  }
+
   public Instant getDeadline() {
     return deadline;
   }
