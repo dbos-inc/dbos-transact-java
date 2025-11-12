@@ -101,11 +101,11 @@ class StartCommand implements Callable<Integer> {
 
     try {
       var status = PostgresCommand.inspectContainerStatus(containerName);
-      if (status.equals("running")) {
+      if (status != null && status.equals("running")) {
         out.format("Container %s is already running\n", containerName);
         return;
       }
-      if (status.equals("exited")) {
+      if (status != null && status.equals("exited")) {
         CommandResult.checkExecute("docker", "start", containerName);
         out.format("Container %s was stopped and has been restarted\n", containerName);
         return;

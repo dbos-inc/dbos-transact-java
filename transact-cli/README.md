@@ -26,17 +26,17 @@ These values can be specified on the command line or via environment variables.
 * System Database user
   * `--db-user` / `-U` flag
   * `PGUSER` environment variable
-* JDBC URL
+* System Database password
   * `--db-password` / `-P` flag
   * `PGPASSWORD` environment variable
 
 Example:
 ```bash
 # Using command-line flag (highest priority)
-java -jar dbos.jar migrate --db-url postgres://localhost/mydb -U user -P password
+java -jar dbos.jar migrate --db-url jdbc:postgresql://localhost/mydb -U user -P password
 
 # Using environment variable (lowest priority)
-export DBOS_SYSTEM_JDBC_URL=postgres://localhost/mydb
+export DBOS_SYSTEM_JDBC_URL=jdbc:postgresql://localhost/mydb
 export PGUSER=user
 export PGPASSWORD=password
 java -jar dbos.jar migrate
@@ -120,7 +120,7 @@ List workflows for your application.
 ```bash
 java -jar dbos.jar workflow list
 java -jar dbos.jar workflow list --limit 50 --status SUCCESS
-java -jar dbos.jar workflow list --name "ProcessOrder" --user "admin"
+java -jar dbos.jar workflow list --name "ProcessOrder"
 ```
 
 #### `dbos workflow get [workflow-id]`
