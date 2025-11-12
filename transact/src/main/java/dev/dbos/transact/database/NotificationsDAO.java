@@ -244,6 +244,7 @@ public class NotificationsDAO {
 
     try (Connection conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
+      conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
       try {
         // Check if operation was already executed
@@ -294,9 +295,12 @@ public class NotificationsDAO {
         }
 
         conn.commit();
-
       } catch (Exception e) {
-        conn.rollback();
+        logger.debug("setEvent rollback, wf: {} id: {}, key: {}", workflowId, functionId, key);
+        try {
+          conn.rollback();
+        } catch (Exception e2) {
+        }
         throw e;
       }
     }
