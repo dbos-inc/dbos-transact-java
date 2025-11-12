@@ -194,7 +194,7 @@ class GetCommand implements Runnable {
             .withLoadOutput(false);
     var client = dbOptions.createClient();
     var workflows = client.listWorkflows(input);
-    if (workflows.size() == 0) {
+    if (workflows.isEmpty()) {
       System.err.println("Failed to retrieve workflow %s".formatted(workflowId));
     } else {
       var json = WorkflowCommand.prettyPrint(workflows.get(0));
