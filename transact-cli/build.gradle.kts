@@ -37,46 +37,8 @@ tasks.test {
     }
 }
 
-val prepareLaunchers by tasks.registering {
-    val outputDir = layout.buildDirectory.dir("dist/bin").get().asFile
-    doLast {
-        outputDir.mkdirs()
-
-        // Linux/macOS launcher
-        val linuxLauncher = File(outputDir, "dbos")
-        linuxLauncher.writeText(
-            "#!/bin/bash\n" +
-            "DIR=\"\$(cd \"\$(dirname \"\\\${BASH_SOURCE[0]}\\\")\" && pwd)\"\n" +
-            "java -jar \"\$DIR/../lib/transact-cli-${'$'}{project.version}-all.jar\" \"\$@\"\n"
-        )
-        linuxLauncher.setExecutable(true)
-
-        // Windows launcher
-        val windowsLauncher = File(outputDir, "dbos.bat")
-        windowsLauncher.writeText("""
-            @echo off
-            set DIR=%~dp0
-            java -jar "%DIR%..\lib\transact-cli-${'$'}{project.version}-all.jar" %*
-        """.trimIndent())
-    }
-}
-
-val shadowJarTask = tasks.named("shadowJar")
-
-val packageZip by tasks.registering(Zip::class) {
-    dependsOn(shadowJarTask, prepareLaunchers)
-
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
     archiveBaseName.set("dbos")
-    archiveVersion.set(project.version.toString())
-    destinationDirectory.set(layout.buildDirectory.dir("dist"))
-
-    // Launcher scripts
-    from(layout.buildDirectory.dir("dist/bin")) { into("bin") }
-
-    // Fat JAR from com.gradleup.shadow
-    from(shadowJarTask.map { it.outputs.files.singleFile }) { into("lib") }
-
-    // README
-    from(layout.projectDirectory.file("README.md")) { into(".") }
+    archiveVersion.set("")
+    archiveClassifier.set("")
 }
- 
