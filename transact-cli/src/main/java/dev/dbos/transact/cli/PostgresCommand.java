@@ -114,7 +114,7 @@ class StartCommand implements Callable<Integer> {
       // ignore exception, proceed with creation
     }
 
-    var queryImagesResult = CommandResult.execute("docker", "images -q", imageName);
+    var queryImagesResult = CommandResult.execute("docker", "images", "-q", imageName);
     if (queryImagesResult.stdout().trim().isEmpty()) {
       out.format("Pulling docker image %s\n", imageName);
       CommandResult.checkExecute("docker", "pull", imageName);
