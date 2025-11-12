@@ -79,9 +79,4 @@ val packageZip by tasks.registering(Zip::class) {
     // README
     from(layout.projectDirectory.file("README.md")) { into(".") }
 }
-
-// TODO: remove this before merge
-tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
-    archiveVersion.set("")      // remove version
-}
  
