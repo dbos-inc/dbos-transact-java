@@ -846,7 +846,7 @@ public class DBOSExecutor implements AutoCloseable {
       var options =
           new StartWorkflowOptions(
               workflowId,
-              Timeout.ofOrNone(timeout),
+              Timeout.of(timeout),
               ctx.getQueueName(),
               ctx.getDeduplicationId(),
               ctx.getPriority(),
@@ -878,7 +878,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     var options =
         new StartWorkflowOptions(workflowId)
-            .withTimeoutOrNull(status.getTimeout())
+            .withTimeout(status.getTimeout())
             .withDeadline(status.getDeadline());
     return executeWorkflow(workflow, inputs, options, null, null);
   }

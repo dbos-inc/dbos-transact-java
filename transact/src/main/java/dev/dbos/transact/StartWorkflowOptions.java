@@ -63,7 +63,7 @@ public record StartWorkflowOptions(
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
   public StartWorkflowOptions withTimeout(Timeout timeout) {
-    if (timeout != null && deadline != null) {
+    if (timeout != null && this.deadline != null) {
       throw new IllegalArgumentException(
           "should not specify a timeout if the deadline is already set");
     }
@@ -90,11 +90,6 @@ public record StartWorkflowOptions(
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
   public StartWorkflowOptions withTimeout(Duration timeout) {
     return withTimeout(Timeout.of(timeout));
-  }
-
-  /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
-  public StartWorkflowOptions withTimeoutOrNull(Duration timeout) {
-    return withTimeout(Timeout.ofOrNone(timeout));
   }
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */

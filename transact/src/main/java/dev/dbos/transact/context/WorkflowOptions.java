@@ -35,10 +35,6 @@ public record WorkflowOptions(String workflowId, Timeout timeout) {
     return new WorkflowOptions(this.workflowId, Timeout.of(timeout));
   }
 
-  public WorkflowOptions withOptionalTimeout(Duration timeout) {
-    return new WorkflowOptions(this.workflowId, Timeout.ofOrNone(timeout));
-  }
-
   public WorkflowOptions withTimeout(long value, TimeUnit unit) {
     return withTimeout(Duration.ofNanos(unit.toNanos(value)));
   }
