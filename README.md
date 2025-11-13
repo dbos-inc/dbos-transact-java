@@ -89,7 +89,7 @@ result = handle.getResult();
 
 ####
 
-DBOS queues help you **durably** run tasks in the background.
+DBOS queues help you **durably** run distributed tasks.
 You can enqueue a task from a durable workflow and one of your processes will pick it up for execution.
 DBOS manages the execution of your tasks: it guarantees that tasks complete, and that their callers get their results without needing to resubmit them, even if your application is interrupted.
 
