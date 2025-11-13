@@ -15,8 +15,8 @@ Essentially, it helps you write long-lived, reliable code that can survive crash
 As your workflows run, DBOS checkpoints each step they take in a Postgres database.
 When a process stops (fails, intentionally suspends, or a machine dies), your program can recover from those checkpoints to restore its exact state and continue from where it left off, as if nothing happened.
 
-In practice, this makes it easier to build reliable systems for use cases like AI agents, payments, data synchronization, or anything that takes minutes, days, or weeks to complete.
-Rather than bolting on ad-hoc retry logic and database checkpoints, durable workflows give you one consistent model for ensuring progress without duplicate execution.
+In practice, this makes it easier to build reliable systems for use cases like AI agents, data synchronization, payments, or anything that takes minutes, days, or weeks to complete.
+Rather than bolting on ad-hoc retry logic and database checkpoints, DBOS workflows give you one consistent model for ensuring your programs can recover from any failure from exactly where they left off.
 
 This library contains all you need to add durable workflows to your program: there's no separate service or orchestrator or any external dependencies except Postgres.
 Because it's just a library, you can incrementally add it to your projects, and it works out of the box with frameworks like Spring.
@@ -71,15 +71,14 @@ Workflows are particularly useful for
 
 ####
 
-DBOS can run your workflows asynchronously without you needing to make any changes to the interface or implementation. 
+You can run your workflows asynchronously without making any changes to their interface or implementation. 
 
-This is ideal for long-running workflows whose result might not be available immediately. 
-You code can return at a later point and check the status for completion and/or retrive the result.
+This is ideal for long-running background workflows: you code can return at a later point and check the status for completion and/or retrieve the result.
 
 
 ```java
-    var handle = DBOS.startWorkflow(()->example.exampleWorkflow("HelloDBOS"));
-    result = handle.getResult();
+var handle = DBOS.startWorkflow(()->example.exampleWorkflow("HelloDBOS"));
+result = handle.getResult();
 ```
 
 [Read more ↗️](https://docs.dbos.dev/java/tutorials/workflow-tutorial#starting-workflows-in-the-background)
@@ -91,7 +90,7 @@ You code can return at a later point and check the status for completion and/or 
 ####
 
 DBOS queues help you **durably** run tasks in the background.
-You can enqueue a task (which can be a single step or an entire workflow) from a durable workflow and one of your processes will pick it up for execution.
+You can enqueue a task from a durable workflow and one of your processes will pick it up for execution.
 DBOS manages the execution of your tasks: it guarantees that tasks complete, and that their callers get their results without needing to resubmit them, even if your application is interrupted.
 
 Queues also provide flow control, so you can limit the concurrency of your tasks on a per-queue or per-process basis.
@@ -102,10 +101,6 @@ They don't require a separate queueing service or message broker&mdash;just Post
 
 ```java
  public void queuedTasks() {
-    var q = new Queue("childQ");
-    DBOS.registerQueue(q);
-    DBOS.launch();
-
     for (int i = 0; i < 3; i++) {
         String workflowId = "child" + i;
         var options = new StartWorkflowOptions(workflowId).withQueue(q);
@@ -119,6 +114,10 @@ They don't require a separate queueing service or message broker&mdash;just Post
         System.out.println(h.getResult());
     }
 }
+
+// In your main
+var queue = new Queue("exampleQueue");
+DBOS.registerQueue(queue);
 ```
 
 [Read more ↗️](https://docs.dbos.dev/java/tutorials/queue-tutorial)
@@ -205,13 +204,9 @@ Then, check out the [programming guide](https://docs.dbos.dev/java/programming-g
 
 Both DBOS and Temporal provide durable execution, but DBOS is implemented in a lightweight Postgres-backed library whereas Temporal is implemented in an externally orchestrated server.
 
-You can add DBOS to your program by installing this open-source library, connecting it to Postgres, and registering workflows and steps.
+You can add DBOS to your program by installing the open-source library, connecting it to Postgres, and annotating workflows and steps.
 By contrast, to add Temporal to your program, you must rearchitect your program to move your workflows and steps (activities) to a Temporal worker, configure a Temporal server to orchestrate those workflows, and access your workflows only through a Temporal client.
-[This blog post](https://www.dbos.dev/blog/durable-execution-coding-comparison) makes the comparison in more detail.
-
-**When to use DBOS:** You need to add durable workflows to your applications with minimal rearchitecting, or you are using Postgres.
-
-**When to use Temporal:** You don't want to add Postgres to your stack, or you need a language DBOS doesn't support yet.
+[This page](https://docs.dbos.dev/explanations/comparing-temporal) makes the comparison in more detail.
 
 </details>
 
