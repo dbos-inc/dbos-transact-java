@@ -12,6 +12,7 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -89,6 +90,7 @@ public class DBOSClient implements AutoCloseable {
       String workflowId,
       String appVersion,
       Duration timeout,
+      Instant deadline,
       String deduplicationId,
       Integer priority) {
 
@@ -117,7 +119,7 @@ public class DBOSClient implements AutoCloseable {
 
     /** Construct `EnqueueOptions` with a minimum set of required options */
     public EnqueueOptions(String className, String workflowName, String queueName) {
-      this(workflowName, queueName, className, "", null, null, null, null, null);
+      this(workflowName, queueName, className, "", null, null, null, null, null, null);
     }
 
     /**
@@ -135,6 +137,7 @@ public class DBOSClient implements AutoCloseable {
           this.workflowId,
           this.appVersion,
           this.timeout,
+          this.deadline,
           this.deduplicationId,
           this.priority);
     }
@@ -155,6 +158,7 @@ public class DBOSClient implements AutoCloseable {
           workflowId,
           this.appVersion,
           this.timeout,
+          this.deadline,
           this.deduplicationId,
           this.priority);
     }
@@ -175,6 +179,7 @@ public class DBOSClient implements AutoCloseable {
           this.workflowId,
           appVersion,
           this.timeout,
+          this.deadline,
           this.deduplicationId,
           this.priority);
     }
@@ -195,6 +200,28 @@ public class DBOSClient implements AutoCloseable {
           this.workflowId,
           this.appVersion,
           timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority);
+    }
+
+    /**
+     * Specify a deadline for the workflow. This is an absolute time, regardless of when the
+     * workflow starts.
+     *
+     * @param deadline Instant after which the workflow will be canceled.
+     * @return New `EnqueueOptions` with the deadline set
+     */
+    public EnqueueOptions withDeadline(Instant deadline) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.queueName,
+          this.className,
+          this.instanceName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          deadline,
           this.deduplicationId,
           this.priority);
     }
@@ -215,6 +242,7 @@ public class DBOSClient implements AutoCloseable {
           this.workflowId,
           this.appVersion,
           this.timeout,
+          this.deadline,
           deduplicationId,
           this.priority);
     }
@@ -235,6 +263,7 @@ public class DBOSClient implements AutoCloseable {
           this.workflowId,
           this.appVersion,
           this.timeout,
+          this.deadline,
           this.deduplicationId,
           this.priority);
     }
@@ -254,6 +283,7 @@ public class DBOSClient implements AutoCloseable {
           this.workflowId,
           this.appVersion,
           this.timeout,
+          this.deadline,
           this.deduplicationId,
           priority);
     }
@@ -295,7 +325,7 @@ public class DBOSClient implements AutoCloseable {
                 options.queueName(), "EnqueueOptions queueName must not be null"),
             options.deduplicationId,
             options.priority,
-            null),
+            options.deadline),
         null,
         null,
         options.appVersion,
