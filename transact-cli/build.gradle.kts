@@ -42,3 +42,10 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
     archiveVersion.set("")
     archiveClassifier.set("")
 }
+
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("-Xlint:unchecked")    // warn about unchecked operations
+    options.compilerArgs.add("-Xlint:deprecation")  // warn about deprecated APIs
+    options.compilerArgs.add("-Xlint:rawtypes")     // warn about raw types
+    options.compilerArgs.add("-Werror")             // treat all warnings as errors
+}
