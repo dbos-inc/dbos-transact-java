@@ -25,6 +25,12 @@ public class DatabaseOptions {
       interactive = true)
   private String password;
 
+  @Option(
+      names = {"--schema"},
+      defaultValue = "dbos",
+      description = "Database schema name [default: ${DEFAULT-VALUE}]")
+  private String schema;
+
   public String url() {
     return this.url;
   }
@@ -37,7 +43,11 @@ public class DatabaseOptions {
     return this.password;
   }
 
+  public String schema() {
+    return this.schema;
+  }
+
   public DBOSClient createClient() {
-    return new DBOSClient(url(), user(), password());
+    return new DBOSClient(url(), user(), password(), schema());
   }
 }
