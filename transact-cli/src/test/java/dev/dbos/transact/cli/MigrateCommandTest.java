@@ -63,7 +63,7 @@ public class MigrateCommandTest {
     var cmd = new CommandLine(app);
 
     var sw = new StringWriter();
-    cmd.setOut(new PrintWriter(sw));
+    cmd.setOut(new PrintWriter(sw)); 
 
     var exitCode = cmd.execute("migrate", "-D=" + db_url, "-U=" + db_user);
     assertEquals(0, exitCode);

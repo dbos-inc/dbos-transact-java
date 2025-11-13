@@ -245,7 +245,7 @@ public class MigrationManager {
       """
       CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-      CREATE TABLE \"%1$s\".workflow_status (
+      CREATE TABLE "%1$s".workflow_status (
           workflow_uuid TEXT PRIMARY KEY,
           status TEXT,
           name TEXT,
@@ -272,15 +272,15 @@ public class MigrationManager {
           priority INTEGER NOT NULL DEFAULT 0
       );
 
-      CREATE INDEX workflow_status_created_at_index ON \"%1$s\".workflow_status (created_at);
-      CREATE INDEX workflow_status_executor_id_index ON \"%1$s\".workflow_status (executor_id);
-      CREATE INDEX workflow_status_status_index ON \"%1$s\".workflow_status (status);
+      CREATE INDEX workflow_status_created_at_index ON "%1$s".workflow_status (created_at);
+      CREATE INDEX workflow_status_executor_id_index ON "%1$s".workflow_status (executor_id);
+      CREATE INDEX workflow_status_status_index ON "%1$s".workflow_status (status);
 
-      ALTER TABLE \"%1$s\".workflow_status
+      ALTER TABLE "%1$s".workflow_status
       ADD CONSTRAINT uq_workflow_status_queue_name_dedup_id
       UNIQUE (queue_name, deduplication_id);
 
-      CREATE TABLE \"%1$s\".operation_outputs (
+      CREATE TABLE "%1$s".operation_outputs (
           workflow_uuid TEXT NOT NULL,
           function_id INTEGER NOT NULL,
           function_name TEXT NOT NULL DEFAULT '',
@@ -288,23 +288,23 @@ public class MigrationManager {
           error TEXT,
           child_workflow_id TEXT,
           PRIMARY KEY (workflow_uuid, function_id),
-          FOREIGN KEY (workflow_uuid) REFERENCES \"%1$s\".workflow_status(workflow_uuid)
+          FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
 
-      CREATE TABLE \"%1$s\".notifications (
+      CREATE TABLE "%1$s".notifications (
           destination_uuid TEXT NOT NULL,
           topic TEXT,
           message TEXT NOT NULL,
           created_at_epoch_ms BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
           message_uuid TEXT NOT NULL DEFAULT gen_random_uuid(), -- Built-in function
-          FOREIGN KEY (destination_uuid) REFERENCES \"%1$s\".workflow_status(workflow_uuid)
+          FOREIGN KEY (destination_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
-      CREATE INDEX idx_workflow_topic ON \"%1$s\".notifications (destination_uuid, topic);
+      CREATE INDEX idx_workflow_topic ON "%1$s".notifications (destination_uuid, topic);
 
       -- Create notification function
-      CREATE OR REPLACE FUNCTION \"%1$s\".notifications_function() RETURNS TRIGGER AS $$
+      CREATE OR REPLACE FUNCTION "%1$s".notifications_function() RETURNS TRIGGER AS $$
       DECLARE
           payload text := NEW.destination_uuid || '::' || NEW.topic;
       BEGIN
@@ -315,20 +315,20 @@ public class MigrationManager {
 
       -- Create notification trigger
       CREATE TRIGGER dbos_notifications_trigger
-      AFTER INSERT ON \"%1$s\".notifications
-      FOR EACH ROW EXECUTE FUNCTION \"%1$s\".notifications_function();
+      AFTER INSERT ON "%1$s".notifications
+      FOR EACH ROW EXECUTE FUNCTION "%1$s".notifications_function();
 
-      CREATE TABLE \"%1$s\".workflow_events (
+      CREATE TABLE "%1$s".workflow_events (
           workflow_uuid TEXT NOT NULL,
           key TEXT NOT NULL,
           value TEXT NOT NULL,
           PRIMARY KEY (workflow_uuid, key),
-          FOREIGN KEY (workflow_uuid) REFERENCES \"%1$s\".workflow_status(workflow_uuid)
+          FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
 
       -- Create events function
-      CREATE OR REPLACE FUNCTION \"%1$s\".workflow_events_function() RETURNS TRIGGER AS $$
+      CREATE OR REPLACE FUNCTION "%1$s".workflow_events_function() RETURNS TRIGGER AS $$
       DECLARE
           payload text := NEW.workflow_uuid || '::' || NEW.key;
       BEGIN
@@ -339,20 +339,20 @@ public class MigrationManager {
 
       -- Create events trigger
       CREATE TRIGGER dbos_workflow_events_trigger
-      AFTER INSERT ON \"%1$s\".workflow_events
-      FOR EACH ROW EXECUTE FUNCTION \"%1$s\".workflow_events_function();
+      AFTER INSERT ON "%1$s".workflow_events
+      FOR EACH ROW EXECUTE FUNCTION "%1$s".workflow_events_function();
 
-      CREATE TABLE \"%1$s\".streams (
+      CREATE TABLE "%1$s".streams (
           workflow_uuid TEXT NOT NULL,
           key TEXT NOT NULL,
           value TEXT NOT NULL,
           "offset" INTEGER NOT NULL,
           PRIMARY KEY (workflow_uuid, key, "offset"),
-          FOREIGN KEY (workflow_uuid) REFERENCES \"%1$s\".workflow_status(workflow_uuid)
+          FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
 
-      CREATE TABLE \"%1$s\".event_dispatch_kv (
+      CREATE TABLE "%1$s".event_dispatch_kv (
           service_name TEXT NOT NULL,
           workflow_fn_name TEXT NOT NULL,
           key TEXT NOT NULL,
@@ -364,20 +364,22 @@ public class MigrationManager {
       """;
 
   static final String migration2 =
-      "ALTER TABLE \"%1$s\".workflow_status ADD COLUMN queue_partition_key TEXT;";
+      """
+      ALTER TABLE "%1$s".workflow_status ADD COLUMN queue_partition_key TEXT;
+      """;
 
   static final String migration3 =
       """
-      create index "idx_workflow_status_queue_status_started" on \"%1$s\"."workflow_status" ("queue_name", "status", "started_at_epoch_ms")
+      create index "idx_workflow_status_queue_status_started" on "%1$s"."workflow_status" ("queue_name", "status", "started_at_epoch_ms")
       """;
 
   static final String migration4 =
       """
-      ALTER TABLE \"%1$s\".workflow_status ADD COLUMN forked_from TEXT;
+      ALTER TABLE "%1$s".workflow_status ADD COLUMN forked_from TEXT;
       """;
 
   static final String migration5 =
       """
-      ALTER TABLE \"%1$s\".operation_outputs ADD COLUMN started_at_epoch_ms BIGINT, ADD COLUMN completed_at_epoch_ms BIGINT;
+      ALTER TABLE "%1$s".operation_outputs ADD COLUMN started_at_epoch_ms BIGINT, ADD COLUMN completed_at_epoch_ms BIGINT;
       """;
 }
