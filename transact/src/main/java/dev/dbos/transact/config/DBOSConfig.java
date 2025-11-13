@@ -18,7 +18,8 @@ public record DBOSConfig(
     String conductorKey,
     String conductorDomain,
     String appVersion,
-    String executorId) {
+    String executorId,
+    String databaseSchema) {
 
   public static DBOSConfig defaults(String appName) {
     return new DBOSConfig(
@@ -27,7 +28,7 @@ public record DBOSConfig(
         null, false, // adminServer
         3001, // adminServerPort
         true, // migrate
-        null, null, null, null);
+        null, null, null, null, null);
   }
 
   public static DBOSConfig defaultsFromEnv(String appName) {
@@ -56,7 +57,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withDatabaseUrl(String v) {
@@ -74,7 +76,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withDbUser(String v) {
@@ -92,7 +95,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withDbPassword(String v) {
@@ -110,7 +114,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withMaximumPoolSize(int v) {
@@ -128,7 +133,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withConnectionTimeout(int v) {
@@ -146,7 +152,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withDataSource(HikariDataSource v) {
@@ -164,7 +171,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withAdminServer(boolean v) {
@@ -182,7 +190,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withAdminServerPort(int v) {
@@ -200,7 +209,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withMigrate(boolean v) {
@@ -218,7 +228,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withConductorKey(String v) {
@@ -236,7 +247,8 @@ public record DBOSConfig(
         v,
         conductorDomain,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withConductorDomain(String v) {
@@ -254,7 +266,8 @@ public record DBOSConfig(
         conductorKey,
         v,
         appVersion,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withAppVersion(String v) {
@@ -272,7 +285,8 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         v,
-        executorId);
+        executorId,
+        databaseSchema);
   }
 
   public DBOSConfig withExecutorId(String v) {
@@ -290,9 +304,28 @@ public record DBOSConfig(
         conductorKey,
         conductorDomain,
         appVersion,
-        v);
+        v,
+        databaseSchema);
   }
 
+  public DBOSConfig withDatabaseSchema(String v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        maximumPoolSize,
+        connectionTimeout,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        appVersion,
+        executorId,
+        v);
+  }
   public DBOSConfig enableAdminServer() {
     return withAdminServer(true);
   }
@@ -304,7 +337,7 @@ public record DBOSConfig(
   // Override toString to mask the DB password
   @Override
   public String toString() {
-    return "DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, appVersion=%s, executorId=%s]"
+    return "DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, appVersion=%s, executorId=%s, dbSchema=%s]"
         .formatted(
             appName,
             databaseUrl,
@@ -318,6 +351,7 @@ public record DBOSConfig(
             conductorKey,
             conductorDomain,
             appVersion,
-            executorId);
+            executorId,
+            databaseSchema);
   }
 }
