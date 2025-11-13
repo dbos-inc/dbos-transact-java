@@ -7,6 +7,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import java.sql.*;
 import java.util.*;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,10 +26,32 @@ public class MigrationManager {
           );
 
   public static void runMigrations(DBOSConfig config) {
+    Objects.requireNonNull(config, "DBOS Config must not be null");
 
-    createDatabaseIfNotExists(Objects.requireNonNull(config, "DBOS Config must not be null"));
+    if (config.dataSource() != null) {
+      runMigrations(config.dataSource());
+    } else {
+      createDatabaseIfNotExists(config);
+      try (var ds = SystemDatabase.createDataSource(config)) {
+        runMigrations(ds);
+      }
+    }
+  }
 
-    var ds = SystemDatabase.createDataSource(config);
+  public static void runMigrations(String url, String user, String password) {
+    Objects.requireNonNull(url, "database url must not be null");
+    Objects.requireNonNull(user, "database user must not be null");
+    Objects.requireNonNull(password, "database password must not be null");
+
+    createDatabaseIfNotExists(url, user, password);
+    try (var ds = SystemDatabase.createDataSource(url, user, password, 0, 0)) {
+      runMigrations(ds);
+    }
+  }
+
+  private static void runMigrations(HikariDataSource ds) {
+    Objects.requireNonNull(ds, "Data Source must not be null");
+
     try (var conn = ds.getConnection()) {
       ensureDbosSchema(conn, Constants.DB_SCHEMA);
       ensureMigrationTable(conn, Constants.DB_SCHEMA);
@@ -36,11 +59,6 @@ public class MigrationManager {
       runDbosMigrations(conn, Constants.DB_SCHEMA, migrations);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
-    } finally {
-      // Close the data source if it was not provided by config
-      if (config.dataSource() == null) {
-        ds.close();
-      }
     }
   }
 
@@ -48,14 +66,19 @@ public class MigrationManager {
     Objects.requireNonNull(config, "DBOS Config must not be null");
     if (config.dataSource() != null) {
       logger.debug("DBOSConfig specifies data source, skipping createDatabaseIfNotExists");
-      return;
+    } else {
+      createDatabaseIfNotExists(config.databaseUrl(), config.dbUser(), config.dbPassword());
     }
-    var dbUrl =
-        Objects.requireNonNull(config.databaseUrl(), "DBOSConfig databaseUrl must not be null");
-    var pair = extractDbAndPostgresUrl(dbUrl);
+  }
 
-    try (var adminDS =
-            SystemDatabase.createDataSource(pair.url(), config.dbUser(), config.dbPassword());
+  public static void createDatabaseIfNotExists(String url, String user, String password) {
+    Objects.requireNonNull(url, "database url must not be null");
+    Objects.requireNonNull(user, "database user must not be null");
+    Objects.requireNonNull(password, "database password must not be null");
+
+    var pair = extractDbAndPostgresUrl(url);
+
+    try (var adminDS = SystemDatabase.createDataSource(pair.url(), user, password);
         var conn = adminDS.getConnection()) {
       try (var stmt = conn.prepareStatement("SELECT 1 FROM pg_database WHERE datname = ?")) {
         stmt.setString(1, pair.database());
@@ -157,7 +180,7 @@ public class MigrationManager {
     return 0;
   }
 
-  public static void runDbosMigrations(Connection conn, String schema, List<String> migrations) {
+  static void runDbosMigrations(Connection conn, String schema, List<String> migrations) {
     Objects.requireNonNull(schema, "schema must not be null");
     var lastApplied = getCurrentSysDbVersion(conn, schema);
 
