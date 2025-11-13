@@ -77,7 +77,7 @@ public class MigrateCommandTest {
 
     assertFalse(checkConnection());
 
-    var schema = "custom";
+    var schema = "C\"$+0m'";
 
     var cmd = new CommandLine(new DBOSCommand());
     var sw = new StringWriter();

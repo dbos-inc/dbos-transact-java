@@ -47,6 +47,7 @@ public class MigrationManager {
     Objects.requireNonNull(url, "database url must not be null");
     Objects.requireNonNull(user, "database user must not be null");
     Objects.requireNonNull(password, "database password must not be null");
+    schema = Objects.requireNonNullElse(schema, Constants.DB_SCHEMA).replace("\"", "\"\"");
 
     createDatabaseIfNotExists(url, user, password);
     try (var ds = SystemDatabase.createDataSource(url, user, password, 0, 0)) {
@@ -139,7 +140,7 @@ public class MigrationManager {
     }
 
     try (var stmt = conn.createStatement()) {
-      stmt.execute("CREATE SCHEMA IF NOT EXISTS %s".formatted(schema));
+      stmt.execute("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(schema));
     } catch (SQLException e) {
       logger.warn("SQLException thrown creating the {} schema", schema, e);
     }
@@ -162,7 +163,7 @@ public class MigrationManager {
 
     try (var stmt = conn.createStatement()) {
       stmt.execute(
-          "CREATE TABLE IF NOT EXISTS %s.dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)"
+          "CREATE TABLE IF NOT EXISTS \"%s\".dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)"
               .formatted(schema));
     } catch (SQLException e) {
       logger.warn("SQLException thrown creating the dbos_migrations table", e);
@@ -172,7 +173,8 @@ public class MigrationManager {
   public static int getCurrentSysDbVersion(Connection conn, String schema) {
     Objects.requireNonNull(schema, "schema must not be null");
     var sql =
-        "SELECT version FROM %s.dbos_migrations ORDER BY version DESC limit 1".formatted(schema);
+        "SELECT version FROM \"%s\".dbos_migrations ORDER BY version DESC limit 1"
+            .formatted(schema);
     try (var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
       if (rs.next()) {
@@ -211,14 +213,15 @@ public class MigrationManager {
 
       try {
         int rowCount = 0;
-        var updateSQL = "UPDATE %s.dbos_migrations SET version = ?".formatted(schema);
+        var updateSQL = "UPDATE \"%s\".dbos_migrations SET version = ?".formatted(schema);
         try (var stmt = conn.prepareStatement(updateSQL)) {
           stmt.setLong(1, migrationIndex);
           rowCount = stmt.executeUpdate();
         }
 
         if (rowCount == 0) {
-          var insertSql = "INSERT INTO %s.dbos_migrations (version) VALUES (?)".formatted(schema);
+          var insertSql =
+              "INSERT INTO \"%s\".dbos_migrations (version) VALUES (?)".formatted(schema);
           try (var stmt = conn.prepareStatement(insertSql)) {
             stmt.setLong(1, migrationIndex);
             stmt.executeUpdate();
