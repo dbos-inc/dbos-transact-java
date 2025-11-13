@@ -67,7 +67,7 @@ public class DBOSClient implements AutoCloseable {
    * @param url System database JDBC URL
    * @param user System database user
    * @param password System database credential / password
-   * @param schema Database schema for DBOS tables 
+   * @param schema Database schema for DBOS tables
    */
   public DBOSClient(String url, String user, String password, String schema) {
     var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
