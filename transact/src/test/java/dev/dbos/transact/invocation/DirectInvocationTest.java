@@ -15,6 +15,7 @@ import dev.dbos.transact.workflow.Timeout;
 
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
@@ -150,6 +151,23 @@ public class DirectInvocationTest {
   void directInvokeTimeoutCancellation() {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(1));
+    try (var _o = options.setContext()) {
+      assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
+    }
+
+    var rows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(1, rows.size());
+    var row = rows.get(0);
+    assertEquals("CANCELLED", row.status());
+    assertNull(row.output());
+    assertNull(row.error());
+  }
+
+  @Test
+  void directInvokeTimeoutDeadline() {
+
+    var options =
+        new WorkflowOptions().withDeadline(Instant.ofEpochMilli(System.currentTimeMillis() + 1000));
     try (var _o = options.setContext()) {
       assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
     }

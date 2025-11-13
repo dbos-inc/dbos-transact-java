@@ -73,6 +73,15 @@ public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadli
     return withTimeout(Duration.ofNanos(unit.toNanos(value)));
   }
 
+  /**
+   * Create a WorkflowOptions like this one, but with the deadline set
+   *
+   * @param deadline deadline to use, expressed as a `java.util.Instant`
+   */
+  public WorkflowOptions withDeadline(Instant deadline) {
+    return new WorkflowOptions(this.workflowId, this.timeout, deadline);
+  }
+
   /** Create a workflow options like this one, but without a timeout */
   public WorkflowOptions withNoTimeout() {
     return new WorkflowOptions(this.workflowId, Timeout.none(), this.deadline);
