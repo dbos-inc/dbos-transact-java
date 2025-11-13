@@ -255,6 +255,24 @@ public class DBUtils {
     }
   }
 
+  public static List<String> getWorkflowEvents(DataSource ds, String workflowId) {
+    try (var conn = ds.getConnection(); ) {
+      var stmt =
+          conn.prepareStatement("SELECT * FROM dbos.workflow_events WHERE workflow_uuid = ?");
+      stmt.setString(1, workflowId);
+      var rs = stmt.executeQuery();
+      List<String> rows = new ArrayList<>();
+
+      while (rs.next()) {
+        rows.add(rs.getString("key") + "=" + rs.getString("value"));
+      }
+
+      return rows;
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   public static void causeChaos(DataSource ds) {
     try (Connection conn = ds.getConnection();
         Statement st = conn.createStatement()) {
