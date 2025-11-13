@@ -896,7 +896,7 @@ public class WorkflowDAO {
       stmt.setInt(3, startStep);
 
       int rowsCopied = stmt.executeUpdate();
-      System.out.println("Copied " + rowsCopied + " operation outputs to forked workflow");
+      logger.debug("Copied " + rowsCopied + " operation outputs to forked workflow");
     }
   }
 

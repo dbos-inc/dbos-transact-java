@@ -15,6 +15,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.SQLException;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -33,7 +34,8 @@ public class SystemDatabaseTest {
   static void onetimeSetup() throws Exception {
     config =
         DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(10);
   }
 
   @BeforeEach
@@ -102,11 +104,26 @@ public class SystemDatabaseTest {
     assertTrue(before.equals(after));
   }
 
-  @Test
+  void logWorkflowDetails(String wfid, String name) {
+    var wfstat = DBOS.getWorkflowStatus(wfid);
+    System.out.println(
+        String.format("Workflow (%s) ID: %s. Status %s", name, wfid, wfstat.status()));
+    var steps = DBOS.listWorkflowSteps(wfid);
+    for (var step : steps) {
+      System.out.println(
+          String.format("  - # %d %s %s", step.functionId(), step.functionName(), step.output()));
+    }
+    var events = DBUtils.getWorkflowEvents(dataSource, wfid);
+    for (var event : events) {
+      System.out.println(String.format("  $ %s", event));
+    }
+  }
+
+  // @RepeatedTest(100)
   public void testSysDbWfDisruption() throws Exception {
     var dsvci = new DisruptiveServiceImpl();
     dsvci.setDS(dataSource);
-    var dsvc = DBOS.registerWorkflows(DisruptiveService.class, dsvci);
+    var dsvc = DBOS.registerWorkflows(DisruptiveService.class, dsvci, UUID.randomUUID().toString());
     dsvci.setSelf(dsvc);
     DBOS.launch();
     try {
@@ -116,6 +133,11 @@ public class SystemDatabaseTest {
 
       var h1 = DBOS.startWorkflow(() -> dsvc.wfPart1());
       var h2 = DBOS.startWorkflow(() -> dsvc.wfPart2(h1.workflowId()));
+
+      if (!"Part1hello1".equals(h1.getResult()) || !"Part2v1".equals(h2.getResult())) {
+        logWorkflowDetails(h1.workflowId(), "Part 1 Details");
+        logWorkflowDetails(h2.workflowId(), "Part 2 Details");
+      }
 
       assertEquals("Part1hello1", h1.getResult());
       assertEquals("Part2v1", h2.getResult());

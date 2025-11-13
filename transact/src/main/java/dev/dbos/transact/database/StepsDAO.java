@@ -196,7 +196,6 @@ public class StepsDAO {
           String outputData = rs.getString("output");
           String errorData = rs.getString("error");
           String childWorkflowId = rs.getString("child_workflow_id");
-          System.out.println(functionId);
 
           // Deserialize output if present
           Object[] output = null;
@@ -227,8 +226,6 @@ public class StepsDAO {
           steps.add(new StepInfo(functionId, functionName, outputVal, stepError, childWorkflowId));
         }
       }
-    } catch (SQLException e) {
-      throw new SQLException("Failed to retrieve workflow steps for workflow: " + workflowId, e);
     }
 
     return steps;
