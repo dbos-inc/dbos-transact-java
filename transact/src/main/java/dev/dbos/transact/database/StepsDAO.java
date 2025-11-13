@@ -46,7 +46,7 @@ public class StepsDAO {
     Objects.requireNonNull(schema);
     String sql =
         """
-          INSERT INTO %s.operation_outputs
+          INSERT INTO "%s".operation_outputs
             (workflow_uuid, function_id, function_name, output, error, child_workflow_id)
           VALUES (?, ?, ?, ?, ?, ?)
         """
@@ -108,7 +108,10 @@ public class StepsDAO {
 
     Objects.requireNonNull(schema);
     final String sql =
-        "SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?".formatted(schema);
+        """
+          SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
+        """
+            .formatted(schema);
 
     String workflowStatus = null;
     try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -131,9 +134,9 @@ public class StepsDAO {
 
     String operationOutputSql =
         """
-        SELECT output, error, function_name
-        FROM %s.operation_outputs
-        WHERE workflow_uuid = ? AND function_id = ?
+          SELECT output, error, function_name
+          FROM "%s".operation_outputs
+          WHERE workflow_uuid = ? AND function_id = ?
         """
             .formatted(schema);
 
@@ -174,10 +177,10 @@ public class StepsDAO {
 
     final String sql =
         """
-        SELECT function_id, function_name, output, error, child_workflow_id
-        FROM %s.operation_outputs
-        WHERE workflow_uuid = ?
-        ORDER BY function_id;
+          SELECT function_id, function_name, output, error, child_workflow_id
+          FROM "%s".operation_outputs
+          WHERE workflow_uuid = ?
+          ORDER BY function_id;
         """
             .formatted(this.schema);
 

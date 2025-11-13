@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class CustomSchemaTest {
   private static DBOSConfig dbosConfig;
-  private static final String schema = "custom";
+  private static final String schema = "C$+0m'";
   private HawkService proxy;
   private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
@@ -92,5 +92,4 @@ public class CustomSchemaTest {
     assertNull(row.timeoutMs());
     assertNull(row.deadlineEpochMs());
   }
-
 }

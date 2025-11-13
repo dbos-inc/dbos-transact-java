@@ -287,7 +287,9 @@ public class SystemDatabase implements AutoCloseable {
     return DbRetry.call(
         () -> {
           final String sql =
-              " SELECT value, update_seq, update_time FROM %s.event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ? "
+              """
+                SELECT value, update_seq, update_time FROM "%s".event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ?
+              """
                   .formatted(this.schema);
 
           try (var conn = dataSource.getConnection();
@@ -317,19 +319,19 @@ public class SystemDatabase implements AutoCloseable {
         () -> {
           final var sql =
               """
-              INSERT INTO %s.event_dispatch_kv (
-               service_name, workflow_fn_name, key, value, update_time, update_seq)
-              VALUES (?, ?, ?, ?, ?, ?)
-              ON CONFLICT (service_name, workflow_fn_name, key)
-              DO UPDATE SET
-                update_time = GREATEST(EXCLUDED.update_time, event_dispatch_kv.update_time),
-                update_seq =  GREATEST(EXCLUDED.update_seq,  event_dispatch_kv.update_seq),
-                value = CASE WHEN (EXCLUDED.update_time > event_dispatch_kv.update_time
-                   OR EXCLUDED.update_seq > event_dispatch_kv.update_seq
-                   OR (event_dispatch_kv.update_time IS NULL and event_dispatch_kv.update_seq IS NULL)
-                ) THEN EXCLUDED.value ELSE event_dispatch_kv.value END
-              RETURNING value, update_time, update_seq
-                   """
+                INSERT INTO "%s".event_dispatch_kv (
+                service_name, workflow_fn_name, key, value, update_time, update_seq)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (service_name, workflow_fn_name, key)
+                DO UPDATE SET
+                  update_time = GREATEST(EXCLUDED.update_time, event_dispatch_kv.update_time),
+                  update_seq =  GREATEST(EXCLUDED.update_seq,  event_dispatch_kv.update_seq),
+                  value = CASE WHEN (EXCLUDED.update_time > event_dispatch_kv.update_time
+                    OR EXCLUDED.update_seq > event_dispatch_kv.update_seq
+                    OR (event_dispatch_kv.update_time IS NULL and event_dispatch_kv.update_seq IS NULL)
+                  ) THEN EXCLUDED.value ELSE event_dispatch_kv.value END
+                RETURNING value, update_time, update_seq
+              """
                   .formatted(this.schema);
 
           try (var conn = dataSource.getConnection();
