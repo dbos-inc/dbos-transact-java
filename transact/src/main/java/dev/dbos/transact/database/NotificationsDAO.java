@@ -11,6 +11,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -20,11 +21,14 @@ import org.slf4j.LoggerFactory;
 public class NotificationsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(NotificationsDAO.class);
-  private HikariDataSource dataSource;
+
+  private final HikariDataSource dataSource;
+  private final String schema;
   private NotificationService notificationService;
 
-  NotificationsDAO(HikariDataSource ds, NotificationService nService) {
+  NotificationsDAO(HikariDataSource ds, NotificationService nService, String schema) {
     this.dataSource = ds;
+    this.schema = Objects.requireNonNull(schema);
     this.notificationService = nService;
   }
 
@@ -45,7 +49,8 @@ public class NotificationsDAO {
       try {
         // Check if operation was already executed
         StepResult recordedOutput =
-            StepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, conn);
+            StepsDAO.checkStepExecutionTxn(
+                workflowUuid, functionId, functionName, conn, this.schema);
 
         if (recordedOutput != null) {
           logger.debug(
@@ -66,7 +71,7 @@ public class NotificationsDAO {
         // Insert notification
         final String sql =
             "INSERT INTO %s.notifications (destination_uuid, topic, message) VALUES (?, ?, ?) "
-                .formatted(Constants.DB_SCHEMA);
+                .formatted(this.schema);
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, destinationUuid);
@@ -89,7 +94,7 @@ public class NotificationsDAO {
         output.setOutput(null);
         output.setError(null);
 
-        StepsDAO.recordStepResultTxn(output, conn);
+        StepsDAO.recordStepResultTxn(output, conn, this.schema);
 
         conn.commit();
 
@@ -119,7 +124,8 @@ public class NotificationsDAO {
     StepResult recordedOutput = null;
 
     try (Connection c = dataSource.getConnection()) {
-      recordedOutput = StepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c);
+      recordedOutput =
+          StepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c, this.schema);
     }
 
     if (recordedOutput != null) {
@@ -153,7 +159,7 @@ public class NotificationsDAO {
       try (Connection conn = dataSource.getConnection()) {
         final String sql =
             "SELECT topic FROM %s.notifications WHERE destination_uuid = ? AND topic = ? "
-                .formatted(Constants.DB_SCHEMA);
+                .formatted(this.schema);
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, workflowUuid);
@@ -168,7 +174,8 @@ public class NotificationsDAO {
         // Wait for the notification
         // Support OAOO sleep
         double actualTimeout =
-            StepsDAO.sleep(dataSource, workflowUuid, timeoutFunctionId, timeout, true).toMillis();
+            StepsDAO.sleep(dataSource, workflowUuid, timeoutFunctionId, timeout, true, this.schema)
+                .toMillis();
         long timeoutMs = (long) (actualTimeout);
         lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
       }
@@ -198,7 +205,7 @@ public class NotificationsDAO {
                 AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry)
               RETURNING message
               """
-                .formatted(Constants.DB_SCHEMA);
+                .formatted(this.schema);
 
         Object[] recvdSermessage = null;
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -222,7 +229,7 @@ public class NotificationsDAO {
         output.setOutput(JSONUtil.serialize(toSave));
         output.setError(null);
 
-        StepsDAO.recordStepResultTxn(output, conn);
+        StepsDAO.recordStepResultTxn(output, conn, this.schema);
 
         conn.commit();
         return toSave;
@@ -249,7 +256,8 @@ public class NotificationsDAO {
         // Check if operation was already executed
         if (functionId != null) {
           StepResult recordedOutput =
-              StepsDAO.checkStepExecutionTxn(workflowId, functionId, functionName, conn);
+              StepsDAO.checkStepExecutionTxn(
+                  workflowId, functionId, functionName, conn, this.schema);
 
           if (recordedOutput != null) {
             logger.debug("Replaying setEvent, id: {}, key: {}", functionId, key);
@@ -271,7 +279,7 @@ public class NotificationsDAO {
               ON CONFLICT (workflow_uuid, key)
               DO UPDATE SET value = EXCLUDED.value
               """
-                .formatted(Constants.DB_SCHEMA);
+                .formatted(this.schema);
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, workflowId);
@@ -290,7 +298,7 @@ public class NotificationsDAO {
           output.setError(null);
 
           // Record the operation result
-          StepsDAO.recordStepResultTxn(output, conn);
+          StepsDAO.recordStepResultTxn(output, conn, this.schema);
         }
 
         conn.commit();
@@ -318,7 +326,11 @@ public class NotificationsDAO {
       try (Connection conn = dataSource.getConnection()) {
         recordedOutput =
             StepsDAO.checkStepExecutionTxn(
-                callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName, conn);
+                callerCtx.getWorkflowId(),
+                callerCtx.getFunctionId(),
+                functionName,
+                conn,
+                this.schema);
       }
 
       if (recordedOutput != null) {
@@ -347,7 +359,7 @@ public class NotificationsDAO {
       // Initial database check
       final String sql =
           "SELECT value FROM %s.workflow_events WHERE workflow_uuid = ? AND key = ?"
-              .formatted(Constants.DB_SCHEMA);
+              .formatted(this.schema);
 
       try (Connection conn = dataSource.getConnection();
           PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -378,8 +390,8 @@ public class NotificationsDAO {
                       callerCtx.getWorkflowId(),
                       callerCtx.getTimeoutFunctionId(),
                       timeout,
-                      true // skip_sleep
-                      )
+                      true, // skip_sleep
+                      this.schema)
                   .toMillis();
         }
 
@@ -422,7 +434,7 @@ public class NotificationsDAO {
         // 'null'
         output.setError(null);
 
-        StepsDAO.recordStepResultTxn(dataSource, output);
+        StepsDAO.recordStepResultTxn(dataSource, output, this.schema);
       }
 
       return value;

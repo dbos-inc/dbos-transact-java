@@ -27,13 +27,14 @@ public class MigrationManager {
   public static void runMigrations(DBOSConfig config) {
 
     createDatabaseIfNotExists(Objects.requireNonNull(config, "DBOS Config must not be null"));
+    final String schema = Objects.requireNonNullElse(config.databaseSchema(), Constants.DB_SCHEMA);
 
     var ds = SystemDatabase.createDataSource(config);
     try (var conn = ds.getConnection()) {
-      ensureDbosSchema(conn, Constants.DB_SCHEMA);
-      ensureMigrationTable(conn, Constants.DB_SCHEMA);
-      var migrations = getMigrations(Constants.DB_SCHEMA);
-      runDbosMigrations(conn, Constants.DB_SCHEMA, migrations);
+      ensureDbosSchema(conn, schema);
+      ensureMigrationTable(conn, schema);
+      var migrations = getMigrations(schema);
+      runDbosMigrations(conn, schema, migrations);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
     } finally {
@@ -206,7 +207,8 @@ public class MigrationManager {
 
   public static List<String> getMigrations(String schema) {
     Objects.requireNonNull(schema);
-    return List.of(migrationOne.formatted(schema), migrationTwo.formatted(schema));
+    var migrations = List.of(migrationOne, migrationTwo);
+    return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
   static final String migrationOne =

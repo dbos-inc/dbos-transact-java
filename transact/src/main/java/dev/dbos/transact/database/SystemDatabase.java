@@ -27,6 +27,7 @@ public class SystemDatabase implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
   private final HikariDataSource dataSource;
+  private final String schema;
 
   private final WorkflowDAO workflowDAO;
   private final StepsDAO stepsDAO;
@@ -35,16 +36,17 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationService notificationService;
 
   public SystemDatabase(DBOSConfig config) {
-    this(SystemDatabase.createDataSource(config));
+    this(SystemDatabase.createDataSource(config), Objects.requireNonNull(config).databaseSchema());
   }
 
-  public SystemDatabase(HikariDataSource dataSource) {
+  public SystemDatabase(HikariDataSource dataSource, String schema) {
+    this.schema = Objects.requireNonNullElse(schema, Constants.DB_SCHEMA);
     this.dataSource = dataSource;
-    stepsDAO = new StepsDAO(dataSource);
-    workflowDAO = new WorkflowDAO(dataSource);
-    queuesDAO = new QueuesDAO(dataSource);
+    stepsDAO = new StepsDAO(dataSource, this.schema);
+    workflowDAO = new WorkflowDAO(dataSource, this.schema);
+    queuesDAO = new QueuesDAO(dataSource, this.schema);
     notificationService = new NotificationService(dataSource);
-    notificationsDAO = new NotificationsDAO(dataSource, notificationService);
+    notificationsDAO = new NotificationsDAO(dataSource, notificationService, this.schema);
   }
 
   HikariConfig getConfig() {
@@ -154,7 +156,8 @@ public class SystemDatabase implements AutoCloseable {
     return DbRetry.call(
         () -> {
           try (Connection connection = dataSource.getConnection()) {
-            return StepsDAO.checkStepExecutionTxn(workflowId, functionId, functionName, connection);
+            return StepsDAO.checkStepExecutionTxn(
+                workflowId, functionId, functionName, connection, this.schema);
           }
         });
   }
@@ -162,7 +165,7 @@ public class SystemDatabase implements AutoCloseable {
   public void recordStepResultTxn(StepResult result) {
     DbRetry.run(
         () -> {
-          StepsDAO.recordStepResultTxn(dataSource, result);
+          StepsDAO.recordStepResultTxn(dataSource, result, this.schema);
         });
   }
 
@@ -285,7 +288,7 @@ public class SystemDatabase implements AutoCloseable {
         () -> {
           final String sql =
               " SELECT value, update_seq, update_time FROM %s.event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ? "
-                  .formatted(Constants.DB_SCHEMA);
+                  .formatted(this.schema);
 
           try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {
@@ -327,7 +330,7 @@ public class SystemDatabase implements AutoCloseable {
                 ) THEN EXCLUDED.value ELSE event_dispatch_kv.value END
               RETURNING value, update_time, update_seq
                    """
-                  .formatted(Constants.DB_SCHEMA);
+                  .formatted(this.schema);
 
           try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {

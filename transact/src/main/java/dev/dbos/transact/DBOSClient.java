@@ -58,8 +58,19 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    */
   public DBOSClient(String url, String user, String password) {
+    this(url, user, password, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing system database access credentials
+   *
+   * @param url System database JDBC URL
+   * @param user System database user
+   * @param password System database credential / password
+   */
+  public DBOSClient(String url, String user, String password, String schema) {
     var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
-    systemDatabase = new SystemDatabase(dataSource);
+    systemDatabase = new SystemDatabase(dataSource, schema);
   }
 
   /**
@@ -68,7 +79,16 @@ public class DBOSClient implements AutoCloseable {
    * @param dataSource System database data source
    */
   public DBOSClient(HikariDataSource dataSource) {
-    systemDatabase = new SystemDatabase(dataSource);
+    this(dataSource, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing a configured data source
+   *
+   * @param dataSource System database data source
+   */
+  public DBOSClient(HikariDataSource dataSource, String schema) {
+    systemDatabase = new SystemDatabase(dataSource, schema);
   }
 
   @Override
