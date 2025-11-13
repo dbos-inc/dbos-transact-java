@@ -1,6 +1,9 @@
 package dev.dbos.transact.migrations;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
@@ -16,34 +19,35 @@ import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class MigrationManagerTest {
 
-  private static DataSource testDataSource;
-  private static DBOSConfig dbosConfig;
+  private DataSource testDataSource;
+  private DBOSConfig dbosConfig;
 
-  @BeforeAll
-  static void setup() throws Exception {
+  @BeforeEach
+  void setup() throws Exception {
 
-    MigrationManagerTest.dbosConfig =
+    dbosConfig =
         DBOSConfig.defaultsFromEnv("migrationtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys_mm_test")
             .withMaximumPoolSize(3);
 
-    DBUtils.recreateDB(MigrationManagerTest.dbosConfig);
+    DBUtils.recreateDB(dbosConfig);
     testDataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
-  @AfterAll
-  static void cleanup() throws Exception {
+  @AfterEach
+  void cleanup() throws Exception {
     ((HikariDataSource) testDataSource).close();
   }
 
   @Test
-  @Order(1)
   void testRunMigrations_CreatesTables() throws Exception {
 
     MigrationManager.runMigrations(dbosConfig);
@@ -59,12 +63,8 @@ class MigrationManagerTest {
       assertTableExists(metaData, "workflow_events");
 
       var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
-      try (var stmt = conn.createStatement();
-          var rs = stmt.executeQuery("SELECT version FROM dbos.dbos_migrations")) {
-        assertTrue(rs.next());
-        assertEquals(migrations.size(), rs.getInt("version"));
-        assertFalse(rs.next());
-      }
+      var version = getVersion(conn);
+      assertEquals(migrations.size(), version);
     }
   }
 
@@ -80,9 +80,49 @@ class MigrationManagerTest {
     }
   }
 
+  public static int getVersion(Connection conn) throws Exception {
+    return getVersion(conn, Constants.DB_SCHEMA);
+  }
+
+  public static int getVersion(Connection conn, String schema) throws Exception {
+    String sql = "SELECT version FROM \"%1$s\".dbos_migrations".formatted(schema);
+    try (var stmt = conn.createStatement();
+        var rs = stmt.executeQuery(sql)) {
+      assertTrue(rs.next());
+      var value = rs.getInt("version");
+      assertFalse(rs.next());
+      return value;
+    }
+  }
+
   @Test
-  @Order(2)
-  void testRunMigrations_IsIdempotent() {
+  void testRunMigrations_customSchema() throws Exception {
+
+    String schema = "custom";
+    dbosConfig = dbosConfig.withDatabaseSchema(schema);
+    MigrationManager.runMigrations(dbosConfig);
+
+    // Assert
+    try (Connection conn = testDataSource.getConnection()) {
+      DatabaseMetaData metaData = conn.getMetaData();
+
+      // Verify all expected tables exist in the dbos schema
+      assertTableExists(metaData, "operation_outputs", schema);
+      assertTableExists(metaData, "workflow_status", schema);
+      assertTableExists(metaData, "notifications", schema);
+      assertTableExists(metaData, "workflow_events", schema);
+
+      var migrations = new ArrayList<>(MigrationManager.getMigrations(schema));
+      var version = getVersion(conn, schema);
+      assertEquals(migrations.size(), version);
+    }
+  }
+
+  @Test
+  void testRunMigrations_IsIdempotent() throws Exception {
+
+    testRunMigrations_CreatesTables();
+
     // Running migrations again
     assertDoesNotThrow(
         () -> {
@@ -92,8 +132,9 @@ class MigrationManagerTest {
   }
 
   @Test
-  @Order(4)
   void testAddingNewMigration() throws Exception {
+    testRunMigrations_CreatesTables();
+
     var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
     migrations.add("CREATE TABLE dummy_table(id SERIAL PRIMARY KEY);");
 

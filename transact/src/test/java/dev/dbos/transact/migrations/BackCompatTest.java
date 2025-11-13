@@ -15,19 +15,15 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class BackCompatTest {
-  private static DBOSConfig config;
+  private DBOSConfig config;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
+  @BeforeEach
+  void onetimeSetup() throws Exception {
 
     config =
         DBOSConfig.defaultsFromEnv("systemdbtest")
@@ -43,7 +39,6 @@ public class BackCompatTest {
   }
 
   @Test
-  @Order(1)
   void testInitialRun() throws Exception {
 
     runDbos();
@@ -60,8 +55,9 @@ public class BackCompatTest {
   }
 
   @Test
-  @Order(2)
   void testWayFutureVersion() throws Exception {
+    testInitialRun();
+
     var dataSource = SystemDatabase.createDataSource(config);
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
@@ -72,8 +68,9 @@ public class BackCompatTest {
   }
 
   @Test
-  @Order(3)
   void testIdempotence() throws Exception {
+    testWayFutureVersion();
+
     var dataSource = SystemDatabase.createDataSource(config);
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
