@@ -71,7 +71,7 @@ public class NotificationsDAO {
         // Insert notification
         final String sql =
             """
-              INSERT INTO "%s".notifications (destination_uuid, topic, message) VALUES (?, ?, ?)
+              INSERT INTO %s.notifications (destination_uuid, topic, message) VALUES (?, ?, ?)
             """
                 .formatted(this.schema);
 
@@ -161,7 +161,7 @@ public class NotificationsDAO {
       try (Connection conn = dataSource.getConnection()) {
         final String sql =
             """
-              SELECT topic FROM "%s".notifications WHERE destination_uuid = ? AND topic = ?
+              SELECT topic FROM %s.notifications WHERE destination_uuid = ? AND topic = ?
             """
                 .formatted(this.schema);
 
@@ -198,12 +198,12 @@ public class NotificationsDAO {
             """
               WITH oldest_entry AS (
                   SELECT destination_uuid, topic, message, created_at_epoch_ms
-                  FROM "%1$s".notifications
+                  FROM %1$s.notifications
                   WHERE destination_uuid = ? AND topic = ?
                   ORDER BY created_at_epoch_ms ASC
                   LIMIT 1
               )
-              DELETE FROM "%1$s".notifications
+              DELETE FROM %1$s.notifications
               WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry)
                 AND topic = (SELECT topic FROM oldest_entry)
                 AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry)
@@ -279,7 +279,7 @@ public class NotificationsDAO {
         // Insert or update the workflow event using UPSERT
         final String sql =
             """
-              INSERT INTO "%s".workflow_events (workflow_uuid, key, value)
+              INSERT INTO %s.workflow_events (workflow_uuid, key, value)
               VALUES (?, ?, ?)
               ON CONFLICT (workflow_uuid, key)
               DO UPDATE SET value = EXCLUDED.value
@@ -367,7 +367,7 @@ public class NotificationsDAO {
       // Initial database check
       final String sql =
           """
-            SELECT value FROM "%s".workflow_events WHERE workflow_uuid = ? AND key = ?
+            SELECT value FROM %s.workflow_events WHERE workflow_uuid = ? AND key = ?
           """
               .formatted(this.schema);
 

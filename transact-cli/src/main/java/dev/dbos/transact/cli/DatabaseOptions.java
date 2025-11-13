@@ -27,8 +27,7 @@ public class DatabaseOptions {
 
   @Option(
       names = {"--schema"},
-      defaultValue = "dbos",
-      description = "Database schema name [default: ${DEFAULT-VALUE}]")
+      description = "Database schema name [default: dbos")
   private String schema;
 
   public String url() {

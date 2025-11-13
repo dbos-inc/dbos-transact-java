@@ -1,6 +1,5 @@
 package dev.dbos.transact.migrations;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 
@@ -31,14 +30,13 @@ public class MigrationManager {
 
   public static void runMigrations(DBOSConfig config) {
     Objects.requireNonNull(config, "DBOS Config must not be null");
-    final String schema = Objects.requireNonNullElse(config.databaseSchema(), Constants.DB_SCHEMA);
 
     if (config.dataSource() != null) {
-      runMigrations(config.dataSource(), schema);
+      runMigrations(config.dataSource(), config.databaseSchema());
     } else {
       createDatabaseIfNotExists(config);
       try (var ds = SystemDatabase.createDataSource(config)) {
-        runMigrations(ds, schema);
+        runMigrations(ds, config.databaseSchema());
       }
     }
   }
@@ -47,7 +45,6 @@ public class MigrationManager {
     Objects.requireNonNull(url, "database url must not be null");
     Objects.requireNonNull(user, "database user must not be null");
     Objects.requireNonNull(password, "database password must not be null");
-    schema = Objects.requireNonNullElse(schema, Constants.DB_SCHEMA).replace("\"", "\"\"");
 
     createDatabaseIfNotExists(url, user, password);
     try (var ds = SystemDatabase.createDataSource(url, user, password, 0, 0)) {
@@ -57,6 +54,7 @@ public class MigrationManager {
 
   private static void runMigrations(HikariDataSource ds, String schema) {
     Objects.requireNonNull(ds, "Data Source must not be null");
+    schema = SystemDatabase.sanitizeSchema(schema);
 
     try (var conn = ds.getConnection()) {
       ensureDbosSchema(conn, schema);
@@ -140,7 +138,7 @@ public class MigrationManager {
     }
 
     try (var stmt = conn.createStatement()) {
-      stmt.execute("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(schema));
+      stmt.execute("CREATE SCHEMA IF NOT EXISTS %s".formatted(schema));
     } catch (SQLException e) {
       logger.warn("SQLException thrown creating the {} schema", schema, e);
     }
@@ -163,7 +161,7 @@ public class MigrationManager {
 
     try (var stmt = conn.createStatement()) {
       stmt.execute(
-          "CREATE TABLE IF NOT EXISTS \"%s\".dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)"
+          "CREATE TABLE IF NOT EXISTS %s.dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)"
               .formatted(schema));
     } catch (SQLException e) {
       logger.warn("SQLException thrown creating the dbos_migrations table", e);
@@ -173,8 +171,7 @@ public class MigrationManager {
   public static int getCurrentSysDbVersion(Connection conn, String schema) {
     Objects.requireNonNull(schema, "schema must not be null");
     var sql =
-        "SELECT version FROM \"%s\".dbos_migrations ORDER BY version DESC limit 1"
-            .formatted(schema);
+        "SELECT version FROM %s.dbos_migrations ORDER BY version DESC limit 1".formatted(schema);
     try (var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
       if (rs.next()) {
@@ -213,15 +210,14 @@ public class MigrationManager {
 
       try {
         int rowCount = 0;
-        var updateSQL = "UPDATE \"%s\".dbos_migrations SET version = ?".formatted(schema);
+        var updateSQL = "UPDATE %s.dbos_migrations SET version = ?".formatted(schema);
         try (var stmt = conn.prepareStatement(updateSQL)) {
           stmt.setLong(1, migrationIndex);
           rowCount = stmt.executeUpdate();
         }
 
         if (rowCount == 0) {
-          var insertSql =
-              "INSERT INTO \"%s\".dbos_migrations (version) VALUES (?)".formatted(schema);
+          var insertSql = "INSERT INTO %s.dbos_migrations (version) VALUES (?)".formatted(schema);
           try (var stmt = conn.prepareStatement(insertSql)) {
             stmt.setLong(1, migrationIndex);
             stmt.executeUpdate();
@@ -245,7 +241,7 @@ public class MigrationManager {
       """
       CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-      CREATE TABLE "%1$s".workflow_status (
+      CREATE TABLE %1$s.workflow_status (
           workflow_uuid TEXT PRIMARY KEY,
           status TEXT,
           name TEXT,
@@ -272,15 +268,15 @@ public class MigrationManager {
           priority INTEGER NOT NULL DEFAULT 0
       );
 
-      CREATE INDEX workflow_status_created_at_index ON "%1$s".workflow_status (created_at);
-      CREATE INDEX workflow_status_executor_id_index ON "%1$s".workflow_status (executor_id);
-      CREATE INDEX workflow_status_status_index ON "%1$s".workflow_status (status);
+      CREATE INDEX workflow_status_created_at_index ON %1$s.workflow_status (created_at);
+      CREATE INDEX workflow_status_executor_id_index ON %1$s.workflow_status (executor_id);
+      CREATE INDEX workflow_status_status_index ON %1$s.workflow_status (status);
 
-      ALTER TABLE "%1$s".workflow_status
+      ALTER TABLE %1$s.workflow_status
       ADD CONSTRAINT uq_workflow_status_queue_name_dedup_id
       UNIQUE (queue_name, deduplication_id);
 
-      CREATE TABLE "%1$s".operation_outputs (
+      CREATE TABLE %1$s.operation_outputs (
           workflow_uuid TEXT NOT NULL,
           function_id INTEGER NOT NULL,
           function_name TEXT NOT NULL DEFAULT '',
@@ -288,23 +284,23 @@ public class MigrationManager {
           error TEXT,
           child_workflow_id TEXT,
           PRIMARY KEY (workflow_uuid, function_id),
-          FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
+          FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
 
-      CREATE TABLE "%1$s".notifications (
+      CREATE TABLE %1$s.notifications (
           destination_uuid TEXT NOT NULL,
           topic TEXT,
           message TEXT NOT NULL,
           created_at_epoch_ms BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
           message_uuid TEXT NOT NULL DEFAULT gen_random_uuid(), -- Built-in function
-          FOREIGN KEY (destination_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
+          FOREIGN KEY (destination_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
-      CREATE INDEX idx_workflow_topic ON "%1$s".notifications (destination_uuid, topic);
+      CREATE INDEX idx_workflow_topic ON %1$s.notifications (destination_uuid, topic);
 
       -- Create notification function
-      CREATE OR REPLACE FUNCTION "%1$s".notifications_function() RETURNS TRIGGER AS $$
+      CREATE OR REPLACE FUNCTION %1$s.notifications_function() RETURNS TRIGGER AS $$
       DECLARE
           payload text := NEW.destination_uuid || '::' || NEW.topic;
       BEGIN
@@ -315,20 +311,20 @@ public class MigrationManager {
 
       -- Create notification trigger
       CREATE TRIGGER dbos_notifications_trigger
-      AFTER INSERT ON "%1$s".notifications
-      FOR EACH ROW EXECUTE FUNCTION "%1$s".notifications_function();
+      AFTER INSERT ON %1$s.notifications
+      FOR EACH ROW EXECUTE FUNCTION %1$s.notifications_function();
 
-      CREATE TABLE "%1$s".workflow_events (
+      CREATE TABLE %1$s.workflow_events (
           workflow_uuid TEXT NOT NULL,
           key TEXT NOT NULL,
           value TEXT NOT NULL,
           PRIMARY KEY (workflow_uuid, key),
-          FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
+          FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
 
       -- Create events function
-      CREATE OR REPLACE FUNCTION "%1$s".workflow_events_function() RETURNS TRIGGER AS $$
+      CREATE OR REPLACE FUNCTION %1$s.workflow_events_function() RETURNS TRIGGER AS $$
       DECLARE
           payload text := NEW.workflow_uuid || '::' || NEW.key;
       BEGIN
@@ -339,20 +335,20 @@ public class MigrationManager {
 
       -- Create events trigger
       CREATE TRIGGER dbos_workflow_events_trigger
-      AFTER INSERT ON "%1$s".workflow_events
-      FOR EACH ROW EXECUTE FUNCTION "%1$s".workflow_events_function();
+      AFTER INSERT ON %1$s.workflow_events
+      FOR EACH ROW EXECUTE FUNCTION %1$s.workflow_events_function();
 
-      CREATE TABLE "%1$s".streams (
+      CREATE TABLE %1$s.streams (
           workflow_uuid TEXT NOT NULL,
           key TEXT NOT NULL,
           value TEXT NOT NULL,
           "offset" INTEGER NOT NULL,
           PRIMARY KEY (workflow_uuid, key, "offset"),
-          FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
+          FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
 
-      CREATE TABLE "%1$s".event_dispatch_kv (
+      CREATE TABLE %1$s.event_dispatch_kv (
           service_name TEXT NOT NULL,
           workflow_fn_name TEXT NOT NULL,
           key TEXT NOT NULL,
@@ -365,21 +361,21 @@ public class MigrationManager {
 
   static final String migration2 =
       """
-      ALTER TABLE "%1$s".workflow_status ADD COLUMN queue_partition_key TEXT;
+      ALTER TABLE %1$s.workflow_status ADD COLUMN queue_partition_key TEXT;
       """;
 
   static final String migration3 =
       """
-      create index "idx_workflow_status_queue_status_started" on "%1$s"."workflow_status" ("queue_name", "status", "started_at_epoch_ms")
+      create index "idx_workflow_status_queue_status_started" on %1$s."workflow_status" ("queue_name", "status", "started_at_epoch_ms")
       """;
 
   static final String migration4 =
       """
-      ALTER TABLE "%1$s".workflow_status ADD COLUMN forked_from TEXT;
+      ALTER TABLE %1$s.workflow_status ADD COLUMN forked_from TEXT;
       """;
 
   static final String migration5 =
       """
-      ALTER TABLE "%1$s".operation_outputs ADD COLUMN started_at_epoch_ms BIGINT, ADD COLUMN completed_at_epoch_ms BIGINT;
+      ALTER TABLE %1$s.operation_outputs ADD COLUMN started_at_epoch_ms BIGINT, ADD COLUMN completed_at_epoch_ms BIGINT;
       """;
 }

@@ -60,7 +60,7 @@ public class QueuesDAO {
         final String limiterQuery =
             """
               SELECT COUNT(*)
-              FROM "%s".workflow_status
+              FROM %s.workflow_status
               WHERE queue_name = ?
               AND status != 'ENQUEUED'
               AND started_at_epoch_ms > ?;
@@ -91,7 +91,7 @@ public class QueuesDAO {
         final String pendingQuery =
             """
               SELECT executor_id, COUNT(*) as task_count
-              FROM "%s".workflow_status
+              FROM %s.workflow_status
               WHERE queue_name = ? AND status = 'PENDING'
               GROUP BY executor_id;
             """
@@ -138,7 +138,7 @@ public class QueuesDAO {
           new StringBuilder(
               """
                 SELECT workflow_uuid
-                FROM "%s".workflow_status
+                FROM %s.workflow_status
                 WHERE queue_name = ?
                   AND status = 'ENQUEUED'
                   AND (application_version = ? OR application_version IS NULL)
@@ -191,7 +191,7 @@ public class QueuesDAO {
       // Update workflow status for each dequeued workflow
       final String updateQuery =
           """
-            UPDATE "%s".workflow_status
+            UPDATE %s.workflow_status
             SET status = 'PENDING',
               application_version = ?,
               executor_id = ?,
@@ -243,7 +243,7 @@ public class QueuesDAO {
 
     final String sql =
         """
-          UPDATE "%s".workflow_status
+          UPDATE %s.workflow_status
           SET started_at_epoch_ms = NULL, status = ?
           WHERE workflow_uuid = ? AND queue_name IS NOT NULL AND status = ?
         """

@@ -40,7 +40,7 @@ public class WorkflowDAO {
 
     String sql =
         """
-          SELECT status, output, error FROM "%s".workflow_status WHERE workflow_uuid = ?;
+          SELECT status, output, error FROM %s.workflow_status WHERE workflow_uuid = ?;
         """
             .formatted(this.schema);
 
@@ -117,7 +117,7 @@ public class WorkflowDAO {
 
           var sql =
               """
-                UPDATE "%s".workflow_status
+                UPDATE %s.workflow_status
                 SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL
                 WHERE workflow_uuid = ? AND status = ?
               """
@@ -158,7 +158,7 @@ public class WorkflowDAO {
 
     String insertSQL =
         """
-          INSERT INTO "%s".workflow_status (
+          INSERT INTO %s.workflow_status (
             workflow_uuid, status, inputs,
             name, class_name, config_name,
             queue_name, deduplication_id, priority,
@@ -259,7 +259,7 @@ public class WorkflowDAO {
     // Note that transitions from CANCELLED to SUCCESS or ERROR are forbidden
     var sql =
         """
-          UPDATE "%s".workflow_status
+          UPDATE %s.workflow_status
           SET status = ?, output = ?, error = ?, updated_at = ?, deduplication_id = NULL
           WHERE workflow_uuid = ? AND NOT (status = ? AND ? in (?, ?))
         """
@@ -534,7 +534,7 @@ public class WorkflowDAO {
     final String sql =
         """
           SELECT workflow_uuid, queue_name
-          FROM "%s".workflow_status
+          FROM %s.workflow_status
           WHERE status = ?
             AND executor_id = ?
             AND application_version = ?
@@ -571,7 +571,7 @@ public class WorkflowDAO {
     final String sql =
         """
           SELECT status, output, error
-          FROM "%s".workflow_status
+          FROM %s.workflow_status
           WHERE workflow_uuid = ?
         """
             .formatted(this.schema);
@@ -636,7 +636,7 @@ public class WorkflowDAO {
 
     String sql =
         """
-          INSERT INTO "%s".operation_outputs (workflow_uuid, function_id, function_name, child_workflow_id) VALUES (?, ?, ?, ?)
+          INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, child_workflow_id) VALUES (?, ?, ?, ?)
         """
             .formatted(this.schema);
 
@@ -667,7 +667,7 @@ public class WorkflowDAO {
     }
     final String sql =
         """
-          SELECT child_workflow_id FROM "%s".operation_outputs WHERE workflow_uuid = ? AND function_id = ?
+          SELECT child_workflow_id FROM %s.operation_outputs WHERE workflow_uuid = ? AND function_id = ?
         """
             .formatted(this.schema);
 
@@ -697,7 +697,7 @@ public class WorkflowDAO {
       // Check the status of the workflow. If it is complete, do nothing.
       String checkStatusSql =
           """
-            SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
+            SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?
           """
               .formatted(this.schema);
 
@@ -723,7 +723,7 @@ public class WorkflowDAO {
       // on
       String updateSql =
           """
-            UPDATE "%s".workflow_status
+            UPDATE %s.workflow_status
             SET status = ?,
                 queue_name = NULL,
                 deduplication_id = NULL,
@@ -849,7 +849,7 @@ public class WorkflowDAO {
 
     String sql =
         """
-          INSERT INTO "%s".workflow_status (
+          INSERT INTO %s.workflow_status (
             workflow_uuid, status, name, class_name, config_name, application_version, application_id,
             authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_deadline_epoch_ms, workflow_timeout_ms
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -891,10 +891,10 @@ public class WorkflowDAO {
 
     String sql =
         """
-          INSERT INTO "%1$s".operation_outputs
+          INSERT INTO %1$s.operation_outputs
               (workflow_uuid, function_id, output, error, function_name, child_workflow_id )
           SELECT ? as workflow_uuid, function_id, output, error, function_name, child_workflow_id
-              FROM "%1$s".operation_outputs
+              FROM %1$s.operation_outputs
               WHERE workflow_uuid = ? AND function_id < ?
         """
             .formatted(schema);
@@ -919,7 +919,7 @@ public class WorkflowDAO {
       throws SQLException {
     String sql =
         """
-          SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
+          SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?
         """
             .formatted(schema);
 
@@ -939,7 +939,7 @@ public class WorkflowDAO {
       Connection connection, String workflowId, String schema) throws SQLException {
     String sql =
         """
-          UPDATE "%s".workflow_status
+          UPDATE %s.workflow_status
           SET status = ?, queue_name = ?, recovery_attempts = ?, workflow_deadline_epoch_ms = 0, deduplication_id = NULL,  started_at_epoch_ms = NULL
           WHERE workflow_uuid = ?
         """
@@ -959,7 +959,7 @@ public class WorkflowDAO {
       throws SQLException {
     String sql =
         """
-          SELECT created_at FROM "%s".workflow_status ORDER BY created_at DESC OFFSET ? LIMIT 1
+          SELECT created_at FROM %s.workflow_status ORDER BY created_at DESC OFFSET ? LIMIT 1
         """
             .formatted(schema);
     try (PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -992,7 +992,7 @@ public class WorkflowDAO {
       if (cutoffEpochTimestampMs != null) {
         String sql =
             """
-              DELETE FROM "%s".workflow_status WHERE created_at < ? AND status NOT IN (?, ?)
+              DELETE FROM %s.workflow_status WHERE created_at < ? AND status NOT IN (?, ?)
             """
                 .formatted(this.schema);
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {

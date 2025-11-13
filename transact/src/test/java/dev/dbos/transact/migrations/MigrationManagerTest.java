@@ -85,7 +85,8 @@ class MigrationManagerTest {
   }
 
   public static int getVersion(Connection conn, String schema) throws Exception {
-    String sql = "SELECT version FROM \"%1$s\".dbos_migrations".formatted(schema);
+    schema = SystemDatabase.sanitizeSchema(schema);
+    String sql = "SELECT version FROM %s.dbos_migrations".formatted(schema);
     try (var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
       assertTrue(rs.next());
@@ -98,7 +99,7 @@ class MigrationManagerTest {
   @Test
   void testRunMigrations_customSchema() throws Exception {
 
-    String schema = "custom";
+    String schema = "C\"$+0m'";
     dbosConfig = dbosConfig.withDatabaseSchema(schema);
     MigrationManager.runMigrations(dbosConfig);
 

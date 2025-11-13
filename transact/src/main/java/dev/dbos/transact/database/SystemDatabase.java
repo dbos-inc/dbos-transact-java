@@ -26,6 +26,15 @@ import org.slf4j.LoggerFactory;
 public class SystemDatabase implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
+
+  public static String sanitizeSchema(String schema) {
+    schema =
+        Objects.requireNonNullElse(schema, Constants.DB_SCHEMA)
+            .replace("\0", "")
+            .replace("\"", "\"\"");
+    return "\"%s\"".formatted(schema);
+  }
+
   private final HikariDataSource dataSource;
   private final String schema;
 
@@ -40,7 +49,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public SystemDatabase(HikariDataSource dataSource, String schema) {
-    this.schema = Objects.requireNonNullElse(schema, Constants.DB_SCHEMA);
+    this.schema = sanitizeSchema(schema);
     this.dataSource = dataSource;
     stepsDAO = new StepsDAO(dataSource, this.schema);
     workflowDAO = new WorkflowDAO(dataSource, this.schema);
@@ -288,7 +297,7 @@ public class SystemDatabase implements AutoCloseable {
         () -> {
           final String sql =
               """
-                SELECT value, update_seq, update_time FROM "%s".event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ?
+                SELECT value, update_seq, update_time FROM %s.event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ?
               """
                   .formatted(this.schema);
 
@@ -319,7 +328,7 @@ public class SystemDatabase implements AutoCloseable {
         () -> {
           final var sql =
               """
-                INSERT INTO "%s".event_dispatch_kv (
+                INSERT INTO %s.event_dispatch_kv (
                 service_name, workflow_fn_name, key, value, update_time, update_seq)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT (service_name, workflow_fn_name, key)
