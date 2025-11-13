@@ -2,10 +2,16 @@ package dev.dbos.transact.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migrations.MigrationManager;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -202,9 +208,14 @@ public class DBUtils {
   }
 
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) {
+    return getWorkflowRows(ds, Constants.DB_SCHEMA);
+  }
+
+  public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds, String schema) {
+    String sql = "SELECT * FROM \"%1$s\".workflow_status ORDER BY \"created_at\"".formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.createStatement();
-        var rs = stmt.executeQuery("SELECT * FROM dbos.workflow_status ORDER BY \"created_at\"")) {
+        var rs = stmt.executeQuery(sql)) {
       List<WorkflowStatusRow> rows = new ArrayList<>();
 
       while (rs.next()) {
