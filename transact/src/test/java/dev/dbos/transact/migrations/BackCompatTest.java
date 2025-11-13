@@ -1,4 +1,4 @@
-package dev.dbos.transact.migration;
+package dev.dbos.transact.migrations;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -7,7 +7,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.invocation.HawkService;
 import dev.dbos.transact.invocation.HawkServiceImpl;
-import dev.dbos.transact.migrations.MigrationManager;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
