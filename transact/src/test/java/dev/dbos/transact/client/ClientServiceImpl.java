@@ -17,4 +17,13 @@ public class ClientServiceImpl implements ClientService {
     var message = DBOS.recv("test-topic", Duration.ofSeconds(10));
     return String.format("%d-%s", i, message);
   }
+
+  @Workflow
+  public void sleep(int ms) {
+    try {
+      Thread.sleep(ms);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
+  }
 }
