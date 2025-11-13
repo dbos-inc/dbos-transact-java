@@ -360,7 +360,7 @@ public class WorkflowDAO {
       sqlBuilder.append(", output, error");
     }
 
-    sqlBuilder.append(" FROM \"%s\".workflow_status ".formatted(this.schema));
+    sqlBuilder.append(" FROM %s.workflow_status ".formatted(this.schema));
 
     // --- WHERE Clauses ---
     StringJoiner whereConditions = new StringJoiner(" AND ");
