@@ -2,8 +2,8 @@ package dev.dbos.transact.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.migrations.MigrationManager;
 
 import java.sql.Connection;
@@ -208,20 +208,19 @@ public class DBUtils {
   }
 
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) {
-    return getWorkflowRows(ds, Constants.DB_SCHEMA);
+    return getWorkflowRows(ds, null);
   }
 
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds, String schema) {
-    String sql = "SELECT * FROM \"%1$s\".workflow_status ORDER BY \"created_at\"".formatted(schema);
+    schema = SystemDatabase.sanitizeSchema(schema);
+    String sql = "SELECT * FROM %s.workflow_status ORDER BY created_at".formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
       List<WorkflowStatusRow> rows = new ArrayList<>();
-
       while (rs.next()) {
         rows.add(new WorkflowStatusRow(rs));
       }
-
       return rows;
     } catch (SQLException e) {
       throw new RuntimeException(e);
@@ -229,12 +228,15 @@ public class DBUtils {
   }
 
   public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId) {
-    var sql = "SELECT * FROM dbos.workflow_status WHERE workflow_uuid = ?";
+    return getWorkflowRow(ds, workflowId, null);
+  }
 
+  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId, String schema) {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    var sql = "SELECT * FROM %s.workflow_status WHERE workflow_uuid = ?".formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
-
       try (var rs = stmt.executeQuery()) {
         if (rs.next()) {
           return new WorkflowStatusRow(rs);
@@ -248,7 +250,15 @@ public class DBUtils {
   }
 
   public static List<OperationOutputRow> getStepRows(DataSource ds, String workflowId) {
-    var sql = "SELECT * FROM dbos.operation_outputs WHERE workflow_uuid = ? ORDER BY function_id";
+    return getStepRows(ds, workflowId, null);
+  }
+
+  public static List<OperationOutputRow> getStepRows(
+      DataSource ds, String workflowId, String schema) {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    var sql =
+        "SELECT * FROM %s.operation_outputs WHERE workflow_uuid = ? ORDER BY function_id"
+            .formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.prepareStatement(sql)) {
 
@@ -267,9 +277,15 @@ public class DBUtils {
   }
 
   public static List<String> getWorkflowEvents(DataSource ds, String workflowId) {
+    return getWorkflowEvents(ds, workflowId, null);
+  }
+
+  public static List<String> getWorkflowEvents(DataSource ds, String workflowId, String schema) {
+    schema = SystemDatabase.sanitizeSchema(schema);
     try (var conn = ds.getConnection(); ) {
       var stmt =
-          conn.prepareStatement("SELECT * FROM dbos.workflow_events WHERE workflow_uuid = ?");
+          conn.prepareStatement(
+              "SELECT * FROM %s.workflow_events WHERE workflow_uuid = ?".formatted(schema));
       stmt.setString(1, workflowId);
       var rs = stmt.executeQuery();
       List<String> rows = new ArrayList<>();
