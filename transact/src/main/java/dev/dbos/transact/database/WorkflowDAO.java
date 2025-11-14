@@ -344,11 +344,14 @@ public class WorkflowDAO {
     // for mapping to the WorkflowStatus fields by index later in the ResultSet.
     sqlBuilder.append(
         """
-          SELECT workflow_uuid, status, name, config_name, class_name,
-          authenticated_user, assumed_role, authenticated_roles,
-          executor_id, created_at, updated_at, application_version, application_id,
-          recovery_attempts, queue_name, workflow_timeout_ms, workflow_deadline_epoch_ms,
-          started_at_epoch_ms, deduplication_id, priority
+          SELECT
+            workflow_uuid, status,  forked_from,
+            name, class_name, config_name,
+            queue_name, deduplication_id, priority, queue_partition_key,
+            executor_id, application_version, application_id,
+            authenticated_user, assumed_role, authenticated_roles,
+            created_at, updated_at, recovery_attempts, started_at_epoch_ms
+            workflow_timeout_ms, workflow_deadline_epoch_ms
         """);
 
     var loadInput = input.loadInput() == null || input.loadInput();
@@ -383,6 +386,13 @@ public class WorkflowDAO {
     }
     if (input.queuesOnly() != null && input.queuesOnly()) {
       whereConditions.add("queue_name IS NOT NULL");
+      whereConditions.add("status in (?, ?)");
+      parameters.add(WorkflowState.PENDING.name());
+      parameters.add(WorkflowState.ENQUEUED.name());
+    }
+    if (input.forkedFrom() != null) {
+      whereConditions.add("forked_from = ?");
+      parameters.add(input.forkedFrom());
     }
     if (input.workflowIdPrefix() != null) {
       whereConditions.add("workflow_uuid LIKE ?");
@@ -515,7 +525,9 @@ public class WorkflowDAO {
                   rs.getObject("workflow_deadline_epoch_ms", Long.class),
                   rs.getObject("started_at_epoch_ms", Long.class),
                   rs.getString("deduplication_id"),
-                  rs.getObject("priority", Integer.class));
+                  rs.getObject("priority", Integer.class),
+                  rs.getString("queue_partition_key"),
+                  rs.getString("forked_from"));
 
           workflows.add(info);
         }
