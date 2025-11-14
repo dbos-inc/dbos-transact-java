@@ -1,9 +1,9 @@
 package dev.dbos.transact.conductor.protocol;
 
-import java.util.Objects;
-
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.WorkflowStatus;
+
+import java.util.Objects;
 
 public class WorkflowsOutput {
   public String WorkflowUUID;
@@ -63,7 +63,8 @@ public class WorkflowsOutput {
     this.ApplicationVersion = status.appVersion();
     this.ExecutorID = status.executorId();
     this.WorkflowTimeoutMS = status.timeoutMs() == null ? null : status.timeoutMs().toString();
-    this.WorkflowDeadlineEpochMS = status.deadlineEpochMs() == null ? null : status.deadlineEpochMs().toString();
+    this.WorkflowDeadlineEpochMS =
+        status.deadlineEpochMs() == null ? null : status.deadlineEpochMs().toString();
     this.DeduplicationID = status.deduplicationId();
     this.Priority = Objects.requireNonNullElse(status.priority(), 0).toString();
     this.QueuePartitionKey = status.partitionKey();
