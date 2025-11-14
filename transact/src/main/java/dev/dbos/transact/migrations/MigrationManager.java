@@ -233,7 +233,8 @@ public class MigrationManager {
 
   public static List<String> getMigrations(String schema) {
     Objects.requireNonNull(schema);
-    var migrations = List.of(migration1, migration2, migration3, migration4, migration5);
+    var migrations =
+        List.of(migration1, migration2, migration3, migration4, migration5, migration6);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -377,5 +378,19 @@ public class MigrationManager {
   static final String migration5 =
       """
       ALTER TABLE %1$s.operation_outputs ADD COLUMN started_at_epoch_ms BIGINT, ADD COLUMN completed_at_epoch_ms BIGINT;
+      """;
+
+  static final String migration6 =
+      """
+      CREATE TABLE %1$s.workflow_events_history (
+          workflow_uuid TEXT NOT NULL,
+          function_id INTEGER NOT NULL,
+          key TEXT NOT NULL,
+          value TEXT NOT NULL,
+          PRIMARY KEY (workflow_uuid, function_id, key),
+          FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
+              ON UPDATE CASCADE ON DELETE CASCADE
+      );
+      ALTER TABLE %1$s.streams ADD COLUMN function_id INTEGER NOT NULL DEFAULT 0;
       """;
 }
