@@ -26,7 +26,17 @@ import org.slf4j.LoggerFactory;
 public class SystemDatabase implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
+
+  public static String sanitizeSchema(String schema) {
+    schema =
+        Objects.requireNonNullElse(schema, Constants.DB_SCHEMA)
+            .replace("\0", "")
+            .replace("\"", "\"\"");
+    return "\"%s\"".formatted(schema);
+  }
+
   private final HikariDataSource dataSource;
+  private final String schema;
 
   private final WorkflowDAO workflowDAO;
   private final StepsDAO stepsDAO;
@@ -35,16 +45,17 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationService notificationService;
 
   public SystemDatabase(DBOSConfig config) {
-    this(SystemDatabase.createDataSource(config));
+    this(SystemDatabase.createDataSource(config), Objects.requireNonNull(config).databaseSchema());
   }
 
-  public SystemDatabase(HikariDataSource dataSource) {
+  public SystemDatabase(HikariDataSource dataSource, String schema) {
+    this.schema = sanitizeSchema(schema);
     this.dataSource = dataSource;
-    stepsDAO = new StepsDAO(dataSource);
-    workflowDAO = new WorkflowDAO(dataSource);
-    queuesDAO = new QueuesDAO(dataSource);
+    stepsDAO = new StepsDAO(dataSource, this.schema);
+    workflowDAO = new WorkflowDAO(dataSource, this.schema);
+    queuesDAO = new QueuesDAO(dataSource, this.schema);
     notificationService = new NotificationService(dataSource);
-    notificationsDAO = new NotificationsDAO(dataSource, notificationService);
+    notificationsDAO = new NotificationsDAO(dataSource, notificationService, this.schema);
   }
 
   HikariConfig getConfig() {
@@ -154,7 +165,8 @@ public class SystemDatabase implements AutoCloseable {
     return DbRetry.call(
         () -> {
           try (Connection connection = dataSource.getConnection()) {
-            return StepsDAO.checkStepExecutionTxn(workflowId, functionId, functionName, connection);
+            return StepsDAO.checkStepExecutionTxn(
+                workflowId, functionId, functionName, connection, this.schema);
           }
         });
   }
@@ -162,7 +174,7 @@ public class SystemDatabase implements AutoCloseable {
   public void recordStepResultTxn(StepResult result) {
     DbRetry.run(
         () -> {
-          StepsDAO.recordStepResultTxn(dataSource, result);
+          StepsDAO.recordStepResultTxn(dataSource, result, this.schema);
         });
   }
 
@@ -284,8 +296,10 @@ public class SystemDatabase implements AutoCloseable {
     return DbRetry.call(
         () -> {
           final String sql =
-              " SELECT value, update_seq, update_time FROM %s.event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ? "
-                  .formatted(Constants.DB_SCHEMA);
+              """
+                SELECT value, update_seq, update_time FROM %s.event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ?
+              """
+                  .formatted(this.schema);
 
           try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {
@@ -314,20 +328,20 @@ public class SystemDatabase implements AutoCloseable {
         () -> {
           final var sql =
               """
-              INSERT INTO %s.event_dispatch_kv (
-               service_name, workflow_fn_name, key, value, update_time, update_seq)
-              VALUES (?, ?, ?, ?, ?, ?)
-              ON CONFLICT (service_name, workflow_fn_name, key)
-              DO UPDATE SET
-                update_time = GREATEST(EXCLUDED.update_time, event_dispatch_kv.update_time),
-                update_seq =  GREATEST(EXCLUDED.update_seq,  event_dispatch_kv.update_seq),
-                value = CASE WHEN (EXCLUDED.update_time > event_dispatch_kv.update_time
-                   OR EXCLUDED.update_seq > event_dispatch_kv.update_seq
-                   OR (event_dispatch_kv.update_time IS NULL and event_dispatch_kv.update_seq IS NULL)
-                ) THEN EXCLUDED.value ELSE event_dispatch_kv.value END
-              RETURNING value, update_time, update_seq
-                   """
-                  .formatted(Constants.DB_SCHEMA);
+                INSERT INTO %s.event_dispatch_kv (
+                service_name, workflow_fn_name, key, value, update_time, update_seq)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (service_name, workflow_fn_name, key)
+                DO UPDATE SET
+                  update_time = GREATEST(EXCLUDED.update_time, event_dispatch_kv.update_time),
+                  update_seq =  GREATEST(EXCLUDED.update_seq,  event_dispatch_kv.update_seq),
+                  value = CASE WHEN (EXCLUDED.update_time > event_dispatch_kv.update_time
+                    OR EXCLUDED.update_seq > event_dispatch_kv.update_seq
+                    OR (event_dispatch_kv.update_time IS NULL and event_dispatch_kv.update_seq IS NULL)
+                  ) THEN EXCLUDED.value ELSE event_dispatch_kv.value END
+                RETURNING value, update_time, update_seq
+              """
+                  .formatted(this.schema);
 
           try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {

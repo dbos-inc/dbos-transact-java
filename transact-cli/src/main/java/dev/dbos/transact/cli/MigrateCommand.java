@@ -38,13 +38,13 @@ public class MigrateCommand implements Callable<Integer> {
     out.format("  System Database: %s\n", dbOptions.url());
     out.format("  System Database User: %s\n", dbOptions.user());
 
-    MigrationManager.runMigrations(dbOptions.url(), dbOptions.user(), dbOptions.password());
-    grantDBOSSchemaPermissions(out);
+    MigrationManager.runMigrations(
+        dbOptions.url(), dbOptions.user(), dbOptions.password(), dbOptions.schema());
+    grantDBOSSchemaPermissions(out, dbOptions.schema());
     return 0;
   }
 
-  void grantDBOSSchemaPermissions(PrintWriter out) throws SQLException {
-    final var schema = "dbos";
+  void grantDBOSSchemaPermissions(PrintWriter out, String schema) throws SQLException {
 
     if (appRole == null || appRole.isEmpty()) {
       return;

@@ -42,6 +42,21 @@ export PGPASSWORD=password
 java -jar dbos.jar migrate
 ```
 
+### Database Schema Configuration
+
+By default, DBOS creates its system tables in the `dbos` schema. You can specify a custom schema name using the `--schema` option.
+
+Example:
+```bash
+# Use a custom schema for all DBOS system tables
+java -jar dbos.jar migrate --schema myapp_schema
+
+# All workflow commands will use the specified schema
+java -jar dbos.jar workflow list --schema myapp_schema
+```
+
+## Commands
+
 ### `dbos migrate`
 Create DBOS system tables in your database. This command runs the migration commands specified in the `database.migrate` section of your config file.
 
