@@ -1,6 +1,5 @@
 package dev.dbos.transact.database;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowState;
 
@@ -9,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
@@ -16,10 +16,13 @@ import org.slf4j.LoggerFactory;
 
 public class QueuesDAO {
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
-  private HikariDataSource dataSource;
 
-  QueuesDAO(HikariDataSource ds) {
-    dataSource = ds;
+  private final HikariDataSource dataSource;
+  private final String schema;
+
+  QueuesDAO(HikariDataSource ds, String schema) {
+    this.dataSource = ds;
+    this.schema = Objects.requireNonNull(schema);
   }
 
   /**
@@ -61,8 +64,8 @@ public class QueuesDAO {
               WHERE queue_name = ?
               AND status != 'ENQUEUED'
               AND started_at_epoch_ms > ?;
-              """
-                .formatted(Constants.DB_SCHEMA);
+            """
+                .formatted(this.schema);
 
         try (PreparedStatement ps = connection.prepareStatement(limiterQuery)) {
           ps.setString(1, queue.name());
@@ -87,12 +90,12 @@ public class QueuesDAO {
         // Count pending workflows by executor
         final String pendingQuery =
             """
-            SELECT executor_id, COUNT(*) as task_count
-            FROM %s.workflow_status
-            WHERE queue_name = ? AND status = 'PENDING'
-            GROUP BY executor_id;
+              SELECT executor_id, COUNT(*) as task_count
+              FROM %s.workflow_status
+              WHERE queue_name = ? AND status = 'PENDING'
+              GROUP BY executor_id;
             """
-                .formatted(Constants.DB_SCHEMA);
+                .formatted(this.schema);
 
         Map<String, Integer> pendingWorkflowsDict = new HashMap<>();
         try (PreparedStatement ps = connection.prepareStatement(pendingQuery)) {
@@ -160,7 +163,7 @@ public class QueuesDAO {
         queryBuilder.append(" FOR UPDATE SKIP LOCKED");
       }
 
-      String workflowsQuery = queryBuilder.toString().formatted(Constants.DB_SCHEMA);
+      String workflowsQuery = queryBuilder.toString().formatted(this.schema);
 
       List<String> dequeuedIds = new ArrayList<>();
       try (PreparedStatement ps = connection.prepareStatement(workflowsQuery)) {
@@ -200,7 +203,7 @@ public class QueuesDAO {
               END
             WHERE workflow_uuid = ?;
           """
-              .formatted(Constants.DB_SCHEMA);
+              .formatted(this.schema);
 
       try (PreparedStatement updatePs = connection.prepareStatement(updateQuery)) {
         for (String id : dequeuedIds) {
@@ -244,7 +247,7 @@ public class QueuesDAO {
           SET started_at_epoch_ms = NULL, status = ?
           WHERE workflow_uuid = ? AND queue_name IS NOT NULL AND status = ?
         """
-            .formatted(Constants.DB_SCHEMA);
+            .formatted(this.schema);
     try (Connection connection = dataSource.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, WorkflowState.ENQUEUED.name());

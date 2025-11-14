@@ -1,6 +1,5 @@
 package dev.dbos.transact.database;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ErrorResult;
@@ -21,33 +20,37 @@ import org.slf4j.LoggerFactory;
 public class StepsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
-  private HikariDataSource dataSource;
 
-  StepsDAO(HikariDataSource dataSource) {
-    this.dataSource = dataSource;
+  private final HikariDataSource dataSource;
+  private final String schema;
+
+  StepsDAO(HikariDataSource ds, String schema) {
+    this.dataSource = ds;
+    this.schema = Objects.requireNonNull(schema);
   }
 
-  public static void recordStepResultTxn(HikariDataSource dataSource, StepResult result)
-      throws SQLException {
+  public static void recordStepResultTxn(
+      HikariDataSource dataSource, StepResult result, String schema) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
     try (Connection connection = dataSource.getConnection(); ) {
-      recordStepResultTxn(result, connection);
+      recordStepResultTxn(result, connection, schema);
     }
   }
 
-  public static void recordStepResultTxn(StepResult result, Connection connection)
+  public static void recordStepResultTxn(StepResult result, Connection connection, String schema)
       throws SQLException {
 
+    Objects.requireNonNull(schema);
     String sql =
         """
           INSERT INTO %s.operation_outputs
             (workflow_uuid, function_id, function_name, output, error, child_workflow_id)
           VALUES (?, ?, ?, ?, ?, ?)
         """
-            .formatted(Constants.DB_SCHEMA);
+            .formatted(schema);
 
     try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
       int paramIdx = 1;
@@ -100,12 +103,15 @@ public class StepsDAO {
    * @throws SQLException For other database access errors.
    */
   public static StepResult checkStepExecutionTxn(
-      String workflowId, int functionId, String functionName, Connection connection)
+      String workflowId, int functionId, String functionName, Connection connection, String schema)
       throws SQLException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
 
+    Objects.requireNonNull(schema);
     final String sql =
-        "SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?"
-            .formatted(Constants.DB_SCHEMA);
+        """
+          SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?
+        """
+            .formatted(schema);
 
     String workflowStatus = null;
     try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -128,11 +134,11 @@ public class StepsDAO {
 
     String operationOutputSql =
         """
-        SELECT output, error, function_name
-        FROM %s.operation_outputs
-        WHERE workflow_uuid = ? AND function_id = ?
+          SELECT output, error, function_name
+          FROM %s.operation_outputs
+          WHERE workflow_uuid = ? AND function_id = ?
         """
-            .formatted(Constants.DB_SCHEMA);
+            .formatted(schema);
 
     StepResult recordedResult = null;
     String recordedFunctionName = null;
@@ -171,12 +177,12 @@ public class StepsDAO {
 
     final String sql =
         """
-        SELECT function_id, function_name, output, error, child_workflow_id
-        FROM %s.operation_outputs
-        WHERE workflow_uuid = ?
-        ORDER BY function_id;
+          SELECT function_id, function_name, output, error, child_workflow_id
+          FROM %s.operation_outputs
+          WHERE workflow_uuid = ?
+          ORDER BY function_id;
         """
-            .formatted(Constants.DB_SCHEMA);
+            .formatted(this.schema);
 
     List<StepInfo> steps = new ArrayList<>();
 
@@ -230,7 +236,7 @@ public class StepsDAO {
 
   public Duration sleep(String workflowUuid, int functionId, Duration duration, boolean skipSleep)
       throws SQLException {
-    return StepsDAO.sleep(dataSource, workflowUuid, functionId, duration, skipSleep);
+    return StepsDAO.sleep(dataSource, workflowUuid, functionId, duration, skipSleep, this.schema);
   }
 
   public static Duration sleep(
@@ -238,19 +244,22 @@ public class StepsDAO {
       String workflowUuid,
       int functionId,
       Duration duration,
-      boolean skipSleep)
+      boolean skipSleep,
+      String schema)
       throws SQLException {
 
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
+    Objects.requireNonNull(schema);
     String functionName = "DBOS.sleep";
 
     StepResult recordedOutput;
 
     try (Connection connection = dataSource.getConnection()) {
-      recordedOutput = checkStepExecutionTxn(workflowUuid, functionId, functionName, connection);
+      recordedOutput =
+          checkStepExecutionTxn(workflowUuid, functionId, functionName, connection, schema);
     }
 
     double endTime;
@@ -274,7 +283,7 @@ public class StepsDAO {
         output.setOutput(JSONUtil.serialize(endTime));
         output.setError(null);
 
-        recordStepResultTxn(dataSource, output);
+        recordStepResultTxn(dataSource, output, schema);
       } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
       }

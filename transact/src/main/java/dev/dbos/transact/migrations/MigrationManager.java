@@ -1,11 +1,14 @@
 package dev.dbos.transact.migrations;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 
-import java.sql.*;
-import java.util.*;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
+import java.util.Objects;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
@@ -29,34 +32,35 @@ public class MigrationManager {
     Objects.requireNonNull(config, "DBOS Config must not be null");
 
     if (config.dataSource() != null) {
-      runMigrations(config.dataSource());
+      runMigrations(config.dataSource(), config.databaseSchema());
     } else {
       createDatabaseIfNotExists(config);
       try (var ds = SystemDatabase.createDataSource(config)) {
-        runMigrations(ds);
+        runMigrations(ds, config.databaseSchema());
       }
     }
   }
 
-  public static void runMigrations(String url, String user, String password) {
+  public static void runMigrations(String url, String user, String password, String schema) {
     Objects.requireNonNull(url, "database url must not be null");
     Objects.requireNonNull(user, "database user must not be null");
     Objects.requireNonNull(password, "database password must not be null");
 
     createDatabaseIfNotExists(url, user, password);
     try (var ds = SystemDatabase.createDataSource(url, user, password, 0, 0)) {
-      runMigrations(ds);
+      runMigrations(ds, schema);
     }
   }
 
-  private static void runMigrations(HikariDataSource ds) {
+  private static void runMigrations(HikariDataSource ds, String schema) {
     Objects.requireNonNull(ds, "Data Source must not be null");
+    schema = SystemDatabase.sanitizeSchema(schema);
 
     try (var conn = ds.getConnection()) {
-      ensureDbosSchema(conn, Constants.DB_SCHEMA);
-      ensureMigrationTable(conn, Constants.DB_SCHEMA);
-      var migrations = getMigrations(Constants.DB_SCHEMA);
-      runDbosMigrations(conn, Constants.DB_SCHEMA, migrations);
+      ensureDbosSchema(conn, schema);
+      ensureMigrationTable(conn, schema);
+      var migrations = getMigrations(schema);
+      runDbosMigrations(conn, schema, migrations);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
     }
@@ -229,10 +233,12 @@ public class MigrationManager {
 
   public static List<String> getMigrations(String schema) {
     Objects.requireNonNull(schema);
-    return List.of(migrationOne.formatted(schema), migrationTwo.formatted(schema));
+    var migrations =
+        List.of(migration1, migration2, migration3, migration4, migration5, migration6);
+    return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
-  static final String migrationOne =
+  static final String migration1 =
       """
       CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -354,6 +360,37 @@ public class MigrationManager {
       );
       """;
 
-  static final String migrationTwo =
-      "ALTER TABLE %1$s.workflow_status ADD COLUMN queue_partition_key TEXT;";
+  static final String migration2 =
+      """
+      ALTER TABLE %1$s.workflow_status ADD COLUMN queue_partition_key TEXT;
+      """;
+
+  static final String migration3 =
+      """
+      create index "idx_workflow_status_queue_status_started" on %1$s."workflow_status" ("queue_name", "status", "started_at_epoch_ms")
+      """;
+
+  static final String migration4 =
+      """
+      ALTER TABLE %1$s.workflow_status ADD COLUMN forked_from TEXT;
+      """;
+
+  static final String migration5 =
+      """
+      ALTER TABLE %1$s.operation_outputs ADD COLUMN started_at_epoch_ms BIGINT, ADD COLUMN completed_at_epoch_ms BIGINT;
+      """;
+
+  static final String migration6 =
+      """
+      CREATE TABLE %1$s.workflow_events_history (
+          workflow_uuid TEXT NOT NULL,
+          function_id INTEGER NOT NULL,
+          key TEXT NOT NULL,
+          value TEXT NOT NULL,
+          PRIMARY KEY (workflow_uuid, function_id, key),
+          FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
+              ON UPDATE CASCADE ON DELETE CASCADE
+      );
+      ALTER TABLE %1$s.streams ADD COLUMN function_id INTEGER NOT NULL DEFAULT 0;
+      """;
 }
