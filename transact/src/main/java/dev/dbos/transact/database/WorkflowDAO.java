@@ -10,6 +10,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
+import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.*;
@@ -637,8 +638,7 @@ public class WorkflowDAO {
 
   public void recordChildWorkflow(
       String parentId,
-      String childId, // workflowId of the
-      // child
+      String childId, // workflowId of the child
       int functionId, // func id in the parent
       String functionName)
       throws SQLException {
@@ -646,29 +646,9 @@ public class WorkflowDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
-    String sql =
-        """
-          INSERT INTO %s.operation_outputs (workflow_uuid, function_id, function_name, child_workflow_id) VALUES (?, ?, ?, ?)
-        """
-            .formatted(this.schema);
-
-    try {
-      try (Connection connection = dataSource.getConnection();
-          PreparedStatement pStmt = connection.prepareStatement(sql)) {
-
-        pStmt.setString(1, parentId);
-        pStmt.setInt(2, functionId);
-        pStmt.setString(3, functionName);
-        pStmt.setString(4, childId);
-
-        pStmt.executeUpdate();
-      }
-    } catch (SQLException sqe) {
-      if ("23505".equals(sqe.getSQLState())) {
-        throw new DBOSWorkflowExecutionConflictException(parentId);
-      } else {
-        throw sqe;
-      }
+    var result = new StepResult(parentId, functionId, functionName).withChildWorkflowId(childId);
+    try (Connection connection = dataSource.getConnection()) {
+      StepsDAO.recordStepResultTxn(result, connection, schema);
     }
   }
 
