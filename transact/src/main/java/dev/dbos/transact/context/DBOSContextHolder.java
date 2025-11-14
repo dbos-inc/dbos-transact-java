@@ -1,7 +1,6 @@
 package dev.dbos.transact.context;
 
 public class DBOSContextHolder {
-  // CB: I think this default ctor business will bite us.
   private static final ThreadLocal<DBOSContext> contextHolder =
       ThreadLocal.withInitial(DBOSContext::new);
 
