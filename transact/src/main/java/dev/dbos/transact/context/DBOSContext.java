@@ -13,6 +13,7 @@ public class DBOSContext {
   // assigned context options
   String nextWorkflowId;
   Timeout nextTimeout;
+  Instant nextDeadline;
   StartWorkflowOptions startOptions;
   String startedWorkflowId;
 
@@ -50,6 +51,7 @@ public class DBOSContext {
       CompletableFuture<String> future) {
     this.nextWorkflowId = other.nextWorkflowId;
     this.nextTimeout = other.nextTimeout;
+    this.nextDeadline = other.nextDeadline;
     this.workflowId = other.workflowId;
     this.functionId = functionId == null ? other.functionId : functionId;
     this.stepFunctionId = other.stepFunctionId;
@@ -125,6 +127,14 @@ public class DBOSContext {
 
   public Duration getTimeout() {
     return timeout;
+  }
+
+  public Instant getNextDeadline() {
+    if (startOptions != null && startOptions.deadline() != null) {
+      return startOptions.deadline();
+    }
+
+    return nextDeadline;
   }
 
   public Instant getDeadline() {

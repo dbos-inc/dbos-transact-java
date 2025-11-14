@@ -10,10 +10,13 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 
 import java.sql.SQLException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -124,5 +127,40 @@ public class ClientTest {
     assertEquals("SUCCESS", status.status());
 
     assertEquals("42-test.message", handle.getResult());
+  }
+
+  @Test
+  public void clientEnqueueTimeouts() throws Exception {
+    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+      var options =
+          new DBOSClient.EnqueueOptions(
+              "dev.dbos.transact.client.ClientServiceImpl", "sleep", "testQueue");
+
+      var handle1 =
+          client.enqueueWorkflow(options.withTimeout(Duration.ofSeconds(1)), new Object[] {10000});
+      assertThrows(
+          DBOSAwaitedWorkflowCancelledException.class,
+          () -> {
+            handle1.getResult();
+          });
+      var stat1 = client.getWorkflowStatus(handle1.workflowId());
+      assertEquals(
+          "CANCELLED",
+          stat1.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+
+      var handle2 =
+          client.enqueueWorkflow(
+              options.withDeadline(Instant.ofEpochMilli(System.currentTimeMillis() + 1000)),
+              new Object[] {10000});
+      assertThrows(
+          DBOSAwaitedWorkflowCancelledException.class,
+          () -> {
+            handle2.getResult();
+          });
+      var stat2 = client.getWorkflowStatus(handle2.workflowId());
+      assertEquals(
+          "CANCELLED",
+          stat2.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+    }
   }
 }

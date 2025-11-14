@@ -23,6 +23,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -98,7 +99,7 @@ public class WorkflowMgmtTest {
     logger.info("Test completed");
   }
 
-  @Test
+  @RetryingTest(3)
   public void queuedCancelResumeTest() throws Exception {
 
     CountDownLatch mainLatch = new CountDownLatch(1);

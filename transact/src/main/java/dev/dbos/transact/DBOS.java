@@ -5,6 +5,9 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.DBOSLifecycleListener;
+import dev.dbos.transact.execution.RegisteredWorkflow;
+import dev.dbos.transact.execution.RegisteredWorkflowInstance;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
@@ -17,9 +20,13 @@ import dev.dbos.transact.workflow.*;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
@@ -38,6 +45,7 @@ public class DBOS {
   public static class Instance {
     private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
     private final QueueRegistry queueRegistry = new QueueRegistry();
+    private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
 
     private DBOSConfig config;
 
@@ -61,31 +69,38 @@ public class DBOS {
         throw new IllegalStateException("Cannot register workflow after DBOS is launched");
       }
 
+      String className = implementation.getClass().getName();
+      workflowRegistry.register(interfaceClass, implementation, className, instanceName);
+
       Method[] methods = implementation.getClass().getDeclaredMethods();
       for (Method method : methods) {
         Workflow wfAnnotation = method.getAnnotation(Workflow.class);
         if (wfAnnotation != null) {
           method.setAccessible(true); // In case it's not public
-          registerWorkflowMethod(wfAnnotation, implementation, instanceName, method);
+          registerWorkflowMethod(wfAnnotation, implementation, className, instanceName, method);
         }
       }
     }
 
     private String registerWorkflowMethod(
-        Workflow wfTag, Object target, String instanceName, Method method) {
+        Workflow wfTag, Object target, String className, String instanceName, Method method) {
       if (dbosExecutor.get() != null) {
         throw new IllegalStateException("Cannot register workflow after DBOS is launched");
       }
 
       String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
       workflowRegistry.register(
-          target.getClass().getName(),
-          name,
-          target,
-          instanceName,
-          method,
-          wfTag.maxRecoveryAttempts());
+          className, name, target, instanceName, method, wfTag.maxRecoveryAttempts());
       return name;
+    }
+
+    void registerLifecycleListener(DBOSLifecycleListener l) {
+      if (dbosExecutor.get() != null) {
+        throw new IllegalStateException(
+            "Cannot register lifecycle listener after DBOS is launched");
+      }
+
+      lifecycleRegistry.add(l);
     }
 
     void registerQueue(Queue queue) {
@@ -117,6 +132,7 @@ public class DBOS {
     void clearRegistry() {
       workflowRegistry.clear();
       queueRegistry.clear();
+      lifecycleRegistry.clear();
 
       registerInternals();
     }
@@ -153,7 +169,12 @@ public class DBOS {
         var executor = new DBOSExecutor(config);
 
         if (dbosExecutor.compareAndSet(null, executor)) {
-          executor.start(this, workflowRegistry.getSnapshot(), queueRegistry.getSnapshot());
+          executor.start(
+              this,
+              new HashSet<DBOSLifecycleListener>(this.lifecycleRegistry),
+              workflowRegistry.getWorkflowSnapshot(),
+              workflowRegistry.getInstanceSnapshot(),
+              queueRegistry.getSnapshot());
         }
       }
     }
@@ -209,6 +230,15 @@ public class DBOS {
   public static Queue registerQueue(Queue queue) {
     ensureInstance().registerQueue(queue);
     return queue;
+  }
+
+  /**
+   * Register a lifecycle listener that receives callbacks when DBOS is launched or shut down
+   *
+   * @param listener
+   */
+  public static void registerLifecycleListener(DBOSLifecycleListener listener) {
+    ensureInstance().registerLifecycleListener(listener);
   }
 
   /**
@@ -618,6 +648,38 @@ public class DBOS {
    */
   public static List<StepInfo> listWorkflowSteps(String workflowId) {
     return executor("listWorkflowSteps").listWorkflowSteps(workflowId);
+  }
+
+  /**
+   * Get all workflows registered with DBOS.
+   *
+   * @return list of all registered workflow methods
+   */
+  public static Collection<RegisteredWorkflow> getRegisteredWorkflows() {
+    return executor("getRegisteredWorkflows").getWorkflows();
+  }
+
+  /**
+   * Get all workflow classes registered with DBOS.
+   *
+   * @return list of all class instances containing registered workflow methods
+   */
+  public static Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
+    return executor("getRegisteredWorkflowInstances").getInstances();
+  }
+
+  /**
+   * Execute a workflow based on registration and arguments. This is expected to be used by generic
+   * callers, not app code.
+   *
+   * @param regWorkflow Registration of the workflow. @see getRegisteredWorkflows
+   * @param args Workflow function arguments
+   * @param options Execution options, such as ID, queue, and timeout/deadline
+   * @return WorkflowHandle to the executed workflow
+   */
+  public static WorkflowHandle<?, ?> startWorkflow(
+      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
+    return executor("executeWorkflow").executeWorkflow(regWorkflow, args, options, null, null);
   }
 
   /**
