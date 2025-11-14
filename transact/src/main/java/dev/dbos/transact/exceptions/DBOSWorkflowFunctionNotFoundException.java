@@ -1,5 +1,12 @@
 package dev.dbos.transact.exceptions;
 
+/**
+ * {@code DBOSWorkflowFunctionNotFoundException} indicates that invocation of a workflow function
+ * was attempted using the registered name of the workflow function, but the name does not exist.
+ * DBOSWorkflowFunctionNotFoundException usually indicates a programmer error, such as removing or
+ * renaming a workflow function between runs, or using the DBOS client to call a function that does
+ * not exist.
+ */
 public class DBOSWorkflowFunctionNotFoundException extends RuntimeException {
   private String workflowId;
   private String workflowName;
@@ -10,10 +17,12 @@ public class DBOSWorkflowFunctionNotFoundException extends RuntimeException {
     this.workflowId = id;
   }
 
+  /** The workflow function name that does not exist in the registry */
   public String workflowName() {
     return workflowName;
   }
 
+  /** The ID of the workflow attempted with an unregistered function name */
   public String workflowId() {
     return workflowId;
   }
