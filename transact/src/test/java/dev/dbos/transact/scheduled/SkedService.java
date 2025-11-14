@@ -1,10 +1,13 @@
 package dev.dbos.transact.scheduled;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.workflow.Scheduled;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 import org.slf4j.Logger;
@@ -18,6 +21,10 @@ interface SkedService {
   void timed(Instant schedule, Instant actual);
 
   void withSteps(Instant schedule, Instant actual);
+
+  void everySecondIgnoreMissed(Instant schedule, Instant actual);
+
+  void everySecondDontIgnoreMissed(Instant schedule, Instant actual);
 }
 
 class SkedServiceImpl implements SkedService {
@@ -29,17 +36,22 @@ class SkedServiceImpl implements SkedService {
   public volatile Instant scheduled;
   public volatile Instant actual;
 
+  public volatile int everySecondCounterIgnoreMissed = 0;
+  public volatile int everySecondCounterDontIgnoreMissed = 0;
+
   @Override
   @Workflow
   @Scheduled(cron = "0/1 * * * * *")
   public void everySecond(Instant scheduled, Instant actual) {
+    assertTrue(DBOS.inWorkflow());
+    assert scheduled.equals(scheduled.truncatedTo(ChronoUnit.SECONDS));
     logger.info("Executing everySecond {} {} {}", everySecondCounter, scheduled, actual);
     ++everySecondCounter;
   }
 
   @Override
   @Workflow
-  @Scheduled(cron = "0/3 * * * * *")
+  @Scheduled(cron = "0/3 * * * * *", queue = "q2")
   public void everyThird(Instant scheduled, Instant actual) {
     logger.info("Executing everyThird {} {} {}", everyThirdCounter, scheduled, actual);
     ++everyThirdCounter;
@@ -61,5 +73,36 @@ class SkedServiceImpl implements SkedService {
     logger.info("Executing withSteps {} {}", scheduled, actual);
     DBOS.runStep(() -> {}, "stepOne");
     DBOS.runStep(() -> {}, "stepTwo");
+  }
+
+  @Override
+  @Workflow
+  @Scheduled(cron = "0/1 * * * * *", ignoreMissed = true)
+  public void everySecondIgnoreMissed(Instant scheduled, Instant actual) {
+    if (everySecondCounterIgnoreMissed++ == 0) {
+      try {
+        Thread.sleep(3000);
+      } catch (Exception e) {
+      }
+    }
+    logger.info(
+        "Executing everySecond ignore missed {} {} {}", everySecondCounter, scheduled, actual);
+  }
+
+  @Override
+  @Workflow
+  @Scheduled(cron = "0/1 * * * * *", ignoreMissed = false)
+  public void everySecondDontIgnoreMissed(Instant scheduled, Instant actual) {
+    if (everySecondCounterDontIgnoreMissed++ == 0) {
+      try {
+        Thread.sleep(3000);
+      } catch (Exception e) {
+      }
+    }
+    logger.info(
+        "Executing everySecond do not ignore missed {} {} {}",
+        everySecondCounter,
+        scheduled,
+        actual);
   }
 }

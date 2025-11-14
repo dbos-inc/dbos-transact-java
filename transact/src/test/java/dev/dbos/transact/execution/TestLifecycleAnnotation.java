@@ -1,4 +1,4 @@
-package dev.dbos.transact.workflow;
+package dev.dbos.transact.execution;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -7,10 +7,6 @@ import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
-public @interface Scheduled {
-  String cron();
-
-  String queue() default "";
-
-  boolean ignoreMissed() default true;
+public @interface TestLifecycleAnnotation {
+  int count() default 4;
 }

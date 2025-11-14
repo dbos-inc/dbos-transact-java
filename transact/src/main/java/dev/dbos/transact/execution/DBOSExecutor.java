@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -64,7 +65,9 @@ public class DBOSExecutor implements AutoCloseable {
   private String appVersion;
   private String executorId;
 
+  private Set<DBOSLifecycleListener> listeners;
   private Map<String, RegisteredWorkflow> workflowMap;
+  private Map<String, RegisteredWorkflowInstance> instanceMap;
   private List<Queue> queues;
 
   private SystemDatabase systemDatabase;
@@ -82,11 +85,17 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void start(
-      DBOS.Instance dbos, Map<String, RegisteredWorkflow> workflowMap, List<Queue> queues) {
+      DBOS.Instance dbos,
+      Set<DBOSLifecycleListener> listenerSet,
+      Map<String, RegisteredWorkflow> workflowMap,
+      Map<String, RegisteredWorkflowInstance> instanceMap,
+      List<Queue> queues) {
 
     if (isRunning.compareAndSet(false, true)) {
       this.workflowMap = Collections.unmodifiableMap(workflowMap);
+      this.instanceMap = Collections.unmodifiableMap(instanceMap);
       this.queues = Collections.unmodifiableList(queues);
+      this.listeners = listenerSet;
 
       this.executorId = System.getenv("DBOS__VMID");
       if (this.executorId == null || this.executorId.isEmpty()) {
@@ -123,14 +132,12 @@ public class DBOSExecutor implements AutoCloseable {
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queues);
 
-      Queue schedulerQueue = null;
-      for (var queue : queues) {
-        if (queue.name().equals(Constants.DBOS_SCHEDULER_QUEUE)) {
-          schedulerQueue = queue;
-        }
+      schedulerService = new SchedulerService(Constants.DBOS_SCHEDULER_QUEUE);
+      listeners.add(schedulerService);
+
+      for (var listener : listeners) {
+        listener.dbosLaunched();
       }
-      schedulerService = new SchedulerService(this, schedulerQueue);
-      schedulerService.start();
 
       recoveryService = new RecoveryService(this, systemDatabase);
       recoveryService.start();
@@ -178,8 +185,15 @@ public class DBOSExecutor implements AutoCloseable {
 
       recoveryService.stop();
       recoveryService = null;
-      schedulerService.stop();
-      schedulerService = null;
+
+      for (var listener : listeners) {
+        try {
+          listener.dbosShutDown();
+        } catch (Exception e) {
+          logger.warn("Exception from shutdown", e);
+        }
+      }
+
       queueService.stop();
       queueService = null;
       systemDatabase.stop();
@@ -189,6 +203,7 @@ public class DBOSExecutor implements AutoCloseable {
       executorService.shutdownNow();
 
       this.workflowMap = null;
+      this.instanceMap = null;
     }
   }
 
@@ -227,6 +242,10 @@ public class DBOSExecutor implements AutoCloseable {
 
   public Collection<RegisteredWorkflow> getWorkflows() {
     return this.workflowMap.values();
+  }
+
+  public Collection<RegisteredWorkflowInstance> getInstances() {
+    return this.instanceMap.values();
   }
 
   public List<Queue> getQueues() {
@@ -806,11 +825,14 @@ public class DBOSExecutor implements AutoCloseable {
             ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString());
 
     var nextTimeout = ctx.getNextTimeout();
+    var nextDeadline = ctx.getNextDeadline();
 
     // default to context timeout & deadline if nextTimeout is null or Inherit
     Duration timeout = ctx.getTimeout();
     Instant deadline = ctx.getDeadline();
-    if (nextTimeout instanceof Timeout.None) {
+    if (nextDeadline != null) {
+      deadline = nextDeadline;
+    } else if (nextTimeout instanceof Timeout.None) {
       // clear timeout and deadline to null if nextTimeout is None
       timeout = null;
       deadline = null;
@@ -822,13 +844,13 @@ public class DBOSExecutor implements AutoCloseable {
 
     try {
       var options =
-          new ExecuteWorkflowOptions(
+          new StartWorkflowOptions(
               workflowId,
-              timeout,
-              deadline,
+              Timeout.of(timeout),
               ctx.getQueueName(),
               ctx.getDeduplicationId(),
-              ctx.getPriority());
+              ctx.getPriority(),
+              deadline);
       return executeWorkflow(workflow, args, options, parent, ctx.getStartWorkflowFuture());
     } finally {
       ctx.setStartedWorkflowId(workflowId);
@@ -854,47 +876,23 @@ public class DBOSExecutor implements AutoCloseable {
       throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
     }
 
-    var options = new ExecuteWorkflowOptions(workflowId, status.getTimeout(), status.getDeadline());
+    var options =
+        new StartWorkflowOptions(workflowId)
+            .withTimeout(status.getTimeout())
+            .withDeadline(status.getDeadline());
     return executeWorkflow(workflow, inputs, options, null, null);
-  }
-
-  public record ExecuteWorkflowOptions(
-      String workflowId,
-      Duration timeout,
-      Instant deadline,
-      String queueName,
-      String deduplicationId,
-      Integer priority) {
-
-    public ExecuteWorkflowOptions {
-      if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
-        throw new IllegalArgumentException("workflowId must not be empty");
-      }
-
-      if (timeout != null && timeout.isNegative()) {
-        throw new IllegalStateException("negative timeout");
-      }
-    }
-
-    public ExecuteWorkflowOptions(String workflowId, Duration timeout, Instant deadline) {
-      this(workflowId, timeout, deadline, null, null, null);
-    }
-
-    public long getTimeoutMillis() {
-      return Objects.requireNonNullElse(timeout, Duration.ZERO).toMillis();
-    }
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
       RegisteredWorkflow workflow,
       Object[] args,
-      ExecuteWorkflowOptions options,
+      StartWorkflowOptions options,
       WorkflowInfo parent,
       CompletableFuture<String> latch) {
 
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
 
-    if (options.queueName != null) {
+    if (options.queueName() != null) {
       return enqueueWorkflow(
           workflow.name(),
           workflow.className(),
@@ -936,7 +934,7 @@ public class DBOSExecutor implements AutoCloseable {
               executorId(),
               appVersion(),
               parent,
-              options.timeout(),
+              options.getTimeoutDuration(),
               options.deadline());
       if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
         return retrieveWorkflow(workflowId);
@@ -952,7 +950,7 @@ public class DBOSExecutor implements AutoCloseable {
       throw e;
     } finally {
       if (latch != null) {
-        latch.complete(options.workflowId);
+        latch.complete(options.workflowId());
       }
     }
 
@@ -962,11 +960,13 @@ public class DBOSExecutor implements AutoCloseable {
           try {
             logger.debug(
                 "executeWorkflow task {} {}",
-                Objects.requireNonNullElse(options.timeout, Duration.ZERO).toMillis(),
-                Objects.requireNonNullElse(options.deadline, Instant.EPOCH).toEpochMilli());
+                (Objects.requireNonNullElse(options.getTimeoutDuration(), Duration.ZERO)
+                    .toMillis()),
+                Objects.requireNonNullElse(options.deadline(), Instant.EPOCH).toEpochMilli());
 
             DBOSContextHolder.set(
-                new DBOSContext(workflowId, parent, options.timeout, options.deadline));
+                new DBOSContext(
+                    workflowId, parent, options.getTimeoutDuration(), options.deadline()));
             T result = workflow.invoke(args);
             postInvokeWorkflowResult(systemDatabase, workflowId, result);
             return result;
@@ -1028,7 +1028,7 @@ public class DBOSExecutor implements AutoCloseable {
       String instanceName,
       Integer maxRetries,
       Object[] args,
-      ExecuteWorkflowOptions options,
+      StartWorkflowOptions options,
       WorkflowInfo parent,
       String executorId,
       String appVersion,
@@ -1065,7 +1065,7 @@ public class DBOSExecutor implements AutoCloseable {
           executorId,
           appVersion,
           parent,
-          options.timeout(),
+          options.getTimeoutDuration(),
           options.deadline());
       return retrieveWorkflow(workflowId, systemDatabase);
     } catch (DBOSWorkflowExecutionConflictException e) {
@@ -1111,7 +1111,9 @@ public class DBOSExecutor implements AutoCloseable {
 
     Long timeoutMs = timeout != null ? timeout.toMillis() : null;
     Long deadlineEpochMs =
-        queueName != null ? null : deadline != null ? deadline.toEpochMilli() : null;
+        (queueName != null && timeoutMs != null)
+            ? null
+            : deadline != null ? deadline.toEpochMilli() : null;
 
     final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
     WorkflowStatusInternal workflowStatusInternal =

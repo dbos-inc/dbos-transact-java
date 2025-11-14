@@ -12,6 +12,7 @@ import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.*;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
@@ -84,10 +85,16 @@ public class TimeoutTest {
     DBOS.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase();
 
-    // make it timeout
+    // make it time out
     String wfid1 = "wf-125";
     var options = new StartWorkflowOptions(wfid1).withTimeout(1, TimeUnit.SECONDS);
     var handle = DBOS.startWorkflow(() -> simpleService.longWorkflow("12345"), options);
+
+    String wfid2 = "wf-125b";
+    var options2 =
+        new StartWorkflowOptions(wfid2)
+            .withDeadline(Instant.ofEpochMilli(System.currentTimeMillis() + 1000));
+    var handle2 = DBOS.startWorkflow(() -> simpleService.longWorkflow("12345"), options2);
 
     try {
       handle.getResult();
@@ -100,6 +107,29 @@ public class TimeoutTest {
     var s = systemDatabase.getWorkflowStatus(wfid1);
     assertNotNull(s);
     assertEquals(WorkflowState.CANCELLED.name(), s.status());
+
+    try {
+      handle2.getResult();
+      fail("Expected Exception to be thrown");
+    } catch (Exception t) {
+      System.out.println(t.getClass().toString());
+      assertTrue(t instanceof DBOSAwaitedWorkflowCancelledException);
+    }
+
+    var s2 = systemDatabase.getWorkflowStatus(wfid2);
+    assertNotNull(s2);
+    assertEquals(WorkflowState.CANCELLED.name(), s2.status());
+
+    // Negative test
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new StartWorkflowOptions().withTimeout(Duration.ofSeconds(-1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new StartWorkflowOptions()
+                .withDeadline(Instant.ofEpochMilli(System.currentTimeMillis() + 100))
+                .withTimeout(Duration.ofSeconds(1)));
   }
 
   @Test

@@ -4,4 +4,6 @@ public interface ClientService {
   String enqueueTest(int i, String s);
 
   String sendTest(int i);
+
+  void sleep(int ms);
 }
