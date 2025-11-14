@@ -1,5 +1,7 @@
 package dev.dbos.transact.conductor.protocol;
 
+import java.util.Objects;
+
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
@@ -23,6 +25,12 @@ public class WorkflowsOutput {
   public String QueueName;
   public String ApplicationVersion;
   public String ExecutorID;
+  public String WorkflowTimeoutMS;
+  public String WorkflowDeadlineEpochMS;
+  public String DeduplicationID;
+  public String Priority;
+  public String QueuePartitionKey;
+  public String ForkedFrom;
 
   public WorkflowsOutput(WorkflowStatus status) {
     Object[] input = status.input();
@@ -54,5 +62,11 @@ public class WorkflowsOutput {
     this.QueueName = status.queueName();
     this.ApplicationVersion = status.appVersion();
     this.ExecutorID = status.executorId();
+    this.WorkflowTimeoutMS = status.timeoutMs() == null ? null : status.timeoutMs().toString();
+    this.WorkflowDeadlineEpochMS = status.deadlineEpochMs() == null ? null : status.deadlineEpochMs().toString();
+    this.DeduplicationID = status.deduplicationId();
+    this.Priority = Objects.requireNonNullElse(status.priority(), 0).toString();
+    this.QueuePartitionKey = status.partitionKey();
+    this.ForkedFrom = status.forkedFrom();
   }
 }
