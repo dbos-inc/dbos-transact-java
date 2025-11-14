@@ -823,6 +823,7 @@ public class WorkflowDAO {
         // Create entry for forked workflow
         insertForkedWorkflowStatus(
             connection,
+            originalWorkflowId,
             forkedWorkflowId,
             status,
             applicationVersion,
@@ -847,6 +848,7 @@ public class WorkflowDAO {
 
   private static void insertForkedWorkflowStatus(
       Connection connection,
+      String originalWorkflowId,
       String forkedWorkflowId,
       WorkflowStatus originalStatus,
       String applicationVersion,
@@ -863,8 +865,8 @@ public class WorkflowDAO {
         """
           INSERT INTO %s.workflow_status (
             workflow_uuid, status, name, class_name, config_name, application_version, application_id,
-            authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_deadline_epoch_ms, workflow_timeout_ms
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_deadline_epoch_ms, workflow_timeout_ms, forked_from
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
             .formatted(schema);
 
@@ -888,6 +890,7 @@ public class WorkflowDAO {
       stmt.setString(12, JSONUtil.serializeArray(originalStatus.input()));
       stmt.setLong(13, workflowDeadlineEpoch);
       stmt.setObject(14, originalStatus.timeoutMs());
+      stmt.setString(15, originalWorkflowId);
 
       stmt.executeUpdate();
     }
