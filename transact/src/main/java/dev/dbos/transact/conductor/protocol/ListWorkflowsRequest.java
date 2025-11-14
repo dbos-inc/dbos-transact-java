@@ -19,6 +19,7 @@ public class ListWorkflowsRequest extends BaseMessage {
     public String start_time;
     public String end_time;
     public String status;
+    public String forked_from;
     public String application_version;
     public Integer limit;
     public Integer offset;
@@ -34,6 +35,7 @@ public class ListWorkflowsRequest extends BaseMessage {
     private String start_time;
     private String end_time;
     private String status;
+    private String forked_from;
     private String application_version;
     private Integer limit;
     private Integer offset;
@@ -50,18 +52,6 @@ public class ListWorkflowsRequest extends BaseMessage {
       this.workflow_uuids.add(workflow_id);
       return this;
     }
-
-    /* Future
-    public Builder className(String class_name) {
-      this.class_name = class_name;
-      return this;
-    }
-
-    public Builder instanceName(String instance_name) {
-      this.instance_name = instance_name;
-      return this;
-    }
-    */
 
     public Builder workflowName(String workflow_name) {
       this.workflow_name = workflow_name;
@@ -85,6 +75,11 @@ public class ListWorkflowsRequest extends BaseMessage {
 
     public Builder status(String status) {
       this.status = status;
+      return this;
+    }
+
+    public Builder forkedFrom(String forked_from) {
+      this.forked_from = forked_from;
       return this;
     }
 
@@ -115,13 +110,12 @@ public class ListWorkflowsRequest extends BaseMessage {
 
       Body body = new Body();
       body.workflow_uuids = this.workflow_uuids;
-      // body.class_name = this.class_name;
-      // body.instance_name = this.instance_name;
       body.workflow_name = this.workflow_name;
       body.authenticated_user = this.authenticated_user;
       body.start_time = this.start_time;
       body.end_time = this.end_time;
       body.status = this.status;
+      body.forked_from = this.forked_from;
       body.application_version = this.application_version;
       body.limit = this.limit;
       body.offset = this.offset;
@@ -141,6 +135,7 @@ public class ListWorkflowsRequest extends BaseMessage {
         .withStartTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null)
         .withEndTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null)
         .withStatus(body.status)
+        .withForkedFrom(body.forked_from)
         .withApplicationVersion(body.application_version)
         .withLimit(body.limit)
         .withOffset(body.offset)

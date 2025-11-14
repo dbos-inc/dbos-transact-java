@@ -28,7 +28,9 @@ public record WorkflowStatus(
     Long deadlineEpochMs,
     Long startedAtEpochMs,
     String deduplicationId,
-    Integer priority) {
+    Integer priority,
+    String partitionKey,
+    String forkedFrom) {
 
   @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)
   public Instant getDeadline() {

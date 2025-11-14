@@ -54,24 +54,24 @@ public class StepsDAO {
 
     try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
       int paramIdx = 1;
-      pstmt.setString(paramIdx++, result.getWorkflowId());
-      pstmt.setInt(paramIdx++, result.getStepId());
-      pstmt.setString(paramIdx++, result.getFunctionName());
+      pstmt.setString(paramIdx++, result.workflowId());
+      pstmt.setInt(paramIdx++, result.stepId());
+      pstmt.setString(paramIdx++, result.functionName());
 
-      if (result.getOutput() != null) {
-        pstmt.setString(paramIdx++, result.getOutput());
+      if (result.output() != null) {
+        pstmt.setString(paramIdx++, result.output());
       } else {
         pstmt.setNull(paramIdx++, Types.LONGVARCHAR);
       }
 
-      if (result.getError() != null) {
-        pstmt.setString(paramIdx++, result.getError());
+      if (result.error() != null) {
+        pstmt.setString(paramIdx++, result.error());
       } else {
         pstmt.setNull(paramIdx++, Types.LONGVARCHAR);
       }
 
-      if (result.getChildWorkflowId() != null) {
-        pstmt.setString(paramIdx++, result.getChildWorkflowId());
+      if (result.childWorkflowId() != null) {
+        pstmt.setString(paramIdx++, result.childWorkflowId());
       } else {
         pstmt.setNull(paramIdx++, Types.VARCHAR);
       }
@@ -80,7 +80,7 @@ public class StepsDAO {
 
     } catch (SQLException e) {
       if ("23505".equals(e.getSQLState())) {
-        throw new DBOSWorkflowExecutionConflictException(result.getWorkflowId());
+        throw new DBOSWorkflowExecutionConflictException(result.workflowId());
       } else {
         throw e;
       }
@@ -266,23 +266,19 @@ public class StepsDAO {
 
     if (recordedOutput != null) {
       logger.debug("Replaying sleep, id: {}, millis: {}", functionId, duration.toMillis());
-      if (recordedOutput.getOutput() == null) {
+      if (recordedOutput.output() == null) {
         throw new IllegalStateException("No recorded timeout for sleep");
       }
-      Object[] dser = JSONUtil.deserializeToArray(recordedOutput.getOutput());
+      Object[] dser = JSONUtil.deserializeToArray(recordedOutput.output());
       endTime = (Double) dser[0];
     } else {
       logger.debug("Running sleep, id: {}, millis: {}", functionId, duration.toMillis());
       endTime = System.currentTimeMillis() + duration.toMillis();
 
       try {
-        StepResult output = new StepResult();
-        output.setWorkflowId(workflowUuid);
-        output.setStepId(functionId);
-        output.setFunctionName(functionName);
-        output.setOutput(JSONUtil.serialize(endTime));
-        output.setError(null);
-
+        StepResult output =
+            new StepResult(workflowUuid, functionId, functionName)
+                .withOutput(JSONUtil.serialize(endTime));
         recordStepResultTxn(dataSource, output, schema);
       } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
