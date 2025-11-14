@@ -402,11 +402,11 @@ public class DBOSExecutor implements AutoCloseable {
   @SuppressWarnings("unchecked")
   private <T, E extends Exception> T handleExistingResult(StepResult result, String functionName)
       throws E {
-    if (result.getOutput() != null) {
-      Object[] resArray = JSONUtil.deserializeToArray(result.getOutput());
+    if (result.output() != null) {
+      Object[] resArray = JSONUtil.deserializeToArray(result.output());
       return resArray == null ? null : (T) resArray[0];
-    } else if (result.getError() != null) {
-      Throwable t = JSONUtil.deserializeAppException(result.getError());
+    } else if (result.error() != null) {
+      Throwable t = JSONUtil.deserializeAppException(result.error());
       if (t instanceof Exception) {
         throw (E) t;
       } else {
@@ -454,13 +454,13 @@ public class DBOSExecutor implements AutoCloseable {
         systemDatabase.checkStepExecutionTxn(workflowId, stepFunctionId, stepName);
 
     if (recordedResult != null) {
-      String output = recordedResult.getOutput();
+      String output = recordedResult.output();
       if (output != null) {
         Object[] stepO = JSONUtil.deserializeToArray(output);
         return stepO == null ? null : (T) stepO[0];
       }
 
-      String error = recordedResult.getError();
+      String error = recordedResult.error();
       if (error != null) {
         var throwable = JSONUtil.deserializeAppException(error);
         if (!(throwable instanceof Exception))

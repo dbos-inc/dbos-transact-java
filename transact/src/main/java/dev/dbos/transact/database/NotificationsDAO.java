@@ -89,13 +89,7 @@ public class NotificationsDAO {
         }
 
         // Record operation result
-        StepResult output = new StepResult();
-        output.setWorkflowId(workflowUuid);
-        output.setStepId(functionId);
-        output.setFunctionName(functionName);
-        output.setOutput(null);
-        output.setError(null);
-
+        var output = new StepResult(workflowUuid, functionId, functionName);
         StepsDAO.recordStepResultTxn(output, conn, this.schema);
 
         conn.commit();
@@ -132,8 +126,8 @@ public class NotificationsDAO {
 
     if (recordedOutput != null) {
       logger.debug("Replaying recv, id: {}, topic: {}", functionId, finalTopic);
-      if (recordedOutput.getOutput() != null) {
-        Object[] dSerOut = JSONUtil.deserializeToArray(recordedOutput.getOutput());
+      if (recordedOutput.output() != null) {
+        Object[] dSerOut = JSONUtil.deserializeToArray(recordedOutput.output());
         return dSerOut == null ? null : dSerOut[0];
       } else {
         throw new RuntimeException("No output recorded in the last recv");
@@ -225,14 +219,10 @@ public class NotificationsDAO {
         }
 
         // Record operation result
-        StepResult output = new StepResult();
-        output.setWorkflowId(workflowUuid);
-        output.setStepId(functionId);
-        output.setFunctionName(functionName);
         Object toSave = recvdSermessage == null ? null : recvdSermessage[0];
-        output.setOutput(JSONUtil.serialize(toSave));
-        output.setError(null);
-
+        StepResult output =
+            new StepResult(workflowUuid, functionId, functionName)
+                .withOutput(JSONUtil.serialize(toSave));
         StepsDAO.recordStepResultTxn(output, conn, this.schema);
 
         conn.commit();
@@ -295,12 +285,7 @@ public class NotificationsDAO {
 
         if (functionId != null) {
           // Create operation result
-          StepResult output = new StepResult();
-          output.setWorkflowId(workflowId);
-          output.setStepId(functionId);
-          output.setFunctionName(functionName);
-          output.setOutput(null);
-          output.setError(null);
+          StepResult output = new StepResult(workflowId, functionId, functionName);
 
           // Record the operation result
           StepsDAO.recordStepResultTxn(output, conn, this.schema);
@@ -343,8 +328,8 @@ public class NotificationsDAO {
 
       if (recordedOutput != null) {
         logger.debug("Replaying getEvent, id: {}, key: {}", callerCtx.getFunctionId(), key);
-        if (recordedOutput.getOutput() != null) {
-          Object[] outputArray = JSONUtil.deserializeToArray(recordedOutput.getOutput());
+        if (recordedOutput.output() != null) {
+          Object[] outputArray = JSONUtil.deserializeToArray(recordedOutput.output());
           return outputArray == null ? null : outputArray[0];
         } else {
           throw new RuntimeException("No output recorded in the last getEvent");
@@ -430,14 +415,9 @@ public class NotificationsDAO {
 
       // Record the output if it's in a workflow
       if (callerCtx != null) {
-        StepResult output = new StepResult();
-        output.setWorkflowId(callerCtx.getWorkflowId());
-        output.setStepId(callerCtx.getFunctionId());
-        output.setFunctionName(functionName);
-        output.setOutput(JSONUtil.serialize(value)); // null will be serialized to
-        // 'null'
-        output.setError(null);
-
+        StepResult output =
+            new StepResult(callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName)
+                .withOutput(JSONUtil.serialize(value));
         StepsDAO.recordStepResultTxn(dataSource, output, this.schema);
       }
 
