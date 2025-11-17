@@ -59,8 +59,8 @@ public class StepsTest {
     List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
 
-    String[] names = {"step1", "step2", "step3", "step4", "step5" };
-    String[] output = {"one", "two", "three", "four", "five" };
+    String[] names = {"step1", "step2", "step3", "step4", "step5"};
+    String[] output = {"one", "two", "three", "four", "five"};
 
     for (var i = 0; i < stepInfos.size(); i++) {
       var step = stepInfos.get(i);
@@ -125,7 +125,6 @@ public class StepsTest {
       service.aWorkflowWithInlineSteps("input");
     }
 
-    
     WorkflowHandle<String, RuntimeException> handle = DBOS.retrieveWorkflow(wid);
     assertEquals("input5", (String) handle.getResult());
 
