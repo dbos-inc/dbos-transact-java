@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.RealBaseTest;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -17,16 +17,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class ExternalStateTest {
+public class ExternalStateTest extends RealBaseTest {
   private static SystemDatabase systemDatabase;
-  private static DBOSConfig dbosConfig;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
-
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
 
     DBUtils.recreateDB(dbosConfig);
     MigrationManager.runMigrations(dbosConfig);

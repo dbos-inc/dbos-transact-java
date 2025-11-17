@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.RealBaseTest;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.invocation.HawkService;
 import dev.dbos.transact.invocation.HawkServiceImpl;
@@ -26,19 +26,13 @@ import uk.org.webcompere.systemstubs.jupiter.SystemStub;
 import uk.org.webcompere.systemstubs.jupiter.SystemStubsExtension;
 
 @ExtendWith(SystemStubsExtension.class)
-public class ConfigTest {
+public class ConfigTest extends RealBaseTest {
 
   @SystemStub private EnvironmentVariables envVars = new EnvironmentVariables();
 
   @Test
   public void setExecutorAndAppVersionViaConfig() throws Exception {
-    var config =
-        DBOSConfig.defaults("config-test")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withDbUser("postgres")
-            .withDbPassword(System.getenv("PGPASSWORD"))
-            .withAppVersion("test-app-version")
-            .withExecutorId("test-executor-id");
+    var config = dbosConfig.withAppVersion("test-app-version").withExecutorId("test-executor-id");
 
     DBOS.reinitialize(config);
     try {
@@ -57,13 +51,7 @@ public class ConfigTest {
     envVars.set("DBOS__VMID", "test-env-executor-id");
     envVars.set("DBOS__APPVERSION", "test-env-app-version");
 
-    var config =
-        DBOSConfig.defaults("config-test")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withDbUser("postgres")
-            .withDbPassword(System.getenv("PGPASSWORD"))
-            .withAppVersion("test-app-version")
-            .withExecutorId("test-executor-id");
+    var config = dbosConfig.withAppVersion("test-app-version").withExecutorId("test-executor-id");
 
     DBOS.reinitialize(config);
     try {
@@ -78,11 +66,7 @@ public class ConfigTest {
 
   @Test
   public void localExecutorId() throws Exception {
-    var config =
-        DBOSConfig.defaults("config-test")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withDbUser("postgres")
-            .withDbPassword(System.getenv("PGPASSWORD"));
+    var config = dbosConfig;
 
     DBOS.reinitialize(config);
     try {
@@ -96,10 +80,7 @@ public class ConfigTest {
 
   @Test
   public void conductorExecutorId() throws Exception {
-    var config =
-        DBOSConfig.defaultsFromEnv("config-test")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withConductorKey("test-conductor-key");
+    var config = dbosConfig.withConductorKey("test-conductor-key");
 
     DBOS.reinitialize(config);
     try {
@@ -114,11 +95,7 @@ public class ConfigTest {
 
   @Test
   public void calcAppVersion() throws Exception {
-    var config =
-        DBOSConfig.defaults("config-test")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withDbUser("postgres")
-            .withDbPassword(System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR));
+    var config = dbosConfig;
 
     DBOS.reinitialize(config);
     try {
@@ -136,9 +113,9 @@ public class ConfigTest {
   public void configDataSource() throws Exception {
 
     var poolName = "dbos-configDataSource";
-    var url = "jdbc:postgresql://localhost:5432/dbos_java_sys";
-    var user = "postgres";
-    var password = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
+    var url = dbosConfig.databaseUrl();
+    var user = dbosConfig.dbUser();
+    var password = dbosConfig.dbPassword();
 
     DBUtils.recreateDB(url, user, password);
 

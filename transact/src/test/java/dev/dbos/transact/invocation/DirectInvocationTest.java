@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.RealBaseTest;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
@@ -24,25 +24,14 @@ import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class DirectInvocationTest {
-  private static DBOSConfig dbosConfig;
+public class DirectInvocationTest extends RealBaseTest {
   private HawkService proxy;
   private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {

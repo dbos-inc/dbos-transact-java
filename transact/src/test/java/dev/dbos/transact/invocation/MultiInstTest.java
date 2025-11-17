@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.RealBaseTest;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -20,13 +20,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class MultiInstTest {
-  private static DBOSConfig dbosConfig;
+public class MultiInstTest extends RealBaseTest {
   HawkServiceImpl himpl;
   BearServiceImpl bimpla;
   BearServiceImpl bimpl1;
@@ -34,14 +32,6 @@ public class MultiInstTest {
   private BearService bproxya;
   private BearService bproxy1;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
@@ -161,13 +151,9 @@ public class MultiInstTest {
     assertEquals(1, browsjust1.size());
   }
 
-  private static final String dbUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
-  private static final String dbUser = "postgres";
-  private static final String dbPassword = System.getenv("PGPASSWORD");
-
   @Test
   public void enqueueForSpecificInstance() throws Exception {
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = getDBOSClient()) {
       var options =
           new DBOSClient.EnqueueOptions(
                   "dev.dbos.transact.invocation.BearServiceImpl", "stepWorkflow", "testQueue")

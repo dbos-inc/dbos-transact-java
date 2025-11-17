@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.RealBaseTest;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -17,19 +17,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class AsyncWorkflowTest {
-
-  private static DBOSConfig dbosConfig;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    AsyncWorkflowTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2)
-            .withAdminServer(true);
-  }
+public class AsyncWorkflowTest extends RealBaseTest {
 
   @BeforeEach
   void beforeEachTest() throws SQLException {

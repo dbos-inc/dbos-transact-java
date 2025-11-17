@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.RealBaseTest;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
@@ -20,25 +20,14 @@ import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.RetryingTest;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class TimeoutTest {
+public class TimeoutTest extends RealBaseTest {
 
-  private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    TimeoutTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
