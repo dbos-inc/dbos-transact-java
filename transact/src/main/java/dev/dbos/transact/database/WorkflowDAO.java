@@ -387,9 +387,6 @@ public class WorkflowDAO {
     }
     if (input.queuesOnly() != null && input.queuesOnly()) {
       whereConditions.add("queue_name IS NOT NULL");
-      whereConditions.add("status in (?, ?)");
-      parameters.add(WorkflowState.PENDING.name());
-      parameters.add(WorkflowState.ENQUEUED.name());
     }
     if (input.forkedFrom() != null) {
       whereConditions.add("forked_from = ?");
