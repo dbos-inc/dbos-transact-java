@@ -169,24 +169,11 @@ public class EventsTest {
     res = (String) getwfh.getResult();
     assertEquals("value1value2", res);
 
-    // check event history
-    String sql1 = "SELECT count(*) FROM dbos.workflow_events WHERE workflow_uuid = ?";
-    String sql2 = "SELECT count(*) FROM dbos.workflow_events_history WHERE workflow_uuid = ?";
-    try (var conn = dataSource.getConnection();
-        var stmt1 = conn.prepareStatement(sql1);
-        var stmt2 = conn.prepareStatement(sql2)) {
-      stmt1.setString(1, "id1");
-      try (var rs = stmt1.executeQuery()) {
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt("count"));
-      }
+    var events = DBUtils.getWorkflowEvents(dataSource, "id1");
+    assertEquals(1, events.size());
 
-      stmt2.setString(1, "id1");
-      try (var rs = stmt2.executeQuery()) {
-        assertTrue(rs.next());
-        assertEquals(2, rs.getInt("count"));
-      }
-    }
+    var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, "id1");
+    assertEquals(2, eventHistory.size());
   }
 
   @Test
