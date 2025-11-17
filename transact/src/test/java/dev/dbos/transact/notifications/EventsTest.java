@@ -68,6 +68,14 @@ public class EventsTest {
       eventService.setEventWorkflow("key1", "value1");
     }
 
+    var steps = DBOS.listWorkflowSteps("id1");
+    String[] stepNames = {"DBOS.setEvent", "stepSetEvent", "getEventInStep"};
+    assertEquals(3, steps.size());
+    for (var i = 0; i < steps.size(); i++) {
+      var step = steps.get(i);
+      assertEquals(stepNames[i], step.functionName());
+    }
+
     try (var id = new WorkflowOptions("id2").setContext()) {
       Object event = eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3));
       assertEquals("value1", (String) event);
@@ -160,6 +168,25 @@ public class EventsTest {
     getwfh = DBOSTestAccess.getDbosExecutor().executeWorkflowById(getwfh.workflowId());
     res = (String) getwfh.getResult();
     assertEquals("value1value2", res);
+
+    // check event history
+    String sql1 = "SELECT count(*) FROM dbos.workflow_events WHERE workflow_uuid = ?";
+    String sql2 = "SELECT count(*) FROM dbos.workflow_events_history WHERE workflow_uuid = ?";
+    try (var conn = dataSource.getConnection();
+        var stmt1 = conn.prepareStatement(sql1);
+        var stmt2 = conn.prepareStatement(sql2)) {
+      stmt1.setString(1, "id1");
+      try (var rs = stmt1.executeQuery()) {
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt("count"));
+      }
+
+      stmt2.setString(1, "id1");
+      try (var rs = stmt2.executeQuery()) {
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt("count"));
+      }
+    }
   }
 
   @Test

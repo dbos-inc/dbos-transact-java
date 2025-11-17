@@ -241,11 +241,12 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void setEvent(String workflowId, Integer functionId, String key, Object message) {
+  public void setEvent(
+      String workflowId, int functionId, String key, Object message, boolean asStep) {
 
     DbRetry.run(
         () -> {
-          notificationsDAO.setEvent(workflowId, functionId, key, message);
+          notificationsDAO.setEvent(workflowId, functionId, key, message, asStep);
         });
   }
 
