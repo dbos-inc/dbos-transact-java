@@ -30,17 +30,19 @@ public class StepsDAO {
   }
 
   public static void recordStepResultTxn(
-      HikariDataSource dataSource, StepResult result, String schema) throws SQLException {
+      HikariDataSource dataSource, StepResult result, long startTimeEpochMs, String schema)
+      throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
     try (Connection connection = dataSource.getConnection(); ) {
-      recordStepResultTxn(result, connection, schema);
+      recordStepResultTxn(result, startTimeEpochMs, connection, schema);
     }
   }
 
-  public static void recordStepResultTxn(StepResult result, Connection connection, String schema)
+  public static void recordStepResultTxn(
+      StepResult result, long startTimeEpochMs, Connection connection, String schema)
       throws SQLException {
 
     Objects.requireNonNull(schema);
@@ -75,7 +77,7 @@ public class StepsDAO {
         pstmt.setNull(6, Types.VARCHAR);
       }
 
-      pstmt.setLong(7, result.startTimeEpochMs());
+      pstmt.setLong(7, startTimeEpochMs);
       pstmt.setLong(8, System.currentTimeMillis());
 
       pstmt.executeUpdate();
@@ -154,7 +156,7 @@ public class StepsDAO {
           String error = rs.getString("error");
           recordedFunctionName = rs.getString("function_name");
           recordedResult =
-              new StepResult(workflowId, functionId, recordedFunctionName, output, error, null, 0);
+              new StepResult(workflowId, functionId, recordedFunctionName, output, error, null);
         }
       }
     }
@@ -290,9 +292,9 @@ public class StepsDAO {
 
       try {
         StepResult output =
-            new StepResult(workflowUuid, functionId, functionName, startTime)
+            new StepResult(workflowUuid, functionId, functionName)
                 .withOutput(JSONUtil.serialize(endTime));
-        recordStepResultTxn(dataSource, output, schema);
+        recordStepResultTxn(dataSource, output, startTime, schema);
       } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
       }

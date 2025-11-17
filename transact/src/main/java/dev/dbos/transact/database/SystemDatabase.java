@@ -160,8 +160,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public StepResult checkStepExecutionTxn(
-      String workflowId, int functionId, String functionName, long startTime) {
+  public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName) {
 
     return DbRetry.call(
         () -> {
@@ -172,10 +171,10 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void recordStepResultTxn(StepResult result) {
+  public void recordStepResultTxn(StepResult result, long startTime) {
     DbRetry.run(
         () -> {
-          StepsDAO.recordStepResultTxn(dataSource, result, this.schema);
+          StepsDAO.recordStepResultTxn(dataSource, result, startTime, this.schema);
         });
   }
 

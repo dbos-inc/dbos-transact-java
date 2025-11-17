@@ -90,8 +90,8 @@ public class NotificationsDAO {
         }
 
         // Record operation result
-        var output = new StepResult(workflowUuid, functionId, functionName, startTime);
-        StepsDAO.recordStepResultTxn(output, conn, this.schema);
+        var output = new StepResult(workflowUuid, functionId, functionName);
+        StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
 
         conn.commit();
 
@@ -223,9 +223,9 @@ public class NotificationsDAO {
         // Record operation result
         Object toSave = recvdSermessage == null ? null : recvdSermessage[0];
         StepResult output =
-            new StepResult(workflowUuid, functionId, functionName, startTime)
+            new StepResult(workflowUuid, functionId, functionName)
                 .withOutput(JSONUtil.serialize(toSave));
-        StepsDAO.recordStepResultTxn(output, conn, this.schema);
+        StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
 
         conn.commit();
         return toSave;
@@ -288,10 +288,10 @@ public class NotificationsDAO {
 
         if (functionId != null) {
           // Create operation result
-          StepResult output = new StepResult(workflowId, functionId, functionName, startTime);
+          StepResult output = new StepResult(workflowId, functionId, functionName);
 
           // Record the operation result
-          StepsDAO.recordStepResultTxn(output, conn, this.schema);
+          StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
         }
 
         conn.commit();
@@ -421,10 +421,9 @@ public class NotificationsDAO {
       // Record the output if it's in a workflow
       if (callerCtx != null) {
         StepResult output =
-            new StepResult(
-                    callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName, startTime)
+            new StepResult(callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName)
                 .withOutput(JSONUtil.serialize(value));
-        StepsDAO.recordStepResultTxn(dataSource, output, this.schema);
+        StepsDAO.recordStepResultTxn(dataSource, output, startTime, this.schema);
       }
 
       return value;

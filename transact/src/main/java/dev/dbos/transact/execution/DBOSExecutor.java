@@ -351,8 +351,7 @@ public class DBOSExecutor implements AutoCloseable {
     nextFuncId = ctx.getAndIncrementFunctionId();
 
     StepResult result =
-        systemDatabase.checkStepExecutionTxn(
-            ctx.getWorkflowId(), nextFuncId, functionName, startTime);
+        systemDatabase.checkStepExecutionTxn(ctx.getWorkflowId(), nextFuncId, functionName);
     if (result != null) {
       return handleExistingResult(result, functionName);
     }
@@ -366,14 +365,8 @@ public class DBOSExecutor implements AutoCloseable {
         String jsonError = JSONUtil.serializeAppException(e);
         StepResult r =
             new StepResult(
-                ctx.getWorkflowId(),
-                nextFuncId,
-                functionName,
-                null,
-                jsonError,
-                childWfId,
-                startTime);
-        systemDatabase.recordStepResultTxn(r);
+                ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError, childWfId);
+        systemDatabase.recordStepResultTxn(r, startTime);
       }
       throw (E) e;
     }
@@ -381,9 +374,8 @@ public class DBOSExecutor implements AutoCloseable {
     // Record the successful result
     String jsonOutput = JSONUtil.serialize(functionResult);
     StepResult o =
-        new StepResult(
-            ctx.getWorkflowId(), nextFuncId, functionName, jsonOutput, null, childWfId, startTime);
-    systemDatabase.recordStepResultTxn(o);
+        new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, jsonOutput, null, childWfId);
+    systemDatabase.recordStepResultTxn(o, startTime);
 
     return functionResult;
   }
@@ -461,7 +453,7 @@ public class DBOSExecutor implements AutoCloseable {
     int stepFunctionId = ctx.getAndIncrementFunctionId();
 
     StepResult recordedResult =
-        systemDatabase.checkStepExecutionTxn(workflowId, stepFunctionId, stepName, startTime);
+        systemDatabase.checkStepExecutionTxn(workflowId, stepFunctionId, stepName);
 
     if (recordedResult != null) {
       String output = recordedResult.output();
@@ -517,9 +509,8 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (eThrown == null) {
       StepResult stepResult =
-          new StepResult(
-              workflowId, stepFunctionId, stepName, serializedOutput, null, childWfId, startTime);
-      systemDatabase.recordStepResultTxn(stepResult);
+          new StepResult(workflowId, stepFunctionId, stepName, serializedOutput, null, childWfId);
+      systemDatabase.recordStepResultTxn(stepResult, startTime);
       return result;
     } else {
       StepResult stepResult =
@@ -529,9 +520,8 @@ public class DBOSExecutor implements AutoCloseable {
               stepName,
               null,
               JSONUtil.serializeAppException(eThrown),
-              childWfId,
-              startTime);
-      systemDatabase.recordStepResultTxn(stepResult);
+              childWfId);
+      systemDatabase.recordStepResultTxn(stepResult, startTime);
       throw (E) eThrown;
     }
   }

@@ -647,10 +647,9 @@ public class WorkflowDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
-    var result =
-        new StepResult(parentId, functionId, functionName, startTime).withChildWorkflowId(childId);
+    var result = new StepResult(parentId, functionId, functionName).withChildWorkflowId(childId);
     try (Connection connection = dataSource.getConnection()) {
-      StepsDAO.recordStepResultTxn(result, connection, schema);
+      StepsDAO.recordStepResultTxn(result, startTime, connection, schema);
     }
   }
 
