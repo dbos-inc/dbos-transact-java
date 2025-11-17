@@ -228,6 +228,31 @@ public class WorkflowMgmtTest {
   }
 
   @Test
+  public void testForkAppVersion() throws SQLException {
+    ForkServiceImpl impl = new ForkServiceImpl();
+
+    ForkService forkService = DBOS.registerWorkflows(ForkService.class, impl);
+    forkService.setForkService(forkService);
+
+    DBOS.launch();
+    DBOSTestAccess.getQueueService().pause();
+
+    var wfid = "testForkAppVersion-%d".formatted(System.currentTimeMillis());
+    var options = new StartWorkflowOptions(wfid);
+    var handle = DBOS.startWorkflow(() -> forkService.simpleWorkflow("hello"), options);
+    var result = handle.getResult();
+    assertEquals("hellohello", result);
+
+    var forkOptions = new ForkOptions();
+    WorkflowHandle<String, SQLException> forkHandle = DBOS.forkWorkflow(wfid, 0, forkOptions);
+    assertNull(forkHandle.getStatus().appVersion());
+
+    forkOptions = forkOptions.withApplicationVersion("test-app-version");
+    forkHandle = DBOS.forkWorkflow(wfid, 0, forkOptions);
+    assertEquals("test-app-version", forkHandle.getStatus().appVersion());
+  }
+
+  @Test
   public void testFork() throws SQLException {
 
     ForkServiceImpl impl = new ForkServiceImpl();
