@@ -27,12 +27,13 @@ public record ListWorkflowsInput(
     Boolean loadOutput,
     String queueName,
     Boolean queuesOnly,
-    List<String> executorIds) {
+    List<String> executorIds,
+    String forkedFrom) {
 
   public ListWorkflowsInput() {
     this(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null);
+        null, null, null, null);
   }
 
   /** Restrict the returned workflows to those on the specified `workflowIds` list */
@@ -55,7 +56,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /**
@@ -91,7 +93,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** Restrict the returned workflows to those with a status of `status` */
@@ -130,7 +133,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** Restrict the returned workflows to those initiated on or before `endTime` */
@@ -153,7 +157,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** Restrict the returned workflows to those with the function name `workflowName` */
@@ -176,7 +181,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** Restrict the returned workflows to those within the class named `className` */
@@ -199,7 +205,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** Restrict the returned workflows to those within the instance named `instanceName` */
@@ -222,7 +229,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** Restrict the returned workflows to those run on app version `applicationVersion` */
@@ -245,7 +253,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** Restrict the returned workflows to those run by user `authenticatedUser` */
@@ -268,7 +277,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** Restrict the number of returned workflows to `limit` */
@@ -291,7 +301,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /**
@@ -317,7 +328,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /**
@@ -343,7 +355,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** Filter returned workflows by a prefix of the workflow ID */
@@ -366,7 +379,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** If true, workflow inputs will be materialized and returned as part of the record */
@@ -389,7 +403,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /**
@@ -415,7 +430,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /**
@@ -441,7 +457,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /** Restrict the returned workflows to only those run on queues. */
@@ -468,7 +485,8 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds);
+        executorIds,
+        forkedFrom);
   }
 
   /**
@@ -494,7 +512,32 @@ public record ListWorkflowsInput(
         loadOutput,
         queueName,
         queuesOnly,
-        executorIds == null ? null : List.copyOf(executorIds));
+        executorIds == null ? null : List.copyOf(executorIds),
+        forkedFrom);
+  }
+
+  /** Restrict the returned workflows to those forked from the specified workflow ID */
+  public ListWorkflowsInput withForkedFrom(String forkedFrom) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom);
   }
 
   public ListWorkflowsInput withAddedWorkflowId(String workflowId) {
