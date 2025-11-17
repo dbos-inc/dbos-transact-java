@@ -8,7 +8,7 @@ package dev.dbos.transact.exceptions;
  * programmer error.
  */
 public class DBOSNonExistentWorkflowException extends RuntimeException {
-  private String workflowId;
+  private final String workflowId;
 
   public DBOSNonExistentWorkflowException(String workflowId) {
     super(String.format("Workflow does not exist %s", workflowId));
