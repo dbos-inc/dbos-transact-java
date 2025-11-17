@@ -8,7 +8,7 @@ package dev.dbos.transact.exceptions;
  * exception.
  */
 public class DBOSAwaitedWorkflowCancelledException extends RuntimeException {
-  private String workflowId;
+  private final String workflowId;
 
   public DBOSAwaitedWorkflowCancelledException(String workflowId) {
     super(String.format("Awaited workflow %s was cancelled.", workflowId));

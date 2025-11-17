@@ -6,14 +6,16 @@ package dev.dbos.transact.exceptions;
  */
 public class DBOSMaxRecoveryAttemptsExceededException extends RuntimeException {
 
-  private String workflowId;
-  private int maxRetries;
+  private final String workflowId;
+  private final int maxRetries;
 
   public DBOSMaxRecoveryAttemptsExceededException(String workflowId, int maxRetries) {
     super(
         String.format(
             "Workflow %s has been moved to the dead-letter queue after exceeding the maximum of %d retries",
             workflowId, maxRetries));
+    this.workflowId = workflowId;
+    this.maxRetries = maxRetries;
   }
 
   /**
