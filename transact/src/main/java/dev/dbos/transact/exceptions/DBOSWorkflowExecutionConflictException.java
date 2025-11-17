@@ -7,7 +7,7 @@ package dev.dbos.transact.exceptions;
  * execution should be abandoned, this exception should not be caught or otherwise handled.
  */
 public class DBOSWorkflowExecutionConflictException extends RuntimeException {
-  private String workflowId;
+  private final String workflowId;
 
   public DBOSWorkflowExecutionConflictException(String workflowId) {
     super("Conflicting workflow ID %s".formatted(workflowId));

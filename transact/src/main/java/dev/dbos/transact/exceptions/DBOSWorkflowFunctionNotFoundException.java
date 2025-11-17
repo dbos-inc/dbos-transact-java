@@ -8,8 +8,8 @@ package dev.dbos.transact.exceptions;
  * not exist.
  */
 public class DBOSWorkflowFunctionNotFoundException extends RuntimeException {
-  private String workflowId;
-  private String workflowName;
+  private final String workflowId;
+  private final String workflowName;
 
   public DBOSWorkflowFunctionNotFoundException(String id, String name) {
     super(String.format("Workflow function %s does not exist for workflow id %s.", name, id));

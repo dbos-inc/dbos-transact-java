@@ -8,7 +8,7 @@ import java.sql.SQLException;
  * system database connectivity is restored.
  */
 public class DBOSSystemDatabaseException extends RuntimeException {
-  Throwable underlyingException;
+  private final Throwable underlyingException;
 
   public DBOSSystemDatabaseException(Throwable e) {
     super(
