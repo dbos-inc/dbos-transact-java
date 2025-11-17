@@ -862,12 +862,7 @@ public class WorkflowDAO {
       stmt.setString(3, originalStatus.name());
       stmt.setString(4, originalStatus.className());
       stmt.setString(5, originalStatus.instanceName());
-
-      // Use provided application version or fall back to original
-      String appVersion =
-          applicationVersion != null ? applicationVersion : originalStatus.appVersion();
-      stmt.setString(6, appVersion);
-
+      stmt.setString(6, applicationVersion);
       stmt.setString(7, originalStatus.appId());
       stmt.setString(8, originalStatus.authenticatedUser());
       stmt.setString(9, JSONUtil.serializeArray(originalStatus.authenticatedRoles()));
