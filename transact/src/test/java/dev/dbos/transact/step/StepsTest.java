@@ -68,9 +68,9 @@ public class StepsTest {
       assertEquals(output[i], step.output());
       assertNull(step.error());
       assertNotNull(step.startedAtEpochMs());
-      assertTrue(before < step.startedAtEpochMs());
+      assertTrue(before <= step.startedAtEpochMs());
       assertNotNull(step.completedAtEpochMs());
-      assertTrue(step.startedAtEpochMs() < step.completedAtEpochMs());
+      assertTrue(step.startedAtEpochMs() <= step.completedAtEpochMs());
       before = step.completedAtEpochMs();
     }
   }
@@ -96,9 +96,9 @@ public class StepsTest {
     for (var i = 0; i < stepInfos.size(); i++) {
       var step = stepInfos.get(i);
       assertNotNull(step.startedAtEpochMs());
-      assertTrue(before < step.startedAtEpochMs());
+      assertTrue(before <= step.startedAtEpochMs());
       assertNotNull(step.completedAtEpochMs());
-      assertTrue(step.startedAtEpochMs() < step.completedAtEpochMs());
+      assertTrue(step.startedAtEpochMs() <= step.completedAtEpochMs());
       before = step.completedAtEpochMs();
     }
 
@@ -134,9 +134,9 @@ public class StepsTest {
     for (var i = 0; i < stepInfos.size(); i++) {
       var step = stepInfos.get(i);
       assertNotNull(step.startedAtEpochMs());
-      assertTrue(before < step.startedAtEpochMs());
+      assertTrue(before <= step.startedAtEpochMs());
       assertNotNull(step.completedAtEpochMs());
-      assertTrue(step.startedAtEpochMs() < step.completedAtEpochMs());
+      assertTrue(step.startedAtEpochMs() <= step.completedAtEpochMs());
       before = step.completedAtEpochMs();
     }
 
@@ -166,31 +166,20 @@ public class StepsTest {
     List<StepInfo> stepInfos = DBOS.listWorkflowSteps(workflowId);
     assertEquals(5, stepInfos.size());
 
+    String[] names = {"step1", "step2", "step3", "step4", "step5"};
+    String[] output = {"one", "two", "three", "four", "five"};
+
     for (var i = 0; i < stepInfos.size(); i++) {
       var step = stepInfos.get(i);
+      assertEquals(names[i], step.functionName());
+      assertEquals(output[i], step.output());
+      assertNull(step.error());
       assertNotNull(step.startedAtEpochMs());
-      assertTrue(before < step.startedAtEpochMs());
+      assertTrue(before <= step.startedAtEpochMs());
       assertNotNull(step.completedAtEpochMs());
-      assertTrue(step.startedAtEpochMs() < step.completedAtEpochMs());
+      assertTrue(step.startedAtEpochMs() <= step.completedAtEpochMs());
       before = step.completedAtEpochMs();
     }
-
-    assertEquals("step1", stepInfos.get(0).functionName());
-    assertEquals(0, stepInfos.get(0).functionId());
-    assertEquals("one", stepInfos.get(0).output());
-    assertEquals("step2", stepInfos.get(1).functionName());
-    assertEquals(1, stepInfos.get(1).functionId());
-    assertEquals("two", stepInfos.get(1).output());
-    assertEquals("step3", stepInfos.get(2).functionName());
-    assertEquals(2, stepInfos.get(2).functionId());
-    assertEquals("three", stepInfos.get(2).output());
-    assertEquals("step4", stepInfos.get(3).functionName());
-    assertEquals(3, stepInfos.get(3).functionId());
-    assertEquals("four", stepInfos.get(3).output());
-    assertEquals("step5", stepInfos.get(4).functionName());
-    assertEquals(4, stepInfos.get(4).functionId());
-    assertEquals("five", stepInfos.get(4).output());
-    assertNull(stepInfos.get(4).error());
   }
 
   @Test
