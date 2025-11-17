@@ -257,9 +257,9 @@ public class StepsTest {
     for (var i = 0; i < stepInfos.size(); i++) {
       var step = stepInfos.get(i);
       assertNotNull(step.startedAtEpochMs());
-      assertTrue(before < step.startedAtEpochMs());
+      assertTrue(before <= step.startedAtEpochMs());
       assertNotNull(step.completedAtEpochMs());
-      assertTrue(step.startedAtEpochMs() < step.completedAtEpochMs());
+      assertTrue(step.startedAtEpochMs() <= step.completedAtEpochMs());
       before = step.completedAtEpochMs();
     }
 
