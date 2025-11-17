@@ -47,34 +47,36 @@ public class StepsDAO {
     String sql =
         """
           INSERT INTO %s.operation_outputs
-            (workflow_uuid, function_id, function_name, output, error, child_workflow_id)
-          VALUES (?, ?, ?, ?, ?, ?)
+            (workflow_uuid, function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
             .formatted(schema);
 
     try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-      int paramIdx = 1;
-      pstmt.setString(paramIdx++, result.workflowId());
-      pstmt.setInt(paramIdx++, result.stepId());
-      pstmt.setString(paramIdx++, result.functionName());
+      pstmt.setString(1, result.workflowId());
+      pstmt.setInt(2, result.stepId());
+      pstmt.setString(3, result.functionName());
 
       if (result.output() != null) {
-        pstmt.setString(paramIdx++, result.output());
+        pstmt.setString(4, result.output());
       } else {
-        pstmt.setNull(paramIdx++, Types.LONGVARCHAR);
+        pstmt.setNull(4, Types.LONGVARCHAR);
       }
 
       if (result.error() != null) {
-        pstmt.setString(paramIdx++, result.error());
+        pstmt.setString(5, result.error());
       } else {
-        pstmt.setNull(paramIdx++, Types.LONGVARCHAR);
+        pstmt.setNull(5, Types.LONGVARCHAR);
       }
 
       if (result.childWorkflowId() != null) {
-        pstmt.setString(paramIdx++, result.childWorkflowId());
+        pstmt.setString(6, result.childWorkflowId());
       } else {
-        pstmt.setNull(paramIdx++, Types.VARCHAR);
+        pstmt.setNull(6, Types.VARCHAR);
       }
+
+      pstmt.setLong(7, result.startTimeEpochMs());
+      pstmt.setLong(8, System.currentTimeMillis());
 
       pstmt.executeUpdate();
 
@@ -152,7 +154,7 @@ public class StepsDAO {
           String error = rs.getString("error");
           recordedFunctionName = rs.getString("function_name");
           recordedResult =
-              new StepResult(workflowId, functionId, recordedFunctionName, output, error, null);
+              new StepResult(workflowId, functionId, recordedFunctionName, output, error, null, 0);
         }
       }
     }
@@ -177,7 +179,7 @@ public class StepsDAO {
 
     final String sql =
         """
-          SELECT function_id, function_name, output, error, child_workflow_id
+          SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms
           FROM %s.operation_outputs
           WHERE workflow_uuid = ?
           ORDER BY function_id;
@@ -199,6 +201,8 @@ public class StepsDAO {
           String outputData = rs.getString("output");
           String errorData = rs.getString("error");
           String childWorkflowId = rs.getString("child_workflow_id");
+          Long startedAt = rs.getObject("started_at_epoch_ms", Long.class);
+          Long completedAt = rs.getObject("completed_at_epoch_ms", Long.class);
 
           // Deserialize output if present
           Object[] output = null;
@@ -226,7 +230,15 @@ public class StepsDAO {
           }
 
           Object outputVal = output != null ? output[0] : null;
-          steps.add(new StepInfo(functionId, functionName, outputVal, stepError, childWorkflowId));
+          steps.add(
+              new StepInfo(
+                  functionId,
+                  functionName,
+                  outputVal,
+                  stepError,
+                  childWorkflowId,
+                  startedAt,
+                  completedAt));
         }
       }
     }
@@ -253,6 +265,7 @@ public class StepsDAO {
     }
 
     Objects.requireNonNull(schema);
+    var startTime = System.currentTimeMillis();
     String functionName = "DBOS.sleep";
 
     StepResult recordedOutput;
@@ -277,7 +290,7 @@ public class StepsDAO {
 
       try {
         StepResult output =
-            new StepResult(workflowUuid, functionId, functionName)
+            new StepResult(workflowUuid, functionId, functionName, startTime)
                 .withOutput(JSONUtil.serialize(endTime));
         recordStepResultTxn(dataSource, output, schema);
       } catch (DBOSWorkflowExecutionConflictException e) {

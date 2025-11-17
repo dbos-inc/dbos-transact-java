@@ -40,6 +40,7 @@ public class NotificationsDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
+    var startTime = System.currentTimeMillis();
     String functionName = "DBOS.send";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
 
@@ -89,7 +90,7 @@ public class NotificationsDAO {
         }
 
         // Record operation result
-        var output = new StepResult(workflowUuid, functionId, functionName);
+        var output = new StepResult(workflowUuid, functionId, functionName, startTime);
         StepsDAO.recordStepResultTxn(output, conn, this.schema);
 
         conn.commit();
@@ -113,6 +114,7 @@ public class NotificationsDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
+    var startTime = System.currentTimeMillis();
     String functionName = "DBOS.recv";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
 
@@ -221,7 +223,7 @@ public class NotificationsDAO {
         // Record operation result
         Object toSave = recvdSermessage == null ? null : recvdSermessage[0];
         StepResult output =
-            new StepResult(workflowUuid, functionId, functionName)
+            new StepResult(workflowUuid, functionId, functionName, startTime)
                 .withOutput(JSONUtil.serialize(toSave));
         StepsDAO.recordStepResultTxn(output, conn, this.schema);
 
@@ -241,6 +243,7 @@ public class NotificationsDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
+    var startTime = System.currentTimeMillis();
     String functionName = "DBOS.setEvent";
 
     try (Connection conn = dataSource.getConnection()) {
@@ -285,7 +288,7 @@ public class NotificationsDAO {
 
         if (functionId != null) {
           // Create operation result
-          StepResult output = new StepResult(workflowId, functionId, functionName);
+          StepResult output = new StepResult(workflowId, functionId, functionName, startTime);
 
           // Record the operation result
           StepsDAO.recordStepResultTxn(output, conn, this.schema);
@@ -309,6 +312,8 @@ public class NotificationsDAO {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
+
+    var startTime = System.currentTimeMillis();
     String functionName = "DBOS.getEvent";
 
     // Check for previous executions only if it's in a workflow
@@ -416,7 +421,8 @@ public class NotificationsDAO {
       // Record the output if it's in a workflow
       if (callerCtx != null) {
         StepResult output =
-            new StepResult(callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName)
+            new StepResult(
+                    callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName, startTime)
                 .withOutput(JSONUtil.serialize(value));
         StepsDAO.recordStepResultTxn(dataSource, output, this.schema);
       }

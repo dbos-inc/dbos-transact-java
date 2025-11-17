@@ -15,6 +15,8 @@ public class ListStepsResponse extends BaseResponse {
     public String output;
     public String error;
     public String child_workflow_id;
+    public String started_at_epoch_ms;
+    public String completed_at_epoch_ms;
 
     public Step(StepInfo info) {
       Object output = info.output();
@@ -26,6 +28,10 @@ public class ListStepsResponse extends BaseResponse {
       this.error =
           error != null ? String.format("%s: %s", error.className(), error.message()) : null;
       this.child_workflow_id = info.childWorkflowId();
+      this.started_at_epoch_ms =
+          info.startedAtEpochMs() == null ? null : info.startedAtEpochMs().toString();
+      this.completed_at_epoch_ms =
+          info.completedAtEpochMs() == null ? null : info.completedAtEpochMs().toString();
     }
   }
 

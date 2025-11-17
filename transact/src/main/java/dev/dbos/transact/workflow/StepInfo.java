@@ -5,4 +5,6 @@ public record StepInfo(
     String functionName,
     Object output,
     ErrorResult error,
-    String childWorkflowId) {}
+    String childWorkflowId,
+    Long startedAtEpochMs,
+    Long completedAtEpochMs) {}

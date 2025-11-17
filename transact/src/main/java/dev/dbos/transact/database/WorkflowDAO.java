@@ -640,13 +640,15 @@ public class WorkflowDAO {
       String parentId,
       String childId, // workflowId of the child
       int functionId, // func id in the parent
-      String functionName)
+      String functionName,
+      long startTime)
       throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
-    var result = new StepResult(parentId, functionId, functionName).withChildWorkflowId(childId);
+    var result =
+        new StepResult(parentId, functionId, functionName, startTime).withChildWorkflowId(childId);
     try (Connection connection = dataSource.getConnection()) {
       StepsDAO.recordStepResultTxn(result, connection, schema);
     }
@@ -887,8 +889,8 @@ public class WorkflowDAO {
     String sql =
         """
           INSERT INTO %1$s.operation_outputs
-              (workflow_uuid, function_id, output, error, function_name, child_workflow_id )
-          SELECT ? as workflow_uuid, function_id, output, error, function_name, child_workflow_id
+              (workflow_uuid, function_id, output, error, function_name, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms)
+          SELECT ? as workflow_uuid, function_id, output, error, function_name, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms
               FROM %1$s.operation_outputs
               WHERE workflow_uuid = ? AND function_id < ?
         """
