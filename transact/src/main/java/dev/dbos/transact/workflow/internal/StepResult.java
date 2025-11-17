@@ -1,75 +1,26 @@
 package dev.dbos.transact.workflow.internal;
 
-public class StepResult {
-  private String workflowId;
-  private String childWorkflowId;
-  private int stepId;
-  private String functionName;
-  private String output;
-  private String error;
+public record StepResult(
+    String workflowId,
+    int stepId,
+    String functionName,
+    String output,
+    String error,
+    String childWorkflowId) {
 
-  public StepResult() {}
-
-  public StepResult(
-      String workflowId,
-      int stepId,
-      String functionName,
-      String output,
-      String error,
-      String childWorkflowId) {
-    this.workflowId = workflowId;
-    this.stepId = stepId;
-    this.functionName = functionName;
-    this.output = output;
-    this.error = error;
-    this.childWorkflowId = childWorkflowId;
+  public StepResult(String workflowId, int stepId, String functionName) {
+    this(workflowId, stepId, functionName, null, null, null);
   }
 
-  public String getWorkflowId() {
-    return workflowId;
+  public StepResult withOutput(String v) {
+    return new StepResult(workflowId, stepId, functionName, v, error, childWorkflowId);
   }
 
-  public String getChildWorkflowId() {
-    return childWorkflowId;
+  public StepResult withError(String v) {
+    return new StepResult(workflowId, stepId, functionName, output, v, childWorkflowId);
   }
 
-  public int getStepId() {
-    return stepId;
-  }
-
-  public String getFunctionName() {
-    return functionName;
-  }
-
-  public String getOutput() {
-    return output;
-  }
-
-  public String getError() {
-    return error;
-  }
-
-  public void setWorkflowId(String workflowId) {
-    this.workflowId = workflowId;
-  }
-
-  public void setChildWorkflowId(String childWorkflowId) {
-    this.childWorkflowId = childWorkflowId;
-  }
-
-  public void setStepId(int stepId) {
-    this.stepId = stepId;
-  }
-
-  public void setFunctionName(String functionName) {
-    this.functionName = functionName;
-  }
-
-  public void setOutput(String output) {
-    this.output = output;
-  }
-
-  public void setError(String error) {
-    this.error = error;
+  public StepResult withChildWorkflowId(String v) {
+    return new StepResult(workflowId, stepId, functionName, output, error, v);
   }
 }

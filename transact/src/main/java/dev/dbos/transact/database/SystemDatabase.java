@@ -171,10 +171,10 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void recordStepResultTxn(StepResult result) {
+  public void recordStepResultTxn(StepResult result, long startTime) {
     DbRetry.run(
         () -> {
-          StepsDAO.recordStepResultTxn(dataSource, result, this.schema);
+          StepsDAO.recordStepResultTxn(dataSource, result, startTime, this.schema);
         });
   }
 
@@ -202,10 +202,11 @@ public class SystemDatabase implements AutoCloseable {
       String childId, // workflowId of the
       // child
       int functionId, // func id in the parent
-      String functionName) {
+      String functionName,
+      long startTime) {
     DbRetry.run(
         () -> {
-          workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName);
+          workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName, startTime);
         });
   }
 

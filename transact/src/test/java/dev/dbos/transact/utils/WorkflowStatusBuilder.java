@@ -9,27 +9,36 @@ import java.util.Objects;
 public class WorkflowStatusBuilder {
   private String workflowId;
   private String status;
+  private String forkedFrom;
+
   private String name;
   private String className;
   private String instanceName;
-  private String authenticatedUser;
-  private String assumedRole;
-  private String[] authenticatedRoles;
+
   private Object[] input;
   private Object output;
   private ErrorResult error;
-  private String executorId;
-  private Long createdAt;
-  private Long updatedAt;
-  private String appVersion;
-  private String appId;
-  private Integer recoveryAttempts;
+
   private String queueName;
-  private Long timeoutMs;
-  private Long deadlineEpochMs;
-  private Long startedAtEpochMs;
   private String deduplicationId;
   private Integer priority;
+  private String partitionKey;
+
+  private String executorId;
+  private String appVersion;
+  private String appId;
+
+  private String authenticatedUser;
+  private String assumedRole;
+  private String[] authenticatedRoles;
+
+  private Long createdAt;
+  private Long updatedAt;
+  private Integer recoveryAttempts;
+  private Long startedAtEpochMs;
+
+  private Long timeoutMs;
+  private Long deadlineEpochMs;
 
   public WorkflowStatus build() {
     return new WorkflowStatus(
@@ -55,7 +64,9 @@ public class WorkflowStatusBuilder {
         deadlineEpochMs,
         startedAtEpochMs,
         deduplicationId,
-        priority);
+        priority,
+        partitionKey,
+        forkedFrom);
   }
 
   public WorkflowStatusBuilder(String workflowId) {
@@ -68,7 +79,12 @@ public class WorkflowStatusBuilder {
   }
 
   public WorkflowStatusBuilder status(WorkflowState state) {
-    this.status = state.toString();
+    this.status = state.name();
+    return this;
+  }
+
+  public WorkflowStatusBuilder forkedFrom(String forkedFrom) {
+    this.forkedFrom = forkedFrom;
     return this;
   }
 
@@ -87,21 +103,6 @@ public class WorkflowStatusBuilder {
     return this;
   }
 
-  public WorkflowStatusBuilder authenticatedUser(String authenticatedUser) {
-    this.authenticatedUser = authenticatedUser;
-    return this;
-  }
-
-  public WorkflowStatusBuilder assumedRole(String assumedRole) {
-    this.assumedRole = assumedRole;
-    return this;
-  }
-
-  public WorkflowStatusBuilder authenticatedRoles(String[] authenticatedRoles) {
-    this.authenticatedRoles = authenticatedRoles;
-    return this;
-  }
-
   public WorkflowStatusBuilder input(Object[] input) {
     this.input = input;
     return this;
@@ -117,18 +118,28 @@ public class WorkflowStatusBuilder {
     return this;
   }
 
+  public WorkflowStatusBuilder queueName(String queueName) {
+    this.queueName = queueName;
+    return this;
+  }
+
+  public WorkflowStatusBuilder deduplicationId(String deduplicationId) {
+    this.deduplicationId = deduplicationId;
+    return this;
+  }
+
+  public WorkflowStatusBuilder priority(Integer priority) {
+    this.priority = priority;
+    return this;
+  }
+
+  public WorkflowStatusBuilder partitionKey(String partitionKey) {
+    this.partitionKey = partitionKey;
+    return this;
+  }
+
   public WorkflowStatusBuilder executorId(String executorId) {
     this.executorId = executorId;
-    return this;
-  }
-
-  public WorkflowStatusBuilder createdAt(Long createdAt) {
-    this.createdAt = createdAt;
-    return this;
-  }
-
-  public WorkflowStatusBuilder updatedAt(Long updatedAt) {
-    this.updatedAt = updatedAt;
     return this;
   }
 
@@ -142,13 +153,38 @@ public class WorkflowStatusBuilder {
     return this;
   }
 
+  public WorkflowStatusBuilder authenticatedUser(String authenticatedUser) {
+    this.authenticatedUser = authenticatedUser;
+    return this;
+  }
+
+  public WorkflowStatusBuilder assumedRole(String assumedRole) {
+    this.assumedRole = assumedRole;
+    return this;
+  }
+
+  public WorkflowStatusBuilder authenticatedRoles(String[] authenticatedRoles) {
+    this.authenticatedRoles = authenticatedRoles;
+    return this;
+  }
+
+  public WorkflowStatusBuilder createdAt(Long createdAt) {
+    this.createdAt = createdAt;
+    return this;
+  }
+
+  public WorkflowStatusBuilder updatedAt(Long updatedAt) {
+    this.updatedAt = updatedAt;
+    return this;
+  }
+
   public WorkflowStatusBuilder recoveryAttempts(Integer recoveryAttempts) {
     this.recoveryAttempts = recoveryAttempts;
     return this;
   }
 
-  public WorkflowStatusBuilder queueName(String queueName) {
-    this.queueName = queueName;
+  public WorkflowStatusBuilder startedAtEpochMs(Long startedAtEpochMs) {
+    this.startedAtEpochMs = startedAtEpochMs;
     return this;
   }
 
@@ -159,21 +195,6 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder deadlineEpochMs(Long deadlineEpochMs) {
     this.deadlineEpochMs = deadlineEpochMs;
-    return this;
-  }
-
-  public WorkflowStatusBuilder startedAtEpochMs(Long startedAtEpochMs) {
-    this.startedAtEpochMs = startedAtEpochMs;
-    return this;
-  }
-
-  public WorkflowStatusBuilder deduplicationId(String deduplicationId) {
-    this.deduplicationId = deduplicationId;
-    return this;
-  }
-
-  public WorkflowStatusBuilder priority(Integer priority) {
-    this.priority = priority;
     return this;
   }
 }

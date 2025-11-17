@@ -40,6 +40,7 @@ public class NotificationsDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
+    var startTime = System.currentTimeMillis();
     String functionName = "DBOS.send";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
 
@@ -89,14 +90,8 @@ public class NotificationsDAO {
         }
 
         // Record operation result
-        StepResult output = new StepResult();
-        output.setWorkflowId(workflowUuid);
-        output.setStepId(functionId);
-        output.setFunctionName(functionName);
-        output.setOutput(null);
-        output.setError(null);
-
-        StepsDAO.recordStepResultTxn(output, conn, this.schema);
+        var output = new StepResult(workflowUuid, functionId, functionName);
+        StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
 
         conn.commit();
 
@@ -119,6 +114,7 @@ public class NotificationsDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
+    var startTime = System.currentTimeMillis();
     String functionName = "DBOS.recv";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
 
@@ -132,8 +128,8 @@ public class NotificationsDAO {
 
     if (recordedOutput != null) {
       logger.debug("Replaying recv, id: {}, topic: {}", functionId, finalTopic);
-      if (recordedOutput.getOutput() != null) {
-        Object[] dSerOut = JSONUtil.deserializeToArray(recordedOutput.getOutput());
+      if (recordedOutput.output() != null) {
+        Object[] dSerOut = JSONUtil.deserializeToArray(recordedOutput.output());
         return dSerOut == null ? null : dSerOut[0];
       } else {
         throw new RuntimeException("No output recorded in the last recv");
@@ -225,15 +221,11 @@ public class NotificationsDAO {
         }
 
         // Record operation result
-        StepResult output = new StepResult();
-        output.setWorkflowId(workflowUuid);
-        output.setStepId(functionId);
-        output.setFunctionName(functionName);
         Object toSave = recvdSermessage == null ? null : recvdSermessage[0];
-        output.setOutput(JSONUtil.serialize(toSave));
-        output.setError(null);
-
-        StepsDAO.recordStepResultTxn(output, conn, this.schema);
+        StepResult output =
+            new StepResult(workflowUuid, functionId, functionName)
+                .withOutput(JSONUtil.serialize(toSave));
+        StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
 
         conn.commit();
         return toSave;
@@ -251,6 +243,7 @@ public class NotificationsDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
+    var startTime = System.currentTimeMillis();
     String functionName = "DBOS.setEvent";
 
     try (Connection conn = dataSource.getConnection()) {
@@ -295,15 +288,10 @@ public class NotificationsDAO {
 
         if (functionId != null) {
           // Create operation result
-          StepResult output = new StepResult();
-          output.setWorkflowId(workflowId);
-          output.setStepId(functionId);
-          output.setFunctionName(functionName);
-          output.setOutput(null);
-          output.setError(null);
+          StepResult output = new StepResult(workflowId, functionId, functionName);
 
           // Record the operation result
-          StepsDAO.recordStepResultTxn(output, conn, this.schema);
+          StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
         }
 
         conn.commit();
@@ -324,6 +312,8 @@ public class NotificationsDAO {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
+
+    var startTime = System.currentTimeMillis();
     String functionName = "DBOS.getEvent";
 
     // Check for previous executions only if it's in a workflow
@@ -343,8 +333,8 @@ public class NotificationsDAO {
 
       if (recordedOutput != null) {
         logger.debug("Replaying getEvent, id: {}, key: {}", callerCtx.getFunctionId(), key);
-        if (recordedOutput.getOutput() != null) {
-          Object[] outputArray = JSONUtil.deserializeToArray(recordedOutput.getOutput());
+        if (recordedOutput.output() != null) {
+          Object[] outputArray = JSONUtil.deserializeToArray(recordedOutput.output());
           return outputArray == null ? null : outputArray[0];
         } else {
           throw new RuntimeException("No output recorded in the last getEvent");
@@ -430,15 +420,10 @@ public class NotificationsDAO {
 
       // Record the output if it's in a workflow
       if (callerCtx != null) {
-        StepResult output = new StepResult();
-        output.setWorkflowId(callerCtx.getWorkflowId());
-        output.setStepId(callerCtx.getFunctionId());
-        output.setFunctionName(functionName);
-        output.setOutput(JSONUtil.serialize(value)); // null will be serialized to
-        // 'null'
-        output.setError(null);
-
-        StepsDAO.recordStepResultTxn(dataSource, output, this.schema);
+        StepResult output =
+            new StepResult(callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName)
+                .withOutput(JSONUtil.serialize(value));
+        StepsDAO.recordStepResultTxn(dataSource, output, startTime, this.schema);
       }
 
       return value;
