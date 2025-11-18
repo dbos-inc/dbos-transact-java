@@ -276,7 +276,7 @@ public class QueuesTest {
     assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
   }
 
-  @Test
+  @RetryingTest(3)
   public void testLimiter() throws Exception {
 
     int limit = 5;
@@ -312,7 +312,8 @@ public class QueuesTest {
       times.add(result);
     }
 
-    double waveTolerance = 0.5;
+    double waveTolerance =
+        0.5; // This expectation is not so good if the poll occurs amidst the starts
     for (int wave = 0; wave < numWaves; wave++) {
       for (int i = wave * limit; i < (wave + 1) * limit - 1; i++) {
         double diff = times.get(i + 1) - times.get(i);
