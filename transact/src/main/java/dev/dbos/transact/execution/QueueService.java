@@ -25,10 +25,15 @@ public class QueueService {
   private volatile boolean paused = false;
   private Thread workerThread;
   private CountDownLatch shutdownLatch;
+  private double speedup = 1.0;
 
   public QueueService(DBOSExecutor dbosExecutor, SystemDatabase systemDatabase) {
     this.systemDatabase = systemDatabase;
     this.dbosExecutor = dbosExecutor;
+  }
+
+  public void setSpeedupForTest() {
+    speedup = 0.01;
   }
 
   @SuppressWarnings("deprecation") // Thread.currentThread().getId()
@@ -47,7 +52,7 @@ public class QueueService {
         randomSleepFactor = (0.95 + ThreadLocalRandom.current().nextDouble(0.1));
 
         try {
-          Thread.sleep((long) (randomSleepFactor * pollingIntervalSec * 1000));
+          Thread.sleep((long) (randomSleepFactor * pollingIntervalSec * 1000 * speedup));
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           logger.error("QueuesPollThread interrupted while sleeping");

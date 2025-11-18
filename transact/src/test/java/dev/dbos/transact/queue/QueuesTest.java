@@ -276,11 +276,11 @@ public class QueuesTest {
     assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
   }
 
-  @RetryingTest(3)
+  @Test
   public void testLimiter() throws Exception {
 
     int limit = 5;
-    double period = 5; //
+    double period = 1.8; //
 
     Queue limitQ =
         new Queue("limitQueue")
@@ -292,6 +292,9 @@ public class QueuesTest {
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
 
     DBOS.launch();
+    var queueService = DBOSTestAccess.getQueueService();
+    queueService.setSpeedupForTest();
+    Thread.sleep(1000);
 
     int numWaves = 3;
     int numTasks = numWaves * limit;
@@ -312,7 +315,7 @@ public class QueuesTest {
       times.add(result);
     }
 
-    double waveTolerance = 1.2; // Must be bigger than 1 randomized poll interval
+    double waveTolerance = 0.5;
     for (int wave = 0; wave < numWaves; wave++) {
       for (int i = wave * limit; i < (wave + 1) * limit - 1; i++) {
         double diff = times.get(i + 1) - times.get(i);
@@ -326,7 +329,7 @@ public class QueuesTest {
     }
     logger.info("Verified intra-wave timing.");
 
-    double periodTolerance = 2.2;
+    double periodTolerance = 0.5;
     for (int wave = 0; wave < numWaves - 1; wave++) {
       double startOfNextWave = times.get(limit * (wave + 1));
       double startOfCurrentWave = times.get(limit * wave);
