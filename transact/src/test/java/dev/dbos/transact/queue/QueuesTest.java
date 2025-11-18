@@ -292,6 +292,9 @@ public class QueuesTest {
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
 
     DBOS.launch();
+    var queueService = DBOSTestAccess.getQueueService();
+    queueService.setSpeedupForTest();
+    Thread.sleep(1000);
 
     int numWaves = 3;
     int numTasks = numWaves * limit;
