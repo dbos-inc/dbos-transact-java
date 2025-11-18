@@ -280,7 +280,7 @@ public class QueuesTest {
   public void testLimiter() throws Exception {
 
     int limit = 5;
-    double period = 1.8; //
+    double period = 5; //
 
     Queue limitQ =
         new Queue("limitQueue")
@@ -312,8 +312,7 @@ public class QueuesTest {
       times.add(result);
     }
 
-    double waveTolerance =
-        0.5; // This expectation is not so good if the poll occurs amidst the starts
+    double waveTolerance = 1.2; // Must be bigger than 1 randomized poll interval
     for (int wave = 0; wave < numWaves; wave++) {
       for (int i = wave * limit; i < (wave + 1) * limit - 1; i++) {
         double diff = times.get(i + 1) - times.get(i);
@@ -327,7 +326,7 @@ public class QueuesTest {
     }
     logger.info("Verified intra-wave timing.");
 
-    double periodTolerance = 0.5;
+    double periodTolerance = 2.2;
     for (int wave = 0; wave < numWaves - 1; wave++) {
       double startOfNextWave = times.get(limit * (wave + 1));
       double startOfCurrentWave = times.get(limit * wave);
