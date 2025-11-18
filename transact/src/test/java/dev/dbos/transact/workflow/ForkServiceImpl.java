@@ -104,14 +104,11 @@ public class ForkServiceImpl implements ForkService {
 
   @Workflow
   public void setEventWorkflow(String key) throws InterruptedException {
-    DBOS.setEvent(key, "event-%d".formatted(System.currentTimeMillis()));
-    Thread.sleep(100);
-    DBOS.setEvent(key, "event-%d".formatted(System.currentTimeMillis()));
-    Thread.sleep(100);
-    DBOS.setEvent(key, "event-%d".formatted(System.currentTimeMillis()));
-    Thread.sleep(100);
-    DBOS.setEvent(key, "event-%d".formatted(System.currentTimeMillis()));
-    Thread.sleep(100);
-    DBOS.setEvent(key, "event-%d".formatted(System.currentTimeMillis()));
+    for (int i = 0; i < 5; i++) {
+      DBOS.setEvent(key, "event-%d".formatted(System.currentTimeMillis()));
+      if (i < 4) {
+        Thread.sleep(100);
+      }
+    }
   }
 }

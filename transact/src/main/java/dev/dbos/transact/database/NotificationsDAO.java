@@ -296,7 +296,7 @@ public class NotificationsDAO {
           if (recordedOutput != null) {
             logger.debug(
                 "Replaying setEvent, workflow: {}, step: {}, key: {}", workflowId, functionId, key);
-            conn.rollback();
+            conn.commit();
             return; // Already sent before
           } else {
             logger.debug(
@@ -315,7 +315,7 @@ public class NotificationsDAO {
         conn.commit();
       } catch (Exception e) {
         logger.error(
-            "setEvent rollback, workflow: {} id: {}, key: {}", workflowId, functionId, key);
+            "setEvent rollback, workflow: {} id: {}, key: {}", workflowId, functionId, key, e);
         conn.rollback();
         throw e;
       }
