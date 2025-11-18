@@ -23,4 +23,6 @@ public interface ForkService {
   String child2(Float number);
 
   void setForkService(ForkService service);
+
+  void setEventWorkflow(String key) throws InterruptedException;
 }

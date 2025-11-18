@@ -854,12 +854,7 @@ public class WorkflowDAO {
       stmt.setString(3, originalStatus.name());
       stmt.setString(4, originalStatus.className());
       stmt.setString(5, originalStatus.instanceName());
-
-      // Use provided application version or fall back to original
-      String appVersion =
-          applicationVersion != null ? applicationVersion : originalStatus.appVersion();
-      stmt.setString(6, appVersion);
-
+      stmt.setString(6, applicationVersion);
       stmt.setString(7, originalStatus.appId());
       stmt.setString(8, originalStatus.authenticatedUser());
       stmt.setString(9, JSONUtil.serializeArray(originalStatus.authenticatedRoles()));
@@ -882,7 +877,7 @@ public class WorkflowDAO {
       String schema)
       throws SQLException {
 
-    String sql =
+    String stepOutputsSql =
         """
           INSERT INTO %1$s.operation_outputs
               (workflow_uuid, function_id, output, error, function_name, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms)
@@ -891,14 +886,58 @@ public class WorkflowDAO {
               WHERE workflow_uuid = ? AND function_id < ?
         """
             .formatted(schema);
-
-    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+    try (PreparedStatement stmt = connection.prepareStatement(stepOutputsSql)) {
       stmt.setString(1, forkedWorkflowId);
       stmt.setString(2, originalWorkflowId);
       stmt.setInt(3, startStep);
 
       int rowsCopied = stmt.executeUpdate();
       logger.debug("Copied " + rowsCopied + " operation outputs to forked workflow");
+    }
+
+    var eventHistorySql =
+        """
+          INSERT INTO %1$s.workflow_events_history
+            (workflow_uuid, function_id, key, value)
+          SELECT ? as workflow_uuid, function_id, key, value
+            FROM %1$s.workflow_events_history
+            WHERE workflow_uuid = ? AND function_id < ?
+        """
+            .formatted(schema);
+    try (PreparedStatement stmt = connection.prepareStatement(eventHistorySql)) {
+      stmt.setString(1, forkedWorkflowId);
+      stmt.setString(2, originalWorkflowId);
+      stmt.setInt(3, startStep);
+
+      int rowsCopied = stmt.executeUpdate();
+      logger.debug("Copied " + rowsCopied + " workflow_events_history to forked workflow");
+    }
+
+    var eventSql =
+        """
+          INSERT INTO %1$s.workflow_events
+            (workflow_uuid, key, value)
+          SELECT ?, weh1.key, weh1.value
+            FROM %1$s.workflow_events_history weh1
+            WHERE weh1.workflow_uuid = ?
+              AND weh1.function_id = (
+                SELECT MAX(weh2.function_id)
+                  FROM %1$s.workflow_events_history weh2
+                  WHERE weh2.workflow_uuid = ?
+                    AND weh2.key = weh1.key
+                    AND weh2.function_id < ?
+              )
+        """
+            .formatted(schema);
+
+    try (PreparedStatement stmt = connection.prepareStatement(eventSql)) {
+      stmt.setString(1, forkedWorkflowId);
+      stmt.setString(2, originalWorkflowId);
+      stmt.setString(3, originalWorkflowId);
+      stmt.setInt(4, startStep);
+
+      int rowsCopied = stmt.executeUpdate();
+      logger.debug("Copied " + rowsCopied + " workflow_events to forked workflow");
     }
   }
 

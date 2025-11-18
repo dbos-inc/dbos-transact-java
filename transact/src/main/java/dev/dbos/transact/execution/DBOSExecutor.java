@@ -666,12 +666,10 @@ public class DBOSExecutor implements AutoCloseable {
     if (!ctx.isInWorkflow()) {
       throw new IllegalStateException("DBOS.setEvent() must be called from a workflow.");
     }
-    if (!ctx.isInStep()) {
-      int stepFunctionId = ctx.getAndIncrementFunctionId();
-      systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
-    } else {
-      systemDatabase.setEvent(ctx.getWorkflowId(), null, key, value);
-    }
+
+    var asStep = !ctx.isInStep();
+    var stepId = ctx.isInStep() ? ctx.getCurrentFunctionId() : ctx.getAndIncrementFunctionId();
+    systemDatabase.setEvent(ctx.getWorkflowId(), stepId, key, value, asStep);
   }
 
   public Object getEvent(String workflowId, String key, Duration timeout) {

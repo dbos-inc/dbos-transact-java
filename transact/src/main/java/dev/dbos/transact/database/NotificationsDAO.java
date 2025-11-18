@@ -237,7 +237,45 @@ public class NotificationsDAO {
     }
   }
 
-  public void setEvent(String workflowId, Integer functionId, String key, Object message)
+  private void setEvent(
+      Connection conn, String workflowId, int functionId, String key, String message)
+      throws SQLException {
+    final String eventSql =
+        """
+          INSERT INTO %s.workflow_events (workflow_uuid, key, value)
+          VALUES (?, ?, ?)
+          ON CONFLICT (workflow_uuid, key)
+          DO UPDATE SET value = EXCLUDED.value
+        """
+            .formatted(this.schema);
+
+    try (PreparedStatement stmt = conn.prepareStatement(eventSql)) {
+      stmt.setString(1, workflowId);
+      stmt.setString(2, key);
+      stmt.setString(3, message);
+      stmt.executeUpdate();
+    }
+
+    final String eventHistorySql =
+        """
+          INSERT INTO %s.workflow_events_history (workflow_uuid, function_id, key, value)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT (workflow_uuid, key, function_id)
+          DO UPDATE SET value = EXCLUDED.value
+        """
+            .formatted(this.schema);
+
+    try (PreparedStatement stmt = conn.prepareStatement(eventHistorySql)) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, functionId);
+      stmt.setString(3, key);
+      stmt.setString(4, message);
+      stmt.executeUpdate();
+    }
+  }
+
+  public void setEvent(
+      String workflowId, int functionId, String key, Object message, boolean asStep)
       throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
@@ -245,62 +283,40 @@ public class NotificationsDAO {
 
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.setEvent";
+    String serializedMessage = JSONUtil.serialize(message);
 
     try (Connection conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
-      conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-
       try {
-        // Check if operation was already executed
-        if (functionId != null) {
-          StepResult recordedOutput =
+        if (asStep) {
+          // check for a previous operation result
+          var recordedOutput =
               StepsDAO.checkStepExecutionTxn(
                   workflowId, functionId, functionName, conn, this.schema);
-
           if (recordedOutput != null) {
-            logger.debug("Replaying setEvent, id: {}, key: {}", functionId, key);
+            logger.debug(
+                "Replaying setEvent, workflow: {}, step: {}, key: {}", workflowId, functionId, key);
             conn.commit();
             return; // Already sent before
           } else {
-            logger.debug("Running setEvent, id: {}, key: {}", functionId, key);
+            logger.debug(
+                "Running setEvent, workflow: {}, step: {}, key: {}", workflowId, functionId, key);
           }
         }
 
-        // Serialize the message
-        String serializedMessage = JSONUtil.serialize(message);
+        this.setEvent(conn, workflowId, functionId, key, serializedMessage);
 
-        // Insert or update the workflow event using UPSERT
-        final String sql =
-            """
-              INSERT INTO %s.workflow_events (workflow_uuid, key, value)
-              VALUES (?, ?, ?)
-              ON CONFLICT (workflow_uuid, key)
-              DO UPDATE SET value = EXCLUDED.value
-            """
-                .formatted(this.schema);
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-          stmt.setString(1, workflowId);
-          stmt.setString(2, key);
-          stmt.setString(3, serializedMessage);
-          stmt.executeUpdate();
-        }
-
-        if (functionId != null) {
-          // Create operation result
-          StepResult output = new StepResult(workflowId, functionId, functionName);
-
+        if (asStep) {
           // Record the operation result
+          StepResult output = new StepResult(workflowId, functionId, functionName);
           StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
         }
 
         conn.commit();
       } catch (Exception e) {
-        logger.debug("setEvent rollback, wf: {} id: {}, key: {}", workflowId, functionId, key);
-        try {
-          conn.rollback();
-        } catch (Exception e2) {
-        }
+        logger.error(
+            "setEvent rollback, workflow: {} id: {}, key: {}", workflowId, functionId, key, e);
+        conn.rollback();
         throw e;
       }
     }

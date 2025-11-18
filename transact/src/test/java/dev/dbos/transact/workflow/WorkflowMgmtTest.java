@@ -7,6 +7,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
@@ -18,6 +19,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+
+import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,6 +36,7 @@ public class WorkflowMgmtTest {
   private static final Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
 
   private static DBOSConfig dbosConfig;
+  private static DataSource dataSource;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -48,6 +52,7 @@ public class WorkflowMgmtTest {
     DBUtils.recreateDB(dbosConfig);
 
     DBOS.reinitialize(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
@@ -225,6 +230,62 @@ public class WorkflowMgmtTest {
       logger.info(t.getClass().getName());
       assertTrue(t instanceof DBOSNonExistentWorkflowException);
     }
+  }
+
+  @Test
+  public void forkEventHistory() throws Exception {
+    ForkServiceImpl impl = new ForkServiceImpl();
+
+    ForkService forkService = DBOS.registerWorkflows(ForkService.class, impl);
+    forkService.setForkService(forkService);
+
+    DBOS.launch();
+    DBOSTestAccess.getQueueService().pause();
+
+    var wfid = "forkEventHistory-%d".formatted(System.currentTimeMillis());
+    var options = new StartWorkflowOptions(wfid);
+    var handle = DBOS.startWorkflow(() -> forkService.setEventWorkflow("hello"), options);
+    handle.getResult();
+
+    var events = DBUtils.getWorkflowEvents(dataSource, handle.workflowId());
+    var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, handle.workflowId());
+    assertEquals(1, events.size());
+    assertEquals(5, eventHistory.size());
+
+    var forkOptions = new ForkOptions();
+    WorkflowHandle<String, SQLException> forkHandle = DBOS.forkWorkflow(wfid, 3, forkOptions);
+
+    events = DBUtils.getWorkflowEvents(dataSource, forkHandle.workflowId());
+    eventHistory = DBUtils.getWorkflowEventHistory(dataSource, forkHandle.workflowId());
+    assertEquals(1, events.size());
+    assertEquals(3, eventHistory.size());
+
+    assertEquals(events.get(0).value(), eventHistory.get(2).value());
+  }
+
+  @Test
+  public void testForkAppVersion() throws SQLException {
+    ForkServiceImpl impl = new ForkServiceImpl();
+
+    ForkService forkService = DBOS.registerWorkflows(ForkService.class, impl);
+    forkService.setForkService(forkService);
+
+    DBOS.launch();
+    DBOSTestAccess.getQueueService().pause();
+
+    var wfid = "testForkAppVersion-%d".formatted(System.currentTimeMillis());
+    var options = new StartWorkflowOptions(wfid);
+    var handle = DBOS.startWorkflow(() -> forkService.simpleWorkflow("hello"), options);
+    var result = handle.getResult();
+    assertEquals("hellohello", result);
+
+    var forkOptions = new ForkOptions();
+    WorkflowHandle<String, SQLException> forkHandle = DBOS.forkWorkflow(wfid, 0, forkOptions);
+    assertNull(forkHandle.getStatus().appVersion());
+
+    forkOptions = forkOptions.withApplicationVersion("test-app-version");
+    forkHandle = DBOS.forkWorkflow(wfid, 0, forkOptions);
+    assertEquals("test-app-version", forkHandle.getStatus().appVersion());
   }
 
   @Test
