@@ -758,12 +758,13 @@ public class DBOSExecutor implements AutoCloseable {
     CompletableFuture<String> future = new CompletableFuture<>();
     var newCtx = new DBOSContext(ctx, options, functionId, future);
 
-    Callable<T> task =
+    Callable<Void> task =
         () -> {
           DBOSContextHolder.clear();
           try {
             DBOSContextHolder.set(newCtx);
-            return supplier.execute();
+            supplier.execute();
+            return null;
           } finally {
             DBOSContextHolder.clear();
           }
@@ -890,6 +891,14 @@ public class DBOSExecutor implements AutoCloseable {
       WorkflowInfo parent,
       CompletableFuture<String> latch) {
 
+    if (parent != null) {
+      var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
+      if (childId.isPresent()) {
+        latch.complete(childId.get());
+        return retrieveWorkflow(childId.get());
+      }
+    }
+
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
 
     if (options.queueName() != null) {
@@ -912,13 +921,6 @@ public class DBOSExecutor implements AutoCloseable {
     var workflowId = options.workflowId();
     WorkflowInitResult initResult = null;
     try {
-      if (parent != null) {
-        var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
-        if (childId.isPresent()) {
-          return retrieveWorkflow(childId.get());
-        }
-      }
-
       initResult =
           preInvokeWorkflow(
               systemDatabase,
@@ -967,7 +969,15 @@ public class DBOSExecutor implements AutoCloseable {
             DBOSContextHolder.set(
                 new DBOSContext(
                     workflowId, parent, options.getTimeoutDuration(), options.deadline()));
+            if (Thread.currentThread().isInterrupted()) {
+              logger.debug("executeWorkflow task interupted before workflow.invoke");
+              return null;
+            }
             T result = workflow.invoke(args);
+            if (Thread.currentThread().isInterrupted()) {
+              logger.debug("executeWorkflow task interupted before postInvokeWorkflowResult");
+              return null;
+            }
             postInvokeWorkflowResult(systemDatabase, workflowId, result);
             return result;
           } catch (DBOSWorkflowExecutionConflictException e) {
