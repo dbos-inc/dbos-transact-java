@@ -25,29 +25,34 @@ public class QueueService {
   private volatile boolean paused = false;
   private Thread workerThread;
   private CountDownLatch shutdownLatch;
+  private double speedup = 1.0;
 
   public QueueService(DBOSExecutor dbosExecutor, SystemDatabase systemDatabase) {
     this.systemDatabase = systemDatabase;
     this.dbosExecutor = dbosExecutor;
   }
 
+  public void setSpeedupForTest() {
+    speedup = 0.01;
+  }
+
   @SuppressWarnings("deprecation") // Thread.currentThread().getId()
   private void pollForWorkflows() {
     logger.debug("PollQueuesThread started {}", Thread.currentThread().getId());
 
-    double pollingInterval = 1.0;
-    double minPollingInterval = 1.0;
-    double maxPollingInterval = 120.0;
-    int randomSleep = 0;
+    double pollingIntervalSec = 1.0;
+    double minPollingIntervalSec = 1.0;
+    double maxPollingIntervalSec = 120.0;
+    double randomSleepFactor = 0;
 
     try {
 
       while (running) {
 
-        randomSleep = (int) (0.95 + ThreadLocalRandom.current().nextDouble(0.1));
+        randomSleepFactor = (0.95 + ThreadLocalRandom.current().nextDouble(0.1));
 
         try {
-          Thread.sleep(randomSleep);
+          Thread.sleep((long) (randomSleepFactor * pollingIntervalSec * 1000 * speedup));
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           logger.error("QueuesPollThread interrupted while sleeping");
@@ -76,12 +81,12 @@ public class QueueService {
 
           } catch (Exception e) {
 
-            pollingInterval = min(maxPollingInterval, pollingInterval * 2);
+            pollingIntervalSec = min(maxPollingIntervalSec, pollingIntervalSec * 2);
             logger.error("Error executing queued workflow", e);
           }
         }
 
-        pollingInterval = max(minPollingInterval, pollingInterval * 0.9);
+        pollingIntervalSec = max(minPollingIntervalSec, pollingIntervalSec * 0.9);
       }
 
     } finally {
