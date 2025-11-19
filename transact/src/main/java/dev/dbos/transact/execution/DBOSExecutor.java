@@ -894,7 +894,9 @@ public class DBOSExecutor implements AutoCloseable {
     if (parent != null) {
       var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
       if (childId.isPresent()) {
-        latch.complete(childId.get());
+        if (latch != null) {
+          latch.complete(childId.get());
+        }
         return retrieveWorkflow(childId.get());
       }
     }
