@@ -42,7 +42,7 @@ public class StepsDAO {
   }
 
   public static void recordStepResultTxn(
-      StepResult result, long startTimeEpochMs, Connection connection, String schema)
+      StepResult result, Long startTimeEpochMs, Connection connection, String schema)
       throws SQLException {
 
     Objects.requireNonNull(schema);
@@ -77,12 +77,14 @@ public class StepsDAO {
         pstmt.setNull(6, Types.VARCHAR);
       }
 
-      pstmt.setLong(7, startTimeEpochMs);
-      pstmt.setLong(8, System.currentTimeMillis());
+      pstmt.setObject(7, startTimeEpochMs);
+      Long endTime = startTimeEpochMs == null ? null : System.currentTimeMillis();
+      pstmt.setObject(8, endTime);
 
       pstmt.executeUpdate();
 
     } catch (SQLException e) {
+      logger.debug("recordStepResultTxn error", e);
       if ("23505".equals(e.getSQLState())) {
         throw new DBOSWorkflowExecutionConflictException(result.workflowId());
       } else {
