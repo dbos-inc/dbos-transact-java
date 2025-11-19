@@ -148,12 +148,12 @@ public class Issue218 {
       if (step.functionName().equals("task-workflow")) {
         assertNull(step.output());
         assertNull(step.startedAt());
-        assertNull(step.startedAt());
+        assertNull(step.completedAt());
       }
       if (step.functionName().equals("DBOS.getResult")) {
         assertNotNull(step.output());
         assertNotNull(step.startedAt());
-        assertNotNull(step.startedAt());
+        assertNotNull(step.completedAt());
       }
     }
   }

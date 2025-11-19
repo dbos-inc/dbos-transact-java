@@ -970,12 +970,12 @@ public class DBOSExecutor implements AutoCloseable {
                 new DBOSContext(
                     workflowId, parent, options.getTimeoutDuration(), options.deadline()));
             if (Thread.currentThread().isInterrupted()) {
-              logger.debug("executeWorkflow task interupted before workflow.invoke");
+              logger.debug("executeWorkflow task interrupted before workflow.invoke");
               return null;
             }
             T result = workflow.invoke(args);
             if (Thread.currentThread().isInterrupted()) {
-              logger.debug("executeWorkflow task interupted before postInvokeWorkflowResult");
+              logger.debug("executeWorkflow task interrupted before postInvokeWorkflowResult");
               return null;
             }
             postInvokeWorkflowResult(systemDatabase, workflowId, result);
