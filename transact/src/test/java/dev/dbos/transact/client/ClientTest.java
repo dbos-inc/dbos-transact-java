@@ -21,7 +21,6 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
@@ -52,7 +51,7 @@ public class ClientTest extends DbSetupTestBase {
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
-    try (var client = getDbosClient()) {
+    try (var client = getDBOSClient()) {
       var options =
           new DBOSClient.EnqueueOptions(
               "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue");
@@ -81,7 +80,7 @@ public class ClientTest extends DbSetupTestBase {
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
-    try (var client = getDbosClient()) {
+    try (var client = getDBOSClient()) {
       var options =
           new DBOSClient.EnqueueOptions(
                   "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue")
@@ -101,7 +100,7 @@ public class ClientTest extends DbSetupTestBase {
 
     var idempotencyKey = UUID.randomUUID().toString();
 
-    try (var client = getDbosClient()) {
+    try (var client = getDBOSClient()) {
       client.send(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
     }
 
@@ -117,7 +116,7 @@ public class ClientTest extends DbSetupTestBase {
 
   @Test
   public void clientEnqueueTimeouts() throws Exception {
-    try (var client = getDbosClient()) {
+    try (var client = getDBOSClient()) {
       var options =
           new DBOSClient.EnqueueOptions(
               "dev.dbos.transact.client.ClientServiceImpl", "sleep", "testQueue");
@@ -148,9 +147,5 @@ public class ClientTest extends DbSetupTestBase {
           "CANCELLED",
           stat2.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
     }
-  }
-
-  private static @NotNull DBOSClient getDbosClient() {
-    return new DBOSClient(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
   }
 }
