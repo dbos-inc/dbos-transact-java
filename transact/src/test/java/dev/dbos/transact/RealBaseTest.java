@@ -13,7 +13,7 @@ public class RealBaseTest {
   protected static DBOSConfig dbosConfig;
 
   @BeforeAll
-  static void onetimeSetup() throws Exception {
+  static void onetimeSetup() {
     postgres.start();
     dbosConfig =
         DBOSConfig.defaults("systemdbtest")

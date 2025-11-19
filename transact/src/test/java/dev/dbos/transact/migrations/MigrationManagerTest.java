@@ -32,7 +32,11 @@ class MigrationManagerTest extends RealBaseTest {
 
   @BeforeEach
   void setup() throws Exception {
-      dbosConfig = dbosConfig.defaultsFromEnv("migrationtest");
+      dbosConfig = DBOSConfig.defaultsFromEnv("migrationtest")
+              .withDatabaseUrl(postgres.getJdbcUrl())
+              .withDbUser(postgres.getUsername())
+              .withDbPassword(postgres.getPassword())
+              .withMaximumPoolSize(2);
 
     DBUtils.recreateDB(dbosConfig);
     testDataSource = SystemDatabase.createDataSource(dbosConfig);
