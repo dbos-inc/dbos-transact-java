@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.dbos.transact.RealBaseTest;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -17,7 +17,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class ExternalStateTest extends RealBaseTest {
+public class ExternalStateTest extends DbSetupTestBase {
   private static SystemDatabase systemDatabase;
 
   @BeforeAll

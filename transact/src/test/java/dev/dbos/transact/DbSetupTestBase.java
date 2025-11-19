@@ -6,7 +6,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-public class RealBaseTest {
+public class DbSetupTestBase {
 
   protected static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18");
 

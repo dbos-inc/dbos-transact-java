@@ -3,7 +3,7 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.RealBaseTest;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -16,7 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class QueueChildWorkflowTest extends RealBaseTest {
+public class QueueChildWorkflowTest extends DbSetupTestBase {
 
   @BeforeEach
   void beforeEachTest() throws SQLException {

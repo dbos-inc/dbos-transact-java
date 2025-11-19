@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.RealBaseTest;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
@@ -25,7 +25,7 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class ClientTest extends RealBaseTest {
+public class ClientTest extends DbSetupTestBase {
   private ClientService service;
   private HikariDataSource dataSource;
 

@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.RealBaseTest;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class AsyncWorkflowTest extends RealBaseTest {
+public class AsyncWorkflowTest extends DbSetupTestBase {
 
   @BeforeEach
   void beforeEachTest() throws SQLException {

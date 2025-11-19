@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.RealBaseTest;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.invocation.HawkService;
 import dev.dbos.transact.invocation.HawkServiceImpl;
@@ -26,7 +26,7 @@ import uk.org.webcompere.systemstubs.jupiter.SystemStub;
 import uk.org.webcompere.systemstubs.jupiter.SystemStubsExtension;
 
 @ExtendWith(SystemStubsExtension.class)
-public class ConfigTest extends RealBaseTest {
+public class ConfigTest extends DbSetupTestBase {
 
   @SystemStub private EnvironmentVariables envVars = new EnvironmentVariables();
 

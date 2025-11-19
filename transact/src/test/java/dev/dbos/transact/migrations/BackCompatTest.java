@@ -3,7 +3,7 @@ package dev.dbos.transact.migrations;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.RealBaseTest;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.invocation.HawkService;
 import dev.dbos.transact.invocation.HawkServiceImpl;
@@ -19,7 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class BackCompatTest extends RealBaseTest {
+public class BackCompatTest extends DbSetupTestBase {
 
   @BeforeEach
   void onetimeSetup() throws Exception {

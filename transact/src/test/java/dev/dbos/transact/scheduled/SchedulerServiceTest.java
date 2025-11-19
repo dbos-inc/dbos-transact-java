@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.RealBaseTest;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.RetryingTest;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-class SchedulerServiceTest extends RealBaseTest {
+class SchedulerServiceTest extends DbSetupTestBase {
 
   @BeforeEach
   void beforeEachTest() throws SQLException {

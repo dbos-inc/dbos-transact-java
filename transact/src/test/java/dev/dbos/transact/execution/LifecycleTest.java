@@ -3,7 +3,7 @@ package dev.dbos.transact.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.RealBaseTest;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
@@ -12,7 +12,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class LifecycleTest extends RealBaseTest {
+public class LifecycleTest extends DbSetupTestBase {
   private static LifecycleTestWorkflowsImpl impl;
   private static TestLifecycleService svc;
 
