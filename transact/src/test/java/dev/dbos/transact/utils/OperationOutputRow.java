@@ -22,7 +22,6 @@ public record OperationOutputRow(
         rs.getString("function_name"),
         rs.getString("child_workflow_id"),
         rs.getObject("started_at_epoch_ms", Long.class),
-        rs.getObject("completed_at_epoch_ms", Long.class)
-    );
+        rs.getObject("completed_at_epoch_ms", Long.class));
   }
 }

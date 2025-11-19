@@ -19,12 +19,11 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import com.zaxxer.hikari.HikariDataSource;
 
 interface Example {
 
@@ -141,14 +140,16 @@ public class Issue218 {
 
     steps = DBUtils.getStepRows(dataSource, wfid);
     for (var step : steps) {
-      assertTrue(step.functionName().equals("task-workflow") || step.functionName().equals("DBOS.getResult"));
+      assertTrue(
+          step.functionName().equals("task-workflow")
+              || step.functionName().equals("DBOS.getResult"));
       assertNull(step.error());
       assertTrue(step.childWorkflowId().startsWith(wfid));
       if (step.functionName().equals("task-workflow")) {
         assertNull(step.output());
         assertNull(step.startedAt());
         assertNull(step.startedAt());
-      } 
+      }
       if (step.functionName().equals("DBOS.getResult")) {
         assertNotNull(step.output());
         assertNotNull(step.startedAt());
