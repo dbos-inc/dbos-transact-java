@@ -276,11 +276,13 @@ public class DBUtils {
     }
   }
 
-  public static List<String> getWorkflowEvents(DataSource ds, String workflowId) {
+  public record Event(String key, String value) {}
+
+  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId) {
     return getWorkflowEvents(ds, workflowId, null);
   }
 
-  public static List<String> getWorkflowEvents(DataSource ds, String workflowId, String schema) {
+  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId, String schema) {
     schema = SystemDatabase.sanitizeSchema(schema);
     try (var conn = ds.getConnection(); ) {
       var stmt =
@@ -288,10 +290,42 @@ public class DBUtils {
               "SELECT * FROM %s.workflow_events WHERE workflow_uuid = ?".formatted(schema));
       stmt.setString(1, workflowId);
       var rs = stmt.executeQuery();
-      List<String> rows = new ArrayList<>();
+      List<Event> rows = new ArrayList<>();
 
       while (rs.next()) {
-        rows.add(rs.getString("key") + "=" + rs.getString("value"));
+        var key = rs.getString("key");
+        var value = rs.getString("value");
+        rows.add(new Event(key, value));
+      }
+
+      return rows;
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public record EventHistory(int stepId, String key, String value) {}
+
+  public static List<EventHistory> getWorkflowEventHistory(DataSource ds, String workflowId) {
+    return getWorkflowEventHistory(ds, workflowId, null);
+  }
+
+  public static List<EventHistory> getWorkflowEventHistory(
+      DataSource ds, String workflowId, String schema) {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    try (var conn = ds.getConnection(); ) {
+      var stmt =
+          conn.prepareStatement(
+              "SELECT * FROM %s.workflow_events_history WHERE workflow_uuid = ?".formatted(schema));
+      stmt.setString(1, workflowId);
+      var rs = stmt.executeQuery();
+      List<EventHistory> rows = new ArrayList<>();
+
+      while (rs.next()) {
+        var stepId = rs.getInt("function_id");
+        var key = rs.getString("key");
+        var value = rs.getString("value");
+        rows.add(new EventHistory(stepId, key, value));
       }
 
       return rows;

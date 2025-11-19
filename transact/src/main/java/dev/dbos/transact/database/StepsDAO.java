@@ -30,57 +30,63 @@ public class StepsDAO {
   }
 
   public static void recordStepResultTxn(
-      HikariDataSource dataSource, StepResult result, String schema) throws SQLException {
+      HikariDataSource dataSource, StepResult result, long startTimeEpochMs, String schema)
+      throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
     try (Connection connection = dataSource.getConnection(); ) {
-      recordStepResultTxn(result, connection, schema);
+      recordStepResultTxn(result, startTimeEpochMs, connection, schema);
     }
   }
 
-  public static void recordStepResultTxn(StepResult result, Connection connection, String schema)
+  public static void recordStepResultTxn(
+      StepResult result, Long startTimeEpochMs, Connection connection, String schema)
       throws SQLException {
 
     Objects.requireNonNull(schema);
     String sql =
         """
           INSERT INTO %s.operation_outputs
-            (workflow_uuid, function_id, function_name, output, error, child_workflow_id)
-          VALUES (?, ?, ?, ?, ?, ?)
+            (workflow_uuid, function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
             .formatted(schema);
 
     try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-      int paramIdx = 1;
-      pstmt.setString(paramIdx++, result.getWorkflowId());
-      pstmt.setInt(paramIdx++, result.getStepId());
-      pstmt.setString(paramIdx++, result.getFunctionName());
+      pstmt.setString(1, result.workflowId());
+      pstmt.setInt(2, result.stepId());
+      pstmt.setString(3, result.functionName());
 
-      if (result.getOutput() != null) {
-        pstmt.setString(paramIdx++, result.getOutput());
+      if (result.output() != null) {
+        pstmt.setString(4, result.output());
       } else {
-        pstmt.setNull(paramIdx++, Types.LONGVARCHAR);
+        pstmt.setNull(4, Types.LONGVARCHAR);
       }
 
-      if (result.getError() != null) {
-        pstmt.setString(paramIdx++, result.getError());
+      if (result.error() != null) {
+        pstmt.setString(5, result.error());
       } else {
-        pstmt.setNull(paramIdx++, Types.LONGVARCHAR);
+        pstmt.setNull(5, Types.LONGVARCHAR);
       }
 
-      if (result.getChildWorkflowId() != null) {
-        pstmt.setString(paramIdx++, result.getChildWorkflowId());
+      if (result.childWorkflowId() != null) {
+        pstmt.setString(6, result.childWorkflowId());
       } else {
-        pstmt.setNull(paramIdx++, Types.VARCHAR);
+        pstmt.setNull(6, Types.VARCHAR);
       }
+
+      pstmt.setObject(7, startTimeEpochMs);
+      Long endTime = startTimeEpochMs == null ? null : System.currentTimeMillis();
+      pstmt.setObject(8, endTime);
 
       pstmt.executeUpdate();
 
     } catch (SQLException e) {
+      logger.debug("recordStepResultTxn error", e);
       if ("23505".equals(e.getSQLState())) {
-        throw new DBOSWorkflowExecutionConflictException(result.getWorkflowId());
+        throw new DBOSWorkflowExecutionConflictException(result.workflowId());
       } else {
         throw e;
       }
@@ -177,7 +183,7 @@ public class StepsDAO {
 
     final String sql =
         """
-          SELECT function_id, function_name, output, error, child_workflow_id
+          SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms
           FROM %s.operation_outputs
           WHERE workflow_uuid = ?
           ORDER BY function_id;
@@ -199,6 +205,8 @@ public class StepsDAO {
           String outputData = rs.getString("output");
           String errorData = rs.getString("error");
           String childWorkflowId = rs.getString("child_workflow_id");
+          Long startedAt = rs.getObject("started_at_epoch_ms", Long.class);
+          Long completedAt = rs.getObject("completed_at_epoch_ms", Long.class);
 
           // Deserialize output if present
           Object[] output = null;
@@ -226,7 +234,15 @@ public class StepsDAO {
           }
 
           Object outputVal = output != null ? output[0] : null;
-          steps.add(new StepInfo(functionId, functionName, outputVal, stepError, childWorkflowId));
+          steps.add(
+              new StepInfo(
+                  functionId,
+                  functionName,
+                  outputVal,
+                  stepError,
+                  childWorkflowId,
+                  startedAt,
+                  completedAt));
         }
       }
     }
@@ -253,6 +269,7 @@ public class StepsDAO {
     }
 
     Objects.requireNonNull(schema);
+    var startTime = System.currentTimeMillis();
     String functionName = "DBOS.sleep";
 
     StepResult recordedOutput;
@@ -266,24 +283,20 @@ public class StepsDAO {
 
     if (recordedOutput != null) {
       logger.debug("Replaying sleep, id: {}, millis: {}", functionId, duration.toMillis());
-      if (recordedOutput.getOutput() == null) {
+      if (recordedOutput.output() == null) {
         throw new IllegalStateException("No recorded timeout for sleep");
       }
-      Object[] dser = JSONUtil.deserializeToArray(recordedOutput.getOutput());
+      Object[] dser = JSONUtil.deserializeToArray(recordedOutput.output());
       endTime = (Double) dser[0];
     } else {
       logger.debug("Running sleep, id: {}, millis: {}", functionId, duration.toMillis());
       endTime = System.currentTimeMillis() + duration.toMillis();
 
       try {
-        StepResult output = new StepResult();
-        output.setWorkflowId(workflowUuid);
-        output.setStepId(functionId);
-        output.setFunctionName(functionName);
-        output.setOutput(JSONUtil.serialize(endTime));
-        output.setError(null);
-
-        recordStepResultTxn(dataSource, output, schema);
+        StepResult output =
+            new StepResult(workflowUuid, functionId, functionName)
+                .withOutput(JSONUtil.serialize(endTime));
+        recordStepResultTxn(dataSource, output, startTime, schema);
       } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
       }

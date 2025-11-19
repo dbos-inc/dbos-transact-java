@@ -472,12 +472,13 @@ class AdminServerTest {
 
     List<StepInfo> steps = new ArrayList<>();
     for (int i = 0; i < 3; i++) {
-      var step = new StepInfo(i, "step-%d".formatted(i), "output-%d".formatted(i), null, null);
+      var step =
+          new StepInfo(i, "step-%d".formatted(i), "output-%d".formatted(i), null, null, null, null);
       steps.add(step);
     }
-    steps.add(new StepInfo(3, "step-3", null, null, "child-wfid-3"));
+    steps.add(new StepInfo(3, "step-3", null, null, "child-wfid-3", null, null));
     var error = new RuntimeException("error-4");
-    steps.add(new StepInfo(4, "step-4", null, ErrorResult.of(error), null));
+    steps.add(new StepInfo(4, "step-4", null, ErrorResult.of(error), null, null, null));
 
     when(mockDB.listWorkflowSteps(any())).thenReturn(steps);
 

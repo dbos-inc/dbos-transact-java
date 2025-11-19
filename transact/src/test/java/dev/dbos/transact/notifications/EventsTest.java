@@ -57,6 +57,14 @@ public class EventsTest extends DbSetupTestBase {
       eventService.setEventWorkflow("key1", "value1");
     }
 
+    var steps = DBOS.listWorkflowSteps("id1");
+    String[] stepNames = {"DBOS.setEvent", "stepSetEvent", "getEventInStep"};
+    assertEquals(3, steps.size());
+    for (var i = 0; i < steps.size(); i++) {
+      var step = steps.get(i);
+      assertEquals(stepNames[i], step.functionName());
+    }
+
     try (var id = new WorkflowOptions("id2").setContext()) {
       Object event = eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3));
       assertEquals("value1", (String) event);
@@ -149,6 +157,12 @@ public class EventsTest extends DbSetupTestBase {
     getwfh = DBOSTestAccess.getDbosExecutor().executeWorkflowById(getwfh.workflowId());
     res = (String) getwfh.getResult();
     assertEquals("value1value2", res);
+
+    var events = DBUtils.getWorkflowEvents(dataSource, "id1");
+    assertEquals(1, events.size());
+
+    var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, "id1");
+    assertEquals(2, eventHistory.size());
   }
 
   @Test

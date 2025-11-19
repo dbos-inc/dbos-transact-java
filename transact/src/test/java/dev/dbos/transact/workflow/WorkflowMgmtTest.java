@@ -4,9 +4,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
@@ -19,7 +20,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import javax.sql.DataSource;
+
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.RetryingTest;
@@ -27,15 +31,28 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class WorkflowMgmtTest extends DbSetupTestBase {
+public class WorkflowMgmtTest {
 
   private static final Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
+
+  private static DBOSConfig dbosConfig;
+  private static DataSource dataSource;
+
+  @BeforeAll
+  static void onetimeSetup() throws Exception {
+
+    WorkflowMgmtTest.dbosConfig =
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2);
+  }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
 
     DBOS.reinitialize(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
@@ -216,6 +233,62 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
   }
 
   @Test
+  public void forkEventHistory() throws Exception {
+    ForkServiceImpl impl = new ForkServiceImpl();
+
+    ForkService forkService = DBOS.registerWorkflows(ForkService.class, impl);
+    forkService.setForkService(forkService);
+
+    DBOS.launch();
+    DBOSTestAccess.getQueueService().pause();
+
+    var wfid = "forkEventHistory-%d".formatted(System.currentTimeMillis());
+    var options = new StartWorkflowOptions(wfid);
+    var handle = DBOS.startWorkflow(() -> forkService.setEventWorkflow("hello"), options);
+    handle.getResult();
+
+    var events = DBUtils.getWorkflowEvents(dataSource, handle.workflowId());
+    var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, handle.workflowId());
+    assertEquals(1, events.size());
+    assertEquals(5, eventHistory.size());
+
+    var forkOptions = new ForkOptions();
+    WorkflowHandle<String, SQLException> forkHandle = DBOS.forkWorkflow(wfid, 3, forkOptions);
+
+    events = DBUtils.getWorkflowEvents(dataSource, forkHandle.workflowId());
+    eventHistory = DBUtils.getWorkflowEventHistory(dataSource, forkHandle.workflowId());
+    assertEquals(1, events.size());
+    assertEquals(3, eventHistory.size());
+
+    assertEquals(events.get(0).value(), eventHistory.get(2).value());
+  }
+
+  @Test
+  public void testForkAppVersion() throws SQLException {
+    ForkServiceImpl impl = new ForkServiceImpl();
+
+    ForkService forkService = DBOS.registerWorkflows(ForkService.class, impl);
+    forkService.setForkService(forkService);
+
+    DBOS.launch();
+    DBOSTestAccess.getQueueService().pause();
+
+    var wfid = "testForkAppVersion-%d".formatted(System.currentTimeMillis());
+    var options = new StartWorkflowOptions(wfid);
+    var handle = DBOS.startWorkflow(() -> forkService.simpleWorkflow("hello"), options);
+    var result = handle.getResult();
+    assertEquals("hellohello", result);
+
+    var forkOptions = new ForkOptions();
+    WorkflowHandle<String, SQLException> forkHandle = DBOS.forkWorkflow(wfid, 0, forkOptions);
+    assertNull(forkHandle.getStatus().appVersion());
+
+    forkOptions = forkOptions.withApplicationVersion("test-app-version");
+    forkHandle = DBOS.forkWorkflow(wfid, 0, forkOptions);
+    assertEquals("test-app-version", forkHandle.getStatus().appVersion());
+  }
+
+  @Test
   public void testFork() throws SQLException {
 
     ForkServiceImpl impl = new ForkServiceImpl();
@@ -234,7 +307,9 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
 
     assertEquals("hellohello", result);
     WorkflowHandle<String, ?> handle = DBOS.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    var status = handle.getStatus();
+    assertEquals(WorkflowState.SUCCESS.name(), status.status());
+    assertNull(status.forkedFrom());
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);
@@ -247,9 +322,11 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
     ForkOptions foptions = new ForkOptions();
     WorkflowHandle<String, SQLException> rstatHandle = DBOS.forkWorkflow(workflowId, 0, foptions);
     result = rstatHandle.getResult();
+    status = rstatHandle.getStatus();
     assertEquals("hellohello", result);
-    assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS.name(), status.status());
     assertNotEquals(rstatHandle.workflowId(), workflowId);
+    assertEquals(workflowId, status.forkedFrom());
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -264,9 +341,11 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
 
     rstatHandle = DBOS.forkWorkflow(workflowId, 2, foptions);
     result = rstatHandle.getResult();
+    status = rstatHandle.getStatus();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
     assertNotEquals(rstatHandle.workflowId(), workflowId);
+    assertEquals(workflowId, status.forkedFrom());
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -278,9 +357,11 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
 
     rstatHandle = DBOS.forkWorkflow(workflowId, 4, foptions);
     result = rstatHandle.getResult();
+    status = rstatHandle.getStatus();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
     assertNotEquals(rstatHandle.workflowId(), workflowId);
+    assertEquals(workflowId, status.forkedFrom());
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -308,7 +389,9 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
 
     assertEquals("hellohello", result);
     var handle = DBOS.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    var status = handle.getStatus();
+    assertEquals(WorkflowState.SUCCESS.name(), status.status());
+    assertNull(status.forkedFrom());
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);
@@ -324,9 +407,11 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
     ForkOptions foptions = new ForkOptions("f1");
     WorkflowHandle<String, SQLException> rstatHandle = DBOS.forkWorkflow(workflowId, 0, foptions);
     result = rstatHandle.getResult();
+    status = rstatHandle.getStatus();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
     assertEquals(rstatHandle.workflowId(), "f1");
+    assertEquals(workflowId, status.forkedFrom());
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -345,9 +430,11 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
     foptions = new ForkOptions("f2");
     rstatHandle = DBOS.forkWorkflow(workflowId, 3, foptions);
     result = rstatHandle.getResult();
+    status = rstatHandle.getStatus();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
     assertEquals(rstatHandle.workflowId(), "f2");
+    assertEquals(workflowId, status.forkedFrom());
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -368,9 +455,11 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
     foptions = new ForkOptions("f3");
     rstatHandle = DBOS.forkWorkflow(workflowId, 4, foptions);
     result = rstatHandle.getResult();
+    status = rstatHandle.getStatus();
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
     assertEquals(rstatHandle.workflowId(), "f3");
+    assertEquals(workflowId, status.forkedFrom());
 
     assertEquals(2, impl.step1Count);
     assertEquals(2, impl.step2Count);
@@ -406,7 +495,9 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
 
     assertEquals("hellohello", result);
     var handle = DBOS.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    var status = handle.getStatus();
+    assertEquals(WorkflowState.SUCCESS.name(), status.status());
+    assertNull(status.forkedFrom());
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);
@@ -422,10 +513,12 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
     ForkOptions foptions = new ForkOptions();
     WorkflowHandle<?, SQLException> rstatHandle = DBOS.forkWorkflow(workflowId, 3, foptions);
     result = (String) rstatHandle.getResult();
+    status = rstatHandle.getStatus();
 
     assertEquals("hellohello", result);
     assertEquals(WorkflowState.SUCCESS.name(), rstatHandle.getStatus().status());
     assertNotEquals(rstatHandle.workflowId(), workflowId);
+    assertEquals(workflowId, status.forkedFrom());
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);

@@ -9,7 +9,9 @@ public record OperationOutputRow(
     String output,
     String error,
     String functionName,
-    String childWorkflowId) {
+    String childWorkflowId,
+    Long startedAt,
+    Long completedAt) {
 
   public OperationOutputRow(ResultSet rs) throws SQLException {
     this(
@@ -18,6 +20,8 @@ public record OperationOutputRow(
         rs.getString("output"),
         rs.getString("error"),
         rs.getString("function_name"),
-        rs.getString("child_workflow_id"));
+        rs.getString("child_workflow_id"),
+        rs.getObject("started_at_epoch_ms", Long.class),
+        rs.getObject("completed_at_epoch_ms", Long.class));
   }
 }

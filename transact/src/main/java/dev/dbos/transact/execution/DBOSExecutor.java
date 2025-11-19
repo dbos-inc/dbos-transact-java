@@ -344,6 +344,7 @@ public class DBOSExecutor implements AutoCloseable {
     int nextFuncId = 0;
     boolean inWorkflow = ctx != null && ctx.isInWorkflow();
     boolean inStep = ctx.isInStep();
+    var startTime = System.currentTimeMillis();
 
     if (!inWorkflow || inStep) return fn.execute();
 
@@ -365,7 +366,7 @@ public class DBOSExecutor implements AutoCloseable {
         StepResult r =
             new StepResult(
                 ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError, childWfId);
-        systemDatabase.recordStepResultTxn(r);
+        systemDatabase.recordStepResultTxn(r, startTime);
       }
       throw (E) e;
     }
@@ -374,7 +375,7 @@ public class DBOSExecutor implements AutoCloseable {
     String jsonOutput = JSONUtil.serialize(functionResult);
     StepResult o =
         new StepResult(ctx.getWorkflowId(), nextFuncId, functionName, jsonOutput, null, childWfId);
-    systemDatabase.recordStepResultTxn(o);
+    systemDatabase.recordStepResultTxn(o, startTime);
 
     return functionResult;
   }
@@ -402,11 +403,11 @@ public class DBOSExecutor implements AutoCloseable {
   @SuppressWarnings("unchecked")
   private <T, E extends Exception> T handleExistingResult(StepResult result, String functionName)
       throws E {
-    if (result.getOutput() != null) {
-      Object[] resArray = JSONUtil.deserializeToArray(result.getOutput());
+    if (result.output() != null) {
+      Object[] resArray = JSONUtil.deserializeToArray(result.output());
       return resArray == null ? null : (T) resArray[0];
-    } else if (result.getError() != null) {
-      Throwable t = JSONUtil.deserializeAppException(result.getError());
+    } else if (result.error() != null) {
+      Throwable t = JSONUtil.deserializeAppException(result.error());
       if (t instanceof Exception) {
         throw (E) t;
       } else {
@@ -445,6 +446,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     String workflowId = ctx.getWorkflowId();
+    var startTime = System.currentTimeMillis();
 
     logger.debug("Running step {} for workflow {}", stepName, workflowId);
 
@@ -454,13 +456,13 @@ public class DBOSExecutor implements AutoCloseable {
         systemDatabase.checkStepExecutionTxn(workflowId, stepFunctionId, stepName);
 
     if (recordedResult != null) {
-      String output = recordedResult.getOutput();
+      String output = recordedResult.output();
       if (output != null) {
         Object[] stepO = JSONUtil.deserializeToArray(output);
         return stepO == null ? null : (T) stepO[0];
       }
 
-      String error = recordedResult.getError();
+      String error = recordedResult.error();
       if (error != null) {
         var throwable = JSONUtil.deserializeAppException(error);
         if (!(throwable instanceof Exception))
@@ -508,7 +510,7 @@ public class DBOSExecutor implements AutoCloseable {
     if (eThrown == null) {
       StepResult stepResult =
           new StepResult(workflowId, stepFunctionId, stepName, serializedOutput, null, childWfId);
-      systemDatabase.recordStepResultTxn(stepResult);
+      systemDatabase.recordStepResultTxn(stepResult, startTime);
       return result;
     } else {
       StepResult stepResult =
@@ -519,7 +521,7 @@ public class DBOSExecutor implements AutoCloseable {
               null,
               JSONUtil.serializeAppException(eThrown),
               childWfId);
-      systemDatabase.recordStepResultTxn(stepResult);
+      systemDatabase.recordStepResultTxn(stepResult, startTime);
       throw (E) eThrown;
     }
   }
@@ -664,12 +666,10 @@ public class DBOSExecutor implements AutoCloseable {
     if (!ctx.isInWorkflow()) {
       throw new IllegalStateException("DBOS.setEvent() must be called from a workflow.");
     }
-    if (!ctx.isInStep()) {
-      int stepFunctionId = ctx.getAndIncrementFunctionId();
-      systemDatabase.setEvent(ctx.getWorkflowId(), stepFunctionId, key, value);
-    } else {
-      systemDatabase.setEvent(ctx.getWorkflowId(), null, key, value);
-    }
+
+    var asStep = !ctx.isInStep();
+    var stepId = ctx.isInStep() ? ctx.getCurrentFunctionId() : ctx.getAndIncrementFunctionId();
+    systemDatabase.setEvent(ctx.getWorkflowId(), stepId, key, value, asStep);
   }
 
   public Object getEvent(String workflowId, String key, Duration timeout) {
@@ -758,12 +758,13 @@ public class DBOSExecutor implements AutoCloseable {
     CompletableFuture<String> future = new CompletableFuture<>();
     var newCtx = new DBOSContext(ctx, options, functionId, future);
 
-    Callable<T> task =
+    Callable<Void> task =
         () -> {
           DBOSContextHolder.clear();
           try {
             DBOSContextHolder.set(newCtx);
-            return supplier.execute();
+            supplier.execute();
+            return null;
           } finally {
             DBOSContextHolder.clear();
           }
@@ -890,6 +891,16 @@ public class DBOSExecutor implements AutoCloseable {
       WorkflowInfo parent,
       CompletableFuture<String> latch) {
 
+    if (parent != null) {
+      var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
+      if (childId.isPresent()) {
+        if (latch != null) {
+          latch.complete(childId.get());
+        }
+        return retrieveWorkflow(childId.get());
+      }
+    }
+
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
 
     if (options.queueName() != null) {
@@ -912,13 +923,6 @@ public class DBOSExecutor implements AutoCloseable {
     var workflowId = options.workflowId();
     WorkflowInitResult initResult = null;
     try {
-      if (parent != null) {
-        var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
-        if (childId.isPresent()) {
-          return retrieveWorkflow(childId.get());
-        }
-      }
-
       initResult =
           preInvokeWorkflow(
               systemDatabase,
@@ -967,7 +971,15 @@ public class DBOSExecutor implements AutoCloseable {
             DBOSContextHolder.set(
                 new DBOSContext(
                     workflowId, parent, options.getTimeoutDuration(), options.deadline()));
+            if (Thread.currentThread().isInterrupted()) {
+              logger.debug("executeWorkflow task interrupted before workflow.invoke");
+              return null;
+            }
             T result = workflow.invoke(args);
+            if (Thread.currentThread().isInterrupted()) {
+              logger.debug("executeWorkflow task interrupted before postInvokeWorkflowResult");
+              return null;
+            }
             postInvokeWorkflowResult(systemDatabase, workflowId, result);
             return result;
           } catch (DBOSWorkflowExecutionConflictException e) {
@@ -1106,6 +1118,7 @@ public class DBOSExecutor implements AutoCloseable {
       inputs = new Object[0];
     }
     String inputString = JSONUtil.serializeArray(inputs);
+    var startTime = System.currentTimeMillis();
 
     WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
@@ -1150,7 +1163,11 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (parentWorkflow != null) {
       systemDatabase.recordChildWorkflow(
-          parentWorkflow.workflowId(), workflowId, parentWorkflow.functionId(), workflowName);
+          parentWorkflow.workflowId(),
+          workflowId,
+          parentWorkflow.functionId(),
+          workflowName,
+          startTime);
     }
 
     return initResult[0];

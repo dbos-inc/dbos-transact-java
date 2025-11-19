@@ -40,7 +40,8 @@ public record ListWorkflowsRequest(
         load_output,
         queue_name,
         queue_name != null ? true : false,
-        null // Executor IDs
+        null, // Executor IDs
+        null // forkedFrom
         );
   }
 }

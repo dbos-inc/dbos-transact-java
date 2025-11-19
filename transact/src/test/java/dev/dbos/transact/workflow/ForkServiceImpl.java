@@ -90,15 +90,25 @@ public class ForkServiceImpl implements ForkService {
     ++step5Count;
   }
 
-  @Workflow(name = "child1")
+  @Workflow
   public String child1(Integer number) {
     ++child1Count;
     return String.valueOf(number);
   }
 
-  @Workflow(name = "child2")
+  @Workflow
   public String child2(Float number) {
     ++child2Count;
     return String.valueOf(number);
+  }
+
+  @Workflow
+  public void setEventWorkflow(String key) throws InterruptedException {
+    for (int i = 0; i < 5; i++) {
+      DBOS.setEvent(key, "event-%d".formatted(System.currentTimeMillis()));
+      if (i < 4) {
+        Thread.sleep(100);
+      }
+    }
   }
 }

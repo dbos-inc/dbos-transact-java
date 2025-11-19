@@ -39,6 +39,7 @@ public class StepsTest extends DbSetupTestBase {
 
     String wid = "sync123";
 
+    var before = System.currentTimeMillis();
     try (var id = new WorkflowOptions(wid).setContext()) {
       String result = serviceA.workflowWithSteps("hello");
       assertEquals("hellohello", result);
@@ -47,22 +48,20 @@ public class StepsTest extends DbSetupTestBase {
     List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
 
-    assertEquals("step1", stepInfos.get(0).functionName());
-    assertEquals(0, stepInfos.get(0).functionId());
-    assertEquals("one", stepInfos.get(0).output());
-    assertNull(stepInfos.get(0).error());
-    assertEquals("step2", stepInfos.get(1).functionName());
-    assertEquals(1, stepInfos.get(1).functionId());
-    assertEquals("two", stepInfos.get(1).output());
-    assertEquals("step3", stepInfos.get(2).functionName());
-    assertEquals(2, stepInfos.get(2).functionId());
-    assertEquals("three", stepInfos.get(2).output());
-    assertEquals("step4", stepInfos.get(3).functionName());
-    assertEquals(3, stepInfos.get(3).functionId());
-    assertEquals("four", stepInfos.get(3).output());
-    assertEquals("step5", stepInfos.get(4).functionName());
-    assertEquals(4, stepInfos.get(4).functionId());
-    assertEquals("five", stepInfos.get(4).output());
+    String[] names = {"step1", "step2", "step3", "step4", "step5"};
+    String[] output = {"one", "two", "three", "four", "five"};
+
+    for (var i = 0; i < stepInfos.size(); i++) {
+      var step = stepInfos.get(i);
+      assertEquals(names[i], step.functionName());
+      assertEquals(output[i], step.output());
+      assertNull(step.error());
+      assertNotNull(step.startedAtEpochMs());
+      assertTrue(before <= step.startedAtEpochMs());
+      assertNotNull(step.completedAtEpochMs());
+      assertTrue(step.startedAtEpochMs() <= step.completedAtEpochMs());
+      before = step.completedAtEpochMs();
+    }
   }
 
   @Test
@@ -73,6 +72,7 @@ public class StepsTest extends DbSetupTestBase {
 
     DBOS.launch();
 
+    var before = System.currentTimeMillis();
     String wid = "sync123er";
     try (var id = new WorkflowOptions(wid).setContext()) {
       String result = serviceA.workflowWithStepError("hello");
@@ -81,13 +81,24 @@ public class StepsTest extends DbSetupTestBase {
 
     List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
-    assertEquals("step3", stepInfos.get(2).functionName());
-    assertEquals(2, stepInfos.get(2).functionId());
-    var error = stepInfos.get(2).error().throwable();
+
+    for (var i = 0; i < stepInfos.size(); i++) {
+      var step = stepInfos.get(i);
+      assertNotNull(step.startedAtEpochMs());
+      assertTrue(before <= step.startedAtEpochMs());
+      assertNotNull(step.completedAtEpochMs());
+      assertTrue(step.startedAtEpochMs() <= step.completedAtEpochMs());
+      before = step.completedAtEpochMs();
+    }
+
+    var step3 = stepInfos.get(2);
+    assertEquals("step3", step3.functionName());
+    assertEquals(2, step3.functionId());
+    var error = step3.error().throwable();
     assertInstanceOf(Exception.class, error, "The error should be an Exception");
     assertEquals("step3 error", error.getMessage(), "Error message should match");
-    assertEquals("step3 error", stepInfos.get(2).error().message());
-    assertNull(stepInfos.get(2).output());
+    assertEquals("step3 error", step3.error().message());
+    assertNull(step3.output());
   }
 
   @Test
@@ -97,6 +108,7 @@ public class StepsTest extends DbSetupTestBase {
 
     DBOS.launch();
 
+    var before = System.currentTimeMillis();
     String wid = "wfWISwww123";
     try (var id = new WorkflowOptions(wid).setContext()) {
       service.aWorkflowWithInlineSteps("input");
@@ -107,6 +119,15 @@ public class StepsTest extends DbSetupTestBase {
 
     List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wid);
     assertEquals(1, stepInfos.size());
+
+    for (var i = 0; i < stepInfos.size(); i++) {
+      var step = stepInfos.get(i);
+      assertNotNull(step.startedAtEpochMs());
+      assertTrue(before <= step.startedAtEpochMs());
+      assertNotNull(step.completedAtEpochMs());
+      assertTrue(step.startedAtEpochMs() <= step.completedAtEpochMs());
+      before = step.completedAtEpochMs();
+    }
 
     assertEquals("stringLength", stepInfos.get(0).functionName());
     assertEquals(0, stepInfos.get(0).functionId());
@@ -122,8 +143,8 @@ public class StepsTest extends DbSetupTestBase {
 
     DBOS.launch();
 
+    var before = System.currentTimeMillis();
     String workflowId = "wf-1234";
-
     try (var id = new WorkflowOptions(workflowId).setContext()) {
       serviceA.workflowWithSteps("hello");
     }
@@ -134,22 +155,20 @@ public class StepsTest extends DbSetupTestBase {
     List<StepInfo> stepInfos = DBOS.listWorkflowSteps(workflowId);
     assertEquals(5, stepInfos.size());
 
-    assertEquals("step1", stepInfos.get(0).functionName());
-    assertEquals(0, stepInfos.get(0).functionId());
-    assertEquals("one", stepInfos.get(0).output());
-    assertEquals("step2", stepInfos.get(1).functionName());
-    assertEquals(1, stepInfos.get(1).functionId());
-    assertEquals("two", stepInfos.get(1).output());
-    assertEquals("step3", stepInfos.get(2).functionName());
-    assertEquals(2, stepInfos.get(2).functionId());
-    assertEquals("three", stepInfos.get(2).output());
-    assertEquals("step4", stepInfos.get(3).functionName());
-    assertEquals(3, stepInfos.get(3).functionId());
-    assertEquals("four", stepInfos.get(3).output());
-    assertEquals("step5", stepInfos.get(4).functionName());
-    assertEquals(4, stepInfos.get(4).functionId());
-    assertEquals("five", stepInfos.get(4).output());
-    assertNull(stepInfos.get(4).error());
+    String[] names = {"step1", "step2", "step3", "step4", "step5"};
+    String[] output = {"one", "two", "three", "four", "five"};
+
+    for (var i = 0; i < stepInfos.size(); i++) {
+      var step = stepInfos.get(i);
+      assertEquals(names[i], step.functionName());
+      assertEquals(output[i], step.output());
+      assertNull(step.error());
+      assertNotNull(step.startedAtEpochMs());
+      assertTrue(before <= step.startedAtEpochMs());
+      assertNotNull(step.completedAtEpochMs());
+      assertTrue(step.startedAtEpochMs() <= step.completedAtEpochMs());
+      before = step.completedAtEpochMs();
+    }
   }
 
   @Test
@@ -211,8 +230,8 @@ public class StepsTest extends DbSetupTestBase {
 
     service.setSelf(service);
 
+    var before = System.currentTimeMillis();
     String workflowId = "wf-stepretrytest-1234";
-
     try (var id = new WorkflowOptions(workflowId).setContext()) {
       service.stepRetryWorkflow("hello");
     }
@@ -223,6 +242,15 @@ public class StepsTest extends DbSetupTestBase {
 
     List<StepInfo> stepInfos = DBOS.listWorkflowSteps(workflowId);
     assertEquals(3, stepInfos.size());
+
+    for (var i = 0; i < stepInfos.size(); i++) {
+      var step = stepInfos.get(i);
+      assertNotNull(step.startedAtEpochMs());
+      assertTrue(before <= step.startedAtEpochMs());
+      assertNotNull(step.completedAtEpochMs());
+      assertTrue(step.startedAtEpochMs() <= step.completedAtEpochMs());
+      before = step.completedAtEpochMs();
+    }
 
     assertEquals("stepWith2Retries", stepInfos.get(0).functionName());
     assertEquals(0, stepInfos.get(0).functionId());

@@ -84,6 +84,10 @@ public class DBOSContext {
     return stepFunctionId;
   }
 
+  public int getCurrentFunctionId() {
+    return functionId;
+  }
+
   public int getAndIncrementFunctionId() {
     return functionId++;
   }
