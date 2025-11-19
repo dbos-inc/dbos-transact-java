@@ -646,7 +646,7 @@ public class WorkflowDAO {
 
     var result = new StepResult(parentId, functionId, functionName).withChildWorkflowId(childId);
     try (Connection connection = dataSource.getConnection()) {
-      StepsDAO.recordStepResultTxn(result, startTime, connection, schema);
+      StepsDAO.recordStepResultTxn(result, null, connection, schema);
     }
   }
 
