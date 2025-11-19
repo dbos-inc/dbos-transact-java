@@ -1,24 +1,30 @@
 package dev.dbos.transact.issues;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.sql.SQLException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import com.zaxxer.hikari.HikariDataSource;
 
 interface Example {
 
@@ -65,6 +71,7 @@ class ExampleImpl implements Example {
         handle.getResult();
       } catch (Exception e) {
         System.out.println("Task failed " + e);
+        throw e;
       }
     }
     System.out.println("parent-parallel completed");
@@ -74,6 +81,7 @@ class ExampleImpl implements Example {
 // @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class Issue218 {
   private static DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -87,6 +95,7 @@ public class Issue218 {
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
     DBOS.reinitialize(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
@@ -104,13 +113,47 @@ public class Issue218 {
     impl.setProxy(proxy);
 
     DBOS.launch();
-    DBOSTestAccess.getQueueService().pause();
 
     var handle = DBOS.startWorkflow(() -> proxy.parentParallel());
-    Thread.sleep(500);
+    var wfid = handle.workflowId();
     DBOS.shutdown();
 
+    var rows = DBUtils.getWorkflowRows(dataSource);
+    for (var row : rows) {
+      var expected = row.workflowId().equals(wfid) ? "PENDING" : "ENQUEUED";
+      assertEquals(expected, row.status());
+    }
+
+    var steps = DBUtils.getStepRows(dataSource, wfid);
+    for (var step : steps) {
+      assertNull(step.output());
+      assertNull(step.error());
+      assertTrue(step.childWorkflowId().startsWith(wfid));
+    }
+
     DBOS.launch();
-    var result = handle.getResult();
+    assertDoesNotThrow(() -> DBOS.getResult(wfid));
+
+    rows = DBUtils.getWorkflowRows(dataSource);
+    for (var row : rows) {
+      assertEquals("SUCCESS", row.status());
+    }
+
+    steps = DBUtils.getStepRows(dataSource, wfid);
+    for (var step : steps) {
+      assertTrue(step.functionName().equals("task-workflow") || step.functionName().equals("DBOS.getResult"));
+      assertNull(step.error());
+      assertTrue(step.childWorkflowId().startsWith(wfid));
+      if (step.functionName().equals("task-workflow")) {
+        assertNull(step.output());
+        assertNull(step.startedAt());
+        assertNull(step.startedAt());
+      } 
+      if (step.functionName().equals("DBOS.getResult")) {
+        assertNotNull(step.output());
+        assertNotNull(step.startedAt());
+        assertNotNull(step.startedAt());
+      }
+    }
   }
 }
