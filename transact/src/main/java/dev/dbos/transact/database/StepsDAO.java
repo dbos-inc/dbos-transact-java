@@ -283,14 +283,15 @@ public class StepsDAO {
 
     if (recordedOutput != null) {
       logger.debug(
-          "Replaying sleep, workflow {}, id: {}, millis: {}", workflowUuid, functionId, duration);
+          "Replaying sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
       if (recordedOutput.output() == null) {
         throw new IllegalStateException("No recorded timeout for sleep");
       }
       Object[] dser = JSONUtil.deserializeToArray(recordedOutput.output());
       endTime = (Double) dser[0];
     } else {
-      logger.debug("Running sleep, workflow {}, id: {}, millis: {}", functionId, duration);
+      logger.debug(
+          "Running sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
       endTime = System.currentTimeMillis() + duration.toMillis();
 
       try {
