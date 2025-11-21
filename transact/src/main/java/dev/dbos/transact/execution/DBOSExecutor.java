@@ -963,10 +963,7 @@ public class DBOSExecutor implements AutoCloseable {
           DBOSContextHolder.clear();
           try {
             logger.debug(
-                "executeWorkflow task {} {}",
-                (Objects.requireNonNullElse(options.getTimeoutDuration(), Duration.ZERO)
-                    .toMillis()),
-                Objects.requireNonNullElse(options.deadline(), Instant.EPOCH).toEpochMilli());
+                "executeWorkflow task {}({}) {}", workflow.fullyQualifiedName(), args, options);
 
             DBOSContextHolder.set(
                 new DBOSContext(
