@@ -127,6 +127,69 @@ public class AsyncWorkflowTest {
   }
 
   @Test
+  public void workWithNonSerializableException() throws SQLException {
+    SimpleService simpleService =
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+
+    DBOS.launch();
+
+    String wfid = "abc";
+    WorkflowHandle<Void, ?> handle =
+        DBOS.startWorkflow(
+            () -> {
+              simpleService.workWithNonSerializableException();
+              return null;
+            },
+            new StartWorkflowOptions(wfid));
+
+    var e = assertThrows(Exception.class, () -> handle.getResult());
+    assertEquals("workNonSerializableException error", e.getMessage());
+
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
+    assertEquals(1, wfs.size());
+    assertEquals(wfs.get(0).name(), "workNonSerializableException");
+    assertNotNull(wfs.get(0).workflowId());
+    assertEquals(wfs.get(0).workflowId(), handle.workflowId());
+    assertEquals(
+        "dev.dbos.transact.workflow.SimpleServiceImpl$NonSerializableException",
+        wfs.get(0).error().className());
+    assertEquals("workNonSerializableException error", wfs.get(0).error().message());
+    assertNotNull(wfs.get(0).workflowId());
+  }
+
+  @Test
+  public void workWithNonSerializableExceptionInStep() throws SQLException {
+    SimpleService simpleService =
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+    simpleService.setSimpleService(simpleService);
+
+    DBOS.launch();
+
+    String wfid = "abc";
+    WorkflowHandle<Void, ?> handle =
+        DBOS.startWorkflow(
+            () -> {
+              simpleService.workWithNonSerializableExceptionInStep();
+              return null;
+            },
+            new StartWorkflowOptions(wfid));
+
+    var e = assertThrows(Exception.class, () -> handle.getResult());
+    assertEquals("stepWithNonSerializableException error", e.getMessage());
+
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
+    assertEquals(1, wfs.size());
+    assertEquals(wfs.get(0).name(), "workWithNonSerializableExceptionInStep");
+    assertNotNull(wfs.get(0).workflowId());
+    assertEquals(wfs.get(0).workflowId(), handle.workflowId());
+    assertEquals(
+        "dev.dbos.transact.workflow.SimpleServiceImpl$NonSerializableException",
+        wfs.get(0).error().className());
+    assertEquals("stepWithNonSerializableException error", wfs.get(0).error().message());
+    assertNotNull(wfs.get(0).workflowId());
+  }
+
+  @Test
   public void childWorkflowWithoutSet() throws Exception {
 
     SimpleService simpleService =
