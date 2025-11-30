@@ -123,7 +123,12 @@ public class DBOSExecutor implements AutoCloseable {
       logger.info("Executor ID: {}", this.executorId);
       logger.info("Application Version: {}", this.appVersion);
 
-      executorService = Executors.newCachedThreadPool();
+      if (config.workFlowExecutorService() != null) {
+        executorService = config.workFlowExecutorService();
+      } else {
+        executorService = Executors.newCachedThreadPool();
+      }
+
       timeoutScheduler = Executors.newScheduledThreadPool(2);
 
       systemDatabase = new SystemDatabase(config);

@@ -2,6 +2,8 @@ package dev.dbos.transact.config;
 
 import dev.dbos.transact.Constants;
 
+import java.util.concurrent.ExecutorService;
+
 import com.zaxxer.hikari.HikariDataSource;
 
 public record DBOSConfig(
@@ -19,7 +21,8 @@ public record DBOSConfig(
     String conductorDomain,
     String appVersion,
     String executorId,
-    String databaseSchema) {
+    String databaseSchema,
+    ExecutorService workFlowExecutorService) {
 
   public static DBOSConfig defaults(String appName) {
     return new DBOSConfig(
@@ -28,7 +31,7 @@ public record DBOSConfig(
         null, false, // adminServer
         3001, // adminServerPort
         true, // migrate
-        null, null, null, null, null);
+        null, null, null, null, null, null);
   }
 
   public static DBOSConfig defaultsFromEnv(String appName) {
@@ -58,7 +61,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        null);
   }
 
   public DBOSConfig withDatabaseUrl(String v) {
@@ -77,7 +81,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withDbUser(String v) {
@@ -96,7 +101,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withDbPassword(String v) {
@@ -115,7 +121,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withMaximumPoolSize(int v) {
@@ -134,7 +141,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withConnectionTimeout(int v) {
@@ -153,7 +161,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withDataSource(HikariDataSource v) {
@@ -172,7 +181,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withAdminServer(boolean v) {
@@ -191,7 +201,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withAdminServerPort(int v) {
@@ -210,7 +221,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withMigrate(boolean v) {
@@ -229,7 +241,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withConductorKey(String v) {
@@ -248,7 +261,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withConductorDomain(String v) {
@@ -267,7 +281,8 @@ public record DBOSConfig(
         v,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withAppVersion(String v) {
@@ -286,7 +301,8 @@ public record DBOSConfig(
         conductorDomain,
         v,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withExecutorId(String v) {
@@ -305,7 +321,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         v,
-        databaseSchema);
+        databaseSchema,
+        workFlowExecutorService);
   }
 
   public DBOSConfig withDatabaseSchema(String v) {
@@ -324,6 +341,27 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
+        v,
+        workFlowExecutorService);
+  }
+
+  public DBOSConfig withWorkFlowExecutorService(ExecutorService v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        maximumPoolSize,
+        connectionTimeout,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        appVersion,
+        executorId,
+        databaseSchema,
         v);
   }
 
@@ -338,7 +376,7 @@ public record DBOSConfig(
   // Override toString to mask the DB password
   @Override
   public String toString() {
-    return "DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, appVersion=%s, executorId=%s, dbSchema=%s]"
+    return "DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, appVersion=%s, executorId=%s, dbSchema=%s, workFlowExecutorService=%s]"
         .formatted(
             appName,
             databaseUrl,
@@ -353,6 +391,7 @@ public record DBOSConfig(
             conductorDomain,
             appVersion,
             executorId,
-            databaseSchema);
+            databaseSchema,
+            workFlowExecutorService);
   }
 }
