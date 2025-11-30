@@ -14,20 +14,24 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class JSONUtil {
   private static final Logger logger = LoggerFactory.getLogger(Conductor.class);
 
-  private static final ObjectMapper mapper = new ObjectMapper();
+  private static JSONSerde jsonSerde = new JacksonJSONSerde();
+
+  public static JSONSerde getJsonSerde() {
+    return jsonSerde;
+  }
+
+  public static void setJsonSerde(JSONSerde jsonSerde) {
+    JSONUtil.jsonSerde = jsonSerde;
+  }
 
   public static class JsonRuntimeException extends RuntimeException {
-    public JsonRuntimeException(JsonProcessingException cause) {
+    public JsonRuntimeException(Exception cause) {
       super(cause.getMessage(), cause);
       setStackTrace(cause.getStackTrace());
       for (Throwable suppressed : cause.getSuppressed()) {
@@ -36,30 +40,16 @@ public class JSONUtil {
     }
   }
 
-  static {
-    mapper.registerModule(new JavaTimeModule());
-    mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional
-  }
-
   public static String serialize(Object obj) {
     return serializeArray(new Object[] {obj});
   }
 
   public static String serializeArray(Object[] args) {
-    try {
-      return mapper.writeValueAsString(new Boxed(args));
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return jsonSerde.serializeArray(args);
   }
 
   public static Object[] deserializeToArray(String json) {
-    try {
-      Boxed boxed = mapper.readValue(json, Boxed.class);
-      return boxed.args;
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return jsonSerde.deserializeToArray(json);
   }
 
   public static String serializeAppException(Throwable error) {
@@ -83,19 +73,11 @@ public class JSONUtil {
   }
 
   public static String toJson(Object obj) {
-    try {
-      return mapper.writeValueAsString(obj);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return jsonSerde.toJson(obj);
   }
 
   public static <T> T fromJson(String content, Class<T> valueType) {
-    try {
-      return mapper.readValue(content, valueType);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return jsonSerde.fromJson(content, valueType);
   }
 
   public static final class WireThrowable {
