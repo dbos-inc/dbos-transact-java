@@ -85,7 +85,7 @@ public class WorkflowDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
-    logger.debug("initWorkflowStatus {}", initStatus);
+    logger.debug("initWorkflowStatus workflowId {}", initStatus.workflowId());
 
     try (Connection connection = dataSource.getConnection()) {
 
@@ -161,7 +161,7 @@ public class WorkflowDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
-    logger.debug("insertWorkflowStatus {}", status);
+    logger.debug("insertWorkflowStatus workflowId {}", status.workflowId());
 
     String insertSQL =
         """
