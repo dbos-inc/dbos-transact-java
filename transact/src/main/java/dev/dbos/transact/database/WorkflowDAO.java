@@ -34,49 +34,6 @@ public class WorkflowDAO {
     this.schema = Objects.requireNonNull(schema);
   }
 
-  public Optional<String> getWorkflowResult(String workflowId) throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
-
-    String sql =
-        """
-          SELECT status, output, error FROM %s.workflow_status WHERE workflow_uuid = ?;
-        """
-            .formatted(this.schema);
-
-    try (Connection connection = dataSource.getConnection();
-        PreparedStatement stmt = connection.prepareStatement(sql)) {
-
-      stmt.setString(1, workflowId);
-
-      try (ResultSet rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          String status = rs.getString("status");
-
-          if (WorkflowState.SUCCESS.toString().equals(status)) {
-            String output = rs.getString("output");
-            return Optional.ofNullable(output);
-
-          } else if (WorkflowState.ERROR.toString().equals(status)) {
-            String error = rs.getString("error");
-            return Optional.ofNullable(error);
-          }
-
-          // For other statuses (PENDING, RUNNING, etc.), return empty
-          return Optional.empty();
-        }
-
-        // No row found - return empty
-        return Optional.empty();
-      }
-
-    } catch (SQLException e) {
-      logger.error("Error getting workflow result", e);
-      throw e;
-    }
-  }
-
   public WorkflowInitResult initWorkflowStatus(
       WorkflowStatusInternal initStatus, Integer maxRetries) throws SQLException {
     if (dataSource.isClosed()) {
