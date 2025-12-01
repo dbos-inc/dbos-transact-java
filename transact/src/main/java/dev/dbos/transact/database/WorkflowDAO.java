@@ -45,6 +45,8 @@ public class WorkflowDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
+    logger.debug("initWorkflowStatus workflowId {}", initStatus.workflowId());
+
     try (Connection connection = dataSource.getConnection()) {
 
       try {
@@ -118,6 +120,8 @@ public class WorkflowDAO {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
+
+    logger.debug("insertWorkflowStatus workflowId {}", status.workflowId());
 
     String insertSQL =
         """
@@ -218,6 +222,8 @@ public class WorkflowDAO {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
+
+    logger.debug("updateWorkflowOutcome wfid {} status {}", workflowId, status);
 
     // Note that transitions from CANCELLED to SUCCESS or ERROR are forbidden
     var sql =
