@@ -25,6 +25,7 @@ public class NotificationsDAO {
   private final HikariDataSource dataSource;
   private final String schema;
   private NotificationService notificationService;
+  private long dbPollingIntervalEventMs = 10000;
 
   NotificationsDAO(HikariDataSource ds, NotificationService nService, String schema) {
     this.dataSource = ds;
@@ -143,6 +144,11 @@ public class NotificationsDAO {
     String payload = workflowUuid + "::" + finalTopic;
     NotificationService.LockConditionPair lockPair = new NotificationService.LockConditionPair();
 
+    // Timeout / deadline for the notification
+    double actualTimeout = timeout.toMillis();
+    var targetTime = System.currentTimeMillis() + actualTimeout;
+    var checkedDBForSleep = false;
+
     try {
       lockPair.lock.lock();
       boolean success = notificationService.registerNotificationCondition(payload, lockPair);
@@ -151,32 +157,42 @@ public class NotificationsDAO {
         throw new DBOSWorkflowExecutionConflictException(workflowUuid);
       }
 
-      // Check if the key is already in the database. If not, wait for the
-      // notification
-      boolean hasExistingNotification = false;
-      try (Connection conn = dataSource.getConnection()) {
-        final String sql =
-            """
-              SELECT topic FROM %s.notifications WHERE destination_uuid = ? AND topic = ?
-            """
-                .formatted(this.schema);
+      while (true) {
+        // Check if the key is already in the database. If not, wait for the
+        // notification
+        boolean hasExistingNotification = false;
+        try (Connection conn = dataSource.getConnection()) {
+          final String sql =
+              """
+                SELECT topic FROM %s.notifications WHERE destination_uuid = ? AND topic = ?
+              """
+                  .formatted(this.schema);
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-          stmt.setString(1, workflowUuid);
-          stmt.setString(2, finalTopic);
-          try (ResultSet rs = stmt.executeQuery()) {
-            hasExistingNotification = rs.next();
+          try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, workflowUuid);
+            stmt.setString(2, finalTopic);
+            try (ResultSet rs = stmt.executeQuery()) {
+              hasExistingNotification = rs.next();
+            }
           }
         }
-      }
 
-      if (!hasExistingNotification) {
+        if (hasExistingNotification) break;
+
+        var nowTime = System.currentTimeMillis();
+
         // Wait for the notification
-        // Support OAOO sleep
-        double actualTimeout =
-            StepsDAO.sleep(dataSource, workflowUuid, timeoutFunctionId, timeout, true, this.schema)
-                .toMillis();
-        long timeoutMs = (long) (actualTimeout);
+        if (!checkedDBForSleep) {
+          // Support OAOO sleep
+          actualTimeout =
+              StepsDAO.sleep(
+                      dataSource, workflowUuid, timeoutFunctionId, timeout, true, this.schema)
+                  .toMillis();
+          checkedDBForSleep = true;
+          targetTime = nowTime + actualTimeout;
+        }
+        if (nowTime >= targetTime) break;
+        long timeoutMs = (long) (Math.min(targetTime - nowTime, dbPollingIntervalEventMs));
         lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
       }
     } finally {
@@ -369,55 +385,20 @@ public class NotificationsDAO {
       // Check if the key is already in the database. If not, wait for the
       // notification.
       Object value = null;
-
-      // Initial database check
       final String sql =
           """
             SELECT value FROM %s.workflow_events WHERE workflow_uuid = ? AND key = ?
           """
               .formatted(this.schema);
 
-      try (Connection conn = dataSource.getConnection();
-          PreparedStatement stmt = conn.prepareStatement(sql)) {
+      // Wait for the notification
+      double actualTimeout = timeout.toMillis();
+      var targetTime = System.currentTimeMillis() + actualTimeout;
+      var checkedDBForSleep = false;
 
-        stmt.setString(1, targetUuid);
-        stmt.setString(2, key);
+      while (true) {
+        // Database check
 
-        try (ResultSet rs = stmt.executeQuery()) {
-          if (rs.next()) {
-            String serializedValue = rs.getString("value");
-            Object[] valueArray = JSONUtil.deserializeToArray(serializedValue);
-            value = valueArray == null ? null : valueArray[0];
-          }
-        }
-      }
-
-      if (value == null) {
-        // Wait for the notification
-        double actualTimeout = timeout.toMillis();
-        if (callerCtx != null) {
-          // Support OAOO sleep for workflows
-          actualTimeout =
-              StepsDAO.sleep(
-                      dataSource,
-                      callerCtx.getWorkflowId(),
-                      callerCtx.getTimeoutFunctionId(),
-                      timeout,
-                      true, // skip_sleep
-                      this.schema)
-                  .toMillis();
-        }
-
-        try {
-          long timeoutms = (long) (actualTimeout);
-          logger.debug("Waiting for notification {}...", timeout);
-          lockConditionPair.condition.await(timeoutms, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          throw new RuntimeException("Interrupted while waiting for event", e);
-        }
-
-        // Read the value from the database after notification
         try (Connection conn = dataSource.getConnection();
             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
@@ -431,6 +412,36 @@ public class NotificationsDAO {
               value = valueArray == null ? null : valueArray[0];
             }
           }
+        }
+
+        if (value != null) break;
+        var nowTime = System.currentTimeMillis();
+        if (nowTime > targetTime) break;
+
+        // Consult DB - part of timeout may have expired if sleep is durable.
+        if (callerCtx != null & !checkedDBForSleep) {
+          actualTimeout =
+              StepsDAO.sleep(
+                      dataSource,
+                      callerCtx.getWorkflowId(),
+                      callerCtx.getTimeoutFunctionId(),
+                      timeout,
+                      true, // skip_sleep
+                      this.schema)
+                  .toMillis();
+          targetTime = System.currentTimeMillis() + actualTimeout;
+          checkedDBForSleep = true;
+          if (nowTime > targetTime) break;
+        }
+
+        try {
+          long timeoutms = (long) (targetTime - nowTime);
+          logger.debug("Waiting for notification {}...", timeout);
+          lockConditionPair.condition.await(
+              Math.min(timeoutms, dbPollingIntervalEventMs), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new RuntimeException("Interrupted while waiting for event", e);
         }
       }
 
