@@ -74,7 +74,7 @@ public class DisruptiveServiceImpl implements DisruptiveService {
     DBUtils.causeChaos(ds);
     DBOS.send(id1, "hello1", "topic");
     DBUtils.causeChaos(ds);
-    var v1 = (String) DBOS.getEvent(id1, "key", Duration.ofSeconds(10));
+    var v1 = (String) DBOS.getEvent(id1, "key", Duration.ofSeconds(5));
     DBUtils.causeChaos(ds);
     return "Part2" + v1;
   }

@@ -33,6 +33,10 @@ public class NotificationsDAO {
     this.notificationService = nService;
   }
 
+  public void speedUpPollingForTest() {
+    dbPollingIntervalEventMs = 100;
+  }
+
   public void send(
       String workflowUuid, int functionId, String destinationUuid, Object message, String topic)
       throws SQLException {

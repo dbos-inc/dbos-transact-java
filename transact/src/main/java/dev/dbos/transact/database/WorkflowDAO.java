@@ -28,10 +28,15 @@ public class WorkflowDAO {
 
   private final HikariDataSource dataSource;
   private final String schema;
+  private long getResultPollingIntervalMs = 1000;
 
   WorkflowDAO(HikariDataSource ds, String schema) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
+  }
+
+  public void speedUpPollingForTest() {
+    getResultPollingIntervalMs = 100;
   }
 
   public WorkflowInitResult initWorkflowStatus(
@@ -582,7 +587,7 @@ public class WorkflowDAO {
       }
 
       try {
-        Thread.sleep(1000);
+        Thread.sleep(getResultPollingIntervalMs);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new RuntimeException("Workflow polling interrupted for " + workflowId, e);

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
@@ -22,6 +23,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
@@ -119,13 +121,14 @@ public class SystemDatabaseTest {
     }
   }
 
-  // @RepeatedTest(100)
+  @RepeatedTest(100)
   public void testSysDbWfDisruption() throws Exception {
     var dsvci = new DisruptiveServiceImpl();
     dsvci.setDS(dataSource);
     var dsvc = DBOS.registerWorkflows(DisruptiveService.class, dsvci, UUID.randomUUID().toString());
     dsvci.setSelf(dsvc);
     DBOS.launch();
+    DBOSTestAccess.getSystemDatabase().speedUpPollingForTest();
     try {
       assertEquals("Hehehe", dsvc.dbLossBetweenSteps());
 
