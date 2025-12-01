@@ -399,6 +399,7 @@ public class NotificationsDAO {
       double actualTimeout = timeout.toMillis();
       var targetTime = System.currentTimeMillis() + actualTimeout;
       var checkedDBForSleep = false;
+      var hasExistingNotification = false;
 
       while (true) {
         // Database check
@@ -414,11 +415,12 @@ public class NotificationsDAO {
               String serializedValue = rs.getString("value");
               Object[] valueArray = JSONUtil.deserializeToArray(serializedValue);
               value = valueArray == null ? null : valueArray[0];
+              hasExistingNotification = true;
             }
           }
         }
 
-        if (value != null) break;
+        if (hasExistingNotification) break;
         var nowTime = System.currentTimeMillis();
         if (nowTime > targetTime) break;
 
