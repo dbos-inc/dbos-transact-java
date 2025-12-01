@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.RetryingTest;
@@ -31,21 +30,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
-public class WorkflowMgmtTest {
+public class WorkflowMgmtTest extends DbSetupTestBase {
 
   private static final Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
 
-  private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    WorkflowMgmtTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {

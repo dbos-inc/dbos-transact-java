@@ -22,18 +22,18 @@ jobs:
           - jdk-distro: graalvm
             jdk-version: 17.0.12
 
-    services:
-      postgres:
-        image: sibedge/postgres-plv8:16.3-3.2.2
-        env:
-          POSTGRES_PASSWORD: dbos
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
+    # services:
+    #   postgres:
+    #     image: sibedge/postgres-plv8:16.3-3.2.2
+    #     env:
+    #       POSTGRES_PASSWORD: dbos
+    #     options: >-
+    #       --health-cmd pg_isready
+    #       --health-interval 10s
+    #       --health-timeout 5s
+    #       --health-retries 5
+    #     ports:
+    #       - 5432:5432
 
     steps:
       - name: Checkout code
@@ -48,14 +48,14 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Wait for PostgreSQL
-        run: |
-          until pg_isready -h localhost -p 5432 -U postgres; do
-            echo "Waiting for PostgreSQL..."
-            sleep 2
-          done
-        env:
-          PGPASSWORD: dbos
+      # - name: Wait for PostgreSQL
+      #   run: |
+      #     until pg_isready -h localhost -p 5432 -U postgres; do
+      #       echo "Waiting for PostgreSQL..."
+      #       sleep 2
+      #     done
+      #   env:
+      #     PGPASSWORD: dbos
 
       - name: Run tests
         run: ./gradlew clean build
