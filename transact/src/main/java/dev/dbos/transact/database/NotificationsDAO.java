@@ -33,7 +33,7 @@ public class NotificationsDAO {
     this.notificationService = nService;
   }
 
-  public void speedUpPollingForTest() {
+  void speedUpPollingForTest() {
     dbPollingIntervalEventMs = 100;
   }
 

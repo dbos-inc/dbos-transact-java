@@ -35,7 +35,7 @@ public class WorkflowDAO {
     this.schema = Objects.requireNonNull(schema);
   }
 
-  public void speedUpPollingForTest() {
+  void speedUpPollingForTest() {
     getResultPollingIntervalMs = 100;
   }
 

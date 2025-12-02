@@ -75,7 +75,7 @@ public class SystemDatabase implements AutoCloseable {
     notificationService.stop();
   }
 
-  public void speedUpPollingForTest() {
+  void speedUpPollingForTest() {
     workflowDAO.speedUpPollingForTest();
     notificationsDAO.speedUpPollingForTest();
   }
