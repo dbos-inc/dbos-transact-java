@@ -28,55 +28,15 @@ public class WorkflowDAO {
 
   private final HikariDataSource dataSource;
   private final String schema;
+  private long getResultPollingIntervalMs = 1000;
 
   WorkflowDAO(HikariDataSource ds, String schema) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
   }
 
-  public Optional<String> getWorkflowResult(String workflowId) throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
-
-    logger.debug("getWorkflowResult {}", workflowId);
-
-    String sql =
-        """
-          SELECT status, output, error FROM %s.workflow_status WHERE workflow_uuid = ?;
-        """
-            .formatted(this.schema);
-
-    try (Connection connection = dataSource.getConnection();
-        PreparedStatement stmt = connection.prepareStatement(sql)) {
-
-      stmt.setString(1, workflowId);
-
-      try (ResultSet rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          String status = rs.getString("status");
-
-          if (WorkflowState.SUCCESS.toString().equals(status)) {
-            String output = rs.getString("output");
-            return Optional.ofNullable(output);
-
-          } else if (WorkflowState.ERROR.toString().equals(status)) {
-            String error = rs.getString("error");
-            return Optional.ofNullable(error);
-          }
-
-          // For other statuses (PENDING, RUNNING, etc.), return empty
-          return Optional.empty();
-        }
-
-        // No row found - return empty
-        return Optional.empty();
-      }
-
-    } catch (SQLException e) {
-      logger.error("Error getting workflow {} result", workflowId, e);
-      throw e;
-    }
+  void speedUpPollingForTest() {
+    getResultPollingIntervalMs = 100;
   }
 
   public WorkflowInitResult initWorkflowStatus(
@@ -633,7 +593,7 @@ public class WorkflowDAO {
       }
 
       try {
-        Thread.sleep(1000);
+        Thread.sleep(getResultPollingIntervalMs);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new RuntimeException("Workflow polling interrupted for " + workflowId, e);

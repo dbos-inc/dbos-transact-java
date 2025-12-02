@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
@@ -126,6 +127,7 @@ public class SystemDatabaseTest {
     var dsvc = DBOS.registerWorkflows(DisruptiveService.class, dsvci, UUID.randomUUID().toString());
     dsvci.setSelf(dsvc);
     DBOS.launch();
+    DBOSTestAccess.getSystemDatabase().speedUpPollingForTest();
     try {
       assertEquals("Hehehe", dsvc.dbLossBetweenSteps());
 

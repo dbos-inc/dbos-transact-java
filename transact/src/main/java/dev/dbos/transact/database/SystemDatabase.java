@@ -75,18 +75,9 @@ public class SystemDatabase implements AutoCloseable {
     notificationService.stop();
   }
 
-  /**
-   * Get workflow result by workflow ID
-   *
-   * @param workflowId The workflow ID
-   * @return Optional containing the raw output string if workflow completed successfully, empty
-   *     otherwise
-   */
-  public Optional<String> getWorkflowResult(String workflowId) {
-    return DbRetry.call(
-        () -> {
-          return workflowDAO.getWorkflowResult(workflowId);
-        });
+  void speedUpPollingForTest() {
+    workflowDAO.speedUpPollingForTest();
+    notificationsDAO.speedUpPollingForTest();
   }
 
   /**
