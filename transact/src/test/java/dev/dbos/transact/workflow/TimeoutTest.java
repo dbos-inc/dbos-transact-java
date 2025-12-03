@@ -101,7 +101,7 @@ public class TimeoutTest {
       fail("Expected Exception to be thrown");
     } catch (Exception t) {
       System.out.println(t.getClass().toString());
-      // assertTrue(t instanceof DBOSAwaitedWorkflowCancelledException);
+      assertTrue(t instanceof DBOSAwaitedWorkflowCancelledException);
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
@@ -113,7 +113,7 @@ public class TimeoutTest {
       fail("Expected Exception to be thrown");
     } catch (Exception t) {
       System.out.println(t.getClass().toString());
-      // assertTrue(t instanceof DBOSAwaitedWorkflowCancelledException);
+      assertTrue(t instanceof DBOSAwaitedWorkflowCancelledException);
     }
 
     var s2 = systemDatabase.getWorkflowStatus(wfid2);
@@ -328,7 +328,7 @@ public class TimeoutTest {
 
     var parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus();
     assertEquals(WorkflowState.ERROR.name(), parentStatus.status());
-    // assertEquals("Awaited workflow childwf was cancelled.", parentStatus.error().message());
+    assertEquals("Awaited workflow childwf was cancelled.", parentStatus.error().message());
 
     String childStatus = DBOS.retrieveWorkflow("childwf").getStatus().status();
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
@@ -358,7 +358,7 @@ public class TimeoutTest {
     assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
 
     String childStatus = DBOS.retrieveWorkflow("childwf").getStatus().status();
-    // assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+    assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
   @Test
@@ -375,7 +375,7 @@ public class TimeoutTest {
     WorkflowHandle<String, ?> handle =
         DBOS.startWorkflow(() -> simpleService.longParent("12345", 10, 0), options);
 
-    assertThrows(Exception.class, () -> handle.getResult());
+    assertThrows(DBOSAwaitedWorkflowCancelledException.class, () -> handle.getResult());
   }
 
   private void setDelayEpoch(DataSource ds, String workflowId) throws SQLException {
