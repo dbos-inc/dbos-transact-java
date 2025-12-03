@@ -1,6 +1,7 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.StepInfo;
@@ -39,6 +40,7 @@ public class StepsDAO {
     try (Connection connection = dataSource.getConnection(); ) {
       recordStepResultTxn(result, startTimeEpochMs, connection, schema);
     }
+    DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
   }
 
   public static void recordStepResultTxn(

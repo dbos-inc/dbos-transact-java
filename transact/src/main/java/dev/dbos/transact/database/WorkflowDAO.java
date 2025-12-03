@@ -1,8 +1,8 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.database.WorkflowDAO.InsertWorkflowResult;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -130,6 +130,7 @@ public class WorkflowDAO {
         } else {
           connection.rollback();
         }
+        DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_INITWF_COMMIT);
       }
     } // end try with resources connection closed
   }
