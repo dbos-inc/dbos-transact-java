@@ -792,43 +792,33 @@ public class DBOSExecutor implements AutoCloseable {
     var childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
-      var workflowId =
-        Objects.requireNonNullElseGet(options.workflowId(), () -> Objects.requireNonNullElseGet(
-            ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
+    // var nextTimeout = Objects.requireNonNullElse(options.timeout(), ctx.getNextTimeout());
+    // var nextDeadline = Objects.requireNonNullElse(options.deadline(), ctx.getNextDeadline());
 
-    Integer functionId = parent != null ? parent.functionId() : null;
+    // // default to context timeout & deadline if nextTimeout is null or Inherit
+    // Duration timeout = ctx.getTimeout();
+    // Instant deadline = ctx.getDeadline();
+    // if (nextDeadline != null) {
+    //   deadline = nextDeadline;
+    // } else if (nextTimeout instanceof Timeout.None) {
+    //   // clear timeout and deadline to null if nextTimeout is None
+    //   timeout = null;
+    //   deadline = null;
+    // } else if (nextTimeout instanceof Timeout.Explicit e) {
+    //   // set the timeout and deadline if nextTimeout is Explicit
+    //   timeout = e.value();
+    //   deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
+    // }
 
-    if (options.workflowId() == null) {
-      options = options.withWorkflowId(workflowId);
-    }
+    var workflowId =
+        Objects.requireNonNullElseGet(
+            options.workflowId(),
+            () ->
+                Objects.requireNonNullElseGet(
+                    ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
+    options = options.withWorkflowId(workflowId); //.withDeadline(deadline).withTimeout(timeout);
 
-    CompletableFuture<String> future = new CompletableFuture<>();
-    var newCtx = new DBOSContext(ctx, options, functionId, future);
-
-    Callable<Void> task =
-        () -> {
-          DBOSContextHolder.clear();
-          try {
-            DBOSContextHolder.set(newCtx);
-            supplier.execute();
-            return null;
-          } finally {
-            DBOSContextHolder.clear();
-          }
-        };
-
-    executorService.submit(task);
-    try {
-      var wfid = future.get(10, TimeUnit.SECONDS);
-      return retrieveWorkflow(wfid);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new RuntimeException("startWorkflow future await interupted", e);
-    } catch (TimeoutException e) {
-      throw new RuntimeException("startWorkflow future await timed out", e);
-    } catch (ExecutionException e) {
-      throw new RuntimeException("startWorkflow future execution exception", e);
-    }
+    return executeWorkflow(workflow, invocation.args(), options, parent, null);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
