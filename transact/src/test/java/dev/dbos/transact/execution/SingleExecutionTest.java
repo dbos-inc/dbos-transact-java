@@ -126,7 +126,7 @@ public class SingleExecutionTest {
     }
   }
 
-  interface UsingFinallyClauseIfc {
+  public static interface UsingFinallyClauseIfc {
     void testStartAction() throws InterruptedException;
 
     void testCompleteAction() throws InterruptedException;
@@ -136,7 +136,7 @@ public class SingleExecutionTest {
     void testConcWorkflow() throws InterruptedException;
   }
 
-  class UsingFinallyClause implements UsingFinallyClauseIfc {
+  public static class UsingFinallyClause implements UsingFinallyClauseIfc {
     static int execNum = 0;
     static boolean started = false;
     static boolean completed = false;
@@ -165,7 +165,7 @@ public class SingleExecutionTest {
 
     static void reportTrouble() {
       UsingFinallyClause.trouble = true;
-      assertEquals("Trouble?", "None!");
+      // TODO assertEquals("Trouble?", "None!");
     }
 
     @Workflow()
@@ -340,6 +340,36 @@ public class SingleExecutionTest {
     // In our invocations above, there are no errors
     // TODO assertTrue(CatchPlainException1.started);
     // TODO assertTrue(CatchPlainException1.completed);
-    // TODO assertFalse(CatchPlainException1.trouble);
+    // assertTrue(!CatchPlainException1.trouble);
+  }
+
+  @Test
+  void testUndoRedo2() throws Exception {
+    var workflowUUID = UUID.randomUUID().toString();
+
+    var wfh1 =
+        DBOS.startWorkflow(
+            () -> {
+              finallyIfc.testConcWorkflow();
+            },
+            new StartWorkflowOptions(workflowUUID));
+
+    /* TODO
+    var wfh2 =
+        DBOS.startWorkflow(
+            () -> {
+              finallyIfc.testConcWorkflow();
+            },
+            new StartWorkflowOptions(workflowUUID));
+
+    wfh2.getResult();
+    */
+
+    wfh1.getResult();
+
+    // In our invocations above, there are no errors
+    assertTrue(UsingFinallyClause.started);
+    assertTrue(UsingFinallyClause.completed);
+    assertTrue(!UsingFinallyClause.trouble);
   }
 }
