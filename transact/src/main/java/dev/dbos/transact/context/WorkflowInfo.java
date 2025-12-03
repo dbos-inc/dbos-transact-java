@@ -9,4 +9,8 @@ package dev.dbos.transact.context;
  * @param workflowId The unique id for the parent workflow.
  * @param functionId The step number within the parent workflow that created the child.
  */
-public record WorkflowInfo(String workflowId, int functionId) {}
+public record WorkflowInfo(String workflowId, int functionId) {
+  public String asWorkflowId() {
+    return "%s-%d".formatted(workflowId, functionId);
+  }
+}

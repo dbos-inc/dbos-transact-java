@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 public class DBOSInvocationHandler implements InvocationHandler {
 
+  public static final ThreadLocal<StartWorkflowHook> hookHolder = new ThreadLocal<>();
   private static final Logger logger = LoggerFactory.getLogger(DBOSInvocationHandler.class);
 
   private final Object target;
@@ -47,11 +48,17 @@ public class DBOSInvocationHandler implements InvocationHandler {
 
   public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
 
-    Method implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
+    var hook = hookHolder.get();
+    var implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
 
     var wfTag = implMethod.getAnnotation(Workflow.class);
     if (wfTag != null) {
-      return handleWorkflow(implMethod, args, wfTag);
+      return handleWorkflow(implMethod, args, wfTag, hook);
+    }
+
+    if (hook != null) {
+      throw new RuntimeException(
+          "Only @Workflow functions may be called from the startWorkflow lambda");
     }
 
     var stepTag = implMethod.getAnnotation(Step.class);
@@ -62,18 +69,25 @@ public class DBOSInvocationHandler implements InvocationHandler {
     return method.invoke(target, args);
   }
 
-  protected Object handleWorkflow(Method method, Object[] args, Workflow workflow)
-      throws Exception {
+  protected Object handleWorkflow(
+      Method method, Object[] args, Workflow workflow, StartWorkflowHook hook) throws Exception {
+    var clsName = target.getClass().getName();
+    var wfName = workflow.name().isEmpty() ? method.getName() : workflow.name();
+    var invocation = new Invocation(clsName, instanceName, wfName, args);
+    if (hook != null) {
+      hook.invoke(invocation);
+      return null;
+    }
+
     var executor = executorSupplier.get();
     if (executor == null) {
       throw new IllegalStateException("executorSupplier returned null");
     }
 
-    var clsName = target.getClass().getName();
-    var wfName = workflow.name().isEmpty() ? method.getName() : workflow.name();
-    var handle = executor.invokeWorkflow(clsName, instanceName, wfName, args);
-    // This is not really a getResult call - it is part of invocation which will be written
-    //  as its own step entry.
+    var handle = executor.invokeWorkflow(invocation);
+    // This is not really a getResult call - it is part of invocation which will be
+    // written
+    // as its own step entry.
     var ctx = DBOSContextHolder.get();
     try {
       DBOSContextHolder.clear();
