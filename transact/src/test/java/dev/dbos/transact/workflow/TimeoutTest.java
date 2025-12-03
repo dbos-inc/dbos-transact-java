@@ -22,7 +22,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junitpioneer.jupiter.RetryingTest;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class TimeoutTest {
@@ -333,7 +332,7 @@ public class TimeoutTest {
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
-  @RetryingTest(3)
+  @Test
   public void parentTimeoutInheritedByChild() throws Exception {
 
     var simpleService = DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
