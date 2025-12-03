@@ -343,11 +343,11 @@ public class DBOSClient implements AutoCloseable {
         new StartWorkflowOptions(
             Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString()),
             Timeout.of(options.timeout()),
+            options.deadline,
             Objects.requireNonNull(
                 options.queueName(), "EnqueueOptions queueName must not be null"),
             options.deduplicationId,
-            options.priority,
-            options.deadline),
+            options.priority),
         null,
         null,
         options.appVersion,

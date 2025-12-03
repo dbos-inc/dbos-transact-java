@@ -411,8 +411,7 @@ public class DBOSExecutor implements AutoCloseable {
         throw new RuntimeException(t.getMessage(), t);
       }
     } else {
-      // Note that this shouldn't happen because the result is always wrapped in an
-      // array, making
+      // Note that this shouldn't happen because the result is always wrapped in an array, making
       // output not null.
       throw new IllegalStateException(
           String.format("Recorded output and error are both null for %s", functionName));
@@ -771,6 +770,27 @@ public class DBOSExecutor implements AutoCloseable {
         capturedInvocation.get(), "The startWorkflow lambda must call exactly one @Workflow");
   }
 
+  record TimeoutAndDuration(Duration timeout, Instant duration) {}
+
+  static TimeoutAndDuration getTimeoutAndDuration(
+      DBOSContext ctx, Timeout timeoutOverride, Instant deadlineOverride) {
+    var nextTimeout = Objects.requireNonNullElse(timeoutOverride, ctx.getNextTimeout());
+    var nextDeadline = Objects.requireNonNullElse(deadlineOverride, ctx.getNextDeadline());
+
+    Duration timeout = ctx.getTimeout();
+    Instant deadline = ctx.getDeadline();
+    if (nextDeadline != null) {
+      deadline = nextDeadline;
+    } else if (nextTimeout instanceof Timeout.None) {
+      timeout = null;
+      deadline = null;
+    } else if (nextTimeout instanceof Timeout.Explicit e) {
+      timeout = e.value();
+      deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
+    }
+    return new TimeoutAndDuration(timeout, deadline);
+  }
+
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
@@ -779,6 +799,8 @@ public class DBOSExecutor implements AutoCloseable {
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
     var invocation = captureInvocation(supplier);
+    var tod = getTimeoutAndDuration(ctx, options.timeout(), options.deadline());
+    options = options.withTimeout(tod.timeout()).withDeadline(tod.duration());
 
     return executeWorkflow(invocation, options, parent);
   }
@@ -789,25 +811,12 @@ public class DBOSExecutor implements AutoCloseable {
 
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
-    var nextTimeout = ctx.getNextTimeout();
-    var nextDeadline = ctx.getNextDeadline();
+    var tod = getTimeoutAndDuration(ctx, null, null);
 
-    // default to context timeout & deadline if nextTimeout is null or Inherit
-    Duration timeout = ctx.getTimeout();
-    Instant deadline = ctx.getDeadline();
-    if (nextDeadline != null) {
-      deadline = nextDeadline;
-    } else if (nextTimeout instanceof Timeout.None) {
-      // clear timeout and deadline to null if nextTimeout is None
-      timeout = null;
-      deadline = null;
-    } else if (nextTimeout instanceof Timeout.Explicit e) {
-      // set the timeout and deadline if nextTimeout is Explicit
-      timeout = e.value();
-      deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
-    }
-
-    var options = new StartWorkflowOptions().withTimeout(timeout).withDeadline(deadline);
+    var options =
+        new StartWorkflowOptions(ctx.getNextWorkflowId())
+            .withTimeout(tod.timeout())
+            .withDeadline(tod.duration());
     return executeWorkflow(invocation, options, parent);
   }
 
