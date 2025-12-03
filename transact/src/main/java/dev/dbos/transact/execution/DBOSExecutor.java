@@ -757,6 +757,20 @@ public class DBOSExecutor implements AutoCloseable {
         capturedInvocation.get(), "The startWorkflow lambda must call exactly one @Workflow");
   }
 
+  private static WorkflowInfo getParent(DBOSContext ctx) {
+    Objects.requireNonNull(ctx);
+    if (ctx.isInWorkflow()) {
+      if (ctx.isInStep()) {
+        throw new IllegalStateException("cannot invoke a workflow from a step");
+      }
+
+      var workflowId = ctx.getWorkflowId();
+      var functionId = ctx.getAndIncrementFunctionId();
+      return new WorkflowInfo(workflowId, functionId);
+    }
+    return null;
+  }
+
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
@@ -765,14 +779,11 @@ public class DBOSExecutor implements AutoCloseable {
     var invocation = captureInvocation(supplier);
 
     var ctx = DBOSContextHolder.get();
-    Integer functionId = null;
+    var parent = getParent(ctx);
+    var childWorkflowId = parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
-    if (ctx.isInWorkflow()) {
-      if (ctx.isInStep()) {
-        throw new IllegalStateException("cannot invoke a workflow from a step");
-      }
-      functionId = ctx.getAndIncrementFunctionId();
-    }
+    Integer functionId = parent != null ? parent.functionId() : null;
+
 
     if (options.workflowId() == null) {
       options = options.withWorkflowId(ctx.getNextWorkflowId());
@@ -829,20 +840,8 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalCallerException();
     }
 
-    WorkflowInfo parent = null;
-    String childWorkflowId = null;
-
-    if (ctx.isInWorkflow()) {
-      if (ctx.isInStep()) {
-        throw new IllegalStateException("cannot invoke a workflow from a step");
-      }
-
-      var workflowId = ctx.getWorkflowId();
-      var functionId = ctx.getAndIncrementFunctionId();
-      parent = new WorkflowInfo(workflowId, functionId);
-
-      childWorkflowId = "%s-%d".formatted(ctx.getWorkflowId(), functionId);
-    }
+    WorkflowInfo parent = getParent(ctx);
+    String childWorkflowId = parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
     var workflowId =
         Objects.requireNonNullElseGet(
