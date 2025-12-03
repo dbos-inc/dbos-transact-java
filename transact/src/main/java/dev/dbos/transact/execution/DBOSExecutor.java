@@ -942,7 +942,10 @@ public class DBOSExecutor implements AutoCloseable {
 
     logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
 
-    var workflowId = options.workflowId();
+    var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
+    if (workflowId.isEmpty()) {
+      throw new IllegalArgumentException("workflowId cannot be empty");
+    }
     WorkflowInitResult initResult = null;
     try {
       initResult =
