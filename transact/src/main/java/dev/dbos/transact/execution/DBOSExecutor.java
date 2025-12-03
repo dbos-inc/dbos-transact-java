@@ -54,6 +54,7 @@ import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -814,7 +815,7 @@ public class DBOSExecutor implements AutoCloseable {
             () ->
                 Objects.requireNonNullElseGet(
                     ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
-    options = options.withWorkflowId(workflowId); //.withDeadline(deadline).withTimeout(timeout);
+    options = options.withWorkflowId(workflowId); // .withDeadline(deadline).withTimeout(timeout);
 
     return executeWorkflow(workflow, invocation.args(), options, parent);
   }
@@ -855,8 +856,7 @@ public class DBOSExecutor implements AutoCloseable {
       deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
     }
 
-    var options =
-        new StartWorkflowOptions(workflowId).withTimeout(timeout).withDeadline(deadline);
+    var options = new StartWorkflowOptions(workflowId).withTimeout(timeout).withDeadline(deadline);
     return executeWorkflow(workflow, args, options, parent);
   }
 
@@ -922,32 +922,32 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalArgumentException("workflowId cannot be empty");
     }
     WorkflowInitResult initResult = null;
-      initResult =
-          preInvokeWorkflow(
-              systemDatabase,
-              workflow.name(),
-              workflow.className(),
-              workflow.instanceName(),
-              maxRetries,
-              args,
-              workflowId,
-              null,
-              null,
-              null,
-              executorId(),
-              appVersion(),
-              parent,
-              options.getTimeoutDuration(),
-              options.deadline());
-      if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
-        return retrieveWorkflow(workflowId);
-      } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
-        logger.warn("Idempotency check not impl for error");
-      } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
-        logger.warn("Idempotency check not impl for cancelled");
-      }
+    initResult =
+        preInvokeWorkflow(
+            systemDatabase,
+            workflow.name(),
+            workflow.className(),
+            workflow.instanceName(),
+            maxRetries,
+            args,
+            workflowId,
+            null,
+            null,
+            null,
+            executorId(),
+            appVersion(),
+            parent,
+            options.getTimeoutDuration(),
+            options.deadline());
+    if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+      return retrieveWorkflow(workflowId);
+    } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+      logger.warn("Idempotency check not impl for error");
+    } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+      logger.warn("Idempotency check not impl for cancelled");
+    }
 
-    Callable<T> task =
+    Supplier<T> task =
         () -> {
           DBOSContextHolder.clear();
           try {
@@ -1004,7 +1004,7 @@ public class DBOSExecutor implements AutoCloseable {
       return retrieveWorkflow(workflowId);
     }
 
-    var future = executorService.submit(task);
+    var future = CompletableFuture.supplyAsync(task, executorService);
     if (newTimeout > 0) {
       timeoutScheduler.schedule(
           () -> {
