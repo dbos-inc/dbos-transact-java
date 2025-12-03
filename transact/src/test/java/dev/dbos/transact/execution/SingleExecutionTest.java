@@ -306,15 +306,15 @@ public class SingleExecutionTest {
 
     wfh1.getResult();
     wfh2.getResult();
-    // TODO assertEquals(TryConcExec.maxConc, 1);
-    // TODO assertEquals(TryConcExec.maxWf, 1);
+    // TODO assertEquals(1, TryConcExec.maxConc);
+    // TODO assertEquals(1, TryConcExec.maxWf);
 
     var wfh1r = reexecuteWorkflowById(workflowUUID);
     var wfh2r = reexecuteWorkflowById(workflowUUID);
     wfh1r.getResult();
     wfh2r.getResult();
-    // TODO assertEquals(TryConcExec.maxConc, 1);
-    // TODO assertEquals(TryConcExec.maxWf, 1);
+    // TODO assertEquals(1, TryConcExec.maxConc);
+    // TODO assertEquals(1, TryConcExec.maxWf);
   }
 
   @Test
@@ -371,5 +371,27 @@ public class SingleExecutionTest {
     assertTrue(UsingFinallyClause.started);
     assertTrue(UsingFinallyClause.completed);
     assertTrue(!UsingFinallyClause.trouble);
+  }
+
+  @Test
+  void testStepSequence() throws Exception {
+    var workflowUUID = UUID.randomUUID().toString();
+
+    var wfh1 =
+        DBOS.startWorkflow(
+            () -> {
+              concIfc.testConcWorkflow();
+            },
+            new StartWorkflowOptions(workflowUUID));
+    var wfh2 =
+        DBOS.startWorkflow(
+            () -> {
+              concIfc.testConcWorkflow();
+            },
+            new StartWorkflowOptions(workflowUUID));
+
+    wfh1.getResult();
+    wfh2.getResult();
+    // assertEquals(2, TryConcExec2.curStep);
   }
 }
