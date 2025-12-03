@@ -27,10 +27,10 @@ import java.util.concurrent.TimeUnit;
 public record StartWorkflowOptions(
     String workflowId,
     Timeout timeout,
+    Instant deadline,
     String queueName,
     String deduplicationId,
-    Integer priority,
-    Instant deadline) {
+    Integer priority) {
 
   public StartWorkflowOptions {
     if (timeout instanceof Timeout.Explicit explicit) {
@@ -55,10 +55,10 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         workflowId,
         this.timeout,
+        this.deadline,
         this.queueName,
         this.deduplicationId,
-        this.priority,
-        this.deadline);
+        this.priority);
   }
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
@@ -70,10 +70,10 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         this.workflowId,
         timeout,
+        this.deadline,
         this.queueName,
         this.deduplicationId,
-        this.priority,
-        this.deadline);
+        this.priority);
   }
 
   /** Produces a new StartWorkflowOptions that overrides deadline value for the started workflow */
@@ -81,10 +81,10 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         this.workflowId,
         this.timeout,
+        deadline,
         this.queueName,
         this.deduplicationId,
-        this.priority,
-        deadline);
+        this.priority);
   }
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
@@ -102,16 +102,17 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         this.workflowId,
         Timeout.none(),
+        this.deadline,
         this.queueName,
         this.deduplicationId,
-        this.priority,
-        this.deadline);
+        this.priority);
   }
 
   /** Produces a new StartWorkflowOptions that assigns the started workflow to a queue */
   public StartWorkflowOptions withQueue(String queue) {
     return new StartWorkflowOptions(
-        this.workflowId, this.timeout, queue, this.deduplicationId, this.priority, this.deadline);
+        this.workflowId, this.timeout,
+        this.deadline, queue, this.deduplicationId, this.priority);
   }
 
   /** Produces a new StartWorkflowOptions that assigns the started workflow to a queue */
@@ -127,10 +128,10 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         this.workflowId,
         this.timeout,
+        this.deadline,
         this.queueName,
         deduplicationId,
-        this.priority,
-        this.deadline);
+        this.priority);
   }
 
   /**
@@ -141,10 +142,10 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         this.workflowId,
         this.timeout,
+        this.deadline,
         this.queueName,
         this.deduplicationId,
-        priority,
-        this.deadline);
+        priority);
   }
 
   /** Get the assigned workflow ID, replacing empty with null */

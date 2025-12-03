@@ -848,10 +848,10 @@ public class DBOSExecutor implements AutoCloseable {
           new StartWorkflowOptions(
               workflowId,
               Timeout.of(timeout),
+              deadline,
               ctx.getQueueName(),
               ctx.getDeduplicationId(),
-              ctx.getPriority(),
-              deadline);
+              ctx.getPriority());
       return executeWorkflow(workflow, args, options, parent, ctx.getStartWorkflowFuture());
     } finally {
       ctx.setStartedWorkflowId(workflowId);
