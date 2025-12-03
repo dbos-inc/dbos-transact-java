@@ -237,12 +237,6 @@ public class DBOSExecutor implements AutoCloseable {
     return this.appVersion;
   }
 
-  public RegisteredWorkflow getWorkflow(
-      String className, String instanceName, String workflowName) {
-    return workflowMap.get(
-        RegisteredWorkflow.fullyQualifiedWFName(className, instanceName, workflowName));
-  }
-
   public Collection<RegisteredWorkflow> getWorkflows() {
     return this.workflowMap.values();
   }
@@ -771,22 +765,41 @@ public class DBOSExecutor implements AutoCloseable {
     return null;
   }
 
+  private RegisteredWorkflow getWorkflow(Invocation inv) {
+    return getWorkflow(inv.className(), inv.instanceName(), inv.workflowName());
+  }
+
+  private RegisteredWorkflow getWorkflow(
+      String className, String instanceName, String workflowName) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
+    var workflow = workflowMap.get(fqName);
+    if (workflow == null) {
+      throw new IllegalStateException("%s workflow not registered".formatted(fqName));
+    }
+    return workflow;
+  }
+
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
     logger.debug("startWorkflow {}", options);
 
     var invocation = captureInvocation(supplier);
+    var workflow = getWorkflow(invocation);
 
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
-    var childWorkflowId = parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
+    var childWorkflowId =
+        parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
+
+      var workflowId =
+        Objects.requireNonNullElseGet(options.workflowId(), () -> Objects.requireNonNullElseGet(
+            ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
 
     Integer functionId = parent != null ? parent.functionId() : null;
 
-
     if (options.workflowId() == null) {
-      options = options.withWorkflowId(ctx.getNextWorkflowId());
+      options = options.withWorkflowId(workflowId);
     }
 
     CompletableFuture<String> future = new CompletableFuture<>();
@@ -819,29 +832,24 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
-      String clsName, String instName, String wfName, Object[] args) {
+      String className, String instanceName, String workflowName, Object[] args) {
 
-    logger.debug(
-        "invokeWorkflow {}({})",
-        RegisteredWorkflow.fullyQualifiedWFName(clsName, instName, wfName),
-        args);
+    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
+    logger.debug("invokeWorkflow {}({})", fqName, args);
 
-    var workflow = getWorkflow(clsName, instName, wfName);
-    if (workflow == null) {
-      throw new IllegalStateException(
-          "%s/%s/%s workflow not registered".formatted(clsName, instName, wfName));
-    }
+    var workflow = getWorkflow(className, instanceName, workflowName);
 
     var ctx = DBOSContextHolder.get();
     if (!ctx.validateStartedWorkflow()) {
       logger.error(
           "Attempting to call {} workflow from a startWorkflow lambda that has already invoked a workflow",
-          wfName);
+          workflow.fullyQualifiedName());
       throw new IllegalCallerException();
     }
 
     WorkflowInfo parent = getParent(ctx);
-    String childWorkflowId = parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
+    String childWorkflowId =
+        parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
     var workflowId =
         Objects.requireNonNullElseGet(
@@ -891,7 +899,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     Object[] inputs = status.input();
     var wfName =
-        RegisteredWorkflow.fullyQualifiedWFName(
+        RegisteredWorkflow.fullyQualifiedName(
             status.className(), status.instanceName(), status.name());
     RegisteredWorkflow workflow = workflowMap.get(wfName);
 
@@ -1071,7 +1079,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     logger.debug(
         "enqueueWorkflow {}({}) {}",
-        RegisteredWorkflow.fullyQualifiedWFName(className, instanceName, name),
+        RegisteredWorkflow.fullyQualifiedName(className, instanceName, name),
         args,
         options);
 
