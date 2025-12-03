@@ -792,23 +792,21 @@ public class DBOSExecutor implements AutoCloseable {
     var childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
-    // var nextTimeout = Objects.requireNonNullElse(options.timeout(), ctx.getNextTimeout());
-    // var nextDeadline = Objects.requireNonNullElse(options.deadline(), ctx.getNextDeadline());
+    var nextTimeout = options.timeout();
+    var nextDeadline = options.deadline();
 
-    // // default to context timeout & deadline if nextTimeout is null or Inherit
+    // default to context timeout & deadline if nextTimeout is null or Inherit
     // Duration timeout = ctx.getTimeout();
     // Instant deadline = ctx.getDeadline();
-    // if (nextDeadline != null) {
-    //   deadline = nextDeadline;
-    // } else if (nextTimeout instanceof Timeout.None) {
-    //   // clear timeout and deadline to null if nextTimeout is None
-    //   timeout = null;
-    //   deadline = null;
-    // } else if (nextTimeout instanceof Timeout.Explicit e) {
-    //   // set the timeout and deadline if nextTimeout is Explicit
-    //   timeout = e.value();
-    //   deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
-    // }
+    if (nextDeadline != null) {
+    } else if (nextTimeout instanceof Timeout.None) {
+      // clear timeout and deadline to null if nextTimeout is None
+      options = options.withDeadline(null);
+    } else if (nextTimeout instanceof Timeout.Explicit e) {
+      // set the timeout and deadline if nextTimeout is Explicit
+      var deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
+      options = options.withDeadline(deadline);
+    }
 
     var workflowId =
         Objects.requireNonNullElseGet(
