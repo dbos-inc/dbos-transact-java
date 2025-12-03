@@ -351,8 +351,7 @@ public class DBOSClient implements AutoCloseable {
         null,
         null,
         options.appVersion,
-        systemDatabase,
-        null);
+        systemDatabase);
   }
 
   /**
