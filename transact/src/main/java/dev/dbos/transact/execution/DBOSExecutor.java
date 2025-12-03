@@ -946,14 +946,14 @@ public class DBOSExecutor implements AutoCloseable {
               options.deadline(),
               isRecoveryRequest,
               isDequeuedRequest);
-      if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+      if (!initResult.shouldExecuteOnThisExecutor()) {
+        return retrieveWorkflow(workflowId);
+      } else if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
         return retrieveWorkflow(workflowId);
       } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
         logger.warn("Idempotency check not impl for error");
       } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
         logger.warn("Idempotency check not impl for cancelled");
-      } else if (!initResult.shouldExecuteOnThisExecutor()) {
-        return retrieveWorkflow(workflowId);
       }
     } catch (Exception e) {
       if (latch != null) {
