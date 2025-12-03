@@ -532,11 +532,6 @@ public class DBOSExecutor implements AutoCloseable {
   /** Retrieve the workflowHandle for the workflowId */
   public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {
     logger.debug("retrieveWorkflow {}", workflowId);
-    return retrieveWorkflow(workflowId, systemDatabase);
-  }
-
-  private static <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(
-      String workflowId, SystemDatabase systemDatabase) {
     return new WorkflowHandleDBPoll<R, E>(workflowId);
   }
 
@@ -1104,10 +1099,10 @@ public class DBOSExecutor implements AutoCloseable {
           parent,
           options.getTimeoutDuration(),
           options.deadline());
-      return retrieveWorkflow(workflowId, systemDatabase);
+      return new WorkflowHandleDBPoll<T, E>(workflowId);
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", workflowId);
-      return retrieveWorkflow(workflowId, systemDatabase);
+      return new WorkflowHandleDBPoll<T, E>(workflowId);
     } catch (Throwable e) {
       var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
       logger.error("enqueueWorkflow", actual);
