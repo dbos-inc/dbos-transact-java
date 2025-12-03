@@ -234,7 +234,7 @@ public class MigrationManager {
   public static List<String> getMigrations(String schema) {
     Objects.requireNonNull(schema);
     var migrations =
-        List.of(migration1, migration2, migration3, migration4, migration5, migration6);
+        List.of(migration1, migration2, migration3, migration4, migration5, migration6, migration7);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -393,5 +393,10 @@ public class MigrationManager {
               ON UPDATE CASCADE ON DELETE CASCADE
       );
       ALTER TABLE %1$s.streams ADD COLUMN function_id INTEGER NOT NULL DEFAULT 0;
+      """;
+
+  static final String migration7 =
+      """
+      ALTER TABLE %1$s."workflow_status" ADD COLUMN "owner_xid" VARCHAR(40) DEFAULT NULL
       """;
 }

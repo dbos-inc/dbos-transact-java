@@ -76,7 +76,7 @@ public class QueueService {
 
             for (String id : workflowIds) {
               logger.debug("Starting workflow {} from queue {}", id, queue.name());
-              dbosExecutor.executeWorkflowById(id);
+              dbosExecutor.executeWorkflowById(id, false, true);
             }
 
           } catch (Exception e) {

@@ -198,7 +198,7 @@ public class MultiInstTest {
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
-      var eh = dbosExecutor.executeWorkflowById(handle.workflowId());
+      var eh = dbosExecutor.executeWorkflowById(handle.workflowId(), false, true);
       eh.getResult();
       stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(

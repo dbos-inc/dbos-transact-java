@@ -10,7 +10,6 @@ import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.database.DbRetry;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.SystemDatabase;
@@ -281,7 +280,7 @@ public class DBOSExecutor implements AutoCloseable {
         return retrieveWorkflow(workflowId);
       }
     }
-    return executeWorkflowById(workflowId);
+    return executeWorkflowById(workflowId, true, false);
   }
 
   public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIDs) {
@@ -852,13 +851,15 @@ public class DBOSExecutor implements AutoCloseable {
               ctx.getDeduplicationId(),
               ctx.getPriority(),
               deadline);
-      return executeWorkflow(workflow, args, options, parent, ctx.getStartWorkflowFuture());
+      return executeWorkflow(
+          workflow, args, options, parent, ctx.getStartWorkflowFuture(), false, false);
     } finally {
       ctx.setStartedWorkflowId(workflowId);
     }
   }
 
-  public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(String workflowId) {
+  public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(
+      String workflowId, boolean isRecoveryRequest, boolean isDequeuedRequest) {
     logger.debug("executeWorkflowById {}", workflowId);
 
     var status = systemDatabase.getWorkflowStatus(workflowId);
@@ -881,7 +882,8 @@ public class DBOSExecutor implements AutoCloseable {
         new StartWorkflowOptions(workflowId)
             .withTimeout(status.getTimeout())
             .withDeadline(status.getDeadline());
-    return executeWorkflow(workflow, inputs, options, null, null);
+    return executeWorkflow(
+        workflow, inputs, options, null, null, isRecoveryRequest, isDequeuedRequest);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
@@ -889,7 +891,9 @@ public class DBOSExecutor implements AutoCloseable {
       Object[] args,
       StartWorkflowOptions options,
       WorkflowInfo parent,
-      CompletableFuture<String> latch) {
+      CompletableFuture<String> latch,
+      boolean isRecoveryRequest,
+      boolean isDequeuedRequest) {
 
     if (parent != null) {
       var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
@@ -939,13 +943,17 @@ public class DBOSExecutor implements AutoCloseable {
               appVersion(),
               parent,
               options.getTimeoutDuration(),
-              options.deadline());
+              options.deadline(),
+              isRecoveryRequest,
+              isDequeuedRequest);
       if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
         return retrieveWorkflow(workflowId);
       } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
         logger.warn("Idempotency check not impl for error");
       } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
         logger.warn("Idempotency check not impl for cancelled");
+      } else if (!initResult.shouldExecuteOnThisExecutor()) {
+        return retrieveWorkflow(workflowId);
       }
     } catch (Exception e) {
       if (latch != null) {
@@ -1075,7 +1083,9 @@ public class DBOSExecutor implements AutoCloseable {
           appVersion,
           parent,
           options.getTimeoutDuration(),
-          options.deadline());
+          options.deadline(),
+          false,
+          false);
       return retrieveWorkflow(workflowId, systemDatabase);
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", workflowId);
@@ -1109,7 +1119,9 @@ public class DBOSExecutor implements AutoCloseable {
       String appVersion,
       WorkflowInfo parentWorkflow,
       Duration timeout,
-      Instant deadline) {
+      Instant deadline,
+      boolean isRecoveryRequest,
+      boolean isDequeuedRequest) {
 
     if (inputs == null) {
       inputs = new Object[0];
@@ -1153,10 +1165,13 @@ public class DBOSExecutor implements AutoCloseable {
             deadlineEpochMs);
 
     WorkflowInitResult[] initResult = {null};
-    DbRetry.run(
-        () -> {
-          initResult[0] = systemDatabase.initWorkflowStatus(workflowStatusInternal, retries);
-        });
+    initResult[0] =
+        systemDatabase.initWorkflowStatus(
+            workflowStatusInternal,
+            retries,
+            isRecoveryRequest,
+            isDequeuedRequest,
+            UUID.randomUUID().toString());
 
     if (parentWorkflow != null) {
       systemDatabase.recordChildWorkflow(

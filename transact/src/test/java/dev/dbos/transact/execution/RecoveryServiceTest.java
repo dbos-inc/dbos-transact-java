@@ -202,7 +202,7 @@ class RecoveryServiceTest {
     // Recover workflow
     // This should use checkpointed step values
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-    h = dbosExecutor.executeWorkflowById(wfid);
+    h = dbosExecutor.executeWorkflowById(wfid, true, false);
     assertNull(h.getStatus().error());
     assertNull(h.getResult());
     assertEquals(executingServiceImpl.callsToThrowStep, 1);
@@ -212,7 +212,7 @@ class RecoveryServiceTest {
     // This should use 1 checkpointed step value
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     DBUtils.deleteStepOutput(dataSource, wfid, 1);
-    h = dbosExecutor.executeWorkflowById(wfid);
+    h = dbosExecutor.executeWorkflowById(wfid, true, false);
     assertNull(h.getStatus().error());
     assertNull(h.getResult());
     assertEquals(executingServiceImpl.callsToThrowStep, 1);

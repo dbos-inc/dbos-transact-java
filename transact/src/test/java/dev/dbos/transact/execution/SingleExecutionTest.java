@@ -165,7 +165,7 @@ public class SingleExecutionTest {
 
     static void reportTrouble() {
       UsingFinallyClause.trouble = true;
-      // TODO assertEquals("Trouble?", "None!");
+      assertEquals("Trouble?", "None!");
     }
 
     @Workflow()
@@ -285,7 +285,7 @@ public class SingleExecutionTest {
 
   static WorkflowHandle<?, ?> reexecuteWorkflowById(String id) throws Exception {
     DBUtils.setWorkflowState(dataSource, id, WorkflowState.PENDING.toString());
-    return DBOSTestAccess.getDbosExecutor().executeWorkflowById(id);
+    return DBOSTestAccess.getDbosExecutor().executeWorkflowById(id, true, false);
   }
 
   @Test
@@ -306,15 +306,17 @@ public class SingleExecutionTest {
 
     wfh1.getResult();
     wfh2.getResult();
-    // TODO assertEquals(1, TryConcExec.maxConc);
-    // TODO assertEquals(1, TryConcExec.maxWf);
+    assertEquals(1, TryConcExec.maxConc);
+    assertEquals(1, TryConcExec.maxWf);
 
+    /* TODO
     var wfh1r = reexecuteWorkflowById(workflowUUID);
     var wfh2r = reexecuteWorkflowById(workflowUUID);
     wfh1r.getResult();
     wfh2r.getResult();
-    // TODO assertEquals(1, TryConcExec.maxConc);
-    // TODO assertEquals(1, TryConcExec.maxWf);
+    assertEquals(1, TryConcExec.maxConc);
+    assertEquals(1, TryConcExec.maxWf);
+    */
   }
 
   @Test

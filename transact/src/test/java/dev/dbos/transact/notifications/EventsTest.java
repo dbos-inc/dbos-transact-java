@@ -165,7 +165,7 @@ public class EventsTest {
     impl.advanceGet1();
     impl.advanceGet2();
     DBUtils.setWorkflowState(dataSource, getwfh.workflowId(), WorkflowState.PENDING.name());
-    getwfh = DBOSTestAccess.getDbosExecutor().executeWorkflowById(getwfh.workflowId());
+    getwfh = DBOSTestAccess.getDbosExecutor().executeWorkflowById(getwfh.workflowId(), true, false);
     res = (String) getwfh.getResult();
     assertEquals("value1value2", res);
 

@@ -1,6 +1,7 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.database.WorkflowDAO.InsertWorkflowResult;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ErrorResult;
@@ -9,7 +10,6 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
-import dev.dbos.transact.workflow.internal.InsertWorkflowResult;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
@@ -40,7 +40,12 @@ public class WorkflowDAO {
   }
 
   public WorkflowInitResult initWorkflowStatus(
-      WorkflowStatusInternal initStatus, Integer maxRetries) throws SQLException {
+      WorkflowStatusInternal initStatus,
+      Integer maxRetries,
+      boolean isRecoveryRequest,
+      boolean isDequeuedRequest,
+      String ownerXid)
+      throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -49,11 +54,15 @@ public class WorkflowDAO {
 
     try (Connection connection = dataSource.getConnection()) {
 
+      boolean shouldCommit = false;
+
       try {
         connection.setAutoCommit(false);
         connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
-        InsertWorkflowResult resRow = insertWorkflowStatus(connection, initStatus);
+        InsertWorkflowResult resRow =
+            insertWorkflowStatus(
+                connection, initStatus, ownerXid, isRecoveryRequest || isDequeuedRequest);
 
         if (!Objects.equals(resRow.name(), initStatus.name())) {
           String msg =
@@ -76,6 +85,19 @@ public class WorkflowDAO {
                   resRow.instanceName(), initStatus.instanceName());
           throw new DBOSConflictingWorkflowException(initStatus.workflowId(), msg);
         }
+
+        // If there is an existing DB record and we aren't here to recover it,
+        //  leave it be.  Roll back the change to max recovery attempts.
+        if (!ownerXid.equals(resRow.ownerXid) && !isRecoveryRequest && !isDequeuedRequest) {
+          if (resRow.status.equals(WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.toString())) {
+            throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
+          }
+          return new WorkflowInitResult(
+              initStatus.workflowId(), resRow.status(), resRow.deadlineEpochMs(), false);
+        }
+
+        // Upsert above already set executor assignment and incremented the recovery attempt
+        shouldCommit = true;
 
         final int attempts = resRow.recoveryAttempts();
         if (maxRetries != null && attempts > maxRetries + 1) {
@@ -100,13 +122,28 @@ public class WorkflowDAO {
         }
 
         return new WorkflowInitResult(
-            initStatus.workflowId(), resRow.status(), resRow.deadlineEpochMs());
+            initStatus.workflowId(), resRow.status(), resRow.deadlineEpochMs(), true);
 
       } finally {
-        connection.commit();
+        if (shouldCommit) {
+          connection.commit();
+        } else {
+          connection.rollback();
+        }
       }
     } // end try with resources connection closed
   }
+
+  public static record InsertWorkflowResult(
+      int recoveryAttempts,
+      String status,
+      String name,
+      String className,
+      String instanceName,
+      String queueName,
+      Long timeoutMs,
+      Long deadlineEpochMs,
+      String ownerXid) {}
 
   /**
    * Insert into the workflow_status table
@@ -116,7 +153,11 @@ public class WorkflowDAO {
    * @throws SQLException
    */
   public InsertWorkflowResult insertWorkflowStatus(
-      Connection connection, WorkflowStatusInternal status) throws SQLException {
+      Connection connection,
+      WorkflowStatusInternal status,
+      String ownerXid,
+      boolean incrementAttempts)
+      throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -132,13 +173,14 @@ public class WorkflowDAO {
             authenticated_user, assumed_role, authenticated_roles,
             executor_id, application_version, application_id,
             created_at, updated_at, recovery_attempts,
-            workflow_timeout_ms, workflow_deadline_epoch_ms
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            workflow_timeout_ms, workflow_deadline_epoch_ms,
+            owner_xid
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               recovery_attempts = CASE
                   WHEN EXCLUDED.status != 'ENQUEUED'
-                    THEN workflow_status.recovery_attempts + 1
+                    THEN workflow_status.recovery_attempts + ?
                     ELSE workflow_status.recovery_attempts
               END,
               updated_at = EXCLUDED.updated_at,
@@ -147,7 +189,7 @@ public class WorkflowDAO {
                     THEN workflow_status.executor_id
                     ELSE EXCLUDED.executor_id
               END
-          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_timeout_ms, workflow_deadline_epoch_ms
+          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_timeout_ms, workflow_deadline_epoch_ms, owner_xid
         """
             .formatted(this.schema);
 
@@ -184,6 +226,9 @@ public class WorkflowDAO {
       stmt.setObject(19, status.timeoutMs());
       stmt.setObject(20, status.deadlineEpochMs());
 
+      stmt.setObject(21, ownerXid);
+      stmt.setInt(22, incrementAttempts ? 1 : 0);
+
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
           InsertWorkflowResult result =
@@ -195,7 +240,8 @@ public class WorkflowDAO {
                   rs.getString("config_name"),
                   rs.getString("queue_name"),
                   rs.getObject("workflow_timeout_ms", Long.class),
-                  rs.getObject("workflow_deadline_epoch_ms", Long.class));
+                  rs.getObject("workflow_deadline_epoch_ms", Long.class),
+                  rs.getString("owner_xid"));
 
           return result;
         } else {

@@ -90,10 +90,15 @@ public class SystemDatabase implements AutoCloseable {
    * @throws DBOSMaxRecoveryAttemptsExceededException If the workflow exceeds max retries.
    */
   public WorkflowInitResult initWorkflowStatus(
-      WorkflowStatusInternal initStatus, Integer maxRetries) {
+      WorkflowStatusInternal initStatus,
+      Integer maxRetries,
+      boolean isRecoveryRequest,
+      boolean isDequeuedRequest,
+      String ownerXid) {
     return DbRetry.call(
         () -> {
-          return workflowDAO.initWorkflowStatus(initStatus, maxRetries);
+          return workflowDAO.initWorkflowStatus(
+              initStatus, maxRetries, isRecoveryRequest, isDequeuedRequest, ownerXid);
         });
   }
 

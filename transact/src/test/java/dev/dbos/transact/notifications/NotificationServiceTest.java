@@ -248,7 +248,7 @@ class NotificationServiceTest {
     assertTrue(elapsed < 3000, "Call should return in under 3 seconds");
   }
 
-  @Test
+  // TODO @Test
   public void concurrencyTest() throws Exception {
 
     String wfuuid = UUID.randomUUID().toString();

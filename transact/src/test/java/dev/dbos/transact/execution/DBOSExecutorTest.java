@@ -74,7 +74,7 @@ class DBOSExecutorTest {
 
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
-    var handle = dbosExecutor.executeWorkflowById(wfid);
+    var handle = dbosExecutor.executeWorkflowById(wfid, true, false);
 
     result = (String) handle.getResult();
     assertEquals("test-itemtest-item", result);
@@ -108,7 +108,7 @@ class DBOSExecutorTest {
 
     boolean error = false;
     try {
-      dbosExecutor.executeWorkflowById("wf-124");
+      dbosExecutor.executeWorkflowById("wf-124", false, false);
     } catch (Exception e) {
       error = true;
       assert e instanceof DBOSNonExistentWorkflowException
@@ -144,7 +144,7 @@ class DBOSExecutorTest {
 
     boolean error = false;
     try {
-      dbosExecutor.executeWorkflowById(wfid);
+      dbosExecutor.executeWorkflowById(wfid, false, false);
     } catch (Exception e) {
       error = true;
       assert e instanceof DBOSWorkflowFunctionNotFoundException
@@ -185,7 +185,7 @@ class DBOSExecutorTest {
     steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(0, steps.size());
 
-    WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
+    WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
 
     result = handle.getResult();
     assertEquals("test-itemstepOnestepTwo", result);
@@ -230,7 +230,7 @@ class DBOSExecutorTest {
     steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(1, steps.size());
 
-    WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
+    WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
 
     result = handle.getResult();
     assertEquals("test-itemstepOnestepTwo", result);
@@ -301,7 +301,7 @@ class DBOSExecutorTest {
     DBUtils.updateStepEndTime(dataSource, wfid, steps.get(0).functionId(), endTimeAsJson);
 
     long starttime = System.currentTimeMillis();
-    var h = dbosExecutor.executeWorkflowById(wfid);
+    var h = dbosExecutor.executeWorkflowById(wfid, true, false);
     h.getResult();
 
     long duration = System.currentTimeMillis() - starttime;
