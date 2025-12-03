@@ -17,6 +17,8 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.AppVersionComputer;
+import dev.dbos.transact.internal.DBOSInvocationHandler;
+import dev.dbos.transact.internal.Invocation;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -51,6 +53,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -736,10 +739,35 @@ public class DBOSExecutor implements AutoCloseable {
         workflowId);
   }
 
+  private static <T, E extends Exception> Invocation captureInvocation(
+      ThrowingSupplier<T, E> supplier) {
+    AtomicReference<Invocation> capturedInvocation = new AtomicReference<>();
+    DBOSInvocationHandler.hookHolder.set(
+        (invocation) -> {
+          if (!capturedInvocation.compareAndSet(null, invocation)) {
+            throw new RuntimeException(
+                "Only one @Workflow can be called in the startWorkflow lambda");
+          }
+        });
+
+    try {
+      supplier.execute();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    } finally {
+      DBOSInvocationHandler.hookHolder.remove();
+    }
+
+    return Objects.requireNonNull(
+        capturedInvocation.get(), "The startWorkflow lambda must call exactly one @Workflow");
+  }
+
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
     logger.debug("startWorkflow {}", options);
+
+    var invocation = captureInvocation(supplier);
 
     var ctx = DBOSContextHolder.get();
     Integer functionId = null;

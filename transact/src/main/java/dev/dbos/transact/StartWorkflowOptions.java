@@ -111,8 +111,7 @@ public record StartWorkflowOptions(
   /** Produces a new StartWorkflowOptions that assigns the started workflow to a queue */
   public StartWorkflowOptions withQueue(String queue) {
     return new StartWorkflowOptions(
-        this.workflowId, this.timeout,
-        this.deadline, queue, this.deduplicationId, this.priority);
+        this.workflowId, this.timeout, this.deadline, queue, this.deduplicationId, this.priority);
   }
 
   /** Produces a new StartWorkflowOptions that assigns the started workflow to a queue */
