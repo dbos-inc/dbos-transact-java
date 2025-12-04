@@ -168,9 +168,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void recordStepResultTxn(StepResult result, long startTime) {
+    var et = System.currentTimeMillis();
     DbRetry.run(
         () -> {
-          StepsDAO.recordStepResultTxn(dataSource, result, startTime, this.schema);
+          StepsDAO.recordStepResultTxn(dataSource, result, startTime, et, this.schema);
         });
   }
 

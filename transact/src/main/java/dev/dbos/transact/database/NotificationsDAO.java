@@ -96,7 +96,8 @@ public class NotificationsDAO {
 
         // Record operation result
         var output = new StepResult(workflowUuid, functionId, functionName);
-        StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
+        StepsDAO.recordStepResultTxn(
+            output, startTime, System.currentTimeMillis(), conn, this.schema);
 
         conn.commit();
 
@@ -245,7 +246,8 @@ public class NotificationsDAO {
         StepResult output =
             new StepResult(workflowUuid, functionId, functionName)
                 .withOutput(JSONUtil.serialize(toSave));
-        StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
+        StepsDAO.recordStepResultTxn(
+            output, startTime, System.currentTimeMillis(), conn, this.schema);
 
         conn.commit();
         return toSave;
@@ -329,7 +331,8 @@ public class NotificationsDAO {
         if (asStep) {
           // Record the operation result
           StepResult output = new StepResult(workflowId, functionId, functionName);
-          StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
+          StepsDAO.recordStepResultTxn(
+              output, startTime, System.currentTimeMillis(), conn, this.schema);
         }
 
         conn.commit();
@@ -456,7 +459,8 @@ public class NotificationsDAO {
         StepResult output =
             new StepResult(callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName)
                 .withOutput(JSONUtil.serialize(value));
-        StepsDAO.recordStepResultTxn(dataSource, output, startTime, this.schema);
+        StepsDAO.recordStepResultTxn(
+            dataSource, output, startTime, System.currentTimeMillis(), this.schema);
       }
 
       return value;

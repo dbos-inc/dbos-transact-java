@@ -415,12 +415,11 @@ public class SingleExecutionTest {
   @Test
   void testCommitHiccups() throws InterruptedException {
     assertEquals("Yay!", execIfc.testWorkflow());
-    /*
+
     DebugTriggers.setDebugTrigger(
         DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT,
         new DebugTriggers.DebugAction().setSqlExceptionToThrow(new SQLTransientException()));
     assertEquals("Yay!", execIfc.testWorkflow());
-    */
 
     DebugTriggers.setDebugTrigger(
         DebugTriggers.DEBUG_TRIGGER_INITWF_COMMIT,

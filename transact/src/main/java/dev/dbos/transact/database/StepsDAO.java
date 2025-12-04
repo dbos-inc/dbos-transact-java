@@ -31,20 +31,28 @@ public class StepsDAO {
   }
 
   public static void recordStepResultTxn(
-      HikariDataSource dataSource, StepResult result, long startTimeEpochMs, String schema)
+      HikariDataSource dataSource,
+      StepResult result,
+      long startTimeEpochMs,
+      long endTimeEpochMs,
+      String schema)
       throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
 
     try (Connection connection = dataSource.getConnection(); ) {
-      recordStepResultTxn(result, startTimeEpochMs, connection, schema);
+      recordStepResultTxn(result, startTimeEpochMs, endTimeEpochMs, connection, schema);
     }
     DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
   }
 
   public static void recordStepResultTxn(
-      StepResult result, Long startTimeEpochMs, Connection connection, String schema)
+      StepResult result,
+      Long startTimeEpochMs,
+      Long endTimeEpochMs,
+      Connection connection,
+      String schema)
       throws SQLException {
 
     Objects.requireNonNull(schema);
@@ -53,6 +61,7 @@ public class StepsDAO {
           INSERT INTO %s.operation_outputs
             (workflow_uuid, function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT DO NOTHING RETURNING completed_at_epoch_ms
         """
             .formatted(schema);
 
@@ -80,11 +89,20 @@ public class StepsDAO {
       }
 
       pstmt.setObject(7, startTimeEpochMs);
-      Long endTime = startTimeEpochMs == null ? null : System.currentTimeMillis();
-      pstmt.setObject(8, endTime);
+      pstmt.setObject(8, endTimeEpochMs);
 
-      pstmt.executeUpdate();
-
+      try (ResultSet rs = pstmt.executeQuery()) {
+        if (rs.next() && endTimeEpochMs != null) {
+          long completedAt = rs.getLong("completed_at_epoch_ms");
+          logger.warn(
+              String.format(
+                  "Step output for %s:%d-%s was already recorded",
+                  result.workflowId(), result.stepId(), result.functionName()));
+          if (completedAt != endTimeEpochMs) {
+            throw new DBOSWorkflowExecutionConflictException(result.workflowId());
+          }
+        }
+      }
     } catch (SQLException e) {
       logger.debug("recordStepResultTxn error", e);
       if ("23505".equals(e.getSQLState())) {
@@ -300,7 +318,7 @@ public class StepsDAO {
         StepResult output =
             new StepResult(workflowUuid, functionId, functionName)
                 .withOutput(JSONUtil.serialize(endTime));
-        recordStepResultTxn(dataSource, output, startTime, schema);
+        recordStepResultTxn(dataSource, output, startTime, (long) endTime, schema);
       } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
       }
