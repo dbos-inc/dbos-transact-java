@@ -14,7 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class DBOSInvocationHandler implements InvocationHandler {
-
+  public static final ThreadLocal<StartWorkflowHook> hookHolder = new ThreadLocal<>();
   private static final Logger logger = LoggerFactory.getLogger(DBOSInvocationHandler.class);
 
   private final Object target;
@@ -47,11 +47,17 @@ public class DBOSInvocationHandler implements InvocationHandler {
 
   public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
 
-    Method implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
+    var implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
+    var hook = hookHolder.get();
 
     var wfTag = implMethod.getAnnotation(Workflow.class);
     if (wfTag != null) {
-      return handleWorkflow(implMethod, args, wfTag);
+      return handleWorkflow(implMethod, args, wfTag, hook);
+    }
+
+    if (hook != null) {
+      throw new RuntimeException(
+          "Only @Workflow functions may be called from the startWorkflow lambda");
     }
 
     var stepTag = implMethod.getAnnotation(Step.class);
@@ -62,16 +68,41 @@ public class DBOSInvocationHandler implements InvocationHandler {
     return method.invoke(target, args);
   }
 
-  protected Object handleWorkflow(Method method, Object[] args, Workflow workflow)
-      throws Exception {
+  static Object defaultReturn(Method method) {
+    var type = method.getReturnType();
+
+    if (type.isPrimitive()) {
+      if (type == void.class) return null;
+      if (type == boolean.class) return false;
+      if (type == byte.class) return (byte) 0;
+      if (type == short.class) return (short) 0;
+      if (type == int.class) return 0;
+      if (type == long.class) return 0L;
+      if (type == float.class) return 0f;
+      if (type == double.class) return 0d;
+      if (type == char.class) return '\0';
+    }
+
+    return null;
+  }
+
+  protected Object handleWorkflow(
+      Method method, Object[] args, Workflow workflow, StartWorkflowHook hook) throws Exception {
+    var className = target.getClass().getName();
+    var workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
+    if (hook != null) {
+      var invocation = new Invocation(className, instanceName, workflowName, args);
+      hook.invoke(invocation);
+      return defaultReturn(method);
+    }
+
     var executor = executorSupplier.get();
     if (executor == null) {
       throw new IllegalStateException("executorSupplier returned null");
     }
 
-    var clsName = target.getClass().getName();
-    var wfName = workflow.name().isEmpty() ? method.getName() : workflow.name();
-    var handle = executor.invokeWorkflow(clsName, instanceName, wfName, args);
+    var handle = executor.invokeWorkflow(className, instanceName, workflowName, args);
+
     // This is not really a getResult call - it is part of invocation which will be written
     //  as its own step entry.
     var ctx = DBOSContextHolder.get();

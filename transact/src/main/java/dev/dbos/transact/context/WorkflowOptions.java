@@ -19,13 +19,15 @@ import java.util.concurrent.TimeUnit;
 public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadline) {
 
   public WorkflowOptions {
-    if (timeout != null && timeout instanceof Timeout.Explicit explicit) {
+    if (timeout instanceof Timeout.Explicit explicit) {
       if (explicit.value().isNegative() || explicit.value().isZero()) {
-        throw new IllegalArgumentException("timeout must be a positive non-zero duration");
-      }
-      if (deadline != null && timeout instanceof Timeout.Explicit) {
         throw new IllegalArgumentException(
-            "WorkflowOptions may not specify both `timeout` and `deadline`");
+            "WorkflowOptions explicit timeout must be a positive non-zero duration");
+      }
+
+      if (deadline != null) {
+        throw new IllegalArgumentException(
+            "WorkflowOptions explicit timeout and deadline cannot both be set");
       }
     }
   }
