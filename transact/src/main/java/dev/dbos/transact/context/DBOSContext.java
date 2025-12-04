@@ -5,7 +5,6 @@ import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 public class DBOSContext {
@@ -14,8 +13,6 @@ public class DBOSContext {
   String nextWorkflowId;
   Timeout nextTimeout;
   Instant nextDeadline;
-  StartWorkflowOptions startOptions;
-  String startedWorkflowId;
 
   // current workflow fields
   private final String workflowId;
@@ -24,7 +21,6 @@ public class DBOSContext {
   private final WorkflowInfo parent;
   private final Duration timeout;
   private final Instant deadline;
-  private CompletableFuture<String> startWorkflowFuture;
 
   // private StepStatus stepStatus;
 
@@ -58,14 +54,6 @@ public class DBOSContext {
     this.parent = other.parent;
     this.timeout = other.timeout;
     this.deadline = other.deadline;
-
-    if (other.startedWorkflowId != null) {
-      throw new IllegalStateException("startedWorkflowId not null");
-    }
-
-    this.startOptions = options;
-    this.startWorkflowFuture = future;
-    this.startedWorkflowId = null;
   }
 
   public boolean isInWorkflow() {
@@ -109,9 +97,6 @@ public class DBOSContext {
   }
 
   public String getNextWorkflowId(String workflowId) {
-    if (startOptions != null && startOptions.workflowId() != null) {
-      return startOptions.workflowId();
-    }
     if (nextWorkflowId != null) {
       var value = nextWorkflowId;
       this.nextWorkflowId = null;
@@ -122,10 +107,6 @@ public class DBOSContext {
   }
 
   public Timeout getNextTimeout() {
-    if (startOptions != null && startOptions.timeout() != null) {
-      return startOptions.timeout();
-    }
-
     return nextTimeout;
   }
 
@@ -134,64 +115,11 @@ public class DBOSContext {
   }
 
   public Instant getNextDeadline() {
-    if (startOptions != null && startOptions.deadline() != null) {
-      return startOptions.deadline();
-    }
-
     return nextDeadline;
   }
 
   public Instant getDeadline() {
     return deadline;
-  }
-
-  public String getQueueName() {
-    if (startOptions != null) {
-      return startOptions.queueName();
-    }
-    return null;
-  }
-
-  public String getDeduplicationId() {
-    if (startOptions != null) {
-      return startOptions.deduplicationId();
-    }
-    return null;
-  }
-
-  public Integer getPriority() {
-    if (startOptions != null) {
-      return startOptions.priority();
-    }
-    return null;
-  }
-
-  public void setStartOptions(StartWorkflowOptions options, CompletableFuture<String> future) {
-    if (startedWorkflowId != null) {
-      throw new IllegalStateException();
-    }
-    startOptions = options;
-    startWorkflowFuture = future;
-  }
-
-  public boolean validateStartedWorkflow() {
-    return startOptions == null || startedWorkflowId == null;
-  }
-
-  public void setStartedWorkflowId(String workflowId) {
-    if (startOptions != null) {
-      if (startedWorkflowId != null) {
-        throw new IllegalStateException(
-            String.format(
-                "more than one workflow called from start workflow lambda: %s %s",
-                workflowId, startedWorkflowId));
-      }
-      startedWorkflowId = Objects.requireNonNull(workflowId, "workflowId must not be null");
-    }
-  }
-
-  public CompletableFuture<String> getStartWorkflowFuture() {
-    return this.startWorkflowFuture;
   }
 
   public static String workflowId() {

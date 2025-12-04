@@ -37,13 +37,13 @@ public record RegisteredWorkflow(
         maxRecoveryAttempts);
   }
 
-  public static String fullyQualifiedWFName(
+  public static String fullyQualifiedName(
       String className, String instanceName, String workflowName) {
     return String.format("%s/%s/%s", className, instanceName, workflowName);
   }
 
   public String fullyQualifiedName() {
-    return fullyQualifiedWFName(className, instanceName, name);
+    return fullyQualifiedName(className, instanceName, name);
   }
 
   @SuppressWarnings("unchecked")

@@ -10,6 +10,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Timeout;
 
@@ -19,7 +20,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -152,7 +152,7 @@ public class DirectInvocationTest {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(1));
     try (var _o = options.setContext()) {
-      assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
+      assertThrows(DBOSAwaitedWorkflowCancelledException.class, () -> proxy.sleepWorkflow(10L));
     }
 
     var rows = DBUtils.getWorkflowRows(dataSource);
@@ -169,7 +169,7 @@ public class DirectInvocationTest {
     var options =
         new WorkflowOptions().withDeadline(Instant.ofEpochMilli(System.currentTimeMillis() + 1000));
     try (var _o = options.setContext()) {
-      assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
+      assertThrows(DBOSAwaitedWorkflowCancelledException.class, () -> proxy.sleepWorkflow(10L));
     }
 
     var rows = DBUtils.getWorkflowRows(dataSource);
@@ -186,7 +186,7 @@ public class DirectInvocationTest {
     var workflowId = "directInvokeSetWorkflowIdTimeoutCancellation";
     var options = new WorkflowOptions(workflowId).withTimeout(Duration.ofSeconds(1));
     try (var _o = options.setContext()) {
-      assertThrows(CancellationException.class, () -> proxy.sleepWorkflow(10L));
+      assertThrows(DBOSAwaitedWorkflowCancelledException.class, () -> proxy.sleepWorkflow(10L));
     }
 
     var rows = DBUtils.getWorkflowRows(dataSource);

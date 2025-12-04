@@ -27,15 +27,21 @@ import java.util.concurrent.TimeUnit;
 public record StartWorkflowOptions(
     String workflowId,
     Timeout timeout,
+    Instant deadline,
     String queueName,
     String deduplicationId,
-    Integer priority,
-    Instant deadline) {
+    Integer priority) {
 
   public StartWorkflowOptions {
     if (timeout instanceof Timeout.Explicit explicit) {
       if (explicit.value().isNegative() || explicit.value().isZero()) {
-        throw new IllegalArgumentException("timeout must be a positive non-zero duration");
+        throw new IllegalArgumentException(
+            "StartWorkflowOptions explicit timeout must be a positive non-zero duration");
+      }
+
+      if (deadline != null) {
+        throw new IllegalArgumentException(
+            "StartWorkflowOptions explicit timeout and deadline cannot both be set");
       }
     }
   }
@@ -55,36 +61,21 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         workflowId,
         this.timeout,
+        this.deadline,
         this.queueName,
         this.deduplicationId,
-        this.priority,
-        this.deadline);
+        this.priority);
   }
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
   public StartWorkflowOptions withTimeout(Timeout timeout) {
-    if (timeout != null && this.deadline != null) {
-      throw new IllegalArgumentException(
-          "should not specify a timeout if the deadline is already set");
-    }
     return new StartWorkflowOptions(
         this.workflowId,
         timeout,
+        this.deadline,
         this.queueName,
         this.deduplicationId,
-        this.priority,
-        this.deadline);
-  }
-
-  /** Produces a new StartWorkflowOptions that overrides deadline value for the started workflow */
-  public StartWorkflowOptions withDeadline(Instant deadline) {
-    return new StartWorkflowOptions(
-        this.workflowId,
-        this.timeout,
-        this.queueName,
-        this.deduplicationId,
-        this.priority,
-        deadline);
+        this.priority);
   }
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
@@ -102,16 +93,27 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         this.workflowId,
         Timeout.none(),
+        this.deadline,
         this.queueName,
         this.deduplicationId,
-        this.priority,
-        this.deadline);
+        this.priority);
+  }
+
+  /** Produces a new StartWorkflowOptions that overrides deadline value for the started workflow */
+  public StartWorkflowOptions withDeadline(Instant deadline) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority);
   }
 
   /** Produces a new StartWorkflowOptions that assigns the started workflow to a queue */
   public StartWorkflowOptions withQueue(String queue) {
     return new StartWorkflowOptions(
-        this.workflowId, this.timeout, queue, this.deduplicationId, this.priority, this.deadline);
+        this.workflowId, this.timeout, this.deadline, queue, this.deduplicationId, this.priority);
   }
 
   /** Produces a new StartWorkflowOptions that assigns the started workflow to a queue */
@@ -127,10 +129,10 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         this.workflowId,
         this.timeout,
+        this.deadline,
         this.queueName,
         deduplicationId,
-        this.priority,
-        this.deadline);
+        this.priority);
   }
 
   /**
@@ -141,23 +143,15 @@ public record StartWorkflowOptions(
     return new StartWorkflowOptions(
         this.workflowId,
         this.timeout,
+        this.deadline,
         this.queueName,
         this.deduplicationId,
-        priority,
-        this.deadline);
+        priority);
   }
 
   /** Get the assigned workflow ID, replacing empty with null */
   @Override
   public String workflowId() {
     return workflowId != null && workflowId.isEmpty() ? null : workflowId;
-  }
-
-  /** Get timeout duration */
-  public Duration getTimeoutDuration() {
-    if (timeout instanceof Timeout.Explicit e) {
-      return e.value();
-    }
-    return null;
   }
 }

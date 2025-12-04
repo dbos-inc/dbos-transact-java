@@ -14,7 +14,6 @@ import dev.dbos.transact.utils.DBUtils;
 import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
@@ -23,7 +22,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junitpioneer.jupiter.RetryingTest;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class TimeoutTest {
@@ -241,7 +239,7 @@ public class TimeoutTest {
       }
     } catch (Exception t) {
       assertNull(result);
-      assertTrue(t instanceof CancellationException);
+      assertTrue(t instanceof DBOSAwaitedWorkflowCancelledException);
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
@@ -334,7 +332,7 @@ public class TimeoutTest {
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
-  @RetryingTest(3)
+  @Test
   public void parentTimeoutInheritedByChild() throws Exception {
 
     var simpleService = DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());

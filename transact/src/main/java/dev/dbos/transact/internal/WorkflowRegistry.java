@@ -31,7 +31,7 @@ public class WorkflowRegistry {
       Method method,
       int maxRecoveryAttempts) {
 
-    var fqName = RegisteredWorkflow.fullyQualifiedWFName(className, instanceName, workflowName);
+    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
     var regWorkflow =
         new RegisteredWorkflow(workflowName, target, instanceName, method, maxRecoveryAttempts);
     SchedulerService.validateScheduledWorkflow(regWorkflow);
