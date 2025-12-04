@@ -138,7 +138,7 @@ public final class DebugTriggers {
   private static final Map<String, DebugPoint> pointLocations = new ConcurrentHashMap<>();
 
   /**
-   * Blocks the current thread according to the configured DebugAction.
+   * Proceed according to the configured DebugAction.
    *
    * <p>Order: 1. Record point + increment hit count 2. Sleep (if configured) 3. Run callback (if
    * configured) 4. Acquire semaphore (if configured) and block until someone releases
@@ -167,6 +167,7 @@ public final class DebugTriggers {
 
       SQLException sqle = action.getSqlExceptionToThrow();
       if (sqle != null) {
+        action.setSqlExceptionToThrow(null); // Only do once
         throw sqle;
       }
 

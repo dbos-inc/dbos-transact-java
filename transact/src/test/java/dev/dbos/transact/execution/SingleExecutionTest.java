@@ -8,6 +8,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
@@ -15,6 +16,7 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
+import java.sql.SQLTransientException;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -28,6 +30,10 @@ public class SingleExecutionTest {
     public void testConcStep() throws InterruptedException;
 
     public void testConcWorkflow() throws InterruptedException;
+
+    public String step1() throws InterruptedException;
+
+    public String testWorkflow() throws InterruptedException;
   }
 
   public static class TryConcExec implements TryConcExecIfc {
@@ -55,6 +61,17 @@ public class SingleExecutionTest {
       self.testConcStep();
       Thread.sleep(500);
       --TryConcExec.concWf;
+    }
+
+    @Step()
+    public String step1() throws InterruptedException {
+      Thread.sleep(1000);
+      return "Yay!";
+    }
+
+    @Workflow()
+    public String testWorkflow() throws InterruptedException {
+      return self.step1();
     }
   }
 
@@ -85,7 +102,7 @@ public class SingleExecutionTest {
 
     @Step()
     public void testCompleteAction() throws InterruptedException {
-      // TODO assertEquals(CatchPlainException1.started, true);
+      assertEquals(CatchPlainException1.started, true);
       Thread.sleep(1000);
       CatchPlainException1.completed = true;
     }
@@ -393,5 +410,21 @@ public class SingleExecutionTest {
     wfh1.getResult();
     wfh2.getResult();
     assertEquals(2, TryConcExec2.curStep);
+  }
+
+  @Test
+  void testCommitHiccups() throws InterruptedException {
+    assertEquals("Yay!", execIfc.testWorkflow());
+    /*
+    DebugTriggers.setDebugTrigger(
+        DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT,
+        new DebugTriggers.DebugAction().setSqlExceptionToThrow(new SQLTransientException()));
+    assertEquals("Yay!", execIfc.testWorkflow());
+    */
+
+    DebugTriggers.setDebugTrigger(
+        DebugTriggers.DEBUG_TRIGGER_INITWF_COMMIT,
+        new DebugTriggers.DebugAction().setSqlExceptionToThrow(new SQLTransientException()));
+    assertEquals("Yay!", execIfc.testWorkflow());
   }
 }
