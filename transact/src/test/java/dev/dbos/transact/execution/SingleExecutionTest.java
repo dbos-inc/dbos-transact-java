@@ -340,9 +340,9 @@ public class SingleExecutionTest {
     wfh2.getResult();
 
     // In our invocations above, there are no errors
-    // TODO assertTrue(CatchPlainException1.started);
-    // TODO assertTrue(CatchPlainException1.completed);
-    // assertTrue(!CatchPlainException1.trouble);
+    assertTrue(CatchPlainException1.started);
+    assertTrue(CatchPlainException1.completed);
+    assertTrue(!CatchPlainException1.trouble);
   }
 
   @Test
@@ -356,7 +356,6 @@ public class SingleExecutionTest {
             },
             new StartWorkflowOptions(workflowUUID));
 
-    /* TODO
     var wfh2 =
         DBOS.startWorkflow(
             () -> {
@@ -365,7 +364,6 @@ public class SingleExecutionTest {
             new StartWorkflowOptions(workflowUUID));
 
     wfh2.getResult();
-    */
 
     wfh1.getResult();
 
@@ -394,6 +392,6 @@ public class SingleExecutionTest {
 
     wfh1.getResult();
     wfh2.getResult();
-    // assertEquals(2, TryConcExec2.curStep);
+    assertEquals(2, TryConcExec2.curStep);
   }
 }
