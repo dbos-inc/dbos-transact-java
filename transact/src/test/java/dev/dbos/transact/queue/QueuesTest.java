@@ -99,14 +99,18 @@ public class QueuesTest {
 
     var options = new StartWorkflowOptions().withQueue(firstQ);
     var dedupeId = "dedupeId";
-    var h1 = DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("abc"), options.withDeduplicationId(dedupeId));
+    var h1 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("abc"), options.withDeduplicationId(dedupeId));
     var s1 = h1.getStatus();
     assertEquals(s1.queueName(), firstQ.name());
     assertEquals(s1.deduplicationId(), dedupeId);
 
     // enqueue with different dedupe ID should be fine
     var dedupeId2 = "different-dedupeId";
-    var h2 = DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("def"), options.withDeduplicationId(dedupeId2));
+    var h2 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("def"), options.withDeduplicationId(dedupeId2));
     var s2 = h2.getStatus();
     assertEquals(s2.queueName(), firstQ.name());
     assertEquals(s2.deduplicationId(), dedupeId2);
@@ -119,8 +123,9 @@ public class QueuesTest {
 
     assertThrows(
         RuntimeException.class,
-        () -> DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("jkl"), options.withDeduplicationId(dedupeId)));
-
+        () ->
+            DBOS.startWorkflow(
+                () -> serviceQ.simpleQWorkflow("jkl"), options.withDeduplicationId(dedupeId)));
 
     // enable queue service to run
     qs.unpause();
@@ -130,7 +135,9 @@ public class QueuesTest {
     h2.getResult();
     h3.getResult();
 
-    var h4 = DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("jkl"), options.withDeduplicationId(dedupeId));
+    var h4 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("jkl"), options.withDeduplicationId(dedupeId));
     h4.getResult();
 
     var rows = DBUtils.getWorkflowRows(dataSource);
