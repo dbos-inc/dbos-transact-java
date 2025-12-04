@@ -1,6 +1,7 @@
 package dev.dbos.transact.queue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -86,21 +87,60 @@ public class QueuesTest {
   @Test
   public void testDedupeId() throws Exception {
 
-    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
+    Queue firstQ = new Queue("firstQueue");
     DBOS.registerQueue(firstQ);
 
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
     DBOS.launch();
 
+    // pause queue service for test validation
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
-    var options = new StartWorkflowOptions().withQueue(firstQ).withDeduplicationId("dedupe");
-    DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
+    var options = new StartWorkflowOptions().withQueue(firstQ);
+    var dedupeId = "dedupeId";
+    var h1 = DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("abc"), options.withDeduplicationId(dedupeId));
+    var s1 = h1.getStatus();
+    assertEquals(s1.queueName(), firstQ.name());
+    assertEquals(s1.deduplicationId(), dedupeId);
+
+    // enqueue with different dedupe ID should be fine
+    var dedupeId2 = "different-dedupeId";
+    var h2 = DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("def"), options.withDeduplicationId(dedupeId2));
+    var s2 = h2.getStatus();
+    assertEquals(s2.queueName(), firstQ.name());
+    assertEquals(s2.deduplicationId(), dedupeId2);
+
+    // enqueue with no dedupe ID should be fine
+    var h3 = DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("ghi"), options);
+    var s3 = h3.getStatus();
+    assertEquals(s3.queueName(), firstQ.name());
+    assertNull(s3.deduplicationId());
 
     assertThrows(
         RuntimeException.class,
-        () -> DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("id"), options));
+        () -> DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("jkl"), options.withDeduplicationId(dedupeId)));
+
+
+    // enable queue service to run
+    qs.unpause();
+
+    // wait for initial workflow with initial dedupe ID to finish
+    h1.getResult();
+    h2.getResult();
+    h3.getResult();
+
+    var h4 = DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("jkl"), options.withDeduplicationId(dedupeId));
+    h4.getResult();
+
+    var rows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(4, rows.size());
+
+    for (var row : rows) {
+      assertEquals("SUCCESS", row.status());
+      assertEquals("firstQueue", row.queueName());
+      assertNull(row.deduplicationId());
+    }
   }
 
   @RetryingTest(3)
