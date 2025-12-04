@@ -780,6 +780,51 @@ public class DBOSExecutor implements AutoCloseable {
     return workflow;
   }
 
+  public record ExecutionOptions(
+      String workflowId,
+      Timeout timeout,
+      Instant deadline,
+      String queueName,
+      String deduplicationId,
+      Integer priority) {
+    public ExecutionOptions {
+      if (timeout instanceof Timeout.Explicit explicit) {
+        if (explicit.value().isNegative() || explicit.value().isZero()) {
+          throw new IllegalArgumentException("timeout must be a positive non-zero duration");
+        }
+      }
+    }
+
+    public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
+      this(workflowId, Timeout.of(timeout), deadline, null, null, null);
+    }
+
+    public Duration timeoutDuration() {
+      if (timeout instanceof Timeout.Explicit e) {
+        return e.value();
+      }
+      return null;
+    }
+
+    @Override
+    public String workflowId() {
+      return workflowId != null && workflowId.isEmpty() ? null : workflowId;
+    }
+  }
+
+  public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
+      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
+    var execOptions =
+        new ExecutionOptions(
+            options.workflowId(),
+            options.timeout(),
+            options.deadline(),
+            options.queueName(),
+            options.deduplicationId(),
+            options.priority());
+    return executeWorkflow(regWorkflow, args, execOptions, null);
+  }
+
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
@@ -793,20 +838,22 @@ public class DBOSExecutor implements AutoCloseable {
     var childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
-    var nextTimeout = options.timeout();
-    var nextDeadline = options.deadline();
+    var nextTimeout = options.timeout() != null ? options.timeout() : ctx.getNextTimeout();
+    var nextDeadline = options.deadline() != null ? options.deadline() : ctx.getNextDeadline();
 
     // default to context timeout & deadline if nextTimeout is null or Inherit
-    // Duration timeout = ctx.getTimeout();
-    // Instant deadline = ctx.getDeadline();
+    Duration timeout = ctx.getTimeout();
+    Instant deadline = ctx.getDeadline();
     if (nextDeadline != null) {
+      deadline = nextDeadline;
     } else if (nextTimeout instanceof Timeout.None) {
       // clear timeout and deadline to null if nextTimeout is None
-      options = options.withDeadline(null);
+      timeout = null;
+      deadline = null;
     } else if (nextTimeout instanceof Timeout.Explicit e) {
       // set the timeout and deadline if nextTimeout is Explicit
-      var deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
-      options = options.withDeadline(deadline);
+      timeout = e.value();
+      deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
     }
 
     var workflowId =
@@ -815,9 +862,15 @@ public class DBOSExecutor implements AutoCloseable {
             () ->
                 Objects.requireNonNullElseGet(
                     ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
-    options = options.withWorkflowId(workflowId); // .withDeadline(deadline).withTimeout(timeout);
-
-    return executeWorkflow(workflow, invocation.args(), options, parent);
+    var execOptions =
+        new ExecutionOptions(
+            workflowId,
+            Timeout.of(timeout),
+            deadline,
+            options.queueName(),
+            options.deduplicationId(),
+            options.priority());
+    return executeWorkflow(workflow, invocation.args(), execOptions, parent);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
@@ -856,7 +909,7 @@ public class DBOSExecutor implements AutoCloseable {
       deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
     }
 
-    var options = new StartWorkflowOptions(workflowId).withTimeout(timeout).withDeadline(deadline);
+    var options = new ExecutionOptions(workflowId, timeout, deadline);
     return executeWorkflow(workflow, args, options, parent);
   }
 
@@ -879,18 +932,12 @@ public class DBOSExecutor implements AutoCloseable {
       throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
     }
 
-    var options =
-        new StartWorkflowOptions(workflowId)
-            .withTimeout(status.getTimeout())
-            .withDeadline(status.getDeadline());
+    var options = new ExecutionOptions(workflowId, status.getTimeout(), status.getDeadline());
     return executeWorkflow(workflow, inputs, options, null);
   }
 
-  public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
-      RegisteredWorkflow workflow,
-      Object[] args,
-      StartWorkflowOptions options,
-      WorkflowInfo parent) {
+  private <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
+      RegisteredWorkflow workflow, Object[] args, ExecutionOptions options, WorkflowInfo parent) {
 
     if (parent != null) {
       var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
@@ -937,7 +984,7 @@ public class DBOSExecutor implements AutoCloseable {
             executorId(),
             appVersion(),
             parent,
-            options.getTimeoutDuration(),
+            options.timeoutDuration(),
             options.deadline());
     if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
       return retrieveWorkflow(workflowId);
@@ -955,8 +1002,7 @@ public class DBOSExecutor implements AutoCloseable {
                 "executeWorkflow task {}({}) {}", workflow.fullyQualifiedName(), args, options);
 
             DBOSContextHolder.set(
-                new DBOSContext(
-                    workflowId, parent, options.getTimeoutDuration(), options.deadline()));
+                new DBOSContext(workflowId, parent, options.timeoutDuration(), options.deadline()));
             if (Thread.currentThread().isInterrupted()) {
               logger.debug("executeWorkflow task interrupted before workflow.invoke");
               return null;
@@ -1026,7 +1072,7 @@ public class DBOSExecutor implements AutoCloseable {
       String instanceName,
       Integer maxRetries,
       Object[] args,
-      StartWorkflowOptions options,
+      ExecutionOptions options,
       WorkflowInfo parent,
       String executorId,
       String appVersion,
@@ -1062,7 +1108,7 @@ public class DBOSExecutor implements AutoCloseable {
           executorId,
           appVersion,
           parent,
-          options.getTimeoutDuration(),
+          options.timeoutDuration(),
           options.deadline());
       return new WorkflowHandleDBPoll<T, E>(workflowId);
     } catch (DBOSWorkflowExecutionConflictException e) {

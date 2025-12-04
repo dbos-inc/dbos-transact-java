@@ -679,7 +679,7 @@ public class DBOS {
    */
   public static WorkflowHandle<?, ?> startWorkflow(
       RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
-    return executor("executeWorkflow").executeWorkflow(regWorkflow, args, options, null);
+    return executor("startWorkflow").startWorkflow(regWorkflow, args, options);
   }
 
   /**

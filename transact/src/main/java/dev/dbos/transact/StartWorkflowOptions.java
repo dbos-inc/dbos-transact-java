@@ -38,6 +38,10 @@ public record StartWorkflowOptions(
         throw new IllegalArgumentException("timeout must be a positive non-zero duration");
       }
     }
+
+    if (timeout != null && deadline != null) {
+      throw new IllegalArgumentException("timeout and deadline cannot both be set");
+    }
   }
 
   /** Construct with default options */
@@ -63,25 +67,10 @@ public record StartWorkflowOptions(
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
   public StartWorkflowOptions withTimeout(Timeout timeout) {
-    if (timeout != null && this.deadline != null) {
-      throw new IllegalArgumentException(
-          "should not specify a timeout if the deadline is already set");
-    }
     return new StartWorkflowOptions(
         this.workflowId,
         timeout,
         this.deadline,
-        this.queueName,
-        this.deduplicationId,
-        this.priority);
-  }
-
-  /** Produces a new StartWorkflowOptions that overrides deadline value for the started workflow */
-  public StartWorkflowOptions withDeadline(Instant deadline) {
-    return new StartWorkflowOptions(
-        this.workflowId,
-        this.timeout,
-        deadline,
         this.queueName,
         this.deduplicationId,
         this.priority);
@@ -103,6 +92,17 @@ public record StartWorkflowOptions(
         this.workflowId,
         Timeout.none(),
         this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority);
+  }
+
+  /** Produces a new StartWorkflowOptions that overrides deadline value for the started workflow */
+  public StartWorkflowOptions withDeadline(Instant deadline) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        deadline,
         this.queueName,
         this.deduplicationId,
         this.priority);
@@ -151,13 +151,5 @@ public record StartWorkflowOptions(
   @Override
   public String workflowId() {
     return workflowId != null && workflowId.isEmpty() ? null : workflowId;
-  }
-
-  /** Get timeout duration */
-  public Duration getTimeoutDuration() {
-    if (timeout instanceof Timeout.Explicit e) {
-      return e.value();
-    }
-    return null;
   }
 }

@@ -137,6 +137,10 @@ public class DBOSClient implements AutoCloseable {
       if (timeout != null && timeout.isNegative()) {
         throw new IllegalArgumentException("timeout must not be negative");
       }
+
+      if (timeout != null && deadline != null) {
+        throw new IllegalArgumentException("timeout and deadline cannot both be set");
+      }
     }
 
     /** Construct `EnqueueOptions` with a minimum set of required options */
@@ -340,7 +344,7 @@ public class DBOSClient implements AutoCloseable {
         Objects.requireNonNullElse(options.instanceName(), ""),
         null,
         args,
-        new StartWorkflowOptions(
+        new DBOSExecutor.ExecutionOptions(
             Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString()),
             Timeout.of(options.timeout()),
             options.deadline,
