@@ -35,12 +35,14 @@ public record StartWorkflowOptions(
   public StartWorkflowOptions {
     if (timeout instanceof Timeout.Explicit explicit) {
       if (explicit.value().isNegative() || explicit.value().isZero()) {
-        throw new IllegalArgumentException("timeout must be a positive non-zero duration");
+        throw new IllegalArgumentException(
+            "StartWorkflowOptions explicit timeout must be a positive non-zero duration");
       }
-    }
 
-    if (timeout != null && deadline != null) {
-      throw new IllegalArgumentException("timeout and deadline cannot both be set");
+      if (deadline != null) {
+        throw new IllegalArgumentException(
+            "StartWorkflowOptions explicit timeout and deadline cannot both be set");
+      }
     }
   }
 

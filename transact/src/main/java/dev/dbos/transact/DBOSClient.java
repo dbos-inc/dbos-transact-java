@@ -119,27 +119,31 @@ public class DBOSClient implements AutoCloseable {
     public EnqueueOptions {
       if (Objects.requireNonNull(workflowName, "EnqueueOptions workflowName must not be null")
           .isEmpty()) {
-        throw new IllegalArgumentException("workflowName must not be empty");
+        throw new IllegalArgumentException("EnqueueOptions workflowName must not be empty");
       }
 
       if (Objects.requireNonNull(queueName, "EnqueueOptions queueName must not be null")
           .isEmpty()) {
-        throw new IllegalArgumentException("queueName must not be empty");
+        throw new IllegalArgumentException("EnqueueOptions queueName must not be empty");
       }
 
       if (Objects.requireNonNull(className, "EnqueueOptions className must not be null")
           .isEmpty()) {
-        throw new IllegalArgumentException("className must not be empty");
+        throw new IllegalArgumentException("EnqueueOptions className must not be empty");
       }
 
       if (instanceName == null) instanceName = "";
 
-      if (timeout != null && timeout.isNegative()) {
-        throw new IllegalArgumentException("timeout must not be negative");
-      }
+      if (timeout != null) {
+        if (timeout.isNegative() || timeout.isZero()) {
+          throw new IllegalArgumentException(
+              "EnqueueOptions timeout must be a positive non-zero duration");
+        }
 
-      if (timeout != null && deadline != null) {
-        throw new IllegalArgumentException("timeout and deadline cannot both be set");
+        if (deadline != null) {
+          throw new IllegalArgumentException(
+              "EnqueueOptions timeout and deadline cannot both be set");
+        }
       }
     }
 
