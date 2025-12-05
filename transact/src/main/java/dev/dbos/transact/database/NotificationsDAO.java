@@ -18,7 +18,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class NotificationsDAO {
+class NotificationsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(NotificationsDAO.class);
 
@@ -37,7 +37,7 @@ public class NotificationsDAO {
     dbPollingIntervalEventMs = 100;
   }
 
-  public void send(
+  void send(
       String workflowUuid, int functionId, String destinationUuid, Object message, String topic)
       throws SQLException {
 
@@ -96,7 +96,8 @@ public class NotificationsDAO {
 
         // Record operation result
         var output = new StepResult(workflowUuid, functionId, functionName);
-        StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
+        StepsDAO.recordStepResultTxn(
+            output, startTime, System.currentTimeMillis(), conn, this.schema);
 
         conn.commit();
 
@@ -111,7 +112,7 @@ public class NotificationsDAO {
     }
   }
 
-  public Object recv(
+  Object recv(
       String workflowUuid, int functionId, int timeoutFunctionId, String topic, Duration timeout)
       throws SQLException, InterruptedException {
 
@@ -245,7 +246,8 @@ public class NotificationsDAO {
         StepResult output =
             new StepResult(workflowUuid, functionId, functionName)
                 .withOutput(JSONUtil.serialize(toSave));
-        StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
+        StepsDAO.recordStepResultTxn(
+            output, startTime, System.currentTimeMillis(), conn, this.schema);
 
         conn.commit();
         return toSave;
@@ -294,8 +296,7 @@ public class NotificationsDAO {
     }
   }
 
-  public void setEvent(
-      String workflowId, int functionId, String key, Object message, boolean asStep)
+  void setEvent(String workflowId, int functionId, String key, Object message, boolean asStep)
       throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
@@ -329,7 +330,8 @@ public class NotificationsDAO {
         if (asStep) {
           // Record the operation result
           StepResult output = new StepResult(workflowId, functionId, functionName);
-          StepsDAO.recordStepResultTxn(output, startTime, conn, this.schema);
+          StepsDAO.recordStepResultTxn(
+              output, startTime, System.currentTimeMillis(), conn, this.schema);
         }
 
         conn.commit();
@@ -342,7 +344,7 @@ public class NotificationsDAO {
     }
   }
 
-  public Object getEvent(
+  Object getEvent(
       String targetUuid, String key, Duration timeout, GetWorkflowEventContext callerCtx)
       throws SQLException {
     if (dataSource.isClosed()) {
@@ -456,7 +458,8 @@ public class NotificationsDAO {
         StepResult output =
             new StepResult(callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName)
                 .withOutput(JSONUtil.serialize(value));
-        StepsDAO.recordStepResultTxn(dataSource, output, startTime, this.schema);
+        StepsDAO.recordStepResultTxn(
+            dataSource, output, startTime, System.currentTimeMillis(), this.schema);
       }
 
       return value;

@@ -41,7 +41,11 @@ public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHan
             throw new DBOSAwaitedWorkflowCancelledException(workflowId);
           } catch (ExecutionException ee) {
             if (ee.getCause() instanceof Exception) {
-              throw (E) ee.getCause();
+              var re = ee.getCause();
+              if (re instanceof DBOSWorkflowExecutionConflictException) {
+                return (T) executor.awaitWorkflowResult(workflowId);
+              }
+              throw (E) re;
             }
             throw new RuntimeException("Future threw non-exception", ee.getCause());
           } catch (Exception e) {

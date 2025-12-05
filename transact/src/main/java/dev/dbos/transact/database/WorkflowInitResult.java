@@ -6,11 +6,13 @@ public class WorkflowInitResult {
   private String workflowId;
   private String status;
   private Long deadlineEpochMS; // Use Long for nullable number
+  private boolean shouldExecuteOnThisExecutor;
 
-  public WorkflowInitResult(String id, String status, Long deadlineEpochMS) {
+  public WorkflowInitResult(String id, String status, Long deadlineEpochMS, boolean shouldExecute) {
     this.workflowId = id;
     this.status = status;
     this.deadlineEpochMS = deadlineEpochMS;
+    this.shouldExecuteOnThisExecutor = shouldExecute;
   }
 
   public String getStatus() {
@@ -23,5 +25,9 @@ public class WorkflowInitResult {
 
   public String getWorkflowId() {
     return workflowId;
+  }
+
+  public boolean shouldExecuteOnThisExecutor() {
+    return shouldExecuteOnThisExecutor;
   }
 }

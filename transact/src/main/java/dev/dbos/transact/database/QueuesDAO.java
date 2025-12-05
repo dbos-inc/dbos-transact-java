@@ -14,7 +14,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class QueuesDAO {
+class QueuesDAO {
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
 
   private final HikariDataSource dataSource;
@@ -33,7 +33,7 @@ public class QueuesDAO {
    * @param appVersion The application version
    * @return List of workflow UUIDs that are due for execution
    */
-  public List<String> getAndStartQueuedWorkflows(Queue queue, String executorId, String appVersion)
+  List<String> getAndStartQueuedWorkflows(Queue queue, String executorId, String appVersion)
       throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
@@ -236,7 +236,7 @@ public class QueuesDAO {
     }
   }
 
-  public boolean clearQueueAssignment(String workflowId) throws SQLException {
+  boolean clearQueueAssignment(String workflowId) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }

@@ -269,7 +269,7 @@ public class TimeoutTest {
 
     setDelayEpoch(dataSource, wfid1);
 
-    var handle = dbosExecutor.executeWorkflowById(wfid1);
+    var handle = dbosExecutor.executeWorkflowById(wfid1, true, false);
     assertEquals(WorkflowState.CANCELLED.name(), handle.getStatus().status());
   }
 

@@ -355,7 +355,9 @@ public class DBOSClient implements AutoCloseable {
             Objects.requireNonNull(
                 options.queueName(), "EnqueueOptions queueName must not be null"),
             options.deduplicationId,
-            options.priority),
+            options.priority,
+            false,
+            false),
         null,
         null,
         options.appVersion,
@@ -379,7 +381,7 @@ public class DBOSClient implements AutoCloseable {
     var status =
         new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS)
             .withName("temp_workflow-send-client");
-    systemDatabase.initWorkflowStatus(status, null);
+    systemDatabase.initWorkflowStatus(status, null, false, false);
     systemDatabase.send(status.workflowId(), 0, destinationId, message, topic);
   }
 
