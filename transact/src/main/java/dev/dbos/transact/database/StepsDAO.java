@@ -18,7 +18,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class StepsDAO {
+class StepsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
 
@@ -30,7 +30,7 @@ public class StepsDAO {
     this.schema = Objects.requireNonNull(schema);
   }
 
-  public static void recordStepResultTxn(
+  static void recordStepResultTxn(
       HikariDataSource dataSource,
       StepResult result,
       long startTimeEpochMs,
@@ -47,7 +47,7 @@ public class StepsDAO {
     DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
   }
 
-  public static void recordStepResultTxn(
+  static void recordStepResultTxn(
       StepResult result,
       Long startTimeEpochMs,
       Long endTimeEpochMs,
@@ -128,7 +128,7 @@ public class StepsDAO {
    *     match the provided name.
    * @throws SQLException For other database access errors.
    */
-  public static StepResult checkStepExecutionTxn(
+  static StepResult checkStepExecutionTxn(
       String workflowId, int functionId, String functionName, Connection connection, String schema)
       throws SQLException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
 
@@ -195,7 +195,7 @@ public class StepsDAO {
     return recordedResult;
   }
 
-  public List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
+  List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
 
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
@@ -270,12 +270,12 @@ public class StepsDAO {
     return steps;
   }
 
-  public Duration sleep(String workflowUuid, int functionId, Duration duration, boolean skipSleep)
+  Duration sleep(String workflowUuid, int functionId, Duration duration, boolean skipSleep)
       throws SQLException {
     return StepsDAO.sleep(dataSource, workflowUuid, functionId, duration, skipSleep, this.schema);
   }
 
-  public static Duration sleep(
+  static Duration sleep(
       HikariDataSource dataSource,
       String workflowUuid,
       int functionId,

@@ -22,7 +22,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class WorkflowDAO {
+class WorkflowDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(WorkflowDAO.class);
 
@@ -39,7 +39,7 @@ public class WorkflowDAO {
     getResultPollingIntervalMs = 100;
   }
 
-  public WorkflowInitResult initWorkflowStatus(
+  WorkflowInitResult initWorkflowStatus(
       WorkflowStatusInternal initStatus,
       Integer maxRetries,
       boolean isRecoveryRequest,
@@ -135,7 +135,7 @@ public class WorkflowDAO {
     } // end try with resources connection closed
   }
 
-  public static record InsertWorkflowResult(
+  static record InsertWorkflowResult(
       int recoveryAttempts,
       String status,
       String name,
@@ -153,7 +153,7 @@ public class WorkflowDAO {
    * @return InsertWorkflowResult some of the column inserted
    * @throws SQLException
    */
-  public InsertWorkflowResult insertWorkflowStatus(
+  InsertWorkflowResult insertWorkflowStatus(
       Connection connection,
       WorkflowStatusInternal status,
       String ownerXid,
@@ -263,7 +263,7 @@ public class WorkflowDAO {
     }
   }
 
-  public void updateWorkflowOutcome(
+  void updateWorkflowOutcome(
       Connection connection, String workflowId, WorkflowState status, String output, String error)
       throws SQLException {
     if (dataSource.isClosed()) {
@@ -302,7 +302,7 @@ public class WorkflowDAO {
    * @param workflowId id of the workflow
    * @param result output serialized as json
    */
-  public void recordWorkflowOutput(String workflowId, String result) throws SQLException {
+  void recordWorkflowOutput(String workflowId, String result) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -318,7 +318,7 @@ public class WorkflowDAO {
    * @param workflowId id of the workflow
    * @param error output serialized as json
    */
-  public void recordWorkflowError(String workflowId, String error) throws SQLException {
+  void recordWorkflowError(String workflowId, String error) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -328,7 +328,7 @@ public class WorkflowDAO {
     }
   }
 
-  public WorkflowStatus getWorkflowStatus(String workflowId) throws SQLException {
+  WorkflowStatus getWorkflowStatus(String workflowId) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -342,7 +342,7 @@ public class WorkflowDAO {
     return null;
   }
 
-  public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
+  List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -550,7 +550,7 @@ public class WorkflowDAO {
     return workflows;
   }
 
-  public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
+  List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
       throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
@@ -588,7 +588,7 @@ public class WorkflowDAO {
   }
 
   @SuppressWarnings("unchecked")
-  public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
+  <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -648,7 +648,7 @@ public class WorkflowDAO {
     }
   }
 
-  public void recordChildWorkflow(
+  void recordChildWorkflow(
       String parentId,
       String childId, // workflowId of the child
       int functionId, // func id in the parent
@@ -665,8 +665,7 @@ public class WorkflowDAO {
     }
   }
 
-  public Optional<String> checkChildWorkflow(String workflowUuid, int functionId)
-      throws SQLException {
+  Optional<String> checkChildWorkflow(String workflowUuid, int functionId) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -692,7 +691,7 @@ public class WorkflowDAO {
     }
   }
 
-  public void cancelWorkflow(String workflowId) throws SQLException {
+  void cancelWorkflow(String workflowId) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -745,7 +744,7 @@ public class WorkflowDAO {
     }
   }
 
-  public void resumeWorkflow(String workflowId) throws SQLException {
+  void resumeWorkflow(String workflowId) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -781,7 +780,7 @@ public class WorkflowDAO {
     }
   }
 
-  public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options)
+  String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options)
       throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
@@ -956,12 +955,6 @@ public class WorkflowDAO {
     }
   }
 
-  /*
-   * public String forkWorkflow(String originalWorkflowId, String
-   * forkedWorkflowId, int startStep) throws SQLException { return
-   * forkWorkflow(originalWorkflowId, forkedWorkflowId, startStep, null); }
-   */
-
   private static String getWorkflowStatus(Connection connection, String workflowId, String schema)
       throws SQLException {
     String sql =
@@ -1021,7 +1014,7 @@ public class WorkflowDAO {
     return null;
   }
 
-  public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) throws SQLException {
+  void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }

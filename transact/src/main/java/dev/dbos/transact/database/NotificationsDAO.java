@@ -18,7 +18,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class NotificationsDAO {
+class NotificationsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(NotificationsDAO.class);
 
@@ -37,7 +37,7 @@ public class NotificationsDAO {
     dbPollingIntervalEventMs = 100;
   }
 
-  public void send(
+  void send(
       String workflowUuid, int functionId, String destinationUuid, Object message, String topic)
       throws SQLException {
 
@@ -112,7 +112,7 @@ public class NotificationsDAO {
     }
   }
 
-  public Object recv(
+  Object recv(
       String workflowUuid, int functionId, int timeoutFunctionId, String topic, Duration timeout)
       throws SQLException, InterruptedException {
 
@@ -296,8 +296,7 @@ public class NotificationsDAO {
     }
   }
 
-  public void setEvent(
-      String workflowId, int functionId, String key, Object message, boolean asStep)
+  void setEvent(String workflowId, int functionId, String key, Object message, boolean asStep)
       throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
@@ -345,7 +344,7 @@ public class NotificationsDAO {
     }
   }
 
-  public Object getEvent(
+  Object getEvent(
       String targetUuid, String key, Duration timeout, GetWorkflowEventContext callerCtx)
       throws SQLException {
     if (dataSource.isClosed()) {
