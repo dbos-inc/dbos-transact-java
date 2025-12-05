@@ -326,14 +326,12 @@ public class SingleExecutionTest {
     assertEquals(1, TryConcExec.maxConc);
     assertEquals(1, TryConcExec.maxWf);
 
-    /* TODO
     var wfh1r = reexecuteWorkflowById(workflowUUID);
     var wfh2r = reexecuteWorkflowById(workflowUUID);
     wfh1r.getResult();
     wfh2r.getResult();
     assertEquals(1, TryConcExec.maxConc);
     assertEquals(1, TryConcExec.maxWf);
-    */
   }
 
   @Test

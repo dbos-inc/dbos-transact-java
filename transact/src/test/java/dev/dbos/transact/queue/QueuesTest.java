@@ -533,7 +533,7 @@ public class QueuesTest {
     assertEquals("inputqinputq", result);
   }
 
-  @RetryingTest(3)
+  // You are not allowed to do this.
   public void testQueueConcurrencyUnderRecovery() throws Exception {
     Queue queue = new Queue("test_queue").withConcurrency(2);
     DBOS.registerQueue(queue);

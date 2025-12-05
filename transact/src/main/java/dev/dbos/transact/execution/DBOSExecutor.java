@@ -72,6 +72,7 @@ public class DBOSExecutor implements AutoCloseable {
   private Map<String, RegisteredWorkflow> workflowMap;
   private Map<String, RegisteredWorkflowInstance> instanceMap;
   private List<Queue> queues;
+  private ConcurrentHashMap<String, Boolean> workflowsInProgress = new ConcurrentHashMap<>();
 
   private SystemDatabase systemDatabase;
   private QueueService queueService;
@@ -1034,6 +1035,8 @@ public class DBOSExecutor implements AutoCloseable {
     Supplier<T> task =
         () -> {
           DBOSContextHolder.clear();
+          var res = workflowsInProgress.putIfAbsent(workflowId, true);
+          if (res != null) throw new DBOSWorkflowExecutionConflictException(workflowId);
           try {
             logger.debug(
                 "executeWorkflow task {}({}) {}", workflow.fullyQualifiedName(), args, options);
@@ -1078,6 +1081,7 @@ public class DBOSExecutor implements AutoCloseable {
             throw e;
           } finally {
             DBOSContextHolder.clear();
+            workflowsInProgress.remove(workflowId);
           }
         };
 
