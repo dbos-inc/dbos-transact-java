@@ -85,6 +85,10 @@ public class SystemDatabase implements AutoCloseable {
    *
    * @param initStatus The initial workflow status details.
    * @param maxRetries Optional maximum number of retries.
+   * @param isRecoveryRequest True if this is a recovery request, indicating that this node is told
+   *     it owns the workflow even if the ID already exists
+   * @param isDequeuedRequest True if this is a dequeue request, indicating that this node is told
+   *     it owns the workflow (provided it is in the enqueued state)
    * @return An object containing the current status and optionally the deadline epoch milliseconds.
    * @throws DBOSConflictingWorkflowException If a conflicting workflow already exists.
    * @throws DBOSMaxRecoveryAttemptsExceededException If the workflow exceeds max retries.
@@ -93,8 +97,13 @@ public class SystemDatabase implements AutoCloseable {
       WorkflowStatusInternal initStatus,
       Integer maxRetries,
       boolean isRecoveryRequest,
-      boolean isDequeuedRequest,
-      String ownerXid) {
+      boolean isDequeuedRequest) {
+
+    // This ID will be used to tell if we are the first writer of the record, or if there is an
+    // existing one
+    // Note that it is generated outside of the DB retry loop, in case commit acks get lost and we
+    // do not know if we committed or not
+    String ownerXid = UUID.randomUUID().toString();
     return DbRetry.call(
         () -> {
           return workflowDAO.initWorkflowStatus(

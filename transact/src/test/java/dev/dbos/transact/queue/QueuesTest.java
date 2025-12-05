@@ -448,7 +448,7 @@ public class QueuesTest {
               .withWorkflowid(wfid)
               .withStatus(WorkflowState.ENQUEUED)
               .withDeduplicationId("dedup" + i);
-      systemDatabase.initWorkflowStatus(status, null, false, false, "xid");
+      systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
     List<String> idsToRun =
@@ -526,7 +526,7 @@ public class QueuesTest {
               .withWorkflowid(wfid)
               .withStatus(WorkflowState.ENQUEUED)
               .withDeduplicationId("dedup" + i);
-      systemDatabase.initWorkflowStatus(status, null, false, false, "xid");
+      systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
     // executor2
@@ -540,7 +540,7 @@ public class QueuesTest {
               .withStatus(WorkflowState.PENDING)
               .withDeduplicationId("dedup" + i)
               .withExecutorId(executor2);
-      systemDatabase.initWorkflowStatus(status, null, false, false, "xid");
+      systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
     List<String> idsToRun =

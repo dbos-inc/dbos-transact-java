@@ -1227,11 +1227,7 @@ public class DBOSExecutor implements AutoCloseable {
     WorkflowInitResult[] initResult = {null};
     initResult[0] =
         systemDatabase.initWorkflowStatus(
-            workflowStatusInternal,
-            retries,
-            isRecoveryRequest,
-            isDequeuedRequest,
-            UUID.randomUUID().toString());
+            workflowStatusInternal, retries, isRecoveryRequest, isDequeuedRequest);
 
     if (parentWorkflow != null) {
       systemDatabase.recordChildWorkflow(
