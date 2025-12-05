@@ -533,7 +533,7 @@ public class QueuesTest {
     assertEquals("inputqinputq", result);
   }
 
-  // You are not allowed to do this.
+  @RetryingTest(3)
   public void testQueueConcurrencyUnderRecovery() throws Exception {
     Queue queue = new Queue("test_queue").withConcurrency(2);
     DBOS.registerQueue(queue);
@@ -592,14 +592,11 @@ public class QueuesTest {
     assertTrue(expectedWorkflowIds.contains(localHandles.get(0).workflowId()));
     assertTrue(expectedWorkflowIds.contains(localHandles.get(1).workflowId()));
 
-    for (int i = 0; i < impl.wfSemaphores.size(); i++) {
-      logger.info("acquire {} semaphore", i);
-      impl.wfSemaphores.get(i).acquire();
-    }
-
-    assertEquals(4, impl.counter);
-    assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().status());
-    assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().status());
+    assertEquals(2, impl.counter);
+    // Recovery sets back to enqueued.
+    //   The enqueued run will get skipped (first run is still blocked)
+    assertEquals(WorkflowState.ENQUEUED.toString(), handle1.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED.toString(), handle2.getStatus().status());
     assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().status());
 
     impl.latch.countDown();
