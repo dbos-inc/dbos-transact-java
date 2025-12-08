@@ -146,10 +146,12 @@ class AdminServerTest {
       given()
           .port(port)
           .when()
-          .get("/dbos-deactivate")
+          .get("/deactivate")
           .then()
-          .statusCode(500)
-          .body(equalTo("not implemented"));
+          .statusCode(200)
+          .body(equalTo("deactivated"));
+
+      verify(mockExec).deactivateLifecycleListeners();
     }
   }
 

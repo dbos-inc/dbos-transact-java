@@ -12,6 +12,7 @@ import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -30,6 +31,7 @@ public class AdminServer implements AutoCloseable {
   private HttpServer server;
   private final SystemDatabase systemDatabase;
   private final DBOSExecutor dbosExecutor;
+  private final AtomicBoolean isRunning = new AtomicBoolean(true);
 
   public AdminServer(int port, DBOSExecutor exec, SystemDatabase sysDb) throws IOException {
 
@@ -39,7 +41,7 @@ public class AdminServer implements AutoCloseable {
     Map<String, HttpHandler> staticRoutes = new HashMap<>();
     staticRoutes.put("/dbos-healthz", x -> healthCheck(x));
     staticRoutes.put("/dbos-workflow-recovery", x -> workflowRecovery(x)); // post
-    staticRoutes.put("/dbos-deactivate", x -> deactivate(x));
+    staticRoutes.put("/deactivate", x -> deactivate(x));
     staticRoutes.put("/dbos-workflow-queues-metadata", x -> workflowQueuesMetadata(x));
     staticRoutes.put("/dbos-garbage-collect", x -> garbageCollect(x)); // post
     staticRoutes.put("/dbos-global-timeout", x -> globalTimeout(x)); // post
@@ -125,7 +127,14 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void deactivate(HttpExchange exchange) throws IOException {
-    sendText(exchange, 500, "not implemented");
+    if (isRunning.compareAndSet(true, false)) {
+      logger.info(
+          "Deactivating DBOS executor {} app version {}",
+          dbosExecutor.executorId(),
+          dbosExecutor.appVersion());
+      dbosExecutor.deactivateLifecycleListeners();
+    }
+    sendText(exchange, 200, "deactivated");
   }
 
   private void workflowQueuesMetadata(HttpExchange exchange) throws IOException {
