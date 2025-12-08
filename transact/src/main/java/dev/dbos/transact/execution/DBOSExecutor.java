@@ -190,13 +190,7 @@ public class DBOSExecutor implements AutoCloseable {
       recoveryService.stop();
       recoveryService = null;
 
-      for (var listener : listeners) {
-        try {
-          listener.dbosShutDown();
-        } catch (Exception e) {
-          logger.warn("Exception from shutdown", e);
-        }
-      }
+      shutdownLifecycleListeners();
 
       queueService.stop();
       queueService = null;
@@ -208,6 +202,22 @@ public class DBOSExecutor implements AutoCloseable {
 
       this.workflowMap = null;
       this.instanceMap = null;
+    }
+  }
+
+  public void deactivateLifecycleListeners() {
+    if (isRunning.get()) {
+      shutdownLifecycleListeners();
+    }
+  }
+
+  private void shutdownLifecycleListeners() {
+    for (var listener : listeners) {
+      try {
+        listener.dbosShutDown();
+      } catch (Exception e) {
+        logger.warn("Exception from shutdown", e);
+      }
     }
   }
 
