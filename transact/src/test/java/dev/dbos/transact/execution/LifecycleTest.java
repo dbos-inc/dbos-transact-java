@@ -60,7 +60,6 @@ public class LifecycleTest {
     assertEquals(0, svc.shutdownCount);
     DBOS.shutdown();
     assertEquals(1, svc.shutdownCount);
-
   }
 
   @Test
