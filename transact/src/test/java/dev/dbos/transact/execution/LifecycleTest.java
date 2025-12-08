@@ -3,6 +3,7 @@ package dev.dbos.transact.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -44,9 +45,7 @@ public class LifecycleTest {
 
   @AfterEach
   void afterEachTest() throws Exception {
-    assertEquals(0, svc.shutdownCount);
     DBOS.shutdown();
-    assertEquals(1, svc.shutdownCount);
   }
 
   @Test
@@ -57,5 +56,26 @@ public class LifecycleTest {
     assertEquals(4, impl.nWfs);
     assertEquals(14, svc.annotationCount);
     assertEquals(30, total);
+
+    assertEquals(0, svc.shutdownCount);
+    DBOS.shutdown();
+    assertEquals(1, svc.shutdownCount);
+
+  }
+
+  @Test
+  void deactivateLifecycleListeners() throws Exception {
+    // Pretend this is an external event
+    var total = svc.runThemAll();
+    assertEquals(3, impl.nInstances); // One of these is internal... for better or worse
+    assertEquals(4, impl.nWfs);
+    assertEquals(14, svc.annotationCount);
+    assertEquals(30, total);
+
+    assertEquals(0, svc.shutdownCount);
+    DBOSTestAccess.getDbosExecutor().deactivateLifecycleListeners();
+    assertEquals(1, svc.shutdownCount);
+    DBOS.shutdown();
+    assertEquals(2, svc.shutdownCount);
   }
 }
