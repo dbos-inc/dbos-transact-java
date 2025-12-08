@@ -127,7 +127,7 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void deactivate(HttpExchange exchange) throws IOException {
-    if (isRunning.compareAndExchange(true, false)) {
+    if (isRunning.compareAndSet(true, false)) {
       logger.info(
           "Deactivating DBOS executor {} app version {}",
           dbosExecutor.executorId(),
