@@ -94,11 +94,11 @@ class StepsDAO {
       try (ResultSet rs = pstmt.executeQuery()) {
         if (rs.next() && endTimeEpochMs != null) {
           long completedAt = rs.getLong("completed_at_epoch_ms");
-          logger.warn(
-              String.format(
-                  "Step output for %s:%d-%s was already recorded",
-                  result.workflowId(), result.stepId(), result.functionName()));
           if (completedAt != endTimeEpochMs) {
+            logger.warn(
+                String.format(
+                    "Step output for %s:%d-%s was already recorded",
+                    result.workflowId(), result.stepId(), result.functionName()));
             throw new DBOSWorkflowExecutionConflictException(result.workflowId());
           }
         }
