@@ -3,6 +3,7 @@ package dev.dbos.transact.invocation;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
@@ -11,6 +12,8 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
@@ -54,6 +57,35 @@ public class StartWorkflowTest {
   void afterEachTest() throws Exception {
     dataSource.close();
     DBOS.shutdown();
+  }
+
+  @Test
+  public void startWorkflowOptionsValidation() throws Exception {
+
+    var options = new StartWorkflowOptions().withQueue("queue-name");
+
+    // dedupe ID and partition key must not be empty if set
+    assertThrows(IllegalArgumentException.class, () -> options.withDeduplicationId(""));
+    assertThrows(IllegalArgumentException.class, () -> options.withQueuePartitionKey(""));
+
+    // dedupe ID and partition key must not both be set
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> options.withDeduplicationId("dedupe-id").withQueuePartitionKey("partion-key"));
+
+    // queue name must be set if partition key is set
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new StartWorkflowOptions().withQueuePartitionKey("partion-key"));
+
+    // negative timeout
+    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(-1)));
+
+    // timeout & deadline both set
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            options.withDeadline(Instant.now().plusSeconds(1)).withTimeout(Duration.ofSeconds(1)));
   }
 
   @Test

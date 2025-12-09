@@ -48,6 +48,16 @@ public record StartWorkflowOptions(
       }
     }
 
+    if (queuePartitionKey != null && queuePartitionKey.isEmpty()) {
+      throw new IllegalArgumentException(
+          "EnqueueOptions queuePartitionKey must not be empty if not null");
+    }
+
+    if (deduplicationId != null && deduplicationId.isEmpty()) {
+      throw new IllegalArgumentException(
+          "EnqueueOptions deduplicationId must not be empty if not null");
+    }
+
     if (queuePartitionKey != null && queueName == null) {
       throw new IllegalArgumentException(
           "StartWorkflowOptions partition key provided but queue name is missing");

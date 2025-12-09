@@ -133,6 +133,16 @@ public class DBOSClient implements AutoCloseable {
         throw new IllegalArgumentException("EnqueueOptions className must not be empty");
       }
 
+      if (queuePartitionKey != null && queuePartitionKey.isEmpty()) {
+        throw new IllegalArgumentException(
+            "EnqueueOptions queuePartitionKey must not be empty if not null");
+      }
+
+      if (deduplicationId != null && deduplicationId.isEmpty()) {
+        throw new IllegalArgumentException(
+            "EnqueueOptions deduplicationId must not be empty if not null");
+      }
+
       if (queuePartitionKey != null && deduplicationId != null) {
         throw new IllegalArgumentException(
             "EnqueueOptions partition key and deduplication ID cannot both be set");

@@ -61,6 +61,51 @@ public class ClientTest {
   }
 
   @Test
+  public void enqueueOptionsValidation() throws Exception {
+    // workflow/class/queue names must not be null
+    assertThrows(
+        NullPointerException.class,
+        () -> new DBOSClient.EnqueueOptions(null, "workflow-name", "queue-name"));
+    assertThrows(
+        NullPointerException.class,
+        () -> new DBOSClient.EnqueueOptions("class-name", null, "queue-name"));
+    assertThrows(
+        NullPointerException.class,
+        () -> new DBOSClient.EnqueueOptions("class-name", "workflow-name", null));
+
+    // workflow/class/queue names must not be empty
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("", "workflow-name", "queue-name"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("class-name", "", "queue-name"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("class-name", "workflow-name", ""));
+
+    var options = new DBOSClient.EnqueueOptions("class", "workflow", "queue");
+
+    // dedupe ID and partition key must not be empty if set
+    assertThrows(IllegalArgumentException.class, () -> options.withDeduplicationId(""));
+    assertThrows(IllegalArgumentException.class, () -> options.withQueuePartitionKey(""));
+
+    // dedupe ID and partition key must not both be set
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> options.withDeduplicationId("dedupe-id").withQueuePartitionKey("partion-key"));
+
+    // negative timeout
+    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(-1)));
+
+    // timeout & deadline both set
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            options.withDeadline(Instant.now().plusSeconds(1)).withTimeout(Duration.ofSeconds(1)));
+  }
+
+  @Test
   public void clientEnqueue() throws Exception {
 
     var qs = DBOSTestAccess.getQueueService();
