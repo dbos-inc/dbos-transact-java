@@ -10,6 +10,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.Queue;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -47,6 +48,9 @@ public class StartWorkflowTest {
     var impl = new HawkServiceImpl();
     proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
+
+    DBOS.registerQueue(new Queue("queue"));
+    DBOS.registerQueue(new Queue("partitioned-queue").withPartitionedEnabled(true));
 
     DBOS.launch();
 
@@ -139,5 +143,23 @@ public class StartWorkflowTest {
     assertEquals("SUCCESS", row.getStatus().status());
     assertEquals(1000, row.getStatus().timeoutMs());
     assertNotNull(row.getStatus().deadlineEpochMs());
+  }
+
+  @Test
+  void invalidQueue() throws Exception {
+    var options = new StartWorkflowOptions().withQueue("invalid-queue-name");
+    assertThrows(IllegalArgumentException.class, () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
+  }
+
+  @Test
+  void missingPartitionKey() throws Exception {
+    var options = new StartWorkflowOptions().withQueue("partitioned-queue");
+    assertThrows(IllegalArgumentException.class, () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
+  }
+
+  @Test
+  void invalidPartitionKey() throws Exception {
+    var options = new StartWorkflowOptions().withQueue("queue").withQueuePartitionKey("partiton-key");
+    assertThrows(IllegalArgumentException.class, () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
   }
 }
