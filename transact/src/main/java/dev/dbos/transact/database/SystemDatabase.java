@@ -206,7 +206,7 @@ public class SystemDatabase implements AutoCloseable {
       Queue queue, String executorId, String appVersion) {
     return DbRetry.call(
         () -> {
-          return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
+          return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion, null);
         });
   }
 

@@ -9,6 +9,7 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,8 +17,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -27,6 +32,25 @@ import org.slf4j.LoggerFactory;
 public class AdminServer implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(AdminServer.class);
   private static final ObjectMapper mapper = new ObjectMapper();
+
+  static class DurationSerializer extends StdSerializer<Duration> {
+
+    public DurationSerializer() {
+      super(Duration.class);
+    }
+
+    @Override
+    public void serialize(Duration value, JsonGenerator gen, SerializerProvider provider)
+        throws IOException {
+      gen.writeNumber(value.toMillis() / 1000.0);
+    }
+  }
+
+  static {
+    var module = new SimpleModule();
+    module.addSerializer(Duration.class, new DurationSerializer());
+    mapper.registerModule(module);
+  }
 
   private HttpServer server;
   private final SystemDatabase systemDatabase;
