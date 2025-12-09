@@ -96,7 +96,6 @@ public record Queue(
    * Produces a new Queue with the assigned rate limit, expressed in workflows per period (seconds).
    */
   public Queue withRateLimit(int limit, double period) {
-    var millis = (long) (period * 1000);
-    return withRateLimit(new RateLimit(limit, Duration.ofMillis(millis)));
+    return withRateLimit(new RateLimit(limit, Duration.ofMillis((long) (period * 1000))));
   }
 }

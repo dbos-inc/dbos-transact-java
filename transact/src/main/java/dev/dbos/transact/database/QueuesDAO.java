@@ -197,9 +197,7 @@ class QueuesDAO {
         query += " FOR UPDATE NOWAIT";
       }
 
-      if (maxTasks >= 0) {
-        query += " LIMIT %d".formatted(maxTasks);
-      }
+      query += " LIMIT %d".formatted(maxTasks);
 
       // Execute the query to get workflow IDs
       List<String> dequeuedWorkflowIds = new ArrayList<>();
@@ -247,7 +245,7 @@ class QueuesDAO {
       try (var ps = connection.prepareStatement(updateQuery)) {
         for (var id : dequeuedWorkflowIds) {
           if (queue.rateLimit() != null) {
-            if (updatedWorkflowIds.size() + numRecentQueries > queue.rateLimit().limit()) {
+            if (updatedWorkflowIds.size() + numRecentQueries >= queue.rateLimit().limit()) {
               break;
             }
           }
