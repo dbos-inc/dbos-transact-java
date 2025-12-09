@@ -82,10 +82,11 @@ public class StartWorkflowTest {
         IllegalArgumentException.class,
         () -> new StartWorkflowOptions().withQueuePartitionKey("partion-key"));
 
-    // negative timeout
+    // timeout can't be negative or zero
+    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ZERO));
     assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(-1)));
 
-    // timeout & deadline both set
+    // timeout & deadline can't both be set
     assertThrows(
         IllegalArgumentException.class,
         () ->
