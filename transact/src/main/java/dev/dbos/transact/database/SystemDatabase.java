@@ -165,7 +165,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public List<String> getQueuePartitions(String queueName) throws SQLException {
+  public List<String> getQueuePartitions(String queueName) {
     return DbRetry.call(
         () -> {
           return queuesDAO.getQueuePartitions(queueName);
@@ -203,10 +203,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public List<String> getAndStartQueuedWorkflows(
-      Queue queue, String executorId, String appVersion) {
+      Queue queue, String executorId, String appVersion, String partitionKey) {
     return DbRetry.call(
         () -> {
-          return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion, null);
+          return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion, partitionKey);
         });
   }
 

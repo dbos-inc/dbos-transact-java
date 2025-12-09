@@ -452,13 +452,14 @@ public class QueuesTest {
     }
 
     List<String> idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
 
     assertEquals(2, idsToRun.size());
 
     // run the same above 2 are in Pending.
     // So no de queueing
-    idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+    idsToRun =
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
     assertEquals(0, idsToRun.size());
 
     // mark the first 2 as success
@@ -466,14 +467,15 @@ public class QueuesTest {
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
 
     // next 2 get dequeued
-    idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+    idsToRun =
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
     assertEquals(2, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
         systemDatabase.getAndStartQueuedWorkflows(
-            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION);
+            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null);
     assertEquals(0, idsToRun.size());
   }
 
@@ -544,7 +546,7 @@ public class QueuesTest {
     }
 
     List<String> idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
     // 0 because global concurrency limit is reached
     assertEquals(0, idsToRun.size());
 
@@ -555,7 +557,8 @@ public class QueuesTest {
             qwithWCLimit,
             // executorId,
             executor2,
-            appVersion);
+            appVersion,
+            null);
     assertEquals(2, idsToRun.size());
   }
 
