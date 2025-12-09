@@ -165,6 +165,13 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
+  public List<String> getQueuePartitions(String queueName) throws SQLException {
+    return DbRetry.call(
+        () -> {
+          return queuesDAO.getQueuePartitions(queueName);
+        });
+  }
+
   public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName) {
 
     return DbRetry.call(

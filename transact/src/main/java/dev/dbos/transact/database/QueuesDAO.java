@@ -258,4 +258,35 @@ class QueuesDAO {
       return affectedRows > 0;
     }
   }
+
+  List<String> getQueuePartitions(String queueName) throws SQLException {
+    if (dataSource.isClosed()) {
+      throw new IllegalStateException("Database is closed!");
+    }
+
+    final String sql =
+        """
+          SELECT DISTINCT queue_partition_key
+          FROM %s.workflow_status
+          WHERE queue_name = ?
+            AND status = ?
+            AND queue_partition_key IS NOT NULL
+        """
+            .formatted(this.schema);
+
+    try (Connection connection = dataSource.getConnection();
+        PreparedStatement stmt = connection.prepareStatement(sql)) {
+      stmt.setString(1, queueName);
+      stmt.setString(2, WorkflowState.ENQUEUED.name());
+
+      try (ResultSet rs = stmt.executeQuery()) {
+        List<String> partitions = new ArrayList<>();
+        while (rs.next()) {
+          String partitionKey = rs.getString("queue_partition_key");
+          partitions.add(partitionKey);
+        }
+        return partitions;
+      }
+    }
+  }
 }
