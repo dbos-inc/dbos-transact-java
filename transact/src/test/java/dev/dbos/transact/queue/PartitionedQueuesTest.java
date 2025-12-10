@@ -220,4 +220,59 @@ public class PartitionedQueuesTest {
 
     assertTrue(DBUtils.queueEntriesCleanedUp(dataSource));
   }
+
+  @Test
+  public void testPartitionKeyWithoutQueue() throws Exception {
+    var impl = new PartitionsTestServiceImpl();
+    var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);
+    DBOS.launch();
+
+    var options = new StartWorkflowOptions().withQueuePartitionKey("partition-1");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DBOS.startWorkflow(() -> proxy.normalWorkflow(), options));
+  }
+
+  @Test
+  public void testPartitionKeyOnNonPartitionedQueue() throws Exception {
+    var queue = new Queue("non-partitioned-queue");
+    DBOS.registerQueue(queue);
+    var impl = new PartitionsTestServiceImpl();
+    var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);
+    DBOS.launch();
+
+    var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("partition-1");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DBOS.startWorkflow(() -> proxy.normalWorkflow(), options));
+  }
+
+  @Test
+  public void testPartitionedQueueWithoutPartitionKey() throws Exception {
+    var queue = new Queue("partitioned-queue").withPartitionedEnabled(true);
+    DBOS.registerQueue(queue);
+    var impl = new PartitionsTestServiceImpl();
+    var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);
+    DBOS.launch();
+
+    var options = new StartWorkflowOptions().withQueue(queue);
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DBOS.startWorkflow(() -> proxy.normalWorkflow(), options));
+  }
+
+  @Test
+  public void testPartitionKeyWithDeduplicationID() throws Exception {
+    var queue = new Queue("partitioned-queue").withPartitionedEnabled(true);
+    DBOS.registerQueue(queue);
+    var impl = new PartitionsTestServiceImpl();
+    var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);
+    DBOS.launch();
+
+    var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("partition-1").withDeduplicationId("dedupe");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DBOS.startWorkflow(() -> proxy.normalWorkflow(), options));
+  }
+
 }

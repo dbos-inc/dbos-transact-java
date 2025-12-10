@@ -57,16 +57,6 @@ public record StartWorkflowOptions(
       throw new IllegalArgumentException(
           "EnqueueOptions deduplicationId must not be empty if not null");
     }
-
-    if (queuePartitionKey != null && queueName == null) {
-      throw new IllegalArgumentException(
-          "StartWorkflowOptions partition key provided but queue name is missing");
-    }
-
-    if (queuePartitionKey != null && deduplicationId != null) {
-      throw new IllegalArgumentException(
-          "StartWorkflowOptions partition key and deduplication ID cannot both be set");
-    }
   }
 
   /** Construct with default options */

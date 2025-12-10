@@ -72,16 +72,6 @@ public class StartWorkflowTest {
     assertThrows(IllegalArgumentException.class, () -> options.withDeduplicationId(""));
     assertThrows(IllegalArgumentException.class, () -> options.withQueuePartitionKey(""));
 
-    // dedupe ID and partition key must not both be set
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> options.withDeduplicationId("dedupe-id").withQueuePartitionKey("partion-key"));
-
-    // queue name must be set if partition key is set
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> new StartWorkflowOptions().withQueuePartitionKey("partion-key"));
-
     // timeout can't be negative or zero
     assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ZERO));
     assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(-1)));
