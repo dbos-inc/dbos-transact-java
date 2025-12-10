@@ -93,7 +93,7 @@ public class ClientTest {
     // dedupe ID and partition key must not both be set
     assertThrows(
         IllegalArgumentException.class,
-        () -> options.withDeduplicationId("dedupe-id").withQueuePartitionKey("partion-key"));
+        () -> options.withDeduplicationId("dedupe-id").withQueuePartitionKey("partition-key"));
 
     // timeout can't be negative or zero
     assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ZERO));

@@ -155,7 +155,7 @@ public class StartWorkflowTest {
   @Test
   void invalidPartitionKey() throws Exception {
     var options =
-        new StartWorkflowOptions().withQueue("queue").withQueuePartitionKey("partiton-key");
+        new StartWorkflowOptions().withQueue("queue").withQueuePartitionKey("partition-key");
     assertThrows(
         IllegalArgumentException.class,
         () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
