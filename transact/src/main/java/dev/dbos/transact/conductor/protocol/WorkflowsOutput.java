@@ -67,7 +67,7 @@ public class WorkflowsOutput {
         status.deadlineEpochMs() == null ? null : status.deadlineEpochMs().toString();
     this.DeduplicationID = status.deduplicationId();
     this.Priority = Objects.requireNonNullElse(status.priority(), 0).toString();
-    this.QueuePartitionKey = status.partitionKey();
+    this.QueuePartitionKey = status.queuePartitionKey();
     this.ForkedFrom = status.forkedFrom();
   }
 }

@@ -427,8 +427,9 @@ public class DBOSClient implements AutoCloseable {
     var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
 
     var status =
-        new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS)
-            .withName("temp_workflow-send-client");
+        WorkflowStatusInternal.builder(workflowId, WorkflowState.SUCCESS)
+            .name("temp_workflow-send-client")
+            .build();
     systemDatabase.initWorkflowStatus(status, null, false, false);
     systemDatabase.send(status.workflowId(), 0, destinationId, message, topic);
   }

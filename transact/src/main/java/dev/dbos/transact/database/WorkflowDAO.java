@@ -170,13 +170,13 @@ class WorkflowDAO {
           INSERT INTO %s.workflow_status (
             workflow_uuid, status, inputs,
             name, class_name, config_name,
-            queue_name, deduplication_id, priority,
+            queue_name, deduplication_id, priority, queue_partition_key,
             authenticated_user, assumed_role, authenticated_roles,
             executor_id, application_version, application_id,
             created_at, updated_at, recovery_attempts,
             workflow_timeout_ms, workflow_deadline_epoch_ms,
             owner_xid
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               recovery_attempts = CASE
@@ -211,24 +211,25 @@ class WorkflowDAO {
       stmt.setString(7, status.queueName());
       stmt.setString(8, status.deduplicationId());
       stmt.setInt(9, priority);
+      stmt.setString(10, status.queuePartitionKey());
 
-      stmt.setString(10, status.authenticatedUser());
-      stmt.setString(11, status.assumedRole());
-      stmt.setString(12, status.authenticatedRoles());
+      stmt.setString(11, status.authenticatedUser());
+      stmt.setString(12, status.assumedRole());
+      stmt.setString(13, status.authenticatedRoles());
 
-      stmt.setString(13, status.executorId());
-      stmt.setString(14, status.appVersion());
-      stmt.setString(15, status.appId());
+      stmt.setString(14, status.executorId());
+      stmt.setString(15, status.appVersion());
+      stmt.setString(16, status.appId());
 
-      stmt.setLong(16, now); // created_at
-      stmt.setLong(17, now); // updated_at
-      stmt.setInt(18, recoveryAttempts);
+      stmt.setLong(17, now); // created_at
+      stmt.setLong(18, now); // updated_at
+      stmt.setInt(19, recoveryAttempts);
 
-      stmt.setObject(19, status.timeoutMs());
-      stmt.setObject(20, status.deadlineEpochMs());
+      stmt.setObject(20, status.timeoutMs());
+      stmt.setObject(21, status.deadlineEpochMs());
 
-      stmt.setObject(21, ownerXid);
-      stmt.setInt(22, incrementAttempts ? 1 : 0);
+      stmt.setObject(22, ownerXid);
+      stmt.setInt(23, incrementAttempts ? 1 : 0);
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
