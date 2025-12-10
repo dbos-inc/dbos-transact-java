@@ -269,10 +269,13 @@ public class PartitionedQueuesTest {
     var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);
     DBOS.launch();
 
-    var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("partition-1").withDeduplicationId("dedupe");
+    var options =
+        new StartWorkflowOptions()
+            .withQueue(queue)
+            .withQueuePartitionKey("partition-1")
+            .withDeduplicationId("dedupe");
     assertThrows(
         IllegalArgumentException.class,
         () -> DBOS.startWorkflow(() -> proxy.normalWorkflow(), options));
   }
-
 }
