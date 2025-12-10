@@ -149,18 +149,25 @@ public class StartWorkflowTest {
   @Test
   void invalidQueue() throws Exception {
     var options = new StartWorkflowOptions().withQueue("invalid-queue-name");
-    assertThrows(IllegalArgumentException.class, () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
   }
 
   @Test
   void missingPartitionKey() throws Exception {
     var options = new StartWorkflowOptions().withQueue("partitioned-queue");
-    assertThrows(IllegalArgumentException.class, () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
   }
 
   @Test
   void invalidPartitionKey() throws Exception {
-    var options = new StartWorkflowOptions().withQueue("queue").withQueuePartitionKey("partiton-key");
-    assertThrows(IllegalArgumentException.class, () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
+    var options =
+        new StartWorkflowOptions().withQueue("queue").withQueuePartitionKey("partiton-key");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
   }
 }
