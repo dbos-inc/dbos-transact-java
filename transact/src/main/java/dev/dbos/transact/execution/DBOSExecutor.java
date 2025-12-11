@@ -973,7 +973,7 @@ public class DBOSExecutor implements AutoCloseable {
       throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
     }
 
-    var options = new ExecutionOptions(workflowId, status.getTimeout(), status.getDeadline());
+    var options = new ExecutionOptions(workflowId, status.timeout(), status.deadline());
     if (isRecoveryRequest) options = options.asRecoveryRequest();
     if (isDequeuedRequest) options = options.asDequeuedRequest();
     return executeWorkflow(workflow, inputs, options, null);
