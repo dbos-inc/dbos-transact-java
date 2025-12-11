@@ -6,20 +6,20 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 public record ListWorkflowsRequest(
-      List<String> workflow_uuids,
-      String workflow_name,
-      String authenticated_user,
-      String start_time,
-      String end_time,
-      String status,
-      String application_version,
-      String fork_from,
-      Integer limit,
-      Integer offset,
-      Boolean sort_desc,
-      String workflow_id_prefix,
-      Boolean load_input,
-      Boolean load_output) {
+    List<String> workflow_uuids,
+    String workflow_name,
+    String authenticated_user,
+    String start_time,
+    String end_time,
+    String status,
+    String application_version,
+    String fork_from,
+    Integer limit,
+    Integer offset,
+    Boolean sort_desc,
+    String workflow_id_prefix,
+    Boolean load_input,
+    Boolean load_output) {
 
   public ListWorkflowsInput asInput() {
     return new ListWorkflowsInput(
@@ -39,9 +39,8 @@ public record ListWorkflowsRequest(
         load_input,
         load_output,
         null,
-        false,        
+        false,
         null, // Executor IDs
-        fork_from 
-        );
+        fork_from);
   }
 }

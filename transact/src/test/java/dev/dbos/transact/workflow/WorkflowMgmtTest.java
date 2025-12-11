@@ -10,6 +10,7 @@ import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,6 +25,8 @@ import org.slf4j.LoggerFactory;
 
 interface MgmtService {
   int simpleWorkflow(int input) throws InterruptedException;
+
+  void stepTimingWorkflow() throws InterruptedException;
 }
 
 class MgmtServiceImpl implements MgmtService {
@@ -46,6 +49,17 @@ class MgmtServiceImpl implements MgmtService {
     DBOS.runStep(() -> ++stepsExecuted, "stepThree");
 
     return input;
+  }
+
+  @Workflow
+  public void stepTimingWorkflow() throws InterruptedException {
+    for (var i = 0; i < 5; i++) {
+      DBOS.runStep(() -> Thread.sleep(100), "stepTimingStep");
+    }
+
+    DBOS.setEvent("key", "value");
+    DBOS.listWorkflows(new ListWorkflowsInput());
+    DBOS.recv(null, Duration.ofSeconds(1));
   }
 }
 
@@ -86,6 +100,25 @@ public class WorkflowMgmtTest {
   @AfterEach
   void afterEachTest() throws Exception {
     DBOS.shutdown();
+  }
+
+  @Test
+  public void testStepTiming() throws Exception {
+    var start = System.currentTimeMillis();
+    var handle = DBOS.startWorkflow(() -> proxy.stepTimingWorkflow());
+    assertDoesNotThrow(() -> handle.getResult());
+
+    var steps = DBOS.listWorkflowSteps(handle.workflowId());
+    assertEquals(9, steps.size());
+    for (var step : steps) {
+      assertNotNull(step.startedAtEpochMs());
+      assertNotNull(step.completedAtEpochMs());
+      assert (step.startedAtEpochMs() >= start);
+      assert (step.completedAtEpochMs() >= step.startedAtEpochMs());
+      if (step.functionName().equals("stepTimingStep")) {
+        assert (step.completedAtEpochMs() - step.startedAtEpochMs() >= 100);
+      }
+    }
   }
 
   @Test

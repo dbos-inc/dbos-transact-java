@@ -136,11 +136,12 @@ class EventsServiceImpl implements EventsService {
     DBOS.setEvent("key2", "value2");
     DBOS.setEvent("key3", null);
 
-    DBOS.runStep(() -> {
-      DBOS.setEvent("key4", "badvalue");
-      DBOS.setEvent("key4", "value4");
-
-    }, "setEventStep");
+    DBOS.runStep(
+        () -> {
+          DBOS.setEvent("key4", "badvalue");
+          DBOS.setEvent("key4", "value4");
+        },
+        "setEventStep");
   }
 
   public void resetLatches() {
@@ -220,7 +221,7 @@ public class EventsTest {
       var begin = System.currentTimeMillis();
       var result = proxy.getEventWorkflow("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
       var end = System.currentTimeMillis();
-      assert(end - begin > 1500);
+      assert (end - begin > 1500);
       assertNull(result);
     }
 
@@ -228,7 +229,7 @@ public class EventsTest {
       var begin = System.currentTimeMillis();
       var result = proxy.getEventWorkflow("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
       var end = System.currentTimeMillis();
-      assert(end - begin < 300);
+      assert (end - begin < 300);
       assertNull(result);
     }
 
@@ -237,7 +238,7 @@ public class EventsTest {
       var begin = System.currentTimeMillis();
       var result = DBOS.getEvent("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
       var end = System.currentTimeMillis();
-      assert(end - begin > 1500);
+      assert (end - begin > 1500);
       assertNull(result);
     }
 
@@ -245,12 +246,11 @@ public class EventsTest {
       var begin = System.currentTimeMillis();
       var result = DBOS.getEvent("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
       var end = System.currentTimeMillis();
-      assert(end - begin > 1500);
+      assert (end - begin > 1500);
       assertNull(result);
     }
 
     assertThrows(IllegalStateException.class, () -> DBOS.setEvent("key", "value"));
-
   }
 
   @Test

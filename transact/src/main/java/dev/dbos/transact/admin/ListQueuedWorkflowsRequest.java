@@ -1,23 +1,23 @@
 package dev.dbos.transact.admin;
 
+import dev.dbos.transact.workflow.ListWorkflowsInput;
+
 import java.time.OffsetDateTime;
 import java.util.List;
 
-import dev.dbos.transact.workflow.ListWorkflowsInput;
-
 public record ListQueuedWorkflowsRequest(
-      String workflow_name,
-      String start_time,
-      String end_time,
-      String status,
-      String fork_from,
-      String queue_name,
-      Integer limit,
-      Integer offset,
-      Boolean sort_desc,
-      Boolean load_input)  {
+    String workflow_name,
+    String start_time,
+    String end_time,
+    String status,
+    String fork_from,
+    String queue_name,
+    Integer limit,
+    Integer offset,
+    Boolean sort_desc,
+    Boolean load_input) {
 
-public ListWorkflowsInput asInput() {
+  public ListWorkflowsInput asInput() {
     return new ListWorkflowsInput(
         null, // workflow ids
         status != null ? List.of(status) : null,
@@ -35,10 +35,8 @@ public ListWorkflowsInput asInput() {
         load_input,
         false, // load output
         queue_name,
-        true,        
+        true,
         null, // Executor IDs
-        fork_from 
-        );
+        fork_from);
   }
-
 }
