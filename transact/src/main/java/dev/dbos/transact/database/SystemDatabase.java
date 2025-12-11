@@ -390,8 +390,54 @@ public class SystemDatabase implements AutoCloseable {
   public record MetricData(String metricType, String metricName, int value) {}
 
   public List<MetricData> getMetrics(Instant startTime, Instant endTime) {
-    // TODO: real implementation
-    return List.of();
+    Objects.requireNonNull(startTime);
+    Objects.requireNonNull(endTime);
+    return DbRetry.call(
+        () -> {
+          List<MetricData> metrics = new ArrayList<>();
+          final var wfSQL =
+              """
+                SELECT name, COUNT(workflow_uuid) as count
+                FROM %s.workflow_status
+                WHERE created_at >= $1 AND created_at < $2
+                GROUP BY name
+              """
+                  .formatted(this.schema);
+          final var stepSQL =
+              """
+                SELECT function_name, COUNT(*) as count
+                FROM %s.operation_outputs
+                WHERE completed_at_epoch_ms >= $1 AND completed_at_epoch_ms < $2
+                GROUP BY function_name
+              """
+                  .formatted(this.schema);
+
+          try (var conn = dataSource.getConnection();
+              var ps1 = conn.prepareStatement(wfSQL);
+              var ps2 = conn.prepareStatement(stepSQL)) {
+
+            ps1.setLong(1, startTime.toEpochMilli());
+            ps1.setLong(2, startTime.toEpochMilli());
+
+            try (var rs = ps1.executeQuery()) {
+              while (rs.next()) {
+                var name = rs.getString("name");
+                var count = rs.getInt("count");
+                metrics.add(new MetricData("workflow_count", name, count));
+              }
+            }
+
+            try (var rs = ps2.executeQuery()) {
+              while (rs.next()) {
+                var name = rs.getString("step_count");
+                var count = rs.getInt("count");
+                metrics.add(new MetricData("workflow_count", name, count));
+              }
+            }
+          }
+
+          return metrics;
+        });
   }
 
   // package public helper for test purposes
