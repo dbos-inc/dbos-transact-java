@@ -1,6 +1,7 @@
 package dev.dbos.transact.notifications;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -12,11 +13,14 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -29,27 +33,151 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+interface EventsService {
+
+  String setEventWorkflow(String key, String value);
+
+  Object getEventWorkflow(String workflowId, String key, Duration timeout);
+
+  void setMultipleEvents();
+
+  void setWithLatch(String key, String value);
+
+  Object getWithlatch(String workflowId, String key, Duration timeOut);
+
+  String getEventTwice(String wfid, String key) throws InterruptedException;
+
+  void setEventTwice(String key, String v1, String v2) throws InterruptedException;
+
+  void setMultipleEventsWorkflow();
+}
+
+class EventsServiceImpl implements EventsService {
+
+  CountDownLatch getReadyLatch = new CountDownLatch(1);
+  CountDownLatch advanceSetLatch = new CountDownLatch(1);
+  CountDownLatch advanceGetLatch1 = new CountDownLatch(1);
+  CountDownLatch advanceGetLatch2 = new CountDownLatch(1);
+  CountDownLatch doneSetLatch1 = new CountDownLatch(1);
+  CountDownLatch doneSetLatch2 = new CountDownLatch(1);
+  CountDownLatch doneGetLatch1 = new CountDownLatch(1);
+
+  EventsServiceImpl() {}
+
+  @Workflow
+  public String setEventWorkflow(String key, String value) {
+    DBOS.setEvent(key, value);
+    DBOS.runStep(
+        () -> {
+          DBOS.setEvent(key + "-fromstep", value);
+        },
+        "stepSetEvent");
+    return DBOS.runStep(
+        () -> {
+          return (String)
+              DBOS.getEvent(DBOS.workflowId(), key + "-fromstep", Duration.ofSeconds(0));
+        },
+        "getEventInStep");
+  }
+
+  @Workflow
+  public Object getEventWorkflow(String workflowId, String key, Duration timeOut) {
+    return DBOS.getEvent(workflowId, key, timeOut);
+  }
+
+  @Workflow
+  public void setMultipleEvents() {
+    DBOS.setEvent("key1", "value1");
+    DBOS.setEvent("key2", Double.valueOf(241.5));
+    DBOS.setEvent("key3", null);
+  }
+
+  @Workflow
+  public void setWithLatch(String key, String value) {
+    try {
+      System.out.printf("workflowId is %s %b%n", DBOS.workflowId(), DBOS.inWorkflow());
+      getReadyLatch.await();
+      Thread.sleep(1000); // delay so that get goes and awaits notification
+      DBOS.setEvent(key, value);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException("Interrupted while waiting for recv signal", e);
+    }
+  }
+
+  @Workflow
+  public Object getWithlatch(String workflowId, String key, Duration timeOut) {
+    getReadyLatch.countDown();
+    return DBOS.getEvent(workflowId, key, timeOut);
+  }
+
+  @Workflow
+  public void setEventTwice(String key, String v1, String v2) throws InterruptedException {
+    DBOS.setEvent(key, v1);
+    doneSetLatch1.countDown();
+    advanceSetLatch.await();
+    DBOS.setEvent(key, v2);
+    doneSetLatch2.countDown();
+  }
+
+  @Workflow
+  public String getEventTwice(String wfid, String key) throws InterruptedException {
+    advanceGetLatch1.await();
+    var v1 = (String) DBOS.getEvent(wfid, key, Duration.ofSeconds(0));
+    doneGetLatch1.countDown();
+    advanceGetLatch2.await();
+    var v2 = (String) DBOS.getEvent(wfid, key, Duration.ofSeconds(0));
+    return v1 + v2;
+  }
+
+  @Workflow
+  public void setMultipleEventsWorkflow() {
+    DBOS.setEvent("key1", "value1");
+    DBOS.setEvent("key2", "value2");
+    DBOS.setEvent("key3", null);
+
+    DBOS.runStep(() -> {
+      DBOS.setEvent("key4", "badvalue");
+      DBOS.setEvent("key4", "value4");
+
+    }, "setEventStep");
+  }
+
+  public void resetLatches() {
+    advanceGetLatch1 = new CountDownLatch(1);
+    advanceGetLatch2 = new CountDownLatch(1);
+    advanceSetLatch = new CountDownLatch(1);
+    doneGetLatch1 = new CountDownLatch(1);
+    doneSetLatch1 = new CountDownLatch(1);
+    doneSetLatch2 = new CountDownLatch(1);
+  }
+}
+
 @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class EventsTest {
 
   private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
 
+  private EventsService proxy;
+  private EventsServiceImpl impl;
+
   @BeforeAll
   static void onetimeSetup() throws Exception {
-
     EventsTest.dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .withMaximumPoolSize(2);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-
     DBOS.reinitialize(dbosConfig);
-    EventsTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+    impl = new EventsServiceImpl();
+    proxy = DBOS.registerWorkflows(EventsService.class, impl);
+    DBOS.launch();
   }
 
   @AfterEach
@@ -58,14 +186,77 @@ public class EventsTest {
   }
 
   @Test
+  public void setGetEvents() throws Exception {
+    var wfid = UUID.randomUUID().toString();
+    try (var ctx = new WorkflowOptions(wfid).setContext()) {
+      proxy.setMultipleEventsWorkflow();
+    }
+    try (var ctx = new WorkflowOptions(wfid).setContext()) {
+      proxy.setMultipleEventsWorkflow();
+    }
+
+    var timeout = Duration.ofSeconds(5);
+    assertEquals("value1", proxy.getEventWorkflow(wfid, "key1", timeout));
+    assertEquals("value2", proxy.getEventWorkflow(wfid, "key2", timeout));
+
+    // Run getEvent outside of a workflow
+    assertEquals("value1", DBOS.getEvent(wfid, "key1", timeout));
+    assertEquals("value2", DBOS.getEvent(wfid, "key2", timeout));
+
+    assertNull(proxy.getEventWorkflow(wfid, "key3", timeout));
+
+    assertEquals("value4", DBOS.getEvent(wfid, "key4", timeout));
+
+    var steps = DBOS.listWorkflowSteps(wfid);
+    assertEquals(4, steps.size());
+    for (var i = 0; i < 3; i++) {
+      assertEquals(steps.get(i).functionName(), "DBOS.setEvent");
+    }
+    assertEquals(steps.get(3).functionName(), "setEventStep");
+
+    // test OAOO
+    var timeoutWFID = UUID.randomUUID().toString();
+    try (var ctx = new WorkflowOptions(timeoutWFID).setContext()) {
+      var begin = System.currentTimeMillis();
+      var result = proxy.getEventWorkflow("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
+      var end = System.currentTimeMillis();
+      assert(end - begin > 1500);
+      assertNull(result);
+    }
+
+    try (var ctx = new WorkflowOptions(timeoutWFID).setContext()) {
+      var begin = System.currentTimeMillis();
+      var result = proxy.getEventWorkflow("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
+      var end = System.currentTimeMillis();
+      assert(end - begin < 300);
+      assertNull(result);
+    }
+
+    // No OAOO for getEvent outside of a workflow
+    {
+      var begin = System.currentTimeMillis();
+      var result = DBOS.getEvent("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
+      var end = System.currentTimeMillis();
+      assert(end - begin > 1500);
+      assertNull(result);
+    }
+
+    {
+      var begin = System.currentTimeMillis();
+      var result = DBOS.getEvent("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
+      var end = System.currentTimeMillis();
+      assert(end - begin > 1500);
+      assertNull(result);
+    }
+
+    assertThrows(IllegalStateException.class, () -> DBOS.setEvent("key", "value"));
+
+  }
+
+  @Test
   public void basic_set_get() throws Exception {
-
-    EventsService eventService =
-        DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
-    DBOS.launch();
-
     try (var id = new WorkflowOptions("id1").setContext()) {
-      eventService.setEventWorkflow("key1", "value1");
+      proxy.setEventWorkflow("key1", "value1");
     }
 
     var steps = DBOS.listWorkflowSteps("id1");
@@ -77,7 +268,7 @@ public class EventsTest {
     }
 
     try (var id = new WorkflowOptions("id2").setContext()) {
-      Object event = eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3));
+      Object event = proxy.getEventWorkflow("id1", "key1", Duration.ofSeconds(3));
       assertEquals("value1", (String) event);
     }
 
@@ -89,17 +280,12 @@ public class EventsTest {
 
   @Test
   public void multipleEvents() throws Exception {
-
-    EventsService eventService =
-        DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
-    DBOS.launch();
-
     try (var id = new WorkflowOptions("id1").setContext()) {
-      eventService.setMultipleEvents();
+      proxy.setMultipleEvents();
     }
 
     try (var id = new WorkflowOptions("id2").setContext()) {
-      Object event = eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3));
+      Object event = proxy.getEventWorkflow("id1", "key1", Duration.ofSeconds(3));
       assertEquals("value1", (String) event);
     }
 
@@ -110,16 +296,11 @@ public class EventsTest {
 
   @Test
   public void async_set_get() throws Exception {
-
-    EventsService eventService =
-        DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
-    DBOS.launch();
-
     var setwfh =
         DBOS.startWorkflow(
-            () -> eventService.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
+            () -> proxy.setEventWorkflow("key1", "value1"), new StartWorkflowOptions("id1"));
     DBOS.startWorkflow(
-        () -> eventService.getEventWorkflow("id1", "key1", Duration.ofSeconds(3)),
+        () -> proxy.getEventWorkflow("id1", "key1", Duration.ofSeconds(3)),
         new StartWorkflowOptions("id2"));
 
     String event = (String) DBOS.retrieveWorkflow("id2").getResult();
@@ -137,33 +318,28 @@ public class EventsTest {
 
   @Test
   public void set_twice() throws Exception {
-    var impl = new EventsServiceImpl();
-    EventsService eventService = DBOS.registerWorkflows(EventsService.class, impl);
-    DBOS.launch();
-
     var setwfh =
         DBOS.startWorkflow(
-            () -> eventService.setEventTwice("key1", "value1", "value2"),
-            new StartWorkflowOptions("id1"));
+            () -> proxy.setEventTwice("key1", "value1", "value2"), new StartWorkflowOptions("id1"));
     var getwfh =
         DBOS.startWorkflow(
-            () -> eventService.getEventTwice(setwfh.workflowId(), "key1"),
+            () -> proxy.getEventTwice(setwfh.workflowId(), "key1"),
             new StartWorkflowOptions("id2"));
 
     // Make these things both happen
-    impl.awaitSetLatch1();
-    impl.advanceGet1();
-    impl.awaitGetLatch1();
-    impl.advanceSet();
-    impl.awaitSetLatch2();
-    impl.advanceGet2();
+    impl.doneSetLatch1.await();
+    impl.advanceGetLatch1.countDown();
+    impl.doneGetLatch1.await();
+    impl.advanceSetLatch.countDown();
+    impl.doneSetLatch2.await();
+    impl.advanceGetLatch2.countDown();
     String res = (String) getwfh.getResult();
     assertEquals("value1value2", res);
 
     // See if it stuck
-    impl.resetCounts();
-    impl.advanceGet1();
-    impl.advanceGet2();
+    impl.resetLatches();
+    impl.advanceGetLatch1.countDown();
+    impl.advanceGetLatch2.countDown();
     DBUtils.setWorkflowState(dataSource, getwfh.workflowId(), WorkflowState.PENDING.name());
     getwfh = DBOSTestAccess.getDbosExecutor().executeWorkflowById(getwfh.workflowId(), true, false);
     res = (String) getwfh.getResult();
@@ -178,16 +354,10 @@ public class EventsTest {
 
   @Test
   public void notification() throws Exception {
-
-    EventsService eventService =
-        DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
-    DBOS.launch();
-
     DBOS.startWorkflow(
-        () -> eventService.getWithlatch("id1", "key1", Duration.ofSeconds(5)),
+        () -> proxy.getWithlatch("id1", "key1", Duration.ofSeconds(5)),
         new StartWorkflowOptions("id2"));
-    DBOS.startWorkflow(
-        () -> eventService.setWithLatch("key1", "value1"), new StartWorkflowOptions("id1"));
+    DBOS.startWorkflow(() -> proxy.setWithLatch("key1", "value1"), new StartWorkflowOptions("id1"));
 
     String event = (String) DBOS.retrieveWorkflow("id2").getResult();
     assertEquals("value1", event);
@@ -204,9 +374,6 @@ public class EventsTest {
 
   @Test
   public void timeout() {
-
-    DBOS.launch();
-
     long start = System.currentTimeMillis();
     DBOS.getEvent("nonexistingid", "fake_key", Duration.ofMillis(10));
     long elapsed = System.currentTimeMillis() - start;
@@ -215,11 +382,6 @@ public class EventsTest {
 
   @Test
   public void concurrency() throws Exception {
-
-    EventsService eventService =
-        DBOS.registerWorkflows(EventsService.class, new EventsServiceImpl());
-    DBOS.launch();
-
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {
       Future<Object> future1 =
@@ -229,7 +391,7 @@ public class EventsTest {
 
       String expectedMessage = "test message";
       try (var id = new WorkflowOptions("id1").setContext()) {
-        eventService.setEventWorkflow("key1", expectedMessage);
+        proxy.setEventWorkflow("key1", expectedMessage);
         ;
       }
 
