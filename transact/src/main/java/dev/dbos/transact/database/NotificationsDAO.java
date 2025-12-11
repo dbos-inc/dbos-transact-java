@@ -362,15 +362,11 @@ class NotificationsDAO {
       try (Connection conn = dataSource.getConnection()) {
         recordedOutput =
             StepsDAO.checkStepExecutionTxn(
-                callerCtx.getWorkflowId(),
-                callerCtx.getFunctionId(),
-                functionName,
-                conn,
-                this.schema);
+                callerCtx.workflowId(), callerCtx.functionId(), functionName, conn, this.schema);
       }
 
       if (recordedOutput != null) {
-        logger.debug("Replaying getEvent, id: {}, key: {}", callerCtx.getFunctionId(), key);
+        logger.debug("Replaying getEvent, id: {}, key: {}", callerCtx.functionId(), key);
         if (recordedOutput.output() != null) {
           Object[] outputArray = JSONUtil.deserializeToArray(recordedOutput.output());
           return outputArray == null ? null : outputArray[0];
@@ -378,7 +374,7 @@ class NotificationsDAO {
           throw new RuntimeException("No output recorded in the last getEvent");
         }
       } else {
-        logger.debug("Running getEvent, id: {}, key: {}", callerCtx.getFunctionId(), key);
+        logger.debug("Running getEvent, id: {}, key: {}", callerCtx.functionId(), key);
       }
     }
 
@@ -432,8 +428,8 @@ class NotificationsDAO {
           actualTimeout =
               StepsDAO.sleep(
                       dataSource,
-                      callerCtx.getWorkflowId(),
-                      callerCtx.getTimeoutFunctionId(),
+                      callerCtx.workflowId(),
+                      callerCtx.timeoutFunctionId(),
                       timeout,
                       true, // skip_sleep
                       this.schema)
@@ -457,7 +453,7 @@ class NotificationsDAO {
       // Record the output if it's in a workflow
       if (callerCtx != null) {
         StepResult output =
-            new StepResult(callerCtx.getWorkflowId(), callerCtx.getFunctionId(), functionName)
+            new StepResult(callerCtx.workflowId(), callerCtx.functionId(), functionName)
                 .withOutput(JSONUtil.serialize(value));
         StepsDAO.recordStepResultTxn(
             dataSource, output, startTime, System.currentTimeMillis(), this.schema);
