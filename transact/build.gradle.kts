@@ -45,6 +45,12 @@ dependencies {
     testImplementation("io.rest-assured:xml-path:5.4.0")
 }
 
+tasks.processResources {
+    filesMatching("**/app.properties") {
+        expand(mapOf("projectVersion" to project.version))
+    }
+}
+
 tasks.test {
     useJUnitPlatform()
     testLogging {
