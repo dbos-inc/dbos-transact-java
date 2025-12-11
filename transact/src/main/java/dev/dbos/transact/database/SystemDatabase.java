@@ -388,8 +388,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public List<MetricData> getMetrics(Instant startTime, Instant endTime) {
-    Objects.requireNonNull(startTime);
-    Objects.requireNonNull(endTime);
+    final var start = Objects.requireNonNull(startTime).toEpochMilli();
+    final var end = Objects.requireNonNull(endTime).toEpochMilli();
     return DbRetry.call(
         () -> {
           List<MetricData> metrics = new ArrayList<>();
@@ -397,7 +397,7 @@ public class SystemDatabase implements AutoCloseable {
               """
                 SELECT name, COUNT(workflow_uuid) as count
                 FROM %s.workflow_status
-                WHERE created_at >= $1 AND created_at < $2
+                WHERE created_at >= ? AND created_at < ?
                 GROUP BY name
               """
                   .formatted(this.schema);
@@ -405,7 +405,7 @@ public class SystemDatabase implements AutoCloseable {
               """
                 SELECT function_name, COUNT(*) as count
                 FROM %s.operation_outputs
-                WHERE completed_at_epoch_ms >= $1 AND completed_at_epoch_ms < $2
+                WHERE completed_at_epoch_ms >= ? AND completed_at_epoch_ms < ?
                 GROUP BY function_name
               """
                   .formatted(this.schema);
@@ -414,8 +414,8 @@ public class SystemDatabase implements AutoCloseable {
               var ps1 = conn.prepareStatement(wfSQL);
               var ps2 = conn.prepareStatement(stepSQL)) {
 
-            ps1.setLong(1, startTime.toEpochMilli());
-            ps1.setLong(2, startTime.toEpochMilli());
+            ps1.setLong(1, start);
+            ps1.setLong(2, end);
 
             try (var rs = ps1.executeQuery()) {
               while (rs.next()) {
@@ -425,11 +425,14 @@ public class SystemDatabase implements AutoCloseable {
               }
             }
 
+            ps2.setLong(1, start);
+            ps2.setLong(2, end);
+
             try (var rs = ps2.executeQuery()) {
               while (rs.next()) {
-                var name = rs.getString("step_count");
+                var name = rs.getString("function_name");
                 var count = rs.getInt("count");
-                metrics.add(new MetricData("workflow_count", name, count));
+                metrics.add(new MetricData("step_count", name, count));
               }
             }
           }
