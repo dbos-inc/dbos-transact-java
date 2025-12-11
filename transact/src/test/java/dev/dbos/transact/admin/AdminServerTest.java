@@ -191,8 +191,13 @@ class AdminServerTest {
 
   @Test
   public void queueMetadata() throws IOException {
-    var queue1 = new Queue("test-queue-1", null, null, false, null);
-    var queue2 = new Queue("test-queue-2", 10, 5, true, new Queue.RateLimit(2, 4.0));
+    var queue1 = new Queue("test-queue-1");
+    var queue2 =
+        new Queue("test-queue-2")
+            .withConcurrency(10)
+            .withWorkerConcurrency(5)
+            .withPriorityEnabled(true)
+            .withRateLimit(2, 4.0);
 
     when(mockExec.getQueues()).thenReturn(List.of(queue1, queue2));
 

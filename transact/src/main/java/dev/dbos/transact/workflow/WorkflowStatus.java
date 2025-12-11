@@ -29,7 +29,7 @@ public record WorkflowStatus(
     Long startedAtEpochMs,
     String deduplicationId,
     Integer priority,
-    String partitionKey,
+    String queuePartitionKey,
     String forkedFrom) {
 
   @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)

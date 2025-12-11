@@ -23,6 +23,8 @@ import java.util.concurrent.TimeUnit;
  *     enqueued workflows.
  * @param priority If `queueName` is specified and refers to a queue with priority enabled, the
  *     priority to assign.
+ * @param queuePartitionKey If `queueName` is specified, an optional partition key used to
+ *     distribute workflows across queue partitions for load balancing and ordered processing.
  */
 public record StartWorkflowOptions(
     String workflowId,
@@ -30,7 +32,8 @@ public record StartWorkflowOptions(
     Instant deadline,
     String queueName,
     String deduplicationId,
-    Integer priority) {
+    Integer priority,
+    String queuePartitionKey) {
 
   public StartWorkflowOptions {
     if (timeout instanceof Timeout.Explicit explicit) {
@@ -44,16 +47,26 @@ public record StartWorkflowOptions(
             "StartWorkflowOptions explicit timeout and deadline cannot both be set");
       }
     }
+
+    if (queuePartitionKey != null && queuePartitionKey.isEmpty()) {
+      throw new IllegalArgumentException(
+          "EnqueueOptions queuePartitionKey must not be empty if not null");
+    }
+
+    if (deduplicationId != null && deduplicationId.isEmpty()) {
+      throw new IllegalArgumentException(
+          "EnqueueOptions deduplicationId must not be empty if not null");
+    }
   }
 
   /** Construct with default options */
   public StartWorkflowOptions() {
-    this(null, null, null, null, null, null);
+    this(null, null, null, null, null, null, null);
   }
 
   /** Construct with a specified workflow ID */
   public StartWorkflowOptions(String workflowId) {
-    this(workflowId, null, null, null, null, null);
+    this(workflowId, null, null, null, null, null, null);
   }
 
   /** Produces a new StartWorkflowOptions that overrides the ID assigned to the started workflow */
@@ -64,7 +77,8 @@ public record StartWorkflowOptions(
         this.deadline,
         this.queueName,
         this.deduplicationId,
-        this.priority);
+        this.priority,
+        this.queuePartitionKey);
   }
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
@@ -75,7 +89,8 @@ public record StartWorkflowOptions(
         this.deadline,
         this.queueName,
         this.deduplicationId,
-        this.priority);
+        this.priority,
+        this.queuePartitionKey);
   }
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
@@ -101,13 +116,20 @@ public record StartWorkflowOptions(
         deadline,
         this.queueName,
         this.deduplicationId,
-        this.priority);
+        this.priority,
+        this.queuePartitionKey);
   }
 
   /** Produces a new StartWorkflowOptions that assigns the started workflow to a queue */
   public StartWorkflowOptions withQueue(String queue) {
     return new StartWorkflowOptions(
-        this.workflowId, this.timeout, this.deadline, queue, this.deduplicationId, this.priority);
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        queue,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey);
   }
 
   /** Produces a new StartWorkflowOptions that assigns the started workflow to a queue */
@@ -126,7 +148,8 @@ public record StartWorkflowOptions(
         this.deadline,
         this.queueName,
         deduplicationId,
-        this.priority);
+        this.priority,
+        this.queuePartitionKey);
   }
 
   /**
@@ -140,7 +163,20 @@ public record StartWorkflowOptions(
         this.deadline,
         this.queueName,
         this.deduplicationId,
-        priority);
+        priority,
+        this.queuePartitionKey);
+  }
+
+  /** Produces a new StartWorkflowOptions that assigns a queue partition key */
+  public StartWorkflowOptions withQueuePartitionKey(String queuePartitionKey) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        queuePartitionKey);
   }
 
   /** Get the assigned workflow ID, replacing empty with null */

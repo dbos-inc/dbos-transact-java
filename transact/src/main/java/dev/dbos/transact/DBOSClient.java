@@ -114,7 +114,8 @@ public class DBOSClient implements AutoCloseable {
       Duration timeout,
       Instant deadline,
       String deduplicationId,
-      Integer priority) {
+      Integer priority,
+      String queuePartitionKey) {
 
     public EnqueueOptions {
       if (Objects.requireNonNull(workflowName, "EnqueueOptions workflowName must not be null")
@@ -130,6 +131,16 @@ public class DBOSClient implements AutoCloseable {
       if (Objects.requireNonNull(className, "EnqueueOptions className must not be null")
           .isEmpty()) {
         throw new IllegalArgumentException("EnqueueOptions className must not be empty");
+      }
+
+      if (queuePartitionKey != null && queuePartitionKey.isEmpty()) {
+        throw new IllegalArgumentException(
+            "EnqueueOptions queuePartitionKey must not be empty if not null");
+      }
+
+      if (deduplicationId != null && deduplicationId.isEmpty()) {
+        throw new IllegalArgumentException(
+            "EnqueueOptions deduplicationId must not be empty if not null");
       }
 
       if (instanceName == null) instanceName = "";
@@ -149,7 +160,7 @@ public class DBOSClient implements AutoCloseable {
 
     /** Construct `EnqueueOptions` with a minimum set of required options */
     public EnqueueOptions(String className, String workflowName, String queueName) {
-      this(workflowName, queueName, className, "", null, null, null, null, null, null);
+      this(workflowName, queueName, className, "", null, null, null, null, null, null, null);
     }
 
     /**
@@ -169,7 +180,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -190,7 +202,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -211,7 +224,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -232,7 +246,8 @@ public class DBOSClient implements AutoCloseable {
           timeout,
           this.deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -253,7 +268,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -274,7 +290,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -295,7 +312,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -315,7 +333,31 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           this.deduplicationId,
-          priority);
+          priority,
+          this.queuePartitionKey);
+    }
+
+    /**
+     * Creates a new EnqueueOptions instance with the specified queue partition key. The partition
+     * key is used to determine which partition of the queue the workflow should be enqueued to,
+     * allowing for better load distribution and ordering guarantees.
+     *
+     * @param partitionKey the partition key to use for queue partitioning, can be null
+     * @return a new EnqueueOptions instance with the specified partition key
+     */
+    public EnqueueOptions withQueuePartitionKey(String partitionKey) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.queueName,
+          this.className,
+          this.instanceName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          partitionKey);
     }
 
     /**
@@ -356,6 +398,7 @@ public class DBOSClient implements AutoCloseable {
                 options.queueName(), "EnqueueOptions queueName must not be null"),
             options.deduplicationId,
             options.priority,
+            options.queuePartitionKey,
             false,
             false),
         null,
@@ -379,8 +422,9 @@ public class DBOSClient implements AutoCloseable {
     var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
 
     var status =
-        new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS)
-            .withName("temp_workflow-send-client");
+        WorkflowStatusInternal.builder(workflowId, WorkflowState.SUCCESS)
+            .name("temp_workflow-send-client")
+            .build();
     systemDatabase.initWorkflowStatus(status, null, false, false);
     systemDatabase.send(status.workflowId(), 0, destinationId, message, topic);
   }
