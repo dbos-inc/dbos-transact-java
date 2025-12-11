@@ -11,6 +11,7 @@ public record WorkflowStatusInternal(
     String queueName,
     String deduplicationId,
     Integer priority,
+    String queuePartitionKey,
     String authenticatedUser,
     String assumedRole,
     String authenticatedRoles,
@@ -30,7 +31,7 @@ public record WorkflowStatusInternal(
   public WorkflowStatusInternal() {
     this(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null);
+        null, null, null, null, null, null, null, null, null);
   }
 
   public WorkflowStatusInternal(String workflowUUID, WorkflowState state) {
@@ -57,627 +58,190 @@ public record WorkflowStatusInternal(
         null,
         null,
         null,
+        null,
         null);
   }
 
-  public WorkflowStatusInternal withWorkflowid(String workflowid) {
-    return new WorkflowStatusInternal(
-        workflowid,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
+  public static class Builder {
+    private String workflowId;
+    private WorkflowState status;
+    private String name;
+    private String className;
+    private String instanceName;
+    private String queueName;
+    private String deduplicationId;
+    private Integer priority;
+    private String queuePartitionKey;
+    private String authenticatedUser;
+    private String assumedRole;
+    private String authenticatedRoles;
+    private String inputs;
+    private String output;
+    private String error;
+    private String executorId;
+    private String appVersion;
+    private String appId;
+    private Long createdAt;
+    private Long updatedAt;
+    private Long recoveryAttempts;
+    private Long startedAt;
+    private Long timeoutMs;
+    private Long deadlineEpochMs;
+
+    public Builder workflowId(String workflowId) {
+      this.workflowId = workflowId;
+      return this;
+    }
+
+    public Builder status(WorkflowState status) {
+      this.status = status;
+      return this;
+    }
+
+    public Builder name(String name) {
+      this.name = name;
+      return this;
+    }
+
+    public Builder className(String className) {
+      this.className = className;
+      return this;
+    }
+
+    public Builder instanceName(String instanceName) {
+      this.instanceName = instanceName;
+      return this;
+    }
+
+    public Builder queueName(String queueName) {
+      this.queueName = queueName;
+      return this;
+    }
+
+    public Builder deduplicationId(String deduplicationId) {
+      this.deduplicationId = deduplicationId;
+      return this;
+    }
+
+    public Builder priority(Integer priority) {
+      this.priority = priority;
+      return this;
+    }
+
+    public Builder queuePartitionKey(String queuePartitionKey) {
+      this.queuePartitionKey = queuePartitionKey;
+      return this;
+    }
+
+    public Builder authenticatedUser(String authenticatedUser) {
+      this.authenticatedUser = authenticatedUser;
+      return this;
+    }
+
+    public Builder assumedRole(String assumedRole) {
+      this.assumedRole = assumedRole;
+      return this;
+    }
+
+    public Builder authenticatedRoles(String authenticatedRoles) {
+      this.authenticatedRoles = authenticatedRoles;
+      return this;
+    }
+
+    public Builder inputs(String inputs) {
+      this.inputs = inputs;
+      return this;
+    }
+
+    public Builder output(String output) {
+      this.output = output;
+      return this;
+    }
+
+    public Builder error(String error) {
+      this.error = error;
+      return this;
+    }
+
+    public Builder executorId(String executorId) {
+      this.executorId = executorId;
+      return this;
+    }
+
+    public Builder appVersion(String appVersion) {
+      this.appVersion = appVersion;
+      return this;
+    }
+
+    public Builder appId(String appId) {
+      this.appId = appId;
+      return this;
+    }
+
+    public Builder createdAt(Long createdAt) {
+      this.createdAt = createdAt;
+      return this;
+    }
+
+    public Builder updatedAt(Long updatedAt) {
+      this.updatedAt = updatedAt;
+      return this;
+    }
+
+    public Builder recoveryAttempts(Long recoveryAttempts) {
+      this.recoveryAttempts = recoveryAttempts;
+      return this;
+    }
+
+    public Builder startedAt(Long startedAt) {
+      this.startedAt = startedAt;
+      return this;
+    }
+
+    public Builder timeoutMs(Long timeoutMs) {
+      this.timeoutMs = timeoutMs;
+      return this;
+    }
+
+    public Builder deadlineEpochMs(Long deadlineEpochMs) {
+      this.deadlineEpochMs = deadlineEpochMs;
+      return this;
+    }
+
+    public WorkflowStatusInternal build() {
+      return new WorkflowStatusInternal(
+          workflowId,
+          status,
+          name,
+          className,
+          instanceName,
+          queueName,
+          deduplicationId,
+          priority,
+          queuePartitionKey,
+          authenticatedUser,
+          assumedRole,
+          authenticatedRoles,
+          inputs,
+          output,
+          error,
+          executorId,
+          appVersion,
+          appId,
+          createdAt,
+          updatedAt,
+          recoveryAttempts,
+          startedAt,
+          timeoutMs,
+          deadlineEpochMs);
+    }
   }
 
-  public WorkflowStatusInternal withStatus(WorkflowState status) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
+  public static Builder builder() {
+    return new Builder();
   }
 
-  public WorkflowStatusInternal withName(String name) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withClassName(String className) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withInstanceName(String instanceName) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withQueueName(String queueName) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withDeduplicationId(String deduplicationId) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withPriority(Integer priority) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withAuthenticatedUser(String authenticatedUser) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withAssumedRole(String assumedRole) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withAuthenticatedRoles(String authenticatedRoles) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withInputs(String inputs) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withOutput(String output) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withError(String error) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withExecutorId(String executorId) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withAppVersion(String appVersion) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withAppId(String appId) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withCreatedAt(Long createdAt) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withUpdatedAt(Long updatedAt) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withRecoveryAttempts(Long recoveryAttempts) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withStartedAt(Long startedAt) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withTimeoutMs(Long timeoutMs) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
-  }
-
-  public WorkflowStatusInternal withDeadlineEpochMs(Long deadlineEpochMs) {
-    return new WorkflowStatusInternal(
-        workflowId,
-        status,
-        name,
-        className,
-        instanceName,
-        queueName,
-        deduplicationId,
-        priority,
-        authenticatedUser,
-        assumedRole,
-        authenticatedRoles,
-        inputs,
-        output,
-        error,
-        executorId,
-        appVersion,
-        appId,
-        createdAt,
-        updatedAt,
-        recoveryAttempts,
-        startedAt,
-        timeoutMs,
-        deadlineEpochMs);
+  public static Builder builder(String workflowId, WorkflowState status) {
+    return new Builder().workflowId(workflowId).status(status);
   }
 }

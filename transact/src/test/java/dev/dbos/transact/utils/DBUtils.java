@@ -2,6 +2,7 @@ package dev.dbos.transact.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.migrations.MigrationManager;
@@ -348,5 +349,42 @@ public class DBUtils {
     } catch (SQLException e) {
       throw new RuntimeException("Could not cause chaos, credentials insufficient?", e);
     }
+  }
+
+  public static boolean queueEntriesCleanedUp(DataSource ds) {
+    return queueEntriesCleanedUp(ds, null);
+  }
+
+  public static boolean queueEntriesCleanedUp(DataSource ds, String schema) {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    var sql =
+        """
+      SELECT COUNT(*) FROM %s.workflow_status
+      WHERE queue_name IS NOT NULL
+        AND queue_name != ?
+        AND status IN ('ENQUEUED', 'PENDING')
+      """
+            .formatted(schema);
+
+    boolean success = false;
+    for (var i = 0; i < 10; i++) {
+      try (var conn = ds.getConnection();
+          var ps = conn.prepareStatement(sql)) {
+        ps.setString(1, Constants.DBOS_INTERNAL_QUEUE);
+        try (var rs = ps.executeQuery()) {
+          if (!rs.next()) {
+            continue;
+          }
+          var count = rs.getInt(1);
+          if (count == 0) {
+            success = true;
+            break;
+          }
+        }
+      } catch (SQLException e) {
+        throw new RuntimeException(e);
+      }
+    }
+    return success;
   }
 }

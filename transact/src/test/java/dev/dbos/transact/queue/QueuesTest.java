@@ -420,45 +420,47 @@ public class QueuesTest {
       logger.info("Waiting for queueService to stop");
     }
 
-    WorkflowStatusInternal wfStatusInternal =
-        new WorkflowStatusInternal()
-            .withName("OrderProcessingWorkflow")
-            .withClassName("com.example.workflows.OrderWorkflow")
-            .withInstanceName("prod-config")
-            .withAuthenticatedUser("user123@example.com")
-            .withAssumedRole("admin")
-            .withAuthenticatedRoles("admin,operator")
-            .withOutput("{\"result\":\"success\"}")
-            .withCreatedAt(System.currentTimeMillis() - 3600000)
-            .withUpdatedAt(System.currentTimeMillis())
-            .withQueueName("QwithWCLimit")
-            .withExecutorId(executorId)
-            .withAppVersion(appVersion)
-            .withAppId("order-app-123")
-            .withRecoveryAttempts(0L)
-            .withTimeoutMs(300000l)
-            .withDeadlineEpochMs(System.currentTimeMillis() + 2400000)
-            .withPriority(1)
-            .withInputs("{\"orderId\":\"ORD-12345\"}");
+    var builder =
+        WorkflowStatusInternal.builder()
+            .name("OrderProcessingWorkflow")
+            .className("com.example.workflows.OrderWorkflow")
+            .instanceName("prod-config")
+            .authenticatedUser("user123@example.com")
+            .assumedRole("admin")
+            .authenticatedRoles("admin,operator")
+            .output("{\"result\":\"success\"}")
+            .createdAt(System.currentTimeMillis() - 3600000)
+            .updatedAt(System.currentTimeMillis())
+            .queueName("QwithWCLimit")
+            .executorId(executorId)
+            .appVersion(appVersion)
+            .appId("order-app-123")
+            .recoveryAttempts(0L)
+            .timeoutMs(300000l)
+            .deadlineEpochMs(System.currentTimeMillis() + 2400000)
+            .priority(1)
+            .inputs("{\"orderId\":\"ORD-12345\"}");
 
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
       var status =
-          wfStatusInternal
-              .withWorkflowid(wfid)
-              .withStatus(WorkflowState.ENQUEUED)
-              .withDeduplicationId("dedup" + i);
+          builder
+              .workflowId(wfid)
+              .status(WorkflowState.ENQUEUED)
+              .deduplicationId("dedup" + i)
+              .build();
       systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
     List<String> idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
 
     assertEquals(2, idsToRun.size());
 
     // run the same above 2 are in Pending.
     // So no de queueing
-    idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+    idsToRun =
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
     assertEquals(0, idsToRun.size());
 
     // mark the first 2 as success
@@ -466,14 +468,15 @@ public class QueuesTest {
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
 
     // next 2 get dequeued
-    idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+    idsToRun =
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
     assertEquals(2, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
         systemDatabase.getAndStartQueuedWorkflows(
-            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION);
+            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null);
     assertEquals(0, idsToRun.size());
   }
 
@@ -497,35 +500,36 @@ public class QueuesTest {
       logger.info("Waiting for queueService to stop");
     }
 
-    WorkflowStatusInternal wfStatusInternal =
-        new WorkflowStatusInternal()
-            .withName("OrderProcessingWorkflow")
-            .withClassName("com.example.workflows.OrderWorkflow")
-            .withInstanceName("prod-config")
-            .withAuthenticatedUser("user123@example.com")
-            .withAssumedRole("admin")
-            .withAuthenticatedRoles("admin,operator")
-            .withOutput("{\"result\":\"success\"}")
-            .withCreatedAt(System.currentTimeMillis() - 3600000)
-            .withUpdatedAt(System.currentTimeMillis())
-            .withQueueName("QwithWCLimit")
-            .withExecutorId(executorId)
-            .withAppVersion(appVersion)
-            .withAppId("order-app-123")
-            .withRecoveryAttempts(0L)
-            .withTimeoutMs(300000l)
-            .withDeadlineEpochMs(System.currentTimeMillis() + 2400000)
-            .withPriority(1)
-            .withInputs("{\"orderId\":\"ORD-12345\"}");
+    var builder =
+        WorkflowStatusInternal.builder()
+            .name("OrderProcessingWorkflow")
+            .className("com.example.workflows.OrderWorkflow")
+            .instanceName("prod-config")
+            .authenticatedUser("user123@example.com")
+            .assumedRole("admin")
+            .authenticatedRoles("admin,operator")
+            .output("{\"result\":\"success\"}")
+            .createdAt(System.currentTimeMillis() - 3600000)
+            .updatedAt(System.currentTimeMillis())
+            .queueName("QwithWCLimit")
+            .executorId(executorId)
+            .appVersion(appVersion)
+            .appId("order-app-123")
+            .recoveryAttempts(0L)
+            .timeoutMs(300000l)
+            .deadlineEpochMs(System.currentTimeMillis() + 2400000)
+            .priority(1)
+            .inputs("{\"orderId\":\"ORD-12345\"}");
 
     // executor1
     for (int i = 0; i < 2; i++) {
       String wfid = "id" + i;
       var status =
-          wfStatusInternal
-              .withWorkflowid(wfid)
-              .withStatus(WorkflowState.ENQUEUED)
-              .withDeduplicationId("dedup" + i);
+          builder
+              .workflowId(wfid)
+              .status(WorkflowState.ENQUEUED)
+              .deduplicationId("dedup" + i)
+              .build();
       systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
@@ -535,16 +539,17 @@ public class QueuesTest {
 
       String wfid = "id" + i;
       var status =
-          wfStatusInternal
-              .withWorkflowid(wfid)
-              .withStatus(WorkflowState.PENDING)
-              .withDeduplicationId("dedup" + i)
-              .withExecutorId(executor2);
+          builder
+              .workflowId(wfid)
+              .status(WorkflowState.PENDING)
+              .deduplicationId("dedup" + i)
+              .executorId(executor2)
+              .build();
       systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
     List<String> idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
     // 0 because global concurrency limit is reached
     assertEquals(0, idsToRun.size());
 
@@ -555,7 +560,8 @@ public class QueuesTest {
             qwithWCLimit,
             // executorId,
             executor2,
-            appVersion);
+            appVersion,
+            null);
     assertEquals(2, idsToRun.size());
   }
 

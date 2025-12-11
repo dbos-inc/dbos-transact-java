@@ -70,17 +70,31 @@ public class QueueService {
 
         for (Queue queue : queues) {
           try {
-            List<String> workflowIds =
-                systemDatabase.getAndStartQueuedWorkflows(
-                    queue, dbosExecutor.executorId(), dbosExecutor.appVersion());
-
-            for (String id : workflowIds) {
-              logger.debug("Starting workflow {} from queue {}", id, queue.name());
-              dbosExecutor.executeWorkflowById(id, false, true);
+            if (queue.partitionedEnabled()) {
+              var partitions = systemDatabase.getQueuePartitions(queue.name());
+              for (var partition : partitions) {
+                var workflowIds =
+                    systemDatabase.getAndStartQueuedWorkflows(
+                        queue, dbosExecutor.executorId(), dbosExecutor.appVersion(), partition);
+                for (var workflowId : workflowIds) {
+                  logger.debug(
+                      "Starting workflow {} from partition {} of queue {}",
+                      workflowId,
+                      partition,
+                      queue.name());
+                  dbosExecutor.executeWorkflowById(workflowId, false, true);
+                }
+              }
+            } else {
+              var workflowIds =
+                  systemDatabase.getAndStartQueuedWorkflows(
+                      queue, dbosExecutor.executorId(), dbosExecutor.appVersion(), null);
+              for (var workflowId : workflowIds) {
+                logger.debug("Starting workflow {} from queue {}", workflowId, queue.name());
+                dbosExecutor.executeWorkflowById(workflowId, false, true);
+              }
             }
-
           } catch (Exception e) {
-
             pollingIntervalSec = min(maxPollingIntervalSec, pollingIntervalSec * 2);
             logger.error("Error executing queued workflow", e);
           }

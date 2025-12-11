@@ -797,6 +797,7 @@ public class DBOSExecutor implements AutoCloseable {
       String queueName,
       String deduplicationId,
       Integer priority,
+      String queuePartitionKey,
       boolean isRecoveryRequest,
       boolean isDequeuedRequest) {
     public ExecutionOptions {
@@ -805,10 +806,30 @@ public class DBOSExecutor implements AutoCloseable {
           throw new IllegalArgumentException("timeout must be a positive non-zero duration");
         }
       }
+
+      if (queuePartitionKey != null && queuePartitionKey.isEmpty()) {
+        throw new IllegalArgumentException(
+            "EnqueueOptions queuePartitionKey must not be empty if not null");
+      }
+
+      if (deduplicationId != null && deduplicationId.isEmpty()) {
+        throw new IllegalArgumentException(
+            "EnqueueOptions deduplicationId must not be empty if not null");
+      }
+
+      if (queuePartitionKey != null && queueName == null) {
+        throw new IllegalArgumentException(
+            "ExecutionOptions partition key provided but queue name is missing");
+      }
+
+      if (queuePartitionKey != null && deduplicationId != null) {
+        throw new IllegalArgumentException(
+            "ExecutionOptions partition key and deduplication ID cannot both be set");
+      }
     }
 
     public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
-      this(workflowId, Timeout.of(timeout), deadline, null, null, null, false, false);
+      this(workflowId, Timeout.of(timeout), deadline, null, null, null, null, false, false);
     }
 
     public ExecutionOptions asRecoveryRequest() {
@@ -819,6 +840,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.queueName,
           this.deduplicationId,
           this.priority,
+          this.queuePartitionKey,
           true,
           false);
     }
@@ -831,6 +853,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.queueName,
           this.deduplicationId,
           this.priority,
+          this.queuePartitionKey,
           false,
           true);
     }
@@ -858,6 +881,7 @@ public class DBOSExecutor implements AutoCloseable {
             options.queueName(),
             options.deduplicationId(),
             options.priority(),
+            options.queuePartitionKey(),
             false,
             false);
     return executeWorkflow(regWorkflow, args, execOptions, null);
@@ -908,6 +932,7 @@ public class DBOSExecutor implements AutoCloseable {
             options.queueName(),
             options.deduplicationId(),
             options.priority(),
+            options.queuePartitionKey(),
             false,
             false);
     return executeWorkflow(workflow, invocation.args(), execOptions, parent);
@@ -992,6 +1017,25 @@ public class DBOSExecutor implements AutoCloseable {
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
 
     if (options.queueName() != null) {
+
+      var queue = queues.stream().filter(q -> q.name().equals(options.queueName())).findFirst();
+      if (queue.isPresent()) {
+        if (queue.get().partitionedEnabled() && options.queuePartitionKey() == null) {
+          throw new IllegalArgumentException(
+              "queue %s partitions enabled, but no partition key was provided"
+                  .formatted(options.queueName()));
+        }
+
+        if (!queue.get().partitionedEnabled() && options.queuePartitionKey() != null) {
+          throw new IllegalArgumentException(
+              "queue %s is not a partitioned queue, but a partition key was provided"
+                  .formatted(options.queueName()));
+        }
+      } else {
+        throw new IllegalArgumentException(
+            "queue %s does not exist".formatted(options.queueName()));
+      }
+
       return enqueueWorkflow(
           workflow.name(),
           workflow.className(),
@@ -1021,6 +1065,7 @@ public class DBOSExecutor implements AutoCloseable {
             maxRetries,
             args,
             workflowId,
+            null,
             null,
             null,
             null,
@@ -1156,6 +1201,7 @@ public class DBOSExecutor implements AutoCloseable {
           queueName,
           options.deduplicationId(),
           options.priority(),
+          options.queuePartitionKey(),
           executorId,
           appVersion,
           parent,
@@ -1185,6 +1231,7 @@ public class DBOSExecutor implements AutoCloseable {
       String queueName,
       String deduplicationId,
       Integer priority,
+      String queuePartitionKey,
       String executorId,
       String appVersion,
       WorkflowInfo parentWorkflow,
@@ -1218,6 +1265,7 @@ public class DBOSExecutor implements AutoCloseable {
             queueName,
             deduplicationId,
             priority == null ? 0 : priority,
+            queuePartitionKey,
             null,
             null,
             null,

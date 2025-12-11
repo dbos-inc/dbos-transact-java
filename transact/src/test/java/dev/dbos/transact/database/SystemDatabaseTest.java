@@ -57,9 +57,10 @@ public class SystemDatabaseTest {
   public void testRetries() throws Exception {
     var wfid = "wfid-1";
     var status =
-        new WorkflowStatusInternal(wfid, WorkflowState.PENDING)
-            .withName("wf-name")
-            .withInputs("wf-inputs");
+        WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING)
+            .name("wf-name")
+            .inputs("wf-inputs")
+            .build();
 
     for (var i = 1; i <= 6; i++) {
       var result1 = sysdb.initWorkflowStatus(status, 5, true, false);
@@ -86,13 +87,13 @@ public class SystemDatabaseTest {
   public void testDedupeId() throws Exception {
     var wfid = "wfid-1";
     var status =
-        new WorkflowStatusInternal(wfid, WorkflowState.PENDING)
-            .withName("wf-name")
-            .withInputs("wf-inputs")
-            .withQueueName("queue-name")
-            .withDeduplicationId("dedupe-id");
+        WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING)
+            .name("wf-name")
+            .inputs("wf-inputs")
+            .queueName("queue-name")
+            .deduplicationId("dedupe-id");
 
-    var result1 = sysdb.initWorkflowStatus(status, 5, false, false);
+    var result1 = sysdb.initWorkflowStatus(status.build(), 5, false, false);
     assertEquals(WorkflowState.PENDING.toString(), result1.getStatus());
     assertEquals(wfid, result1.getWorkflowId());
     assertEquals(0, result1.getDeadlineEpochMS());
@@ -100,7 +101,7 @@ public class SystemDatabaseTest {
     var before = DBUtils.getWorkflowRow(dataSource, wfid);
     assertThrows(
         DBOSQueueDuplicatedException.class,
-        () -> sysdb.initWorkflowStatus(status.withWorkflowid("wfid-2"), 5, false, false));
+        () -> sysdb.initWorkflowStatus(status.workflowId("wfid-2").build(), 5, false, false));
     var after = DBUtils.getWorkflowRow(dataSource, wfid);
 
     assertTrue(before.equals(after));

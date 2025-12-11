@@ -3,14 +3,18 @@ package dev.dbos.transact.invocation;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.Queue;
 
 import java.sql.SQLException;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
@@ -45,6 +49,9 @@ public class StartWorkflowTest {
     proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
+    DBOS.registerQueue(new Queue("queue"));
+    DBOS.registerQueue(new Queue("partitioned-queue").withPartitionedEnabled(true));
+
     DBOS.launch();
 
     dataSource = SystemDatabase.createDataSource(dbosConfig);
@@ -54,6 +61,26 @@ public class StartWorkflowTest {
   void afterEachTest() throws Exception {
     dataSource.close();
     DBOS.shutdown();
+  }
+
+  @Test
+  public void startWorkflowOptionsValidation() throws Exception {
+
+    var options = new StartWorkflowOptions().withQueue("queue-name");
+
+    // dedupe ID and partition key must not be empty if set
+    assertThrows(IllegalArgumentException.class, () -> options.withDeduplicationId(""));
+    assertThrows(IllegalArgumentException.class, () -> options.withQueuePartitionKey(""));
+
+    // timeout can't be negative or zero
+    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ZERO));
+    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(-1)));
+
+    // timeout & deadline can't both be set
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            options.withDeadline(Instant.now().plusSeconds(1)).withTimeout(Duration.ofSeconds(1)));
   }
 
   @Test
@@ -107,5 +134,30 @@ public class StartWorkflowTest {
     assertEquals("SUCCESS", row.getStatus().status());
     assertEquals(1000, row.getStatus().timeoutMs());
     assertNotNull(row.getStatus().deadlineEpochMs());
+  }
+
+  @Test
+  void invalidQueue() throws Exception {
+    var options = new StartWorkflowOptions().withQueue("invalid-queue-name");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
+  }
+
+  @Test
+  void missingPartitionKey() throws Exception {
+    var options = new StartWorkflowOptions().withQueue("partitioned-queue");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
+  }
+
+  @Test
+  void invalidPartitionKey() throws Exception {
+    var options =
+        new StartWorkflowOptions().withQueue("queue").withQueuePartitionKey("partition-key");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
   }
 }
