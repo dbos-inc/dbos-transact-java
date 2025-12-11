@@ -618,6 +618,21 @@ public class DBOS {
   }
 
   /**
+   * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
+   * provided step are copied over
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Checked exception thrown by the workflow function, if any
+   * @param workflowId Original workflow Id
+   * @param startStep Start execution from this step. Prior steps copied over
+   * @return handle to the workflow
+   */
+  public static <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
+      String workflowId, int startStep) {
+    return forkWorkflow(workflowId, startStep, new ForkOptions());
+  }
+
+  /**
    * Retrieve a handle to a workflow, given its ID. Note that a handle is always returned, whether
    * the workflow exists or not; getStatus() can be used to tell the difference
    *
