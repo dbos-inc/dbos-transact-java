@@ -181,7 +181,7 @@ public class WorkflowMgmtTest {
           impl.workLatch.countDown();
           testLatch.countDown();
           // return a value to force using Callable<T> submit overload
-          return "";
+          return null;
         });
 
     testLatch.await();

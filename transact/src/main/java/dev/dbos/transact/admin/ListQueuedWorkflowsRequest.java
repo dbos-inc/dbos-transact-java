@@ -35,7 +35,7 @@ public record ListQueuedWorkflowsRequest(
         load_input,
         false, // load output
         queue_name,
-        true,
+        true, // queuesOnly: only list queued workflows
         null, // Executor IDs
         fork_from);
   }
