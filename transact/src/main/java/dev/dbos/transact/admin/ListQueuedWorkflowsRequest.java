@@ -1,47 +1,44 @@
 package dev.dbos.transact.admin;
 
-import dev.dbos.transact.workflow.ListWorkflowsInput;
-
 import java.time.OffsetDateTime;
 import java.util.List;
 
-public record ListWorkflowsRequest(
-      List<String> workflow_uuids,
+import dev.dbos.transact.workflow.ListWorkflowsInput;
+
+public record ListQueuedWorkflowsRequest(
       String workflow_name,
-      String authenticated_user,
       String start_time,
       String end_time,
       String status,
-      String application_version,
       String fork_from,
+      String queue_name,
       Integer limit,
       Integer offset,
       Boolean sort_desc,
-      String workflow_id_prefix,
-      Boolean load_input,
-      Boolean load_output) {
+      Boolean load_input)  {
 
-  public ListWorkflowsInput asInput() {
+public ListWorkflowsInput asInput() {
     return new ListWorkflowsInput(
-        workflow_uuids,
+        null, // workflow ids
         status != null ? List.of(status) : null,
         start_time != null ? OffsetDateTime.parse(start_time) : null,
         end_time != null ? OffsetDateTime.parse(end_time) : null,
         workflow_name,
         null, // class_name,
         null, // instance_name
-        application_version,
-        authenticated_user,
+        null, // app version
+        null, // auth user
         limit,
         offset,
         sort_desc,
-        workflow_id_prefix,
+        null, // wf id prefix
         load_input,
-        load_output,
-        null,
-        false,        
+        false, // load output
+        queue_name,
+        true,        
         null, // Executor IDs
         fork_from 
         );
   }
+
 }
