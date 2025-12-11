@@ -63,9 +63,9 @@ public class SystemDatabaseTest {
 
     for (var i = 1; i <= 6; i++) {
       var result1 = sysdb.initWorkflowStatus(status, 5, true, false);
-      assertEquals(WorkflowState.PENDING.toString(), result1.getStatus());
-      assertEquals(wfid, result1.getWorkflowId());
-      assertEquals(0, result1.getDeadlineEpochMS());
+      assertEquals(WorkflowState.PENDING.toString(), result1.status());
+      assertEquals(wfid, result1.workflowId());
+      assertEquals(0, result1.deadlineEpochMS());
 
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertNotNull(row);
@@ -93,9 +93,9 @@ public class SystemDatabaseTest {
             .withDeduplicationId("dedupe-id");
 
     var result1 = sysdb.initWorkflowStatus(status, 5, false, false);
-    assertEquals(WorkflowState.PENDING.toString(), result1.getStatus());
-    assertEquals(wfid, result1.getWorkflowId());
-    assertEquals(0, result1.getDeadlineEpochMS());
+    assertEquals(WorkflowState.PENDING.toString(), result1.status());
+    assertEquals(wfid, result1.workflowId());
+    assertEquals(0, result1.deadlineEpochMS());
 
     var before = DBUtils.getWorkflowRow(dataSource, wfid);
     assertThrows(

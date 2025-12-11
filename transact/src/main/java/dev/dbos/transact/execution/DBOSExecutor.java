@@ -1033,11 +1033,11 @@ public class DBOSExecutor implements AutoCloseable {
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
     }
-    if (initResult.getStatus().equals(WorkflowState.SUCCESS.name())) {
+    if (initResult.status().equals(WorkflowState.SUCCESS.name())) {
       return retrieveWorkflow(workflowId);
-    } else if (initResult.getStatus().equals(WorkflowState.ERROR.name())) {
+    } else if (initResult.status().equals(WorkflowState.ERROR.name())) {
       logger.warn("Idempotency check not impl for error");
-    } else if (initResult.getStatus().equals(WorkflowState.CANCELLED.name())) {
+    } else if (initResult.status().equals(WorkflowState.CANCELLED.name())) {
       logger.warn("Idempotency check not impl for cancelled");
     }
 
@@ -1094,8 +1094,8 @@ public class DBOSExecutor implements AutoCloseable {
           }
         };
 
-    long newTimeout = initResult.getDeadlineEpochMS() - System.currentTimeMillis();
-    if (initResult.getDeadlineEpochMS() > 0 && newTimeout < 0) {
+    long newTimeout = initResult.deadlineEpochMS() - System.currentTimeMillis();
+    if (initResult.deadlineEpochMS() > 0 && newTimeout < 0) {
       systemDatabase.cancelWorkflow(workflowId);
       return retrieveWorkflow(workflowId);
     }
