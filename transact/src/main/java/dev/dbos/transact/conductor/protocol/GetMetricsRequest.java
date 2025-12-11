@@ -11,7 +11,7 @@ public class GetMetricsRequest extends BaseMessage {
 
   public GetMetricsRequest(
       String requestId, Instant startTime, Instant endTime, String metricClass) {
-    this.type = MessageType.LIST_STEPS.getValue();
+    this.type = MessageType.GET_METRICS.getValue();
     this.request_id = requestId;
     this.start_time = startTime == null ? null : startTime.toString();
     this.end_time = endTime == null ? null : endTime.toString();

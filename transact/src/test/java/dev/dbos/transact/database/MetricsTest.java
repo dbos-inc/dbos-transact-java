@@ -84,7 +84,7 @@ public class MetricsTest {
     // Record end time after creating workflows
     var end = Instant.now();
 
-    // create some metrics data before the start time
+    // create some metrics data after the end time
     assertEquals("a", proxy.testWorkflowA());
     assertEquals("b", proxy.testWorkflowB());
 

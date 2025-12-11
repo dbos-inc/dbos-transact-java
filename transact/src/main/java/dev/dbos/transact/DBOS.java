@@ -53,7 +53,7 @@ public class DBOS {
     try (InputStream input = DBOS.class.getResourceAsStream(PROPERTIES_FILE)) {
 
       if (input == null) {
-        System.err.println("Could not find " + PROPERTIES_FILE + " resource file.");
+        logger.warn("Could not find {} resource file", PROPERTIES_FILE);
         return "unknown (resource missing)";
       }
 
@@ -64,7 +64,7 @@ public class DBOS {
       return props.getProperty(VERSION_KEY, "<unknown>");
 
     } catch (IOException ex) {
-      System.err.println("Error loading version properties: " + ex.getMessage());
+      logger.error("Error loading version properties", ex);
       return "<unknown (IO Error)>";
     }
   }
