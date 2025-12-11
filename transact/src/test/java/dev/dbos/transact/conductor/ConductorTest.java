@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.conductor.protocol.MessageType;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
@@ -308,6 +309,7 @@ public class ConductorTest {
     }
   }
 
+  @RetryingTest(3)
   public void canExecutorInfo() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -333,6 +335,8 @@ public class ConductorTest {
       assertEquals(hostname, jsonNode.get("hostname").asText());
       assertEquals("test-app-version", jsonNode.get("application_version").asText());
       assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
+      assertEquals("java", jsonNode.get("language").asText());
+      assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
       assertNull(jsonNode.get("error_message"));
     }
   }

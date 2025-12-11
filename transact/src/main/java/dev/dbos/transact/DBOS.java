@@ -18,6 +18,8 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.Collection;
@@ -25,6 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -41,6 +44,41 @@ public class DBOS {
   private DBOS() {}
 
   private static final Logger logger = LoggerFactory.getLogger(DBOS.class);
+  private static String version = null;
+
+  private static String loadVersionFromResources() {
+    final String PROPERTIES_FILE = "/app.properties";
+    final String VERSION_KEY = "app.version";
+    Properties props = new Properties();
+    try (InputStream input = DBOS.class.getResourceAsStream(PROPERTIES_FILE)) {
+
+      if (input == null) {
+        System.err.println("Could not find " + PROPERTIES_FILE + " resource file.");
+        return "unknown (resource missing)";
+      }
+
+      // Load the properties from the file
+      props.load(input);
+
+      // Retrieve the version property, defaulting to "unknown"
+      return props.getProperty(VERSION_KEY, "<unknown>");
+
+    } catch (IOException ex) {
+      System.err.println("Error loading version properties: " + ex.getMessage());
+      return "<unknown (IO Error)>";
+    }
+  }
+
+  public static String version() {
+    if (version == null) {
+      synchronized (DBOS.class) {
+        if (version == null) {
+          version = loadVersionFromResources();
+        }
+      }
+    }
+    return version;
+  }
 
   public static class Instance {
     private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
@@ -161,8 +199,7 @@ public class DBOS {
       if (this.config == null) {
         throw new IllegalStateException("DBOS must be configured before launch()");
       }
-      var pkg = DBOS.class.getPackage();
-      var ver = pkg == null ? null : pkg.getImplementationVersion();
+      var ver = DBOS.version();
       logger.info("Launching DBOS {}", ver == null ? "<unknown version>" : "v" + ver);
 
       if (dbosExecutor.get() == null) {

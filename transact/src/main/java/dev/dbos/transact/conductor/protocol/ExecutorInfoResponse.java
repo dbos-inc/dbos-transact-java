@@ -1,5 +1,7 @@
 package dev.dbos.transact.conductor.protocol;
 
+import dev.dbos.transact.DBOS;
+
 public class ExecutorInfoResponse extends BaseResponse {
   public String executor_id;
   public String application_version;
@@ -14,7 +16,7 @@ public class ExecutorInfoResponse extends BaseResponse {
     this.application_version = appVersion;
     this.hostname = hostName;
     this.language = "java";
-    this.dbos_version = "<unknown>";
+    this.dbos_version = DBOS.version();
   }
 
   public ExecutorInfoResponse(BaseMessage message, Exception ex) {
