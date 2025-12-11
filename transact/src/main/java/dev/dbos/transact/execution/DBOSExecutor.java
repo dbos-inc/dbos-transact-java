@@ -277,9 +277,8 @@ public class DBOSExecutor implements AutoCloseable {
 
   WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) {
     Objects.requireNonNull(output, "output must not be null");
-    String workflowId = output.getWorkflowUuid();
-    Objects.requireNonNull(workflowId, "workflowId must not be null");
-    String queue = output.getQueueName();
+    String workflowId = Objects.requireNonNull(output.workflowId(), "workflowId must not be null");
+    String queue = output.queueName();
 
     logger.debug("Recovery executing workflow {}", workflowId);
 
@@ -321,7 +320,7 @@ public class DBOSExecutor implements AutoCloseable {
         try {
           handles.add(recoverWorkflow(output));
         } catch (Exception e) {
-          logger.warn("Recovery of workflow {} failed", output.getWorkflowUuid(), e);
+          logger.warn("Recovery of workflow {} failed", output.workflowId(), e);
         }
       }
     }
