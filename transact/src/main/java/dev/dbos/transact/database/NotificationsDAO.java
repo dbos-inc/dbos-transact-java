@@ -398,7 +398,8 @@ class NotificationsDAO {
               .formatted(this.schema);
 
       // Wait for the notification
-      double actualTimeout = timeout.toMillis();
+      double actualTimeout =
+          Objects.requireNonNull(timeout, "getEvent timeout cannot be null").toMillis();
       var targetTime = System.currentTimeMillis() + actualTimeout;
       var checkedDBForSleep = false;
       var hasExistingNotification = false;

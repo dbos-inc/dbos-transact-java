@@ -7,6 +7,7 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
@@ -14,7 +15,6 @@ import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.*;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
@@ -361,7 +361,7 @@ class WorkflowDAO {
     sqlBuilder.append(
         """
           SELECT
-            workflow_uuid, status,  forked_from,
+            workflow_uuid, status, forked_from,
             name, class_name, config_name,
             queue_name, deduplication_id, priority, queue_partition_key,
             executor_id, application_version, application_id,
@@ -786,6 +786,8 @@ class WorkflowDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
+    Objects.requireNonNull(options);
+
     var status = getWorkflowStatus(originalWorkflowId);
     if (status == null) {
       throw new DBOSNonExistentWorkflowException(originalWorkflowId);
@@ -800,12 +802,12 @@ class WorkflowDAO {
 
     String applicationVersion = options.applicationVersion();
 
-    var timeout = options.timeout();
-    if (timeout == null) {
-      timeout = status.getTimeout();
-    }
-    if (timeout == null) {
-      timeout = Duration.ZERO;
+    var timeout = Objects.requireNonNullElse(options.timeout(), Timeout.inherit());
+    Long timeoutMS = null;
+    if (timeout instanceof Timeout.Inherit) {
+      timeoutMS = status.timeoutMs();
+    } else if (timeout instanceof Timeout.Explicit explicit) {
+      timeoutMS = explicit.value().toMillis();
     }
 
     try (Connection connection = dataSource.getConnection()) {
@@ -819,7 +821,7 @@ class WorkflowDAO {
             forkedWorkflowId,
             status,
             applicationVersion,
-            timeout.toMillis(),
+            timeoutMS,
             this.schema);
 
         // Copy operation outputs if starting from step > 0
@@ -844,21 +846,17 @@ class WorkflowDAO {
       String forkedWorkflowId,
       WorkflowStatus originalStatus,
       String applicationVersion,
-      long timeoutMs,
+      Long timeoutMS,
       String schema)
       throws SQLException {
     Objects.requireNonNull(schema);
-    long workflowDeadlineEpoch = 0;
-    if (timeoutMs > 0) {
-      workflowDeadlineEpoch = System.currentTimeMillis() + timeoutMs;
-    }
 
     String sql =
         """
           INSERT INTO %s.workflow_status (
             workflow_uuid, status, name, class_name, config_name, application_version, application_id,
-            authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_deadline_epoch_ms, workflow_timeout_ms, forked_from
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_timeout_ms, forked_from
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
             .formatted(schema);
 
@@ -875,9 +873,8 @@ class WorkflowDAO {
       stmt.setString(10, originalStatus.assumedRole());
       stmt.setString(11, Constants.DBOS_INTERNAL_QUEUE);
       stmt.setString(12, JSONUtil.serializeArray(originalStatus.input()));
-      stmt.setLong(13, workflowDeadlineEpoch);
-      stmt.setObject(14, originalStatus.timeoutMs());
-      stmt.setString(15, originalWorkflowId);
+      stmt.setObject(13, timeoutMS);
+      stmt.setString(14, originalWorkflowId);
 
       stmt.executeUpdate();
     }
