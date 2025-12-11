@@ -13,7 +13,6 @@ import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -95,14 +94,16 @@ public class MetricsTest {
     assertEquals(4, metrics.size());
 
     // Convert to map for easier assertion
-    var metricsMap = metrics.stream().collect(Collectors.toMap(m ->  
-        "%s:%s".formatted(m.metricType(), m.metricName()), m -> m.value()));
+    var metricsMap =
+        metrics.stream()
+            .collect(
+                Collectors.toMap(
+                    m -> "%s:%s".formatted(m.metricType(), m.metricName()), m -> m.value()));
 
     // Verify step counts
     assertEquals(2, metricsMap.get("workflow_count:testWorkflowA"));
     assertEquals(1, metricsMap.get("workflow_count:testWorkflowB"));
     assertEquals(4, metricsMap.get("step_count:testStepX"));
     assertEquals(1, metricsMap.get("step_count:testStepY"));
-
   }
 }
