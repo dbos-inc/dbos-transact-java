@@ -498,27 +498,55 @@ public class ForkTest {
   public void forkEventHistory() throws Exception {
     DBOSTestAccess.getQueueService().pause();
 
+    // Verify the workflow runs and the event's final value is correct
     var wfid = "forkEventHistory-%d".formatted(System.currentTimeMillis());
     var key = "event-key";
+    var timeout = Duration.ofSeconds(1);
     var options = new StartWorkflowOptions(wfid);
     var handle = DBOS.startWorkflow(() -> proxy.setEventWorkflow(key), options);
     assertDoesNotThrow(() -> handle.getResult());
-    assertEquals("event-5", DBOS.getEvent(handle.workflowId(), key, Duration.ofSeconds(10)));
+    assertEquals("event-5", DBOS.getEvent(handle.workflowId(), key, timeout));
 
     var events = DBUtils.getWorkflowEvents(dataSource, handle.workflowId());
     var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, handle.workflowId());
     assertEquals(1, events.size());
     assertEquals(5, eventHistory.size());
 
+    // Block the workflow so forked workflows cannot advance
     DBOSTestAccess.getQueueService().pause();
-    var forkHandle = DBOS.forkWorkflow(wfid, 3);
-    assertEquals("event-3", DBOS.getEvent(forkHandle.workflowId(), key, Duration.ofSeconds(10)));
 
-    events = DBUtils.getWorkflowEvents(dataSource, forkHandle.workflowId());
-    eventHistory = DBUtils.getWorkflowEventHistory(dataSource, forkHandle.workflowId());
+    // Fork the workflow from each step, verify the event is set to the appropriate value
+    var forkZero = DBOS.forkWorkflow(wfid, 0);
+    assertNull(DBOS.getEvent(forkZero.workflowId(), key, timeout));
+
+    var forkOne = DBOS.forkWorkflow(wfid, 1);
+    assertEquals("event-1", DBOS.getEvent(forkOne.workflowId(), key, timeout));
+
+    var forkTwo = DBOS.forkWorkflow(wfid, 2);
+    assertEquals("event-2", DBOS.getEvent(forkTwo.workflowId(), key, timeout));
+
+    var forkThree = DBOS.forkWorkflow(wfid, 3);
+    assertEquals("event-3", DBOS.getEvent(forkThree.workflowId(), key, timeout));
+
+    var forkFour = DBOS.forkWorkflow(wfid, 4);
+    assertEquals("event-4", DBOS.getEvent(forkFour.workflowId(), key, timeout));
+
+    // Fork from a fork
+    var forkFive = DBOS.forkWorkflow(forkFour.workflowId(), 4);
+    assertEquals("event-4", DBOS.getEvent(forkFive.workflowId(), key, timeout));
+
+    events = DBUtils.getWorkflowEvents(dataSource, forkThree.workflowId());
+    eventHistory = DBUtils.getWorkflowEventHistory(dataSource, forkThree.workflowId());
     assertEquals(1, events.size());
     assertEquals(3, eventHistory.size());
 
     assertEquals(events.get(0).value(), eventHistory.get(2).value());
+
+    // Unblock the forked workflows, verify they successfully complete
+    DBOSTestAccess.getQueueService().unpause();
+    for (var h : List.of(forkOne, forkTwo, forkThree, forkFour, forkFive)) {
+      assertDoesNotThrow(() -> h.getResult());
+      assertEquals("event-5", DBOS.getEvent(h.workflowId(), key, timeout));
+    }
   }
 }
