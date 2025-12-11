@@ -1105,7 +1105,6 @@ public class ConductorTest {
     }
   }
 
-
   @RetryingTest(3)
   public void canGetMetricsThrows() throws Exception {
     MessageListener listener = new MessageListener();
