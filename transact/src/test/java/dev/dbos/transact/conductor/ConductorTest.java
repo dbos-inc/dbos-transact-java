@@ -11,6 +11,7 @@ import static org.mockito.Mockito.*;
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.conductor.protocol.MessageType;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
+import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
@@ -1061,12 +1062,12 @@ public class ConductorTest {
     var start = Instant.now().minusSeconds(60 * 10);
     var end = start.plusSeconds(60);
 
-    var m1 = new SystemDatabase.MetricData("workflow_count", "wf-one", 10);
-    var m2 = new SystemDatabase.MetricData("workflow_count", "wf-two", 10);
-    var m3 = new SystemDatabase.MetricData("workflow_count", "wf-three", 10);
-    var m4 = new SystemDatabase.MetricData("step_count", "step-one", 10);
-    var m5 = new SystemDatabase.MetricData("step_count", "step-two", 10);
-    var m6 = new SystemDatabase.MetricData("step_count", "step-three", 10);
+    var m1 = new MetricData("workflow_count", "wf-one", 10);
+    var m2 = new MetricData("workflow_count", "wf-two", 10);
+    var m3 = new MetricData("workflow_count", "wf-three", 10);
+    var m4 = new MetricData("step_count", "step-one", 10);
+    var m5 = new MetricData("step_count", "step-two", 10);
+    var m6 = new MetricData("step_count", "step-three", 10);
     when(mockDB.getMetrics(any(), any())).thenReturn(List.of(m1, m2, m3, m4, m5, m6));
 
     try (Conductor conductor = builder.build()) {

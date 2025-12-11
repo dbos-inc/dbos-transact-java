@@ -387,8 +387,6 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public record MetricData(String metricType, String metricName, int value) {}
-
   public List<MetricData> getMetrics(Instant startTime, Instant endTime) {
     Objects.requireNonNull(startTime);
     Objects.requireNonNull(endTime);

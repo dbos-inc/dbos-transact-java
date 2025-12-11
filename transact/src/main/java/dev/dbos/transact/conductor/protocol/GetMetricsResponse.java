@@ -1,6 +1,6 @@
 package dev.dbos.transact.conductor.protocol;
 
-import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.database.MetricData;
 
 import java.util.Collections;
 import java.util.List;
@@ -13,7 +13,7 @@ public class GetMetricsResponse extends BaseResponse {
 
   public GetMetricsResponse() {}
 
-  public GetMetricsResponse(BaseMessage message, List<SystemDatabase.MetricData> metrics) {
+  public GetMetricsResponse(BaseMessage message, List<MetricData> metrics) {
     super(message.type, message.request_id);
     this.metrics =
         metrics.stream()
