@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.*;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -384,6 +385,13 @@ public class SystemDatabase implements AutoCloseable {
             }
           }
         });
+  }
+
+  public record MetricData(String metricType, String metricName, int value) {}
+
+  public List<MetricData> getMetrics(Instant startTime, Instant endTime) {
+    // TODO: real implementation
+    return List.of();
   }
 
   // package public helper for test purposes
