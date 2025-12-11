@@ -33,7 +33,7 @@ public record WorkflowStatus(
     String forkedFrom) {
 
   @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)
-  public Instant getDeadline() {
+  public Instant deadline() {
     if (deadlineEpochMs != null) {
       return Instant.ofEpochMilli(deadlineEpochMs);
     }
@@ -41,7 +41,7 @@ public record WorkflowStatus(
   }
 
   @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)
-  public Duration getTimeout() {
+  public Duration timeout() {
     if (timeoutMs != null) {
       return Duration.ofMillis(timeoutMs);
     }

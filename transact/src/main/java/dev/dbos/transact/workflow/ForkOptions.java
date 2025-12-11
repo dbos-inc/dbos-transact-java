@@ -1,16 +1,20 @@
 package dev.dbos.transact.workflow;
 
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Options for forking a workflow. This includes: Specified ID for the new workflow Application
  * version to use for executing the new workflow Timeout to apply for the new workflow execution
  */
-public record ForkOptions(String forkedWorkflowId, String applicationVersion, Duration timeout) {
+public record ForkOptions(String forkedWorkflowId, String applicationVersion, Timeout timeout) {
 
   public ForkOptions {
-    if (timeout != null && timeout.isNegative()) {
-      throw new IllegalArgumentException("timeout must not be negative");
+    if (timeout instanceof Timeout.Explicit explicit) {
+      if (explicit.value().isNegative() || explicit.value().isZero()) {
+        throw new IllegalArgumentException(
+            "ForkOptions explicit timeout must be a positive non-zero duration");
+      }
     }
   }
 
@@ -41,12 +45,24 @@ public record ForkOptions(String forkedWorkflowId, String applicationVersion, Du
     return new ForkOptions(this.forkedWorkflowId, applicationVersion, this.timeout);
   }
 
+  public ForkOptions withTimeout(Timeout timeout) {
+    return new ForkOptions(this.forkedWorkflowId, this.applicationVersion, timeout);
+  }
+
   /**
    * Returns a copy of this object with the given timeout.
    *
    * @param timeout Duration to allow for the workflow to run, before canceling the workflow
    */
   public ForkOptions withTimeout(Duration timeout) {
-    return new ForkOptions(this.forkedWorkflowId, this.applicationVersion, timeout);
+    return withTimeout(Timeout.of(timeout));
+  }
+
+  public ForkOptions withTimeout(long value, TimeUnit unit) {
+    return withTimeout(Duration.ofNanos(unit.toNanos(value)));
+  }
+
+  public ForkOptions withNoTimeout() {
+    return withTimeout(Timeout.none());
   }
 }

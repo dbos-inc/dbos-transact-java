@@ -198,8 +198,8 @@ public class AdminServer implements AutoCloseable {
   private void listQueuedWorkflows(HttpExchange exchange) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request = mapper.readValue(exchange.getRequestBody(), ListWorkflowsRequest.class);
-    var input = request.asInput().withQueuesOnly();
+    var request = mapper.readValue(exchange.getRequestBody(), ListQueuedWorkflowsRequest.class);
+    var input = request.asInput();
     var workflows = systemDatabase.listWorkflows(input);
     var response = workflows.stream().map(WorkflowsOutput::of).collect(Collectors.toList());
     sendMappedJson(exchange, 200, response);

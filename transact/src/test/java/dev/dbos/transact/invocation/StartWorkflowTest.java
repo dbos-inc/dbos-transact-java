@@ -114,8 +114,8 @@ public class StartWorkflowTest {
     assertNotNull(row);
     assertEquals(workflowId, row.workflowId());
     assertEquals("SUCCESS", row.status());
-    assertNull(row.getTimeout());
-    assertNull(row.getDeadline());
+    assertNull(row.timeout());
+    assertNull(row.deadline());
   }
 
   @Test

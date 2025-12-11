@@ -48,6 +48,7 @@ public class DBOSInvocationHandler implements InvocationHandler {
   public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
 
     var implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
+    implMethod.setAccessible(true);
     var hook = hookHolder.get();
 
     var wfTag = implMethod.getAnnotation(Workflow.class);

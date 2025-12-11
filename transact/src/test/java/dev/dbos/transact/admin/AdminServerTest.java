@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -387,7 +388,7 @@ class AdminServerTest {
           .body(
               """
                       {
-                  "workflow_id_prefix": "WF",
+                  "queue_name": "some-queue",
                   "end_time": "2025-10-09T11:26:05-07:00"
                     } """)
           .when()
@@ -405,7 +406,8 @@ class AdminServerTest {
 
       verify(mockDB).listWorkflows(inputCaptor.capture());
       var input = inputCaptor.getValue();
-      assertEquals("WF", input.workflowIdPrefix());
+      assertEquals("some-queue", input.queueName());
+      assertTrue(input.queuesOnly());
       assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00"), input.endTime());
     }
   }

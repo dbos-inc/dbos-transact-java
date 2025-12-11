@@ -105,14 +105,7 @@ public record StartWorkflowOptions(
 
   /** Produces a new StartWorkflowOptions that removes the timeout behavior */
   public StartWorkflowOptions withNoTimeout() {
-    return new StartWorkflowOptions(
-        this.workflowId,
-        Timeout.none(),
-        this.deadline,
-        this.queueName,
-        this.deduplicationId,
-        this.priority,
-        this.queuePartitionKey);
+    return withTimeout(Timeout.none());
   }
 
   /** Produces a new StartWorkflowOptions that overrides deadline value for the started workflow */
