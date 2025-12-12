@@ -187,7 +187,7 @@ public class ConfigTest {
     assertFalse(DBOS.version().contains("unknown"));
     var version = assertDoesNotThrow(() -> new ComparableVersion(DBOS.version()));
 
-    // an invalid version string will be parsed as 0.0-qualifier, so make sure 
+    // an invalid version string will be parsed as 0.0-qualifier, so make sure
     // the value provided is later 0.6 (the initial published version)
     assertTrue(version.compareTo(new ComparableVersion("0.6")) > 0);
   }
