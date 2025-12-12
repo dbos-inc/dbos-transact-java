@@ -47,14 +47,14 @@ public class DBOS {
   private static final String version = loadVersionFromResources();
 
   private static String loadVersionFromResources() {
-    final String PROPERTIES_FILE = "/app.properties";
+    final String PROPERTIES_FILE = "/dev/dbos/transact/app.properties";
     final String VERSION_KEY = "app.version";
     Properties props = new Properties();
     try (InputStream input = DBOS.class.getResourceAsStream(PROPERTIES_FILE)) {
 
       if (input == null) {
         logger.warn("Could not find {} resource file", PROPERTIES_FILE);
-        return "unknown (resource missing)";
+        return "<unknown (resource missing)>";
       }
 
       // Load the properties from the file
