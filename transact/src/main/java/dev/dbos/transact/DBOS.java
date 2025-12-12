@@ -44,7 +44,7 @@ public class DBOS {
   private DBOS() {}
 
   private static final Logger logger = LoggerFactory.getLogger(DBOS.class);
-  private static String version = null;
+  private static final String version = loadVersionFromResources();
 
   private static String loadVersionFromResources() {
     final String PROPERTIES_FILE = "/app.properties";
@@ -70,13 +70,6 @@ public class DBOS {
   }
 
   public static String version() {
-    if (version == null) {
-      synchronized (DBOS.class) {
-        if (version == null) {
-          version = loadVersionFromResources();
-        }
-      }
-    }
     return version;
   }
 
