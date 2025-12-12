@@ -38,6 +38,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # fetch-depth 0 needed for version calculation
 
       - name: Set up JDK ${{ matrix.jdk-distro }} ${{ matrix.jdk-version }}
         uses: actions/setup-java@v4
