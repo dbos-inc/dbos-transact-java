@@ -392,7 +392,7 @@ public class SystemDatabase implements AutoCloseable {
     final var end = Objects.requireNonNull(endTime).toEpochMilli();
     return DbRetry.call(
         () -> {
-          logger.info("getMetrics {} {}", startTime, endTime);
+          logger.debug("getMetrics {} {}", start, end);
           List<MetricData> metrics = new ArrayList<>();
           final var wfSQL =
               """
