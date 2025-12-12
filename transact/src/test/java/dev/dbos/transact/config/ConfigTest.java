@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
@@ -19,6 +20,7 @@ import java.util.UUID;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
@@ -177,5 +179,16 @@ public class ConfigTest {
     } finally {
       DBOS.shutdown();
     }
+  }
+
+  @Test
+  public void dbosVersion() throws Exception {
+    assertNotNull(DBOS.version());
+    assertFalse(DBOS.version().contains("unknown"));
+    var version = assertDoesNotThrow(() -> new ComparableVersion(DBOS.version()));
+
+    // an invalid version string will be parsed as 0.0-qualifier, so make sure
+    // the value provided is later 0.6 (the initial published version)
+    assertTrue(version.compareTo(new ComparableVersion("0.6")) > 0);
   }
 }
