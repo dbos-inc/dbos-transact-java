@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class GetMetricsResponse extends BaseResponse {
-  public static record MetricsDataOutput(String metric_type, String metric_name, int value) {}
+  public static record MetricsDataOutput(String metric_type, String metric_name, long value) {}
 
   public List<MetricsDataOutput> metrics;
 
