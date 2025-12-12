@@ -109,9 +109,13 @@ public class DBOSExecutor implements AutoCloseable {
         this.executorId = config.conductorKey() == null ? "local" : UUID.randomUUID().toString();
       }
 
+      // TODO: match this to python
       this.appVersion = System.getenv("DBOS__APPVERSION");
       if (this.appVersion == null || this.appVersion.isEmpty()) {
         this.appVersion = config.appVersion();
+      }
+      if (config.enablePatching()) {
+        this.appVersion = "PATCHING_ENABLED";
       }
 
       if (this.appVersion == null || this.appVersion.isEmpty()) {
@@ -736,6 +740,46 @@ public class DBOSExecutor implements AutoCloseable {
         },
         "DBOS.getResult",
         workflowId);
+  }
+
+  public boolean patch(String patchName) {
+    if (!config.enablePatching()) {
+      throw new RuntimeException("Patching must be enabled in DBOS Config");
+    }
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (ctx == null || !ctx.isInWorkflow()) {
+      throw new RuntimeException("DBOS.patch must be called from a workflow");
+    }
+
+    var workflowId = ctx.getWorkflowId();
+    var functionId = ctx.getCurrentFunctionId() + 1;
+    patchName = "DBOS.patch-%s".formatted(patchName);
+    var patched = systemDatabase.patch(workflowId, functionId, patchName);
+    if (patched) {
+      ctx.setStepFunctionId(functionId);
+    }
+    return patched;
+  }
+
+  public boolean deprecatePatch(String patchName) {
+    if (!config.enablePatching()) {
+      throw new RuntimeException("Patching must be enabled in DBOS Config");
+    }
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (ctx == null || !ctx.isInWorkflow()) {
+      throw new RuntimeException("DBOS.deprecatePatch must be called from a workflow");
+    }
+
+    var workflowId = ctx.getWorkflowId();
+    var functionId = ctx.getCurrentFunctionId() + 1;
+    patchName = "DBOS.patch-%s".formatted(patchName);
+    var patchExists = systemDatabase.deprecatePatch(workflowId, functionId, patchName);
+    if (patchExists) {
+      ctx.setStepFunctionId(functionId);
+    }
+    return true;
   }
 
   private static <T, E extends Exception> Invocation captureInvocation(

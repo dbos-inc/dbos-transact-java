@@ -752,4 +752,12 @@ public class DBOS {
   public static ExternalState upsertExternalState(ExternalState state) {
     return executor("upsertExternalState").upsertExternalState(state);
   }
+
+  public static boolean patch(String patchName) {
+    return executor("patch").patch(patchName);
+  }
+
+  public static boolean deprecatePatch(String patchName) {
+    return executor("deprecatePatch").deprecatePatch(patchName);
+  }
 }
