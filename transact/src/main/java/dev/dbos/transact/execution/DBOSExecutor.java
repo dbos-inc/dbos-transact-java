@@ -114,9 +114,9 @@ public class DBOSExecutor implements AutoCloseable {
       if (this.appVersion == null || this.appVersion.isEmpty()) {
         this.appVersion = config.appVersion();
       }
-      if (config.enablePatching()) {
-        this.appVersion = "PATCHING_ENABLED";
-      }
+      // if (config.enablePatching()) {
+      //   this.appVersion = "PATCHING_ENABLED";
+      // }
 
       if (this.appVersion == null || this.appVersion.isEmpty()) {
         List<Class<?>> registeredClasses =
@@ -753,11 +753,11 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     var workflowId = ctx.getWorkflowId();
-    var functionId = ctx.getCurrentFunctionId() + 1;
+    var functionId = ctx.getCurrentFunctionId();
     patchName = "DBOS.patch-%s".formatted(patchName);
     var patched = systemDatabase.patch(workflowId, functionId, patchName);
     if (patched) {
-      ctx.setStepFunctionId(functionId);
+      ctx.getAndIncrementFunctionId();
     }
     return patched;
   }
@@ -773,11 +773,11 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     var workflowId = ctx.getWorkflowId();
-    var functionId = ctx.getCurrentFunctionId() + 1;
+    var functionId = ctx.getCurrentFunctionId();
     patchName = "DBOS.patch-%s".formatted(patchName);
     var patchExists = systemDatabase.deprecatePatch(workflowId, functionId, patchName);
     if (patchExists) {
-      ctx.setStepFunctionId(functionId);
+      ctx.getAndIncrementFunctionId();
     }
     return true;
   }

@@ -466,6 +466,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public boolean patch(String workflowId, int functionId, String patchName) {
+    Objects.requireNonNull(patchName, "patchName cannot be null");
     return DbRetry.call(
         () -> {
           try (Connection conn = dataSource.getConnection()) {
@@ -476,18 +477,19 @@ public class SystemDatabase implements AutoCloseable {
                   output, System.currentTimeMillis(), null, conn, this.schema);
               return true;
             } else {
-              return checkpointName == patchName;
+              return patchName.equals(checkpointName);
             }
           }
         });
   }
 
   public boolean deprecatePatch(String workflowId, int functionId, String patchName) {
+    Objects.requireNonNull(patchName, "patchName cannot be null");
     return DbRetry.call(
         () -> {
           try (Connection conn = dataSource.getConnection()) {
             var checkpointName = getCheckpointName(conn, workflowId, functionId);
-            return checkpointName == patchName;
+            return patchName.equals(checkpointName);
           }
         });
   }
