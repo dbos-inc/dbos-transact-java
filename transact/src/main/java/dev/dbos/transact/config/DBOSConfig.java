@@ -370,7 +370,7 @@ public record DBOSConfig(
     return this.withEnablePatching(false);
   }
 
-  public DBOSConfig withEnablePatching(Boolean v) {
+  public DBOSConfig withEnablePatching(boolean v) {
     return new DBOSConfig(
         appName,
         databaseUrl,

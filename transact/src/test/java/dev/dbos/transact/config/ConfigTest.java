@@ -190,11 +190,11 @@ public class ConfigTest {
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
-      List<Class<?>> workflows =
+      List<Class<?>> workflowClasses =
           dbosExecutor.getWorkflows().stream()
               .map(r -> r.target().getClass())
               .collect(Collectors.toList());
-      var version = assertDoesNotThrow(() -> AppVersionComputer.computeAppVersion(workflows));
+      var version = assertDoesNotThrow(() -> AppVersionComputer.computeAppVersion(workflowClasses));
       assertEquals(version, dbosExecutor.appVersion());
     } finally {
       DBOS.shutdown();
