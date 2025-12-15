@@ -11,9 +11,7 @@ import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Workflow;
 
-import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 interface PatchService {
@@ -79,19 +77,6 @@ class PatchServiceImplFive implements PatchService {
 
 // @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
 public class PatchTest {
-  private static DBOSConfig dbosConfig;
-  private static HikariDataSource dataSource;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2)
-            .withEnablePatching()
-            .withAppVersion("test-version");
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-  }
 
   @AfterEach
   void afterEachTest() throws Exception {
@@ -110,6 +95,14 @@ public class PatchTest {
 
     // In production, developers would be expected to be updating services in place, so they would
     // have the same workflow name across deployed versions.
+
+    var dbosConfig =
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2)
+            .withEnablePatching()
+            .withAppVersion("test-version");
+    var dataSource = SystemDatabase.createDataSource(dbosConfig);
 
     DBUtils.recreateDB(dbosConfig);
     DBOS.reinitialize(dbosConfig);
@@ -271,5 +264,39 @@ public class PatchTest {
     DBUtils.updateWorkflowName(dataSource, h5.workflowId(), h5Fork1.workflowId());
     queueService.unpause();
     assertThrows(DBOSUnexpectedStepException.class, () -> h5Fork1.getResult());
+  }
+
+  @Test
+  public void patchThrowsNotConfigured() throws Exception {
+    var dbosConfig =
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2)
+            .withAppVersion("test-version");
+
+    DBUtils.recreateDB(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
+
+    var proxy2 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplTwo());
+    DBOS.launch();
+
+    assertThrows(IllegalStateException.class, () -> proxy2.workflow());
+  }
+
+  @Test
+  public void deprecatePatchThrowsNotConfigured() throws Exception {
+    var dbosConfig =
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withMaximumPoolSize(2)
+            .withAppVersion("test-version");
+
+    DBUtils.recreateDB(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
+
+    var proxy4 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplFour());
+    DBOS.launch();
+
+    assertThrows(IllegalStateException.class, () -> proxy4.workflow());
   }
 }

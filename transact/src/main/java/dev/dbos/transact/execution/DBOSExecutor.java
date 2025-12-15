@@ -754,12 +754,12 @@ public class DBOSExecutor implements AutoCloseable {
 
   public boolean patch(String patchName) {
     if (!config.enablePatching()) {
-      throw new RuntimeException("Patching must be enabled in DBOS Config");
+      throw new IllegalStateException("Patching must be enabled in DBOS Config");
     }
 
     DBOSContext ctx = DBOSContextHolder.get();
     if (ctx == null || !ctx.isInWorkflow()) {
-      throw new RuntimeException("DBOS.patch must be called from a workflow");
+      throw new IllegalStateException("DBOS.patch must be called from a workflow");
     }
 
     var workflowId = ctx.getWorkflowId();
@@ -774,12 +774,12 @@ public class DBOSExecutor implements AutoCloseable {
 
   public boolean deprecatePatch(String patchName) {
     if (!config.enablePatching()) {
-      throw new RuntimeException("Patching must be enabled in DBOS Config");
+      throw new IllegalStateException("Patching must be enabled in DBOS Config");
     }
 
     DBOSContext ctx = DBOSContextHolder.get();
     if (ctx == null || !ctx.isInWorkflow()) {
-      throw new RuntimeException("DBOS.deprecatePatch must be called from a workflow");
+      throw new IllegalStateException("DBOS.deprecatePatch must be called from a workflow");
     }
 
     var workflowId = ctx.getWorkflowId();
