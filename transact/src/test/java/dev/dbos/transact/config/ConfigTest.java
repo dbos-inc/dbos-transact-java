@@ -4,18 +4,22 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.database.DBTestAccess;
+import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.invocation.HawkService;
 import dev.dbos.transact.invocation.HawkServiceImpl;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -31,7 +35,10 @@ public class ConfigTest {
   @SystemStub private EnvironmentVariables envVars = new EnvironmentVariables();
 
   @Test
-  public void setExecutorAndAppVersionViaConfig() throws Exception {
+  public void configOverridesEnvAppVerAndExecutor() throws Exception {
+    envVars.set("DBOS__VMID", "test-env-executor-id");
+    envVars.set("DBOS__APPVERSION", "test-env-app-version");
+
     var config =
         DBOSConfig.defaults("config-test")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
@@ -52,8 +59,32 @@ public class ConfigTest {
   }
 
   @Test
-  public void setExecutorAndAppVersionViaEnv() throws Exception {
+  public void envAppVerAndExecutor() throws Exception {
 
+    envVars.set("DBOS__VMID", "test-env-executor-id");
+    envVars.set("DBOS__APPVERSION", "test-env-app-version");
+
+    var config =
+        DBOSConfig.defaults("config-test")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withDbUser("postgres")
+            .withDbPassword(System.getenv("PGPASSWORD"));
+
+    DBOS.reinitialize(config);
+    try {
+      DBOS.launch();
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
+      assertEquals("test-env-app-version", dbosExecutor.appVersion());
+      assertEquals("test-env-executor-id", dbosExecutor.executorId());
+    } finally {
+      DBOS.shutdown();
+    }
+  }
+
+  @Test
+  public void dbosCloudEnvOverridesConfigAppVerAndExecutor() throws Exception {
+
+    envVars.set("DBOS__CLOUD", "true");
     envVars.set("DBOS__VMID", "test-env-executor-id");
     envVars.set("DBOS__APPVERSION", "test-env-app-version");
 
@@ -113,6 +144,41 @@ public class ConfigTest {
   }
 
   @Test
+  public void cantSetExecutorIdWhenUsingConductor() throws Exception {
+    var config =
+        DBOSConfig.defaultsFromEnv("config-test")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withConductorKey("test-conductor-key")
+            .withExecutorId("test-executor-id");
+
+    DBOS.reinitialize(config);
+    try {
+      assertThrows(IllegalArgumentException.class, () -> DBOS.launch());
+    } finally {
+      DBOS.shutdown();
+    }
+  }
+
+  @Test
+  public void cantSetEmptyConfigFields() throws Exception {
+    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults(null));
+    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults(""));
+
+    final var config = DBOSConfig.defaults("app-name");
+    assertThrows(IllegalArgumentException.class, () -> config.withAppName(""));
+    assertThrows(IllegalArgumentException.class, () -> config.withAppName(null));
+
+    assertThrows(IllegalArgumentException.class, () -> config.withConductorKey(""));
+    assertDoesNotThrow(() -> config.withConductorKey(null));
+    assertThrows(IllegalArgumentException.class, () -> config.withConductorDomain(""));
+    assertDoesNotThrow(() -> config.withConductorDomain(null));
+    assertThrows(IllegalArgumentException.class, () -> config.withExecutorId(""));
+    assertDoesNotThrow(() -> config.withExecutorId(null));
+    assertThrows(IllegalArgumentException.class, () -> config.withAppVersion(""));
+    assertDoesNotThrow(() -> config.withAppVersion(null));
+  }
+
+  @Test
   public void calcAppVersion() throws Exception {
     var config =
         DBOSConfig.defaults("config-test")
@@ -124,9 +190,12 @@ public class ConfigTest {
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
-      // If we change the internally registered workflows, the expected value will change
-      var expected = "6482a0dde9a452189b20c5f5e0d00a661ea8f160d58244cfc0a99cc5f13dbcad";
-      assertEquals(expected, dbosExecutor.appVersion());
+      List<Class<?>> workflows =
+          dbosExecutor.getWorkflows().stream()
+              .map(r -> r.target().getClass())
+              .collect(Collectors.toList());
+      var version = assertDoesNotThrow(() -> AppVersionComputer.computeAppVersion(workflows));
+      assertEquals(version, dbosExecutor.appVersion());
     } finally {
       DBOS.shutdown();
     }

@@ -65,6 +65,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private final DBOSConfig config;
 
+  private boolean dbosCloud;
   private String appVersion;
   private String executorId;
 
@@ -86,6 +87,28 @@ public class DBOSExecutor implements AutoCloseable {
 
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
+
+    if (config.conductorKey() != null && config.executorId() != null) {
+      throw new IllegalArgumentException(
+          "DBOSConfig.executorId cannot be specified when using Conductor");
+    }
+
+    appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
+    executorId = Objects.requireNonNullElse(System.getenv("DBOS__VMID"), "local");
+    dbosCloud = Objects.requireNonNullElse(System.getenv("DBOS__CLOUD"), "").equals("true");
+
+    if (!dbosCloud) {
+      if (config.enablePatching()) {
+        appVersion = "PATCHING_ENABLED";
+      }
+
+      if (config.appVersion() != null) {
+        appVersion = config.appVersion();
+      }
+      if (config.executorId() != null) {
+        executorId = config.executorId();
+      }
+    }
   }
 
   public void start(
@@ -101,29 +124,16 @@ public class DBOSExecutor implements AutoCloseable {
       this.queues = Collections.unmodifiableList(queues);
       this.listeners = listenerSet;
 
-      this.executorId = System.getenv("DBOS__VMID");
-      if (this.executorId == null || this.executorId.isEmpty()) {
-        this.executorId = config.executorId();
-      }
-      if (this.executorId == null || this.executorId.isEmpty()) {
-        this.executorId = config.conductorKey() == null ? "local" : UUID.randomUUID().toString();
-      }
-
-      // TODO: match this to python
-      this.appVersion = System.getenv("DBOS__APPVERSION");
-      if (this.appVersion == null || this.appVersion.isEmpty()) {
-        this.appVersion = config.appVersion();
-      }
-      // if (config.enablePatching()) {
-      //   this.appVersion = "PATCHING_ENABLED";
-      // }
-
       if (this.appVersion == null || this.appVersion.isEmpty()) {
         List<Class<?>> registeredClasses =
             workflowMap.values().stream()
                 .map(wrapper -> wrapper.target().getClass())
                 .collect(Collectors.toList());
         this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
+      }
+
+      if (config.conductorKey() != null) {
+        this.executorId = UUID.randomUUID().toString();
       }
 
       logger.info("System Database: {}", this.config.databaseUrl());

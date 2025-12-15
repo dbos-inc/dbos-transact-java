@@ -22,6 +22,25 @@ public record DBOSConfig(
     String databaseSchema,
     boolean enablePatching) {
 
+  public DBOSConfig {
+    if (appName == null || appName.isEmpty()) {
+      throw new IllegalArgumentException("DBOSConfig.appName must not be null or empty");
+    }
+    if (conductorKey != null && conductorKey.isEmpty()) {
+      throw new IllegalArgumentException("DBOSConfig.conductorKey must not be empty if specified");
+    }
+    if (conductorDomain != null && conductorDomain.isEmpty()) {
+      throw new IllegalArgumentException(
+          "DBOSConfig.conductorDomain must not be empty if specified");
+    }
+    if (appVersion != null && appVersion.isEmpty()) {
+      throw new IllegalArgumentException("DBOSConfig.appVersion must not be empty if specified");
+    }
+    if (executorId != null && executorId.isEmpty()) {
+      throw new IllegalArgumentException("DBOSConfig.executorId must not be empty if specified");
+    }
+  }
+
   public static DBOSConfig defaults(String appName) {
     return new DBOSConfig(
         appName, null, null, null, 3, // maximumPoolSize default
