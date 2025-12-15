@@ -47,14 +47,14 @@ public class DBOS {
   private static final String version = loadVersionFromResources();
 
   private static String loadVersionFromResources() {
-    final String PROPERTIES_FILE = "/app.properties";
+    final String PROPERTIES_FILE = "/dev/dbos/transact/app.properties";
     final String VERSION_KEY = "app.version";
     Properties props = new Properties();
     try (InputStream input = DBOS.class.getResourceAsStream(PROPERTIES_FILE)) {
 
       if (input == null) {
         logger.warn("Could not find {} resource file", PROPERTIES_FILE);
-        return "unknown (resource missing)";
+        return "<unknown (resource missing)>";
       }
 
       // Load the properties from the file
@@ -754,28 +754,30 @@ public class DBOS {
   }
 
   /**
-   * Apply a patch within a workflow execution to handle code changes and updates.
-   * This method allows workflows to conditionally execute different code paths based on
-   * whether a specific patch has been applied. Patching must be enabled in DBOS configuration
-   * and this method must be called from within a workflow context.
+   * Apply a patch within a workflow execution to handle code changes and updates. This method
+   * allows workflows to conditionally execute different code paths based on whether a specific
+   * patch has been applied. Patching must be enabled in DBOS configuration and this method must be
+   * called from within a workflow context.
    *
    * @param patchName the name of the patch to apply
    * @return true if the patch was successfully applied, false if it was already applied previously
-   * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a workflow
+   * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
+   *     workflow
    */
   public static boolean patch(String patchName) {
     return executor("patch").patch(patchName);
   }
 
   /**
-   * Deprecate a previously applied patch within a workflow execution.
-   * This method marks a patch as deprecated, allowing workflows to handle the removal
-   * or phasing out of code changes that were previously applied. Patching must be enabled 
-   * in DBOS configuration and this method must be called from within a workflow context.
+   * Deprecate a previously applied patch within a workflow execution. This method marks a patch as
+   * deprecated, allowing workflows to handle the removal or phasing out of code changes that were
+   * previously applied. Patching must be enabled in DBOS configuration and this method must be
+   * called from within a workflow context.
    *
    * @param patchName the name of the patch to deprecate
    * @return true (always returns true when the operation completes successfully)
-   * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a workflow
+   * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
+   *     workflow
    */
   public static boolean deprecatePatch(String patchName) {
     return executor("deprecatePatch").deprecatePatch(patchName);

@@ -43,6 +43,7 @@ dependencies {
     testImplementation("io.rest-assured:rest-assured:5.4.0")
     testImplementation("io.rest-assured:json-path:5.4.0")
     testImplementation("io.rest-assured:xml-path:5.4.0")
+    testImplementation("org.apache.maven:maven-artifact:3.9.11")
 }
 
 tasks.processResources {
