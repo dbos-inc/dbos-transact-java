@@ -756,7 +756,7 @@ public class DBOS {
   /**
    * Marks a breaking change within a workflow. Returns true for workflows that execute this step
    * after the breaking change, false for worklows that execute this step before the breaking
-   * change. The workflow should take the patch branch if patch returns true. Patching must be
+   * change. The workflow should take the patch branch if this method returns true. Patching must be
    * enabled in DBOS configuration and this method must be called from within a workflow context.
    *
    * @param patchName the name of the patch to apply
