@@ -754,13 +754,13 @@ public class DBOS {
   }
 
   /**
-   * Apply a patch within a workflow execution to handle code changes and updates. This method
-   * allows workflows to conditionally execute different code paths based on whether a specific
-   * patch has been applied. Patching must be enabled in DBOS configuration and this method must be
-   * called from within a workflow context.
+   * Marks a breaking change within a workflow. Returns true for workflows started after the
+   * breaking change, false for worklows started before the breaking change. Patching must be
+   * enabled in DBOS configuration and this method must be called from within a workflow context.
    *
    * @param patchName the name of the patch to apply
-   * @return true if the patch was successfully applied, false if it was already applied previously
+   * @return true for workflows started after the breaking change, false for workflows started
+   *     before the breaking change
    * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
    *     workflow
    */
@@ -769,9 +769,10 @@ public class DBOS {
   }
 
   /**
-   * Deprecate a previously applied patch within a workflow execution. This method marks a patch as
-   * deprecated, allowing workflows to handle the removal or phasing out of code changes that were
-   * previously applied. Patching must be enabled in DBOS configuration and this method must be
+   * Deprecates a previously applied breaking change patch within a workflow. Safely executes
+   * workflows containing the patch marker, but does not insert the patch marker into new workflows.
+   * Always returns true (boolean return gives deprecatePatch the same signature as {@link #patch}).
+   * Like {@link #patch}, patching must be enabled in DBOS configuration and this method must be
    * called from within a workflow context.
    *
    * @param patchName the name of the patch to deprecate
