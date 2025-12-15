@@ -754,10 +754,12 @@ public class DBOS {
   }
 
   /**
-   * Marks a breaking change within a workflow. Returns true for workflows that execute this step
-   * after the breaking change, false for worklows that execute this step before the breaking
-   * change. The workflow should take the patch branch if this method returns true. Patching must be
-   * enabled in DBOS configuration and this method must be called from within a workflow context.
+   * Marks a breaking change within a workflow. Returns true for new workflows (i.e. workflow sthat
+   * reach this point in the workflow after the breaking change was created) and false for old
+   * worklows (i.e. workflows that reached this point in the workflow before the breaking change was
+   * created). The workflow should execute the new code if this method returns true, otherwise
+   * execute the old code. Note, patching must be enabled in DBOS configuration and this method must
+   * be called from within a workflow context.
    *
    * @param patchName the name of the patch to apply
    * @return true for workflows started after the breaking change, false for workflows started
@@ -777,7 +779,7 @@ public class DBOS {
    * called from within a workflow context.
    *
    * @param patchName the name of the patch to deprecate
-   * @return true (always returns true when the operation completes successfully)
+   * @return true (always returns true or throws)
    * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
    *     workflow
    */
