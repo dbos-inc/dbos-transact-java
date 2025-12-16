@@ -387,4 +387,38 @@ public class DBUtils {
     }
     return success;
   }
+
+  public static void updateWorkflowName(DataSource ds, String sourceId, String destinationId) {
+    updateWorkflowName(ds, sourceId, destinationId, null);
+  }
+
+  public static void updateWorkflowName(
+      DataSource ds, String sourceId, String destinationId, String schema) {
+    var row = getWorkflowRow(ds, sourceId, schema);
+    if (row == null) {
+      throw new RuntimeException("Workflow %s not found".formatted(sourceId));
+    }
+
+    schema = SystemDatabase.sanitizeSchema(schema);
+
+    var sql =
+        """
+          UPDATE %s.workflow_status
+          SET name = ?, class_name = ?, config_name = ?
+          WHERE workflow_uuid = ?
+        """
+            .formatted(schema);
+    try (var conn = ds.getConnection();
+        var ps = conn.prepareStatement(sql)) {
+
+      ps.setString(1, row.name());
+      ps.setString(2, row.className());
+      ps.setString(3, row.instanceName());
+      ps.setString(4, destinationId);
+
+      ps.executeUpdate();
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
 }

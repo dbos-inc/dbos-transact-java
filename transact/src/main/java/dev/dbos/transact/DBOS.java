@@ -752,4 +752,38 @@ public class DBOS {
   public static ExternalState upsertExternalState(ExternalState state) {
     return executor("upsertExternalState").upsertExternalState(state);
   }
+
+  /**
+   * Marks a breaking change within a workflow. Returns true for new workflows (i.e. workflow sthat
+   * reach this point in the workflow after the breaking change was created) and false for old
+   * worklows (i.e. workflows that reached this point in the workflow before the breaking change was
+   * created). The workflow should execute the new code if this method returns true, otherwise
+   * execute the old code. Note, patching must be enabled in DBOS configuration and this method must
+   * be called from within a workflow context.
+   *
+   * @param patchName the name of the patch to apply
+   * @return true for workflows started after the breaking change, false for workflows started
+   *     before the breaking change
+   * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
+   *     workflow
+   */
+  public static boolean patch(String patchName) {
+    return executor("patch").patch(patchName);
+  }
+
+  /**
+   * Deprecates a previously applied breaking change patch within a workflow. Safely executes
+   * workflows containing the patch marker, but does not insert the patch marker into new workflows.
+   * Always returns true (boolean return gives deprecatePatch the same signature as {@link #patch}).
+   * Like {@link #patch}, patching must be enabled in DBOS configuration and this method must be
+   * called from within a workflow context.
+   *
+   * @param patchName the name of the patch to deprecate
+   * @return true (always returns true or throws)
+   * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
+   *     workflow
+   */
+  public static boolean deprecatePatch(String patchName) {
+    return executor("deprecatePatch").deprecatePatch(patchName);
+  }
 }

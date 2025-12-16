@@ -19,7 +19,27 @@ public record DBOSConfig(
     String conductorDomain,
     String appVersion,
     String executorId,
-    String databaseSchema) {
+    String databaseSchema,
+    boolean enablePatching) {
+
+  public DBOSConfig {
+    if (appName == null || appName.isEmpty()) {
+      throw new IllegalArgumentException("DBOSConfig.appName must not be null or empty");
+    }
+    if (conductorKey != null && conductorKey.isEmpty()) {
+      throw new IllegalArgumentException("DBOSConfig.conductorKey must not be empty if specified");
+    }
+    if (conductorDomain != null && conductorDomain.isEmpty()) {
+      throw new IllegalArgumentException(
+          "DBOSConfig.conductorDomain must not be empty if specified");
+    }
+    if (appVersion != null && appVersion.isEmpty()) {
+      throw new IllegalArgumentException("DBOSConfig.appVersion must not be empty if specified");
+    }
+    if (executorId != null && executorId.isEmpty()) {
+      throw new IllegalArgumentException("DBOSConfig.executorId must not be empty if specified");
+    }
+  }
 
   public static DBOSConfig defaults(String appName) {
     return new DBOSConfig(
@@ -28,7 +48,7 @@ public record DBOSConfig(
         null, false, // adminServer
         3001, // adminServerPort
         true, // migrate
-        null, null, null, null, null);
+        null, null, null, null, null, false);
   }
 
   public static DBOSConfig defaultsFromEnv(String appName) {
@@ -58,7 +78,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withDatabaseUrl(String v) {
@@ -77,7 +98,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withDbUser(String v) {
@@ -96,7 +118,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withDbPassword(String v) {
@@ -115,7 +138,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withMaximumPoolSize(int v) {
@@ -134,7 +158,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withConnectionTimeout(int v) {
@@ -153,7 +178,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withDataSource(HikariDataSource v) {
@@ -172,7 +198,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withAdminServer(boolean v) {
@@ -191,7 +218,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withAdminServerPort(int v) {
@@ -210,7 +238,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withMigrate(boolean v) {
@@ -229,7 +258,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withConductorKey(String v) {
@@ -248,7 +278,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withConductorDomain(String v) {
@@ -267,7 +298,8 @@ public record DBOSConfig(
         v,
         appVersion,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withAppVersion(String v) {
@@ -286,7 +318,8 @@ public record DBOSConfig(
         conductorDomain,
         v,
         executorId,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withExecutorId(String v) {
@@ -305,7 +338,8 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         v,
-        databaseSchema);
+        databaseSchema,
+        enablePatching);
   }
 
   public DBOSConfig withDatabaseSchema(String v) {
@@ -324,6 +358,35 @@ public record DBOSConfig(
         conductorDomain,
         appVersion,
         executorId,
+        v,
+        enablePatching);
+  }
+
+  public DBOSConfig withEnablePatching() {
+    return this.withEnablePatching(true);
+  }
+
+  public DBOSConfig withDisablePatching() {
+    return this.withEnablePatching(false);
+  }
+
+  public DBOSConfig withEnablePatching(boolean v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        maximumPoolSize,
+        connectionTimeout,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        appVersion,
+        executorId,
+        databaseSchema,
         v);
   }
 
@@ -338,7 +401,7 @@ public record DBOSConfig(
   // Override toString to mask the DB password
   @Override
   public String toString() {
-    return "DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, appVersion=%s, executorId=%s, dbSchema=%s]"
+    return "DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, appVersion=%s, executorId=%s, dbSchema=%s, enablePatching=%s]"
         .formatted(
             appName,
             databaseUrl,
@@ -353,6 +416,7 @@ public record DBOSConfig(
             conductorDomain,
             appVersion,
             executorId,
-            databaseSchema);
+            databaseSchema,
+            enablePatching);
   }
 }

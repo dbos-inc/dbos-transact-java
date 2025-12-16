@@ -100,10 +100,10 @@ public class SystemDatabase implements AutoCloseable {
       boolean isRecoveryRequest,
       boolean isDequeuedRequest) {
 
-    // This ID will be used to tell if we are the first writer of the record, or if there is an
-    // existing one
-    // Note that it is generated outside of the DB retry loop, in case commit acks get lost and we
-    // do not know if we committed or not
+    // This ID will be used to tell if we are the first writer of the record, or if
+    // there is an existing one.
+    // Note that it is generated outside of the DB retry loop, in case commit acks
+    // get lost and we do not know if we committed or not
     String ownerXid = UUID.randomUUID().toString();
     return DbRetry.call(
         () -> {
@@ -439,6 +439,58 @@ public class SystemDatabase implements AutoCloseable {
           }
 
           return metrics;
+        });
+  }
+
+  private String getCheckpointName(Connection conn, String workflowId, int functionId)
+      throws SQLException {
+    var sql =
+        """
+          SELECT function_name
+          FROM %s.operation_outputs
+          WHERE workflow_uuid = ? AND function_id = ?
+        """
+            .formatted(this.schema);
+
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, workflowId);
+      ps.setInt(2, functionId);
+      try (var rs = ps.executeQuery()) {
+        if (rs.next()) {
+          return rs.getString("function_name");
+        } else {
+          return null;
+        }
+      }
+    }
+  }
+
+  public boolean patch(String workflowId, int functionId, String patchName) {
+    Objects.requireNonNull(patchName, "patchName cannot be null");
+    return DbRetry.call(
+        () -> {
+          try (Connection conn = dataSource.getConnection()) {
+            var checkpointName = getCheckpointName(conn, workflowId, functionId);
+            if (checkpointName == null) {
+              var output = new StepResult(workflowId, functionId, patchName);
+              StepsDAO.recordStepResultTxn(
+                  output, System.currentTimeMillis(), null, conn, this.schema);
+              return true;
+            } else {
+              return patchName.equals(checkpointName);
+            }
+          }
+        });
+  }
+
+  public boolean deprecatePatch(String workflowId, int functionId, String patchName) {
+    Objects.requireNonNull(patchName, "patchName cannot be null");
+    return DbRetry.call(
+        () -> {
+          try (Connection conn = dataSource.getConnection()) {
+            var checkpointName = getCheckpointName(conn, workflowId, functionId);
+            return patchName.equals(checkpointName);
+          }
         });
   }
 

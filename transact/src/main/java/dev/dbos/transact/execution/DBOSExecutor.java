@@ -65,6 +65,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private final DBOSConfig config;
 
+  private boolean dbosCloud;
   private String appVersion;
   private String executorId;
 
@@ -86,6 +87,28 @@ public class DBOSExecutor implements AutoCloseable {
 
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
+
+    if (config.conductorKey() != null && config.executorId() != null) {
+      throw new IllegalArgumentException(
+          "DBOSConfig.executorId cannot be specified when using Conductor");
+    }
+
+    appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
+    executorId = Objects.requireNonNullElse(System.getenv("DBOS__VMID"), "local");
+    dbosCloud = Objects.requireNonNullElse(System.getenv("DBOS__CLOUD"), "").equals("true");
+
+    if (!dbosCloud) {
+      if (config.enablePatching()) {
+        appVersion = "PATCHING_ENABLED";
+      }
+
+      if (config.appVersion() != null) {
+        appVersion = config.appVersion();
+      }
+      if (config.executorId() != null) {
+        executorId = config.executorId();
+      }
+    }
   }
 
   public void start(
@@ -101,25 +124,16 @@ public class DBOSExecutor implements AutoCloseable {
       this.queues = Collections.unmodifiableList(queues);
       this.listeners = listenerSet;
 
-      this.executorId = System.getenv("DBOS__VMID");
-      if (this.executorId == null || this.executorId.isEmpty()) {
-        this.executorId = config.executorId();
-      }
-      if (this.executorId == null || this.executorId.isEmpty()) {
-        this.executorId = config.conductorKey() == null ? "local" : UUID.randomUUID().toString();
-      }
-
-      this.appVersion = System.getenv("DBOS__APPVERSION");
-      if (this.appVersion == null || this.appVersion.isEmpty()) {
-        this.appVersion = config.appVersion();
-      }
-
       if (this.appVersion == null || this.appVersion.isEmpty()) {
         List<Class<?>> registeredClasses =
             workflowMap.values().stream()
                 .map(wrapper -> wrapper.target().getClass())
                 .collect(Collectors.toList());
         this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
+      }
+
+      if (config.conductorKey() != null) {
+        this.executorId = UUID.randomUUID().toString();
       }
 
       logger.info("System Database: {}", this.config.databaseUrl());
@@ -736,6 +750,46 @@ public class DBOSExecutor implements AutoCloseable {
         },
         "DBOS.getResult",
         workflowId);
+  }
+
+  public boolean patch(String patchName) {
+    if (!config.enablePatching()) {
+      throw new IllegalStateException("Patching must be enabled in DBOS Config");
+    }
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (ctx == null || !ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.patch must be called from a workflow");
+    }
+
+    var workflowId = ctx.getWorkflowId();
+    var functionId = ctx.getCurrentFunctionId();
+    patchName = "DBOS.patch-%s".formatted(patchName);
+    var patched = systemDatabase.patch(workflowId, functionId, patchName);
+    if (patched) {
+      ctx.getAndIncrementFunctionId();
+    }
+    return patched;
+  }
+
+  public boolean deprecatePatch(String patchName) {
+    if (!config.enablePatching()) {
+      throw new IllegalStateException("Patching must be enabled in DBOS Config");
+    }
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (ctx == null || !ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.deprecatePatch must be called from a workflow");
+    }
+
+    var workflowId = ctx.getWorkflowId();
+    var functionId = ctx.getCurrentFunctionId();
+    patchName = "DBOS.patch-%s".formatted(patchName);
+    var patchExists = systemDatabase.deprecatePatch(workflowId, functionId, patchName);
+    if (patchExists) {
+      ctx.getAndIncrementFunctionId();
+    }
+    return true;
   }
 
   private static <T, E extends Exception> Invocation captureInvocation(
