@@ -275,7 +275,7 @@ class StepsDAO {
     var sleepDuration =
         StepsDAO.durableSleepDuration(dataSource, workflowUuid, functionId, duration, this.schema);
     logger.debug("Sleeping for duration {}", sleepDuration);
-    Thread.sleep(sleepDuration);
+    Thread.sleep(sleepDuration.toMillis());
   }
 
   static Duration durableSleepDuration(
