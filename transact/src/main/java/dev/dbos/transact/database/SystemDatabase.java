@@ -273,10 +273,10 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public Duration sleep(String workflowId, int functionId, Duration duration, boolean skipSleep) {
-    return DbRetry.call(
+  public void sleep(String workflowId, int functionId, Duration duration) {
+    DbRetry.run(
         () -> {
-          return stepsDAO.sleep(workflowId, functionId, duration, skipSleep);
+          stepsDAO.sleep(workflowId, functionId, duration);
         });
   }
 

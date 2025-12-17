@@ -190,8 +190,8 @@ class NotificationsDAO {
         if (!checkedDBForSleep) {
           // Support OAOO sleep
           actualTimeout =
-              StepsDAO.sleep(
-                      dataSource, workflowUuid, timeoutFunctionId, timeout, true, this.schema)
+              StepsDAO.durableSleepDuration(
+                      dataSource, workflowUuid, timeoutFunctionId, timeout, this.schema)
                   .toMillis();
           checkedDBForSleep = true;
           targetTime = nowTime + actualTimeout;
@@ -426,12 +426,11 @@ class NotificationsDAO {
         // Consult DB - part of timeout may have expired if sleep is durable.
         if (callerCtx != null & !checkedDBForSleep) {
           actualTimeout =
-              StepsDAO.sleep(
+              StepsDAO.durableSleepDuration(
                       dataSource,
                       callerCtx.workflowId(),
                       callerCtx.timeoutFunctionId(),
                       timeout,
-                      true, // skip_sleep
                       this.schema)
                   .toMillis();
           targetTime = System.currentTimeMillis() + actualTimeout;

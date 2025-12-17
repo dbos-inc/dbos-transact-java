@@ -41,7 +41,7 @@ class StepsDAO {
       throw new IllegalStateException("Database is closed!");
     }
 
-    try (Connection connection = dataSource.getConnection(); ) {
+    try (Connection connection = dataSource.getConnection()) {
       recordStepResultTxn(result, startTimeEpochMs, endTimeEpochMs, connection, schema);
     }
     DebugTriggers.debugTriggerPoint(DebugTriggers.DEBUG_TRIGGER_STEP_COMMIT);
@@ -270,17 +270,19 @@ class StepsDAO {
     return steps;
   }
 
-  Duration sleep(String workflowUuid, int functionId, Duration duration, boolean skipSleep)
-      throws SQLException {
-    return StepsDAO.sleep(dataSource, workflowUuid, functionId, duration, skipSleep, this.schema);
+  void sleep(String workflowUuid, int functionId, Duration duration)
+      throws SQLException, InterruptedException {
+    var sleepDuration =
+        StepsDAO.durableSleepDuration(dataSource, workflowUuid, functionId, duration, this.schema);
+    logger.debug("Sleeping for duration {}", sleepDuration);
+    Thread.sleep(sleepDuration);
   }
 
-  static Duration sleep(
+  static Duration durableSleepDuration(
       HikariDataSource dataSource,
       String workflowUuid,
       int functionId,
       Duration duration,
-      boolean skipSleep,
       String schema)
       throws SQLException {
 
@@ -299,8 +301,7 @@ class StepsDAO {
           checkStepExecutionTxn(workflowUuid, functionId, functionName, connection, schema);
     }
 
-    double endTime;
-
+    long endTime;
     if (recordedOutput != null) {
       logger.debug(
           "Replaying sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
@@ -308,7 +309,7 @@ class StepsDAO {
         throw new IllegalStateException("No recorded timeout for sleep");
       }
       Object[] dser = JSONUtil.deserializeToArray(recordedOutput.output());
-      endTime = (Double) dser[0];
+      endTime = (long) dser[0];
     } else {
       logger.debug(
           "Running sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
@@ -324,26 +325,7 @@ class StepsDAO {
       }
     }
 
-    double currentTime = System.currentTimeMillis();
-    double durationms = Math.max(0, endTime - currentTime);
-
-    logger.debug(
-        "sleep, endTime {}, currentTime: {}, durationMS: {}, skip: {}",
-        endTime,
-        currentTime,
-        durationms,
-        skipSleep);
-
-    if (!skipSleep) {
-      try {
-        logger.debug("Sleeping for duration {}", duration);
-        Thread.sleep((long) (durationms));
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw new RuntimeException("Sleep interrupted", e);
-      }
-    }
-
-    return Duration.ofMillis((long) durationms);
+    var durationms = Math.max(0, endTime - System.currentTimeMillis());
+    return Duration.ofMillis(durationms);
   }
 }

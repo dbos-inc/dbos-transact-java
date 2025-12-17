@@ -560,8 +560,7 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalStateException("sleep() must be called from within a workflow");
     }
 
-    systemDatabase.sleep(
-        context.getWorkflowId(), context.getAndIncrementFunctionId(), duration, false);
+    systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
