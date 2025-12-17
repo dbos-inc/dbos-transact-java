@@ -18,6 +18,7 @@ import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.cronutils.model.Cron;
 import com.cronutils.model.CronType;
@@ -29,14 +30,13 @@ import org.slf4j.LoggerFactory;
 
 public class SchedulerService implements DBOSLifecycleListener {
 
-  private ScheduledExecutorService scheduler;
-
   private static final Logger logger = LoggerFactory.getLogger(SchedulerService.class);
   private static final CronParser cronParser =
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING53));
 
-  private volatile boolean stop = false;
+  private ScheduledExecutorService scheduler;
   private final String schedulerQueueName;
+  private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
   public SchedulerService(String defSchedulerQueue) {
     this.schedulerQueueName = Objects.requireNonNull(defSchedulerQueue);
@@ -61,16 +61,21 @@ public class SchedulerService implements DBOSLifecycleListener {
   }
 
   public void dbosLaunched() {
-    scheduler = Executors.newScheduledThreadPool(4);
-    startScheduledWorkflows();
-    stop = false;
+    if (isRunning.compareAndSet(false, true)) {
+      scheduler = Executors.newScheduledThreadPool(4);
+      startScheduledWorkflows();
+    }
   }
 
   public void dbosShutDown() {
-    stop = true;
-    List<Runnable> notRun = scheduler.shutdownNow();
-    logger.debug("Shutting down scheduler service. Tasks not run {}", notRun.size());
-    scheduler = null;
+    if (isRunning.compareAndSet(true, false)) {
+      var scheduler = this.scheduler;
+      this.scheduler = null;
+      if (scheduler != null) {
+        List<Runnable> notRun = scheduler.shutdownNow();
+        logger.debug("Shutting down scheduler service. Tasks not run {}", notRun.size());
+      }
+    }
   }
 
   record ScheduledWorkflow(
@@ -153,14 +158,13 @@ public class SchedulerService implements DBOSLifecycleListener {
     for (var swf : scheduledWorkflows) {
       ExecutionTime executionTime = ExecutionTime.forCron(swf.cron());
 
-      var wf = swf.workflow();
-
       // Kick off the first run (but only scheduled at the next proper time)
       ZonedDateTime cnow = getNextTime(swf);
 
       var task =
           new Runnable() {
             ZonedDateTime curNow = cnow;
+            final RegisteredWorkflow wf = swf.workflow();
 
             @Override
             public void run() {
@@ -180,7 +184,7 @@ public class SchedulerService implements DBOSLifecycleListener {
                 logger.error("Scheduled task exception {}", wf.fullyQualifiedName(), e);
               }
 
-              if (!stop) {
+              if (isRunning.get()) {
                 ZonedDateTime now =
                     swf.ignoreMissed()
                         ? ZonedDateTime.now(ZoneOffset.UTC).withNano(0)
