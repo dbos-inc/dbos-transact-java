@@ -156,10 +156,10 @@ public class SchedulerService implements DBOSLifecycleListener {
     }
 
     for (var swf : scheduledWorkflows) {
-      ExecutionTime executionTime = ExecutionTime.forCron(swf.cron());
+      final ExecutionTime executionTime = ExecutionTime.forCron(swf.cron());
 
       // Kick off the first run (but only scheduled at the next proper time)
-      ZonedDateTime cnow = getNextTime(swf);
+      final ZonedDateTime cnow = getNextTime(swf);
 
       var task =
           new Runnable() {
@@ -168,6 +168,11 @@ public class SchedulerService implements DBOSLifecycleListener {
 
             @Override
             public void run() {
+              // if scheduler serivce isn't running, don't start the workflow or schedule the next
+              // execution
+              if (!isRunning.get()) {
+                return;
+              }
 
               ZonedDateTime scheduledTime = curNow;
               try {
@@ -184,26 +189,27 @@ public class SchedulerService implements DBOSLifecycleListener {
                 logger.error("Scheduled task exception {}", wf.fullyQualifiedName(), e);
               }
 
-              if (isRunning.get()) {
-                ZonedDateTime now =
-                    swf.ignoreMissed()
-                        ? ZonedDateTime.now(ZoneOffset.UTC).withNano(0)
-                        : setLastTime(swf, scheduledTime);
-                logger.debug(
-                    "Scheduling the next execution {} {}", wf.fullyQualifiedName(), now.toString());
-                executionTime
-                    .nextExecution(now)
-                    .ifPresent(
-                        nextTime -> {
-                          logger.debug("Next execution time {}", nextTime);
-                          curNow = nextTime;
-                          long delayMs =
-                              Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime)
-                                  .toMillis();
+              ZonedDateTime now =
+                  swf.ignoreMissed()
+                      ? ZonedDateTime.now(ZoneOffset.UTC).withNano(0)
+                      : setLastTime(swf, scheduledTime);
+              logger.debug(
+                  "Scheduling the next execution {} {}", wf.fullyQualifiedName(), now.toString());
+              executionTime
+                  .nextExecution(now)
+                  .ifPresent(
+                      nextTime -> {
+                        logger.debug("Next execution time {}", nextTime);
+                        curNow = nextTime;
+                        long delayMs =
+                            Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime)
+                                .toMillis();
+                        // ensure scheduler hasn't been shutdown before scheduling
+                        if (scheduler != null) {
                           scheduler.schedule(
                               this, delayMs < 0 ? 0 : delayMs, TimeUnit.MILLISECONDS);
-                        });
-              }
+                        }
+                      });
             }
           };
 
@@ -214,8 +220,11 @@ public class SchedulerService implements DBOSLifecycleListener {
                 task.curNow = nextTime;
                 long initialDelayMs =
                     Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime).toMillis();
-                scheduler.schedule(
-                    task, initialDelayMs < 0 ? 0 : initialDelayMs, TimeUnit.MILLISECONDS);
+                // ensure scheduler hasn't been shutdown before scheduling
+                if (scheduler != null) {
+                  scheduler.schedule(
+                      task, initialDelayMs < 0 ? 0 : initialDelayMs, TimeUnit.MILLISECONDS);
+                }
               });
     }
   }
