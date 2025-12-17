@@ -294,7 +294,7 @@ class DBOSExecutorTest {
     // let us set the state to PENDING and increase the sleep time
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     long currenttime = System.currentTimeMillis();
-    double newEndtime = (currenttime + 2000);
+    long newEndtime = (currenttime + 2000);
 
     String endTimeAsJson = JSONUtil.serialize(newEndtime);
 
