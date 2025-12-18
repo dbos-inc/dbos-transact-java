@@ -276,8 +276,7 @@ public class PatchTest {
     assertThrows(DBOSUnexpectedStepException.class, () -> h5Fork1.getResult());
   }
 
-  void updateWorkflowName(
-      DataSource dataSource, String sourceId, String destinationId)
+  void updateWorkflowName(DataSource dataSource, String sourceId, String destinationId)
       throws SQLException {
 
     var row = DBUtils.getWorkflowRow(dataSource, sourceId);
@@ -285,7 +284,10 @@ public class PatchTest {
       throw new RuntimeException("Source workflow %s not found".formatted(sourceId));
     }
 
-    logger.info("updateWorkflowName {} workflow to {}", destinationId, RegisteredWorkflow.fullyQualifiedName(row.className(), row.instanceName(), row.name()));
+    logger.info(
+        "updateWorkflowName {} workflow to {}",
+        destinationId,
+        RegisteredWorkflow.fullyQualifiedName(row.className(), row.instanceName(), row.name()));
 
     var sql =
         """
