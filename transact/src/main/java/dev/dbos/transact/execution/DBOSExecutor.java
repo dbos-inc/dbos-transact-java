@@ -78,7 +78,6 @@ public class DBOSExecutor implements AutoCloseable {
   private SystemDatabase systemDatabase;
   private QueueService queueService;
   private SchedulerService schedulerService;
-  private RecoveryService recoveryService;
   private AdminServer adminServer;
   private Conductor conductor;
   private ExecutorService executorService;
@@ -157,8 +156,19 @@ public class DBOSExecutor implements AutoCloseable {
         listener.dbosLaunched();
       }
 
-      recoveryService = new RecoveryService(this, systemDatabase);
-      recoveryService.start();
+      var recoveryTask =
+          new Runnable() {
+            @Override
+            public void run() {
+              try {
+                recoverPendingWorkflows(List.of(executorId()));
+              } catch (Throwable t) {
+                logger.error("Recovery task failed", t);
+              }
+            }
+          };
+
+      executorService.submit(recoveryTask);
 
       String conductorKey = config.conductorKey();
       if (conductorKey != null) {
@@ -200,9 +210,6 @@ public class DBOSExecutor implements AutoCloseable {
         conductor.stop();
         conductor = null;
       }
-
-      recoveryService.stop();
-      recoveryService = null;
 
       shutdownLifecycleListeners();
 
@@ -294,47 +301,48 @@ public class DBOSExecutor implements AutoCloseable {
     String workflowId = Objects.requireNonNull(output.workflowId(), "workflowId must not be null");
     String queue = output.queueName();
 
-    logger.debug("Recovery executing workflow {}", workflowId);
+    logger.debug("recoverWorkflow {}", workflowId);
 
     if (queue != null) {
       boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
       if (cleared) {
+        logger.debug(
+            "recoverWorkflow {} queue assignment {}",
+            workflowId,
+            cleared ? "cleared" : "not cleared");
         return retrieveWorkflow(workflowId);
       }
     }
     return executeWorkflowById(workflowId, true, false);
   }
 
-  public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIDs) {
-    if (executorIDs == null) {
-      executorIDs = new ArrayList<>(List.of("local"));
-    }
-
+  public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
+    Objects.requireNonNull(executorIds);
     String appVersion = appVersion();
 
     List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
-    for (String executorId : executorIDs) {
+    for (String executorId : executorIds) {
       List<GetPendingWorkflowsOutput> pendingWorkflows;
       try {
-        pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion);
+        pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion());
       } catch (Exception e) {
         logger.error(
-            "Failed to get pending workflows for executor {} and application version {}",
+            "getPendingWorkflows failed:  executor {}, application version {}",
             executorId,
             appVersion,
             e);
         return new ArrayList<>();
       }
-      logger.debug(
-          "Recovering {} workflow(s) for executor {} and application version {}",
+      logger.info(
+          "Recovering {} workflows for executor {} app version {}",
           pendingWorkflows.size(),
-          executorId,
-          appVersion);
-      for (GetPendingWorkflowsOutput output : pendingWorkflows) {
+          executorId(),
+          appVersion());
+      for (var output : pendingWorkflows) {
         try {
           handles.add(recoverWorkflow(output));
-        } catch (Exception e) {
-          logger.warn("Recovery of workflow {} failed", output.workflowId(), e);
+        } catch (Throwable t) {
+          logger.error("Workflow {} recovery failed", output.workflowId(), t);
         }
       }
     }
@@ -435,7 +443,8 @@ public class DBOSExecutor implements AutoCloseable {
         throw new RuntimeException(t.getMessage(), t);
       }
     } else {
-      // Note that this shouldn't happen because the result is always wrapped in an array, making
+      // Note that this shouldn't happen because the result is always wrapped in an
+      // array, making
       // output not null.
       throw new IllegalStateException(
           String.format("Recorded output and error are both null for %s", functionName));
@@ -560,8 +569,7 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalStateException("sleep() must be called from within a workflow");
     }
 
-    systemDatabase.sleep(
-        context.getWorkflowId(), context.getAndIncrementFunctionId(), duration, false);
+    systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {

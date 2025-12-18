@@ -208,11 +208,12 @@ public class DBUtils {
     return DriverManager.getConnection(config.databaseUrl(), config.dbUser(), config.dbPassword());
   }
 
-  public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) {
+  public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) throws SQLException {
     return getWorkflowRows(ds, null);
   }
 
-  public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds, String schema) {
+  public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds, String schema)
+      throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     String sql = "SELECT * FROM %s.workflow_status ORDER BY created_at".formatted(schema);
     try (var conn = ds.getConnection();
@@ -223,16 +224,16 @@ public class DBUtils {
         rows.add(new WorkflowStatusRow(rs));
       }
       return rows;
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
-  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId) {
+  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId)
+      throws SQLException {
     return getWorkflowRow(ds, workflowId, null);
   }
 
-  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId, String schema) {
+  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId, String schema)
+      throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     var sql = "SELECT * FROM %s.workflow_status WHERE workflow_uuid = ?".formatted(schema);
     try (var conn = ds.getConnection();
@@ -245,17 +246,16 @@ public class DBUtils {
           return null;
         }
       }
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
-  public static List<OperationOutputRow> getStepRows(DataSource ds, String workflowId) {
+  public static List<OperationOutputRow> getStepRows(DataSource ds, String workflowId)
+      throws SQLException {
     return getStepRows(ds, workflowId, null);
   }
 
   public static List<OperationOutputRow> getStepRows(
-      DataSource ds, String workflowId, String schema) {
+      DataSource ds, String workflowId, String schema) throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     var sql =
         "SELECT * FROM %s.operation_outputs WHERE workflow_uuid = ? ORDER BY function_id"
@@ -272,18 +272,18 @@ public class DBUtils {
         }
         return rows;
       }
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
   public record Event(String key, String value) {}
 
-  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId) {
+  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId)
+      throws SQLException {
     return getWorkflowEvents(ds, workflowId, null);
   }
 
-  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId, String schema) {
+  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId, String schema)
+      throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     try (var conn = ds.getConnection(); ) {
       var stmt =
@@ -300,19 +300,18 @@ public class DBUtils {
       }
 
       return rows;
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
   public record EventHistory(int stepId, String key, String value) {}
 
-  public static List<EventHistory> getWorkflowEventHistory(DataSource ds, String workflowId) {
+  public static List<EventHistory> getWorkflowEventHistory(DataSource ds, String workflowId)
+      throws SQLException {
     return getWorkflowEventHistory(ds, workflowId, null);
   }
 
   public static List<EventHistory> getWorkflowEventHistory(
-      DataSource ds, String workflowId, String schema) {
+      DataSource ds, String workflowId, String schema) throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     try (var conn = ds.getConnection(); ) {
       var stmt =
@@ -330,32 +329,14 @@ public class DBUtils {
       }
 
       return rows;
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
-  public static void causeChaos(DataSource ds) {
-    try (Connection conn = ds.getConnection();
-        Statement st = conn.createStatement()) {
-
-      st.execute(
-          """
-            SELECT pg_terminate_backend(pid)
-            FROM pg_stat_activity
-            WHERE pid <> pg_backend_pid()
-              AND datname = current_database();
-        """);
-    } catch (SQLException e) {
-      throw new RuntimeException("Could not cause chaos, credentials insufficient?", e);
-    }
-  }
-
-  public static boolean queueEntriesCleanedUp(DataSource ds) {
+  public static boolean queueEntriesCleanedUp(DataSource ds) throws SQLException {
     return queueEntriesCleanedUp(ds, null);
   }
 
-  public static boolean queueEntriesCleanedUp(DataSource ds, String schema) {
+  public static boolean queueEntriesCleanedUp(DataSource ds, String schema) throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     var sql =
         """
@@ -381,44 +362,8 @@ public class DBUtils {
             break;
           }
         }
-      } catch (SQLException e) {
-        throw new RuntimeException(e);
       }
     }
     return success;
-  }
-
-  public static void updateWorkflowName(DataSource ds, String sourceId, String destinationId) {
-    updateWorkflowName(ds, sourceId, destinationId, null);
-  }
-
-  public static void updateWorkflowName(
-      DataSource ds, String sourceId, String destinationId, String schema) {
-    var row = getWorkflowRow(ds, sourceId, schema);
-    if (row == null) {
-      throw new RuntimeException("Workflow %s not found".formatted(sourceId));
-    }
-
-    schema = SystemDatabase.sanitizeSchema(schema);
-
-    var sql =
-        """
-          UPDATE %s.workflow_status
-          SET name = ?, class_name = ?, config_name = ?
-          WHERE workflow_uuid = ?
-        """
-            .formatted(schema);
-    try (var conn = ds.getConnection();
-        var ps = conn.prepareStatement(sql)) {
-
-      ps.setString(1, row.name());
-      ps.setString(2, row.className());
-      ps.setString(3, row.instanceName());
-      ps.setString(4, destinationId);
-
-      ps.executeUpdate();
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
   }
 }

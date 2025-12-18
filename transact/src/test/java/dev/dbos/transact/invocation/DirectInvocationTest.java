@@ -64,7 +64,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvoke() {
+  void directInvoke() throws Exception {
 
     var result = proxy.simpleWorkflow();
     assertEquals(localDate, result);
@@ -83,7 +83,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeSetWorkflowId() {
+  void directInvokeSetWorkflowId() throws Exception {
 
     String workflowId = "directInvokeSetWorkflowId";
     try (var _o = new WorkflowOptions(workflowId).setContext()) {
@@ -98,7 +98,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeSetTimeout() {
+  void directInvokeSetTimeout() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
@@ -114,7 +114,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeSetZeroTimeout() {
+  void directInvokeSetZeroTimeout() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Timeout.none());
     try (var _o = options.setContext()) {
@@ -130,7 +130,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeSetWorkflowIdAndTimeout() {
+  void directInvokeSetWorkflowIdAndTimeout() throws Exception {
 
     String workflowId = "directInvokeSetWorkflowIdAndTimeout";
     var options = new WorkflowOptions(workflowId).withTimeout(Duration.ofSeconds(10));
@@ -148,7 +148,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeTimeoutCancellation() {
+  void directInvokeTimeoutCancellation() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(1));
     try (var _o = options.setContext()) {
@@ -164,7 +164,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeTimeoutDeadline() {
+  void directInvokeTimeoutDeadline() throws Exception {
 
     var options =
         new WorkflowOptions().withDeadline(Instant.ofEpochMilli(System.currentTimeMillis() + 1000));
@@ -181,7 +181,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeSetWorkflowIdTimeoutCancellation() {
+  void directInvokeSetWorkflowIdTimeoutCancellation() throws Exception {
 
     var workflowId = "directInvokeSetWorkflowIdTimeoutCancellation";
     var options = new WorkflowOptions(workflowId).withTimeout(Duration.ofSeconds(1));
@@ -199,7 +199,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeParent() {
+  void directInvokeParent() throws Exception {
 
     var result = proxy.parentWorkflow();
     assertEquals(localDate, result);
@@ -266,7 +266,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeParentSetWorkflowId() {
+  void directInvokeParentSetWorkflowId() throws Exception {
 
     String workflowId = "directInvokeParentSetWorkflowId";
     try (var _o = new WorkflowOptions(workflowId).setContext()) {
@@ -283,7 +283,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeParentSetTimeout() {
+  void directInvokeParentSetTimeout() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
@@ -304,7 +304,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeParentSetTimeoutParent() {
+  void directInvokeParentSetTimeoutParent() throws Exception {
 
     var result = proxy.parentSleepWorkflow(5L, 1);
     assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
@@ -320,7 +320,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeParentSetTimeoutParent2() {
+  void directInvokeParentSetTimeoutParent2() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
@@ -341,7 +341,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeParentSetTimeoutParent3() {
+  void directInvokeParentSetTimeoutParent3() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
     try (var _o = options.setContext()) {
@@ -362,7 +362,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void invokeWorkflowFromStepThrows() {
+  void invokeWorkflowFromStepThrows() throws Exception {
     var ise = assertThrows(IllegalStateException.class, () -> proxy.illegalWorkflow());
     assertEquals("cannot invoke a workflow from a step", ise.getMessage());
 
@@ -382,7 +382,7 @@ public class DirectInvocationTest {
   }
 
   @Test
-  void directInvokeStep() {
+  void directInvokeStep() throws Exception {
     var result = proxy.stepWorkflow();
     assertNotNull(result);
 
@@ -400,40 +400,23 @@ public class DirectInvocationTest {
     assertEquals("nowStep", step.functionName());
   }
 
-  // @Test
-  // void directInvokeParentSetParentTimeout() {
+  @Test
+  void directInvokeParentSetParentTimeout() throws Exception {
 
-  //   var options = new WorkflowOptions(Duration.ofSeconds(10));
-  //   try (var _o = options.setContext()) {
-  //     var result = proxy.parentWorkflow();
-  //     assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
-  //   }
+    var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
+    try (var _o = options.setContext()) {
+      var result = proxy.parentWorkflow();
+      assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
+    }
 
-  //   var table = DBUtils.dumpWfStatus(dataSource);
-  //   assertEquals(2, table.size());
-  //   var row0 = table.get(0);
-  //   var row1 = table.get(1);
-  //   assertEquals(10000L, row0.get("workflow_timeout_ms"));
-  //   assertEquals(10000L, row1.get("workflow_timeout_ms"));
-  //   assertNotNull(row0.get("workflow_deadline_epoch_ms"));
-  //   assertNotNull(row1.get("workflow_deadline_epoch_ms"));
-  //   assertEquals(row0.get("workflow_deadline_epoch_ms"), row1.get("workflow_deadline_epoch_ms"));
-  // }
-
-  // @Test
-  // void directInvokeParentTimeout() {
-
-  //   var impl = new HawkServiceImpl();
-  //   var proxy =
-  //
-  // dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
-  //   impl.setProxy(proxy);
-
-  //   DBOS.launch();
-
-  //   var options = new WorkflowOptions(Duration.ofSeconds(1));
-  //   try (var _o = options.setContext()) {
-  //     assertThrows(CancellationException.class, () -> proxy.parentSleepWorkflow(null, 10L));
-  //   }
-  // }
+    var table = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(2, table.size());
+    var row0 = table.get(0);
+    var row1 = table.get(1);
+    assertEquals(10000L, row0.timeoutMs());
+    assertEquals(10000L, row1.timeoutMs());
+    assertNotNull(row0.deadlineEpochMs());
+    assertNotNull(row1.deadlineEpochMs());
+    assertEquals(row0.deadlineEpochMs(), row1.deadlineEpochMs());
+  }
 }
