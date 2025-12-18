@@ -136,7 +136,8 @@ class RecoveryServiceTest {
 
     setWorkflowStateToPending(dataSource);
 
-    List<WorkflowHandle<?, ?>> pending = dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId()));
+    List<WorkflowHandle<?, ?>> pending =
+        dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId()));
     assertEquals(5, pending.size());
 
     for (var handle : pending) {
