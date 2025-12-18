@@ -400,40 +400,23 @@ public class DirectInvocationTest {
     assertEquals("nowStep", step.functionName());
   }
 
-  // @Test
-  // void directInvokeParentSetParentTimeout() {
+  @Test
+  void directInvokeParentSetParentTimeout() throws Exception {
 
-  //   var options = new WorkflowOptions(Duration.ofSeconds(10));
-  //   try (var _o = options.setContext()) {
-  //     var result = proxy.parentWorkflow();
-  //     assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
-  //   }
+    var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(10));
+    try (var _o = options.setContext()) {
+      var result = proxy.parentWorkflow();
+      assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
+    }
 
-  //   var table = DBUtils.dumpWfStatus(dataSource);
-  //   assertEquals(2, table.size());
-  //   var row0 = table.get(0);
-  //   var row1 = table.get(1);
-  //   assertEquals(10000L, row0.get("workflow_timeout_ms"));
-  //   assertEquals(10000L, row1.get("workflow_timeout_ms"));
-  //   assertNotNull(row0.get("workflow_deadline_epoch_ms"));
-  //   assertNotNull(row1.get("workflow_deadline_epoch_ms"));
-  //   assertEquals(row0.get("workflow_deadline_epoch_ms"), row1.get("workflow_deadline_epoch_ms"));
-  // }
-
-  // @Test
-  // void directInvokeParentTimeout() {
-
-  //   var impl = new HawkServiceImpl();
-  //   var proxy =
-  //
-  // dbos.<HawkService>Workflow().interfaceClass(HawkService.class).implementation(impl).build();
-  //   impl.setProxy(proxy);
-
-  //   DBOS.launch();
-
-  //   var options = new WorkflowOptions(Duration.ofSeconds(1));
-  //   try (var _o = options.setContext()) {
-  //     assertThrows(CancellationException.class, () -> proxy.parentSleepWorkflow(null, 10L));
-  //   }
-  // }
+    var table = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(2, table.size());
+    var row0 = table.get(0);
+    var row1 = table.get(1);
+    assertEquals(10000L, row0.timeoutMs());
+    assertEquals(10000L, row1.timeoutMs());
+    assertNotNull(row0.deadlineEpochMs());
+    assertNotNull(row1.deadlineEpochMs());
+    assertEquals(row0.deadlineEpochMs(), row1.deadlineEpochMs());
+  }
 }
