@@ -77,7 +77,6 @@ public class QueueService {
 
       var task =
           new Runnable() {
-
             final Queue queue = _queue;
             Duration pollingInterval = Duration.ofSeconds(1);
 
@@ -109,9 +108,15 @@ public class QueueService {
 
             @Override
             public void run() {
+              // if scheduler service isn't running, the queue service was stopped so don't start
+              // the workflow or schedule the next execution
+              if (scheduler.get() == null) {
+                return;
+              }
 
               try {
                 if (paused.get()) {
+                  pollingInterval = minPollingInterval;
                   return;
                 }
 
