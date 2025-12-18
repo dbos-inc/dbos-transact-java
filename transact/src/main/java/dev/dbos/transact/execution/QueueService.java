@@ -130,7 +130,7 @@ public class QueueService {
                         ? pollingInterval
                         : minPollingInterval;
               } catch (Exception e) {
-                logger.error(e.getMessage(), e);
+                logger.error("Error executing queued workflow(s) for queue {}", queue.name(), e);
                 pollingInterval = pollingInterval.multipliedBy(2);
                 pollingInterval =
                     pollingInterval.compareTo(maxPollingInterval) <= 0

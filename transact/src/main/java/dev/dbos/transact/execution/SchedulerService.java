@@ -167,7 +167,7 @@ public class SchedulerService implements DBOSLifecycleListener {
 
             @Override
             public void run() {
-              // if scheduler serivce isn't running, don't start the workflow or schedule the next
+              // if scheduler service isn't running, don't start the workflow or schedule the next
               // execution
               if (scheduler.get() == null) {
                 return;

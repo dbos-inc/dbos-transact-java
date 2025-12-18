@@ -270,12 +270,16 @@ class StepsDAO {
     return steps;
   }
 
-  void sleep(String workflowUuid, int functionId, Duration duration)
-      throws SQLException, InterruptedException {
+  void sleep(String workflowUuid, int functionId, Duration duration) throws SQLException {
     var sleepDuration =
         StepsDAO.durableSleepDuration(dataSource, workflowUuid, functionId, duration, this.schema);
     logger.debug("Sleeping for duration {}", sleepDuration);
-    Thread.sleep(sleepDuration.toMillis());
+    try {
+      Thread.sleep(sleepDuration.toMillis());
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException("Sleep was interrupted for workflow " + workflowUuid, e);
+    }
   }
 
   static Duration durableSleepDuration(
