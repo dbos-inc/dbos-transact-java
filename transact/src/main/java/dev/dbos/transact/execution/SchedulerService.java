@@ -18,7 +18,7 @@ import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.cronutils.model.Cron;
 import com.cronutils.model.CronType;
@@ -34,9 +34,8 @@ public class SchedulerService implements DBOSLifecycleListener {
   private static final CronParser cronParser =
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING53));
 
-  private ScheduledExecutorService scheduler;
   private final String schedulerQueueName;
-  private final AtomicBoolean isRunning = new AtomicBoolean(false);
+  private final AtomicReference<ScheduledExecutorService> scheduler = new AtomicReference<>();
 
   public SchedulerService(String defSchedulerQueue) {
     this.schedulerQueueName = Objects.requireNonNull(defSchedulerQueue);
@@ -61,20 +60,19 @@ public class SchedulerService implements DBOSLifecycleListener {
   }
 
   public void dbosLaunched() {
-    if (isRunning.compareAndSet(false, true)) {
-      scheduler = Executors.newScheduledThreadPool(4);
-      startScheduledWorkflows();
+    if (this.scheduler.get() == null) {
+      var scheduler = Executors.newScheduledThreadPool(4);
+      if (this.scheduler.compareAndSet(null, scheduler)) {
+        startScheduledWorkflows();
+      }
     }
   }
 
   public void dbosShutDown() {
-    if (isRunning.compareAndSet(true, false)) {
-      var scheduler = this.scheduler;
-      this.scheduler = null;
-      if (scheduler != null) {
-        List<Runnable> notRun = scheduler.shutdownNow();
-        logger.debug("Shutting down scheduler service. Tasks not run {}", notRun.size());
-      }
+    var scheduler = this.scheduler.getAndSet(null);
+    if (scheduler != null) {
+      List<Runnable> notRun = scheduler.shutdownNow();
+      logger.debug("Shutting down scheduler service. Tasks not run {}", notRun.size());
     }
   }
 
@@ -170,7 +168,7 @@ public class SchedulerService implements DBOSLifecycleListener {
             public void run() {
               // if scheduler serivce isn't running, don't start the workflow or schedule the next
               // execution
-              if (!isRunning.get()) {
+              if (scheduler.get() == null) {
                 return;
               }
 
@@ -205,8 +203,9 @@ public class SchedulerService implements DBOSLifecycleListener {
                             Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime)
                                 .toMillis();
                         // ensure scheduler hasn't been shutdown before scheduling
-                        if (scheduler != null) {
-                          scheduler.schedule(
+                        var localScheduler = scheduler.get();
+                        if (localScheduler != null) {
+                          localScheduler.schedule(
                               this, delayMs < 0 ? 0 : delayMs, TimeUnit.MILLISECONDS);
                         }
                       });
@@ -221,8 +220,9 @@ public class SchedulerService implements DBOSLifecycleListener {
                 long initialDelayMs =
                     Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime).toMillis();
                 // ensure scheduler hasn't been shutdown before scheduling
-                if (scheduler != null) {
-                  scheduler.schedule(
+                var localScheduler = scheduler.get();
+                if (localScheduler != null) {
+                  localScheduler.schedule(
                       task, initialDelayMs < 0 ? 0 : initialDelayMs, TimeUnit.MILLISECONDS);
                 }
               });
