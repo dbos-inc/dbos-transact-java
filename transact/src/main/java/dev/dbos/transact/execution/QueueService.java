@@ -91,14 +91,19 @@ public class QueueService {
 
             private void processPartition(String partition) {
               var partitionLog = Objects.requireNonNullElse(partition, "<null>");
-              logger.debug(
-                  "Retrieving workflows from partition {} of queue {}", partitionLog, queue.name());
               var workflowIds =
                   systemDatabase.getAndStartQueuedWorkflows(
                       queue, executorId, appVersion, partition);
+              if (workflowIds.size() > 0) {
+                logger.debug(
+                    "Retrieved {} workflows from {} partition of queue {}",
+                    workflowIds.size(),
+                    partitionLog,
+                    queue.name());
+              }
               for (var workflowId : workflowIds) {
                 logger.debug(
-                    "Starting workflow {} from partition {} of queue {}",
+                    "Starting workflow {} from {} partition of queue {}",
                     workflowId,
                     partitionLog,
                     queue.name());
