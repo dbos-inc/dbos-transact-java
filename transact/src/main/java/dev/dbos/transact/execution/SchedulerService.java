@@ -79,34 +79,31 @@ public class SchedulerService implements DBOSLifecycleListener {
   record ScheduledWorkflow(
       RegisteredWorkflow workflow, Cron cron, String queue, boolean ignoreMissed) {}
 
-  private ZonedDateTime getNextTime(ScheduledWorkflow swf) {
-    ZonedDateTime now = null;
-    if (swf.ignoreMissed()) {
-      now = ZonedDateTime.now().withNano(0);
-    } else {
-      var extstate =
+  private ZonedDateTime getLastTime(ScheduledWorkflow swf) {
+    if (!swf.ignoreMissed()) {
+      var state =
           DBOS.getExternalState(
               "DBOS.SchedulerService", swf.workflow().fullyQualifiedName(), "lastTime");
-      if (extstate.isPresent()) {
-        now = ZonedDateTime.parse(extstate.get().value());
-      } else {
-        now = ZonedDateTime.now(ZoneOffset.UTC).withNano(0);
+      if (state.isPresent()) {
+        return ZonedDateTime.parse(state.get().value());
       }
     }
-    return now;
+    return ZonedDateTime.now(ZoneOffset.UTC).withNano(0);
   }
 
   private ZonedDateTime setLastTime(ScheduledWorkflow swf, ZonedDateTime lastTime) {
-    var nes =
-        new ExternalState(
-            "DBOS.SchedulerService",
-            swf.workflow().fullyQualifiedName(),
-            "lastTime",
-            lastTime.toString(),
-            null,
-            BigInteger.valueOf(lastTime.toInstant().toEpochMilli()));
-    var upstate = DBOS.upsertExternalState(nes);
-    return ZonedDateTime.parse(upstate.value()).plus(1, ChronoUnit.MILLIS);
+    if (swf.ignoreMissed()) {
+      return ZonedDateTime.now(ZoneOffset.UTC).withNano(0);
+    }
+
+    var state = DBOS.upsertExternalState(new ExternalState(
+        "DBOS.SchedulerService",
+        swf.workflow().fullyQualifiedName(),
+        "lastTime",
+        lastTime.toString(),
+        null,
+        BigInteger.valueOf(lastTime.toInstant().toEpochMilli())));
+    return ZonedDateTime.parse(state.value()).plus(1, ChronoUnit.MILLIS);
   }
 
   private void startScheduledWorkflows() {
@@ -154,78 +151,66 @@ public class SchedulerService implements DBOSLifecycleListener {
       }
     }
 
-    for (var swf : scheduledWorkflows) {
-      final ExecutionTime executionTime = ExecutionTime.forCron(swf.cron());
-
-      // Kick off the first run (but only scheduled at the next proper time)
-      final ZonedDateTime cnow = getNextTime(swf);
+    for (var _swf : scheduledWorkflows) {
 
       var task =
           new Runnable() {
-            ZonedDateTime curNow = cnow;
-            final RegisteredWorkflow wf = swf.workflow();
+            final ScheduledWorkflow swf = _swf;
+            final ExecutionTime executionTime = ExecutionTime.forCron(swf.cron());
+            final String workflowName = swf.workflow().fullyQualifiedName();
 
-            @Override
-            public void run() {
-              // if scheduler service isn't running, don't start the workflow or schedule the next
-              // execution
-              if (scheduler.get() == null) {
-                return;
-              }
+            ZonedDateTime nextTime = getLastTime(swf);
 
-              ZonedDateTime scheduledTime = curNow;
-              try {
-                Object[] args = new Object[2];
-                args[0] = scheduledTime.toInstant();
-                args[1] = ZonedDateTime.now(ZoneOffset.UTC).toInstant();
-                logger.debug("submitting to dbos Executor {}", wf.fullyQualifiedName());
-                String workflowId =
-                    String.format("sched-%s-%s", wf.fullyQualifiedName(), scheduledTime.toString());
-                var options = new StartWorkflowOptions(workflowId).withQueue(swf.queue());
-                DBOS.startWorkflow(wf, args, options);
-              } catch (Exception e) {
-                logger.error("Scheduled task exception {}", wf.fullyQualifiedName(), e);
-              }
-
-              ZonedDateTime now =
-                  swf.ignoreMissed()
-                      ? ZonedDateTime.now(ZoneOffset.UTC).withNano(0)
-                      : setLastTime(swf, scheduledTime);
-              logger.debug(
-                  "Scheduling the next execution {} {}", wf.fullyQualifiedName(), now.toString());
+            public void schedule() {
               executionTime
-                  .nextExecution(now)
+                  .nextExecution(nextTime)
                   .ifPresent(
                       nextTime -> {
-                        logger.debug("Next execution time {}", nextTime);
-                        curNow = nextTime;
-                        long delayMs =
+                        this.nextTime = nextTime;
+                        long initialDelayMs =
                             Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime)
                                 .toMillis();
                         // ensure scheduler hasn't been shutdown before scheduling
                         var localScheduler = scheduler.get();
                         if (localScheduler != null) {
+                          logger.debug("Scheduling {} @ {}", workflowName, nextTime);
+
                           localScheduler.schedule(
-                              this, delayMs < 0 ? 0 : delayMs, TimeUnit.MILLISECONDS);
+                              this, initialDelayMs < 0 ? 0 : initialDelayMs, TimeUnit.MILLISECONDS);
                         }
                       });
             }
+
+            @Override
+            public void run() {
+              // if scheduler service isn't running, the scheduler service was shut down so don't
+              // start the workflow or schedule the next execution
+              if (scheduler.get() == null) {
+                return;
+              }
+
+              ZonedDateTime scheduledTime = nextTime;
+              try {
+                Object[] args = new Object[2];
+                args[0] = scheduledTime.toInstant();
+                args[1] = ZonedDateTime.now(ZoneOffset.UTC).toInstant();
+
+                logger.debug("starting scheduled workflow {} at {}", workflowName, args[1]);
+
+                String workflowId =
+                    String.format("sched-%s-%s", workflowName, scheduledTime.toString());
+                var options = new StartWorkflowOptions(workflowId).withQueue(swf.queue());
+                DBOS.startWorkflow(swf.workflow(), args, options);
+                nextTime = setLastTime(swf, scheduledTime);
+              } catch (Exception e) {
+                logger.error("Scheduled task exception {}", workflowName, e);
+              } finally {
+                schedule();
+              }
+            }
           };
 
-      executionTime
-          .nextExecution(task.curNow)
-          .ifPresent(
-              nextTime -> {
-                task.curNow = nextTime;
-                long initialDelayMs =
-                    Duration.between(ZonedDateTime.now(ZoneOffset.UTC), nextTime).toMillis();
-                // ensure scheduler hasn't been shutdown before scheduling
-                var localScheduler = scheduler.get();
-                if (localScheduler != null) {
-                  localScheduler.schedule(
-                      task, initialDelayMs < 0 ? 0 : initialDelayMs, TimeUnit.MILLISECONDS);
-                }
-              });
+      task.schedule();
     }
   }
 }
