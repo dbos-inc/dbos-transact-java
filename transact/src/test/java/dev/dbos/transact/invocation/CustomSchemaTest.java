@@ -60,7 +60,7 @@ public class CustomSchemaTest {
   }
 
   @Test
-  void directInvoke() {
+  void directInvoke() throws Exception {
 
     var result = proxy.simpleWorkflow();
     assertEquals(localDate, result);
@@ -79,7 +79,7 @@ public class CustomSchemaTest {
     validateWorkflow();
   }
 
-  void validateWorkflow() {
+  void validateWorkflow() throws SQLException {
     var rows = DBUtils.getWorkflowRows(dataSource, schema);
     assertEquals(1, rows.size());
     var row = rows.get(0);

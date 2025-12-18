@@ -107,7 +107,7 @@ public class SystemDatabaseTest {
     assertTrue(before.equals(after));
   }
 
-  void logWorkflowDetails(String wfid, String name) {
+  void logWorkflowDetails(String wfid, String name) throws Exception {
     var wfstat = DBOS.getWorkflowStatus(wfid);
     System.out.println(
         String.format("Workflow (%s) ID: %s. Status %s", name, wfid, wfstat.status()));
