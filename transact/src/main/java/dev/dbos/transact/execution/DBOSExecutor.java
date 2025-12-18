@@ -161,21 +161,7 @@ public class DBOSExecutor implements AutoCloseable {
             @Override
             public void run() {
               try {
-                var pendingWorkflows =
-                    systemDatabase.getPendingWorkflows(executorId(), appVersion());
-                logger.info(
-                    "Recovering {} workflows for executor {} app version {}",
-                    pendingWorkflows.size(),
-                    executorId(),
-                    appVersion());
-
-                for (var pendingWorkflow : pendingWorkflows) {
-                  try {
-                    recoverWorkflow(pendingWorkflow);
-                  } catch (Throwable t) {
-                    logger.error("Workflow {} recovery failed", pendingWorkflow.workflowId(), t);
-                  }
-                }
+                recoverPendingWorkflows(List.of(executorId()));
               } catch (Throwable t) {
                 logger.error("Recovery task failed", t);
               }
@@ -330,36 +316,33 @@ public class DBOSExecutor implements AutoCloseable {
     return executeWorkflowById(workflowId, true, false);
   }
 
-  public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIDs) {
-    if (executorIDs == null) {
-      executorIDs = new ArrayList<>(List.of("local"));
-    }
-
+  public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
+    Objects.requireNonNull(executorIds);
     String appVersion = appVersion();
 
     List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
-    for (String executorId : executorIDs) {
+    for (String executorId : executorIds) {
       List<GetPendingWorkflowsOutput> pendingWorkflows;
       try {
-        pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion);
+        pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion());
       } catch (Exception e) {
         logger.error(
-            "Failed to get pending workflows for executor {} and application version {}",
+            "getPendingWorkflows failed:  executor {}, application version {}",
             executorId,
             appVersion,
             e);
         return new ArrayList<>();
       }
-      logger.debug(
-          "Recovering {} workflow(s) for executor {} and application version {}",
+      logger.info(
+          "Recovering {} workflows for executor {} app version {}",
           pendingWorkflows.size(),
-          executorId,
-          appVersion);
-      for (GetPendingWorkflowsOutput output : pendingWorkflows) {
+          executorId(),
+          appVersion());
+      for (var output : pendingWorkflows) {
         try {
           handles.add(recoverWorkflow(output));
-        } catch (Exception e) {
-          logger.warn("Recovery of workflow {} failed", output.workflowId(), e);
+        } catch (Throwable t) {
+          logger.error("Workflow {} recovery failed", output.workflowId(), t);
         }
       }
     }
@@ -460,7 +443,8 @@ public class DBOSExecutor implements AutoCloseable {
         throw new RuntimeException(t.getMessage(), t);
       }
     } else {
-      // Note that this shouldn't happen because the result is always wrapped in an array, making
+      // Note that this shouldn't happen because the result is always wrapped in an
+      // array, making
       // output not null.
       throw new IllegalStateException(
           String.format("Recorded output and error are both null for %s", functionName));
