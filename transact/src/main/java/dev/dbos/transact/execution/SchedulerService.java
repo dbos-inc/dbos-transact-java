@@ -110,6 +110,7 @@ public class SchedulerService implements DBOSLifecycleListener {
   }
 
   private void startScheduledWorkflows() {
+    logger.debug("startScheduledWorkflows");
 
     var expectedParams = new Class<?>[] {Instant.class, Instant.class};
 
@@ -182,7 +183,6 @@ public class SchedulerService implements DBOSLifecycleListener {
                     String.format("sched-%s-%s", wf.fullyQualifiedName(), scheduledTime.toString());
                 var options = new StartWorkflowOptions(workflowId).withQueue(swf.queue());
                 DBOS.startWorkflow(wf, args, options);
-
               } catch (Exception e) {
                 logger.error("Scheduled task exception {}", wf.fullyQualifiedName(), e);
               }
