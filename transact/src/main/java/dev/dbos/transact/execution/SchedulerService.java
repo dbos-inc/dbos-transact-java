@@ -96,13 +96,15 @@ public class SchedulerService implements DBOSLifecycleListener {
       return ZonedDateTime.now(ZoneOffset.UTC).withNano(0);
     }
 
-    var state = DBOS.upsertExternalState(new ExternalState(
-        "DBOS.SchedulerService",
-        swf.workflow().fullyQualifiedName(),
-        "lastTime",
-        lastTime.toString(),
-        null,
-        BigInteger.valueOf(lastTime.toInstant().toEpochMilli())));
+    var state =
+        DBOS.upsertExternalState(
+            new ExternalState(
+                "DBOS.SchedulerService",
+                swf.workflow().fullyQualifiedName(),
+                "lastTime",
+                lastTime.toString(),
+                null,
+                BigInteger.valueOf(lastTime.toInstant().toEpochMilli())));
     return ZonedDateTime.parse(state.value()).plus(1, ChronoUnit.MILLIS);
   }
 

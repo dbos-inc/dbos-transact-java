@@ -78,7 +78,6 @@ public class DBOSExecutor implements AutoCloseable {
   private SystemDatabase systemDatabase;
   private QueueService queueService;
   private SchedulerService schedulerService;
-  private RecoveryService recoveryService;
   private AdminServer adminServer;
   private Conductor conductor;
   private ExecutorService executorService;
@@ -157,8 +156,33 @@ public class DBOSExecutor implements AutoCloseable {
         listener.dbosLaunched();
       }
 
-      recoveryService = new RecoveryService(this, systemDatabase);
-      recoveryService.start();
+      var recoveryTask =
+          new Runnable() {
+            @Override
+            public void run() {
+              try {
+                var pendingWorkflows =
+                    systemDatabase.getPendingWorkflows(executorId(), appVersion());
+                logger.info(
+                    "Recovering {} workflows for executor {} app version {}",
+                    pendingWorkflows.size(),
+                    executorId(),
+                    appVersion());
+
+                for (var pendingWorkflow : pendingWorkflows) {
+                  try {
+                    recoverWorkflow(pendingWorkflow);
+                  } catch (Throwable t) {
+                    logger.error("Workflow {} recovery failed", pendingWorkflow.workflowId(), t);
+                  }
+                }
+              } catch (Throwable t) {
+                logger.error("Recovery task failed", t);
+              }
+            }
+          };
+
+      executorService.submit(recoveryTask);
 
       String conductorKey = config.conductorKey();
       if (conductorKey != null) {
@@ -200,9 +224,6 @@ public class DBOSExecutor implements AutoCloseable {
         conductor.stop();
         conductor = null;
       }
-
-      recoveryService.stop();
-      recoveryService = null;
 
       shutdownLifecycleListeners();
 
@@ -294,11 +315,15 @@ public class DBOSExecutor implements AutoCloseable {
     String workflowId = Objects.requireNonNull(output.workflowId(), "workflowId must not be null");
     String queue = output.queueName();
 
-    logger.debug("Recovery executing workflow {}", workflowId);
+    logger.debug("recoverWorkflow {}", workflowId);
 
     if (queue != null) {
       boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
       if (cleared) {
+        logger.debug(
+            "recoverWorkflow {} queue assignment {}",
+            workflowId,
+            cleared ? "cleared" : "not cleared");
         return retrieveWorkflow(workflowId);
       }
     }
