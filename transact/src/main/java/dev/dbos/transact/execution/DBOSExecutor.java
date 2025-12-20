@@ -68,6 +68,7 @@ public class DBOSExecutor implements AutoCloseable {
   private boolean dbosCloud;
   private String appVersion;
   private String executorId;
+  private String appId;
 
   private Set<DBOSLifecycleListener> listeners;
   private Map<String, RegisteredWorkflow> workflowMap;
@@ -93,6 +94,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     appVersion = Objects.requireNonNullElse(System.getenv("DBOS__APPVERSION"), "");
+    appId = Objects.requireNonNullElse(System.getenv("DBOS__APPID"), "");
     executorId = Objects.requireNonNullElse(System.getenv("DBOS__VMID"), "local");
     dbosCloud = Objects.requireNonNullElse(System.getenv("DBOS__CLOUD"), "").equals("true");
 
@@ -118,6 +120,8 @@ public class DBOSExecutor implements AutoCloseable {
       List<Queue> queues) {
 
     if (isRunning.compareAndSet(false, true)) {
+      logger.info("DBOS Executor starting");
+
       this.workflowMap = Collections.unmodifiableMap(workflowMap);
       this.instanceMap = Collections.unmodifiableMap(instanceMap);
       this.queues = Collections.unmodifiableList(queues);
@@ -190,7 +194,7 @@ public class DBOSExecutor implements AutoCloseable {
         }
       }
 
-      logger.info("DBOS started");
+      logger.debug("DBOS Executor started");
 
     } else {
       logger.warn("DBOS Executor already started");
@@ -200,6 +204,7 @@ public class DBOSExecutor implements AutoCloseable {
   @Override
   public void close() {
     if (isRunning.compareAndSet(true, false)) {
+      logger.info("DBOS Executor stopping");
 
       if (adminServer != null) {
         adminServer.stop();
@@ -219,10 +224,13 @@ public class DBOSExecutor implements AutoCloseable {
       systemDatabase = null;
 
       timeoutScheduler.shutdownNow();
-      executorService.shutdownNow();
+      var notRun = executorService.shutdownNow();
+      logger.debug("Shutting down DBOS Executor threadpool. Tasks not run {}", notRun.size());
 
       this.workflowMap = null;
       this.instanceMap = null;
+
+      logger.debug("DBOS Executor stopped");
     }
   }
 
@@ -267,6 +275,10 @@ public class DBOSExecutor implements AutoCloseable {
 
   public String appVersion() {
     return this.appVersion;
+  }
+
+  public String appId() {
+    return this.appId;
   }
 
   public Collection<RegisteredWorkflow> getWorkflows() {
@@ -1104,6 +1116,7 @@ public class DBOSExecutor implements AutoCloseable {
           parent,
           executorId(),
           appVersion(),
+          appId(),
           systemDatabase);
     }
 
@@ -1129,6 +1142,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             executorId(),
             appVersion(),
+            appId(),
             parent,
             options.timeoutDuration(),
             options.deadline(),
@@ -1230,6 +1244,7 @@ public class DBOSExecutor implements AutoCloseable {
       WorkflowInfo parent,
       String executorId,
       String appVersion,
+      String appId,
       SystemDatabase systemDatabase) {
 
     logger.debug(
@@ -1262,6 +1277,7 @@ public class DBOSExecutor implements AutoCloseable {
           options.queuePartitionKey(),
           executorId,
           appVersion,
+          appId,
           parent,
           options.timeoutDuration(),
           options.deadline(),
@@ -1292,6 +1308,7 @@ public class DBOSExecutor implements AutoCloseable {
       String queuePartitionKey,
       String executorId,
       String appVersion,
+      String appId,
       WorkflowInfo parentWorkflow,
       Duration timeout,
       Instant deadline,
@@ -1332,7 +1349,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             executorId,
             appVersion,
-            null,
+            appId,
             null,
             null,
             null,

@@ -403,6 +403,7 @@ public class DBOSClient implements AutoCloseable {
             false),
         null,
         null,
+        null,
         options.appVersion,
         systemDatabase);
   }
