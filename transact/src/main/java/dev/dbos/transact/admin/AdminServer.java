@@ -118,10 +118,12 @@ public class AdminServer implements AutoCloseable {
   }
 
   public void start() {
+    logger.debug("start");
     server.start();
   }
 
   public void stop() {
+    logger.debug("stop");
     server.stop(0);
   }
 
@@ -143,7 +145,7 @@ public class AdminServer implements AutoCloseable {
 
     List<String> executorIds =
         mapper.readValue(exchange.getRequestBody(), new TypeReference<>() {});
-    logger.debug("Recovering workflows for executors {}", executorIds);
+    logger.debug("workflowRecovery executors {}", executorIds);
     var handles = dbosExecutor.recoverPendingWorkflows(executorIds);
     List<String> workflowIds =
         handles.stream().map(WorkflowHandle::workflowId).collect(Collectors.toList());
@@ -153,7 +155,7 @@ public class AdminServer implements AutoCloseable {
   private void deactivate(HttpExchange exchange) throws IOException {
     if (isRunning.compareAndSet(true, false)) {
       logger.info(
-          "Deactivating DBOS executor {} app version {}",
+          "deactivate executor {} app version {}",
           dbosExecutor.executorId(),
           dbosExecutor.appVersion());
       dbosExecutor.deactivateLifecycleListeners();
@@ -226,7 +228,7 @@ public class AdminServer implements AutoCloseable {
   private void cancel(HttpExchange exchange, String wfid) throws IOException {
     if (!ensurePost(exchange)) return;
 
-    logger.info("Cancelling workflow {}", wfid);
+    logger.info("cancel workflow {}", wfid);
 
     dbosExecutor.cancelWorkflow(wfid);
     exchange.sendResponseHeaders(204, 0);
@@ -235,7 +237,7 @@ public class AdminServer implements AutoCloseable {
   private void resume(HttpExchange exchange, String wfid) throws IOException {
     if (!ensurePost(exchange)) return;
 
-    logger.info("Resuming workflow {}", wfid);
+    logger.info("resume workflow {}", wfid);
 
     dbosExecutor.resumeWorkflow(wfid);
     exchange.sendResponseHeaders(204, 0);
@@ -248,7 +250,7 @@ public class AdminServer implements AutoCloseable {
     int startStep = request.start_step == null ? 0 : request.start_step;
     var options = new ForkOptions(request.new_workflow_id, request.application_version, null);
 
-    logger.info("Forking workflow {} at step {}", wfid, startStep);
+    logger.info("fork workflow {} step {}", wfid, startStep);
     var handle = dbosExecutor.forkWorkflow(wfid, startStep, options);
     var response = new ForkResponse(handle.workflowId());
     sendMappedJson(exchange, 200, response);
