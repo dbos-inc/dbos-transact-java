@@ -301,18 +301,15 @@ public class DBOSExecutor implements AutoCloseable {
     String workflowId = Objects.requireNonNull(output.workflowId(), "workflowId must not be null");
     String queue = output.queueName();
 
-    logger.debug("recoverWorkflow {}", workflowId);
-
     if (queue != null) {
       boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
       if (cleared) {
-        logger.debug(
-            "recoverWorkflow {} queue assignment {}",
-            workflowId,
-            cleared ? "cleared" : "not cleared");
+        logger.debug("recoverWorkflow clear queue assignment {}", workflowId);
         return retrieveWorkflow(workflowId);
       }
     }
+
+    logger.debug("recoverWorkflow execute {}", workflowId);
     return executeWorkflowById(workflowId, true, false);
   }
 
@@ -336,8 +333,8 @@ public class DBOSExecutor implements AutoCloseable {
       logger.info(
           "Recovering {} workflows for executor {} app version {}",
           pendingWorkflows.size(),
-          executorId(),
-          appVersion());
+          executorId,
+          appVersion);
       for (var output : pendingWorkflows) {
         try {
           handles.add(recoverWorkflow(output));
