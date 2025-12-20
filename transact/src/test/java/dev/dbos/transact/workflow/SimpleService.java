@@ -8,6 +8,10 @@ public interface SimpleService {
 
   public void workWithError() throws Exception;
 
+  public void workWithNonSerializableException();
+
+  public void workWithNonSerializableExceptionInStep();
+
   public String parentWorkflowWithoutSet(String input);
 
   public String workflowWithMultipleChildren(String input) throws Exception;
@@ -29,6 +33,8 @@ public interface SimpleService {
   String longWorkflow(String input);
 
   void stepWithSleep(long sleepSeconds);
+
+  void stepWithNonSerializableException();
 
   String longParent(String input, long sleepSeconds, long timeoutSeconds)
       throws InterruptedException;

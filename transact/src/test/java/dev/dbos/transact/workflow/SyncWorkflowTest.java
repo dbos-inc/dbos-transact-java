@@ -78,6 +78,48 @@ public class SyncWorkflowTest {
   }
 
   @Test
+  public void workWithNonSerializableException() throws SQLException {
+    SimpleService simpleService =
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+
+    DBOS.launch();
+
+    var e = assertThrows(Exception.class, () -> simpleService.workWithNonSerializableException());
+    assertEquals("workNonSerializableException error", e.getMessage());
+
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
+    assertEquals(1, wfs.size());
+    assertEquals(wfs.get(0).name(), "workNonSerializableException");
+    assertEquals(
+        "dev.dbos.transact.workflow.SimpleServiceImpl$NonSerializableException",
+        wfs.get(0).error().className());
+    assertEquals("workNonSerializableException error", wfs.get(0).error().message());
+    assertNotNull(wfs.get(0).workflowId());
+  }
+
+  @Test
+  public void workWithNonSerializableExceptionInStep() throws SQLException {
+    SimpleService simpleService =
+        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+    simpleService.setSimpleService(simpleService);
+
+    DBOS.launch();
+
+    var e =
+        assertThrows(Exception.class, () -> simpleService.workWithNonSerializableExceptionInStep());
+    assertEquals("stepWithNonSerializableException error", e.getMessage());
+
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
+    assertEquals(1, wfs.size());
+    assertEquals(wfs.get(0).name(), "workWithNonSerializableExceptionInStep");
+    assertEquals(
+        "dev.dbos.transact.workflow.SimpleServiceImpl$NonSerializableException",
+        wfs.get(0).error().className());
+    assertEquals("stepWithNonSerializableException error", wfs.get(0).error().message());
+    assertNotNull(wfs.get(0).workflowId());
+  }
+
+  @Test
   public void setWorkflowId() throws SQLException {
 
     SimpleService simpleService =
