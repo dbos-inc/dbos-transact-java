@@ -426,8 +426,8 @@ public class DBOSExecutor implements AutoCloseable {
           opts.name(),
           opts.retriesAllowed(),
           opts.maxAttempts(),
-          opts.backOffRate(),
           opts.intervalSeconds(),
+          opts.backOffRate(),
           childWfId,
           () -> {
             var res = stepfunc.execute();

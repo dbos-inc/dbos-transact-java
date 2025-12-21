@@ -273,4 +273,21 @@ public class StepsTest {
     assertEquals(2, stepInfos.get(2).functionId());
     assertNull(stepInfos.get(2).error());
   }
+
+  @Test
+  public void inlineStepRetryLogic() throws Exception {
+    ServiceWFAndStep service =
+        DBOS.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
+
+    DBOS.launch();
+
+    String workflowId = "wf-inlinestepretrytest-1234";
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
+      service.inlineStepRetryWorkflow("input");
+    }
+
+    var handle = DBOS.retrieveWorkflow(workflowId);
+    String expectedRes = "2 Retries: 2.";
+    assertEquals(expectedRes, (String) handle.getResult());
+  }
 }
