@@ -135,4 +135,38 @@ public class ServiceWFAndStepImpl implements ServiceWFAndStep {
 
     return result;
   }
+
+  @Workflow(name = "inlineStepRetryTestWorkflow")
+  public String inlineStepRetryWorkflow(String input) {
+    long ctime = System.currentTimeMillis();
+    boolean caught = false;
+    String result = "2 Retries: ";
+    try {
+      result =
+          result
+              + DBOS.runStep(
+                  () -> {
+                    ++this.stepWithRetryRuns;
+                    throw new Exception("Will not ever run");
+                  },
+                  new StepOptions("inlineStepWithRetries")
+                      .withRetriesAllowed(true)
+                      .withMaxAttempts(2)
+                      .withIntervalSeconds(0.01)
+                      .withBackoffRate(2.0));
+      ;
+    } catch (Exception e) {
+      caught = true;
+    }
+    if (!caught) {
+      result += "<Step with retries should have thrown>";
+    }
+    if (System.currentTimeMillis() - ctime > 1000) {
+      result += "<Retry took too long>";
+    }
+    result += this.stepWithRetryRuns;
+    result += ".";
+
+    return result;
+  }
 }
