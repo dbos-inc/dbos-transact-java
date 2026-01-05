@@ -6,6 +6,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
 /**
  * The WorkflowOptions class is used to specify options for DBOS workflow functions that are invoked
  * synchronously. For example, the following construct will run a workflow under id `wfId`, and
@@ -16,7 +19,8 @@ import java.util.concurrent.TimeUnit;
  * @param timeout The timeout to be assigned to the next workflow in the DBOS context
  * @param deadline The deadline to be assigned to the next workflow in the DBOS context
  */
-public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadline) {
+public record WorkflowOptions(
+    @Nullable String workflowId, @Nullable Timeout timeout, @Nullable Instant deadline) {
 
   public WorkflowOptions {
     if (timeout instanceof Timeout.Explicit explicit) {
@@ -33,17 +37,21 @@ public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadli
   }
 
   /** Create a WorkflowOptions with no ID and no timout */
-  public WorkflowOptions() {
+  public
+  @NonNull
+  WorkflowOptions() {
     this(null, null, null);
   }
 
   /** Create a WorkflowOptions with a specified workflow ID and no timout */
-  public WorkflowOptions(String workflowId) {
+  public
+  @NonNull
+  WorkflowOptions(@Nullable String workflowId) {
     this(workflowId, null, null);
   }
 
   /** Create a WorkflowOptions like this one, but with the workflowId set */
-  public WorkflowOptions withWorkflowId(String workflowId) {
+  public @NonNull WorkflowOptions withWorkflowId(@Nullable String workflowId) {
     return new WorkflowOptions(workflowId, this.timeout, this.deadline);
   }
 
@@ -52,7 +60,7 @@ public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadli
    *
    * @param timeout timeout to use, expressed as a `dev.dbos.transact.workflow.Timeout`
    */
-  public WorkflowOptions withTimeout(Timeout timeout) {
+  public @NonNull WorkflowOptions withTimeout(@Nullable Timeout timeout) {
     return new WorkflowOptions(this.workflowId, timeout, this.deadline);
   }
 
@@ -61,7 +69,7 @@ public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadli
    *
    * @param timeout timeout to use, expressed as a `java.util.Duration`
    */
-  public WorkflowOptions withTimeout(Duration timeout) {
+  public @NonNull WorkflowOptions withTimeout(@NonNull Duration timeout) {
     return new WorkflowOptions(this.workflowId, Timeout.of(timeout), this.deadline);
   }
 
@@ -71,7 +79,7 @@ public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadli
    * @param value timeout value to use, expressed as a value (see `unit`)
    * @param unit units to use for interpreting timeout `value`
    */
-  public WorkflowOptions withTimeout(long value, TimeUnit unit) {
+  public @NonNull WorkflowOptions withTimeout(long value, @NonNull TimeUnit unit) {
     return withTimeout(Duration.ofNanos(unit.toNanos(value)));
   }
 
@@ -80,12 +88,12 @@ public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadli
    *
    * @param deadline deadline to use, expressed as a `java.util.Instant`
    */
-  public WorkflowOptions withDeadline(Instant deadline) {
+  public @NonNull WorkflowOptions withDeadline(@Nullable Instant deadline) {
     return new WorkflowOptions(this.workflowId, this.timeout, deadline);
   }
 
   /** Create a workflow options like this one, but without a timeout */
-  public WorkflowOptions withNoTimeout() {
+  public @NonNull WorkflowOptions withNoTimeout() {
     return new WorkflowOptions(this.workflowId, Timeout.none(), this.deadline);
   }
 
@@ -93,7 +101,7 @@ public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadli
    * @return The workflow ID that will be used
    */
   @Override
-  public String workflowId() {
+  public @Nullable String workflowId() {
     return workflowId != null && workflowId.isEmpty() ? null : workflowId;
   }
 
@@ -102,7 +110,7 @@ public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadli
    * Should be called as an AutoCloseable so that the context is restored at the end of the block.
    * try (var _i = new WorkflowOptions(...).setContext()) { ... }
    */
-  public Guard setContext() {
+  public @NonNull Guard setContext() {
     var ctx = DBOSContextHolder.get();
     var guard = new Guard(ctx);
 
@@ -126,7 +134,9 @@ public record WorkflowOptions(String workflowId, Timeout timeout, Instant deadli
     private final Timeout timeout;
     private final Instant deadline;
 
-    private Guard(DBOSContext ctx) {
+    private
+    @NonNull
+    Guard(@NonNull DBOSContext ctx) {
       this.ctx = ctx;
       this.nextWorkflowId = ctx.nextWorkflowId;
       this.timeout = ctx.nextTimeout;
