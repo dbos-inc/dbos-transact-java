@@ -3,23 +3,25 @@ package dev.dbos.transact.config;
 import dev.dbos.transact.Constants;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 public record DBOSConfig(
-    String appName,
-    String databaseUrl,
-    String dbUser,
-    String dbPassword,
+    @NonNull String appName,
+    @Nullable String databaseUrl,
+    @Nullable String dbUser,
+    @Nullable String dbPassword,
     int maximumPoolSize,
     int connectionTimeout,
-    HikariDataSource dataSource,
+    @Nullable HikariDataSource dataSource,
     boolean adminServer,
     int adminServerPort,
     boolean migrate,
-    String conductorKey,
-    String conductorDomain,
-    String appVersion,
-    String executorId,
-    String databaseSchema,
+    @Nullable String conductorKey,
+    @Nullable String conductorDomain,
+    @Nullable String appVersion,
+    @Nullable String executorId,
+    @Nullable String databaseSchema,
     boolean enablePatching) {
 
   public DBOSConfig {
@@ -41,7 +43,7 @@ public record DBOSConfig(
     }
   }
 
-  public static DBOSConfig defaults(String appName) {
+  public static @NonNull DBOSConfig defaults(@NonNull String appName) {
     return new DBOSConfig(
         appName, null, null, null, 3, // maximumPoolSize default
         30000, // connectionTimeout default
@@ -51,7 +53,7 @@ public record DBOSConfig(
         null, null, null, null, null, false);
   }
 
-  public static DBOSConfig defaultsFromEnv(String appName) {
+  public static @NonNull DBOSConfig defaultsFromEnv(@NonNull String appName) {
     String databaseUrl = System.getenv(Constants.SYSTEM_JDBC_URL_ENV_VAR);
     String dbUser = System.getenv(Constants.POSTGRES_USER_ENV_VAR);
     if (dbUser == null || dbUser.isEmpty()) dbUser = "postgres";
@@ -62,7 +64,7 @@ public record DBOSConfig(
         .withDbPassword(dbPassword);
   }
 
-  public DBOSConfig withAppName(String v) {
+  public @NonNull DBOSConfig withAppName(@NonNull String v) {
     return new DBOSConfig(
         v,
         databaseUrl,
@@ -82,7 +84,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withDatabaseUrl(String v) {
+  public @NonNull DBOSConfig withDatabaseUrl(@Nullable String v) {
     return new DBOSConfig(
         appName,
         v,
@@ -102,7 +104,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withDbUser(String v) {
+  public @NonNull DBOSConfig withDbUser(@Nullable String v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -122,7 +124,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withDbPassword(String v) {
+  public @NonNull DBOSConfig withDbPassword(@Nullable String v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -142,7 +144,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withMaximumPoolSize(int v) {
+  public @NonNull DBOSConfig withMaximumPoolSize(int v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -162,7 +164,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withConnectionTimeout(int v) {
+  public @NonNull DBOSConfig withConnectionTimeout(int v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -182,7 +184,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withDataSource(HikariDataSource v) {
+  public @NonNull DBOSConfig withDataSource(@Nullable HikariDataSource v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -202,7 +204,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withAdminServer(boolean v) {
+  public @NonNull DBOSConfig withAdminServer(boolean v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -222,7 +224,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withAdminServerPort(int v) {
+  public @NonNull DBOSConfig withAdminServerPort(int v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -242,7 +244,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withMigrate(boolean v) {
+  public @NonNull DBOSConfig withMigrate(boolean v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -262,7 +264,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withConductorKey(String v) {
+  public @NonNull DBOSConfig withConductorKey(@Nullable String v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -282,7 +284,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withConductorDomain(String v) {
+  public @NonNull DBOSConfig withConductorDomain(@Nullable String v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -302,7 +304,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withAppVersion(String v) {
+  public @NonNull DBOSConfig withAppVersion(@Nullable String v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -322,7 +324,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withExecutorId(String v) {
+  public @NonNull DBOSConfig withExecutorId(@Nullable String v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -342,7 +344,7 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withDatabaseSchema(String v) {
+  public @NonNull DBOSConfig withDatabaseSchema(@Nullable String v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -362,15 +364,15 @@ public record DBOSConfig(
         enablePatching);
   }
 
-  public DBOSConfig withEnablePatching() {
+  public @NonNull DBOSConfig withEnablePatching() {
     return this.withEnablePatching(true);
   }
 
-  public DBOSConfig withDisablePatching() {
+  public @NonNull DBOSConfig withDisablePatching() {
     return this.withEnablePatching(false);
   }
 
-  public DBOSConfig withEnablePatching(boolean v) {
+  public @NonNull DBOSConfig withEnablePatching(boolean v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
@@ -390,11 +392,11 @@ public record DBOSConfig(
         v);
   }
 
-  public DBOSConfig enableAdminServer() {
+  public @NonNull DBOSConfig enableAdminServer() {
     return withAdminServer(true);
   }
 
-  public DBOSConfig disableAdminServer() {
+  public @NonNull DBOSConfig disableAdminServer() {
     return withAdminServer(false);
   }
 
