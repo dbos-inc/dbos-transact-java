@@ -144,7 +144,13 @@ public class DBOSExecutor implements AutoCloseable {
       logger.info("Executor ID: {}", this.executorId);
       logger.info("Application Version: {}", this.appVersion);
 
-      executorService = Executors.newCachedThreadPool();
+      // use virtual thread executor when available (i.e. Java 21+)
+      try {
+        var method = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
+        executorService = (ExecutorService) method.invoke(null);
+      } catch (Exception e) {
+        executorService = Executors.newCachedThreadPool();
+      }
       timeoutScheduler = Executors.newScheduledThreadPool(2);
 
       systemDatabase = new SystemDatabase(config);
