@@ -168,7 +168,7 @@ class ForkTestServiceImpl implements ForkTestService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ForkTest {
 
   private static final Logger logger = LoggerFactory.getLogger(ForkTest.class);

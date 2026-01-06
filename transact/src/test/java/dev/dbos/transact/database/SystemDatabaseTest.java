@@ -17,7 +17,6 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.SQLException;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
@@ -25,7 +24,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class SystemDatabaseTest {
   private static DBOSConfig config;
   private SystemDatabase sysdb;
