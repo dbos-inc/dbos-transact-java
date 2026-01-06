@@ -1,6 +1,13 @@
 package dev.dbos.transact.config;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.workflow.Queue;
+
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.jspecify.annotations.NonNull;
@@ -22,7 +29,8 @@ public record DBOSConfig(
     @Nullable String appVersion,
     @Nullable String executorId,
     @Nullable String databaseSchema,
-    boolean enablePatching) {
+    boolean enablePatching,
+    @NonNull Set<String> listenQueues) {
 
   public DBOSConfig {
     if (appName == null || appName.isEmpty()) {
@@ -41,6 +49,8 @@ public record DBOSConfig(
     if (executorId != null && executorId.isEmpty()) {
       throw new IllegalArgumentException("DBOSConfig.executorId must not be empty if specified");
     }
+
+    listenQueues = (listenQueues == null) ? Set.of() : Set.copyOf(listenQueues);
   }
 
   public static @NonNull DBOSConfig defaults(@NonNull String appName) {
@@ -50,7 +60,7 @@ public record DBOSConfig(
         null, false, // adminServer
         3001, // adminServerPort
         true, // migrate
-        null, null, null, null, null, false);
+        null, null, null, null, null, false, null);
   }
 
   public static @NonNull DBOSConfig defaultsFromEnv(@NonNull String appName) {
@@ -81,7 +91,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withDatabaseUrl(@Nullable String v) {
@@ -101,7 +112,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withDbUser(@Nullable String v) {
@@ -121,7 +133,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withDbPassword(@Nullable String v) {
@@ -141,7 +154,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withMaximumPoolSize(int v) {
@@ -161,7 +175,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withConnectionTimeout(int v) {
@@ -181,7 +196,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withDataSource(@Nullable HikariDataSource v) {
@@ -201,7 +217,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withAdminServer(boolean v) {
@@ -221,7 +238,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withAdminServerPort(int v) {
@@ -241,7 +259,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withMigrate(boolean v) {
@@ -261,7 +280,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withConductorKey(@Nullable String v) {
@@ -281,7 +301,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withConductorDomain(@Nullable String v) {
@@ -301,7 +322,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withAppVersion(@Nullable String v) {
@@ -321,7 +343,8 @@ public record DBOSConfig(
         v,
         executorId,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withExecutorId(@Nullable String v) {
@@ -341,7 +364,8 @@ public record DBOSConfig(
         appVersion,
         v,
         databaseSchema,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withDatabaseSchema(@Nullable String v) {
@@ -361,7 +385,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         v,
-        enablePatching);
+        enablePatching,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig withEnablePatching() {
@@ -389,7 +414,8 @@ public record DBOSConfig(
         appVersion,
         executorId,
         databaseSchema,
-        v);
+        v,
+        listenQueues);
   }
 
   public @NonNull DBOSConfig enableAdminServer() {
@@ -400,10 +426,51 @@ public record DBOSConfig(
     return withAdminServer(false);
   }
 
+  public @NonNull DBOSConfig withListenQueue(@NonNull Queue queue) {
+    return withListenQueues(new String[] {queue.name()});
+  }
+
+  public @NonNull DBOSConfig withListenQueue(@NonNull String queueName) {
+    return withListenQueues(new String[] {queueName});
+  }
+
+  public @NonNull DBOSConfig withListenQueues(@Nullable Queue... queues) {
+    var names =
+        Arrays.stream(Objects.requireNonNullElse(queues, new Queue[0])).map(Queue::name).toList();
+    return withListenQueues(names.toArray(String[]::new));
+  }
+
+  public @NonNull DBOSConfig withListenQueues(@Nullable String... queueNames) {
+    var v =
+        Stream.concat(
+                listenQueues.stream(),
+                Arrays.stream(Objects.requireNonNullElse(queueNames, new String[0])))
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        maximumPoolSize,
+        connectionTimeout,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        v);
+  }
+
   // Override toString to mask the DB password
   @Override
   public String toString() {
-    return "DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, appVersion=%s, executorId=%s, dbSchema=%s, enablePatching=%s]"
+    return "DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, appVersion=%s, executorId=%s, dbSchema=%s, enablePatching=%s, listenQueues=%s]"
         .formatted(
             appName,
             databaseUrl,
@@ -419,6 +486,7 @@ public record DBOSConfig(
             appVersion,
             executorId,
             databaseSchema,
-            enablePatching);
+            enablePatching,
+            listenQueues);
   }
 }

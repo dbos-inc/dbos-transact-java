@@ -660,4 +660,28 @@ public class QueuesTest {
 
     assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
   }
+
+  @Test
+  public void testListenQueue() throws Exception {
+    var config = dbosConfig.withListenQueue("queueOne");
+    DBOS.reinitialize(config);
+
+    Queue queueOne = new Queue("queueOne");
+    Queue queueTwo = new Queue("queueTwo");
+    DBOS.registerQueue(queueOne);
+    DBOS.registerQueue(queueTwo);
+
+    ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    DBOS.launch();
+
+    var h1 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("one"), new StartWorkflowOptions(queueOne));
+    var h2 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("two"), new StartWorkflowOptions(queueTwo));
+
+    assertEquals("oneone", h1.getResult());
+    assertEquals("ENQUEUED", h2.getStatus().status());
+  }
 }
