@@ -153,7 +153,7 @@ public class DBOSExecutor implements AutoCloseable {
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queues);
 
-      schedulerService = new SchedulerService(Constants.DBOS_SCHEDULER_QUEUE);
+      schedulerService = new SchedulerService(Constants.DBOS_INTERNAL_QUEUE);
       listeners.add(schedulerService);
 
       for (var listener : listeners) {

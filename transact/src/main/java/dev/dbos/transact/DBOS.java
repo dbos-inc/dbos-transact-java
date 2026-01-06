@@ -167,7 +167,6 @@ public class DBOS {
       internalWorkflowsService =
           registerWorkflows(InternalWorkflowsService.class, new InternalWorkflowsServiceImpl());
       this.registerQueue(new Queue(Constants.DBOS_INTERNAL_QUEUE));
-      this.registerQueue(new Queue(Constants.DBOS_SCHEDULER_QUEUE));
     }
 
     void clearRegistry() {

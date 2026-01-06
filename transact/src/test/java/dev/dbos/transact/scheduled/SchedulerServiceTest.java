@@ -91,7 +91,7 @@ class SchedulerServiceTest {
 
     var workflows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("withSteps"));
     assertTrue(workflows.size() <= 2);
-    assertEquals(Constants.DBOS_SCHEDULER_QUEUE, workflows.get(0).queueName());
+    assertEquals(Constants.DBOS_INTERNAL_QUEUE, workflows.get(0).queueName());
 
     var steps = DBOS.listWorkflowSteps(workflows.get(0).workflowId());
     assertEquals(2, steps.size());
