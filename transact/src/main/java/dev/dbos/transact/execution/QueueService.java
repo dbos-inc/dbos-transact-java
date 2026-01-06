@@ -76,8 +76,12 @@ public class QueueService {
     final Duration maxPollingInterval = Duration.ofSeconds(120);
 
     for (var _queue : queues) {
-      if (!listenQueues.contains(_queue.name())
-          && !_queue.name().equals(Constants.DBOS_INTERNAL_QUEUE)) {
+
+      var listening =
+          _queue.name().equals(Constants.DBOS_INTERNAL_QUEUE)
+              || listenQueues.isEmpty()
+              || listenQueues.contains(_queue.name());
+      if (!listening) {
         continue;
       }
 
