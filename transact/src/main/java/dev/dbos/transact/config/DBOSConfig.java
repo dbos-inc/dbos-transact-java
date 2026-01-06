@@ -470,7 +470,10 @@ public record DBOSConfig(
   // Override toString to mask the DB password
   @Override
   public String toString() {
-    return "DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, appVersion=%s, executorId=%s, dbSchema=%s, enablePatching=%s, listenQueues=%s]"
+    return ("DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, "
+            + "maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, "
+            + "adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, "
+            + "appVersion=%s, executorId=%s, dbSchema=%s, enablePatching=%s, listenQueues=%s]")
         .formatted(
             appName,
             databaseUrl,

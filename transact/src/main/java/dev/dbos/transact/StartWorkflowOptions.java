@@ -78,7 +78,7 @@ public record StartWorkflowOptions(
     this(workflowId, null, null, null, null, null, null);
   }
 
-  /** Construct with a specified workflow ID */
+  /** Construct with a specified queue */
   public
   @NonNull
   StartWorkflowOptions(@NonNull Queue queue) {
