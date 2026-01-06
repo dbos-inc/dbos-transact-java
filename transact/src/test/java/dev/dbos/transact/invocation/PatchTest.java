@@ -13,7 +13,6 @@ import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.sql.SQLException;
-import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -83,7 +82,7 @@ class PatchServiceImplFive implements PatchService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class PatchTest {
 
   private static final Logger logger = LoggerFactory.getLogger(PatchTest.class);

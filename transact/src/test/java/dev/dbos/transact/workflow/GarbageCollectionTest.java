@@ -12,7 +12,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -57,7 +56,7 @@ class GCTestServiceImpl implements GCTestService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class GarbageCollectionTest {
 
   private static DBOSConfig dbosConfig;

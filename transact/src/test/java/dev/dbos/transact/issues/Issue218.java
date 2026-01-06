@@ -77,7 +77,7 @@ class ExampleImpl implements Example {
   }
 }
 
-// @org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class Issue218 {
   private static DBOSConfig dbosConfig;
   private HikariDataSource dataSource;

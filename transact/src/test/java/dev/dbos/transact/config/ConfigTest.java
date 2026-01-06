@@ -33,6 +33,7 @@ import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
 import uk.org.webcompere.systemstubs.jupiter.SystemStub;
 import uk.org.webcompere.systemstubs.jupiter.SystemStubsExtension;
 
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 @ExtendWith(SystemStubsExtension.class)
 public class ConfigTest {
 

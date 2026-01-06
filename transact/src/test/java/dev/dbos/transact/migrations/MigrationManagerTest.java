@@ -14,7 +14,6 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -24,7 +23,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class MigrationManagerTest {
 
   private DataSource testDataSource;

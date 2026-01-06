@@ -27,7 +27,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -36,7 +35,7 @@ import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class QueuesTest {
 
   private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
@@ -659,5 +658,30 @@ public class QueuesTest {
     assertEquals("local", handle3.getStatus().executorId());
 
     assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testListenQueue() throws Exception {
+    var config = dbosConfig.withListenQueue("queueOne");
+    DBOS.reinitialize(config);
+
+    Queue queueOne = new Queue("queueOne");
+    Queue queueTwo = new Queue("queueTwo");
+    DBOS.registerQueue(queueOne);
+    DBOS.registerQueue(queueTwo);
+
+    ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    DBOS.launch();
+
+    var h2 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("two"), new StartWorkflowOptions(queueTwo));
+    var h1 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("one"), new StartWorkflowOptions(queueOne));
+
+    Thread.sleep(3000);
+    assertEquals("oneone", h1.getResult());
+    assertEquals("ENQUEUED", h2.getStatus().status());
   }
 }

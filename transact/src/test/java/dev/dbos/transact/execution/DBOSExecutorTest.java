@@ -15,7 +15,6 @@ import dev.dbos.transact.workflow.*;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -24,7 +23,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class DBOSExecutorTest {
 
   private static DBOSConfig dbosConfig;

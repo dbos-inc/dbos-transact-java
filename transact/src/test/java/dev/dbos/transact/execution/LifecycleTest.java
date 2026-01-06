@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class LifecycleTest {
   private static DBOSConfig dbosConfig;
   private static LifecycleTestWorkflowsImpl impl;

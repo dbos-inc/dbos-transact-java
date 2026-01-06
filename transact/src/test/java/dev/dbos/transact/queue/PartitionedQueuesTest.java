@@ -18,7 +18,6 @@ import dev.dbos.transact.workflow.WorkflowState;
 import java.sql.SQLException;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -80,7 +79,7 @@ class PartitionsTestServiceImpl implements PartitionsTestService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class PartitionedQueuesTest {
   private static DBOSConfig dbosConfig;
   private static DataSource dataSource;

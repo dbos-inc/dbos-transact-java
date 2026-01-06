@@ -14,7 +14,6 @@ import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -63,7 +62,7 @@ class MgmtServiceImpl implements MgmtService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class WorkflowMgmtTest {
 
   private static final Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);

@@ -1,11 +1,13 @@
 package dev.dbos.transact.execution;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.Queue;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
@@ -44,11 +46,11 @@ public class QueueService {
     paused.set(false);
   }
 
-  public void start(List<Queue> queues) {
+  public void start(List<Queue> queues, Set<String> listenQueues) {
     if (this.scheduler.get() == null) {
       var scheduler = Executors.newScheduledThreadPool(4);
       if (this.scheduler.compareAndSet(null, scheduler)) {
-        startQueueListeners(queues);
+        startQueueListeners(queues, listenQueues);
       }
     }
   }
@@ -65,7 +67,7 @@ public class QueueService {
     return this.scheduler.get() == null;
   }
 
-  private void startQueueListeners(List<Queue> queues) {
+  private void startQueueListeners(List<Queue> queues, Set<String> listenQueues) {
     logger.debug("startQueueListeners");
 
     final var executorId = dbosExecutor.executorId();
@@ -74,6 +76,14 @@ public class QueueService {
     final Duration maxPollingInterval = Duration.ofSeconds(120);
 
     for (var _queue : queues) {
+
+      var listening =
+          _queue.name().equals(Constants.DBOS_INTERNAL_QUEUE)
+              || listenQueues.isEmpty()
+              || listenQueues.contains(_queue.name());
+      if (!listening) {
+        continue;
+      }
 
       var task =
           new Runnable() {

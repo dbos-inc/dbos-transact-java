@@ -10,7 +10,6 @@ import dev.dbos.transact.workflow.Workflow;
 
 import java.sql.SQLException;
 import java.time.Instant;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.AfterEach;
@@ -42,7 +41,7 @@ class MetricsServiceImpl implements MetricsService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class MetricsTest {
   private static DBOSConfig config;
   private MetricsService proxy;

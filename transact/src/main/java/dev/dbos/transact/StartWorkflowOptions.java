@@ -78,6 +78,13 @@ public record StartWorkflowOptions(
     this(workflowId, null, null, null, null, null, null);
   }
 
+  /** Construct with a specified queue */
+  public
+  @NonNull
+  StartWorkflowOptions(@NonNull Queue queue) {
+    this(null, null, null, queue.name(), null, null, null);
+  }
+
   /** Produces a new StartWorkflowOptions that overrides the ID assigned to the started workflow */
   public @NonNull StartWorkflowOptions withWorkflowId(@Nullable String workflowId) {
     return new StartWorkflowOptions(
