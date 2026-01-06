@@ -22,6 +22,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -673,13 +674,14 @@ public class QueuesTest {
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
     DBOS.launch();
 
-    var h1 =
-        DBOS.startWorkflow(
-            () -> serviceQ.simpleQWorkflow("one"), new StartWorkflowOptions(queueOne));
     var h2 =
         DBOS.startWorkflow(
             () -> serviceQ.simpleQWorkflow("two"), new StartWorkflowOptions(queueTwo));
+    var h1 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("one"), new StartWorkflowOptions(queueOne));
 
+    Thread.sleep(Duration.ofSeconds(3));
     assertEquals("oneone", h1.getResult());
     assertEquals("ENQUEUED", h2.getStatus().status());
   }
