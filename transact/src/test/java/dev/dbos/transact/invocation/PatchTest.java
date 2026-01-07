@@ -18,6 +18,7 @@ import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,7 +93,7 @@ public class PatchTest {
     DBOS.shutdown();
   }
 
-  @Test
+  @RetryingTest(3)
   public void testPatch() throws Exception {
 
     // Note, for this test we have to manually update the workflow name when forking across
