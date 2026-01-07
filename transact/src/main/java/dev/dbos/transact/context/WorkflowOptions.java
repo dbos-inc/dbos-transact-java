@@ -37,16 +37,12 @@ public record WorkflowOptions(
   }
 
   /** Create a WorkflowOptions with no ID and no timout */
-  public
-  @NonNull
-  WorkflowOptions() {
+  public WorkflowOptions() {
     this(null, null, null);
   }
 
   /** Create a WorkflowOptions with a specified workflow ID and no timout */
-  public
-  @NonNull
-  WorkflowOptions(@Nullable String workflowId) {
+  public WorkflowOptions(@Nullable String workflowId) {
     this(workflowId, null, null);
   }
 
@@ -134,9 +130,7 @@ public record WorkflowOptions(
     private final Timeout timeout;
     private final Instant deadline;
 
-    private
-    @NonNull
-    Guard(@NonNull DBOSContext ctx) {
+    private Guard(@NonNull DBOSContext ctx) {
       this.ctx = ctx;
       this.nextWorkflowId = ctx.nextWorkflowId;
       this.timeout = ctx.nextTimeout;

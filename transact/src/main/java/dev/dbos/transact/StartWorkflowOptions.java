@@ -38,9 +38,7 @@ public record StartWorkflowOptions(
     @Nullable Integer priority,
     @Nullable String queuePartitionKey) {
 
-  public
-  @NonNull
-  StartWorkflowOptions {
+  public StartWorkflowOptions {
     if (timeout instanceof Timeout.Explicit explicit) {
       if (explicit.value().isNegative() || explicit.value().isZero()) {
         throw new IllegalArgumentException(
@@ -65,23 +63,17 @@ public record StartWorkflowOptions(
   }
 
   /** Construct with default options */
-  public
-  @NonNull
-  StartWorkflowOptions() {
+  public StartWorkflowOptions() {
     this(null, null, null, null, null, null, null);
   }
 
   /** Construct with a specified workflow ID */
-  public
-  @NonNull
-  StartWorkflowOptions(String workflowId) {
+  public StartWorkflowOptions(String workflowId) {
     this(workflowId, null, null, null, null, null, null);
   }
 
   /** Construct with a specified queue */
-  public
-  @NonNull
-  StartWorkflowOptions(@NonNull Queue queue) {
+  public StartWorkflowOptions(@NonNull Queue queue) {
     this(null, null, null, queue.name(), null, null, null);
   }
 
