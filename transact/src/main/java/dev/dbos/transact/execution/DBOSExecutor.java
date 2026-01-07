@@ -152,7 +152,8 @@ public class DBOSExecutor implements AutoCloseable {
         // Running on a JDK without virtual threads; fall back to regular executor
         executorService = Executors.newCachedThreadPool();
       } catch (InvocationTargetException | IllegalAccessException e) {
-        logger.warn("Failed to initialize virtual thread executor, falling back to cached thread pool", e);
+        logger.warn(
+            "Failed to initialize virtual thread executor, falling back to cached thread pool", e);
         executorService = Executors.newCachedThreadPool();
       }
       timeoutScheduler = Executors.newScheduledThreadPool(2);
