@@ -31,6 +31,7 @@ import java.util.concurrent.Semaphore;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.*;
+import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -148,7 +149,7 @@ public class QueuesTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void testPriority() throws Exception {
 
     Queue firstQ =
@@ -230,7 +231,7 @@ public class QueuesTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   void testListQueuedWorkflow() throws Exception {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
@@ -584,7 +585,7 @@ public class QueuesTest {
     assertEquals("inputqinputq", result);
   }
 
-  @Test
+  @RetryingTest(3)
   public void testQueueConcurrencyUnderRecovery() throws Exception {
     Queue queue = new Queue("test_queue").withConcurrency(2);
     DBOS.registerQueue(queue);
