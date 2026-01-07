@@ -68,7 +68,8 @@ public class ScaleTest {
     DBOS.launch();
 
     var usingThreadPoolExecutor = DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor();
-    final int count = Runtime.getRuntime().availableProcessors() * (usingThreadPoolExecutor ? 50 : 500) * 2;
+    final int count =
+        Runtime.getRuntime().availableProcessors() * (usingThreadPoolExecutor ? 50 : 500) * 2;
 
     ArrayList<WorkflowHandle<String, RuntimeException>> handles = new ArrayList<>();
     long startTime = System.nanoTime();
