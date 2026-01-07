@@ -149,12 +149,14 @@ public class DBOSExecutor implements AutoCloseable {
         var method = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
         executorService = (ExecutorService) method.invoke(null);
       } catch (NoSuchMethodException e) {
-        // Running on a JDK without virtual threads; fall back to regular executor
-        executorService = Executors.newCachedThreadPool();
+        // Running on a JDK without virtual threads; fall back to fixed thread pool executor
+        int threadCount = Runtime.getRuntime().availableProcessors() * 50;
+        executorService = Executors.newFixedThreadPool(threadCount);
       } catch (InvocationTargetException | IllegalAccessException e) {
         logger.warn(
-            "Failed to initialize virtual thread executor, falling back to cached thread pool", e);
-        executorService = Executors.newCachedThreadPool();
+            "Failed to initialize virtual thread executor, falling back to fixed thread pool", e);
+        int threadCount = Runtime.getRuntime().availableProcessors() * 50;
+        executorService = Executors.newFixedThreadPool(threadCount);
       }
       timeoutScheduler = Executors.newScheduledThreadPool(2);
 
@@ -274,6 +276,11 @@ public class DBOSExecutor implements AutoCloseable {
   // package private method for test purposes
   SchedulerService getSchedulerService() {
     return schedulerService;
+  }
+
+  // package private method for test purposes
+  boolean usingThreadPoolExecutor() {
+    return this.executorService instanceof ThreadPoolExecutor;
   }
 
   public String appName() {
