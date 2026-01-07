@@ -28,7 +28,8 @@ public class DBOSCommand implements Runnable, IVersionProvider {
   @Override
   public String[] getVersion() throws Exception {
     return new String[] {
-      "${COMMAND-FULL-NAME} " + (DBOS.version() == null ? "<unknown version>" : "v" + DBOS.version())
+      "${COMMAND-FULL-NAME} "
+          + (DBOS.version() == null ? "<unknown version>" : "v" + DBOS.version())
     };
   }
 }
