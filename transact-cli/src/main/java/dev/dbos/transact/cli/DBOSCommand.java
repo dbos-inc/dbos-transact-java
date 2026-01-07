@@ -2,8 +2,6 @@ package dev.dbos.transact.cli;
 
 import dev.dbos.transact.DBOS;
 
-import java.util.Objects;
-
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.IVersionProvider;
@@ -29,10 +27,9 @@ public class DBOSCommand implements Runnable, IVersionProvider {
 
   @Override
   public String[] getVersion() throws Exception {
-    var pkg = DBOS.class.getPackage();
-    var ver = pkg == null ? null : "v%s".formatted(pkg.getImplementationVersion());
     return new String[] {
-      "${COMMAND-FULL-NAME} " + Objects.requireNonNullElse(ver, "<unknown version>")
+      "${COMMAND-FULL-NAME} "
+          + (DBOS.version() == null ? "<unknown version>" : "v" + DBOS.version())
     };
   }
 }
