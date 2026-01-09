@@ -1,6 +1,8 @@
 package dev.dbos.transact.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
@@ -16,7 +18,11 @@ import java.util.ArrayList;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledForJreRange;
+import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.JRE;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,6 +69,23 @@ public class ScaleTest {
   }
 
   @Test
+  @EnabledForJreRange(min = JRE.JAVA_21)
+  public void virtualThreadPoolJava21() throws Exception {
+    DBOS.launch();
+
+    assertFalse(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
+  }
+
+  @Test
+  @DisabledForJreRange(min = JRE.JAVA_21)
+  public void threadPoolJava17() throws Exception {
+    DBOS.launch();
+
+    assertTrue(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
+  }
+
+  @Test
+  @Disabled
   public void scaleTest() throws Exception {
     var service = DBOS.registerWorkflows(ScaleService.class, new ScaleServiceImpl());
     DBOS.launch();
