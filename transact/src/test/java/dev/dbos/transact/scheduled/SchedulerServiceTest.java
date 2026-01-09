@@ -17,7 +17,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junitpioneer.jupiter.RetryingTest;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class SchedulerServiceTest {
@@ -45,7 +44,7 @@ class SchedulerServiceTest {
     DBOS.shutdown();
   }
 
-  @RetryingTest(3)
+  @Test
   public void simpleScheduledWorkflow() throws Exception {
 
     var impl = new SkedServiceImpl();
