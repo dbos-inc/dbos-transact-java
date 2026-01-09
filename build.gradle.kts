@@ -112,10 +112,25 @@ subprojects {
     }
 
     plugins.withId("java") {
-        extensions.configure<JavaPluginExtension> {
-            toolchain {
-                languageVersion.set(JavaLanguageVersion.of(17))
-            }
+        val javaExtension = extensions.getByType<JavaPluginExtension>()
+        
+        // 1. FORCE the published bytecode to be Java 17
+        javaExtension.apply {
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
+        }
+
+        // 2. Allow the compiler to see higher-version APIs for reflection
+        // but keep the bytecode target at 17.
+        tasks.withType<JavaCompile> {
+            options.release.set(17) 
+        }
+
+        // 3. THE KEY: Tell the 'test' task to use the environment's JDK
+        // instead of the toolchain's JDK.
+        tasks.withType<Test> {
+            // This clears the toolchain for the test task only
+            javaLauncher.set(null as JavaLauncher?) 
         }
 
         tasks.named<Jar>("jar") {
