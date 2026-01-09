@@ -144,12 +144,12 @@ public class DBOSExecutor implements AutoCloseable {
       logger.info("Executor ID: {}", this.executorId);
       logger.info("Application Version: {}", this.appVersion);
 
-      // use virtual thread executor when available (i.e. Java 21+)
       try {
+        // use virtual thread executor when available (i.e. Java 21+)
         var method = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
         executorService = (ExecutorService) method.invoke(null);
       } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
-        // Running on a JDK without virtual threads; fall back to fixed thread pool executor
+        // fall back to fixed thread pool executor if virtual thread executor unavailable
         logger.debug("using newFixedThreadPool", e);
         int threadCount = Runtime.getRuntime().availableProcessors() * 50;
         executorService = Executors.newFixedThreadPool(threadCount);
