@@ -47,11 +47,6 @@ jobs:
           java-version: ${{ matrix.jdk-version }}
           distribution: ${{ matrix.jdk-distro }}
 
-      - name: Debug Environment
-        run: |
-          java -version
-          echo "JAVA_HOME: $JAVA_HOME"
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
