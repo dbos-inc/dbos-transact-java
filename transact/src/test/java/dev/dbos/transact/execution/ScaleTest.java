@@ -18,10 +18,10 @@ import java.util.ArrayList;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledForJreRange;
 import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.condition.JRE;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +44,7 @@ class ScaleServiceImpl implements ScaleService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 5, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 10, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ScaleTest {
   private static final Logger logger = LoggerFactory.getLogger(ScaleTest.class);
   private static DBOSConfig dbosConfig;
@@ -85,14 +85,14 @@ public class ScaleTest {
   }
 
   @Test
-  @Disabled
+  @EnabledIfEnvironmentVariable(named = "CI", matches = "true")
   public void scaleTest() throws Exception {
     var service = DBOS.registerWorkflows(ScaleService.class, new ScaleServiceImpl());
     DBOS.launch();
 
     var usingThreadPoolExecutor = DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor();
     final int count =
-        Runtime.getRuntime().availableProcessors() * (usingThreadPoolExecutor ? 50 : 500) * 2;
+        Runtime.getRuntime().availableProcessors() * (usingThreadPoolExecutor ? 50 : 500) * 4;
 
     ArrayList<WorkflowHandle<String, RuntimeException>> handles = new ArrayList<>();
     long startTime = System.nanoTime();
