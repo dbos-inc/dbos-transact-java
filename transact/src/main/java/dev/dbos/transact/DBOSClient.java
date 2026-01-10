@@ -52,6 +52,7 @@ public class DBOSClient implements AutoCloseable {
   }
 
   private final @NonNull SystemDatabase systemDatabase;
+  private final boolean created;
 
   /**
    * Construct a DBOSClient, by providing system database access credentials
@@ -77,6 +78,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String user,
       @NonNull String password,
       @Nullable String schema) {
+    this.created = true;
     var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
     systemDatabase = new SystemDatabase(dataSource, schema);
   }
@@ -97,12 +99,16 @@ public class DBOSClient implements AutoCloseable {
    * @param schema Database schema for DBOS tables
    */
   public DBOSClient(@NonNull HikariDataSource dataSource, @Nullable String schema) {
+    this.created = false;
     systemDatabase = new SystemDatabase(dataSource, schema);
   }
 
   @Override
   public void close() {
-    systemDatabase.close();
+    systemDatabase.stop();
+    if (created) {
+      systemDatabase.close();
+    }
   }
 
   /**
