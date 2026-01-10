@@ -200,7 +200,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
-    return workflowDAO.<T, E>awaitWorkflowResult(workflowId);
+    return DbRetry.call(
+        () -> {
+          return workflowDAO.<T, E>awaitWorkflowResult(workflowId);
+        });
   }
 
   public List<String> getAndStartQueuedWorkflows(

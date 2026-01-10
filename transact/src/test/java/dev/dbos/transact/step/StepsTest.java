@@ -5,31 +5,29 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 import dev.dbos.transact.workflow.*;
 
 import java.sql.SQLException;
 import java.util.List;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class StepsTest {
 
-  private static DBOSConfig dbosConfig;
+  private static final DBSettings db = DBSettings.get();
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    StepsTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
+  private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
+    db.recreate();
+
+    dataSource = db.dataSource();
+    dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
 
     DBOS.reinitialize(dbosConfig);
   }
@@ -37,6 +35,7 @@ public class StepsTest {
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test
