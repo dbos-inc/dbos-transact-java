@@ -9,9 +9,9 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 import dev.dbos.transact.workflow.Queue;
 
 import java.sql.SQLException;
@@ -24,33 +24,25 @@ import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ClientTest {
-  private static DBOSConfig dbosConfig;
-  private static final String dbUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
-  private static final String dbUser = "postgres";
-  private static final String dbPassword = System.getenv("PGPASSWORD");
 
   private ClientService service;
-  private HikariDataSource dataSource;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaults("systemdbtest")
-            .withDatabaseUrl(dbUrl)
-            .withDbUser(dbUser)
-            .withDbPassword(dbPassword)
-            .withMaximumPoolSize(2);
-  }
+  private static final DBSettings db = DBSettings.get();
+  private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
+    db.recreate();
+
+    dataSource = db.dataSource();
+    dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
+
     DBOS.reinitialize(dbosConfig);
+
     DBOS.registerQueue(new Queue("testQueue"));
     service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
     DBOS.launch();
-
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
@@ -106,7 +98,7 @@ public class ClientTest {
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = new DBOSClient(db.url(), db.user(), db.password())) {
       var options =
           new DBOSClient.EnqueueOptions(
               "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue");
@@ -135,7 +127,7 @@ public class ClientTest {
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = new DBOSClient(db.url(), db.user(), db.password())) {
       var options =
           new DBOSClient.EnqueueOptions(
                   "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue")
@@ -155,7 +147,7 @@ public class ClientTest {
 
     var idempotencyKey = UUID.randomUUID().toString();
 
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = new DBOSClient(db.url(), db.user(), db.password())) {
       client.send(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
     }
 
@@ -171,7 +163,7 @@ public class ClientTest {
 
   @Test
   public void clientEnqueueTimeouts() throws Exception {
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = new DBOSClient(db.url(), db.user(), db.password())) {
       var options =
           new DBOSClient.EnqueueOptions(
               "dev.dbos.transact.client.ClientServiceImpl", "sleep", "testQueue");

@@ -10,6 +10,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.sql.SQLException;
@@ -105,15 +106,16 @@ public class PatchTest {
     // In production, developers would be expected to be updating services in place, so they would
     // have the same workflow name across deployed versions.
 
+    final DBSettings db = DBSettings.get();
+    db.recreate();
+
+    var dataSource = db.dataSource();
     var dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2)
+        DBOSConfig.defaults("systemdbtest")
+            .withDataSource(dataSource)
             .withEnablePatching()
             .withAppVersion("test-version");
-    var dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    DBUtils.recreateDB(dbosConfig);
     DBOS.reinitialize(dbosConfig);
 
     var proxy1 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplOne());
@@ -311,13 +313,12 @@ public class PatchTest {
 
   @Test
   public void patchThrowsNotConfigured() throws Exception {
-    var dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2)
-            .withAppVersion("test-version");
+    final DBSettings db = DBSettings.get();
+    db.recreate();
 
-    DBUtils.recreateDB(dbosConfig);
+    var dataSource = db.dataSource();
+    var dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
+
     DBOS.reinitialize(dbosConfig);
 
     var proxy2 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplTwo());
@@ -328,13 +329,12 @@ public class PatchTest {
 
   @Test
   public void deprecatePatchThrowsNotConfigured() throws Exception {
-    var dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2)
-            .withAppVersion("test-version");
+    final DBSettings db = DBSettings.get();
+    db.recreate();
 
-    DBUtils.recreateDB(dbosConfig);
+    var dataSource = db.dataSource();
+    var dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
+
     DBOS.reinitialize(dbosConfig);
 
     var proxy4 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplFour());

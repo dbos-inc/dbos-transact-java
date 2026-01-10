@@ -6,7 +6,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 import dev.dbos.transact.workflow.*;
 
 import java.sql.SQLException;
@@ -18,28 +18,25 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class NotificationServiceTest {
 
-  private static DBOSConfig dbosConfig;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    NotificationServiceTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
+  private static final DBSettings db = DBSettings.get();
+  private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
+    db.recreate();
+
+    dataSource = db.dataSource();
+    dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
+
     DBOS.reinitialize(dbosConfig);
   }
 

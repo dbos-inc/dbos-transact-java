@@ -9,6 +9,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -20,8 +21,8 @@ import java.util.List;
 
 import javax.sql.DataSource;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -30,8 +31,6 @@ import org.slf4j.LoggerFactory;
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class RecoveryServiceTest {
 
-  private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
   private Queue testQueue;
   private SystemDatabase systemDatabase;
   private DBOSExecutor dbosExecutor;
@@ -39,19 +38,18 @@ class RecoveryServiceTest {
   private ExecutingService executingService;
   private static final Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
-  @BeforeAll
-  public static void onetimeBefore() {
-
-    RecoveryServiceTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
+  private static final DBSettings db = DBSettings.get();
+  private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeEach
-  void setUp() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+  void beforeEachTest() throws SQLException {
+    db.recreate();
+
+    dataSource = db.dataSource();
+    dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
+
+    DBOS.reinitialize(dbosConfig);
 
     DBOS.reinitialize(dbosConfig);
     executingService =

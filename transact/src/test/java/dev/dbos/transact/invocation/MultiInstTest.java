@@ -8,6 +8,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -18,14 +19,13 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class MultiInstTest {
-  private static DBOSConfig dbosConfig;
   HawkServiceImpl himpl;
   BearServiceImpl bimpla;
   BearServiceImpl bimpl1;
@@ -34,18 +34,19 @@ public class MultiInstTest {
   private BearService bproxy1;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
+  private static final DBSettings db = DBSettings.get();
+  private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
+    db.recreate();
+
+    dataSource = db.dataSource();
+    dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
+
     DBOS.reinitialize(dbosConfig);
+
     himpl = new HawkServiceImpl();
     bimpla = new BearServiceImpl();
     bimpl1 = new BearServiceImpl();

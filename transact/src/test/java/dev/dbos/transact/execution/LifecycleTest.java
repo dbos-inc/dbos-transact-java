@@ -5,32 +5,31 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 
 import java.sql.SQLException;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class LifecycleTest {
-  private static DBOSConfig dbosConfig;
   private static LifecycleTestWorkflowsImpl impl;
   private static TestLifecycleService svc;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("lifecycletest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
+  private static final DBSettings db = DBSettings.get();
+  private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
+    db.recreate();
+
+    dataSource = db.dataSource();
+    dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
+
     DBOS.reinitialize(dbosConfig);
 
     impl = new LifecycleTestWorkflowsImpl();

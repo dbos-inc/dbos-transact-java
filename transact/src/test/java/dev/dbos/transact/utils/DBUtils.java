@@ -3,7 +3,6 @@ package dev.dbos.transact.utils;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.migrations.MigrationManager;
 
@@ -16,9 +15,11 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import javax.sql.DataSource;
 
+import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -185,12 +186,32 @@ public class DBUtils {
     return false;
   }
 
-  public void closeDS(HikariDataSource ds) {
-    ds.close();
-  }
+  public record DBSettings(String url, String user, String password) {
+    public static DBSettings get() {
+      var dbUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
+      var dbUser =
+          Objects.requireNonNullElse(System.getenv(Constants.POSTGRES_USER_ENV_VAR), "postgres");
+      var dbPassword = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
+      return new DBSettings(dbUrl, dbUser, dbPassword);
+    }
 
-  public static void recreateDB(DBOSConfig config) throws SQLException {
-    recreateDB(config.databaseUrl(), config.dbUser(), config.dbPassword());
+    public void recreate() throws SQLException {
+      recreateDB(url(), user(), password());
+    }
+
+    public HikariDataSource dataSource() {
+      var hikariConfig = new HikariConfig();
+      hikariConfig.setJdbcUrl(url);
+      hikariConfig.setUsername(user);
+      hikariConfig.setPassword(password);
+      hikariConfig.setKeepaliveTime(30000);
+      hikariConfig.setMaxLifetime(600000);
+      hikariConfig.setConnectionTimeout(15000);
+      hikariConfig.setValidationTimeout(2000);
+      hikariConfig.setInitializationFailTimeout(-1);
+      hikariConfig.setMaximumPoolSize(10);
+      return new HikariDataSource(hikariConfig);
+    }
   }
 
   public static void recreateDB(String url, String user, String password) throws SQLException {
@@ -202,10 +223,6 @@ public class DBUtils {
       stmt.execute(dropDbSql);
       stmt.execute(createDbSql);
     }
-  }
-
-  public static Connection getConnection(DBOSConfig config) throws SQLException {
-    return DriverManager.getConnection(config.databaseUrl(), config.dbUser(), config.dbPassword());
   }
 
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) throws SQLException {

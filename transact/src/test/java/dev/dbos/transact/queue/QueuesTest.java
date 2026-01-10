@@ -10,8 +10,8 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -28,8 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Semaphore;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,21 +38,16 @@ public class QueuesTest {
 
   private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
 
-  private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    QueuesTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
+  private static final DBSettings db = DBSettings.get();
+  private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
+    db.recreate();
+
+    dataSource = db.dataSource();
+    dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
 
     DBOS.reinitialize(dbosConfig);
   }
@@ -617,7 +611,7 @@ public class QueuesTest {
     String sql =
         "UPDATE dbos.workflow_status SET status = ?, executor_id = ? where workflow_uuid = ?;";
 
-    try (Connection connection = DBUtils.getConnection(dbosConfig);
+    try (Connection connection = dataSource.getConnection();
         PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
       pstmt.setString(1, WorkflowState.PENDING.toString());

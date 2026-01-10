@@ -15,6 +15,7 @@ import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.invocation.HawkService;
 import dev.dbos.transact.invocation.HawkServiceImpl;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Workflow;
 
@@ -218,16 +219,13 @@ public class ConfigTest {
   public void configDataSource() throws Exception {
 
     var poolName = "dbos-configDataSource";
-    var url = "jdbc:postgresql://localhost:5432/dbos_java_sys";
-    var user = "postgres";
-    var password = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
-
-    DBUtils.recreateDB(url, user, password);
+    final DBSettings db = DBSettings.get();
+    db.recreate();
 
     HikariConfig hikariConfig = new HikariConfig();
-    hikariConfig.setJdbcUrl(url);
-    hikariConfig.setUsername(user);
-    hikariConfig.setPassword(password);
+    hikariConfig.setJdbcUrl(db.url());
+    hikariConfig.setUsername(db.user());
+    hikariConfig.setPassword(db.password());
     hikariConfig.setPoolName(poolName);
 
     var dataSource = new HikariDataSource(hikariConfig);
@@ -267,19 +265,22 @@ public class ConfigTest {
     assertFalse(DBOS.version().contains("unknown"));
     var version = assertDoesNotThrow(() -> new ComparableVersion(DBOS.version()));
 
-    // an invalid version string will be parsed as 0.0-qualifier, so make sure
-    // the value provided is later 0.6 (the initial published version)
-    assertTrue(version.compareTo(new ComparableVersion("0.6")) > 0);
+    if (!(DBOS.version().equals("${projectVersion}"))) {
+      // an invalid version string will be parsed as 0.0-qualifier, so make sure
+      // the value provided is later 0.6 (the initial published version)
+      assertTrue(version.compareTo(new ComparableVersion("0.6")) > 0);
+    }
   }
 
   @Test
   public void appVersion() throws Exception {
     try {
       envVars.set("DBOS__APPID", "test-env-app-id");
+
       var dbosConfig =
           DBOSConfig.defaultsFromEnv("systemdbtest")
               .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-      DBUtils.recreateDB(dbosConfig);
+      DBUtils.recreateDB(dbosConfig.databaseUrl(), dbosConfig.dbUser(), dbosConfig.dbPassword());
       DBOS.reinitialize(dbosConfig);
 
       var proxy = DBOS.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl());

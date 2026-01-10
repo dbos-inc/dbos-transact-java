@@ -27,7 +27,7 @@ public class ExternalStateTest {
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
 
-    DBUtils.recreateDB(dbosConfig);
+    DBUtils.recreateDB(dbosConfig.databaseUrl(), dbosConfig.dbUser(), dbosConfig.dbPassword());
     MigrationManager.runMigrations(dbosConfig);
     systemDatabase = new SystemDatabase(dbosConfig);
   }

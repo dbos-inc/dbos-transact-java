@@ -40,7 +40,7 @@ public class SystemDatabaseTest {
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(config);
+    DBUtils.recreateDB(config.databaseUrl(), config.dbUser(), config.dbPassword());
     MigrationManager.runMigrations(config);
     sysdb = new SystemDatabase(config);
     dataSource = SystemDatabase.createDataSource(config);

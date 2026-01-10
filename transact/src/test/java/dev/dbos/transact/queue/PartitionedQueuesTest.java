@@ -9,8 +9,8 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -19,10 +19,8 @@ import java.sql.SQLException;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -81,22 +79,16 @@ class PartitionsTestServiceImpl implements PartitionsTestService {
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class PartitionedQueuesTest {
-  private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
-  private static final String dbUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
-  private static final String dbUser = "postgres";
-  private static final String dbPassword = System.getenv("PGPASSWORD");
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest").withDatabaseUrl(dbUrl).withMaximumPoolSize(2);
-  }
+  private static final DBSettings db = DBSettings.get();
+  private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
+    db.recreate();
+
+    dataSource = db.dataSource();
+    dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
 
     DBOS.reinitialize(dbosConfig);
   }
@@ -183,7 +175,7 @@ public class PartitionedQueuesTest {
     assertEquals(blockedBlockedHandle.workflowId(), blockedBlockedHandle.getResult());
     assertEquals(blockedNormalHandle.workflowId(), blockedNormalHandle.getResult());
 
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = new DBOSClient(db.url(), db.user(), db.password())) {
       var className = "dev.dbos.transact.queue.PartitionsTestServiceImpl";
       var wfName = "normalWorkflow";
       var nqOptions =

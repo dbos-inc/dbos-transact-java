@@ -37,7 +37,7 @@ class MigrationManagerTest {
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys_mm_test")
             .withMaximumPoolSize(3);
 
-    DBUtils.recreateDB(dbosConfig);
+    DBUtils.recreateDB(dbosConfig.databaseUrl(), dbosConfig.dbUser(), dbosConfig.dbPassword());
     testDataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 

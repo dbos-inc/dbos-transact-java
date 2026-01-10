@@ -7,9 +7,9 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -21,7 +21,6 @@ import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -251,30 +250,26 @@ public class SingleExecutionTest {
     }
   }
 
-  private static DBOSConfig dbosConfig;
-  private static TryConcExec execImpl;
-  private static TryConcExecIfc execIfc;
-  private static CatchPlainException1 catchImpl;
-  private static CatchPlainException1Ifc catchIfc;
-  private static UsingFinallyClause finallyImpl;
-  private static UsingFinallyClauseIfc finallyIfc;
-  private static TryConcExec2 concImpl;
-  private static TryConcExec2Ifc concIfc;
+  private static final DBSettings db = DBSettings.get();
+  private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
-  private static HikariDataSource dataSource;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-  }
+  private TryConcExec execImpl;
+  private TryConcExecIfc execIfc;
+  private CatchPlainException1 catchImpl;
+  private CatchPlainException1Ifc catchIfc;
+  private UsingFinallyClause finallyImpl;
+  private UsingFinallyClauseIfc finallyIfc;
+  private TryConcExec2 concImpl;
+  private TryConcExec2Ifc concIfc;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
+    db.recreate();
+
+    dataSource = db.dataSource();
+    dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
+
     DBOS.reinitialize(dbosConfig);
 
     execImpl = new TryConcExec();
@@ -301,7 +296,7 @@ public class SingleExecutionTest {
     DBOS.shutdown();
   }
 
-  static WorkflowHandle<?, ?> reexecuteWorkflowById(String id) throws Exception {
+  WorkflowHandle<?, ?> reexecuteWorkflowById(String id) throws Exception {
     DBUtils.setWorkflowState(dataSource, id, WorkflowState.PENDING.toString());
     return DBOSTestAccess.getDbosExecutor().executeWorkflowById(id, true, false);
   }

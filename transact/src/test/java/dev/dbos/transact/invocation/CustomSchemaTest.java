@@ -9,6 +9,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.DBSettings;
 
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -17,32 +18,28 @@ import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class CustomSchemaTest {
-  private static DBOSConfig dbosConfig;
   private static final String schema = "C$+0m'";
   private HawkService proxy;
-  private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withDatabaseSchema(schema)
-            .withMaximumPoolSize(2);
-  }
+  private static final DBSettings db = DBSettings.get();
+  private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
+    db.recreate();
+
+    dataSource = db.dataSource();
+    dbosConfig =
+        DBOSConfig.defaults("systemdbtest").withDataSource(dataSource).withDatabaseSchema(schema);
+
     DBOS.reinitialize(dbosConfig);
+
     var impl = new HawkServiceImpl();
     proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
