@@ -240,7 +240,7 @@ public class DBOSExecutor implements AutoCloseable {
       queueService.stop();
       queueService = null;
       systemDatabase.stop();
-      if (config.dataSource() != null) {
+      if (config.dataSource() == null) {
         systemDatabase.close();
       }
       systemDatabase = null;
