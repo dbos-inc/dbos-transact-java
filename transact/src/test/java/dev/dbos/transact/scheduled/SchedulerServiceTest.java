@@ -40,6 +40,7 @@ class SchedulerServiceTest {
     // let scheduled workflows drain
     Thread.sleep(1000);
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

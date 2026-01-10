@@ -42,6 +42,7 @@ public class TimeoutTest {
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

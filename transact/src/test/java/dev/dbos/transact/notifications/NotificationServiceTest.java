@@ -43,6 +43,7 @@ class NotificationServiceTest {
   @AfterEach
   void afterEachTest() throws Exception {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

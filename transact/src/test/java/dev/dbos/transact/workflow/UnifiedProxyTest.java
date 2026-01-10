@@ -36,6 +36,7 @@ public class UnifiedProxyTest {
   @AfterEach
   void afterEachTest() {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

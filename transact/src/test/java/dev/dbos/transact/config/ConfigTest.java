@@ -256,6 +256,7 @@ public class ConfigTest {
 
     } finally {
       DBOS.shutdown();
+      dataSource.close();
     }
   }
 

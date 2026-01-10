@@ -67,6 +67,7 @@ public class MultiInstTest {
   @AfterEach
   void afterEachTest() throws Exception {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

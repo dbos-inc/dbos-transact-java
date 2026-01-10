@@ -55,6 +55,7 @@ public class QueuesTest {
   @AfterEach
   void afterEachTest() throws Exception {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

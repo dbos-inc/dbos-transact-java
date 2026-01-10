@@ -11,6 +11,7 @@ import dev.dbos.transact.workflow.*;
 import java.sql.SQLException;
 import java.util.List;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
@@ -19,12 +20,13 @@ public class StepsTest {
   private static final DBSettings db = DBSettings.get();
 
   private DBOSConfig dbosConfig;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
     db.recreate();
 
-    var dataSource = db.dataSource();
+    dataSource = db.dataSource();
     dbosConfig = DBOSConfig.defaults("systemdbtest").withDataSource(dataSource);
 
     DBOS.reinitialize(dbosConfig);
@@ -33,6 +35,7 @@ public class StepsTest {
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

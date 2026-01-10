@@ -56,8 +56,8 @@ public class StartWorkflowTest {
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dataSource.close();
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

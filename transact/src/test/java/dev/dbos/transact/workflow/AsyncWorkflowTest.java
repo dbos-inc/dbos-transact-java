@@ -36,6 +36,7 @@ public class AsyncWorkflowTest {
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

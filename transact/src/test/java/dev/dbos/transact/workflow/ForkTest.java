@@ -196,6 +196,7 @@ public class ForkTest {
   @AfterEach
   void afterEachTest() throws Exception {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

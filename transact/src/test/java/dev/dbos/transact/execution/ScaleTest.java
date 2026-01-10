@@ -64,6 +64,7 @@ public class ScaleTest {
   @AfterEach
   void afterEachTest() throws Exception {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   @Test

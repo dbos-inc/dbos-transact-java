@@ -294,6 +294,7 @@ public class SingleExecutionTest {
   @AfterEach
   void afterEachTest() throws Exception {
     DBOS.shutdown();
+    dataSource.close();
   }
 
   WorkflowHandle<?, ?> reexecuteWorkflowById(String id) throws Exception {
