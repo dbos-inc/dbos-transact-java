@@ -26,8 +26,7 @@ public class BackCompatTest {
 
     config =
         DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
 
     var pair = MigrationManager.extractDbAndPostgresUrl(config.databaseUrl());
     var dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", pair.database());

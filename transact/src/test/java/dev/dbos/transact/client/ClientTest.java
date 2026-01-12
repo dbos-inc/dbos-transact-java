@@ -38,8 +38,7 @@ public class ClientTest {
         DBOSConfig.defaults("systemdbtest")
             .withDatabaseUrl(dbUrl)
             .withDbUser(dbUser)
-            .withDbPassword(dbPassword)
-            .withMaximumPoolSize(2);
+            .withDbPassword(dbPassword);
   }
 
   @BeforeEach
@@ -50,7 +49,9 @@ public class ClientTest {
     service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
     DBOS.launch();
 
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
+    dataSource =
+        SystemDatabase.createDataSource(
+            dbosConfig.databaseUrl(), dbosConfig.dbUser(), dbosConfig.dbPassword());
   }
 
   @AfterEach

@@ -18,8 +18,6 @@ public record DBOSConfig(
     @Nullable String databaseUrl,
     @Nullable String dbUser,
     @Nullable String dbPassword,
-    int maximumPoolSize,
-    int connectionTimeout,
     @Nullable HikariDataSource dataSource,
     boolean adminServer,
     int adminServerPort,
@@ -55,9 +53,7 @@ public record DBOSConfig(
 
   public static @NonNull DBOSConfig defaults(@NonNull String appName) {
     return new DBOSConfig(
-        appName, null, null, null, 3, // maximumPoolSize default
-        30000, // connectionTimeout default
-        null, false, // adminServer
+        appName, null, null, null, null, false, // adminServer
         3001, // adminServerPort
         true, // migrate
         null, null, null, null, null, false, null);
@@ -80,8 +76,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -101,8 +95,6 @@ public record DBOSConfig(
         v,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -122,8 +114,6 @@ public record DBOSConfig(
         databaseUrl,
         v,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -142,50 +132,6 @@ public record DBOSConfig(
         appName,
         databaseUrl,
         dbUser,
-        v,
-        maximumPoolSize,
-        connectionTimeout,
-        dataSource,
-        adminServer,
-        adminServerPort,
-        migrate,
-        conductorKey,
-        conductorDomain,
-        appVersion,
-        executorId,
-        databaseSchema,
-        enablePatching,
-        listenQueues);
-  }
-
-  public @NonNull DBOSConfig withMaximumPoolSize(int v) {
-    return new DBOSConfig(
-        appName,
-        databaseUrl,
-        dbUser,
-        dbPassword,
-        v,
-        connectionTimeout,
-        dataSource,
-        adminServer,
-        adminServerPort,
-        migrate,
-        conductorKey,
-        conductorDomain,
-        appVersion,
-        executorId,
-        databaseSchema,
-        enablePatching,
-        listenQueues);
-  }
-
-  public @NonNull DBOSConfig withConnectionTimeout(int v) {
-    return new DBOSConfig(
-        appName,
-        databaseUrl,
-        dbUser,
-        dbPassword,
-        maximumPoolSize,
         v,
         dataSource,
         adminServer,
@@ -206,8 +152,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         v,
         adminServer,
         adminServerPort,
@@ -227,8 +171,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         v,
         adminServerPort,
@@ -248,8 +190,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         v,
@@ -269,8 +209,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -290,8 +228,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -311,8 +247,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -332,8 +266,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -353,8 +285,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -374,8 +304,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -403,8 +331,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -452,8 +378,6 @@ public record DBOSConfig(
         databaseUrl,
         dbUser,
         dbPassword,
-        maximumPoolSize,
-        connectionTimeout,
         dataSource,
         adminServer,
         adminServerPort,
@@ -471,16 +395,15 @@ public record DBOSConfig(
   @Override
   public String toString() {
     return ("DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, "
-            + "maximumPoolSize=%d, connectionTimeout=%d, dataSource=%s, adminServer=%s, "
-            + "adminServerPort=%d, migrate=%s, conductorKey=%s, conductorDomain=%s, "
-            + "appVersion=%s, executorId=%s, dbSchema=%s, enablePatching=%s, listenQueues=%s]")
+            + "dataSource=%s, dbSchema=%s, adminServer=%s, adminServerPort=%d, "
+            + "migrate=%s, conductorKey=%s, conductorDomain=%s, "
+            + "appVersion=%s, executorId=%s, enablePatching=%s, listenQueues=%s]")
         .formatted(
             appName,
             databaseUrl,
             dbUser,
-            maximumPoolSize,
-            connectionTimeout,
             dataSource,
+            databaseSchema,
             adminServer,
             adminServerPort,
             migrate,
@@ -488,7 +411,6 @@ public record DBOSConfig(
             conductorDomain,
             appVersion,
             executorId,
-            databaseSchema,
             enablePatching,
             listenQueues);
   }

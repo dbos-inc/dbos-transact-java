@@ -38,6 +38,7 @@ public class SystemDatabase implements AutoCloseable {
 
   private final HikariDataSource dataSource;
   private final String schema;
+  private final boolean created;
 
   private final WorkflowDAO workflowDAO;
   private final StepsDAO stepsDAO;
@@ -45,13 +46,11 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
 
-  public SystemDatabase(DBOSConfig config) {
-    this(SystemDatabase.createDataSource(config), Objects.requireNonNull(config).databaseSchema());
-  }
-
-  public SystemDatabase(HikariDataSource dataSource, String schema) {
+  private SystemDatabase(HikariDataSource dataSource, String schema, boolean created) {
     this.schema = sanitizeSchema(schema);
     this.dataSource = dataSource;
+    this.created = created;
+
     stepsDAO = new StepsDAO(dataSource, this.schema);
     workflowDAO = new WorkflowDAO(dataSource, this.schema);
     queuesDAO = new QueuesDAO(dataSource, this.schema);
@@ -59,21 +58,67 @@ public class SystemDatabase implements AutoCloseable {
     notificationsDAO = new NotificationsDAO(dataSource, notificationService, this.schema);
   }
 
+  public SystemDatabase(String url, String user, String password, String schema) {
+    this(createDataSource(url, user, password), schema, true);
+  }
+
+  public SystemDatabase(HikariDataSource dataSource, String schema) {
+    this(dataSource, schema, false);
+  }
+
+  public static SystemDatabase create(DBOSConfig config) {
+    if (config.dataSource() == null) {
+      return new SystemDatabase(
+          config.databaseUrl(), config.dbUser(), config.dbPassword(), config.databaseSchema());
+    } else {
+      return new SystemDatabase(config.dataSource(), config.databaseSchema());
+    }
+  }
+
   HikariConfig getConfig() {
     return dataSource;
   }
 
+  Connection getSysDBConnection() throws SQLException {
+    return dataSource.getConnection();
+  }
+
+  public static HikariDataSource createDataSource(DBOSConfig config) {
+    return createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword());
+  }
+
+  public static HikariDataSource createDataSource(String url, String user, String password) {
+    HikariConfig config = new HikariConfig();
+    config.setJdbcUrl(url);
+    config.setUsername(user);
+    config.setPassword(password);
+
+    config.setMaxLifetime(600000);
+    config.setKeepaliveTime(30000);
+    config.setConnectionTimeout(20000);
+    config.setValidationTimeout(3000);
+    config.setInitializationFailTimeout(-1);
+    config.setMaximumPoolSize(10);
+    config.setMinimumIdle(10);
+
+    config.addDataSourceProperty("tcpKeepAlive", "true");
+    config.addDataSourceProperty("connectTimeout", "10");
+    config.addDataSourceProperty("socketTimeout", "60");
+    config.addDataSourceProperty("reWriteBatchedInserts", "true");
+
+    return new HikariDataSource(config);
+  }
+
   @Override
   public void close() {
-    dataSource.close();
+    notificationService.stop();
+    if (created) {
+      dataSource.close();
+    }
   }
 
   public void start() {
     notificationService.start();
-  }
-
-  public void stop() {
-    notificationService.stop();
   }
 
   void speedUpPollingForTest() {
@@ -492,42 +537,5 @@ public class SystemDatabase implements AutoCloseable {
             return patchName.equals(checkpointName);
           }
         });
-  }
-
-  // package public helper for test purposes
-  Connection getSysDBConnection() throws SQLException {
-    return dataSource.getConnection();
-  }
-
-  public static HikariDataSource createDataSource(String url, String user, String password) {
-    return createDataSource(url, user, password, 0, 0);
-  }
-
-  public static HikariDataSource createDataSource(
-      String url, String user, String password, int poolSize, int timeout) {
-    HikariConfig hikariConfig = new HikariConfig();
-    hikariConfig.setJdbcUrl(url);
-    hikariConfig.setUsername(user);
-    hikariConfig.setPassword(password);
-    hikariConfig.setMaximumPoolSize(poolSize > 0 ? poolSize : 2);
-    if (timeout > 0) {
-      hikariConfig.setConnectionTimeout(timeout);
-    }
-
-    return new HikariDataSource(hikariConfig);
-  }
-
-  public static HikariDataSource createDataSource(DBOSConfig config) {
-    if (config.dataSource() != null) {
-      return config.dataSource();
-    }
-
-    var dburl = config.databaseUrl();
-    var dbUser = config.dbUser();
-    var dbPassword = config.dbPassword();
-    var maximumPoolSize = config.maximumPoolSize();
-    var connectionTimeout = config.connectionTimeout();
-
-    return createDataSource(dburl, dbUser, dbPassword, maximumPoolSize, connectionTimeout);
   }
 }

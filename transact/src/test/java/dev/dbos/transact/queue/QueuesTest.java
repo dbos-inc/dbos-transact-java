@@ -31,7 +31,6 @@ import java.util.concurrent.Semaphore;
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.*;
-import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,8 +46,7 @@ public class QueuesTest {
   static void onetimeSetup() throws Exception {
     QueuesTest.dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
   }
 
   @BeforeEach
@@ -149,7 +147,7 @@ public class QueuesTest {
     }
   }
 
-  @RetryingTest(3)
+  @Test
   public void testPriority() throws Exception {
 
     Queue firstQ =
@@ -231,7 +229,7 @@ public class QueuesTest {
     }
   }
 
-  @RetryingTest(3)
+  @Test
   void testListQueuedWorkflow() throws Exception {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
@@ -585,7 +583,7 @@ public class QueuesTest {
     assertEquals("inputqinputq", result);
   }
 
-  @RetryingTest(3)
+  @Test
   public void testQueueConcurrencyUnderRecovery() throws Exception {
     Queue queue = new Queue("test_queue").withConcurrency(2);
     DBOS.registerQueue(queue);

@@ -44,8 +44,7 @@ class RecoveryServiceTest {
 
     RecoveryServiceTest.dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
   }
 
   @BeforeEach

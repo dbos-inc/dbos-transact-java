@@ -38,6 +38,7 @@ dependencies {
     testImplementation("org.junit-pioneer:junit-pioneer:2.3.0")
     testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.8")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.testcontainers:testcontainers-postgresql:2.0.3")
 
     testImplementation("org.java-websocket:Java-WebSocket:1.5.6")
     testImplementation("ch.qos.logback:logback-classic:1.5.6")

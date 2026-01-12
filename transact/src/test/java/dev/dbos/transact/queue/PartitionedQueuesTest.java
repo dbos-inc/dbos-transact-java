@@ -89,8 +89,7 @@ public class PartitionedQueuesTest {
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest").withDatabaseUrl(dbUrl).withMaximumPoolSize(2);
+    dbosConfig = DBOSConfig.defaultsFromEnv("systemdbtest").withDatabaseUrl(dbUrl);
   }
 
   @BeforeEach

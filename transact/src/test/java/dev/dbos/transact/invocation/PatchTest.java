@@ -108,7 +108,6 @@ public class PatchTest {
     var dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2)
             .withEnablePatching()
             .withAppVersion("test-version");
     var dataSource = SystemDatabase.createDataSource(dbosConfig);
@@ -314,7 +313,6 @@ public class PatchTest {
     var dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2)
             .withAppVersion("test-version");
 
     DBUtils.recreateDB(dbosConfig);
@@ -331,7 +329,6 @@ public class PatchTest {
     var dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2)
             .withAppVersion("test-version");
 
     DBUtils.recreateDB(dbosConfig);

@@ -167,8 +167,7 @@ public class EventsTest {
   static void onetimeSetup() throws Exception {
     EventsTest.dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
     dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 

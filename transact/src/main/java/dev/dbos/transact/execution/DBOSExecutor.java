@@ -147,7 +147,7 @@ public class DBOSExecutor implements AutoCloseable {
       executorService = Executors.newCachedThreadPool();
       timeoutScheduler = Executors.newScheduledThreadPool(2);
 
-      systemDatabase = new SystemDatabase(config);
+      systemDatabase = SystemDatabase.create(config);
       systemDatabase.start();
 
       queueService = new QueueService(this, systemDatabase);
@@ -220,7 +220,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       queueService.stop();
       queueService = null;
-      systemDatabase.stop();
+      systemDatabase.close();
       systemDatabase = null;
 
       timeoutScheduler.shutdownNow();

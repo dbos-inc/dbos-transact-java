@@ -77,8 +77,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String user,
       @NonNull String password,
       @Nullable String schema) {
-    var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
-    systemDatabase = new SystemDatabase(dataSource, schema);
+    systemDatabase = new SystemDatabase(url, user, password, schema);
   }
 
   /**
