@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
@@ -84,7 +83,7 @@ class PatchServiceImplFive implements PatchService {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class PatchTest extends DbSetupTestBase {
+public class PatchTest {
 
   private static final Logger logger = LoggerFactory.getLogger(PatchTest.class);
 
