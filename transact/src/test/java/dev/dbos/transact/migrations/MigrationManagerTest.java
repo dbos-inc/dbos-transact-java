@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
@@ -24,18 +25,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-class MigrationManagerTest {
+class MigrationManagerTest extends DbSetupTestBase {
 
   private DataSource testDataSource;
-  private DBOSConfig dbosConfig;
 
   @BeforeEach
   void setup() throws Exception {
-
     dbosConfig =
         DBOSConfig.defaultsFromEnv("migrationtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys_mm_test")
-            .withMaximumPoolSize(3);
+            .withDatabaseUrl(postgres.getJdbcUrl())
+            .withDbUser(postgres.getUsername())
+            .withDbPassword(postgres.getPassword())
+            .withMaximumPoolSize(2);
 
     DBUtils.recreateDB(dbosConfig);
     testDataSource = SystemDatabase.createDataSource(dbosConfig);

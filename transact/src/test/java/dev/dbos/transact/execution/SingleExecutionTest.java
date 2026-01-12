@@ -5,9 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Step;
@@ -19,14 +18,12 @@ import java.sql.SQLException;
 import java.sql.SQLTransientException;
 import java.util.UUID;
 
-import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class SingleExecutionTest {
+public class SingleExecutionTest extends DbSetupTestBase {
   public static interface TryConcExecIfc {
     public void testConcStep() throws InterruptedException;
 
@@ -251,7 +248,6 @@ public class SingleExecutionTest {
     }
   }
 
-  private static DBOSConfig dbosConfig;
   private static TryConcExec execImpl;
   private static TryConcExecIfc execIfc;
   private static CatchPlainException1 catchImpl;
@@ -260,17 +256,6 @@ public class SingleExecutionTest {
   private static UsingFinallyClauseIfc finallyIfc;
   private static TryConcExec2 concImpl;
   private static TryConcExec2Ifc concIfc;
-
-  private static HikariDataSource dataSource;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-  }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {

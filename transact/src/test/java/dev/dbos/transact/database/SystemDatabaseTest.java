@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.migrations.MigrationManager;
@@ -20,30 +20,20 @@ import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class SystemDatabaseTest {
-  private static DBOSConfig config;
+public class SystemDatabaseTest extends DbSetupTestBase {
   private SystemDatabase sysdb;
   private HikariDataSource dataSource;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    config =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(10);
-  }
-
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(config);
-    MigrationManager.runMigrations(config);
-    sysdb = new SystemDatabase(config);
-    dataSource = SystemDatabase.createDataSource(config);
+    DBUtils.recreateDB(dbosConfig);
+    MigrationManager.runMigrations(dbosConfig);
+    sysdb = new SystemDatabase(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach

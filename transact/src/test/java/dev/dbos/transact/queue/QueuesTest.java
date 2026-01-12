@@ -5,11 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.dbos.transact.Constants;
-import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.*;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -36,20 +32,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class QueuesTest {
+public class QueuesTest extends DbSetupTestBase {
 
   private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
 
-  private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    QueuesTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-  }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {

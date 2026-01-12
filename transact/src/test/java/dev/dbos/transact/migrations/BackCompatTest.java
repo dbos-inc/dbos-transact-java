@@ -3,7 +3,7 @@ package dev.dbos.transact.migrations;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.invocation.HawkService;
 import dev.dbos.transact.invocation.HawkServiceImpl;
@@ -18,20 +18,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class BackCompatTest {
-  private DBOSConfig config;
+public class BackCompatTest extends DbSetupTestBase {
 
   @BeforeEach
   void onetimeSetup() throws Exception {
-
-    config =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
-
-    var pair = MigrationManager.extractDbAndPostgresUrl(config.databaseUrl());
+    var pair = MigrationManager.extractDbAndPostgresUrl(dbosConfig.databaseUrl());
     var dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", pair.database());
-    try (var conn = DriverManager.getConnection(pair.url(), config.dbUser(), config.dbPassword());
+    try (var conn =
+            DriverManager.getConnection(pair.url(), dbosConfig.dbUser(), dbosConfig.dbPassword());
         var stmt = conn.createStatement()) {
       stmt.execute(dropDbSql);
     }
@@ -42,7 +36,7 @@ public class BackCompatTest {
 
     runDbos();
 
-    var dataSource = SystemDatabase.createDataSource(config);
+    var dataSource = SystemDatabase.createDataSource(dbosConfig);
     try (Connection conn = dataSource.getConnection()) {
       DatabaseMetaData metaData = conn.getMetaData();
 
@@ -57,7 +51,7 @@ public class BackCompatTest {
   void testWayFutureVersion() throws Exception {
     testInitialRun();
 
-    var dataSource = SystemDatabase.createDataSource(config);
+    var dataSource = SystemDatabase.createDataSource(dbosConfig);
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.executeUpdate("UPDATE \"dbos\".\"dbos_migrations\" SET \"version\" = 10000;");
@@ -70,7 +64,7 @@ public class BackCompatTest {
   void testIdempotence() throws Exception {
     testWayFutureVersion();
 
-    var dataSource = SystemDatabase.createDataSource(config);
+    var dataSource = SystemDatabase.createDataSource(dbosConfig);
     try (var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.executeUpdate("UPDATE \"dbos\".\"dbos_migrations\" SET \"version\" = 0;");
@@ -81,7 +75,7 @@ public class BackCompatTest {
 
   void runDbos() {
     try {
-      DBOS.reinitialize(config);
+      DBOS.reinitialize(dbosConfig);
       var impl = new HawkServiceImpl();
       var proxy = DBOS.registerWorkflows(HawkService.class, impl);
       impl.setProxy(proxy);
