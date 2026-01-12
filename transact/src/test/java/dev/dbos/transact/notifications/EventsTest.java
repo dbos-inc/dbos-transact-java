@@ -162,6 +162,7 @@ public class EventsTest extends DbSetupTestBase {
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
+    dataSource = DbSetupTestBase.dataSource;
     DBUtils.recreateDB(dbosConfig);
     DBOS.reinitialize(dbosConfig);
     impl = new EventsServiceImpl();
