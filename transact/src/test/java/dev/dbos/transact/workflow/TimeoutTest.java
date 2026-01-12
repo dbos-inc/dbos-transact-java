@@ -22,9 +22,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class TimeoutTest {
+
+  private static final Logger logger = LoggerFactory.getLogger(TimeoutTest.class);
+
 
   private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
@@ -341,20 +346,32 @@ public class TimeoutTest {
 
     String wfid1 = "wf-124";
 
-    WorkflowOptions options = new WorkflowOptions(wfid1).withTimeout(1, TimeUnit.SECONDS);
-    assertThrows(
-        Exception.class,
-        () -> {
-          try (var id = options.setContext()) {
-            simpleService.longParent("12345", 10, 0);
-          }
-        });
+    try {
+      WorkflowOptions options = new WorkflowOptions(wfid1).withTimeout(1, TimeUnit.SECONDS);
+      assertThrows(
+          Exception.class,
+          () -> {
+            try (var id = options.setContext()) {
+              simpleService.longParent("12345", 10, 0);
+            }
+          });
 
-    String parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus().status();
-    assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
+      String parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus().status();
+      assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
 
-    String childStatus = DBOS.retrieveWorkflow("childwf").getStatus().status();
-    assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+      String childStatus = DBOS.retrieveWorkflow("childwf").getStatus().status();
+      assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+    } finally {
+      var pRow = DBUtils.getWorkflowRow(dataSource, wfid1);
+      if (pRow.status().equals("ERROR")) {
+        logger.error("{} {}", wfid1, pRow.error());
+      }
+
+      var cRow = DBUtils.getWorkflowRow(dataSource, "childwf");
+      if (cRow.status().equals("ERROR")) {
+        logger.error("{} {}", "childwf", cRow.error());
+      }
+    }
   }
 
   @Test
