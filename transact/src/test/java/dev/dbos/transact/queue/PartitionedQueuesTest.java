@@ -9,7 +9,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Workflow;
@@ -19,10 +18,7 @@ import java.sql.SQLException;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
-import javax.sql.DataSource;
-
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -170,7 +166,8 @@ public class PartitionedQueuesTest extends DbSetupTestBase {
     assertEquals(blockedBlockedHandle.workflowId(), blockedBlockedHandle.getResult());
     assertEquals(blockedNormalHandle.workflowId(), blockedNormalHandle.getResult());
 
-    try (var client = new DBOSClient(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
+    try (var client =
+        new DBOSClient(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
       var className = "dev.dbos.transact.queue.PartitionsTestServiceImpl";
       var wfName = "normalWorkflow";
       var nqOptions =

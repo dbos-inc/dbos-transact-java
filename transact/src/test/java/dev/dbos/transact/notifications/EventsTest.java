@@ -10,7 +10,6 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Workflow;
@@ -160,6 +159,7 @@ public class EventsTest extends DbSetupTestBase {
 
   private EventsService proxy;
   private EventsServiceImpl impl;
+
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);

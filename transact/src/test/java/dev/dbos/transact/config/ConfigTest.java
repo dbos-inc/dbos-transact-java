@@ -136,9 +136,7 @@ public class ConfigTest extends DbSetupTestBase {
   @Test
   public void cantSetExecutorIdWhenUsingConductor() throws Exception {
     var config =
-        dbosConfig
-            .withConductorKey("test-conductor-key")
-            .withExecutorId("test-executor-id");
+        dbosConfig.withConductorKey("test-conductor-key").withExecutorId("test-executor-id");
 
     DBOS.reinitialize(config);
     try {
