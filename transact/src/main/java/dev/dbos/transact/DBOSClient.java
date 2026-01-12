@@ -19,6 +19,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 /**
  * DBOSClient allows external programs to interact with DBOS apps via direct system database access.
@@ -27,14 +29,14 @@ import com.zaxxer.hikari.HikariDataSource;
  */
 public class DBOSClient implements AutoCloseable {
   private class WorkflowHandleClient<T, E extends Exception> implements WorkflowHandle<T, E> {
-    private String workflowId;
+    private @NonNull String workflowId;
 
-    public WorkflowHandleClient(String workflowId) {
+    public WorkflowHandleClient(@NonNull String workflowId) {
       this.workflowId = workflowId;
     }
 
     @Override
-    public String workflowId() {
+    public @NonNull String workflowId() {
       return workflowId;
     }
 
@@ -44,12 +46,12 @@ public class DBOSClient implements AutoCloseable {
     }
 
     @Override
-    public WorkflowStatus getStatus() {
+    public @Nullable WorkflowStatus getStatus() {
       return systemDatabase.getWorkflowStatus(workflowId);
     }
   }
 
-  private final SystemDatabase systemDatabase;
+  private final @NonNull SystemDatabase systemDatabase;
 
   /**
    * Construct a DBOSClient, by providing system database access credentials
@@ -58,7 +60,7 @@ public class DBOSClient implements AutoCloseable {
    * @param user System database user
    * @param password System database credential / password
    */
-  public DBOSClient(String url, String user, String password) {
+  public DBOSClient(@NonNull String url, @NonNull String user, @NonNull String password) {
     this(url, user, password, null);
   }
 
@@ -70,7 +72,11 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    * @param schema Database schema for DBOS tables
    */
-  public DBOSClient(String url, String user, String password, String schema) {
+  public DBOSClient(
+      @NonNull String url,
+      @NonNull String user,
+      @NonNull String password,
+      @Nullable String schema) {
     var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
     systemDatabase = new SystemDatabase(dataSource, schema);
   }
@@ -80,7 +86,7 @@ public class DBOSClient implements AutoCloseable {
    *
    * @param dataSource System database data source
    */
-  public DBOSClient(HikariDataSource dataSource) {
+  public DBOSClient(@NonNull HikariDataSource dataSource) {
     this(dataSource, null);
   }
 
@@ -90,7 +96,7 @@ public class DBOSClient implements AutoCloseable {
    * @param dataSource System database data source
    * @param schema Database schema for DBOS tables
    */
-  public DBOSClient(HikariDataSource dataSource, String schema) {
+  public DBOSClient(@NonNull HikariDataSource dataSource, @Nullable String schema) {
     systemDatabase = new SystemDatabase(dataSource, schema);
   }
 
@@ -105,43 +111,63 @@ public class DBOSClient implements AutoCloseable {
    * and app version, are optional, and should be set with `with` functions.
    */
   public record EnqueueOptions(
-      String workflowName,
-      String queueName,
-      String className,
-      String instanceName,
-      String workflowId,
-      String appVersion,
-      Duration timeout,
-      Instant deadline,
-      String deduplicationId,
-      Integer priority) {
+      @NonNull String workflowName,
+      @NonNull String queueName,
+      @NonNull String className,
+      @NonNull String instanceName,
+      @Nullable String workflowId,
+      @Nullable String appVersion,
+      @Nullable Duration timeout,
+      @Nullable Instant deadline,
+      @Nullable String deduplicationId,
+      @Nullable Integer priority,
+      @Nullable String queuePartitionKey) {
 
     public EnqueueOptions {
       if (Objects.requireNonNull(workflowName, "EnqueueOptions workflowName must not be null")
           .isEmpty()) {
-        throw new IllegalArgumentException("workflowName must not be empty");
+        throw new IllegalArgumentException("EnqueueOptions workflowName must not be empty");
       }
 
       if (Objects.requireNonNull(queueName, "EnqueueOptions queueName must not be null")
           .isEmpty()) {
-        throw new IllegalArgumentException("queueName must not be empty");
+        throw new IllegalArgumentException("EnqueueOptions queueName must not be empty");
       }
 
       if (Objects.requireNonNull(className, "EnqueueOptions className must not be null")
           .isEmpty()) {
-        throw new IllegalArgumentException("className must not be empty");
+        throw new IllegalArgumentException("EnqueueOptions className must not be empty");
+      }
+
+      if (queuePartitionKey != null && queuePartitionKey.isEmpty()) {
+        throw new IllegalArgumentException(
+            "EnqueueOptions queuePartitionKey must not be empty if not null");
+      }
+
+      if (deduplicationId != null && deduplicationId.isEmpty()) {
+        throw new IllegalArgumentException(
+            "EnqueueOptions deduplicationId must not be empty if not null");
       }
 
       if (instanceName == null) instanceName = "";
 
-      if (timeout != null && timeout.isNegative()) {
-        throw new IllegalArgumentException("timeout must not be negative");
+      if (timeout != null) {
+        if (timeout.isNegative() || timeout.isZero()) {
+          throw new IllegalArgumentException(
+              "EnqueueOptions timeout must be a positive non-zero duration");
+        }
+
+        if (deadline != null) {
+          throw new IllegalArgumentException(
+              "EnqueueOptions timeout and deadline cannot both be set");
+        }
       }
     }
 
     /** Construct `EnqueueOptions` with a minimum set of required options */
-    public EnqueueOptions(String className, String workflowName, String queueName) {
-      this(workflowName, queueName, className, "", null, null, null, null, null, null);
+    public EnqueueOptions(
+        @NonNull String className, @NonNull String workflowName, @NonNull String queueName) {
+      this(workflowName, queueName, className, "", null, null, null, null, null, null, null);
     }
 
     /**
@@ -150,7 +176,7 @@ public class DBOSClient implements AutoCloseable {
      * @param className Class containing the workflow to enqueue
      * @return New `EnqueueOptions` with the class name set
      */
-    public EnqueueOptions withClassName(String className) {
+    public @NonNull EnqueueOptions withClassName(@NonNull String className) {
       return new EnqueueOptions(
           this.workflowName,
           this.queueName,
@@ -161,7 +187,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -171,7 +198,7 @@ public class DBOSClient implements AutoCloseable {
      * @param workflowId Workflow idempotency ID to use
      * @return New `EnqueueOptions` with the workflow ID set
      */
-    public EnqueueOptions withWorkflowId(String workflowId) {
+    public @NonNull EnqueueOptions withWorkflowId(@Nullable String workflowId) {
       return new EnqueueOptions(
           this.workflowName,
           this.queueName,
@@ -182,7 +209,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -192,7 +220,7 @@ public class DBOSClient implements AutoCloseable {
      * @param appVersion Application version to use for executing the workflow
      * @return New `EnqueueOptions` with the app version set
      */
-    public EnqueueOptions withAppVersion(String appVersion) {
+    public @NonNull EnqueueOptions withAppVersion(@Nullable String appVersion) {
       return new EnqueueOptions(
           this.workflowName,
           this.queueName,
@@ -203,7 +231,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -213,7 +242,7 @@ public class DBOSClient implements AutoCloseable {
      * @param timeout Duration of time, from start, before the workflow is canceled.
      * @return New `EnqueueOptions` with the timeout set
      */
-    public EnqueueOptions withTimeout(Duration timeout) {
+    public @NonNull EnqueueOptions withTimeout(@Nullable Duration timeout) {
       return new EnqueueOptions(
           this.workflowName,
           this.queueName,
@@ -224,7 +253,8 @@ public class DBOSClient implements AutoCloseable {
           timeout,
           this.deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -234,7 +264,7 @@ public class DBOSClient implements AutoCloseable {
      * @param deadline Instant after which the workflow will be canceled.
      * @return New `EnqueueOptions` with the deadline set
      */
-    public EnqueueOptions withDeadline(Instant deadline) {
+    public @NonNull EnqueueOptions withDeadline(@Nullable Instant deadline) {
       return new EnqueueOptions(
           this.workflowName,
           this.queueName,
@@ -245,7 +275,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -255,7 +286,7 @@ public class DBOSClient implements AutoCloseable {
      * @param deduplicationId Queue deduplication ID
      * @return New `EnqueueOptions` with the deduplication ID set
      */
-    public EnqueueOptions withDeduplicationId(String deduplicationId) {
+    public @NonNull EnqueueOptions withDeduplicationId(@Nullable String deduplicationId) {
       return new EnqueueOptions(
           this.workflowName,
           this.queueName,
@@ -266,7 +297,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -276,7 +308,7 @@ public class DBOSClient implements AutoCloseable {
      * @param instName Instance name registered within `DBOS.registerWorkflows`
      * @return New `EnqueueOptions` with the target instance name set
      */
-    public EnqueueOptions withInstanceName(String instName) {
+    public @NonNull EnqueueOptions withInstanceName(@Nullable String instName) {
       return new EnqueueOptions(
           this.workflowName,
           this.queueName,
@@ -287,7 +319,8 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           this.deduplicationId,
-          this.priority);
+          this.priority,
+          this.queuePartitionKey);
     }
 
     /**
@@ -296,7 +329,7 @@ public class DBOSClient implements AutoCloseable {
      * @param priority Queue priority; if `null`, priority '0' will be used.
      * @return New `EnqueueOptions` with the priority set
      */
-    public EnqueueOptions withPriority(Integer priority) {
+    public @NonNull EnqueueOptions withPriority(@Nullable Integer priority) {
       return new EnqueueOptions(
           this.workflowName,
           this.queueName,
@@ -307,7 +340,31 @@ public class DBOSClient implements AutoCloseable {
           this.timeout,
           this.deadline,
           this.deduplicationId,
-          priority);
+          priority,
+          this.queuePartitionKey);
+    }
+
+    /**
+     * Creates a new EnqueueOptions instance with the specified queue partition key. The partition
+     * key is used to determine which partition of the queue the workflow should be enqueued to,
+     * allowing for better load distribution and ordering guarantees.
+     *
+     * @param partitionKey the partition key to use for queue partitioning, can be null
+     * @return a new EnqueueOptions instance with the specified partition key
+     */
+    public @NonNull EnqueueOptions withQueuePartitionKey(@Nullable String partitionKey) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.queueName,
+          this.className,
+          this.instanceName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          partitionKey);
     }
 
     /**
@@ -316,7 +373,7 @@ public class DBOSClient implements AutoCloseable {
      * @return The workflow idemptence ID
      */
     @Override
-    public String workflowId() {
+    public @Nullable String workflowId() {
       return workflowId != null && workflowId.isEmpty() ? null : workflowId;
     }
   }
@@ -330,8 +387,8 @@ public class DBOSClient implements AutoCloseable {
    * @param args Arguments to pass to the workflow function
    * @return WorkflowHandle for retrieving workflow ID, status, and results
    */
-  public <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflow(
-      EnqueueOptions options, Object[] args) {
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
+      @NonNull EnqueueOptions options, @Nullable Object[] args) {
 
     return DBOSExecutor.enqueueWorkflow(
         Objects.requireNonNull(
@@ -340,19 +397,22 @@ public class DBOSClient implements AutoCloseable {
         Objects.requireNonNullElse(options.instanceName(), ""),
         null,
         args,
-        new StartWorkflowOptions(
+        new DBOSExecutor.ExecutionOptions(
             Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString()),
             Timeout.of(options.timeout()),
+            options.deadline,
             Objects.requireNonNull(
                 options.queueName(), "EnqueueOptions queueName must not be null"),
             options.deduplicationId,
             options.priority,
-            options.deadline),
+            options.queuePartitionKey,
+            false,
+            false),
+        null,
         null,
         null,
         options.appVersion,
-        systemDatabase,
-        null);
+        systemDatabase);
   }
 
   /**
@@ -363,16 +423,21 @@ public class DBOSClient implements AutoCloseable {
    * @param topic Topic for the message
    * @param idempotencyKey If specified, use the value to ensure exactly-once send semantics
    */
-  public void send(String destinationId, Object message, String topic, String idempotencyKey) {
+  public void send(
+      @NonNull String destinationId,
+      @NonNull Object message,
+      @NonNull String topic,
+      @Nullable String idempotencyKey) {
     if (idempotencyKey == null) {
       idempotencyKey = UUID.randomUUID().toString();
     }
     var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
 
     var status =
-        new WorkflowStatusInternal(workflowId, WorkflowState.SUCCESS)
-            .withName("temp_workflow-send-client");
-    systemDatabase.initWorkflowStatus(status, null);
+        WorkflowStatusInternal.builder(workflowId, WorkflowState.SUCCESS)
+            .name("temp_workflow-send-client")
+            .build();
+    systemDatabase.initWorkflowStatus(status, null, false, false);
     systemDatabase.send(status.workflowId(), 0, destinationId, message, topic);
   }
 
@@ -384,7 +449,8 @@ public class DBOSClient implements AutoCloseable {
    * @param timeout Maximum time duration to wait before returning `null`
    * @return Workflow event value, or `null` if the timeout is hit.
    */
-  public Object getEvent(String targetId, String key, Duration timeout) {
+  public @Nullable Object getEvent(
+      @NonNull String targetId, @NonNull String key, @NonNull Duration timeout) {
     return systemDatabase.getEvent(targetId, key, timeout, null);
   }
 
@@ -397,7 +463,8 @@ public class DBOSClient implements AutoCloseable {
    * @param workflowId ID of the workflow to retrieve
    * @return A `WorkflowHandle` for the specified worflow ID
    */
-  public <T, E extends Exception> WorkflowHandle<T, E> retrieveWorkflow(String workflowId) {
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> retrieveWorkflow(
+      @NonNull String workflowId) {
     return new WorkflowHandleClient<T, E>(workflowId);
   }
 
@@ -406,7 +473,7 @@ public class DBOSClient implements AutoCloseable {
    *
    * @param workflowId ID of the workflow to cancel
    */
-  public void cancelWorkflow(String workflowId) {
+  public void cancelWorkflow(@NonNull String workflowId) {
     systemDatabase.cancelWorkflow(workflowId);
   }
 
@@ -418,7 +485,8 @@ public class DBOSClient implements AutoCloseable {
    * @param workflowId ID of the workflow to resume
    * @return `WorkflowHandle` for the resumed workflow
    */
-  public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
+      @NonNull String workflowId) {
     systemDatabase.resumeWorkflow(workflowId);
     return retrieveWorkflow(workflowId);
   }
@@ -434,8 +502,8 @@ public class DBOSClient implements AutoCloseable {
    * @param options Options for forking;
    * @return `WorkflowHandle` for the new workflow
    */
-  public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
-      String originalWorkflowId, int startStep, ForkOptions options) {
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
+      @NonNull String originalWorkflowId, int startStep, @NonNull ForkOptions options) {
     var forkedWorkflowId = systemDatabase.forkWorkflow(originalWorkflowId, startStep, options);
     return retrieveWorkflow(forkedWorkflowId);
   }
@@ -446,7 +514,7 @@ public class DBOSClient implements AutoCloseable {
    * @param workflowId ID of the workflow to query for status
    * @return WorkflowStatus of the workflow, or empty if the workflow does not exist
    */
-  public Optional<WorkflowStatus> getWorkflowStatus(String workflowId) {
+  public @NonNull Optional<WorkflowStatus> getWorkflowStatus(@NonNull String workflowId) {
     return Optional.ofNullable(systemDatabase.getWorkflowStatus(workflowId));
   }
 
@@ -456,7 +524,7 @@ public class DBOSClient implements AutoCloseable {
    * @param input Filter criteria to use for listing workflows
    * @return list of workflows matching the `ListWorkflowsInput` criteria
    */
-  public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+  public @NonNull List<WorkflowStatus> listWorkflows(@NonNull ListWorkflowsInput input) {
     return systemDatabase.listWorkflows(input);
   }
 
@@ -466,7 +534,7 @@ public class DBOSClient implements AutoCloseable {
    * @param workflowId ID of the workflow to list
    * @return List of steps executed by the workflow
    */
-  public List<StepInfo> listWorkflowSteps(String workflowId) {
+  public @NonNull List<StepInfo> listWorkflowSteps(@NonNull String workflowId) {
     return systemDatabase.listWorkflowSteps(workflowId);
   }
 }

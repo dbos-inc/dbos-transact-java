@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -30,14 +31,13 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import io.restassured.response.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class AdminServerTest {
 
   int port;
@@ -146,10 +146,12 @@ class AdminServerTest {
       given()
           .port(port)
           .when()
-          .get("/dbos-deactivate")
+          .get("/deactivate")
           .then()
-          .statusCode(500)
-          .body(equalTo("not implemented"));
+          .statusCode(200)
+          .body(equalTo("deactivated"));
+
+      verify(mockExec).deactivateLifecycleListeners();
     }
   }
 
@@ -189,8 +191,13 @@ class AdminServerTest {
 
   @Test
   public void queueMetadata() throws IOException {
-    var queue1 = new Queue("test-queue-1", null, null, false, null);
-    var queue2 = new Queue("test-queue-2", 10, 5, true, new Queue.RateLimit(2, 4.0));
+    var queue1 = new Queue("test-queue-1");
+    var queue2 =
+        new Queue("test-queue-2")
+            .withConcurrency(10)
+            .withWorkerConcurrency(5)
+            .withPriorityEnabled(true)
+            .withRateLimit(2, 4.0);
 
     when(mockExec.getQueues()).thenReturn(List.of(queue1, queue2));
 
@@ -380,7 +387,7 @@ class AdminServerTest {
           .body(
               """
                       {
-                  "workflow_id_prefix": "WF",
+                  "queue_name": "some-queue",
                   "end_time": "2025-10-09T11:26:05-07:00"
                     } """)
           .when()
@@ -398,7 +405,8 @@ class AdminServerTest {
 
       verify(mockDB).listWorkflows(inputCaptor.capture());
       var input = inputCaptor.getValue();
-      assertEquals("WF", input.workflowIdPrefix());
+      assertEquals("some-queue", input.queueName());
+      assertTrue(input.queuesOnly());
       assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00"), input.endTime());
     }
   }

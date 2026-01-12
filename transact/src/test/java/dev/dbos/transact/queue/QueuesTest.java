@@ -1,6 +1,7 @@
 package dev.dbos.transact.queue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,7 +23,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -31,7 +31,7 @@ import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class QueuesTest extends DbSetupTestBase {
 
   private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
@@ -73,21 +73,67 @@ public class QueuesTest extends DbSetupTestBase {
   @Test
   public void testDedupeId() throws Exception {
 
-    Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
+    Queue firstQ = new Queue("firstQueue");
     DBOS.registerQueue(firstQ);
 
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
     DBOS.launch();
 
+    // pause queue service for test validation
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
-    var options = new StartWorkflowOptions().withQueue(firstQ).withDeduplicationId("dedupe");
-    DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("inputq"), options);
+    var options = new StartWorkflowOptions().withQueue(firstQ);
+    var dedupeId = "dedupeId";
+    var h1 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("abc"), options.withDeduplicationId(dedupeId));
+    var s1 = h1.getStatus();
+    assertEquals(s1.queueName(), firstQ.name());
+    assertEquals(s1.deduplicationId(), dedupeId);
+
+    // enqueue with different dedupe ID should be fine
+    var dedupeId2 = "different-dedupeId";
+    var h2 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("def"), options.withDeduplicationId(dedupeId2));
+    var s2 = h2.getStatus();
+    assertEquals(s2.queueName(), firstQ.name());
+    assertEquals(s2.deduplicationId(), dedupeId2);
+
+    // enqueue with no dedupe ID should be fine
+    var h3 = DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("ghi"), options);
+    var s3 = h3.getStatus();
+    assertEquals(s3.queueName(), firstQ.name());
+    assertNull(s3.deduplicationId());
 
     assertThrows(
         RuntimeException.class,
-        () -> DBOS.startWorkflow(() -> serviceQ.simpleQWorkflow("id"), options));
+        () ->
+            DBOS.startWorkflow(
+                () -> serviceQ.simpleQWorkflow("jkl"), options.withDeduplicationId(dedupeId)));
+
+    // enable queue service to run
+    qs.unpause();
+
+    // wait for initial workflow with initial dedupe ID to finish
+    h1.getResult();
+    h2.getResult();
+    h3.getResult();
+
+    var h4 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("jkl"), options.withDeduplicationId(dedupeId));
+    h4.getResult();
+
+    var rows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(4, rows.size());
+
+    for (var row : rows) {
+      assertEquals("SUCCESS", row.status());
+      assertEquals("firstQueue", row.queueName());
+      assertNull(row.deduplicationId());
+    }
   }
 
   @RetryingTest(3)
@@ -360,45 +406,47 @@ public class QueuesTest extends DbSetupTestBase {
       logger.info("Waiting for queueService to stop");
     }
 
-    WorkflowStatusInternal wfStatusInternal =
-        new WorkflowStatusInternal()
-            .withName("OrderProcessingWorkflow")
-            .withClassName("com.example.workflows.OrderWorkflow")
-            .withInstanceName("prod-config")
-            .withAuthenticatedUser("user123@example.com")
-            .withAssumedRole("admin")
-            .withAuthenticatedRoles("admin,operator")
-            .withOutput("{\"result\":\"success\"}")
-            .withCreatedAt(System.currentTimeMillis() - 3600000)
-            .withUpdatedAt(System.currentTimeMillis())
-            .withQueueName("QwithWCLimit")
-            .withExecutorId(executorId)
-            .withAppVersion(appVersion)
-            .withAppId("order-app-123")
-            .withRecoveryAttempts(0L)
-            .withTimeoutMs(300000l)
-            .withDeadlineEpochMs(System.currentTimeMillis() + 2400000)
-            .withPriority(1)
-            .withInputs("{\"orderId\":\"ORD-12345\"}");
+    var builder =
+        WorkflowStatusInternal.builder()
+            .name("OrderProcessingWorkflow")
+            .className("com.example.workflows.OrderWorkflow")
+            .instanceName("prod-config")
+            .authenticatedUser("user123@example.com")
+            .assumedRole("admin")
+            .authenticatedRoles("admin,operator")
+            .output("{\"result\":\"success\"}")
+            .createdAt(System.currentTimeMillis() - 3600000)
+            .updatedAt(System.currentTimeMillis())
+            .queueName("QwithWCLimit")
+            .executorId(executorId)
+            .appVersion(appVersion)
+            .appId("order-app-123")
+            .recoveryAttempts(0L)
+            .timeoutMs(300000l)
+            .deadlineEpochMs(System.currentTimeMillis() + 2400000)
+            .priority(1)
+            .inputs("{\"orderId\":\"ORD-12345\"}");
 
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
       var status =
-          wfStatusInternal
-              .withWorkflowid(wfid)
-              .withStatus(WorkflowState.ENQUEUED)
-              .withDeduplicationId("dedup" + i);
-      systemDatabase.initWorkflowStatus(status, null);
+          builder
+              .workflowId(wfid)
+              .status(WorkflowState.ENQUEUED)
+              .deduplicationId("dedup" + i)
+              .build();
+      systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
     List<String> idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
 
     assertEquals(2, idsToRun.size());
 
     // run the same above 2 are in Pending.
     // So no de queueing
-    idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+    idsToRun =
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
     assertEquals(0, idsToRun.size());
 
     // mark the first 2 as success
@@ -406,14 +454,15 @@ public class QueuesTest extends DbSetupTestBase {
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
 
     // next 2 get dequeued
-    idsToRun = systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+    idsToRun =
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
     assertEquals(2, idsToRun.size());
 
     DBUtils.updateAllWorkflowStates(
         dataSource, WorkflowState.PENDING.name(), WorkflowState.SUCCESS.name());
     idsToRun =
         systemDatabase.getAndStartQueuedWorkflows(
-            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION);
+            qwithWCLimit, Constants.DEFAULT_EXECUTORID, Constants.DEFAULT_APP_VERSION, null);
     assertEquals(0, idsToRun.size());
   }
 
@@ -437,36 +486,37 @@ public class QueuesTest extends DbSetupTestBase {
       logger.info("Waiting for queueService to stop");
     }
 
-    WorkflowStatusInternal wfStatusInternal =
-        new WorkflowStatusInternal()
-            .withName("OrderProcessingWorkflow")
-            .withClassName("com.example.workflows.OrderWorkflow")
-            .withInstanceName("prod-config")
-            .withAuthenticatedUser("user123@example.com")
-            .withAssumedRole("admin")
-            .withAuthenticatedRoles("admin,operator")
-            .withOutput("{\"result\":\"success\"}")
-            .withCreatedAt(System.currentTimeMillis() - 3600000)
-            .withUpdatedAt(System.currentTimeMillis())
-            .withQueueName("QwithWCLimit")
-            .withExecutorId(executorId)
-            .withAppVersion(appVersion)
-            .withAppId("order-app-123")
-            .withRecoveryAttempts(0L)
-            .withTimeoutMs(300000l)
-            .withDeadlineEpochMs(System.currentTimeMillis() + 2400000)
-            .withPriority(1)
-            .withInputs("{\"orderId\":\"ORD-12345\"}");
+    var builder =
+        WorkflowStatusInternal.builder()
+            .name("OrderProcessingWorkflow")
+            .className("com.example.workflows.OrderWorkflow")
+            .instanceName("prod-config")
+            .authenticatedUser("user123@example.com")
+            .assumedRole("admin")
+            .authenticatedRoles("admin,operator")
+            .output("{\"result\":\"success\"}")
+            .createdAt(System.currentTimeMillis() - 3600000)
+            .updatedAt(System.currentTimeMillis())
+            .queueName("QwithWCLimit")
+            .executorId(executorId)
+            .appVersion(appVersion)
+            .appId("order-app-123")
+            .recoveryAttempts(0L)
+            .timeoutMs(300000l)
+            .deadlineEpochMs(System.currentTimeMillis() + 2400000)
+            .priority(1)
+            .inputs("{\"orderId\":\"ORD-12345\"}");
 
     // executor1
     for (int i = 0; i < 2; i++) {
       String wfid = "id" + i;
       var status =
-          wfStatusInternal
-              .withWorkflowid(wfid)
-              .withStatus(WorkflowState.ENQUEUED)
-              .withDeduplicationId("dedup" + i);
-      systemDatabase.initWorkflowStatus(status, null);
+          builder
+              .workflowId(wfid)
+              .status(WorkflowState.ENQUEUED)
+              .deduplicationId("dedup" + i)
+              .build();
+      systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
     // executor2
@@ -475,16 +525,17 @@ public class QueuesTest extends DbSetupTestBase {
 
       String wfid = "id" + i;
       var status =
-          wfStatusInternal
-              .withWorkflowid(wfid)
-              .withStatus(WorkflowState.PENDING)
-              .withDeduplicationId("dedup" + i)
-              .withExecutorId(executor2);
-      systemDatabase.initWorkflowStatus(status, null);
+          builder
+              .workflowId(wfid)
+              .status(WorkflowState.PENDING)
+              .deduplicationId("dedup" + i)
+              .executorId(executor2)
+              .build();
+      systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
     List<String> idsToRun =
-        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion);
+        systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
     // 0 because global concurrency limit is reached
     assertEquals(0, idsToRun.size());
 
@@ -495,7 +546,8 @@ public class QueuesTest extends DbSetupTestBase {
             qwithWCLimit,
             // executorId,
             executor2,
-            appVersion);
+            appVersion,
+            null);
     assertEquals(2, idsToRun.size());
   }
 
@@ -579,14 +631,11 @@ public class QueuesTest extends DbSetupTestBase {
     assertTrue(expectedWorkflowIds.contains(localHandles.get(0).workflowId()));
     assertTrue(expectedWorkflowIds.contains(localHandles.get(1).workflowId()));
 
-    for (int i = 0; i < impl.wfSemaphores.size(); i++) {
-      logger.info("acquire {} semaphore", i);
-      impl.wfSemaphores.get(i).acquire();
-    }
-
-    assertEquals(4, impl.counter);
-    assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().status());
-    assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().status());
+    assertEquals(2, impl.counter);
+    // Recovery sets back to enqueued.
+    //   The enqueued run will get skipped (first run is still blocked)
+    assertEquals(WorkflowState.ENQUEUED.toString(), handle1.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED.toString(), handle2.getStatus().status());
     assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().status());
 
     impl.latch.countDown();
@@ -596,5 +645,30 @@ public class QueuesTest extends DbSetupTestBase {
     assertEquals("local", handle3.getStatus().executorId());
 
     assertTrue(DBUtils.queueEntriesAreCleanedUp(dataSource));
+  }
+
+  @Test
+  public void testListenQueue() throws Exception {
+    var config = dbosConfig.withListenQueue("queueOne");
+    DBOS.reinitialize(config);
+
+    Queue queueOne = new Queue("queueOne");
+    Queue queueTwo = new Queue("queueTwo");
+    DBOS.registerQueue(queueOne);
+    DBOS.registerQueue(queueTwo);
+
+    ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    DBOS.launch();
+
+    var h2 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("two"), new StartWorkflowOptions(queueTwo));
+    var h1 =
+        DBOS.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("one"), new StartWorkflowOptions(queueOne));
+
+    Thread.sleep(3000);
+    assertEquals("oneone", h1.getResult());
+    assertEquals("ENQUEUED", h2.getStatus().status());
   }
 }

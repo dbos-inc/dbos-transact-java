@@ -10,11 +10,10 @@ import dev.dbos.transact.workflow.*;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.*;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class StepsTest extends DbSetupTestBase {
 
   @BeforeEach
@@ -261,5 +260,22 @@ public class StepsTest extends DbSetupTestBase {
     assertEquals("stepWithLongRetry", stepInfos.get(2).functionName());
     assertEquals(2, stepInfos.get(2).functionId());
     assertNull(stepInfos.get(2).error());
+  }
+
+  @Test
+  public void inlineStepRetryLogic() throws Exception {
+    ServiceWFAndStep service =
+        DBOS.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
+
+    DBOS.launch();
+
+    String workflowId = "wf-inlinestepretrytest-1234";
+    try (var id = new WorkflowOptions(workflowId).setContext()) {
+      service.inlineStepRetryWorkflow("input");
+    }
+
+    var handle = DBOS.retrieveWorkflow(workflowId);
+    String expectedRes = "2 Retries: 2.";
+    assertEquals(expectedRes, (String) handle.getResult());
   }
 }

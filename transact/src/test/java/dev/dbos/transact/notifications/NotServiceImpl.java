@@ -5,15 +5,9 @@ import dev.dbos.transact.workflow.Workflow;
 
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class NotServiceImpl implements NotService {
 
-  private final ReentrantLock lock = new ReentrantLock();
-  private final Condition condition = lock.newCondition();
-  private final AtomicInteger counter = new AtomicInteger(0);
   final CountDownLatch recvReadyLatch = new CountDownLatch(1);
 
   @Workflow(name = "sendWorkflow")
@@ -65,27 +59,6 @@ public class NotServiceImpl implements NotService {
   @Workflow(name = "concWorkflow")
   public String concWorkflow(String topic) {
     recvReadyLatch.countDown();
-    lock.lock();
-    try {
-      int currentCount = counter.incrementAndGet();
-      if (currentCount % 2 == 1) {
-        // Wait for the other one to notify
-        try {
-          condition.await();
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          throw new RuntimeException("Interrupted while waiting", e);
-        }
-      } else {
-        // Notify the other one
-        String message = (String) DBOS.recv(topic, Duration.ofSeconds(5));
-        condition.signalAll();
-        return message;
-      }
-    } finally {
-      lock.unlock();
-    }
-
     String message = (String) DBOS.recv(topic, Duration.ofSeconds(5));
     return message;
   }

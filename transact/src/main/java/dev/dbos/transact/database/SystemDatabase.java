@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.*;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -75,18 +76,9 @@ public class SystemDatabase implements AutoCloseable {
     notificationService.stop();
   }
 
-  /**
-   * Get workflow result by workflow ID
-   *
-   * @param workflowId The workflow ID
-   * @return Optional containing the raw output string if workflow completed successfully, empty
-   *     otherwise
-   */
-  public Optional<String> getWorkflowResult(String workflowId) {
-    return DbRetry.call(
-        () -> {
-          return workflowDAO.getWorkflowResult(workflowId);
-        });
+  void speedUpPollingForTest() {
+    workflowDAO.speedUpPollingForTest();
+    notificationsDAO.speedUpPollingForTest();
   }
 
   /**
@@ -94,15 +86,29 @@ public class SystemDatabase implements AutoCloseable {
    *
    * @param initStatus The initial workflow status details.
    * @param maxRetries Optional maximum number of retries.
+   * @param isRecoveryRequest True if this is a recovery request, indicating that this node is told
+   *     it owns the workflow even if the ID already exists
+   * @param isDequeuedRequest True if this is a dequeue request, indicating that this node is told
+   *     it owns the workflow (provided it is in the enqueued state)
    * @return An object containing the current status and optionally the deadline epoch milliseconds.
    * @throws DBOSConflictingWorkflowException If a conflicting workflow already exists.
    * @throws DBOSMaxRecoveryAttemptsExceededException If the workflow exceeds max retries.
    */
   public WorkflowInitResult initWorkflowStatus(
-      WorkflowStatusInternal initStatus, Integer maxRetries) {
+      WorkflowStatusInternal initStatus,
+      Integer maxRetries,
+      boolean isRecoveryRequest,
+      boolean isDequeuedRequest) {
+
+    // This ID will be used to tell if we are the first writer of the record, or if
+    // there is an existing one.
+    // Note that it is generated outside of the DB retry loop, in case commit acks
+    // get lost and we do not know if we committed or not
+    String ownerXid = UUID.randomUUID().toString();
     return DbRetry.call(
         () -> {
-          return workflowDAO.initWorkflowStatus(initStatus, maxRetries);
+          return workflowDAO.initWorkflowStatus(
+              initStatus, maxRetries, isRecoveryRequest, isDequeuedRequest, ownerXid);
         });
   }
 
@@ -160,6 +166,13 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
+  public List<String> getQueuePartitions(String queueName) {
+    return DbRetry.call(
+        () -> {
+          return queuesDAO.getQueuePartitions(queueName);
+        });
+  }
+
   public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName) {
 
     return DbRetry.call(
@@ -172,9 +185,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void recordStepResultTxn(StepResult result, long startTime) {
+    var et = System.currentTimeMillis();
     DbRetry.run(
         () -> {
-          StepsDAO.recordStepResultTxn(dataSource, result, startTime, this.schema);
+          StepsDAO.recordStepResultTxn(dataSource, result, startTime, et, this.schema);
         });
   }
 
@@ -190,10 +204,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public List<String> getAndStartQueuedWorkflows(
-      Queue queue, String executorId, String appVersion) {
+      Queue queue, String executorId, String appVersion, String partitionKey) {
     return DbRetry.call(
         () -> {
-          return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion);
+          return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion, partitionKey);
         });
   }
 
@@ -259,10 +273,10 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public Duration sleep(String workflowId, int functionId, Duration duration, boolean skipSleep) {
-    return DbRetry.call(
+  public void sleep(String workflowId, int functionId, Duration duration) {
+    DbRetry.run(
         () -> {
-          return stepsDAO.sleep(workflowId, functionId, duration, skipSleep);
+          stepsDAO.sleep(workflowId, functionId, duration);
         });
   }
 
@@ -369,6 +383,113 @@ public class SystemDatabase implements AutoCloseable {
                         .formatted(state.service(), state.workflowName(), state.key()));
               }
             }
+          }
+        });
+  }
+
+  public List<MetricData> getMetrics(Instant startTime, Instant endTime) {
+    final var start = Objects.requireNonNull(startTime).toEpochMilli();
+    final var end = Objects.requireNonNull(endTime).toEpochMilli();
+    return DbRetry.call(
+        () -> {
+          logger.debug("getMetrics {} {}", start, end);
+          List<MetricData> metrics = new ArrayList<>();
+          final var wfSQL =
+              """
+                SELECT name, COUNT(workflow_uuid) as count
+                FROM %s.workflow_status
+                WHERE created_at >= ? AND created_at < ?
+                GROUP BY name
+              """
+                  .formatted(this.schema);
+          final var stepSQL =
+              """
+                SELECT function_name, COUNT(*) as count
+                FROM %s.operation_outputs
+                WHERE completed_at_epoch_ms >= ? AND completed_at_epoch_ms < ?
+                GROUP BY function_name
+              """
+                  .formatted(this.schema);
+
+          try (var conn = dataSource.getConnection();
+              var ps1 = conn.prepareStatement(wfSQL);
+              var ps2 = conn.prepareStatement(stepSQL)) {
+
+            ps1.setLong(1, start);
+            ps1.setLong(2, end);
+
+            try (var rs = ps1.executeQuery()) {
+              while (rs.next()) {
+                var name = rs.getString("name");
+                var count = rs.getInt("count");
+                metrics.add(new MetricData("workflow_count", name, count));
+              }
+            }
+
+            ps2.setLong(1, start);
+            ps2.setLong(2, end);
+
+            try (var rs = ps2.executeQuery()) {
+              while (rs.next()) {
+                var name = rs.getString("function_name");
+                var count = rs.getInt("count");
+                metrics.add(new MetricData("step_count", name, count));
+              }
+            }
+          }
+
+          return metrics;
+        });
+  }
+
+  private String getCheckpointName(Connection conn, String workflowId, int functionId)
+      throws SQLException {
+    var sql =
+        """
+          SELECT function_name
+          FROM %s.operation_outputs
+          WHERE workflow_uuid = ? AND function_id = ?
+        """
+            .formatted(this.schema);
+
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, workflowId);
+      ps.setInt(2, functionId);
+      try (var rs = ps.executeQuery()) {
+        if (rs.next()) {
+          return rs.getString("function_name");
+        } else {
+          return null;
+        }
+      }
+    }
+  }
+
+  public boolean patch(String workflowId, int functionId, String patchName) {
+    Objects.requireNonNull(patchName, "patchName cannot be null");
+    return DbRetry.call(
+        () -> {
+          try (Connection conn = dataSource.getConnection()) {
+            var checkpointName = getCheckpointName(conn, workflowId, functionId);
+            if (checkpointName == null) {
+              var output = new StepResult(workflowId, functionId, patchName);
+              StepsDAO.recordStepResultTxn(
+                  output, System.currentTimeMillis(), null, conn, this.schema);
+              return true;
+            } else {
+              return patchName.equals(checkpointName);
+            }
+          }
+        });
+  }
+
+  public boolean deprecatePatch(String workflowId, int functionId, String patchName) {
+    Objects.requireNonNull(patchName, "patchName cannot be null");
+    return DbRetry.call(
+        () -> {
+          try (Connection conn = dataSource.getConnection()) {
+            var checkpointName = getCheckpointName(conn, workflowId, functionId);
+            return patchName.equals(checkpointName);
           }
         });
   }

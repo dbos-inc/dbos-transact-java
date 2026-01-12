@@ -7,19 +7,19 @@ import java.util.List;
 
 public record ListWorkflowsRequest(
     List<String> workflow_uuids,
+    String workflow_name,
     String authenticated_user,
     String start_time,
     String end_time,
     String status,
     String application_version,
-    String workflow_name,
+    String fork_from,
     Integer limit,
     Integer offset,
     Boolean sort_desc,
     String workflow_id_prefix,
     Boolean load_input,
-    Boolean load_output,
-    String queue_name) {
+    Boolean load_output) {
 
   public ListWorkflowsInput asInput() {
     return new ListWorkflowsInput(
@@ -38,10 +38,9 @@ public record ListWorkflowsRequest(
         workflow_id_prefix,
         load_input,
         load_output,
-        queue_name,
-        queue_name != null ? true : false,
+        null,
+        false,
         null, // Executor IDs
-        null // forkedFrom
-        );
+        fork_from);
   }
 }

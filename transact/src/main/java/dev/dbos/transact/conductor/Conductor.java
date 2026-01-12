@@ -56,6 +56,7 @@ public class Conductor implements AutoCloseable {
     map.put(MessageType.EXIST_PENDING_WORKFLOWS, Conductor::handleExistPendingWorkflows);
     map.put(MessageType.GET_WORKFLOW, Conductor::handleGetWorkflow);
     map.put(MessageType.RETENTION, Conductor::handleRetention);
+    map.put(MessageType.GET_METRICS, Conductor::handleGetMetrics);
     dispatchMap = Collections.unmodifiableMap(map);
   }
 
@@ -545,5 +546,21 @@ public class Conductor implements AutoCloseable {
     }
 
     return new SuccessResponse(request, true);
+  }
+
+  static BaseResponse handleGetMetrics(Conductor conductor, BaseMessage message) {
+    GetMetricsRequest request = (GetMetricsRequest) message;
+
+    try {
+      if (request.metric_class.equals("workflow_step_count")) {
+        var metrics = conductor.systemDatabase.getMetrics(request.startTime(), request.endTime());
+        return new GetMetricsResponse(request, metrics);
+      } else {
+        logger.warn("Unexpected metric class {}", request.metric_class);
+        throw new RuntimeException("Unexpected metric class %s".formatted(request.metric_class));
+      }
+    } catch (Exception e) {
+      return new GetMetricsResponse(request, e);
+    }
   }
 }

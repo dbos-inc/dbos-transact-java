@@ -1,5 +1,7 @@
 package dev.dbos.transact.internal;
 
+import dev.dbos.transact.DBOS;
+
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.*;
@@ -30,11 +32,10 @@ public class AppVersionComputer {
         hasher.update((clazz.getName() + ":" + classHash).getBytes("UTF-8"));
       }
 
-      // Add DBOS version
-      // hasher.update(("dbos:" + getDbosVersion()).getBytes("UTF-8"));
+      // Different DBOS versions should produce different app versions
+      hasher.update(DBOS.version().getBytes("UTF-8"));
 
       return bytesToHex(hasher.digest());
-
     } catch (Exception e) {
       logger.warn("Failed to compute simplified app version", e);
       return getFallbackVersion();

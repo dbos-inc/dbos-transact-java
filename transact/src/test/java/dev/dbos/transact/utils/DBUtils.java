@@ -2,6 +2,7 @@ package dev.dbos.transact.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.migrations.MigrationManager;
@@ -207,11 +208,12 @@ public class DBUtils {
     return DriverManager.getConnection(config.databaseUrl(), config.dbUser(), config.dbPassword());
   }
 
-  public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) {
+  public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) throws SQLException {
     return getWorkflowRows(ds, null);
   }
 
-  public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds, String schema) {
+  public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds, String schema)
+      throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     String sql = "SELECT * FROM %s.workflow_status ORDER BY created_at".formatted(schema);
     try (var conn = ds.getConnection();
@@ -222,16 +224,16 @@ public class DBUtils {
         rows.add(new WorkflowStatusRow(rs));
       }
       return rows;
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
-  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId) {
+  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId)
+      throws SQLException {
     return getWorkflowRow(ds, workflowId, null);
   }
 
-  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId, String schema) {
+  public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId, String schema)
+      throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     var sql = "SELECT * FROM %s.workflow_status WHERE workflow_uuid = ?".formatted(schema);
     try (var conn = ds.getConnection();
@@ -244,17 +246,16 @@ public class DBUtils {
           return null;
         }
       }
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
-  public static List<OperationOutputRow> getStepRows(DataSource ds, String workflowId) {
+  public static List<OperationOutputRow> getStepRows(DataSource ds, String workflowId)
+      throws SQLException {
     return getStepRows(ds, workflowId, null);
   }
 
   public static List<OperationOutputRow> getStepRows(
-      DataSource ds, String workflowId, String schema) {
+      DataSource ds, String workflowId, String schema) throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     var sql =
         "SELECT * FROM %s.operation_outputs WHERE workflow_uuid = ? ORDER BY function_id"
@@ -271,18 +272,18 @@ public class DBUtils {
         }
         return rows;
       }
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
   public record Event(String key, String value) {}
 
-  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId) {
+  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId)
+      throws SQLException {
     return getWorkflowEvents(ds, workflowId, null);
   }
 
-  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId, String schema) {
+  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId, String schema)
+      throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     try (var conn = ds.getConnection(); ) {
       var stmt =
@@ -299,19 +300,18 @@ public class DBUtils {
       }
 
       return rows;
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
   public record EventHistory(int stepId, String key, String value) {}
 
-  public static List<EventHistory> getWorkflowEventHistory(DataSource ds, String workflowId) {
+  public static List<EventHistory> getWorkflowEventHistory(DataSource ds, String workflowId)
+      throws SQLException {
     return getWorkflowEventHistory(ds, workflowId, null);
   }
 
   public static List<EventHistory> getWorkflowEventHistory(
-      DataSource ds, String workflowId, String schema) {
+      DataSource ds, String workflowId, String schema) throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     try (var conn = ds.getConnection(); ) {
       var stmt =
@@ -329,24 +329,41 @@ public class DBUtils {
       }
 
       return rows;
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
     }
   }
 
-  public static void causeChaos(DataSource ds) {
-    try (Connection conn = ds.getConnection();
-        Statement st = conn.createStatement()) {
+  public static boolean queueEntriesCleanedUp(DataSource ds) throws SQLException {
+    return queueEntriesCleanedUp(ds, null);
+  }
 
-      st.execute(
-          """
-            SELECT pg_terminate_backend(pid)
-            FROM pg_stat_activity
-            WHERE pid <> pg_backend_pid()
-              AND datname = current_database();
-        """);
-    } catch (SQLException e) {
-      throw new RuntimeException("Could not cause chaos, credentials insufficient?", e);
+  public static boolean queueEntriesCleanedUp(DataSource ds, String schema) throws SQLException {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    var sql =
+        """
+      SELECT COUNT(*) FROM %s.workflow_status
+      WHERE queue_name IS NOT NULL
+        AND queue_name != ?
+        AND status IN ('ENQUEUED', 'PENDING')
+      """
+            .formatted(schema);
+
+    boolean success = false;
+    for (var i = 0; i < 10; i++) {
+      try (var conn = ds.getConnection();
+          var ps = conn.prepareStatement(sql)) {
+        ps.setString(1, Constants.DBOS_INTERNAL_QUEUE);
+        try (var rs = ps.executeQuery()) {
+          if (!rs.next()) {
+            continue;
+          }
+          var count = rs.getInt(1);
+          if (count == 0) {
+            success = true;
+            break;
+          }
+        }
+      }
     }
+    return success;
   }
 }

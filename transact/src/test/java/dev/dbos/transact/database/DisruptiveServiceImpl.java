@@ -1,9 +1,11 @@
 package dev.dbos.transact.database;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Workflow;
 
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 
 import javax.sql.DataSource;
@@ -34,7 +36,7 @@ public class DisruptiveServiceImpl implements DisruptiveService {
           return "B";
         },
         "B");
-    DBUtils.causeChaos(ds);
+    causeChaos(ds);
     DBOS.runStep(
         () -> {
           return "C";
@@ -51,31 +53,47 @@ public class DisruptiveServiceImpl implements DisruptiveService {
   @Override
   @Workflow()
   public String runChildWf() {
-    DBUtils.causeChaos(ds);
+    causeChaos(ds);
     var wfh = DBOS.startWorkflow(() -> self.dbLossBetweenSteps());
-    DBUtils.causeChaos(ds);
+    causeChaos(ds);
     return wfh.getResult();
   }
 
   @Override
   @Workflow()
   public String wfPart1() {
-    DBUtils.causeChaos(ds);
+    causeChaos(ds);
     var r = (String) DBOS.recv("topic", Duration.ofSeconds(5));
-    DBUtils.causeChaos(ds);
+    causeChaos(ds);
     DBOS.setEvent("key", "v1");
-    DBUtils.causeChaos(ds);
+    causeChaos(ds);
     return "Part1" + r;
   }
 
   @Override
   @Workflow()
   public String wfPart2(String id1) {
-    DBUtils.causeChaos(ds);
+    causeChaos(ds);
     DBOS.send(id1, "hello1", "topic");
-    DBUtils.causeChaos(ds);
-    var v1 = (String) DBOS.getEvent(id1, "key", Duration.ofSeconds(10));
-    DBUtils.causeChaos(ds);
+    causeChaos(ds);
+    var v1 = (String) DBOS.getEvent(id1, "key", Duration.ofSeconds(5));
+    causeChaos(ds);
     return "Part2" + v1;
+  }
+
+  static void causeChaos(DataSource ds) {
+    try (Connection conn = ds.getConnection();
+        Statement st = conn.createStatement()) {
+
+      st.execute(
+          """
+            SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+            WHERE pid <> pg_backend_pid()
+              AND datname = current_database();
+        """);
+    } catch (SQLException e) {
+      throw new RuntimeException("Could not cause chaos, credentials insufficient?", e);
+    }
   }
 }

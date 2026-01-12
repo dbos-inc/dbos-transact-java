@@ -3,6 +3,7 @@ package dev.dbos.transact.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class LifecycleTest extends DbSetupTestBase {
   private static LifecycleTestWorkflowsImpl impl;
   private static TestLifecycleService svc;
@@ -34,9 +36,7 @@ public class LifecycleTest extends DbSetupTestBase {
 
   @AfterEach
   void afterEachTest() throws Exception {
-    assertEquals(0, svc.shutdownCount);
     DBOS.shutdown();
-    assertEquals(1, svc.shutdownCount);
   }
 
   @Test
@@ -47,5 +47,25 @@ public class LifecycleTest extends DbSetupTestBase {
     assertEquals(4, impl.nWfs);
     assertEquals(14, svc.annotationCount);
     assertEquals(30, total);
+
+    assertEquals(0, svc.shutdownCount);
+    DBOS.shutdown();
+    assertEquals(1, svc.shutdownCount);
+  }
+
+  @Test
+  void deactivateLifecycleListeners() throws Exception {
+    // Pretend this is an external event
+    var total = svc.runThemAll();
+    assertEquals(3, impl.nInstances); // One of these is internal... for better or worse
+    assertEquals(4, impl.nWfs);
+    assertEquals(14, svc.annotationCount);
+    assertEquals(30, total);
+
+    assertEquals(0, svc.shutdownCount);
+    DBOSTestAccess.getDbosExecutor().deactivateLifecycleListeners();
+    assertEquals(1, svc.shutdownCount);
+    DBOS.shutdown();
+    assertEquals(2, svc.shutdownCount);
   }
 }

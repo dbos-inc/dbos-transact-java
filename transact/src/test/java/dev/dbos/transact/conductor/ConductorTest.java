@@ -8,9 +8,11 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
 import dev.dbos.transact.conductor.protocol.MessageType;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
+import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
@@ -23,6 +25,7 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.net.InetAddress;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -47,7 +50,7 @@ import org.mockito.ArgumentCaptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ConductorTest {
 
   private static final Logger logger = LoggerFactory.getLogger(ConductorTest.class);
@@ -306,6 +309,7 @@ public class ConductorTest {
     }
   }
 
+  @RetryingTest(3)
   public void canExecutorInfo() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
@@ -331,6 +335,8 @@ public class ConductorTest {
       assertEquals(hostname, jsonNode.get("hostname").asText());
       assertEquals("test-app-version", jsonNode.get("application_version").asText());
       assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
+      assertEquals("java", jsonNode.get("language").asText());
+      assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
       assertNull(jsonNode.get("error_message"));
     }
   }
@@ -1049,6 +1055,126 @@ public class ConductorTest {
       assertEquals("12345", jsonNode.get("request_id").asText());
       assertEquals(errorMessage, jsonNode.get("error_message").asText());
       assertFalse(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetMetrics() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    var start = Instant.now().minusSeconds(60 * 10);
+    var end = start.plusSeconds(60);
+
+    var m1 = new MetricData("workflow_count", "wf-one", 10);
+    var m2 = new MetricData("workflow_count", "wf-two", 10);
+    var m3 = new MetricData("workflow_count", "wf-three", 10);
+    var m4 = new MetricData("step_count", "step-one", 10);
+    var m5 = new MetricData("step_count", "step-two", 10);
+    var m6 = new MetricData("step_count", "step-three", 10);
+    when(mockDB.getMetrics(any(), any())).thenReturn(List.of(m1, m2, m3, m4, m5, m6));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of(
+              "start_time",
+              start.toString(),
+              "end_time",
+              end.toString(),
+              "metric_class",
+              "workflow_step_count");
+      listener.send(MessageType.GET_METRICS, "12345", message);
+
+      assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockDB).getMetrics(start, end);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("get_metrics", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+
+      JsonNode metricsNode = jsonNode.get("metrics");
+      assertTrue(metricsNode.isArray());
+      assertEquals(6, metricsNode.size());
+      var n1 = metricsNode.get(0);
+      assertEquals("workflow_count", n1.get("metric_type").asText());
+      assertEquals("wf-one", n1.get("metric_name").asText());
+      assertEquals(10, n1.get("value").asInt());
+      var n5 = metricsNode.get(5);
+      assertEquals("step_count", n5.get("metric_type").asText());
+      assertEquals("step-three", n5.get("metric_name").asText());
+      assertEquals(10, n5.get("value").asInt());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetMetricsThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    var start = Instant.now().minusSeconds(60 * 10);
+    var end = start.plusSeconds(60);
+    String errorMessage = "canGetMetricsThrows error";
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).getMetrics(any(), any());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of(
+              "start_time",
+              start.toString(),
+              "end_time",
+              end.toString(),
+              "metric_class",
+              "workflow_step_count");
+      listener.send(MessageType.GET_METRICS, "12345", message);
+
+      assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockDB).getMetrics(start, end);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("get_metrics", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetMetricsInvalidMetricThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    var errorMessage = "Unexpected metric class commit-to-coffee-ratio";
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      var start = Instant.now().minusSeconds(60 * 10);
+      var end = start.plusSeconds(60);
+      Map<String, Object> message =
+          Map.of(
+              "start_time",
+              start.toString(),
+              "end_time",
+              end.toString(),
+              "metric_class",
+              "commit-to-coffee-ratio");
+      listener.send(MessageType.GET_METRICS, "12345", message);
+
+      assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockDB, never()).getMetrics(any(), any());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("get_metrics", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(errorMessage, jsonNode.get("error_message").asText());
     }
   }
 }

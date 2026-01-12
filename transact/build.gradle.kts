@@ -31,6 +31,8 @@ dependencies {
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.0")
     implementation("com.cronutils:cron-utils:9.2.1") // cron for scheduled wf
 
+    compileOnly("org.jspecify:jspecify:1.0.0")
+
     testImplementation(platform("org.junit:junit-bom:5.12.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.junit-pioneer:junit-pioneer:2.3.0")
@@ -44,6 +46,13 @@ dependencies {
     testImplementation("io.rest-assured:json-path:5.4.0")
     testImplementation("io.rest-assured:xml-path:5.4.0")
     testImplementation("org.testcontainers:postgresql:1.21.3")
+    testImplementation("org.apache.maven:maven-artifact:3.9.11")
+}
+
+tasks.processResources {
+    filesMatching("**/app.properties") {
+        expand(mapOf("projectVersion" to project.version))
+    }
 }
 
 tasks.test {

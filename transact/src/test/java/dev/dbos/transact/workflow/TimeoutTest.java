@@ -14,7 +14,6 @@ import dev.dbos.transact.utils.DBUtils;
 import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
@@ -22,9 +21,8 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junitpioneer.jupiter.RetryingTest;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class TimeoutTest extends DbSetupTestBase {
 
   private static DataSource dataSource;
@@ -230,7 +228,7 @@ public class TimeoutTest extends DbSetupTestBase {
       }
     } catch (Exception t) {
       assertNull(result);
-      assertTrue(t instanceof CancellationException);
+      assertTrue(t instanceof DBOSAwaitedWorkflowCancelledException);
     }
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
@@ -260,7 +258,7 @@ public class TimeoutTest extends DbSetupTestBase {
 
     setDelayEpoch(dataSource, wfid1);
 
-    var handle = dbosExecutor.executeWorkflowById(wfid1);
+    var handle = dbosExecutor.executeWorkflowById(wfid1, true, false);
     assertEquals(WorkflowState.CANCELLED.name(), handle.getStatus().status());
   }
 
@@ -323,7 +321,7 @@ public class TimeoutTest extends DbSetupTestBase {
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
-  @RetryingTest(3)
+  @Test
   public void parentTimeoutInheritedByChild() throws Exception {
 
     var simpleService = DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());

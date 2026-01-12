@@ -12,7 +12,8 @@ public enum MessageType {
   EXIST_PENDING_WORKFLOWS("exist_pending_workflows"),
   LIST_STEPS("list_steps"),
   FORK_WORKFLOW("fork_workflow"),
-  RETENTION("retention");
+  RETENTION("retention"),
+  GET_METRICS("get_metrics");
 
   private final String value;
 

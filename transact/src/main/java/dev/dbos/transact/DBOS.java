@@ -18,6 +18,8 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.*;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.Collection;
@@ -25,10 +27,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +46,34 @@ public class DBOS {
   private DBOS() {}
 
   private static final Logger logger = LoggerFactory.getLogger(DBOS.class);
+  private static final String version = loadVersionFromResources();
+
+  private static @Nullable String loadVersionFromResources() {
+    final String PROPERTIES_FILE = "/dev/dbos/transact/app.properties";
+    final String VERSION_KEY = "app.version";
+    Properties props = new Properties();
+    try (InputStream input = DBOS.class.getResourceAsStream(PROPERTIES_FILE)) {
+
+      if (input == null) {
+        logger.warn("Could not find {} resource file", PROPERTIES_FILE);
+        return "<unknown (resource missing)>";
+      }
+
+      // Load the properties from the file
+      props.load(input);
+
+      // Retrieve the version property, defaulting to "unknown"
+      return props.getProperty(VERSION_KEY, "<unknown>");
+
+    } catch (IOException ex) {
+      logger.error("Error loading version properties", ex);
+      return "<unknown (IO Error)>";
+    }
+  }
+
+  public static @Nullable String version() {
+    return version;
+  }
 
   public static class Instance {
     private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
@@ -58,7 +91,9 @@ public class DBOS {
     }
 
     private void registerClassWorkflows(
-        Class<?> interfaceClass, Object implementation, String instanceName) {
+        @NonNull Class<?> interfaceClass,
+        @NonNull Object implementation,
+        @Nullable String instanceName) {
       Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
       Objects.requireNonNull(implementation, "implementation must not be null");
       instanceName = Objects.requireNonNullElse(instanceName, "");
@@ -82,8 +117,12 @@ public class DBOS {
       }
     }
 
-    private String registerWorkflowMethod(
-        Workflow wfTag, Object target, String className, String instanceName, Method method) {
+    private @NonNull String registerWorkflowMethod(
+        @NonNull Workflow wfTag,
+        @NonNull Object target,
+        @NonNull String className,
+        @NonNull String instanceName,
+        @NonNull Method method) {
       if (dbosExecutor.get() != null) {
         throw new IllegalStateException("Cannot register workflow after DBOS is launched");
       }
@@ -94,7 +133,7 @@ public class DBOS {
       return name;
     }
 
-    void registerLifecycleListener(DBOSLifecycleListener l) {
+    void registerLifecycleListener(@NonNull DBOSLifecycleListener l) {
       if (dbosExecutor.get() != null) {
         throw new IllegalStateException(
             "Cannot register lifecycle listener after DBOS is launched");
@@ -103,7 +142,7 @@ public class DBOS {
       lifecycleRegistry.add(l);
     }
 
-    void registerQueue(Queue queue) {
+    void registerQueue(@NonNull Queue queue) {
       if (dbosExecutor.get() != null) {
         throw new IllegalStateException("Cannot build a queue after DBOS is launched");
       }
@@ -111,11 +150,13 @@ public class DBOS {
       queueRegistry.register(queue);
     }
 
-    public <T> T registerWorkflows(Class<T> interfaceClass, T implementation) {
+    public <T> @NonNull T registerWorkflows(
+        @NonNull Class<T> interfaceClass, @NonNull T implementation) {
       return registerWorkflows(interfaceClass, implementation, "");
     }
 
-    public <T> T registerWorkflows(Class<T> interfaceClass, T implementation, String instanceName) {
+    public <T> @NonNull T registerWorkflows(
+        @NonNull Class<T> interfaceClass, @NonNull T implementation, @NonNull String instanceName) {
       registerClassWorkflows(interfaceClass, implementation, instanceName);
 
       return DBOSInvocationHandler.createProxy(
@@ -126,7 +167,6 @@ public class DBOS {
       internalWorkflowsService =
           registerWorkflows(InternalWorkflowsService.class, new InternalWorkflowsServiceImpl());
       this.registerQueue(new Queue(Constants.DBOS_INTERNAL_QUEUE));
-      this.registerQueue(new Queue(Constants.DBOS_SCHEDULER_QUEUE));
     }
 
     void clearRegistry() {
@@ -138,11 +178,11 @@ public class DBOS {
     }
 
     // package private methods for test purposes
-    DBOSExecutor getDbosExecutor() {
+    @Nullable DBOSExecutor getDbosExecutor() {
       return dbosExecutor.get();
     }
 
-    public void setConfig(DBOSConfig config) {
+    public void setConfig(@NonNull DBOSConfig config) {
       if (this.config != null) {
         throw new IllegalStateException("DBOS has already been configured");
       }
@@ -161,8 +201,7 @@ public class DBOS {
       if (this.config == null) {
         throw new IllegalStateException("DBOS must be configured before launch()");
       }
-      var pkg = DBOS.class.getPackage();
-      var ver = pkg == null ? null : pkg.getImplementationVersion();
+      var ver = DBOS.version();
       logger.info("Launching DBOS {}", ver == null ? "<unknown version>" : "v" + ver);
 
       if (dbosExecutor.get() == null) {
@@ -200,7 +239,8 @@ public class DBOS {
    * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
    *     functions
    */
-  public static <T> T registerWorkflows(Class<T> interfaceClass, T implementation) {
+  public static <T> @NonNull T registerWorkflows(
+      @NonNull Class<T> interfaceClass, @NonNull T implementation) {
     return ensureInstance().registerWorkflows(interfaceClass, implementation, "");
   }
 
@@ -215,8 +255,8 @@ public class DBOS {
    * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
    *     functions
    */
-  public static <T> T registerWorkflows(
-      Class<T> interfaceClass, T implementation, String instanceName) {
+  public static <T> @NonNull T registerWorkflows(
+      @NonNull Class<T> interfaceClass, @NonNull T implementation, @NonNull String instanceName) {
     return ensureInstance().registerWorkflows(interfaceClass, implementation, instanceName);
   }
 
@@ -227,7 +267,7 @@ public class DBOS {
    * @param queue `Queue` to register
    * @return input queue
    */
-  public static Queue registerQueue(Queue queue) {
+  public static @NonNull Queue registerQueue(@NonNull Queue queue) {
     ensureInstance().registerQueue(queue);
     return queue;
   }
@@ -237,7 +277,7 @@ public class DBOS {
    *
    * @param listener
    */
-  public static void registerLifecycleListener(DBOSLifecycleListener listener) {
+  public static void registerLifecycleListener(@NonNull DBOSLifecycleListener listener) {
     ensureInstance().registerLifecycleListener(listener);
   }
 
@@ -286,9 +326,9 @@ public class DBOS {
     if (globalInstance != null) globalInstance.shutdown();
   }
 
-  private static Instance globalInstance = null;
+  private static @Nullable Instance globalInstance = null;
 
-  public static Instance instance() {
+  public static @Nullable Instance instance() {
     return globalInstance;
   }
 
@@ -316,7 +356,7 @@ public class DBOS {
    *
    * @return Current workflow ID
    */
-  public static String workflowId() {
+  public static @Nullable String workflowId() {
     return DBOSContext.workflowId();
   }
 
@@ -325,7 +365,7 @@ public class DBOS {
    *
    * @return Current step ID number
    */
-  public static Integer stepId() {
+  public static @Nullable Integer stepId() {
     return DBOSContext.stepId();
   }
 
@@ -349,7 +389,7 @@ public class DBOS {
    * @param queueName Name of the queue
    * @return Queue definition for given `queueName`
    */
-  public static Optional<Queue> getQueue(String queueName) {
+  public static @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
     return executor("getQueue").getQueue(queueName);
   }
 
@@ -359,7 +399,7 @@ public class DBOS {
    *
    * @param duration amount of time to sleep
    */
-  public static void sleep(Duration duration) {
+  public static void sleep(@NonNull Duration duration) {
     if (!inWorkflow()) {
       try {
         Thread.sleep(duration.toMillis());
@@ -386,8 +426,8 @@ public class DBOS {
    * @param options Start workflow options
    * @return A handle to the enqueued or running workflow
    */
-  public static <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
-      ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
+  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
+      @NonNull ThrowingSupplier<T, E> supplier, @NonNull StartWorkflowOptions options) {
     return executor("startWorkflow").startWorkflow(supplier, options);
   }
 
@@ -399,8 +439,8 @@ public class DBOS {
    * @param supplier A lambda that calls exactly one workflow function
    * @return A handle to the enqueued or running workflow
    */
-  public static <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
-      ThrowingSupplier<T, E> supplier) {
+  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
+      @NonNull ThrowingSupplier<T, E> supplier) {
     return startWorkflow(supplier, new StartWorkflowOptions());
   }
 
@@ -412,8 +452,8 @@ public class DBOS {
    * @param options Start workflow options
    * @return A handle to the enqueued or running workflow
    */
-  public static <E extends Exception> WorkflowHandle<Void, E> startWorkflow(
-      ThrowingRunnable<E> runnable, StartWorkflowOptions options) {
+  public static <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
+      @NonNull ThrowingRunnable<E> runnable, @NonNull StartWorkflowOptions options) {
     return startWorkflow(
         () -> {
           runnable.execute();
@@ -429,8 +469,8 @@ public class DBOS {
    * @param runnable A lambda that calls exactly one workflow function
    * @return A handle to the enqueued or running workflow
    */
-  public static <E extends Exception> WorkflowHandle<Void, E> startWorkflow(
-      ThrowingRunnable<E> runnable) {
+  public static <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
+      @NonNull ThrowingRunnable<E> runnable) {
     return startWorkflow(runnable, new StartWorkflowOptions());
   }
 
@@ -443,7 +483,7 @@ public class DBOS {
    * @return Return value of the workflow
    * @throws E if the workflow threw an exception
    */
-  public static <T, E extends Exception> T getResult(String workflowId) throws E {
+  public static <T, E extends Exception> T getResult(@NonNull String workflowId) throws E {
     return executor("getResult").<T, E>getResult(workflowId);
   }
 
@@ -453,7 +493,7 @@ public class DBOS {
    * @param workflowId ID of the workflow to query
    * @return Current workflow status for the provided workflowId, or null.
    */
-  public static WorkflowStatus getWorkflowStatus(String workflowId) {
+  public static @Nullable WorkflowStatus getWorkflowStatus(@NonNull String workflowId) {
     return executor("getWorkflowStatus").getWorkflowStatus(workflowId);
   }
 
@@ -466,7 +506,10 @@ public class DBOS {
    * @param idempotencyKey optional idempotency key for exactly-once send
    */
   public static void send(
-      String destinationId, Object message, String topic, String idempotencyKey) {
+      @NonNull String destinationId,
+      @NonNull Object message,
+      @NonNull String topic,
+      @Nullable String idempotencyKey) {
     executor("send")
         .send(destinationId, message, topic, instance().internalWorkflowsService, idempotencyKey);
   }
@@ -478,7 +521,8 @@ public class DBOS {
    * @param message message to be sent
    * @param topic topic to which the message is send
    */
-  public static void send(String destinationId, Object message, String topic) {
+  public static void send(
+      @NonNull String destinationId, @NonNull Object message, @NonNull String topic) {
     DBOS.send(destinationId, message, topic, null);
   }
 
@@ -489,7 +533,7 @@ public class DBOS {
    * @param timeout duration after which the call times out
    * @return the message if there is one or else null
    */
-  public static Object recv(String topic, Duration timeout) {
+  public static @Nullable Object recv(@NonNull String topic, @NonNull Duration timeout) {
     return executor("recv").recv(topic, timeout);
   }
 
@@ -499,7 +543,7 @@ public class DBOS {
    * @param key identifier for published data
    * @param value data that is published
    */
-  public static void setEvent(String key, Object value) {
+  public static void setEvent(@NonNull String key, @NonNull Object value) {
     executor("setEvent").setEvent(key, value);
   }
 
@@ -511,7 +555,8 @@ public class DBOS {
    * @param timeout time to wait for data before timing out
    * @return the published value or null
    */
-  public static Object getEvent(String workflowId, String key, Duration timeout) {
+  public static @Nullable Object getEvent(
+      @NonNull String workflowId, @NonNull String key, @NonNull Duration timeout) {
     logger.debug("Received getEvent for {} {}", workflowId, key);
 
     return executor("getEvent").getEvent(workflowId, key, timeout);
@@ -526,7 +571,7 @@ public class DBOS {
    * @throws E
    */
   public static <T, E extends Exception> T runStep(
-      ThrowingSupplier<T, E> stepfunc, StepOptions opts) throws E {
+      @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull StepOptions opts) throws E {
 
     return executor("runStep").runStepInternal(stepfunc, opts, null);
   }
@@ -539,8 +584,8 @@ public class DBOS {
    * @param name name of the step, for tracing and to record in the system database
    * @throws E
    */
-  public static <T, E extends Exception> T runStep(ThrowingSupplier<T, E> stepfunc, String name)
-      throws E {
+  public static <T, E extends Exception> T runStep(
+      @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull String name) throws E {
 
     return executor("runStep").runStepInternal(stepfunc, new StepOptions(name), null);
   }
@@ -553,8 +598,8 @@ public class DBOS {
    * @param opts step name, and retry options for running the step
    * @throws E
    */
-  public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, StepOptions opts)
-      throws E {
+  public static <E extends Exception> void runStep(
+      @NonNull ThrowingRunnable<E> stepfunc, @NonNull StepOptions opts) throws E {
     executor("runStep")
         .runStepInternal(
             () -> {
@@ -573,8 +618,8 @@ public class DBOS {
    * @param name Name of the step, for tracing and recording in the system database
    * @throws E
    */
-  public static <E extends Exception> void runStep(ThrowingRunnable<E> stepfunc, String name)
-      throws E {
+  public static <E extends Exception> void runStep(
+      @NonNull ThrowingRunnable<E> stepfunc, @NonNull String name) throws E {
     runStep(stepfunc, new StepOptions(name));
   }
 
@@ -586,7 +631,8 @@ public class DBOS {
    * @param workflowId id of the workflow
    * @return A handle to the workflow
    */
-  public static <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
+  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
+      @NonNull String workflowId) {
     return executor("resumeWorkflow").resumeWorkflow(workflowId);
   }
 
@@ -597,7 +643,7 @@ public class DBOS {
    *
    * @param workflowId ID of the workflow to cancel
    */
-  public static void cancelWorkflow(String workflowId) {
+  public static void cancelWorkflow(@NonNull String workflowId) {
     executor("cancelWorkflow").cancelWorkflow(workflowId);
   }
 
@@ -612,9 +658,24 @@ public class DBOS {
    * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
    * @return handle to the workflow
    */
-  public static <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
-      String workflowId, int startStep, ForkOptions options) {
+  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
+      @NonNull String workflowId, int startStep, @NonNull ForkOptions options) {
     return executor("forkWorkflow").forkWorkflow(workflowId, startStep, options);
+  }
+
+  /**
+   * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
+   * provided step are copied over
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Checked exception thrown by the workflow function, if any
+   * @param workflowId Original workflow Id
+   * @param startStep Start execution from this step. Prior steps copied over
+   * @return handle to the workflow
+   */
+  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
+      @NonNull String workflowId, int startStep) {
+    return forkWorkflow(workflowId, startStep, new ForkOptions());
   }
 
   /**
@@ -626,7 +687,8 @@ public class DBOS {
    * @param workflowId ID of the workflow to retrieve
    * @return Workflow handle for the provided workflow ID
    */
-  public static <T, E extends Exception> WorkflowHandle<T, E> retrieveWorkflow(String workflowId) {
+  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> retrieveWorkflow(
+      @NonNull String workflowId) {
     return executor("retrieveWorkflow").retrieveWorkflow(workflowId);
   }
 
@@ -636,7 +698,7 @@ public class DBOS {
    * @param input {@link ListWorkflowsInput} parameters to query workflows
    * @return a list of workflow status {@link WorkflowStatus}
    */
-  public static List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+  public static @NonNull List<WorkflowStatus> listWorkflows(@NonNull ListWorkflowsInput input) {
     return executor("listWorkflows").listWorkflows(input);
   }
 
@@ -646,7 +708,7 @@ public class DBOS {
    * @param workflowId Id of the workflow whose steps to return
    * @return list of step information {@link StepInfo}
    */
-  public static List<StepInfo> listWorkflowSteps(String workflowId) {
+  public static @NonNull List<StepInfo> listWorkflowSteps(@NonNull String workflowId) {
     return executor("listWorkflowSteps").listWorkflowSteps(workflowId);
   }
 
@@ -655,7 +717,7 @@ public class DBOS {
    *
    * @return list of all registered workflow methods
    */
-  public static Collection<RegisteredWorkflow> getRegisteredWorkflows() {
+  public static @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
     return executor("getRegisteredWorkflows").getWorkflows();
   }
 
@@ -664,7 +726,7 @@ public class DBOS {
    *
    * @return list of all class instances containing registered workflow methods
    */
-  public static Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
+  public static @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
     return executor("getRegisteredWorkflowInstances").getInstances();
   }
 
@@ -679,7 +741,7 @@ public class DBOS {
    */
   public static WorkflowHandle<?, ?> startWorkflow(
       RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
-    return executor("executeWorkflow").executeWorkflow(regWorkflow, args, options, null, null);
+    return executor("startWorkflow").startWorkflow(regWorkflow, args, options);
   }
 
   /**
@@ -706,5 +768,39 @@ public class DBOS {
    */
   public static ExternalState upsertExternalState(ExternalState state) {
     return executor("upsertExternalState").upsertExternalState(state);
+  }
+
+  /**
+   * Marks a breaking change within a workflow. Returns true for new workflows (i.e. workflow sthat
+   * reach this point in the workflow after the breaking change was created) and false for old
+   * worklows (i.e. workflows that reached this point in the workflow before the breaking change was
+   * created). The workflow should execute the new code if this method returns true, otherwise
+   * execute the old code. Note, patching must be enabled in DBOS configuration and this method must
+   * be called from within a workflow context.
+   *
+   * @param patchName the name of the patch to apply
+   * @return true for workflows started after the breaking change, false for workflows started
+   *     before the breaking change
+   * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
+   *     workflow
+   */
+  public static boolean patch(@NonNull String patchName) {
+    return executor("patch").patch(patchName);
+  }
+
+  /**
+   * Deprecates a previously applied breaking change patch within a workflow. Safely executes
+   * workflows containing the patch marker, but does not insert the patch marker into new workflows.
+   * Always returns true (boolean return gives deprecatePatch the same signature as {@link #patch}).
+   * Like {@link #patch}, patching must be enabled in DBOS configuration and this method must be
+   * called from within a workflow context.
+   *
+   * @param patchName the name of the patch to deprecate
+   * @return true (always returns true or throws)
+   * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
+   *     workflow
+   */
+  public static boolean deprecatePatch(@NonNull String patchName) {
+    return executor("deprecatePatch").deprecatePatch(patchName);
   }
 }

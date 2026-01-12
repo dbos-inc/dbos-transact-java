@@ -19,4 +19,6 @@ public interface ServiceWFAndStep {
   String stepWithLongRetry(String input) throws Exception;
 
   String stepRetryWorkflow(String input);
+
+  String inlineStepRetryWorkflow(String input);
 }

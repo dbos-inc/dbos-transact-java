@@ -17,13 +17,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class MultiInstTest extends DbSetupTestBase {
   HawkServiceImpl himpl;
   BearServiceImpl bimpla;
@@ -184,7 +183,7 @@ public class MultiInstTest extends DbSetupTestBase {
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
-      var eh = dbosExecutor.executeWorkflowById(handle.workflowId());
+      var eh = dbosExecutor.executeWorkflowById(handle.workflowId(), false, true);
       eh.getResult();
       stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(

@@ -1,11 +1,13 @@
 package dev.dbos.transact.workflow.internal;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -35,9 +37,15 @@ public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHan
             return futureResult.get();
           } catch (DBOSWorkflowExecutionConflictException e) {
             return (T) executor.awaitWorkflowResult(workflowId);
+          } catch (CancellationException e) {
+            throw new DBOSAwaitedWorkflowCancelledException(workflowId);
           } catch (ExecutionException ee) {
             if (ee.getCause() instanceof Exception) {
-              throw (E) ee.getCause();
+              var re = ee.getCause();
+              if (re instanceof DBOSWorkflowExecutionConflictException) {
+                return (T) executor.awaitWorkflowResult(workflowId);
+              }
+              throw (E) re;
             }
             throw new RuntimeException("Future threw non-exception", ee.getCause());
           } catch (Exception e) {

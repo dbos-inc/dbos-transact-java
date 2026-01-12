@@ -14,7 +14,6 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
@@ -22,7 +21,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class CustomSchemaTest extends DbSetupTestBase {
   private static final String schema = "C$+0m'";
   private HawkService proxy;
@@ -55,7 +54,7 @@ public class CustomSchemaTest extends DbSetupTestBase {
   }
 
   @Test
-  void directInvoke() {
+  void directInvoke() throws Exception {
 
     var result = proxy.simpleWorkflow();
     assertEquals(localDate, result);
@@ -74,7 +73,7 @@ public class CustomSchemaTest extends DbSetupTestBase {
     validateWorkflow();
   }
 
-  void validateWorkflow() {
+  void validateWorkflow() throws SQLException {
     var rows = DBUtils.getWorkflowRows(dataSource, schema);
     assertEquals(1, rows.size());
     var row = rows.get(0);

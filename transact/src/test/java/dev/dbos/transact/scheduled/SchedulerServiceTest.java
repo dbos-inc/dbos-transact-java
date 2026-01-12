@@ -12,14 +12,13 @@ import dev.dbos.transact.workflow.Queue;
 
 import java.sql.SQLException;
 import java.time.Duration;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.RetryingTest;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class SchedulerServiceTest extends DbSetupTestBase {
 
   @BeforeEach
@@ -80,7 +79,7 @@ class SchedulerServiceTest extends DbSetupTestBase {
 
     var workflows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("withSteps"));
     assertTrue(workflows.size() <= 2);
-    assertEquals(Constants.DBOS_SCHEDULER_QUEUE, workflows.get(0).queueName());
+    assertEquals(Constants.DBOS_INTERNAL_QUEUE, workflows.get(0).queueName());
 
     var steps = DBOS.listWorkflowSteps(workflows.get(0).workflowId());
     assertEquals(2, steps.size());

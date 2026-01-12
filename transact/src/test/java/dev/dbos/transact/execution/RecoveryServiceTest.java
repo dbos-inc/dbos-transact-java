@@ -17,7 +17,6 @@ import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import java.sql.*;
 import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -27,7 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class RecoveryServiceTest extends DbSetupTestBase {
 
   private static DataSource dataSource;
@@ -125,7 +124,8 @@ class RecoveryServiceTest extends DbSetupTestBase {
 
     setWorkflowStateToPending(dataSource);
 
-    List<WorkflowHandle<?, ?>> pending = dbosExecutor.recoverPendingWorkflows(null);
+    List<WorkflowHandle<?, ?>> pending =
+        dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId()));
     assertEquals(5, pending.size());
 
     for (var handle : pending) {
@@ -191,7 +191,7 @@ class RecoveryServiceTest extends DbSetupTestBase {
     // Recover workflow
     // This should use checkpointed step values
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-    h = dbosExecutor.executeWorkflowById(wfid);
+    h = dbosExecutor.executeWorkflowById(wfid, true, false);
     assertNull(h.getStatus().error());
     assertNull(h.getResult());
     assertEquals(executingServiceImpl.callsToThrowStep, 1);
@@ -201,7 +201,7 @@ class RecoveryServiceTest extends DbSetupTestBase {
     // This should use 1 checkpointed step value
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     DBUtils.deleteStepOutput(dataSource, wfid, 1);
-    h = dbosExecutor.executeWorkflowById(wfid);
+    h = dbosExecutor.executeWorkflowById(wfid, true, false);
     assertNull(h.getStatus().error());
     assertNull(h.getResult());
     assertEquals(executingServiceImpl.callsToThrowStep, 1);

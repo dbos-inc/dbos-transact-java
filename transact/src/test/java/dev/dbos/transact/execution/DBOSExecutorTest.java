@@ -15,7 +15,6 @@ import dev.dbos.transact.workflow.*;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -23,7 +22,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class DBOSExecutorTest extends DbSetupTestBase {
 
   private static DataSource dataSource;
@@ -64,7 +63,7 @@ class DBOSExecutorTest extends DbSetupTestBase {
 
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
-    var handle = dbosExecutor.executeWorkflowById(wfid);
+    var handle = dbosExecutor.executeWorkflowById(wfid, true, false);
 
     result = (String) handle.getResult();
     assertEquals("test-itemtest-item", result);
@@ -98,7 +97,7 @@ class DBOSExecutorTest extends DbSetupTestBase {
 
     boolean error = false;
     try {
-      dbosExecutor.executeWorkflowById("wf-124");
+      dbosExecutor.executeWorkflowById("wf-124", false, false);
     } catch (Exception e) {
       error = true;
       assert e instanceof DBOSNonExistentWorkflowException
@@ -134,7 +133,7 @@ class DBOSExecutorTest extends DbSetupTestBase {
 
     boolean error = false;
     try {
-      dbosExecutor.executeWorkflowById(wfid);
+      dbosExecutor.executeWorkflowById(wfid, false, false);
     } catch (Exception e) {
       error = true;
       assert e instanceof DBOSWorkflowFunctionNotFoundException
@@ -175,7 +174,7 @@ class DBOSExecutorTest extends DbSetupTestBase {
     steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(0, steps.size());
 
-    WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
+    WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
 
     result = handle.getResult();
     assertEquals("test-itemstepOnestepTwo", result);
@@ -220,7 +219,7 @@ class DBOSExecutorTest extends DbSetupTestBase {
     steps = DBOS.listWorkflowSteps(wfid);
     assertEquals(1, steps.size());
 
-    WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid);
+    WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
 
     result = handle.getResult();
     assertEquals("test-itemstepOnestepTwo", result);
@@ -284,14 +283,14 @@ class DBOSExecutorTest extends DbSetupTestBase {
     // let us set the state to PENDING and increase the sleep time
     DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     long currenttime = System.currentTimeMillis();
-    double newEndtime = (currenttime + 2000);
+    long newEndtime = (currenttime + 2000);
 
     String endTimeAsJson = JSONUtil.serialize(newEndtime);
 
     DBUtils.updateStepEndTime(dataSource, wfid, steps.get(0).functionId(), endTimeAsJson);
 
     long starttime = System.currentTimeMillis();
-    var h = dbosExecutor.executeWorkflowById(wfid);
+    var h = dbosExecutor.executeWorkflowById(wfid, true, false);
     h.getResult();
 
     long duration = System.currentTimeMillis() - starttime;

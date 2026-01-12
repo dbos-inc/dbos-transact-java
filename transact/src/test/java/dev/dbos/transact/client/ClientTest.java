@@ -18,12 +18,11 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = TimeUnit.MINUTES)
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ClientTest extends DbSetupTestBase {
   private ClientService service;
   private HikariDataSource dataSource;
@@ -43,6 +42,47 @@ public class ClientTest extends DbSetupTestBase {
   void afterEachTest() throws Exception {
     dataSource.close();
     DBOS.shutdown();
+  }
+
+  @Test
+  public void enqueueOptionsValidation() throws Exception {
+    // workflow/class/queue names must not be null
+    assertThrows(
+        NullPointerException.class,
+        () -> new DBOSClient.EnqueueOptions(null, "workflow-name", "queue-name"));
+    assertThrows(
+        NullPointerException.class,
+        () -> new DBOSClient.EnqueueOptions("class-name", null, "queue-name"));
+    assertThrows(
+        NullPointerException.class,
+        () -> new DBOSClient.EnqueueOptions("class-name", "workflow-name", null));
+
+    // workflow/class/queue names must not be empty
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("", "workflow-name", "queue-name"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("class-name", "", "queue-name"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("class-name", "workflow-name", ""));
+
+    var options = new DBOSClient.EnqueueOptions("class", "workflow", "queue");
+
+    // dedupe ID and partition key must not be empty if set
+    assertThrows(IllegalArgumentException.class, () -> options.withDeduplicationId(""));
+    assertThrows(IllegalArgumentException.class, () -> options.withQueuePartitionKey(""));
+
+    // timeout can't be negative or zero
+    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ZERO));
+    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(-1)));
+
+    // timeout & deadline can't both be set
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            options.withDeadline(Instant.now().plusSeconds(1)).withTimeout(Duration.ofSeconds(1)));
   }
 
   @Test

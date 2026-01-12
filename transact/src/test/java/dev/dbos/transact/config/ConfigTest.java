@@ -4,34 +4,47 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.database.DBTestAccess;
+import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.invocation.HawkService;
 import dev.dbos.transact.invocation.HawkServiceImpl;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.Workflow;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
 import uk.org.webcompere.systemstubs.jupiter.SystemStub;
 import uk.org.webcompere.systemstubs.jupiter.SystemStubsExtension;
 
+@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 @ExtendWith(SystemStubsExtension.class)
 public class ConfigTest extends DbSetupTestBase {
 
   @SystemStub private EnvironmentVariables envVars = new EnvironmentVariables();
 
   @Test
-  public void setExecutorAndAppVersionViaConfig() throws Exception {
+  public void configOverridesEnvAppVerAndExecutor() throws Exception {
+    envVars.set("DBOS__VMID", "test-env-executor-id");
+    envVars.set("DBOS__APPVERSION", "test-env-app-version");
+    envVars.set("DBOS__APPID", "test-env-app-id");
+
     var config = dbosConfig.withAppVersion("test-app-version").withExecutorId("test-executor-id");
 
     DBOS.reinitialize(config);
@@ -40,16 +53,40 @@ public class ConfigTest extends DbSetupTestBase {
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertEquals("test-app-version", dbosExecutor.appVersion());
       assertEquals("test-executor-id", dbosExecutor.executorId());
+      assertEquals("test-env-app-id", dbosExecutor.appId());
     } finally {
       DBOS.shutdown();
     }
   }
 
   @Test
-  public void setExecutorAndAppVersionViaEnv() throws Exception {
+  public void envAppVerAndExecutor() throws Exception {
 
     envVars.set("DBOS__VMID", "test-env-executor-id");
     envVars.set("DBOS__APPVERSION", "test-env-app-version");
+    envVars.set("DBOS__APPID", "test-env-app-id");
+
+    var config = dbosConfig;
+
+    DBOS.reinitialize(config);
+    try {
+      DBOS.launch();
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor();
+      assertEquals("test-env-app-version", dbosExecutor.appVersion());
+      assertEquals("test-env-executor-id", dbosExecutor.executorId());
+      assertEquals("test-env-app-id", dbosExecutor.appId());
+    } finally {
+      DBOS.shutdown();
+    }
+  }
+
+  @Test
+  public void dbosCloudEnvOverridesConfigAppVerAndExecutor() throws Exception {
+
+    envVars.set("DBOS__CLOUD", "true");
+    envVars.set("DBOS__VMID", "test-env-executor-id");
+    envVars.set("DBOS__APPVERSION", "test-env-app-version");
+    envVars.set("DBOS__APPID", "test-env-app-id");
 
     var config = dbosConfig.withAppVersion("test-app-version").withExecutorId("test-executor-id");
 
@@ -59,6 +96,7 @@ public class ConfigTest extends DbSetupTestBase {
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertEquals("test-env-app-version", dbosExecutor.appVersion());
       assertEquals("test-env-executor-id", dbosExecutor.executorId());
+      assertEquals("test-env-app-id", dbosExecutor.appId());
     } finally {
       DBOS.shutdown();
     }
@@ -73,6 +111,7 @@ public class ConfigTest extends DbSetupTestBase {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertEquals("local", dbosExecutor.executorId());
+      assertEquals("", dbosExecutor.appId());
     } finally {
       DBOS.shutdown();
     }
@@ -88,9 +127,44 @@ public class ConfigTest extends DbSetupTestBase {
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
       assertNotNull(dbosExecutor.executorId());
       assertDoesNotThrow(() -> UUID.fromString(dbosExecutor.executorId()));
+      assertEquals("", dbosExecutor.appId());
     } finally {
       DBOS.shutdown();
     }
+  }
+
+  @Test
+  public void cantSetExecutorIdWhenUsingConductor() throws Exception {
+    var config =
+        dbosConfig
+            .withConductorKey("test-conductor-key")
+            .withExecutorId("test-executor-id");
+
+    DBOS.reinitialize(config);
+    try {
+      assertThrows(IllegalArgumentException.class, () -> DBOS.launch());
+    } finally {
+      DBOS.shutdown();
+    }
+  }
+
+  @Test
+  public void cantSetEmptyConfigFields() throws Exception {
+    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults(null));
+    assertThrows(IllegalArgumentException.class, () -> DBOSConfig.defaults(""));
+
+    final var config = DBOSConfig.defaults("app-name");
+    assertThrows(IllegalArgumentException.class, () -> config.withAppName(""));
+    assertThrows(IllegalArgumentException.class, () -> config.withAppName(null));
+
+    assertThrows(IllegalArgumentException.class, () -> config.withConductorKey(""));
+    assertDoesNotThrow(() -> config.withConductorKey(null));
+    assertThrows(IllegalArgumentException.class, () -> config.withConductorDomain(""));
+    assertDoesNotThrow(() -> config.withConductorDomain(null));
+    assertThrows(IllegalArgumentException.class, () -> config.withExecutorId(""));
+    assertDoesNotThrow(() -> config.withExecutorId(null));
+    assertThrows(IllegalArgumentException.class, () -> config.withAppVersion(""));
+    assertDoesNotThrow(() -> config.withAppVersion(null));
   }
 
   @Test
@@ -101,9 +175,12 @@ public class ConfigTest extends DbSetupTestBase {
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
-      // If we change the internally registered workflows, the expected value will change
-      var expected = "6482a0dde9a452189b20c5f5e0d00a661ea8f160d58244cfc0a99cc5f13dbcad";
-      assertEquals(expected, dbosExecutor.appVersion());
+      List<Class<?>> workflowClasses =
+          dbosExecutor.getWorkflows().stream()
+              .map(r -> r.target().getClass())
+              .collect(Collectors.toList());
+      var version = assertDoesNotThrow(() -> AppVersionComputer.computeAppVersion(workflowClasses));
+      assertEquals(version, dbosExecutor.appVersion());
     } finally {
       DBOS.shutdown();
     }
@@ -154,5 +231,55 @@ public class ConfigTest extends DbSetupTestBase {
     } finally {
       DBOS.shutdown();
     }
+  }
+
+  @Test
+  public void dbosVersion() throws Exception {
+    assertNotNull(DBOS.version());
+    assertFalse(DBOS.version().contains("unknown"));
+    var version = assertDoesNotThrow(() -> new ComparableVersion(DBOS.version()));
+
+    // an invalid version string will be parsed as 0.0-qualifier, so make sure
+    // the value provided is later 0.6 (the initial published version)
+    assertTrue(version.compareTo(new ComparableVersion("0.6")) > 0);
+  }
+
+  @Test
+  public void appVersion() throws Exception {
+    try {
+      envVars.set("DBOS__APPID", "test-env-app-id");
+      var config = dbosConfig;
+      DBUtils.recreateDB(config);
+      DBOS.reinitialize(config);
+
+      var proxy = DBOS.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl());
+      DBOS.launch();
+
+      var handle = DBOS.startWorkflow(() -> proxy.workflow());
+      assertEquals(6, handle.getResult());
+
+      var input = new ListWorkflowsInput().withWorkflowId(handle.workflowId());
+      var workflows = DBOS.listWorkflows(input);
+      assertEquals(1, workflows.size());
+      assertEquals("test-env-app-id", workflows.get(0).appId());
+    } finally {
+      DBOS.shutdown();
+    }
+  }
+}
+
+interface ExecutorTestService {
+  Integer workflow();
+}
+
+class ExecutorTestServiceImpl implements ExecutorTestService {
+
+  @Override
+  @Workflow
+  public Integer workflow() {
+    var a = DBOS.runStep(() -> 1, "stepOne");
+    var b = DBOS.runStep(() -> 2, "stepTwo");
+    var c = DBOS.runStep(() -> 3, "stepThree");
+    return a + b + c;
   }
 }
