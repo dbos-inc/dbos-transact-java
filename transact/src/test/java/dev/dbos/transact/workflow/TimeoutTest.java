@@ -30,7 +30,6 @@ public class TimeoutTest {
 
   private static final Logger logger = LoggerFactory.getLogger(TimeoutTest.class);
 
-
   private static DBOSConfig dbosConfig;
   private static DataSource dataSource;
 
