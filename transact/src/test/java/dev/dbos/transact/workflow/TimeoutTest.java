@@ -333,7 +333,6 @@ public class TimeoutTest {
   }
 
   @Test
-  @Disabled
   public void parentTimeoutInheritedByChild() throws Exception {
 
     var simpleService = DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
