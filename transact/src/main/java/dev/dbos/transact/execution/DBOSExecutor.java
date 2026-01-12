@@ -12,6 +12,7 @@ import dev.dbos.transact.context.WorkflowInfo;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetWorkflowEventContext;
+import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.*;
@@ -757,7 +758,8 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
-    return systemDatabase.<T, E>awaitWorkflowResult(workflowId);
+    var result = systemDatabase.<T>awaitWorkflowResult(workflowId);
+    return Result.<T, E>process(result);
   }
 
   public <T, E extends Exception> T getResult(String workflowId) throws E {
