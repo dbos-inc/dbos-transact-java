@@ -22,6 +22,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class TimeoutTest {
@@ -331,6 +333,8 @@ public class TimeoutTest {
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
+  private static final Logger logger = LoggerFactory.getLogger(TimeoutTest.class);
+
   @Test
   public void parentTimeoutInheritedByChild() throws Exception {
 
@@ -350,14 +354,29 @@ public class TimeoutTest {
           }
         });
 
-    String parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus().status();
-    assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
+    try {
+      String parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus().status();
+      assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
+    } finally {
+      var row = DBUtils.getWorkflowRow(dataSource, wfid1);
+      if (row.status() != "CANCELLED") {
+        logger.warn("{}: {}", wfid1, row);
+      }
+    }
 
-    var handle = DBOS.retrieveWorkflow("childwf");
+    var childWfId = "childwf";
+    var handle = DBOS.retrieveWorkflow(childWfId);
     assertThrows(Exception.class, () -> handle.getResult());
 
-    String childStatus = DBOS.retrieveWorkflow("childwf").getStatus().status();
-    assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+    try {
+      String childStatus = DBOS.retrieveWorkflow(childWfId).getStatus().status();
+      assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+    } finally {
+      var row = DBUtils.getWorkflowRow(dataSource, childWfId);
+      if (row.status() != "CANCELLED") {
+        logger.warn("{}: {}", wfid1, row);
+      }
+    }
   }
 
   @Test
