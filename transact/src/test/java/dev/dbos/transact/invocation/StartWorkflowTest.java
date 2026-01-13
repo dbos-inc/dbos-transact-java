@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 
@@ -19,7 +18,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
-import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,12 +27,10 @@ import org.junit.jupiter.api.Test;
 public class StartWorkflowTest {
   private static DBOSConfig dbosConfig;
   private HawkService proxy;
-  private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
-
     dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
@@ -52,13 +48,10 @@ public class StartWorkflowTest {
     DBOS.registerQueue(new Queue("partitioned-queue").withPartitionedEnabled(true));
 
     DBOS.launch();
-
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dataSource.close();
     DBOS.shutdown();
   }
 

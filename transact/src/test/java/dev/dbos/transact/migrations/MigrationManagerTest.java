@@ -15,8 +15,6 @@ import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 
-import javax.sql.DataSource;
-
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -26,7 +24,7 @@ import org.junit.jupiter.api.Test;
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class MigrationManagerTest {
 
-  private DataSource testDataSource;
+  private HikariDataSource dataSource;
   private DBOSConfig dbosConfig;
 
   @BeforeEach
@@ -37,12 +35,12 @@ class MigrationManagerTest {
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys_mm_test");
 
     DBUtils.recreateDB(dbosConfig);
-    testDataSource = SystemDatabase.createDataSource(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
   void cleanup() throws Exception {
-    ((HikariDataSource) testDataSource).close();
+    dataSource.close();
   }
 
   @Test
@@ -51,7 +49,7 @@ class MigrationManagerTest {
     MigrationManager.runMigrations(dbosConfig);
 
     // Assert
-    try (Connection conn = testDataSource.getConnection()) {
+    try (Connection conn = dataSource.getConnection()) {
       DatabaseMetaData metaData = conn.getMetaData();
 
       // Verify all expected tables exist in the dbos schema
@@ -102,7 +100,7 @@ class MigrationManagerTest {
     MigrationManager.runMigrations(dbosConfig);
 
     // Assert
-    try (Connection conn = testDataSource.getConnection()) {
+    try (Connection conn = dataSource.getConnection()) {
       DatabaseMetaData metaData = conn.getMetaData();
 
       // Verify all expected tables exist in the dbos schema
@@ -137,12 +135,12 @@ class MigrationManagerTest {
     var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
     migrations.add("CREATE TABLE dummy_table(id SERIAL PRIMARY KEY);");
 
-    try (var conn = testDataSource.getConnection()) {
+    try (var conn = dataSource.getConnection()) {
       MigrationManager.runDbosMigrations(conn, Constants.DB_SCHEMA, migrations);
     }
 
     // Validate the dummy_table was created
-    try (Connection conn = testDataSource.getConnection();
+    try (Connection conn = dataSource.getConnection();
         ResultSet rs = conn.getMetaData().getTables(null, null, "dummy_table", null)) {
       Assertions.assertTrue(rs.next(), "Expected 'dummy_table' to exist after new migration.");
     }
