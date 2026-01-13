@@ -359,7 +359,7 @@ public class TimeoutTest {
       assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
     } finally {
       var row = DBUtils.getWorkflowRow(dataSource, wfid1);
-      if (row.status() != "CANCELLED") {
+      if (!row.status().equals("CANCELLED")) {
         logger.warn("{}: {}", wfid1, row);
       }
     }
@@ -373,7 +373,7 @@ public class TimeoutTest {
       assertEquals(WorkflowState.CANCELLED.name(), childStatus);
     } finally {
       var row = DBUtils.getWorkflowRow(dataSource, childWfId);
-      if (row.status() != "CANCELLED") {
+      if (!row.status().equals("CANCELLED")) {
         logger.warn("{}: {}", wfid1, row);
       }
     }
