@@ -353,7 +353,8 @@ public class TimeoutTest {
     String parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus().status();
     assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
 
-    Thread.sleep(2000);
+    var handle = DBOS.retrieveWorkflow("childwf");
+    assertThrows(Exception.class, () -> handle.getResult());
 
     String childStatus = DBOS.retrieveWorkflow("childwf").getStatus().status();
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
