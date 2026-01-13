@@ -34,8 +34,10 @@ public class MigrationManager {
     if (config.dataSource() != null) {
       runMigrations(config.dataSource(), config.databaseSchema());
     } else {
-      createDatabaseIfNotExists(config);
-      try (var ds = SystemDatabase.createDataSource(config)) {
+      createDatabaseIfNotExists(config.databaseUrl(), config.dbUser(), config.dbPassword());
+      try (var ds =
+          SystemDatabase.createDataSource(
+              config.databaseUrl(), config.dbUser(), config.dbPassword())) {
         runMigrations(ds, config.databaseSchema());
       }
     }
@@ -47,7 +49,7 @@ public class MigrationManager {
     Objects.requireNonNull(password, "database password must not be null");
 
     createDatabaseIfNotExists(url, user, password);
-    try (var ds = SystemDatabase.createDataSource(url, user, password, 0, 0)) {
+    try (var ds = SystemDatabase.createDataSource(url, user, password)) {
       runMigrations(ds, schema);
     }
   }
@@ -63,15 +65,6 @@ public class MigrationManager {
       runDbosMigrations(conn, schema, migrations);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
-    }
-  }
-
-  public static void createDatabaseIfNotExists(DBOSConfig config) {
-    Objects.requireNonNull(config, "DBOS Config must not be null");
-    if (config.dataSource() != null) {
-      logger.debug("DBOSConfig specifies data source, skipping createDatabaseIfNotExists");
-    } else {
-      createDatabaseIfNotExists(config.databaseUrl(), config.dbUser(), config.dbPassword());
     }
   }
 

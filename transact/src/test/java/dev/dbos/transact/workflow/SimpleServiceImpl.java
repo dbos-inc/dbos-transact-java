@@ -165,6 +165,8 @@ public class SimpleServiceImpl implements SimpleService {
         DBOS.startWorkflow(
             () -> simpleService.childWorkflowWithSleep(input, sleepSeconds), options);
 
+    Thread.sleep(sleepSeconds * 500);
+
     String result = handle.getResult();
 
     logger.info("Done with longWorkflow");

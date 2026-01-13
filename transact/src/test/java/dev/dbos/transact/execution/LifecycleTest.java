@@ -24,8 +24,7 @@ public class LifecycleTest {
   static void onetimeSetup() throws Exception {
     dbosConfig =
         DBOSConfig.defaultsFromEnv("lifecycletest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(2);
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
   }
 
   @BeforeEach

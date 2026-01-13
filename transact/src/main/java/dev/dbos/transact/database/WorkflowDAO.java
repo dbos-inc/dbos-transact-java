@@ -589,7 +589,7 @@ class WorkflowDAO {
   }
 
   @SuppressWarnings("unchecked")
-  <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
+  <T> Result<T> awaitWorkflowResult(String workflowId) throws SQLException {
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
     }
@@ -603,7 +603,6 @@ class WorkflowDAO {
             .formatted(this.schema);
 
     while (true) {
-
       try (Connection connection = dataSource.getConnection();
           PreparedStatement stmt = connection.prepareStatement(sql)) {
 
@@ -617,15 +616,12 @@ class WorkflowDAO {
               case SUCCESS:
                 String output = rs.getString("output");
                 Object[] oArray = JSONUtil.deserializeToArray(output);
-                return (T) oArray[0];
+                return Result.success((T) oArray[0]);
 
               case ERROR:
                 String error = rs.getString("error");
                 Throwable t = JSONUtil.deserializeAppException(error);
-                if (t instanceof Exception) {
-                  throw (E) t;
-                }
-                throw new RuntimeException(t.getMessage(), t);
+                return Result.failure(t);
               case CANCELLED:
                 throw new DBOSAwaitedWorkflowCancelledException(workflowId);
 
@@ -636,8 +632,6 @@ class WorkflowDAO {
           }
           // Row not found - workflow hasn't appeared yet, continue polling
         }
-      } catch (SQLException e) {
-        logger.error("Database error while polling workflow {}", workflowId, e);
       }
 
       try {

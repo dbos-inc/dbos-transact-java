@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.maven.artifact.versioning.ComparableVersion;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
@@ -263,6 +264,9 @@ public class ConfigTest {
 
   @Test
   public void dbosVersion() throws Exception {
+    Assumptions.assumeFalse(
+        DBOS.version().equals("${projectVersion}"), "skipping, DBOS version not set");
+
     assertNotNull(DBOS.version());
     assertFalse(DBOS.version().contains("unknown"));
     var version = assertDoesNotThrow(() -> new ComparableVersion(DBOS.version()));

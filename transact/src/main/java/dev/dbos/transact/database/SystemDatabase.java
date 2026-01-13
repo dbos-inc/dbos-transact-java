@@ -38,6 +38,7 @@ public class SystemDatabase implements AutoCloseable {
 
   private final HikariDataSource dataSource;
   private final String schema;
+  private final boolean created;
 
   private final WorkflowDAO workflowDAO;
   private final StepsDAO stepsDAO;
@@ -45,13 +46,11 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
 
-  public SystemDatabase(DBOSConfig config) {
-    this(SystemDatabase.createDataSource(config), Objects.requireNonNull(config).databaseSchema());
-  }
-
-  public SystemDatabase(HikariDataSource dataSource, String schema) {
+  private SystemDatabase(HikariDataSource dataSource, String schema, boolean created) {
     this.schema = sanitizeSchema(schema);
     this.dataSource = dataSource;
+    this.created = created;
+
     stepsDAO = new StepsDAO(dataSource, this.schema);
     workflowDAO = new WorkflowDAO(dataSource, this.schema);
     queuesDAO = new QueuesDAO(dataSource, this.schema);
@@ -59,26 +58,122 @@ public class SystemDatabase implements AutoCloseable {
     notificationsDAO = new NotificationsDAO(dataSource, notificationService, this.schema);
   }
 
+  public SystemDatabase(String url, String user, String password, String schema) {
+    this(createDataSource(url, user, password), schema, true);
+  }
+
+  public SystemDatabase(HikariDataSource dataSource, String schema) {
+    this(dataSource, schema, false);
+  }
+
+  public static SystemDatabase create(DBOSConfig config) {
+    if (config.dataSource() == null) {
+      return new SystemDatabase(
+          config.databaseUrl(), config.dbUser(), config.dbPassword(), config.databaseSchema());
+    } else {
+      return new SystemDatabase(config.dataSource(), config.databaseSchema());
+    }
+  }
+
   HikariConfig getConfig() {
     return dataSource;
   }
 
+  Connection getSysDBConnection() throws SQLException {
+    return dataSource.getConnection();
+  }
+
+  public static HikariDataSource createDataSource(DBOSConfig config) {
+    return createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword());
+  }
+
+  public static HikariDataSource createDataSource(String url, String user, String password) {
+    HikariConfig config = new HikariConfig();
+    config.setJdbcUrl(url);
+    config.setUsername(user);
+    config.setPassword(password);
+
+    config.setMaxLifetime(60_000);
+    config.setKeepaliveTime(30000);
+    config.setConnectionTimeout(10000);
+    config.setValidationTimeout(2000);
+    config.setInitializationFailTimeout(-1);
+    config.setMaximumPoolSize(10);
+    config.setMinimumIdle(10);
+
+    config.addDataSourceProperty("tcpKeepAlive", "true");
+    config.addDataSourceProperty("connectTimeout", "10");
+    config.addDataSourceProperty("socketTimeout", "60");
+    config.addDataSourceProperty("reWriteBatchedInserts", "true");
+
+    return new HikariDataSource(config);
+  }
+
   @Override
   public void close() {
-    dataSource.close();
+    notificationService.stop();
+    if (created) {
+      dataSource.close();
+    }
   }
 
   public void start() {
     notificationService.start();
   }
 
-  public void stop() {
-    notificationService.stop();
-  }
-
   void speedUpPollingForTest() {
     workflowDAO.speedUpPollingForTest();
     notificationsDAO.speedUpPollingForTest();
+  }
+
+  @FunctionalInterface
+  interface SqlSupplier<T> {
+    T get() throws SQLException;
+  }
+
+  private static boolean isConnectionFailure(SQLException e) {
+    String state = e.getSQLState();
+    return state != null && (state.startsWith("08") || state.startsWith("57"));
+  }
+
+  private static boolean isTransientState(SQLException e) {
+    String state = e.getSQLState();
+    return state != null && (state.startsWith("40") || state.equals("53300"));
+  }
+
+  private static void waitForRecovery(int attempt, long baseDelay) {
+    try {
+      // Exponential backoff: 1x, 2x, 4x the base delay
+      long sleepTime = (long) (baseDelay * Math.pow(2, attempt - 1));
+      Thread.sleep(sleepTime);
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+    }
+  }
+
+  private <T> T dbRetry(SqlSupplier<T> supplier) {
+    final int MAX_RETRIES = 20;
+    int attempt = 0;
+    while (true) {
+      try {
+        return supplier.get();
+      } catch (SQLException e) {
+        if (++attempt > MAX_RETRIES) {
+          String msg = "Database operation failed after %d attempts".formatted(attempt);
+          throw new RuntimeException(msg, e);
+        }
+        if (e instanceof SQLRecoverableException || isConnectionFailure(e)) {
+          logger.warn("Recoverable connection error. Resetting client pool.", e);
+          dataSource.getHikariPoolMXBean().softEvictConnections();
+          waitForRecovery(attempt, 2000);
+        } else if (e instanceof SQLTransientException || isTransientState(e)) {
+          logger.warn("Transient DB error. Retrying command.", e);
+          waitForRecovery(attempt, 500);
+        } else {
+          throw new RuntimeException(e);
+        }
+      }
+    }
   }
 
   /**
@@ -105,7 +200,7 @@ public class SystemDatabase implements AutoCloseable {
     // Note that it is generated outside of the DB retry loop, in case commit acks
     // get lost and we do not know if we committed or not
     String ownerXid = UUID.randomUUID().toString();
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return workflowDAO.initWorkflowStatus(
               initStatus, maxRetries, isRecoveryRequest, isDequeuedRequest, ownerXid);
@@ -119,9 +214,10 @@ public class SystemDatabase implements AutoCloseable {
    * @param result output serialized as json
    */
   public void recordWorkflowOutput(String workflowId, String result) {
-    DbRetry.run(
+    dbRetry(
         () -> {
           workflowDAO.recordWorkflowOutput(workflowId, result);
+          return null;
         });
   }
 
@@ -132,42 +228,43 @@ public class SystemDatabase implements AutoCloseable {
    * @param error output serialized as json
    */
   public void recordWorkflowError(String workflowId, String error) {
-    DbRetry.run(
+    dbRetry(
         () -> {
           workflowDAO.recordWorkflowError(workflowId, error);
+          return null;
         });
   }
 
   public WorkflowStatus getWorkflowStatus(String workflowId) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return workflowDAO.getWorkflowStatus(workflowId);
         });
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return workflowDAO.listWorkflows(input);
         });
   }
 
   public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return workflowDAO.getPendingWorkflows(executorId, appVersion);
         });
   }
 
   public boolean clearQueueAssignment(String workflowId) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return queuesDAO.clearQueueAssignment(workflowId);
         });
   }
 
   public List<String> getQueuePartitions(String queueName) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return queuesDAO.getQueuePartitions(queueName);
         });
@@ -175,7 +272,7 @@ public class SystemDatabase implements AutoCloseable {
 
   public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName) {
 
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           try (Connection connection = dataSource.getConnection()) {
             return StepsDAO.checkStepExecutionTxn(
@@ -186,26 +283,27 @@ public class SystemDatabase implements AutoCloseable {
 
   public void recordStepResultTxn(StepResult result, long startTime) {
     var et = System.currentTimeMillis();
-    DbRetry.run(
+    dbRetry(
         () -> {
           StepsDAO.recordStepResultTxn(dataSource, result, startTime, et, this.schema);
+          return null;
         });
   }
 
   public List<StepInfo> listWorkflowSteps(String workflowId) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return stepsDAO.listWorkflowSteps(workflowId);
         });
   }
 
-  public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
-    return workflowDAO.<T, E>awaitWorkflowResult(workflowId);
+  public <T> Result<T> awaitWorkflowResult(String workflowId) {
+    return dbRetry(() -> workflowDAO.<T>awaitWorkflowResult(workflowId));
   }
 
   public List<String> getAndStartQueuedWorkflows(
       Queue queue, String executorId, String appVersion, String partitionKey) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion, partitionKey);
         });
@@ -218,14 +316,15 @@ public class SystemDatabase implements AutoCloseable {
       int functionId, // func id in the parent
       String functionName,
       long startTime) {
-    DbRetry.run(
+    dbRetry(
         () -> {
           workflowDAO.recordChildWorkflow(parentId, childId, functionId, functionName, startTime);
+          return null;
         });
   }
 
   public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return workflowDAO.checkChildWorkflow(workflowUuid, functionId);
         });
@@ -234,82 +333,82 @@ public class SystemDatabase implements AutoCloseable {
   public void send(
       String workflowId, int functionId, String destinationId, Object message, String topic) {
 
-    DbRetry.run(
+    dbRetry(
         () -> {
           notificationsDAO.send(workflowId, functionId, destinationId, message, topic);
+          return null;
         });
   }
 
   public Object recv(
       String workflowId, int functionId, int timeoutFunctionId, String topic, Duration timeout) {
 
-    return DbRetry.call(
+    return dbRetry(
         () -> {
-          try {
-            return notificationsDAO.recv(workflowId, functionId, timeoutFunctionId, topic, timeout);
-          } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            logger.error("recv() was interrupted", ie);
-            throw new RuntimeException(ie.getMessage(), ie);
-          }
+          return notificationsDAO.recv(workflowId, functionId, timeoutFunctionId, topic, timeout);
         });
   }
 
   public void setEvent(
       String workflowId, int functionId, String key, Object message, boolean asStep) {
 
-    DbRetry.run(
+    dbRetry(
         () -> {
           notificationsDAO.setEvent(workflowId, functionId, key, message, asStep);
+          return null;
         });
   }
 
   public Object getEvent(
       String targetId, String key, Duration timeout, GetWorkflowEventContext callerCtx) {
 
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return notificationsDAO.getEvent(targetId, key, timeout, callerCtx);
         });
   }
 
   public void sleep(String workflowId, int functionId, Duration duration) {
-    DbRetry.run(
+    dbRetry(
         () -> {
           stepsDAO.sleep(workflowId, functionId, duration);
+          return null;
         });
   }
 
   public void cancelWorkflow(String workflowId) {
-    DbRetry.run(
+    dbRetry(
         () -> {
           workflowDAO.cancelWorkflow(workflowId);
+          return null;
         });
   }
 
   public void resumeWorkflow(String workflowId) {
-    DbRetry.run(
+    dbRetry(
         () -> {
           workflowDAO.resumeWorkflow(workflowId);
+          return null;
         });
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options);
         });
   }
 
   public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) {
-    DbRetry.run(
+    dbRetry(
         () -> {
           workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold);
+          return null;
         });
   }
 
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           final String sql =
               """
@@ -340,7 +439,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public ExternalState upsertExternalState(ExternalState state) {
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           final var sql =
               """
@@ -390,7 +489,7 @@ public class SystemDatabase implements AutoCloseable {
   public List<MetricData> getMetrics(Instant startTime, Instant endTime) {
     final var start = Objects.requireNonNull(startTime).toEpochMilli();
     final var end = Objects.requireNonNull(endTime).toEpochMilli();
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           logger.debug("getMetrics {} {}", start, end);
           List<MetricData> metrics = new ArrayList<>();
@@ -467,7 +566,7 @@ public class SystemDatabase implements AutoCloseable {
 
   public boolean patch(String workflowId, int functionId, String patchName) {
     Objects.requireNonNull(patchName, "patchName cannot be null");
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           try (Connection conn = dataSource.getConnection()) {
             var checkpointName = getCheckpointName(conn, workflowId, functionId);
@@ -485,49 +584,12 @@ public class SystemDatabase implements AutoCloseable {
 
   public boolean deprecatePatch(String workflowId, int functionId, String patchName) {
     Objects.requireNonNull(patchName, "patchName cannot be null");
-    return DbRetry.call(
+    return dbRetry(
         () -> {
           try (Connection conn = dataSource.getConnection()) {
             var checkpointName = getCheckpointName(conn, workflowId, functionId);
             return patchName.equals(checkpointName);
           }
         });
-  }
-
-  // package public helper for test purposes
-  Connection getSysDBConnection() throws SQLException {
-    return dataSource.getConnection();
-  }
-
-  public static HikariDataSource createDataSource(String url, String user, String password) {
-    return createDataSource(url, user, password, 0, 0);
-  }
-
-  public static HikariDataSource createDataSource(
-      String url, String user, String password, int poolSize, int timeout) {
-    HikariConfig hikariConfig = new HikariConfig();
-    hikariConfig.setJdbcUrl(url);
-    hikariConfig.setUsername(user);
-    hikariConfig.setPassword(password);
-    hikariConfig.setMaximumPoolSize(poolSize > 0 ? poolSize : 2);
-    if (timeout > 0) {
-      hikariConfig.setConnectionTimeout(timeout);
-    }
-
-    return new HikariDataSource(hikariConfig);
-  }
-
-  public static HikariDataSource createDataSource(DBOSConfig config) {
-    if (config.dataSource() != null) {
-      return config.dataSource();
-    }
-
-    var dburl = config.databaseUrl();
-    var dbUser = config.dbUser();
-    var dbPassword = config.dbPassword();
-    var maximumPoolSize = config.maximumPoolSize();
-    var connectionTimeout = config.connectionTimeout();
-
-    return createDataSource(dburl, dbUser, dbPassword, maximumPoolSize, connectionTimeout);
   }
 }

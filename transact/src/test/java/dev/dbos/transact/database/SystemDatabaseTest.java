@@ -34,16 +34,16 @@ public class SystemDatabaseTest {
   static void onetimeSetup() throws Exception {
     config =
         DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withMaximumPoolSize(10);
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
   }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(config);
     MigrationManager.runMigrations(config);
-    sysdb = new SystemDatabase(config);
-    dataSource = SystemDatabase.createDataSource(config);
+    sysdb = SystemDatabase.create(config);
+    dataSource =
+        SystemDatabase.createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword());
   }
 
   @AfterEach

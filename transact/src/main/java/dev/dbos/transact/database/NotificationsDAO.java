@@ -114,7 +114,7 @@ class NotificationsDAO {
 
   Object recv(
       String workflowUuid, int functionId, int timeoutFunctionId, String topic, Duration timeout)
-      throws SQLException, InterruptedException {
+      throws SQLException {
 
     if (dataSource.isClosed()) {
       throw new IllegalStateException("Database is closed!");
@@ -198,7 +198,13 @@ class NotificationsDAO {
         }
         if (nowTime >= targetTime) break;
         long timeoutMs = (long) (Math.min(targetTime - nowTime, dbPollingIntervalEventMs));
-        lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
+
+        try {
+          lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new RuntimeException("Interrupted while waiting for message", e);
+        }
       }
     } finally {
       lockPair.lock.unlock();

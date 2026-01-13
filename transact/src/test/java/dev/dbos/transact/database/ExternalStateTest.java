@@ -29,7 +29,7 @@ public class ExternalStateTest {
 
     DBUtils.recreateDB(dbosConfig);
     MigrationManager.runMigrations(dbosConfig);
-    systemDatabase = new SystemDatabase(dbosConfig);
+    systemDatabase = SystemDatabase.create(dbosConfig);
   }
 
   @AfterAll

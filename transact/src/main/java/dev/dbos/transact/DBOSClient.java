@@ -1,5 +1,6 @@
 package dev.dbos.transact;
 
+import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -42,7 +43,8 @@ public class DBOSClient implements AutoCloseable {
 
     @Override
     public T getResult() throws E {
-      return systemDatabase.awaitWorkflowResult(workflowId);
+      var result = systemDatabase.<T>awaitWorkflowResult(workflowId);
+      return Result.<T, E>process(result);
     }
 
     @Override
@@ -77,8 +79,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String user,
       @NonNull String password,
       @Nullable String schema) {
-    var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
-    systemDatabase = new SystemDatabase(dataSource, schema);
+    systemDatabase = new SystemDatabase(url, user, password, schema);
   }
 
   /**
