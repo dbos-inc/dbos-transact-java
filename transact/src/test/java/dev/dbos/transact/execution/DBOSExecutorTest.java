@@ -22,6 +22,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledForJreRange;
+import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.condition.JRE;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class DBOSExecutorTest {
@@ -47,6 +51,38 @@ class DBOSExecutorTest {
   @AfterEach
   void afterEachTest() throws Exception {
     DBOS.shutdown();
+  }
+
+  @Test
+  @EnabledForJreRange(min = JRE.JAVA_21)
+  public void virtualThreadPoolJava21() throws Exception {
+    DBOS.launch();
+
+    assertFalse(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
+  }
+
+  @Test
+  @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "21|25")
+  public void virtualThreadPoolJDK21() throws Exception {
+    DBOS.launch();
+
+    assertFalse(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
+  }
+
+  @Test
+  @DisabledForJreRange(min = JRE.JAVA_21)
+  public void threadPoolJava17() throws Exception {
+    DBOS.launch();
+
+    assertTrue(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
+  }
+
+  @Test
+  @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "17|17.0.12")
+  public void threadPoolJDK17() throws Exception {
+    DBOS.launch();
+
+    assertTrue(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
   }
 
   @Test

@@ -63,6 +63,7 @@ jobs:
         run: ./gradlew clean build
         env:
           PGPASSWORD: dbos
+          JDKVERSION: ${{ matrix.jdk-version }}
 
       - name: Test Summary
         uses: test-summary/action@v2
