@@ -93,18 +93,18 @@ public class SystemDatabase implements AutoCloseable {
     config.setUsername(user);
     config.setPassword(password);
 
-    // config.setMaxLifetime(60_000);
-    // config.setKeepaliveTime(30000);
-    // config.setConnectionTimeout(10000);
-    // config.setValidationTimeout(2000);
-    // config.setInitializationFailTimeout(-1);
-    // config.setMaximumPoolSize(10);
-    // config.setMinimumIdle(10);
+    config.setMaxLifetime(60_000);
+    config.setKeepaliveTime(30000);
+    config.setConnectionTimeout(10000);
+    config.setValidationTimeout(2000);
+    config.setInitializationFailTimeout(-1);
+    config.setMaximumPoolSize(10);
+    config.setMinimumIdle(10);
 
-    // config.addDataSourceProperty("tcpKeepAlive", "true");
-    // config.addDataSourceProperty("connectTimeout", "10");
-    // config.addDataSourceProperty("socketTimeout", "60");
-    // config.addDataSourceProperty("reWriteBatchedInserts", "true");
+    config.addDataSourceProperty("tcpKeepAlive", "true");
+    config.addDataSourceProperty("connectTimeout", "10");
+    config.addDataSourceProperty("socketTimeout", "60");
+    config.addDataSourceProperty("reWriteBatchedInserts", "true");
 
     return new HikariDataSource(config);
   }
