@@ -26,7 +26,6 @@ import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Semaphore;
 
 import javax.sql.DataSource;
 
@@ -602,10 +601,9 @@ public class QueuesTest {
     var opt3 = new StartWorkflowOptions("wf3").withQueue(queue);
     var handle3 = DBOS.startWorkflow(() -> service.noopWorkflow(2), opt3);
 
-    for (Semaphore e : impl.wfSemaphores) {
-      e.acquire();
-      e.drainPermits();
-    }
+    // each call to blockedWorkflow releases the semaphore once,
+    // so block waiting on both calls to release
+    impl.wfSemaphore.acquire(2);
 
     assertEquals(2, impl.counter);
     assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().status());

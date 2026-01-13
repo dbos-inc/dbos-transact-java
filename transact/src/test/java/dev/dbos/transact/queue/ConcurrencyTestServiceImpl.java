@@ -2,7 +2,6 @@ package dev.dbos.transact.queue;
 
 import dev.dbos.transact.workflow.Workflow;
 
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 
@@ -14,7 +13,7 @@ public class ConcurrencyTestServiceImpl implements ConcurrencyTestService {
   private static final Logger logger = LoggerFactory.getLogger(ConcurrencyTestServiceImpl.class);
 
   public CountDownLatch latch = new CountDownLatch(1);
-  public List<Semaphore> wfSemaphores = List.of(new Semaphore(0), new Semaphore(0));
+  public Semaphore wfSemaphore = new Semaphore(0);
   public int counter = 0;
 
   @Workflow(name = "noopWorkflow")
@@ -25,7 +24,7 @@ public class ConcurrencyTestServiceImpl implements ConcurrencyTestService {
   @Workflow(name = "blockedWorkflow")
   public int blockedWorkflow(int i) throws InterruptedException {
     logger.info("release {} semaphore", i);
-    wfSemaphores.get(i).release();
+    wfSemaphore.release();
     counter++;
     latch.await();
     return i;
