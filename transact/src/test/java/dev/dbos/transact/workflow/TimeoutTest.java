@@ -374,7 +374,7 @@ public class TimeoutTest {
     } finally {
       var row = DBUtils.getWorkflowRow(dataSource, childWfId);
       if (!row.status().equals("CANCELLED")) {
-        logger.warn("{}: {}", wfid1, row);
+        logger.warn("{}: {}", childWfId, row);
       }
     }
   }

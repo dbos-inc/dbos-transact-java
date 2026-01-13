@@ -163,11 +163,11 @@ public class SystemDatabase implements AutoCloseable {
           throw new RuntimeException(msg, e);
         }
         if (e instanceof SQLRecoverableException || isConnectionFailure(e)) {
-          logger.warn("Recoverable connection error. Resetting client pool...");
+          logger.warn("Recoverable connection error. Resetting client pool.", e);
           dataSource.getHikariPoolMXBean().softEvictConnections();
           waitForRecovery(attempt, 2000);
         } else if (e instanceof SQLTransientException || isTransientState(e)) {
-          logger.warn("Transient DB error. Retrying command...");
+          logger.warn("Transient DB error. Retrying command.", e);
           waitForRecovery(attempt, 500);
         } else {
           throw new RuntimeException(e);
