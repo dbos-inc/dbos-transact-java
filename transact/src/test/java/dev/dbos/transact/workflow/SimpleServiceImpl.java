@@ -3,7 +3,6 @@ package dev.dbos.transact.workflow;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 
 import java.util.concurrent.TimeUnit;
 
