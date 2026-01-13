@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.context.WorkflowOptions;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 
 import java.util.concurrent.TimeUnit;
 
@@ -164,6 +165,8 @@ public class SimpleServiceImpl implements SimpleService {
     var handle =
         DBOS.startWorkflow(
             () -> simpleService.childWorkflowWithSleep(input, sleepSeconds), options);
+
+    Thread.sleep(sleepSeconds * 500);
 
     String result = handle.getResult();
 
