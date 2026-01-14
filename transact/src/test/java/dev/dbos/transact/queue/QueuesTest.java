@@ -640,7 +640,7 @@ public class QueuesTest {
     assertTrue(expectedWorkflowIds.contains(localHandles.get(0).workflowId()));
     assertTrue(expectedWorkflowIds.contains(localHandles.get(1).workflowId()));
 
-    assertEquals(2, impl.counter);
+    assertEquals(2, impl.counter.get());
     // Recovery sets back to enqueued.
     //   The enqueued run will get skipped (first run is still blocked)
     assertEquals(WorkflowState.ENQUEUED.toString(), handle1.getStatus().status());
