@@ -4,6 +4,7 @@ import dev.dbos.transact.workflow.Workflow;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +15,7 @@ public class ConcurrencyTestServiceImpl implements ConcurrencyTestService {
 
   public CountDownLatch latch = new CountDownLatch(1);
   public Semaphore wfSemaphore = new Semaphore(0);
-  public int counter = 0;
+  public AtomicInteger counter = new AtomicInteger(0);
 
   @Workflow(name = "noopWorkflow")
   public int noopWorkflow(int i) {
@@ -25,7 +26,7 @@ public class ConcurrencyTestServiceImpl implements ConcurrencyTestService {
   public int blockedWorkflow(int i) throws InterruptedException {
     logger.info("release {} semaphore", i);
     wfSemaphore.release();
-    counter++;
+    counter.incrementAndGet();
     latch.await();
     return i;
   }

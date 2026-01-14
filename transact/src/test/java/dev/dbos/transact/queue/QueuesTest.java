@@ -605,7 +605,7 @@ public class QueuesTest {
     // so block waiting on both calls to release
     impl.wfSemaphore.acquire(2);
 
-    assertEquals(2, impl.counter);
+    assertEquals(2, impl.counter.get());
     assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().status());
     assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().status());
     assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().status());
