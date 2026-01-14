@@ -27,8 +27,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +38,7 @@ public class QueuesTest {
   private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
 
   private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
+  private HikariDataSource dataSource;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -58,6 +57,7 @@ public class QueuesTest {
 
   @AfterEach
   void afterEachTest() throws Exception {
+    dataSource.close();
     DBOS.shutdown();
   }
 

@@ -16,8 +16,7 @@ import dev.dbos.transact.workflow.*;
 import java.sql.SQLException;
 import java.util.List;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +30,7 @@ import org.junit.jupiter.api.condition.JRE;
 class DBOSExecutorTest {
 
   private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
+  private HikariDataSource dataSource;
 
   @BeforeAll
   public static void onetimeBefore() {
@@ -43,13 +42,14 @@ class DBOSExecutorTest {
   @BeforeEach
   void setUp() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
 
     DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
   void afterEachTest() throws Exception {
+    dataSource.close();
     DBOS.shutdown();
   }
 
