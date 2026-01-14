@@ -14,8 +14,6 @@ jobs:
         jdk-version: ['17', '21', '25']
         jdk-distro: ['corretto', 'graalvm', 'microsoft', 'oracle', 'semeru', 'temurin', 'zulu' ]
         exclude:
-          - jdk-version: 25
-            jdk-distro: microsoft
           - jdk-version: 17
             jdk-distro: graalvm
         include:
