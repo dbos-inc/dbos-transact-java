@@ -63,7 +63,7 @@ class DBOSExecutorTest {
 
   @Test
   @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "21|25")
-  public void virtualThreadPoolJDK21() throws Exception {
+  public void virtualThreadPoolJDK21And25() throws Exception {
     DBOS.launch();
 
     assertFalse(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
@@ -78,7 +78,7 @@ class DBOSExecutorTest {
   }
 
   @Test
-  @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "17|17.0.12")
+  @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "17|17\\..*")
   public void threadPoolJDK17() throws Exception {
     DBOS.launch();
 
