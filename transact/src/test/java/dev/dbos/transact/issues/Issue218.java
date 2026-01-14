@@ -98,6 +98,7 @@ public class Issue218 {
 
   @AfterEach
   void afterEachTest() throws Exception {
+    dataSource.close();
     DBOS.shutdown();
   }
 

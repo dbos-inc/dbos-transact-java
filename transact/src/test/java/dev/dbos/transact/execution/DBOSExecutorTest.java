@@ -16,18 +16,21 @@ import dev.dbos.transact.workflow.*;
 import java.sql.SQLException;
 import java.util.List;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledForJreRange;
+import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.condition.JRE;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class DBOSExecutorTest {
 
   private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
+  private HikariDataSource dataSource;
 
   @BeforeAll
   public static void onetimeBefore() {
@@ -39,14 +42,47 @@ class DBOSExecutorTest {
   @BeforeEach
   void setUp() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
 
     DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
   void afterEachTest() throws Exception {
+    dataSource.close();
     DBOS.shutdown();
+  }
+
+  @Test
+  @EnabledForJreRange(min = JRE.JAVA_21)
+  public void virtualThreadPoolJava21() throws Exception {
+    DBOS.launch();
+
+    assertFalse(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
+  }
+
+  @Test
+  @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "21|25")
+  public void virtualThreadPoolJDK21And25() throws Exception {
+    DBOS.launch();
+
+    assertFalse(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
+  }
+
+  @Test
+  @DisabledForJreRange(min = JRE.JAVA_21)
+  public void threadPoolJava17() throws Exception {
+    DBOS.launch();
+
+    assertTrue(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
+  }
+
+  @Test
+  @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "17|17\\..*")
+  public void threadPoolJDK17() throws Exception {
+    DBOS.launch();
+
+    assertTrue(DBOSTestAccess.getDbosExecutor().usingThreadPoolExecutor());
   }
 
   @Test

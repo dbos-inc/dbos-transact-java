@@ -22,8 +22,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -173,7 +172,7 @@ public class ForkTest {
 
   private static final Logger logger = LoggerFactory.getLogger(ForkTest.class);
   private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
+  private HikariDataSource dataSource;
   private ForkTestServiceImpl impl;
   private ForkTestService proxy;
 
@@ -182,11 +181,12 @@ public class ForkTest {
     dbosConfig =
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
+
     DBUtils.recreateDB(dbosConfig);
     DBOS.reinitialize(dbosConfig);
 
@@ -199,6 +199,7 @@ public class ForkTest {
 
   @AfterEach
   void afterEachTest() throws Exception {
+    dataSource.close();
     DBOS.shutdown();
   }
 

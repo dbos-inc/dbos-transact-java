@@ -20,6 +20,7 @@ import java.sql.SQLTransientException;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -269,6 +270,11 @@ public class SingleExecutionTest {
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
     dataSource = SystemDatabase.createDataSource(dbosConfig);
+  }
+
+  @AfterAll
+  static void onetimeShutdown() throws Exception {
+    dataSource.close();
   }
 
   @BeforeEach

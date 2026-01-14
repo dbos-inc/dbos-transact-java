@@ -41,8 +41,8 @@ public class BackCompatTest {
 
     runDbos();
 
-    var dataSource = SystemDatabase.createDataSource(config);
-    try (Connection conn = dataSource.getConnection()) {
+    try (var dataSource = SystemDatabase.createDataSource(config);
+        Connection conn = dataSource.getConnection()) {
       DatabaseMetaData metaData = conn.getMetaData();
 
       MigrationManagerTest.assertTableExists(metaData, "operation_outputs");
@@ -56,8 +56,8 @@ public class BackCompatTest {
   void testWayFutureVersion() throws Exception {
     testInitialRun();
 
-    var dataSource = SystemDatabase.createDataSource(config);
-    try (var conn = dataSource.getConnection();
+    try (var dataSource = SystemDatabase.createDataSource(config);
+        var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.executeUpdate("UPDATE \"dbos\".\"dbos_migrations\" SET \"version\" = 10000;");
     }
@@ -69,8 +69,8 @@ public class BackCompatTest {
   void testIdempotence() throws Exception {
     testWayFutureVersion();
 
-    var dataSource = SystemDatabase.createDataSource(config);
-    try (var conn = dataSource.getConnection();
+    try (var dataSource = SystemDatabase.createDataSource(config);
+        var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.executeUpdate("UPDATE \"dbos\".\"dbos_migrations\" SET \"version\" = 0;");
     }

@@ -26,8 +26,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -158,7 +158,7 @@ class EventsServiceImpl implements EventsService {
 public class EventsTest {
 
   private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
+  private static HikariDataSource dataSource;
 
   private EventsService proxy;
   private EventsServiceImpl impl;
@@ -169,6 +169,11 @@ public class EventsTest {
         DBOSConfig.defaultsFromEnv("systemdbtest")
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
     dataSource = SystemDatabase.createDataSource(dbosConfig);
+  }
+
+  @AfterAll
+  static void oneTimeShutdown() throws Exception {
+    dataSource.close();
   }
 
   @BeforeEach

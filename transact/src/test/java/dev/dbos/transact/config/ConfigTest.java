@@ -231,34 +231,35 @@ public class ConfigTest {
     hikariConfig.setPassword(password);
     hikariConfig.setPoolName(poolName);
 
-    var dataSource = new HikariDataSource(hikariConfig);
-    assertFalse(dataSource.isClosed());
-    var config =
-        DBOSConfig.defaults("config-test")
-            .withDataSource(dataSource)
-            .withDatabaseUrl("completely-invalid-url")
-            .withDbUser("invalid-user")
-            .withDbPassword("invalid-password");
+    try (var dataSource = new HikariDataSource(hikariConfig)) {
+      assertFalse(dataSource.isClosed());
+      var config =
+          DBOSConfig.defaults("config-test")
+              .withDataSource(dataSource)
+              .withDatabaseUrl("completely-invalid-url")
+              .withDbUser("invalid-user")
+              .withDbPassword("invalid-password");
 
-    DBOS.reinitialize(config);
-    assertFalse(dataSource.isClosed());
+      DBOS.reinitialize(config);
+      assertFalse(dataSource.isClosed());
 
-    var impl = new HawkServiceImpl();
-    var proxy = DBOS.registerWorkflows(HawkService.class, impl);
-    impl.setProxy(proxy);
+      var impl = new HawkServiceImpl();
+      var proxy = DBOS.registerWorkflows(HawkService.class, impl);
+      impl.setProxy(proxy);
 
-    try {
-      DBOS.launch();
+      try {
+        DBOS.launch();
 
-      var sysdb = DBOSTestAccess.getSystemDatabase();
-      var dbConfig = DBTestAccess.getHikariConfig(sysdb);
-      assertEquals(poolName, dbConfig.getPoolName());
+        var sysdb = DBOSTestAccess.getSystemDatabase();
+        var dbConfig = DBTestAccess.getHikariConfig(sysdb);
+        assertEquals(poolName, dbConfig.getPoolName());
 
-      var result = proxy.simpleWorkflow();
-      assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
+        var result = proxy.simpleWorkflow();
+        assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
 
-    } finally {
-      DBOS.shutdown();
+      } finally {
+        DBOS.shutdown();
+      }
     }
   }
 

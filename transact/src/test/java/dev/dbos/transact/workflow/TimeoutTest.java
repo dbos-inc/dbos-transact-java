@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +30,7 @@ import org.slf4j.LoggerFactory;
 public class TimeoutTest {
 
   private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
+  private HikariDataSource dataSource;
 
   @BeforeAll
   static void onetimeSetup() throws Exception {
@@ -42,13 +43,14 @@ public class TimeoutTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    TimeoutTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
 
     DBOS.reinitialize(dbosConfig);
   }
 
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
+    dataSource.close();
     DBOS.shutdown();
   }
 
