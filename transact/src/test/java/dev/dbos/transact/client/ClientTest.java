@@ -189,8 +189,10 @@ public class ClientTest {
           "CANCELLED",
           stat1.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
-      var deadline = Instant.ofEpochMilli(System.currentTimeMillis());
-      var handle2 = client.enqueueWorkflow(options.withDeadline(deadline), new Object[] {10000});
+      var handle2 =
+          client.enqueueWorkflow(
+              options.withDeadline(Instant.ofEpochMilli(System.currentTimeMillis() + 1000)),
+              new Object[] {10000});
       assertThrows(
           DBOSAwaitedWorkflowCancelledException.class,
           () -> {
