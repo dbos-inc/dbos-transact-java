@@ -24,9 +24,9 @@ public class ConcurrencyTestServiceImpl implements ConcurrencyTestService {
 
   @Workflow(name = "blockedWorkflow")
   public int blockedWorkflow(int i) throws InterruptedException {
+    counter.incrementAndGet();
     logger.info("release {} semaphore", i);
     wfSemaphore.release();
-    counter.incrementAndGet();
     latch.await();
     return i;
   }
