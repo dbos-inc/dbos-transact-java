@@ -53,6 +53,10 @@ implementation("dev.dbos:transact")
 implementation("ch.qos.logback:logback-classic:1.5.6")
 ```
 
+## update dependencies
+```shell
+./gradlew dependencyUpdates
+```
 
 ## Release Versioning
 
@@ -100,3 +104,4 @@ Like main branch builds, feature branch builds carry the automatically generated
 and a prerelease tag `-a<git-commit-count>.
 In Maven version order algorithm, the `-a` prerelease prefix is lower priority than the `-m` prefix.
 Feature branch builds also carry an additional `-g<git-commit-hash>` prerelease tag.
+

@@ -1,6 +1,7 @@
 plugins {
     id("pmd")
-    id("com.diffplug.spotless") version "8.0.0"
+    id("com.diffplug.spotless") version "8.1.0"
+    id("com.github.ben-manes.versions") version "0.53.0"
 }
 
 fun runCommand(vararg args: String): String {
@@ -90,7 +91,8 @@ allprojects {
 subprojects {
     apply(plugin = "java")
     apply(plugin = "pmd")
-    apply(plugin = "com.diffplug.spotless")  // Spotless plugin
+    apply(plugin = "com.diffplug.spotless")
+    apply(plugin = "com.github.ben-manes.versions")
 
     // PMD configuration
     extensions.configure<org.gradle.api.plugins.quality.PmdExtension> {
@@ -108,6 +110,18 @@ subprojects {
             removeUnusedImports()
             trimTrailingWhitespace()
             endWithNewline()
+        }
+    }
+
+    tasks.withType<com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask> {
+        rejectVersionIf {
+            val isUnstable = listOf("alpha", "beta", "rc", "cr", "m", "preview", "b", "ea")
+                .any { qualifier -> candidate.version.lowercase().contains(qualifier) }
+            
+            val isStable = listOf("release", "final", "ga")
+                .any { qualifier -> currentVersion.lowercase().contains(qualifier) }
+
+            isUnstable && !isStable
         }
     }
 
