@@ -169,8 +169,8 @@ public class SystemDatabase implements AutoCloseable {
         }
         if (e instanceof SQLRecoverableException || isConnectionFailure(e)) {
           logger.warn("Recoverable connection error. Resetting client pool.", e);
-          if (dataSource instanceof HikariDataSource hds) {
-            hds.getHikariPoolMXBean().softEvictConnections();
+          if (dataSource instanceof HikariDataSource hikariDataSource) {
+            hikariDataSource.getHikariPoolMXBean().softEvictConnections();
           }
           waitForRecovery(attempt, 2000);
         } else if (e instanceof SQLTransientException || isTransientState(e)) {
