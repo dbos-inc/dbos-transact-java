@@ -61,7 +61,7 @@ public class ConductorTest {
   TestWebSocketServer testServer;
 
   static final ObjectMapper mapper =
-      new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+      new ObjectMapper().setDefaultPropertyInclusion(JsonInclude.Include.NON_EMPTY);
 
   @BeforeEach
   void beforeEach() throws Exception {

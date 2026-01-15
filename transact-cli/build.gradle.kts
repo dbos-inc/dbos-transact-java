@@ -1,6 +1,6 @@
 plugins {
     application
-    id("com.gradleup.shadow") version "9.2.2"
+    id("com.gradleup.shadow") version "9.3.1"
 }
 
 application {
@@ -9,12 +9,12 @@ application {
 
 dependencies {
     implementation(project(":transact"))
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.17.0") // json
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.0")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.20.1")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.20.1")
     implementation("info.picocli:picocli:4.7.7")
-    runtimeOnly("org.slf4j:slf4j-simple:2.0.13")
+    runtimeOnly("org.slf4j:slf4j-simple:2.0.17")
 
-    testImplementation(platform("org.junit:junit-bom:5.12.1"))
+    testImplementation(platform("org.junit:junit-bom:6.0.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
