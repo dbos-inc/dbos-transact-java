@@ -146,9 +146,8 @@ public class PartitionedQueuesTest {
   @Test
   public void testQueuePartitions() throws Exception {
     Queue queue = new Queue("testQueue").withWorkerConcurrency(1).withPartitionedEnabled(true);
-    DBOS.registerQueue(queue);
     Queue partitionlessQueue = new Queue("partitionless-queue");
-    DBOS.registerQueue(partitionlessQueue);
+    DBOS.registerQueues(queue, partitionlessQueue);
 
     var impl = new PartitionsTestServiceImpl();
     var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);

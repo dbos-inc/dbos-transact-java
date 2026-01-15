@@ -287,11 +287,9 @@ public class QueuesTest {
   public void multipleQueues() throws Exception {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
-    DBOS.registerQueue(firstQ);
-    ServiceQ serviceQ1 = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
-
     Queue secondQ = new Queue("secondQueue").withConcurrency(1).withWorkerConcurrency(1);
-    DBOS.registerQueue(secondQ);
+    DBOS.registerQueues(firstQ, secondQ);
+    ServiceQ serviceQ1 = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
     ServiceI serviceI = DBOS.registerWorkflows(ServiceI.class, new ServiceIImpl());
 
     DBOS.launch();
@@ -663,8 +661,7 @@ public class QueuesTest {
 
     Queue queueOne = new Queue("queueOne");
     Queue queueTwo = new Queue("queueTwo");
-    DBOS.registerQueue(queueOne);
-    DBOS.registerQueue(queueTwo);
+    DBOS.registerQueues(queueOne, queueTwo);
 
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
     DBOS.launch();
