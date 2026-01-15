@@ -9,7 +9,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -18,7 +19,7 @@ public record DBOSConfig(
     @Nullable String databaseUrl,
     @Nullable String dbUser,
     @Nullable String dbPassword,
-    @Nullable HikariDataSource dataSource,
+    @Nullable DataSource dataSource,
     boolean adminServer,
     int adminServerPort,
     boolean migrate,
@@ -146,7 +147,7 @@ public record DBOSConfig(
         listenQueues);
   }
 
-  public @NonNull DBOSConfig withDataSource(@Nullable HikariDataSource v) {
+  public @NonNull DBOSConfig withDataSource(@Nullable DataSource v) {
     return new DBOSConfig(
         appName,
         databaseUrl,
