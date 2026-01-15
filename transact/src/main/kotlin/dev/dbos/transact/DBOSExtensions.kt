@@ -1,4 +1,6 @@
 @file:JvmName("DbosKotlinInternal") // Hides the file from casual Java view
+@file:JvmSynthetic
+
 package dev.dbos.transact
 
 import dev.dbos.transact.execution.ThrowingRunnable
