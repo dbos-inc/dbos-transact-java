@@ -29,6 +29,16 @@ public class SimpleServiceImpl implements SimpleService {
     throw new Exception("DBOS Test error");
   }
 
+  @Workflow(name = "workNonSerializableException")
+  public void workWithNonSerializableException() {
+    throw new NonSerializableException("workNonSerializableException error");
+  }
+
+  @Workflow(name = "workWithNonSerializableExceptionInStep")
+  public void workWithNonSerializableExceptionInStep() {
+    simpleService.stepWithNonSerializableException();
+  }
+
   @Workflow(name = "parentWorkflowWithoutSet")
   public String parentWorkflowWithoutSet(String input) {
     String result = input;
@@ -141,6 +151,11 @@ public class SimpleServiceImpl implements SimpleService {
     }
   }
 
+  @Step(name = "stepWithNonSerializableException")
+  public void stepWithNonSerializableException() {
+    throw new NonSerializableException("stepWithNonSerializableException error");
+  }
+
   @Workflow(name = "childWorkflowWithSleep")
   public String childWorkflowWithSleep(String input, long sleepSeconds)
       throws InterruptedException {
@@ -211,5 +226,15 @@ public class SimpleServiceImpl implements SimpleService {
               new StartWorkflowOptions(childId));
         },
         "startWfInStepById");
+  }
+
+  private static class NonSerializableException extends RuntimeException {
+    private NonSerializableClass nonSerializableValue = new NonSerializableClass();
+
+    public NonSerializableException(String message) {
+      super(message);
+    }
+
+    private static class NonSerializableClass {}
   }
 }
