@@ -54,9 +54,14 @@ implementation("ch.qos.logback:logback-classic:1.5.6")
 ```
 
 ## update dependencies
+
+DBOS uses the [gradle-versions-plugin](https://plugins.gradle.org/plugin/com.github.ben-manes.versions) to detect dependencies that need updates. 
+
 ```shell
 ./gradlew dependencyUpdates
 ```
+
+This will generate a report on the console and in `build/dependencyUpdates/report.txt` of the project dependencies that are out of date.
 
 ## Release Versioning
 
