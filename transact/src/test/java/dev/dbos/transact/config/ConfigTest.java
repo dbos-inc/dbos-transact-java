@@ -234,6 +234,8 @@ public class ConfigTest {
     var config =
         DBOSConfig.defaults("config-test")
             .withDataSource(ds)
+            // Intentionally set an invalid URL and credentials to verify that when a DataSource
+            // is provided, these values are ignored and do not affect connectivity.
             .withDatabaseUrl("completely-invalid-url")
             .withDbUser("invalid-user")
             .withDbPassword("invalid-password");
@@ -278,6 +280,8 @@ public class ConfigTest {
       var config =
           DBOSConfig.defaults("config-test")
               .withDataSource(dataSource)
+              // Intentionally set an invalid URL and credentials to verify that when a DataSource
+              // is provided, these values are ignored and do not affect connectivity.
               .withDatabaseUrl("completely-invalid-url")
               .withDbUser("invalid-user")
               .withDbPassword("invalid-password");

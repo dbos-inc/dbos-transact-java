@@ -117,8 +117,8 @@ public class SystemDatabase implements AutoCloseable {
   @Override
   public void close() {
     notificationService.stop();
-    if (created) {
-      ((HikariDataSource) dataSource).close();
+    if (created && dataSource instanceof HikariDataSource hikariDataSource) {
+      hikariDataSource.close();
     }
   }
 
