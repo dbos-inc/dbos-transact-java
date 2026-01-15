@@ -113,7 +113,6 @@ fun recv(topic: String, timeout: Duration) = DBOS.recv(topic, timeout)
 fun setEvent(key: String, value: Any) = DBOS.setEvent(key, value)
 
 @JvmSynthetic
-// @Suppress("UNCHECKED_CAST")
 fun getEvent(workflowId: String, key: String, timeout: Duration) = DBOS.getEvent(workflowId, key, timeout)
 
 @JvmSynthetic
