@@ -11,17 +11,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class QueuesDAO {
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
 
-  private final HikariDataSource dataSource;
+  private final DataSource dataSource;
   private final String schema;
 
-  QueuesDAO(HikariDataSource ds, String schema) {
+  QueuesDAO(DataSource ds, String schema) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
   }
@@ -36,9 +37,6 @@ class QueuesDAO {
    */
   List<String> getAndStartQueuedWorkflows(
       Queue queue, String executorId, String appVersion, String partitionKey) throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     if (partitionKey != null && partitionKey.length() == 0) {
       partitionKey = null;
@@ -272,9 +270,6 @@ class QueuesDAO {
   }
 
   boolean clearQueueAssignment(String workflowId) throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     final String sql =
         """
@@ -295,9 +290,6 @@ class QueuesDAO {
   }
 
   List<String> getQueuePartitions(String queueName) throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     final String sql =
         """

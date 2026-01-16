@@ -19,6 +19,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
+import javax.sql.DataSource;
+
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
@@ -36,7 +38,7 @@ public class SystemDatabase implements AutoCloseable {
     return "\"%s\"".formatted(schema);
   }
 
-  private final HikariDataSource dataSource;
+  private final DataSource dataSource;
   private final String schema;
   private final boolean created;
 
@@ -46,7 +48,7 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
 
-  private SystemDatabase(HikariDataSource dataSource, String schema, boolean created) {
+  private SystemDatabase(DataSource dataSource, String schema, boolean created) {
     this.schema = sanitizeSchema(schema);
     this.dataSource = dataSource;
     this.created = created;
@@ -62,7 +64,7 @@ public class SystemDatabase implements AutoCloseable {
     this(createDataSource(url, user, password), schema, true);
   }
 
-  public SystemDatabase(HikariDataSource dataSource, String schema) {
+  public SystemDatabase(DataSource dataSource, String schema) {
     this(dataSource, schema, false);
   }
 
@@ -75,8 +77,11 @@ public class SystemDatabase implements AutoCloseable {
     }
   }
 
-  HikariConfig getConfig() {
-    return dataSource;
+  Optional<HikariConfig> getConfig() {
+    if (dataSource instanceof HikariDataSource hds) {
+      return Optional.of(hds);
+    }
+    return Optional.empty();
   }
 
   Connection getSysDBConnection() throws SQLException {
@@ -112,8 +117,8 @@ public class SystemDatabase implements AutoCloseable {
   @Override
   public void close() {
     notificationService.stop();
-    if (created) {
-      dataSource.close();
+    if (created && dataSource instanceof HikariDataSource hikariDataSource) {
+      hikariDataSource.close();
     }
   }
 
@@ -164,7 +169,9 @@ public class SystemDatabase implements AutoCloseable {
         }
         if (e instanceof SQLRecoverableException || isConnectionFailure(e)) {
           logger.warn("Recoverable connection error. Resetting client pool.", e);
-          dataSource.getHikariPoolMXBean().softEvictConnections();
+          if (dataSource instanceof HikariDataSource hikariDataSource) {
+            hikariDataSource.getHikariPoolMXBean().softEvictConnections();
+          }
           waitForRecovery(attempt, 2000);
         } else if (e instanceof SQLTransientException || isTransientState(e)) {
           logger.warn("Transient DB error. Retrying command.", e);

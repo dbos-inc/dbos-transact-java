@@ -14,7 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,25 +23,21 @@ class StepsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
 
-  private final HikariDataSource dataSource;
+  private final DataSource dataSource;
   private final String schema;
 
-  StepsDAO(HikariDataSource ds, String schema) {
+  StepsDAO(DataSource ds, String schema) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
   }
 
   static void recordStepResultTxn(
-      HikariDataSource dataSource,
+      DataSource dataSource,
       StepResult result,
       long startTimeEpochMs,
       long endTimeEpochMs,
       String schema)
       throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
-
     try (Connection connection = dataSource.getConnection()) {
       recordStepResultTxn(result, startTimeEpochMs, endTimeEpochMs, connection, schema);
     }
@@ -197,10 +194,6 @@ class StepsDAO {
 
   List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
 
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
-
     final String sql =
         """
           SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms
@@ -283,16 +276,8 @@ class StepsDAO {
   }
 
   static Duration durableSleepDuration(
-      HikariDataSource dataSource,
-      String workflowUuid,
-      int functionId,
-      Duration duration,
-      String schema)
+      DataSource dataSource, String workflowUuid, int functionId, Duration duration, String schema)
       throws SQLException {
-
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     Objects.requireNonNull(schema);
     var startTime = System.currentTimeMillis();

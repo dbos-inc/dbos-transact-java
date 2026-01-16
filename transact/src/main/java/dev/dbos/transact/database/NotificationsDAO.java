@@ -14,7 +14,8 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,12 +23,12 @@ class NotificationsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(NotificationsDAO.class);
 
-  private final HikariDataSource dataSource;
+  private final DataSource dataSource;
   private final String schema;
   private NotificationService notificationService;
   private long dbPollingIntervalEventMs = 10000;
 
-  NotificationsDAO(HikariDataSource ds, NotificationService nService, String schema) {
+  NotificationsDAO(DataSource ds, NotificationService nService, String schema) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
     this.notificationService = nService;
@@ -40,10 +41,6 @@ class NotificationsDAO {
   void send(
       String workflowUuid, int functionId, String destinationUuid, Object message, String topic)
       throws SQLException {
-
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.send";
@@ -115,10 +112,6 @@ class NotificationsDAO {
   Object recv(
       String workflowUuid, int functionId, int timeoutFunctionId, String topic, Duration timeout)
       throws SQLException {
-
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.recv";
@@ -304,9 +297,6 @@ class NotificationsDAO {
 
   void setEvent(String workflowId, int functionId, String key, Object message, boolean asStep)
       throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.setEvent";
@@ -353,9 +343,6 @@ class NotificationsDAO {
   Object getEvent(
       String targetUuid, String key, Duration timeout, GetWorkflowEventContext callerCtx)
       throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.getEvent";

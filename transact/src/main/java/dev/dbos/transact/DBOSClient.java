@@ -19,7 +19,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -87,7 +88,7 @@ public class DBOSClient implements AutoCloseable {
    *
    * @param dataSource System database data source
    */
-  public DBOSClient(@NonNull HikariDataSource dataSource) {
+  public DBOSClient(@NonNull DataSource dataSource) {
     this(dataSource, null);
   }
 
@@ -97,7 +98,7 @@ public class DBOSClient implements AutoCloseable {
    * @param dataSource System database data source
    * @param schema Database schema for DBOS tables
    */
-  public DBOSClient(@NonNull HikariDataSource dataSource, @Nullable String schema) {
+  public DBOSClient(@NonNull DataSource dataSource, @Nullable String schema) {
     systemDatabase = new SystemDatabase(dataSource, schema);
   }
 

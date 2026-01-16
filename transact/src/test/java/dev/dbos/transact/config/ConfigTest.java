@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.invocation.HawkService;
@@ -30,6 +31,7 @@ import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.postgresql.ds.PGSimpleDataSource;
 import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
 import uk.org.webcompere.systemstubs.jupiter.SystemStub;
 import uk.org.webcompere.systemstubs.jupiter.SystemStubsExtension;
@@ -216,7 +218,49 @@ public class ConfigTest {
   }
 
   @Test
-  public void configDataSource() throws Exception {
+  public void configPGSimpleDataSource() throws Exception {
+    var url = "jdbc:postgresql://localhost:5432/dbos_java_sys";
+    var user = "postgres";
+    var password = System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR);
+    DBUtils.recreateDB(url, user, password);
+
+    PGSimpleDataSource ds = new PGSimpleDataSource();
+    ds.setServerNames(new String[] {"localhost"});
+    ds.setDatabaseName("dbos_java_sys");
+    ds.setUser(user);
+    ds.setPassword(password);
+    ds.setPortNumbers(new int[] {5432});
+
+    var config =
+        DBOSConfig.defaults("config-test")
+            .withDataSource(ds)
+            // Intentionally set an invalid URL and credentials to verify that when a DataSource
+            // is provided, these values are ignored and do not affect connectivity.
+            .withDatabaseUrl("completely-invalid-url")
+            .withDbUser("invalid-user")
+            .withDbPassword("invalid-password");
+
+    DBOS.reinitialize(config);
+
+    var impl = new HawkServiceImpl();
+    var proxy = DBOS.registerWorkflows(HawkService.class, impl);
+    impl.setProxy(proxy);
+
+    try {
+      DBOS.launch();
+
+      var options = new StartWorkflowOptions("dswfid");
+      var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
+      var result = handle.getResult();
+      assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
+      assertEquals("SUCCESS", handle.getStatus().status());
+    } finally {
+      DBOS.shutdown();
+    }
+  }
+
+  @Test
+  public void configHikariDataSource() throws Exception {
 
     var poolName = "dbos-configDataSource";
     var url = "jdbc:postgresql://localhost:5432/dbos_java_sys";
@@ -236,6 +280,8 @@ public class ConfigTest {
       var config =
           DBOSConfig.defaults("config-test")
               .withDataSource(dataSource)
+              // Intentionally set an invalid URL and credentials to verify that when a DataSource
+              // is provided, these values are ignored and do not affect connectivity.
               .withDatabaseUrl("completely-invalid-url")
               .withDbUser("invalid-user")
               .withDbPassword("invalid-password");
@@ -252,11 +298,14 @@ public class ConfigTest {
 
         var sysdb = DBOSTestAccess.getSystemDatabase();
         var dbConfig = DBTestAccess.getHikariConfig(sysdb);
-        assertEquals(poolName, dbConfig.getPoolName());
+        assertTrue(dbConfig.isPresent());
+        assertEquals(poolName, dbConfig.get().getPoolName());
 
-        var result = proxy.simpleWorkflow();
+        var options = new StartWorkflowOptions("dswfid");
+        var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
+        var result = handle.getResult();
         assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
-
+        assertEquals("SUCCESS", handle.getStatus().status());
       } finally {
         DBOS.shutdown();
       }

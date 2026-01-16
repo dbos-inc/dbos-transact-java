@@ -10,7 +10,8 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Objects;
 
-import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,7 +55,7 @@ public class MigrationManager {
     }
   }
 
-  private static void runMigrations(HikariDataSource ds, String schema) {
+  private static void runMigrations(DataSource ds, String schema) {
     Objects.requireNonNull(ds, "Data Source must not be null");
     schema = SystemDatabase.sanitizeSchema(schema);
 

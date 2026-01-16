@@ -273,6 +273,18 @@ public class DBOS {
   }
 
   /**
+   * Register a set of DBOS queues. Each queue must be registered prior to launch, so that recovery
+   * has the queue options available.
+   *
+   * @param queues collection of `Queue` instances to register
+   */
+  public static void registerQueues(@NonNull Queue... queues) {
+    for (Queue queue : queues) {
+      registerQueue(queue);
+    }
+  }
+
+  /**
    * Register a lifecycle listener that receives callbacks when DBOS is launched or shut down
    *
    * @param listener
