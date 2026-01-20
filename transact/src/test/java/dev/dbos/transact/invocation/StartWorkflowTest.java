@@ -44,8 +44,8 @@ public class StartWorkflowTest {
     proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    DBOS.registerQueue(new Queue("queue"));
-    DBOS.registerQueue(new Queue("partitioned-queue").withPartitionedEnabled(true));
+    DBOS.registerQueues(
+        new Queue("queue"), new Queue("partitioned-queue").withPartitionedEnabled(true));
 
     DBOS.launch();
   }
