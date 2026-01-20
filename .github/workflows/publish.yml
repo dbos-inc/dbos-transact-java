@@ -36,3 +36,33 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+
+      - name: Get Gradle project version
+        id: get_version
+        run: |
+          VERSION=$(./gradlew properties -q | grep '^version:' | awk '{print $2}')
+          COMMIT_COUNT=$(./gradlew properties -q | grep '^commitCount:' | awk '{print $2}')
+          TAGS=$(git tag --points-at HEAD)
+
+          echo "Project version: $VERSION, commit Count: $COMMIT_COUNT, tags: $TAGS"
+
+          if [ -z "$TAGS" ]; then
+            echo "is_tagged=false" >> $GITHUB_OUTPUT
+          else
+            echo "is_tagged=true" >> $GITHUB_OUTPUT
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Github Release
+        if: |
+          startsWith(github.ref, 'refs/heads/release/v') && 
+          steps.get_version.outputs.is_tagged == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.get_version.outputs.version }}
+          prerelease: ${{ steps.get_version.outputs.commit_count != '0' }}
+          files: |
+            transact/build/libs/*.jar
+            transact-cli/build/libs/dbos.jar
+
