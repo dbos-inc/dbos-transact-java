@@ -58,7 +58,7 @@ jobs:
         if: |
           startsWith(github.ref, 'refs/heads/release/v') && 
           steps.get_version.outputs.is_tagged == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.1.0
         with:
           name: ${{ steps.get_version.outputs.version }}
           prerelease: ${{ steps.get_version.outputs.commit_count != '0' }}
