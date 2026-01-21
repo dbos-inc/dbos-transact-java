@@ -81,6 +81,7 @@ println("DBOS Transact version: $calculatedVersion")
 allprojects {
     group = "dev.dbos"
     version = calculatedVersion
+    extra["commitCount"] = "$commitCount"
 
     repositories {
         mavenCentral()

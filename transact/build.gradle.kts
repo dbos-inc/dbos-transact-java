@@ -1,11 +1,12 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import com.vanniktech.maven.publish.DeploymentValidation
 
 plugins {
     id("java")
     id("java-library")
     kotlin("jvm") version "2.3.0"
-    id("com.vanniktech.maven.publish") version "0.35.0"
+    id("com.vanniktech.maven.publish") version "0.36.0"
 }
 
 tasks.withType<JavaCompile> {
@@ -52,9 +53,13 @@ dependencies {
     testImplementation("org.apache.maven:maven-artifact:3.9.12")
 }
 
+val projectVersion = project.version.toString()
+
 tasks.processResources {
+    inputs.property("version", projectVersion)
+
     filesMatching("**/app.properties") {
-        expand(mapOf("projectVersion" to project.version))
+        expand(mapOf("projectVersion" to projectVersion))
     }
 }
 
@@ -89,7 +94,7 @@ tasks.withType<KotlinCompile>().configureEach {
 val publishingToMavenCentral = gradle.startParameter.taskNames.any { it.contains("publishToMavenCentral") }
 
 mavenPublishing {
-    publishToMavenCentral(automaticRelease = true)
+    publishToMavenCentral(automaticRelease = true, validateDeployment = DeploymentValidation.NONE)
     if (publishingToMavenCentral) {
         signAllPublications()
     }
