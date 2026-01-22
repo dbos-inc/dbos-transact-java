@@ -1,8 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import com.vanniktech.maven.publish.DeploymentValidation
 
 plugins {
     id("java")
     id("java-library")
+    kotlin("jvm") version "2.3.0"
     id("com.vanniktech.maven.publish") version "0.36.0"
 }
 
@@ -75,6 +78,16 @@ tasks.test {
                 println("  Skipped: ${result.skippedTestCount}")
             }
         }))
+    }
+}
+
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions {
+        // jvmTarget now uses the JvmTarget enum instead of a String
+        jvmTarget.set(JvmTarget.JVM_17)
+        
+        // freeCompilerArgs is now a Property/ListProperty, so we use .add() or .addAll()
+        freeCompilerArgs.add("-Xjsr305=strict")
     }
 }
 
