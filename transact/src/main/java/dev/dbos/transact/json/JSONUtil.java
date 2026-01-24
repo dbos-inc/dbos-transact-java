@@ -1,14 +1,9 @@
 package dev.dbos.transact.json;
 
 import dev.dbos.transact.conductor.Conductor;
+import dev.dbos.transact.exceptions.DbosSerializableException;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.StreamCorruptedException;
-import java.io.UncheckedIOException;
+import java.io.*;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
@@ -127,10 +122,25 @@ public class JSONUtil {
       w.node = node;
       w.extra = (extra == null) ? Map.of() : extra;
 
-      byte[] javaSer = javaSerialize(t);
-      String b64 = Base64.getEncoder().encodeToString(javaSer);
-      w.base64bytes = b64;
+      w.base64bytes = serializeThrowable(t);
       return w;
+    }
+
+    private static String serializeThrowable(Throwable t) {
+      try {
+        byte[] javaSer;
+        try {
+          javaSer = javaSerialize(t);
+        } catch (Exception e) {
+          logger.warn("Failed to serialize Throwable", e);
+          RuntimeException o = new DbosSerializableException(t);
+          javaSer = javaSerialize(o);
+        }
+        return Base64.getEncoder().encodeToString(javaSer);
+      } catch (Exception e) {
+        logger.error("Failed to serialize Throwable", e);
+        return null;
+      }
     }
 
     public static Throwable toThrowable(WireThrowable w, ClassLoader loader)
