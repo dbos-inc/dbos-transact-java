@@ -3,6 +3,7 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -762,5 +763,151 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void importWorkflow(List<ExportedWorkflow> workflows) {}
+  public void importWorkflow(List<ExportedWorkflow> workflows) {
+    var wfSQL =
+        """
+        INSERT INTO %s.workflow_status (
+          workflow_uuid, status,
+          name, class_name, config_name,
+          authenticated_user, assumed_role, authenticated_roles,
+          output, error, inputs,
+          executor_id, application_version, application_id,
+          created_at, updated_at, started_at_epoch_ms,
+          queue_name, deduplication_id, priority, queue_partition_key,
+          workflow_timeout_ms, workflow_deadline_epoch_ms, recovery_attempts, forked_from
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """
+            .formatted(this.schema);
+
+    var stepSQL =
+        """
+        INSERT INTO %s.operation_outputs (
+          workflow_uuid, function_id, function_name,
+          output, error, child_workflow_id,
+          started_at_epoch_ms, completed_at_epoch_ms
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """
+            .formatted(this.schema);
+
+    var eventSQL = 
+        """
+        INSERT INTO %s.workflow_events (
+          workflow_uuid, key, value
+        ) VALUES (
+          ?, ?, ?
+        )
+        """.formatted(this.schema);
+
+    var eventHistorySQL = 
+        """
+        INSERT INTO %s.workflow_events_history (
+          workflow_uuid, key, value, function_id
+        ) VALUES (
+          ?, ?, ?, ?
+        )
+        """.formatted(this.schema);
+
+            var streamsSQL = 
+        """
+        INSERT INTO %s.streams (
+          workflow_uuid, key, value, function_id, offset
+        ) VALUES (
+          ?, ?, ?, ?, ?
+        )
+        """.formatted(this.schema);
+
+    dbRetry(
+        () -> {
+          try (var conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            for (var workflow : workflows) {
+
+              var status = workflow.status();
+              try (var stmt = conn.prepareStatement(wfSQL)) {
+                stmt.setString(1, status.workflowId());
+                stmt.setString(2, status.status().toString());
+                stmt.setString(3, status.name());
+                stmt.setString(4, status.className());
+                stmt.setString(5, status.instanceName());
+                stmt.setString(6, status.authenticatedUser());
+                stmt.setString(7, status.assumedRole());
+                stmt.setString(8, JSONUtil.serializeArray(status.authenticatedRoles()));
+                stmt.setString(9, JSONUtil.serialize(status.output()));
+                // stmt.setString(10, status.error());
+                stmt.setString(9, JSONUtil.serializeArray(status.input()));
+                stmt.setString(12, status.executorId());
+                stmt.setString(13, status.appVersion());
+                stmt.setString(14, status.appId());
+                stmt.setObject(15, status.createdAt());
+                stmt.setObject(16, status.updatedAt());
+                stmt.setObject(17, status.startedAtEpochMs());
+                stmt.setString(18, status.queueName());
+                stmt.setString(19, status.deduplicationId());
+                stmt.setObject(20, status.priority());
+                stmt.setString(21, status.queuePartitionKey());
+                stmt.setObject(22, status.timeoutMs());
+                stmt.setObject(23, status.deadlineEpochMs());
+                stmt.setObject(24, status.recoveryAttempts());
+                stmt.setString(25, status.forkedFrom());
+
+                stmt.executeUpdate();
+              }
+
+              for (var step : workflow.steps()) {
+                try (var stmt = conn.prepareStatement(stepSQL)) {
+                  stmt.setString(1, status.workflowId());
+                  stmt.setInt(2, step.functionId());
+                  stmt.setString(3, step.functionName());
+                  stmt.setString(4, JSONUtil.serialize(step.output()));
+                  // stmt.setString(5, status.error());
+                  stmt.setString(6, step.childWorkflowId());
+                  stmt.setObject(7, step.startedAtEpochMs());
+                  stmt.setObject(9, step.completedAtEpochMs());
+
+                  stmt.executeUpdate();
+                }
+              }
+
+              for (var event : workflow.events()) {
+                try (var stmt = conn.prepareStatement(eventSQL)) {
+                  stmt.setString(1, status.workflowId());
+                  stmt.setString(2, event.key());
+                  stmt.setString(3, event.value());
+
+                  stmt.executeUpdate();
+                }
+              }
+
+              for (var history : workflow.eventHistory()) {
+                try (var stmt = conn.prepareStatement(eventHistorySQL)) {
+                  stmt.setString(1, status.workflowId());
+                  stmt.setString(2, history.key());
+                  stmt.setString(3, history.value());
+                  stmt.setInt(4, history.stepId());
+
+                  stmt.executeUpdate();
+                }
+              }
+
+              for (var stream : workflow.streams()) {
+                try (var stmt = conn.prepareStatement(streamsSQL)) {
+                  stmt.setString(1, status.workflowId());
+                  stmt.setString(2, stream.key());
+                  stmt.setString(3, stream.value());
+                  stmt.setInt(4, stream.stepId());
+                  stmt.setInt(5, stream.offset());
+
+                  stmt.executeUpdate();
+                }
+              }
+            }
+          }
+
+          return null;
+        });
+  }
 }
