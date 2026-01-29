@@ -23,6 +23,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class SystemDatabaseTest {
@@ -50,6 +52,32 @@ public class SystemDatabaseTest {
   void afterEachTest() throws Exception {
     dataSource.close();
     sysdb.close();
+  }
+
+  private static final Logger logger = LoggerFactory.getLogger(SystemDatabaseTest.class);
+
+  @Test
+  public void testDeleteWorkflows() throws Exception {
+    for (var i = 0; i < 5; i++) {
+      var wfid = "wfid-%d".formatted(i);
+      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      sysdb.initWorkflowStatus(status, 5, false, false);
+    }
+
+    var rows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(5, rows.size());
+
+    sysdb.deleteWorkflows("wfid-1", "wfid-3");
+
+    rows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(3, rows.size());
+
+    assertTrue(rows.stream().noneMatch(r -> r.workflowId().equals("wfid-1")));
+    assertTrue(rows.stream().noneMatch(r -> r.workflowId().equals("wfid-3")));
+
+    assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-0")));
+    assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-2")));
+    assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-4")));
   }
 
   @Test

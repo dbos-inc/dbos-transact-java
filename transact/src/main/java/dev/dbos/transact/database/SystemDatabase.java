@@ -599,4 +599,28 @@ public class SystemDatabase implements AutoCloseable {
           }
         });
   }
+
+  public void deleteWorkflows(String... workflowIds) {
+    if (workflowIds == null || workflowIds.length == 0) {
+      return;
+    }
+
+    var sql =
+        """
+          DELETE FROM %s.workflow_status
+          WHERE workflow_uuid = ANY(?);
+        """
+            .formatted(this.schema);
+
+    dbRetry(
+        () -> {
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareStatement(sql)) {
+            var array = conn.createArrayOf("text", workflowIds);
+            stmt.setArray(1, array);
+            stmt.executeUpdate();
+          }
+          return null;
+        });
+  }
 }
