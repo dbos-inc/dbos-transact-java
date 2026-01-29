@@ -3,11 +3,15 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.WorkflowEvent;
+import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
@@ -18,6 +22,7 @@ import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.Stream;
 
 import javax.sql.DataSource;
 
@@ -658,4 +663,104 @@ public class SystemDatabase implements AutoCloseable {
     }
     return new ArrayList<String>(children);
   }
+
+  List<WorkflowEvent> listWorkflowEvents(Connection conn, String workflowId) throws SQLException {
+    var sql =
+        """
+        SELECT key, value
+        FROM %s.workflow_events
+        WHERE workflow_uuid = ?
+        """
+            .formatted(this.schema);
+
+    var events = new ArrayList<WorkflowEvent>();
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(0, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          var key = rs.getString("key");
+          var value = rs.getString("value");
+          events.add(new WorkflowEvent(key, value));
+        }
+      }
+    }
+    return events;
+  }
+
+  List<WorkflowEventHistory> listWorkflowEventHistory(Connection conn, String workflowId)
+      throws SQLException {
+    var sql =
+        """
+        SELECT key, value, function_id
+        FROM %s.workflow_events_history
+        WHERE workflow_uuid = ?
+        """
+            .formatted(this.schema);
+
+    var history = new ArrayList<WorkflowEventHistory>();
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(0, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          var key = rs.getString("key");
+          var value = rs.getString("value");
+          var stepId = rs.getInt("function_id");
+          history.add(new WorkflowEventHistory(key, value, stepId));
+        }
+      }
+    }
+    return history;
+  }
+
+  List<WorkflowStream> listWorkflowStreams(Connection conn, String workflowId) throws SQLException {
+    var sql =
+        """
+        SELECT key, value, offset, function_id
+        FROM %s.streams
+        WHERE workflow_uuid = ?
+        """
+            .formatted(this.schema);
+
+    var streams = new ArrayList<WorkflowStream>();
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(0, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          var key = rs.getString("key");
+          var value = rs.getString("value");
+          var offset = rs.getInt("offset");
+          var stepId = rs.getInt("function_id");
+          streams.add(new WorkflowStream(key, value, offset, stepId));
+        }
+      }
+    }
+    return streams;
+  }
+
+  public List<ExportedWorkflow> exportWorkflow(String workflowId, boolean exportChildren) {
+    return dbRetry(
+        () -> {
+          var workflowIds =
+              exportChildren
+                  ? Stream.concat(
+                          getWorkflowChildren(workflowId).stream(), List.of(workflowId).stream())
+                      .toList()
+                  : List.of(workflowId);
+
+          var workflows = new ArrayList<ExportedWorkflow>();
+          for (var wfid : workflowIds) {
+            var status = workflowDAO.getWorkflowStatus(wfid);
+            var steps = stepsDAO.listWorkflowSteps(wfid);
+            try (var conn = dataSource.getConnection()) {
+              var events = listWorkflowEvents(conn, wfid);
+              var eventHistory = listWorkflowEventHistory(conn, wfid);
+              var streams = listWorkflowStreams(conn, wfid);
+              workflows.add(new ExportedWorkflow(status, steps, events, eventHistory, streams));
+            }
+          }
+          return workflows;
+        });
+  }
+
+  public void importWorkflow(List<ExportedWorkflow> workflows) {}
 }
