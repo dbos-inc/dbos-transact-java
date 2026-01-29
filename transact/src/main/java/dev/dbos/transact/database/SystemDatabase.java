@@ -793,32 +793,35 @@ public class SystemDatabase implements AutoCloseable {
         """
             .formatted(this.schema);
 
-    var eventSQL = 
+    var eventSQL =
         """
         INSERT INTO %s.workflow_events (
           workflow_uuid, key, value
         ) VALUES (
           ?, ?, ?
         )
-        """.formatted(this.schema);
+        """
+            .formatted(this.schema);
 
-    var eventHistorySQL = 
+    var eventHistorySQL =
         """
         INSERT INTO %s.workflow_events_history (
           workflow_uuid, key, value, function_id
         ) VALUES (
           ?, ?, ?, ?
         )
-        """.formatted(this.schema);
+        """
+            .formatted(this.schema);
 
-            var streamsSQL = 
+    var streamsSQL =
         """
         INSERT INTO %s.streams (
           workflow_uuid, key, value, function_id, offset
         ) VALUES (
           ?, ?, ?, ?, ?
         )
-        """.formatted(this.schema);
+        """
+            .formatted(this.schema);
 
     dbRetry(
         () -> {
