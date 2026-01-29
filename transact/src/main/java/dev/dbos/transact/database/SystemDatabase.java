@@ -749,8 +749,8 @@ public class SystemDatabase implements AutoCloseable {
 
           var workflows = new ArrayList<ExportedWorkflow>();
           for (var wfid : workflowIds) {
-            var status = workflowDAO.getWorkflowStatus(wfid);
             try (var conn = dataSource.getConnection()) {
+              var status = workflowDAO.getWorkflowStatus(conn, wfid);
               var steps = stepsDAO.listWorkflowSteps(conn, wfid);
               var events = listWorkflowEvents(conn, wfid);
               var eventHistory = listWorkflowEventHistory(conn, wfid);

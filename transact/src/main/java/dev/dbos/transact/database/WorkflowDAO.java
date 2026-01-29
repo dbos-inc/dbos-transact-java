@@ -317,10 +317,35 @@ class WorkflowDAO {
 
   WorkflowStatus getWorkflowStatus(String workflowId) throws SQLException {
 
-    var input = new ListWorkflowsInput().withWorkflowId(workflowId);
-    List<WorkflowStatus> output = listWorkflows(input);
-    if (output.size() > 0) {
-      return output.get(0);
+    try (var conn = dataSource.getConnection()) {
+      return getWorkflowStatus(conn, workflowId);
+    }
+  }
+
+  WorkflowStatus getWorkflowStatus(Connection conn, String workflowId) throws SQLException {
+    var sql =
+        """
+          SELECT
+            workflow_uuid, status, forked_from,
+            name, class_name, config_name,
+            inputs, output, error,
+            queue_name, deduplication_id, priority, queue_partition_key,
+            executor_id, application_version, application_id,
+            authenticated_user, assumed_role, authenticated_roles,
+            created_at, updated_at, recovery_attempts, started_at_epoch_ms,
+            workflow_timeout_ms, workflow_deadline_epoch_ms
+            FROM %s.workflow_status
+            WHERE workflow_uuid = ?
+        """
+            .formatted(this.schema);
+
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          return resultsToWorkflowStatus(rs, true, true);
+        }
+      }
     }
 
     return null;
@@ -474,61 +499,63 @@ class WorkflowDAO {
 
       try (ResultSet rs = pstmt.executeQuery()) {
         while (rs.next()) {
-          var workflow_uuid = rs.getString("workflow_uuid");
-          String authenticatedRolesJson = rs.getString("authenticated_roles");
-          String serializedInput = loadInput ? rs.getString("inputs") : null;
-          String serializedOutput = loadOutput ? rs.getString("output") : null;
-          String serializedError = loadOutput ? rs.getString("error") : null;
-          ErrorResult err = null;
-          if (serializedError != null) {
-            var wrapper = JSONUtil.deserializeAppExceptionWrapper(serializedError);
-            Throwable throwable = null;
-            try {
-              throwable = JSONUtil.deserializeAppException(serializedError);
-            } catch (Exception e) {
-              throw new RuntimeException(
-                  "Failed to deserialize error for workflow " + workflow_uuid, e);
-            }
-            err = new ErrorResult(wrapper.type, wrapper.message, serializedError, throwable);
-          }
-          WorkflowStatus info =
-              new WorkflowStatus(
-                  workflow_uuid,
-                  rs.getString("status"),
-                  rs.getString("name"),
-                  rs.getString("class_name"),
-                  rs.getString("config_name"),
-                  rs.getString("authenticated_user"),
-                  rs.getString("assumed_role"),
-                  (authenticatedRolesJson != null)
-                      ? (String[]) JSONUtil.deserializeToArray(authenticatedRolesJson)
-                      : null,
-                  (serializedInput != null) ? JSONUtil.deserializeToArray(serializedInput) : null,
-                  (serializedOutput != null)
-                      ? JSONUtil.deserializeToArray(serializedOutput)[0]
-                      : null,
-                  err,
-                  rs.getString("executor_id"),
-                  rs.getObject("created_at", Long.class),
-                  rs.getObject("updated_at", Long.class),
-                  rs.getString("application_version"),
-                  rs.getString("application_id"),
-                  rs.getInt("recovery_attempts"),
-                  rs.getString("queue_name"),
-                  rs.getObject("workflow_timeout_ms", Long.class),
-                  rs.getObject("workflow_deadline_epoch_ms", Long.class),
-                  rs.getObject("started_at_epoch_ms", Long.class),
-                  rs.getString("deduplication_id"),
-                  rs.getObject("priority", Integer.class),
-                  rs.getString("queue_partition_key"),
-                  rs.getString("forked_from"));
-
+          WorkflowStatus info = resultsToWorkflowStatus(rs, loadInput, loadOutput);
           workflows.add(info);
         }
       }
     }
 
     return workflows;
+  }
+
+  private static WorkflowStatus resultsToWorkflowStatus(
+      ResultSet rs, boolean loadInput, boolean loadOutput) throws SQLException {
+    var workflow_uuid = rs.getString("workflow_uuid");
+    String authenticatedRolesJson = rs.getString("authenticated_roles");
+    String serializedInput = loadInput ? rs.getString("inputs") : null;
+    String serializedOutput = loadOutput ? rs.getString("output") : null;
+    String serializedError = loadOutput ? rs.getString("error") : null;
+    ErrorResult err = null;
+    if (serializedError != null) {
+      var wrapper = JSONUtil.deserializeAppExceptionWrapper(serializedError);
+      Throwable throwable = null;
+      try {
+        throwable = JSONUtil.deserializeAppException(serializedError);
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to deserialize error for workflow " + workflow_uuid, e);
+      }
+      err = new ErrorResult(wrapper.type, wrapper.message, serializedError, throwable);
+    }
+    WorkflowStatus info =
+        new WorkflowStatus(
+            workflow_uuid,
+            rs.getString("status"),
+            rs.getString("name"),
+            rs.getString("class_name"),
+            rs.getString("config_name"),
+            rs.getString("authenticated_user"),
+            rs.getString("assumed_role"),
+            (authenticatedRolesJson != null)
+                ? (String[]) JSONUtil.deserializeToArray(authenticatedRolesJson)
+                : null,
+            (serializedInput != null) ? JSONUtil.deserializeToArray(serializedInput) : null,
+            (serializedOutput != null) ? JSONUtil.deserializeToArray(serializedOutput)[0] : null,
+            err,
+            rs.getString("executor_id"),
+            rs.getObject("created_at", Long.class),
+            rs.getObject("updated_at", Long.class),
+            rs.getString("application_version"),
+            rs.getString("application_id"),
+            rs.getInt("recovery_attempts"),
+            rs.getString("queue_name"),
+            rs.getObject("workflow_timeout_ms", Long.class),
+            rs.getObject("workflow_deadline_epoch_ms", Long.class),
+            rs.getObject("started_at_epoch_ms", Long.class),
+            rs.getString("deduplication_id"),
+            rs.getObject("priority", Integer.class),
+            rs.getString("queue_partition_key"),
+            rs.getString("forked_from"));
+    return info;
   }
 
   List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
