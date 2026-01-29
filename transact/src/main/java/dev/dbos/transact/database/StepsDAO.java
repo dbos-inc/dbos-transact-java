@@ -193,6 +193,12 @@ class StepsDAO {
   }
 
   List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
+      return listWorkflowSteps(connection, workflowId);
+    }
+  }
+
+  List<StepInfo> listWorkflowSteps(Connection connection, String workflowId) throws SQLException {
 
     final String sql =
         """
@@ -205,8 +211,7 @@ class StepsDAO {
 
     List<StepInfo> steps = new ArrayList<>();
 
-    try (Connection connection = dataSource.getConnection();
-        PreparedStatement stmt = connection.prepareStatement(sql)) {
+    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
 
       stmt.setString(1, workflowId);
 
