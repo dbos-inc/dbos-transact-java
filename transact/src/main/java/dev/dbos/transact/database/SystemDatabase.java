@@ -623,4 +623,39 @@ public class SystemDatabase implements AutoCloseable {
           return null;
         });
   }
+
+  List<String> getWorkflowChildren(String workflowId) throws SQLException {
+    var children = new HashSet<String>();
+    var toProcess = new ArrayDeque<String>();
+    toProcess.add(workflowId);
+
+    var sql =
+        """
+          SELECT child_workflow_id
+          FROM %s.operation_outputs
+          WHERE workflow_uuid = ? AND child_workflow_id IS NOT NULL
+        """
+            .formatted(this.schema);
+
+    try (var conn = dataSource.getConnection()) {
+      while (!toProcess.isEmpty()) {
+        var wfid = toProcess.poll();
+
+        try (var stmt = conn.prepareStatement(sql)) {
+          stmt.setString(1, wfid);
+
+          try (var rs = stmt.executeQuery()) {
+            while (rs.next()) {
+              var childWorkflowId = rs.getString(1);
+              if (!children.contains(childWorkflowId)) {
+                children.add(childWorkflowId);
+                toProcess.add(childWorkflowId);
+              }
+            }
+          }
+        }
+      }
+    }
+    return new ArrayList<String>(children);
+  }
 }

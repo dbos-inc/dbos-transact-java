@@ -23,8 +23,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class SystemDatabaseTest {
@@ -54,8 +52,6 @@ public class SystemDatabaseTest {
     sysdb.close();
   }
 
-  private static final Logger logger = LoggerFactory.getLogger(SystemDatabaseTest.class);
-
   @Test
   public void testDeleteWorkflows() throws Exception {
     for (var i = 0; i < 5; i++) {
@@ -78,6 +74,43 @@ public class SystemDatabaseTest {
     assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-0")));
     assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-2")));
     assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-4")));
+  }
+
+  @Test
+  public void testGetChildWorkflows() throws Exception {
+    for (var i = 0; i < 5; i++) {
+      var wfid = "wfid-%d".formatted(i);
+      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      sysdb.initWorkflowStatus(status, 5, false, false);
+    }
+
+    for (var i = 0; i < 5; i++) {
+      var parentWfId = "wfid-2";
+      var wfid = "childwfid-%d".formatted(i);
+      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      sysdb.initWorkflowStatus(status, 5, false, false);
+      sysdb.recordChildWorkflow(
+          parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
+    }
+
+    for (var i = 0; i < 5; i++) {
+      var parentWfId = "childwfid-%d".formatted(i);
+      var wfid = "grandchildwfid-%d".formatted(i);
+      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      sysdb.initWorkflowStatus(status, 5, false, false);
+      sysdb.recordChildWorkflow(
+          parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
+    }
+
+    var children = sysdb.getWorkflowChildren("wfid-2");
+    assertEquals(10, children.size());
+
+    for (var i = 0; i < 5; i++) {
+      var child = "childwfid-%d".formatted(i);
+      var grandchild = "grandchildwfid-%d".formatted(i);
+      assertTrue(children.stream().anyMatch(r -> r.equals(child)));
+      assertTrue(children.stream().anyMatch(r -> r.equals(grandchild)));
+    }
   }
 
   @Test
