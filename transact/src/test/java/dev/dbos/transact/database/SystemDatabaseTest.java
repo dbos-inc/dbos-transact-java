@@ -102,7 +102,7 @@ public class SystemDatabaseTest {
           parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
     }
 
-    var children = sysdb.getWorkflowChildren("wfid-2");
+    var children = sysdb.getWorkflowChildrenInternal("wfid-2");
     assertEquals(10, children.size());
 
     for (var i = 0; i < 5; i++) {

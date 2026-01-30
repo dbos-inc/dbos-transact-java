@@ -630,7 +630,11 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  List<String> getWorkflowChildren(String workflowId) throws SQLException {
+  public List<String> getWorkflowChildren(String workflowId) {
+    return dbRetry(() -> getWorkflowChildrenInternal(workflowId));
+  }
+
+  List<String> getWorkflowChildrenInternal(String workflowId) throws SQLException {
     var children = new HashSet<String>();
     var toProcess = new ArrayDeque<String>();
     toProcess.add(workflowId);
@@ -744,7 +748,7 @@ public class SystemDatabase implements AutoCloseable {
           var workflowIds =
               exportChildren
                   ? Stream.concat(
-                          getWorkflowChildren(workflowId).stream(), List.of(workflowId).stream())
+                          getWorkflowChildrenInternal(workflowId).stream(), List.of(workflowId).stream())
                       .toList()
                   : List.of(workflowId);
 
