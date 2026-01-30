@@ -22,7 +22,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -333,34 +332,47 @@ public class Conductor implements AutoCloseable {
                       resetWebSocket();
                     }
 
+                    StringBuilder builder = new StringBuilder(1000);
+
                     @Override
                     public CompletionStage<?> onText(
                         WebSocket webSocket, CharSequence data, boolean last) {
-                      BaseMessage request;
-                      webSocket.request(1);
-                      try {
-                        request = JSONUtil.fromJson(data.toString(), BaseMessage.class);
-                      } catch (Exception e) {
-                        logger.error("Conductor JSON Parsing error", e);
-                        return CompletableFuture.completedStage(null);
-                      }
+                      builder.append(data);
 
-                      String responseText;
                       try {
-                        BaseResponse response = getResponse(request);
-                        responseText = JSONUtil.toJson(response);
-                      } catch (Exception e) {
-                        logger.error("Conductor Response error", e);
-                        return CompletableFuture.completedStage(null);
-                      }
+                        if (!last) {
+                          return null;
+                        }
 
-                      return webSocket
-                          .sendText(responseText, true)
-                          .exceptionally(
-                              ex -> {
-                                logger.error("Conductor sendText error", ex);
-                                return null;
-                              });
+                        BaseMessage request;
+                        try {
+                          var message = builder.toString();
+                          builder.setLength(0);
+                          request = JSONUtil.fromJson(message, BaseMessage.class);
+                        } catch (Exception e) {
+                          logger.error("Conductor JSON Parsing error", e);
+                          return null;
+                        }
+
+                        String responseText;
+                        try {
+                          BaseResponse response = getResponse(request);
+                          responseText = JSONUtil.toJson(response);
+                        } catch (Exception e) {
+                          logger.error("Conductor Response error", e);
+                          return null;
+                        }
+
+                        return webSocket
+                            .sendText(responseText, true)
+                            .exceptionally(
+                                ex -> {
+                                  logger.error("Conductor sendText error", ex);
+                                  return null;
+                                });
+                      } finally {
+                        webSocket.request(1);
+                      }
                     }
                   })
               .join();
