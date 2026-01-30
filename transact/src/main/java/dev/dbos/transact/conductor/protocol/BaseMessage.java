@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.*;
   @JsonSubTypes.Type(value = ExecutorInfoRequest.class, name = "executor_info"),
   @JsonSubTypes.Type(value = RecoveryRequest.class, name = "recovery"),
   @JsonSubTypes.Type(value = CancelRequest.class, name = "cancel"),
+  @JsonSubTypes.Type(value = DeleteRequest.class, name = "delete"),
   @JsonSubTypes.Type(value = ResumeRequest.class, name = "resume"),
   @JsonSubTypes.Type(value = RestartRequest.class, name = "restart"),
   @JsonSubTypes.Type(value = ForkWorkflowRequest.class, name = "fork_workflow"),

@@ -47,6 +47,7 @@ public class Conductor implements AutoCloseable {
     map.put(MessageType.EXECUTOR_INFO, Conductor::handleExecutorInfo);
     map.put(MessageType.RECOVERY, Conductor::handleRecovery);
     map.put(MessageType.CANCEL, Conductor::handleCancel);
+    map.put(MessageType.DELETE, Conductor::handleDelete);
     map.put(MessageType.RESUME, Conductor::handleResume);
     map.put(MessageType.RESTART, Conductor::handleRestart);
     map.put(MessageType.FORK_WORKFLOW, Conductor::handleFork);
@@ -409,6 +410,17 @@ public class Conductor implements AutoCloseable {
     CancelRequest request = (CancelRequest) message;
     try {
       conductor.dbosExecutor.cancelWorkflow(request.workflow_id);
+      return new SuccessResponse(request, true);
+    } catch (Exception e) {
+      logger.error("Exception encountered when cancelling workflow {}", request.workflow_id, e);
+      return new SuccessResponse(request, e);
+    }
+  }
+
+  static BaseResponse handleDelete(Conductor conductor, BaseMessage message) {
+    DeleteRequest request = (DeleteRequest) message;
+    try {
+      conductor.dbosExecutor.deleteWorkflow(request.workflow_id, request.delete_children);
       return new SuccessResponse(request, true);
     } catch (Exception e) {
       logger.error("Exception encountered when cancelling workflow {}", request.workflow_id, e);

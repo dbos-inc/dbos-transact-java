@@ -402,6 +402,67 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void canDelete() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "delete_children", Boolean.TRUE, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.DELETE, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      // Verify that deleteWorkflow was called with the correct argument
+      verify(mockExec).deleteWorkflow(workflowId, true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("delete", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canDeleteThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canDeleteThrows error";
+    String workflowId = "sample-wf-id";
+
+    doThrow(new RuntimeException(errorMessage)).when(mockExec).deleteWorkflow(anyString(), anyBoolean());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "delete_children", Boolean.TRUE, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.DELETE, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).deleteWorkflow(workflowId, true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("delete", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertFalse(jsonNode.get("success").asBoolean());
+    }
+  }
+
+
+  @RetryingTest(3)
   public void canResume() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);

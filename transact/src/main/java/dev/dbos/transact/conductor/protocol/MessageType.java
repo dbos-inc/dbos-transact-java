@@ -4,6 +4,7 @@ public enum MessageType {
   EXECUTOR_INFO("executor_info"),
   RECOVERY("recovery"),
   CANCEL("cancel"),
+  DELETE("delete"),
   LIST_WORKFLOWS("list_workflows"),
   LIST_QUEUED_WORKFLOWS("list_queued_workflows"),
   RESUME("resume"),
