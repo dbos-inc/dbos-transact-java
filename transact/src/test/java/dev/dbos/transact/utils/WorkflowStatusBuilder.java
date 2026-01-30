@@ -114,7 +114,7 @@ public class WorkflowStatusBuilder {
   }
 
   public WorkflowStatusBuilder error(Throwable error) {
-    this.error = ErrorResult.of(error);
+    this.error = ErrorResult.fromThrowable(error);
     return this;
   }
 

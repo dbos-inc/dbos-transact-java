@@ -238,19 +238,7 @@ class StepsDAO {
           }
 
           // Deserialize error if present
-          ErrorResult stepError = null;
-          if (errorData != null) {
-            Exception error = null;
-            try {
-              error = (Exception) JSONUtil.deserializeAppException(errorData);
-            } catch (Exception e) {
-              throw new RuntimeException(
-                  "Failed to deserialize error for function " + functionId, e);
-            }
-            var errorWrapper = JSONUtil.deserializeAppExceptionWrapper(errorData);
-            stepError = new ErrorResult(errorWrapper.type, errorWrapper.message, errorData, error);
-          }
-
+          ErrorResult stepError = ErrorResult.deserialize(errorData);
           Object outputVal = output != null ? output[0] : null;
           steps.add(
               new StepInfo(

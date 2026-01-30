@@ -515,17 +515,7 @@ class WorkflowDAO {
     String serializedInput = loadInput ? rs.getString("inputs") : null;
     String serializedOutput = loadOutput ? rs.getString("output") : null;
     String serializedError = loadOutput ? rs.getString("error") : null;
-    ErrorResult err = null;
-    if (serializedError != null) {
-      var wrapper = JSONUtil.deserializeAppExceptionWrapper(serializedError);
-      Throwable throwable = null;
-      try {
-        throwable = JSONUtil.deserializeAppException(serializedError);
-      } catch (Exception e) {
-        throw new RuntimeException("Failed to deserialize error for workflow " + workflow_uuid, e);
-      }
-      err = new ErrorResult(wrapper.type, wrapper.message, serializedError, throwable);
-    }
+    ErrorResult err = ErrorResult.deserialize(serializedError);
     WorkflowStatus info =
         new WorkflowStatus(
             workflow_uuid,
