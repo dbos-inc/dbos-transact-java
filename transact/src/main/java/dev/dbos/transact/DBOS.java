@@ -692,7 +692,7 @@ public class DBOS {
 
   /**
    * Deletes a workflow from the system. Does not delete child workflows.
-   * 
+   *
    * @param workflowId the unique identifier of the workflow to delete. Must not be null.
    * @throws IllegalArgumentException if workflowId is null
    */
@@ -702,14 +702,14 @@ public class DBOS {
 
   /**
    * Deletes a workflow and optionally its child workflows from the system.
-   * 
+   *
    * @param workflowId the unique identifier of the workflow to delete. Must not be null.
-   * @param deleteChildren if true, also deletes all child workflows associated with the specified workflow;
-   *                      if false, only deletes the specified workflow
+   * @param deleteChildren if true, also deletes all child workflows associated with the specified
+   *     workflow; if false, only deletes the specified workflow
    * @throws IllegalArgumentException if workflowId is null
    */
   public static void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
-    executor("deleteWorkflow").deleteWorkflow(workflowId, deleteChildren);  
+    executor("deleteWorkflow").deleteWorkflow(workflowId, deleteChildren);
   }
 
   /**

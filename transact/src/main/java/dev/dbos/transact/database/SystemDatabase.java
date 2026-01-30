@@ -748,7 +748,8 @@ public class SystemDatabase implements AutoCloseable {
           var workflowIds =
               exportChildren
                   ? Stream.concat(
-                          getWorkflowChildrenInternal(workflowId).stream(), List.of(workflowId).stream())
+                          getWorkflowChildrenInternal(workflowId).stream(),
+                          List.of(workflowId).stream())
                       .toList()
                   : List.of(workflowId);
 

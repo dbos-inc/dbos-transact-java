@@ -632,18 +632,23 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void deleteWorkflow(String workflowId, boolean deleteChildren) {
     Objects.requireNonNull(workflowId);
-    this.callFunctionAsStep(() -> {
-      logger.info("Deleting workflow {}{}", workflowId, deleteChildren ? "" : " and its children");
-      if (deleteChildren) {
-        var children = systemDatabase.getWorkflowChildren(workflowId);
-        var array = Stream.concat(Stream.of(workflowId), children.stream()).toArray(String[]::new);
-        systemDatabase.deleteWorkflows(array);
-      } else {
-        systemDatabase.deleteWorkflows(workflowId);
-      }
+    this.callFunctionAsStep(
+        () -> {
+          logger.info(
+              "Deleting workflow {}{}", workflowId, deleteChildren ? "" : " and its children");
+          if (deleteChildren) {
+            var children = systemDatabase.getWorkflowChildren(workflowId);
+            var array =
+                Stream.concat(Stream.of(workflowId), children.stream()).toArray(String[]::new);
+            systemDatabase.deleteWorkflows(array);
+          } else {
+            systemDatabase.deleteWorkflows(workflowId);
+          }
 
-      return null;
-    }, "DBOS.deleteWorkflow", null);
+          return null;
+        },
+        "DBOS.deleteWorkflow",
+        null);
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
