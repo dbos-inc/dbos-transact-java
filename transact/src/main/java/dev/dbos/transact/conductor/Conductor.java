@@ -109,6 +109,85 @@ public class Conductor implements AutoCloseable {
     this.connectTimeoutMs = builder.connectTimeoutMs;
   }
 
+  private final class ConductorWebSocketListener implements WebSocket.Listener {
+    StringBuilder builder = new StringBuilder(1000);
+
+    @Override
+    public void onOpen(WebSocket webSocket) {
+      logger.debug("Opened connection to DBOS conductor");
+      webSocket.request(1);
+      setPingInterval(webSocket);
+    }
+
+    @Override
+    public CompletionStage<?> onPong(WebSocket webSocket, ByteBuffer message) {
+      logger.debug("Received pong from conductor");
+      webSocket.request(1);
+      if (pingTimeout != null) {
+        pingTimeout.cancel(false);
+        pingTimeout = null;
+      }
+      return null;
+    }
+
+    @Override
+    public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+      if (isShutdown.get()) {
+        logger.debug("Shutdown Conductor connection");
+      } else if (reconnectTimeout == null) {
+        logger.warn("onClose: Connection to conductor lost. Reconnecting");
+        resetWebSocket();
+      }
+      return Listener.super.onClose(webSocket, statusCode, reason);
+    }
+
+    @Override
+    public void onError(WebSocket webSocket, Throwable error) {
+      logger.warn("Unexpected exception in connection to conductor. Reconnecting", error);
+      resetWebSocket();
+    }
+
+    @Override
+    public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
+      builder.append(data);
+
+      try {
+        if (!last) {
+          return null;
+        }
+
+        BaseMessage request;
+        try {
+          var message = builder.toString();
+          builder.setLength(0);
+          request = JSONUtil.fromJson(message, BaseMessage.class);
+        } catch (Exception e) {
+          logger.error("Conductor JSON Parsing error", e);
+          return null;
+        }
+
+        String responseText;
+        try {
+          BaseResponse response = getResponse(request);
+          responseText = JSONUtil.toJson(response);
+        } catch (Exception e) {
+          logger.error("Conductor Response error", e);
+          return null;
+        }
+
+        return webSocket
+            .sendText(responseText, true)
+            .exceptionally(
+                ex -> {
+                  logger.error("Conductor sendText error", ex);
+                  return null;
+                });
+      } finally {
+        webSocket.request(1);
+      }
+    }
+  }
+
   public static class Builder {
     private SystemDatabase systemDatabase;
     private DBOSExecutor dbosExecutor;
@@ -292,89 +371,7 @@ public class Conductor implements AutoCloseable {
           client
               .newWebSocketBuilder()
               .connectTimeout(Duration.ofMillis(connectTimeoutMs))
-              .buildAsync(
-                  URI.create(url),
-                  new WebSocket.Listener() {
-                    @Override
-                    public void onOpen(WebSocket webSocket) {
-                      logger.debug("Opened connection to DBOS conductor");
-                      webSocket.request(1);
-                      setPingInterval(webSocket);
-                    }
-
-                    @Override
-                    public CompletionStage<?> onPong(WebSocket webSocket, ByteBuffer message) {
-                      logger.debug("Received pong from conductor");
-                      webSocket.request(1);
-                      if (pingTimeout != null) {
-                        pingTimeout.cancel(false);
-                        pingTimeout = null;
-                      }
-                      return null;
-                    }
-
-                    @Override
-                    public CompletionStage<?> onClose(
-                        WebSocket webSocket, int statusCode, String reason) {
-                      if (isShutdown.get()) {
-                        logger.debug("Shutdown Conductor connection");
-                      } else if (reconnectTimeout == null) {
-                        logger.warn("onClose: Connection to conductor lost. Reconnecting");
-                        resetWebSocket();
-                      }
-                      return Listener.super.onClose(webSocket, statusCode, reason);
-                    }
-
-                    @Override
-                    public void onError(WebSocket webSocket, Throwable error) {
-                      logger.warn(
-                          "Unexpected exception in connection to conductor. Reconnecting", error);
-                      resetWebSocket();
-                    }
-
-                    StringBuilder builder = new StringBuilder(1000);
-
-                    @Override
-                    public CompletionStage<?> onText(
-                        WebSocket webSocket, CharSequence data, boolean last) {
-                      builder.append(data);
-
-                      try {
-                        if (!last) {
-                          return null;
-                        }
-
-                        BaseMessage request;
-                        try {
-                          var message = builder.toString();
-                          builder.setLength(0);
-                          request = JSONUtil.fromJson(message, BaseMessage.class);
-                        } catch (Exception e) {
-                          logger.error("Conductor JSON Parsing error", e);
-                          return null;
-                        }
-
-                        String responseText;
-                        try {
-                          BaseResponse response = getResponse(request);
-                          responseText = JSONUtil.toJson(response);
-                        } catch (Exception e) {
-                          logger.error("Conductor Response error", e);
-                          return null;
-                        }
-
-                        return webSocket
-                            .sendText(responseText, true)
-                            .exceptionally(
-                                ex -> {
-                                  logger.error("Conductor sendText error", ex);
-                                  return null;
-                                });
-                      } finally {
-                        webSocket.request(1);
-                      }
-                    }
-                  })
+              .buildAsync(URI.create(url), new ConductorWebSocketListener())
               .join();
     } catch (Exception e) {
       logger.warn("Error in conductor loop. Reconnecting", e);
