@@ -14,7 +14,9 @@ public enum MessageType {
   LIST_STEPS("list_steps"),
   FORK_WORKFLOW("fork_workflow"),
   RETENTION("retention"),
-  GET_METRICS("get_metrics");
+  GET_METRICS("get_metrics"),
+  EXPORT_WORKFLOW("export_workflow"),
+  IMPORT_WORKFLOW("import_workflow");
 
   private final String value;
 

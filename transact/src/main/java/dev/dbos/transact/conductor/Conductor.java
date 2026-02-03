@@ -4,6 +4,7 @@ import dev.dbos.transact.conductor.protocol.*;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -11,6 +12,8 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -18,6 +21,7 @@ import java.net.http.WebSocket;
 import java.net.http.WebSocket.Listener;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +34,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,6 +64,9 @@ public class Conductor implements AutoCloseable {
     map.put(MessageType.GET_WORKFLOW, Conductor::handleGetWorkflow);
     map.put(MessageType.RETENTION, Conductor::handleRetention);
     map.put(MessageType.GET_METRICS, Conductor::handleGetMetrics);
+    map.put(MessageType.IMPORT_WORKFLOW, Conductor::handleImportWorkflow);
+    map.put(MessageType.EXPORT_WORKFLOW, Conductor::handleExportWorkflow);
+
     dispatchMap = Collections.unmodifiableMap(map);
   }
 
@@ -582,6 +592,41 @@ public class Conductor implements AutoCloseable {
       }
     } catch (Exception e) {
       return new GetMetricsResponse(request, e);
+    }
+  }
+
+  static BaseResponse handleImportWorkflow(Conductor conductor, BaseMessage message) {
+    ImportWorkflowRequest request = (ImportWorkflowRequest) message;
+    try {
+      var compressed = Base64.getDecoder().decode(request.serialized_workflow);
+      try (var gis = new GZIPInputStream(new ByteArrayInputStream(compressed))) {
+        var typeRef = new TypeReference<List<ExportedWorkflow>>() {};
+        var exportedWorkflows = JSONUtil.fromJson(gis, typeRef);
+        conductor.systemDatabase.importWorkflow(exportedWorkflows);
+        return new SuccessResponse(request, true);
+      }
+    } catch (Exception e) {
+      logger.error("Exception encountered when importing workflow", e);
+      return new SuccessResponse(request, e);
+    }
+  }
+
+  static BaseResponse handleExportWorkflow(Conductor conductor, BaseMessage message) {
+    ExportWorkflowRequest request = (ExportWorkflowRequest) message;
+    try {
+      var workflows =
+          conductor.systemDatabase.exportWorkflow(request.workflow_id, request.export_children);
+      var out = new ByteArrayOutputStream();
+      try (var gOut = new GZIPOutputStream(out)) {
+        JSONUtil.toJson(gOut, workflows);
+      }
+      var serializedWorkflow = Base64.getEncoder().encodeToString(out.toByteArray());
+      return new ExportWorkflowResponse(message, serializedWorkflow);
+    } catch (Exception e) {
+      var children = request.export_children ? "with children" : "";
+      logger.error(
+          "Exception encountered when exporting workflow {} {}", request.workflow_id, children, e);
+      return new ExportWorkflowResponse(request, e);
     }
   }
 }
