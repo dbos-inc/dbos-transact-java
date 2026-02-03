@@ -4,7 +4,7 @@ public class ExportWorkflowResponse extends BaseResponse {
   public String serialized_workflow; // optional
 
   public ExportWorkflowResponse(BaseMessage message, String serializedWorkflow) {
-    super(MessageType.EXECUTOR_INFO.getValue(), message.request_id);
+    super(MessageType.EXPORT_WORKFLOW.getValue(), message.request_id);
     this.serialized_workflow = serializedWorkflow;
   }
 

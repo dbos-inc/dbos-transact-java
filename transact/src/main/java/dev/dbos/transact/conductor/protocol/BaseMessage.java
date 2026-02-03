@@ -22,6 +22,8 @@ import com.fasterxml.jackson.annotation.*;
   @JsonSubTypes.Type(value = ListStepsRequest.class, name = "list_steps"),
   @JsonSubTypes.Type(value = RetentionRequest.class, name = "retention"),
   @JsonSubTypes.Type(value = GetMetricsRequest.class, name = "get_metrics"),
+  @JsonSubTypes.Type(value = ExportWorkflowRequest.class, name = "export_workflow"),
+  @JsonSubTypes.Type(value = ImportWorkflowRequest.class, name = "import_workflow"),
 })
 @JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class BaseMessage {

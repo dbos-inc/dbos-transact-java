@@ -14,6 +14,7 @@ import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -595,16 +596,29 @@ public class Conductor implements AutoCloseable {
     }
   }
 
+  static List<ExportedWorkflow> deserializeExportedWorkflows(String serializedWorkflow)
+      throws IOException {
+    var compressed = Base64.getDecoder().decode(serializedWorkflow);
+    try (var gis = new GZIPInputStream(new ByteArrayInputStream(compressed))) {
+      var typeRef = new TypeReference<List<ExportedWorkflow>>() {};
+      return JSONUtil.fromJson(gis, typeRef);
+    }
+  }
+
+  static String serializeExportedWorkflows(List<ExportedWorkflow> workflows) throws IOException {
+    var out = new ByteArrayOutputStream();
+    try (var gOut = new GZIPOutputStream(out)) {
+      JSONUtil.toJson(gOut, workflows);
+    }
+    return Base64.getEncoder().encodeToString(out.toByteArray());
+  }
+
   static BaseResponse handleImportWorkflow(Conductor conductor, BaseMessage message) {
     ImportWorkflowRequest request = (ImportWorkflowRequest) message;
     try {
-      var compressed = Base64.getDecoder().decode(request.serialized_workflow);
-      try (var gis = new GZIPInputStream(new ByteArrayInputStream(compressed))) {
-        var typeRef = new TypeReference<List<ExportedWorkflow>>() {};
-        var exportedWorkflows = JSONUtil.fromJson(gis, typeRef);
-        conductor.systemDatabase.importWorkflow(exportedWorkflows);
-        return new SuccessResponse(request, true);
-      }
+      var exportedWorkflows = deserializeExportedWorkflows(request.serialized_workflow);
+      conductor.systemDatabase.importWorkflow(exportedWorkflows);
+      return new SuccessResponse(request, true);
     } catch (Exception e) {
       logger.error("Exception encountered when importing workflow", e);
       return new SuccessResponse(request, e);
@@ -616,11 +630,7 @@ public class Conductor implements AutoCloseable {
     try {
       var workflows =
           conductor.systemDatabase.exportWorkflow(request.workflow_id, request.export_children);
-      var out = new ByteArrayOutputStream();
-      try (var gOut = new GZIPOutputStream(out)) {
-        JSONUtil.toJson(gOut, workflows);
-      }
-      var serializedWorkflow = Base64.getEncoder().encodeToString(out.toByteArray());
+      var serializedWorkflow = serializeExportedWorkflows(workflows);
       return new ExportWorkflowResponse(message, serializedWorkflow);
     } catch (Exception e) {
       var children = request.export_children ? "with children" : "";

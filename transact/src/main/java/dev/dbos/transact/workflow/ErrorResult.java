@@ -6,8 +6,12 @@ public record ErrorResult(
     String className, String message, String serializedError, Throwable throwable) {
 
   public static ErrorResult fromThrowable(Throwable error) {
-    var serializedError = JSONUtil.serializeAppException(error);
-    return deserialize(serializedError);
+    if (error != null) {
+      var serializedError = JSONUtil.serializeAppException(error);
+      return deserialize(serializedError);
+    } else {
+      return null;
+    }
   }
 
   public static ErrorResult deserialize(String serializedError) {
