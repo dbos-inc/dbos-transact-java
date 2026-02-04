@@ -334,7 +334,8 @@ public class DBUtils {
     }
   }
 
-  public record Notification(String destinationUuid, String topic, String message, String serialization) {}
+  public record Notification(
+      String destinationUuid, String topic, String message, String serialization) {}
 
   public static List<Notification> getNotifications(DataSource ds, String destinationUuid)
       throws SQLException {

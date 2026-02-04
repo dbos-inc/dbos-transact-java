@@ -20,7 +20,6 @@ import java.time.Duration;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
-import dev.dbos.transact.StartWorkflowOptions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -275,6 +274,7 @@ public class PortableSerializationTest {
   /** Workflow interface for testing setEvent and send with explicit serialization. */
   public interface ExplicitSerService {
     String eventWorkflow();
+
     void senderWorkflow(String targetId);
   }
 
@@ -368,9 +368,11 @@ public class PortableSerializationTest {
       var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, workflowId);
       assertEquals(3, eventHistory.size());
 
-      var defaultHist = eventHistory.stream().filter(e -> e.key().equals("defaultEvent")).findFirst();
+      var defaultHist =
+          eventHistory.stream().filter(e -> e.key().equals("defaultEvent")).findFirst();
       var nativeHist = eventHistory.stream().filter(e -> e.key().equals("nativeEvent")).findFirst();
-      var portableHist = eventHistory.stream().filter(e -> e.key().equals("portableEvent")).findFirst();
+      var portableHist =
+          eventHistory.stream().filter(e -> e.key().equals("portableEvent")).findFirst();
 
       assertTrue(defaultHist.isPresent());
       assertTrue(nativeHist.isPresent());
@@ -426,9 +428,12 @@ public class PortableSerializationTest {
       var notifications = DBUtils.getNotifications(dataSource, targetId);
       assertEquals(3, notifications.size());
 
-      var defaultNotif = notifications.stream().filter(n -> n.topic().equals("defaultTopic")).findFirst();
-      var nativeNotif = notifications.stream().filter(n -> n.topic().equals("nativeTopic")).findFirst();
-      var portableNotif = notifications.stream().filter(n -> n.topic().equals("portableTopic")).findFirst();
+      var defaultNotif =
+          notifications.stream().filter(n -> n.topic().equals("defaultTopic")).findFirst();
+      var nativeNotif =
+          notifications.stream().filter(n -> n.topic().equals("nativeTopic")).findFirst();
+      var portableNotif =
+          notifications.stream().filter(n -> n.topic().equals("portableTopic")).findFirst();
 
       assertTrue(defaultNotif.isPresent());
       assertTrue(nativeNotif.isPresent());
@@ -507,9 +512,7 @@ public class PortableSerializationTest {
     }
   }
 
-  /**
-   * Tests that errors thrown from portable workflows are stored in portable JSON format.
-   */
+  /** Tests that errors thrown from portable workflows are stored in portable JSON format. */
   @Test
   public void testPortableWorkflowErrorSerialization() throws Exception {
     Queue testQueue = new Queue("testq");
