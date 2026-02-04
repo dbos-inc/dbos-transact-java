@@ -864,8 +864,8 @@ class WorkflowDAO {
     String stepOutputsSql =
         """
           INSERT INTO %1$s.operation_outputs
-              (workflow_uuid, function_id, output, error, function_name, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms)
-          SELECT ? as workflow_uuid, function_id, output, error, function_name, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms
+              (workflow_uuid, function_id, output, error, function_name, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization)
+          SELECT ? as workflow_uuid, function_id, output, error, function_name, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization
               FROM %1$s.operation_outputs
               WHERE workflow_uuid = ? AND function_id < ?
         """
@@ -882,8 +882,8 @@ class WorkflowDAO {
     var eventHistorySql =
         """
           INSERT INTO %1$s.workflow_events_history
-            (workflow_uuid, function_id, key, value)
-          SELECT ? as workflow_uuid, function_id, key, value
+            (workflow_uuid, function_id, key, value, serialization)
+          SELECT ? as workflow_uuid, function_id, key, value, serialization
             FROM %1$s.workflow_events_history
             WHERE workflow_uuid = ? AND function_id < ?
         """
@@ -900,8 +900,8 @@ class WorkflowDAO {
     var eventSql =
         """
           INSERT INTO %1$s.workflow_events
-            (workflow_uuid, key, value)
-          SELECT ?, weh1.key, weh1.value
+            (workflow_uuid, key, value, serialization)
+          SELECT ?, weh1.key, weh1.value, weh1.serialization
             FROM %1$s.workflow_events_history weh1
             WHERE weh1.workflow_uuid = ?
               AND weh1.function_id = (

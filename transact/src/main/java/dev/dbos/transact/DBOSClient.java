@@ -14,11 +14,10 @@ import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
-import java.util.Map;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -391,7 +390,8 @@ public class DBOSClient implements AutoCloseable {
      *     {@link SerializationStrategy#DEFAULT} for the default behavior)
      * @return New `EnqueueOptions` with the serialization strategy set
      */
-    public @NonNull EnqueueOptions withSerialization(@Nullable SerializationStrategy serialization) {
+    public @NonNull EnqueueOptions withSerialization(
+        @Nullable SerializationStrategy serialization) {
       return new EnqueueOptions(
           this.workflowName,
           this.queueName,
@@ -460,15 +460,17 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Enqueue a workflow using portable JSON serialization. This method is intended for cross-language
-   * workflow initiation where the workflow function definition may not be available in Java. Unlike
-   * {@link #enqueueWorkflow}, this method does not validate function names or arguments.
+   * Enqueue a workflow using portable JSON serialization. This method is intended for
+   * cross-language workflow initiation where the workflow function definition may not be available
+   * in Java. Unlike {@link #enqueueWorkflow}, this method does not validate function names or
+   * arguments.
    *
    * @param <T> Return type of workflow function
    * @param <E> Exception thrown by workflow function
    * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
    * @param positionalArgs Positional arguments to pass to the workflow function
-   * @param namedArgs Optional named arguments (for workflows that support them, e.g., Python kwargs)
+   * @param namedArgs Optional named arguments (for workflows that support them, e.g., Python
+   *     kwargs)
    * @return WorkflowHandle for retrieving workflow ID, status, and results
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueuePortableWorkflow(
@@ -482,10 +484,7 @@ public class DBOSClient implements AutoCloseable {
     // Serialize arguments in portable format
     SerializationUtil.SerializedResult serializedArgs =
         SerializationUtil.serializeArgs(
-            positionalArgs,
-            namedArgs,
-            SerializationUtil.PORTABLE,
-            null);
+            positionalArgs, namedArgs, SerializationUtil.PORTABLE, null);
 
     // Create workflow status directly with portable serialization
     var statusBuilder =
@@ -516,9 +515,7 @@ public class DBOSClient implements AutoCloseable {
     return new WorkflowHandleClient<>(workflowId);
   }
 
-  /**
-   * Options for sending a message.
-   */
+  /** Options for sending a message. */
   public record SendOptions(@Nullable SerializationStrategy serialization) {
     /** Create SendOptions with default serialization. */
     public static SendOptions defaults() {
@@ -580,7 +577,8 @@ public class DBOSClient implements AutoCloseable {
     var status =
         WorkflowStatusInternal.builder(workflowId, WorkflowState.SUCCESS)
             .name("temp_workflow-send-client")
-            .serialization(serializationFormat != null ? serializationFormat : SerializationUtil.NATIVE)
+            .serialization(
+                serializationFormat != null ? serializationFormat : SerializationUtil.NATIVE)
             .build();
     systemDatabase.initWorkflowStatus(status, null, false, false);
     systemDatabase.send(status.workflowId(), 0, destinationId, message, topic, serializationFormat);

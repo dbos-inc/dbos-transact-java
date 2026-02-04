@@ -9,10 +9,9 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.SerializationStrategy;
-import dev.dbos.transact.workflow.WorkflowHandle;
-
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
+import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -21,6 +20,7 @@ import java.time.Duration;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
+import dev.dbos.transact.StartWorkflowOptions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -197,7 +197,8 @@ public class PortableSerializationTest {
           client.enqueueWorkflow(options, new Object[] {"incoming", 30000L});
 
       // Send a message using portable serialization
-      client.send(workflowId, "HelloFromClient", "incoming", null, DBOSClient.SendOptions.portable());
+      client.send(
+          workflowId, "HelloFromClient", "incoming", null, DBOSClient.SendOptions.portable());
 
       // Await the result
       String result = handle.getResult();
@@ -245,7 +246,12 @@ public class PortableSerializationTest {
           client.enqueuePortableWorkflow(options, new Object[] {"incoming", 30000L}, null);
 
       // Send a message using portable serialization
-      client.send(workflowId, "HelloFromPortableClient", "incoming", null, DBOSClient.SendOptions.portable());
+      client.send(
+          workflowId,
+          "HelloFromPortableClient",
+          "incoming",
+          null,
+          DBOSClient.SendOptions.portable());
 
       // Await the result
       String result = handle.getResult();
@@ -263,6 +269,323 @@ public class PortableSerializationTest {
       assertEquals("portable_json", row.serialization());
       // The output should be in portable format
       assertEquals("\"received:HelloFromPortableClient\"", row.output());
+    }
+  }
+
+  /** Workflow interface for testing setEvent and send with explicit serialization. */
+  public interface ExplicitSerService {
+    String eventWorkflow();
+    void senderWorkflow(String targetId);
+  }
+
+  /** Implementation that sets events with different serialization types. */
+  @WorkflowClassName("ExplicitSerService")
+  public static class ExplicitSerServiceImpl implements ExplicitSerService {
+    @Workflow(name = "eventWorkflow")
+    @Override
+    public String eventWorkflow() {
+      // Set events with different serialization types
+      DBOS.setEvent("defaultEvent", "defaultValue");
+      DBOS.setEvent("nativeEvent", "nativeValue", SerializationStrategy.NATIVE);
+      DBOS.setEvent("portableEvent", "portableValue", SerializationStrategy.PORTABLE);
+      return "done";
+    }
+
+    @Workflow(name = "senderWorkflow")
+    @Override
+    public void senderWorkflow(String targetId) {
+      // Send messages with different serialization types
+      DBOS.send(targetId, "defaultMsg", "defaultTopic");
+      DBOS.send(targetId, "nativeMsg", "nativeTopic", null, SerializationStrategy.NATIVE);
+      DBOS.send(targetId, "portableMsg", "portableTopic", null, SerializationStrategy.PORTABLE);
+    }
+  }
+
+  /** Workflow that throws an error for testing portable error serialization. */
+  public interface ErrorService {
+    void errorWorkflow();
+  }
+
+  @WorkflowClassName("ErrorService")
+  public static class ErrorServiceImpl implements ErrorService {
+    @Workflow(name = "errorWorkflow")
+    @Override
+    public void errorWorkflow() {
+      throw new RuntimeException("Workflow failed!");
+    }
+  }
+
+  /**
+   * Tests that DBOS.setEvent() with explicit SerializationStrategy correctly stores the
+   * serialization format in the database.
+   */
+  @Test
+  public void testSetEventWithExplicitSerialization() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(ExplicitSerService.class, new ExplicitSerServiceImpl());
+
+    DBOS.launch();
+
+    // Use DBOSClient to enqueue and run the workflow
+    try (DBOSClient client = new DBOSClient(dataSource)) {
+      String workflowId = UUID.randomUUID().toString();
+
+      var options =
+          new DBOSClient.EnqueueOptions("ExplicitSerService", "eventWorkflow", "testq")
+              .withWorkflowId(workflowId);
+
+      WorkflowHandle<String, ?> handle = client.enqueueWorkflow(options, new Object[] {});
+      String result = handle.getResult();
+      assertEquals("done", result);
+
+      // Check workflow's serialization - client-enqueued workflows get java_jackson by default
+      var wfRow = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertNotNull(wfRow);
+      assertEquals("java_jackson", wfRow.serialization());
+
+      // Verify the events in the database have correct serialization
+      var events = DBUtils.getWorkflowEvents(dataSource, workflowId);
+      assertEquals(3, events.size());
+
+      // Find each event and verify serialization
+      var defaultEvent = events.stream().filter(e -> e.key().equals("defaultEvent")).findFirst();
+      var nativeEvent = events.stream().filter(e -> e.key().equals("nativeEvent")).findFirst();
+      var portableEvent = events.stream().filter(e -> e.key().equals("portableEvent")).findFirst();
+
+      assertTrue(defaultEvent.isPresent());
+      assertTrue(nativeEvent.isPresent());
+      assertTrue(portableEvent.isPresent());
+
+      // Default setEvent inherits workflow's serialization (java_jackson in this case)
+      assertEquals("java_jackson", defaultEvent.get().serialization());
+      // Native should have java_jackson (explicitly set)
+      assertEquals("java_jackson", nativeEvent.get().serialization());
+      // Portable should have portable_json (explicitly set)
+      assertEquals("portable_json", portableEvent.get().serialization());
+
+      // Also verify the event history
+      var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, workflowId);
+      assertEquals(3, eventHistory.size());
+
+      var defaultHist = eventHistory.stream().filter(e -> e.key().equals("defaultEvent")).findFirst();
+      var nativeHist = eventHistory.stream().filter(e -> e.key().equals("nativeEvent")).findFirst();
+      var portableHist = eventHistory.stream().filter(e -> e.key().equals("portableEvent")).findFirst();
+
+      assertTrue(defaultHist.isPresent());
+      assertTrue(nativeHist.isPresent());
+      assertTrue(portableHist.isPresent());
+
+      assertEquals("java_jackson", defaultHist.get().serialization());
+      assertEquals("java_jackson", nativeHist.get().serialization());
+      assertEquals("portable_json", portableHist.get().serialization());
+    }
+  }
+
+  /**
+   * Tests that DBOS.send() with explicit SerializationStrategy correctly stores the serialization
+   * format in the notifications table.
+   */
+  @Test
+  public void testSendWithExplicitSerialization() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(ExplicitSerService.class, new ExplicitSerServiceImpl());
+
+    DBOS.launch();
+
+    // Create a target workflow to receive messages
+    String targetId = UUID.randomUUID().toString();
+
+    // Insert a dummy workflow to be the target (so FK constraint is satisfied)
+    try (Connection conn = dataSource.getConnection()) {
+      String insertSql =
+          """
+          INSERT INTO dbos.workflow_status(workflow_uuid, name, class_name, config_name, status, created_at)
+          VALUES (?, 'dummy', 'Dummy', '', 'PENDING', ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(insertSql)) {
+        stmt.setString(1, targetId);
+        stmt.setLong(2, System.currentTimeMillis());
+        stmt.executeUpdate();
+      }
+    }
+
+    // Use DBOSClient to enqueue and run the sender workflow
+    try (DBOSClient client = new DBOSClient(dataSource)) {
+      String workflowId = UUID.randomUUID().toString();
+
+      var options =
+          new DBOSClient.EnqueueOptions("ExplicitSerService", "senderWorkflow", "testq")
+              .withWorkflowId(workflowId);
+
+      WorkflowHandle<Void, ?> handle = client.enqueueWorkflow(options, new Object[] {targetId});
+      handle.getResult();
+
+      // Verify the notifications in the database have correct serialization
+      var notifications = DBUtils.getNotifications(dataSource, targetId);
+      assertEquals(3, notifications.size());
+
+      var defaultNotif = notifications.stream().filter(n -> n.topic().equals("defaultTopic")).findFirst();
+      var nativeNotif = notifications.stream().filter(n -> n.topic().equals("nativeTopic")).findFirst();
+      var portableNotif = notifications.stream().filter(n -> n.topic().equals("portableTopic")).findFirst();
+
+      assertTrue(defaultNotif.isPresent());
+      assertTrue(nativeNotif.isPresent());
+      assertTrue(portableNotif.isPresent());
+
+      // Default should have null serialization (backward compatible)
+      assertNull(defaultNotif.get().serialization());
+      // Native should have java_jackson
+      assertEquals("java_jackson", nativeNotif.get().serialization());
+      // Portable should have portable_json
+      assertEquals("portable_json", portableNotif.get().serialization());
+
+      // Also verify the message format
+      // Portable format wraps strings in quotes
+      assertEquals("\"portableMsg\"", portableNotif.get().message());
+    }
+  }
+
+  /**
+   * Tests that a portable workflow (started via portable enqueue) uses portable serialization by
+   * default for setEvent when no explicit serialization is specified.
+   */
+  @Test
+  public void testPortableWorkflowDefaultSerialization() throws Exception {
+    // Workflow that sets an event without explicit serialization
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+
+    // Register a simple workflow that sets an event
+    DBOS.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl());
+
+    DBOS.launch();
+
+    try (DBOSClient client = new DBOSClient(dataSource)) {
+      String workflowId = UUID.randomUUID().toString();
+
+      // Enqueue with portable serialization
+      var options =
+          new DBOSClient.EnqueueOptions("EventSetterService", "setEventWorkflow", "testq")
+              .withWorkflowId(workflowId)
+              .withSerialization(SerializationStrategy.PORTABLE);
+
+      WorkflowHandle<String, ?> handle = client.enqueueWorkflow(options, new Object[] {});
+
+      // Wait for completion
+      String result = handle.getResult();
+      assertEquals("eventSet", result);
+
+      // Verify the workflow used portable serialization
+      var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertNotNull(row);
+      assertEquals("portable_json", row.serialization());
+
+      // Verify the event inherited portable serialization (since it was set without explicit type)
+      var events = DBUtils.getWorkflowEvents(dataSource, workflowId);
+      assertEquals(1, events.size());
+      assertEquals("myKey", events.get(0).key());
+      // Event should inherit workflow's portable serialization
+      assertEquals("portable_json", events.get(0).serialization());
+    }
+  }
+
+  /** Simple workflow interface for event setting tests. */
+  public interface EventSetterService {
+    String setEventWorkflow();
+  }
+
+  @WorkflowClassName("EventSetterService")
+  public static class EventSetterServiceImpl implements EventSetterService {
+    @Workflow(name = "setEventWorkflow")
+    @Override
+    public String setEventWorkflow() {
+      // Set event without explicit serialization - should inherit from workflow context
+      DBOS.setEvent("myKey", "myValue");
+      return "eventSet";
+    }
+  }
+
+  /**
+   * Tests that errors thrown from portable workflows are stored in portable JSON format.
+   */
+  @Test
+  public void testPortableWorkflowErrorSerialization() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+
+    DBOS.registerWorkflows(ErrorService.class, new ErrorServiceImpl());
+
+    DBOS.launch();
+
+    try (DBOSClient client = new DBOSClient(dataSource)) {
+      String workflowId = UUID.randomUUID().toString();
+
+      // Enqueue with portable serialization
+      var options =
+          new DBOSClient.EnqueueOptions("ErrorService", "errorWorkflow", "testq")
+              .withWorkflowId(workflowId)
+              .withSerialization(SerializationStrategy.PORTABLE);
+
+      WorkflowHandle<Void, ?> handle = client.enqueueWorkflow(options, new Object[] {});
+
+      // Wait for completion - should throw
+      try {
+        handle.getResult();
+        fail("Expected exception to be thrown");
+      } catch (Exception e) {
+        // Expected
+        assertTrue(e.getMessage().contains("Workflow failed!"));
+      }
+
+      // Verify the workflow stored error in portable format
+      var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertNotNull(row);
+      assertEquals("portable_json", row.serialization());
+      assertEquals("ERROR", row.status());
+
+      // Verify error is in portable JSON format
+      assertNotNull(row.error());
+      // Portable error format: {"name":"...", "message":"..."}
+      assertTrue(row.error().contains("\"name\""));
+      assertTrue(row.error().contains("\"message\""));
+      assertTrue(row.error().contains("Workflow failed!"));
+    }
+  }
+
+  /**
+   * Tests that DBOSClient.getEvent can retrieve events set with different serialization formats.
+   */
+  @Test
+  public void testClientGetEvent() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(ExplicitSerService.class, new ExplicitSerServiceImpl());
+
+    DBOS.launch();
+
+    // Use DBOSClient to enqueue and run the workflow that sets events
+    try (DBOSClient client = new DBOSClient(dataSource)) {
+      String workflowId = UUID.randomUUID().toString();
+
+      var options =
+          new DBOSClient.EnqueueOptions("ExplicitSerService", "eventWorkflow", "testq")
+              .withWorkflowId(workflowId);
+
+      WorkflowHandle<String, ?> handle = client.enqueueWorkflow(options, new Object[] {});
+      String result = handle.getResult();
+      assertEquals("done", result);
+
+      // Get events with different serializations
+      Object defaultVal = client.getEvent(workflowId, "defaultEvent", Duration.ofSeconds(5));
+      Object nativeVal = client.getEvent(workflowId, "nativeEvent", Duration.ofSeconds(5));
+      Object portableVal = client.getEvent(workflowId, "portableEvent", Duration.ofSeconds(5));
+
+      // All should be retrievable regardless of serialization format
+      assertEquals("defaultValue", defaultVal);
+      assertEquals("nativeValue", nativeVal);
+      assertEquals("portableValue", portableVal);
     }
   }
 }

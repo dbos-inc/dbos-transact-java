@@ -32,7 +32,8 @@ public final class SerializationUtil {
    * Serialize a value using the specified format.
    *
    * @param value the value to serialize
-   * @param format the serialization format ("portable_json", "java_jackson", or a custom serializer name)
+   * @param format the serialization format ("portable_json", "java_jackson", or a custom serializer
+   *     name)
    * @param customSerializer optional custom serializer (used if format is not portable/native)
    * @return the serialized result containing the serialized string and the serializer name
    */
