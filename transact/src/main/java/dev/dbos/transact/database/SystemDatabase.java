@@ -680,7 +680,7 @@ public class SystemDatabase implements AutoCloseable {
 
     var events = new ArrayList<WorkflowEvent>();
     try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(0, workflowId);
+      stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         while (rs.next()) {
           var key = rs.getString("key");
@@ -704,7 +704,7 @@ public class SystemDatabase implements AutoCloseable {
 
     var history = new ArrayList<WorkflowEventHistory>();
     try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(0, workflowId);
+      stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         while (rs.next()) {
           var key = rs.getString("key");
@@ -720,7 +720,7 @@ public class SystemDatabase implements AutoCloseable {
   List<WorkflowStream> listWorkflowStreams(Connection conn, String workflowId) throws SQLException {
     var sql =
         """
-        SELECT key, value, offset, function_id
+        SELECT key, value, "offset", function_id
         FROM %s.streams
         WHERE workflow_uuid = ?
         """
@@ -728,7 +728,7 @@ public class SystemDatabase implements AutoCloseable {
 
     var streams = new ArrayList<WorkflowStream>();
     try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(0, workflowId);
+      stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         while (rs.next()) {
           var key = rs.getString("key");
