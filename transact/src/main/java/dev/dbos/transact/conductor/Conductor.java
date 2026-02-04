@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -181,18 +182,30 @@ public class Conductor implements AutoCloseable {
         try {
           BaseResponse response = getResponse(request);
           responseText = JSONUtil.toJson(response);
+          logger.info("onText {} {}", response.type, response.request_id);
         } catch (Exception e) {
           logger.error("Conductor Response error", e);
           return null;
         }
 
-        return webSocket
-            .sendText(responseText, true)
-            .exceptionally(
-                ex -> {
-                  logger.error("Conductor sendText error", ex);
-                  return null;
-                });
+        final int CHUNK_SIZE = 32_768; // 32KB
+        CompletableFuture<Void> future = CompletableFuture.completedFuture(null);
+        var length = responseText.length();
+        for (int i = 0; i < length; i += CHUNK_SIZE) {
+          int end = Math.min(length, i + CHUNK_SIZE);
+          boolean isLast = (end == length);
+          if (isLast) {
+            logger.info("sendText chunk {} {}", i, isLast);
+          }
+          String chunk = responseText.substring(i, end);
+          future = future.thenCompose(v -> webSocket.sendText(chunk, isLast).thenApply(ws -> null));
+        }
+
+        return future.exceptionally(
+            ex -> {
+              logger.error("Conductor sendText error", ex);
+              return null;
+            });
       } finally {
         webSocket.request(1);
       }
@@ -519,6 +532,8 @@ public class Conductor implements AutoCloseable {
 
   static BaseResponse handleListSteps(Conductor conductor, BaseMessage message) {
     ListStepsRequest request = (ListStepsRequest) message;
+    logger.info("handleListSteps {}", request.workflow_id);
+
     try {
       List<StepInfo> stepInfoList = conductor.dbosExecutor.listWorkflowSteps(request.workflow_id);
       List<ListStepsResponse.Step> steps =
