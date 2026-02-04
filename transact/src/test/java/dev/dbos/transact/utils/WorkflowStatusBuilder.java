@@ -39,6 +39,7 @@ public class WorkflowStatusBuilder {
 
   private Long timeoutMs;
   private Long deadlineEpochMs;
+  private String serialization;
 
   public WorkflowStatus build() {
     return new WorkflowStatus(
@@ -66,7 +67,8 @@ public class WorkflowStatusBuilder {
         deduplicationId,
         priority,
         partitionKey,
-        forkedFrom);
+        forkedFrom,
+        serialization);
   }
 
   public WorkflowStatusBuilder(String workflowId) {
@@ -195,6 +197,11 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder deadlineEpochMs(Long deadlineEpochMs) {
     this.deadlineEpochMs = deadlineEpochMs;
+    return this;
+  }
+
+  public WorkflowStatusBuilder serialization(String serialization) {
+    this.serialization = serialization;
     return this;
   }
 }

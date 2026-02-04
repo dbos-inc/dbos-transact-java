@@ -33,7 +33,8 @@ public class WorkflowRegistry {
 
     var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
     var regWorkflow =
-        new RegisteredWorkflow(workflowName, target, instanceName, method, maxRecoveryAttempts);
+        new RegisteredWorkflow(
+            workflowName, className, instanceName, target, method, maxRecoveryAttempts);
     SchedulerService.validateScheduledWorkflow(regWorkflow);
 
     var previous = wfRegistry.putIfAbsent(fqName, regWorkflow);

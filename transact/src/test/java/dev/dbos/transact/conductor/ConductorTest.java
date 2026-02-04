@@ -880,11 +880,11 @@ public class ConductorTest {
     String workflowId = "workflow-id-1";
 
     List<StepInfo> steps = new ArrayList<StepInfo>();
-    steps.add(new StepInfo(0, "function1", null, null, null, null, null));
-    steps.add(new StepInfo(1, "function2", null, null, null, null, null));
-    steps.add(new StepInfo(2, "function3", null, null, null, null, null));
-    steps.add(new StepInfo(3, "function4", null, null, null, null, null));
-    steps.add(new StepInfo(4, "function5", null, null, null, null, null));
+    steps.add(new StepInfo(0, "function1", null, null, null, null, null, null));
+    steps.add(new StepInfo(1, "function2", null, null, null, null, null, null));
+    steps.add(new StepInfo(2, "function3", null, null, null, null, null, null));
+    steps.add(new StepInfo(3, "function4", null, null, null, null, null, null));
+    steps.add(new StepInfo(4, "function5", null, null, null, null, null, null));
 
     when(mockExec.listWorkflowSteps(workflowId)).thenReturn(steps);
 

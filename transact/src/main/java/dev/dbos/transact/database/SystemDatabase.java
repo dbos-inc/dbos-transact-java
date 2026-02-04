@@ -338,11 +338,17 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void send(
-      String workflowId, int functionId, String destinationId, Object message, String topic) {
+      String workflowId,
+      int functionId,
+      String destinationId,
+      Object message,
+      String topic,
+      String serialization) {
 
     dbRetry(
         () -> {
-          notificationsDAO.send(workflowId, functionId, destinationId, message, topic);
+          notificationsDAO.send(
+              workflowId, functionId, destinationId, message, topic, serialization);
           return null;
         });
   }
@@ -357,11 +363,16 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void setEvent(
-      String workflowId, int functionId, String key, Object message, boolean asStep) {
+      String workflowId,
+      int functionId,
+      String key,
+      Object message,
+      boolean asStep,
+      String serialization) {
 
     dbRetry(
         () -> {
-          notificationsDAO.setEvent(workflowId, functionId, key, message, asStep);
+          notificationsDAO.setEvent(workflowId, functionId, key, message, asStep, serialization);
           return null;
         });
   }
@@ -578,7 +589,8 @@ public class SystemDatabase implements AutoCloseable {
           try (Connection conn = dataSource.getConnection()) {
             var checkpointName = getCheckpointName(conn, workflowId, functionId);
             if (checkpointName == null) {
-              var output = new StepResult(workflowId, functionId, patchName);
+              var output =
+                  new StepResult(workflowId, functionId, patchName, null, null, null, null);
               StepsDAO.recordStepResultTxn(
                   output, System.currentTimeMillis(), null, conn, this.schema);
               return true;

@@ -27,7 +27,8 @@ public record WorkflowStatusRow(
     String inputs,
     Long startedAtEpochMs,
     String deduplicationId,
-    Integer priority) {
+    Integer priority,
+    String serialization) {
 
   public WorkflowStatusRow(ResultSet rs) throws SQLException {
     this(
@@ -54,6 +55,7 @@ public record WorkflowStatusRow(
         rs.getString("inputs"),
         rs.getObject("started_at_epoch_ms", Long.class),
         rs.getString("deduplication_id"),
-        rs.getObject("priority", Integer.class));
+        rs.getObject("priority", Integer.class),
+        rs.getString("serialization"));
   }
 }

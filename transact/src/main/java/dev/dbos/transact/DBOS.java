@@ -104,7 +104,13 @@ public class DBOS {
         throw new IllegalStateException("Cannot register workflow after DBOS is launched");
       }
 
-      String className = implementation.getClass().getName();
+      // Use @WorkflowClassName annotation if present, otherwise use the Java class name
+      WorkflowClassName classNameAnnotation =
+          implementation.getClass().getAnnotation(WorkflowClassName.class);
+      String className =
+          (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
+              ? classNameAnnotation.value()
+              : implementation.getClass().getName();
       workflowRegistry.register(interfaceClass, implementation, className, instanceName);
 
       Method[] methods = implementation.getClass().getDeclaredMethods();
@@ -510,6 +516,17 @@ public class DBOS {
   }
 
   /**
+   * Get the serialization format of the current workflow context.
+   *
+   * @return the serialization format name (e.g., "portable_json", "java_jackson"), or null if not
+   *     in a workflow context or using default serialization
+   */
+  public static @Nullable String getSerialization() {
+    var ctx = DBOSContextHolder.get();
+    return ctx != null ? ctx.getSerialization() : null;
+  }
+
+  /**
    * Send a message to a workflow
    *
    * @param destinationId recipient of the message
@@ -522,8 +539,33 @@ public class DBOS {
       @NonNull Object message,
       @NonNull String topic,
       @Nullable String idempotencyKey) {
+    send(destinationId, message, topic, idempotencyKey, null);
+  }
+
+  /**
+   * Send a message to a workflow with serialization strategy
+   *
+   * @param destinationId recipient of the message
+   * @param message message to be sent
+   * @param topic topic to which the message is send
+   * @param idempotencyKey optional idempotency key for exactly-once send
+   * @param serialization serialization strategy to use (null for default)
+   */
+  public static void send(
+      @NonNull String destinationId,
+      @NonNull Object message,
+      @NonNull String topic,
+      @Nullable String idempotencyKey,
+      @Nullable SerializationStrategy serialization) {
+    String serializationFormat = serialization != null ? serialization.formatName() : null;
     executor("send")
-        .send(destinationId, message, topic, instance().internalWorkflowsService, idempotencyKey);
+        .send(
+            destinationId,
+            message,
+            topic,
+            instance().internalWorkflowsService,
+            idempotencyKey,
+            serializationFormat);
   }
 
   /**
@@ -535,7 +577,7 @@ public class DBOS {
    */
   public static void send(
       @NonNull String destinationId, @NonNull Object message, @NonNull String topic) {
-    DBOS.send(destinationId, message, topic, null);
+    DBOS.send(destinationId, message, topic, null, null);
   }
 
   /**
@@ -550,13 +592,32 @@ public class DBOS {
   }
 
   /**
-   * Call within a workflow to publish a key value pair
+   * Call within a workflow to publish a key value pair. Uses the workflow's serialization format.
    *
    * @param key identifier for published data
    * @param value data that is published
    */
   public static void setEvent(@NonNull String key, @NonNull Object value) {
-    executor("setEvent").setEvent(key, value);
+    setEvent(key, value, null);
+  }
+
+  /**
+   * Call within a workflow to publish a key value pair with a specific serialization strategy.
+   *
+   * @param key identifier for published data
+   * @param value data that is published
+   * @param serialization serialization strategy to use (null to use workflow's default)
+   */
+  public static void setEvent(
+      @NonNull String key, @NonNull Object value, @Nullable SerializationStrategy serialization) {
+    // If no explicit serialization specified, use the workflow context's serialization
+    String serializationFormat;
+    if (serialization != null) {
+      serializationFormat = serialization.formatName();
+    } else {
+      serializationFormat = getSerialization();
+    }
+    executor("setEvent").setEvent(key, value, serializationFormat);
   }
 
   /**

@@ -3,6 +3,7 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -157,7 +158,7 @@ class StepsDAO {
 
     String operationOutputSql =
         """
-          SELECT output, error, function_name
+          SELECT output, error, function_name, serialization
           FROM %s.operation_outputs
           WHERE workflow_uuid = ? AND function_id = ?
         """
@@ -174,8 +175,10 @@ class StepsDAO {
           String output = rs.getString("output");
           String error = rs.getString("error");
           recordedFunctionName = rs.getString("function_name");
+          String serialization = rs.getString("serialization");
           recordedResult =
-              new StepResult(workflowId, functionId, recordedFunctionName, output, error, null);
+              new StepResult(
+                  workflowId, functionId, recordedFunctionName, output, error, null, serialization);
         }
       }
     }
@@ -196,7 +199,7 @@ class StepsDAO {
 
     final String sql =
         """
-          SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms
+          SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization
           FROM %s.operation_outputs
           WHERE workflow_uuid = ?
           ORDER BY function_id;
@@ -220,12 +223,13 @@ class StepsDAO {
           String childWorkflowId = rs.getString("child_workflow_id");
           Long startedAt = rs.getObject("started_at_epoch_ms", Long.class);
           Long completedAt = rs.getObject("completed_at_epoch_ms", Long.class);
+          String serialization = rs.getString("serialization");
 
           // Deserialize output if present
-          Object[] output = null;
+          Object outputVal = null;
           if (outputData != null) {
             try {
-              output = JSONUtil.deserializeToArray(outputData);
+              outputVal = SerializationUtil.deserializeValue(outputData, serialization, null);
             } catch (Exception e) {
               throw new RuntimeException(
                   "Failed to deserialize output for function " + functionId, e);
@@ -235,18 +239,17 @@ class StepsDAO {
           // Deserialize error if present
           ErrorResult stepError = null;
           if (errorData != null) {
-            Exception error = null;
+            Throwable error = null;
             try {
-              error = (Exception) JSONUtil.deserializeAppException(errorData);
+              error = SerializationUtil.deserializeError(errorData, serialization, null);
             } catch (Exception e) {
               throw new RuntimeException(
                   "Failed to deserialize error for function " + functionId, e);
             }
-            var errorWrapper = JSONUtil.deserializeAppExceptionWrapper(errorData);
-            stepError = new ErrorResult(errorWrapper.type, errorWrapper.message, errorData, error);
+            String errorClassName = error.getClass().getName();
+            String errorMessage = error.getMessage();
+            stepError = new ErrorResult(errorClassName, errorMessage, errorData, error);
           }
-
-          Object outputVal = output != null ? output[0] : null;
           steps.add(
               new StepInfo(
                   functionId,
@@ -255,7 +258,8 @@ class StepsDAO {
                   stepError,
                   childWorkflowId,
                   startedAt,
-                  completedAt));
+                  completedAt,
+                  serialization));
         }
       }
     }
@@ -297,8 +301,10 @@ class StepsDAO {
       if (recordedOutput.output() == null) {
         throw new IllegalStateException("No recorded timeout for sleep");
       }
-      Object[] dser = JSONUtil.deserializeToArray(recordedOutput.output());
-      endTime = (long) dser[0];
+      Object deserialized =
+          SerializationUtil.deserializeValue(
+              recordedOutput.output(), recordedOutput.serialization(), null);
+      endTime = ((Number) deserialized).longValue();
     } else {
       logger.debug(
           "Running sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
@@ -306,7 +312,7 @@ class StepsDAO {
 
       try {
         StepResult output =
-            new StepResult(workflowUuid, functionId, functionName)
+            new StepResult(workflowUuid, functionId, functionName, null, null, null, null)
                 .withOutput(JSONUtil.serialize(endTime));
         recordStepResultTxn(dataSource, output, startTime, (long) endTime, schema);
       } catch (DBOSWorkflowExecutionConflictException e) {
