@@ -34,8 +34,7 @@ dependencies {
     implementation("com.zaxxer:HikariCP:7.0.2") // Connection pool
     implementation("com.fasterxml.jackson.core:jackson-databind:2.20.1") // json
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.20.1")
-    implementation("com.cronutils:cron-utils:9.2.1") // for scheduled wf
-    implementation("org.java-websocket:Java-WebSocket:1.6.0") // for conductor
+    implementation("com.cronutils:cron-utils:9.2.1") // cron for scheduled wf
 
     compileOnly("org.jspecify:jspecify:1.0.0")
 
@@ -45,6 +44,7 @@ dependencies {
     testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.8")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
+    testImplementation("org.java-websocket:Java-WebSocket:1.6.0")
     testImplementation("ch.qos.logback:logback-classic:1.5.24")
     testImplementation("org.mockito:mockito-core:5.21.0")
     testImplementation("io.rest-assured:rest-assured:6.0.0")
