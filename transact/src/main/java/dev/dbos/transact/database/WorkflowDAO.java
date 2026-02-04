@@ -4,6 +4,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -170,8 +171,8 @@ class WorkflowDAO {
             executor_id, application_version, application_id,
             created_at, updated_at, recovery_attempts,
             workflow_timeout_ms, workflow_deadline_epoch_ms,
-            owner_xid
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            owner_xid, serialization
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               recovery_attempts = CASE
@@ -224,7 +225,8 @@ class WorkflowDAO {
       stmt.setObject(21, status.deadlineEpochMs());
 
       stmt.setObject(22, ownerXid);
-      stmt.setInt(23, incrementAttempts ? 1 : 0);
+      stmt.setString(23, status.serialization());
+      stmt.setInt(24, incrementAttempts ? 1 : 0);
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -348,7 +350,7 @@ class WorkflowDAO {
             executor_id, application_version, application_id,
             authenticated_user, assumed_role, authenticated_roles,
             created_at, updated_at, recovery_attempts, started_at_epoch_ms,
-            workflow_timeout_ms, workflow_deadline_epoch_ms
+            workflow_timeout_ms, workflow_deadline_epoch_ms, serialization
         """);
 
     var loadInput = input.loadInput() == null || input.loadInput();
@@ -479,18 +481,30 @@ class WorkflowDAO {
           String serializedInput = loadInput ? rs.getString("inputs") : null;
           String serializedOutput = loadOutput ? rs.getString("output") : null;
           String serializedError = loadOutput ? rs.getString("error") : null;
+          String serialization = rs.getString("serialization");
           ErrorResult err = null;
           if (serializedError != null) {
-            var wrapper = JSONUtil.deserializeAppExceptionWrapper(serializedError);
             Throwable throwable = null;
             try {
-              throwable = JSONUtil.deserializeAppException(serializedError);
+              throwable = SerializationUtil.deserializeError(serializedError, serialization, null);
             } catch (Exception e) {
               throw new RuntimeException(
                   "Failed to deserialize error for workflow " + workflow_uuid, e);
             }
-            err = new ErrorResult(wrapper.type, wrapper.message, serializedError, throwable);
+            String errorClassName = throwable.getClass().getName();
+            String errorMessage = throwable.getMessage();
+            err = new ErrorResult(errorClassName, errorMessage, serializedError, throwable);
           }
+          // Deserialize input and output using serialization format
+          Object[] inputArray =
+              (serializedInput != null)
+                  ? SerializationUtil.deserializePositionalArgs(
+                      serializedInput, serialization, null)
+                  : null;
+          Object outputValue =
+              (serializedOutput != null)
+                  ? SerializationUtil.deserializeValue(serializedOutput, serialization, null)
+                  : null;
           WorkflowStatus info =
               new WorkflowStatus(
                   workflow_uuid,
@@ -503,10 +517,8 @@ class WorkflowDAO {
                   (authenticatedRolesJson != null)
                       ? (String[]) JSONUtil.deserializeToArray(authenticatedRolesJson)
                       : null,
-                  (serializedInput != null) ? JSONUtil.deserializeToArray(serializedInput) : null,
-                  (serializedOutput != null)
-                      ? JSONUtil.deserializeToArray(serializedOutput)[0]
-                      : null,
+                  inputArray,
+                  outputValue,
                   err,
                   rs.getString("executor_id"),
                   rs.getObject("created_at", Long.class),
@@ -521,7 +533,8 @@ class WorkflowDAO {
                   rs.getString("deduplication_id"),
                   rs.getObject("priority", Integer.class),
                   rs.getString("queue_partition_key"),
-                  rs.getString("forked_from"));
+                  rs.getString("forked_from"),
+                  rs.getString("serialization"));
 
           workflows.add(info);
         }
@@ -570,7 +583,7 @@ class WorkflowDAO {
 
     final String sql =
         """
-          SELECT status, output, error
+          SELECT status, output, error, serialization
           FROM %s.workflow_status
           WHERE workflow_uuid = ?
         """
@@ -585,16 +598,18 @@ class WorkflowDAO {
         try (ResultSet rs = stmt.executeQuery()) {
           if (rs.next()) {
             String status = rs.getString("status");
+            String serialization = rs.getString("serialization");
 
             switch (WorkflowState.valueOf(status.toUpperCase())) {
               case SUCCESS:
                 String output = rs.getString("output");
-                Object[] oArray = JSONUtil.deserializeToArray(output);
-                return Result.success((T) oArray[0]);
+                Object outputValue =
+                    SerializationUtil.deserializeValue(output, serialization, null);
+                return Result.success((T) outputValue);
 
               case ERROR:
                 String error = rs.getString("error");
-                Throwable t = JSONUtil.deserializeAppException(error);
+                Throwable t = SerializationUtil.deserializeError(error, serialization, null);
                 return Result.failure(t);
               case CANCELLED:
                 throw new DBOSAwaitedWorkflowCancelledException(workflowId);
@@ -625,7 +640,9 @@ class WorkflowDAO {
       long startTime)
       throws SQLException {
 
-    var result = new StepResult(parentId, functionId, functionName).withChildWorkflowId(childId);
+    var result =
+        new StepResult(parentId, functionId, functionName, null, null, null, null)
+            .withChildWorkflowId(childId);
     try (Connection connection = dataSource.getConnection()) {
       StepsDAO.recordStepResultTxn(result, null, null, connection, schema);
     }
@@ -810,8 +827,8 @@ class WorkflowDAO {
         """
           INSERT INTO %s.workflow_status (
             workflow_uuid, status, name, class_name, config_name, application_version, application_id,
-            authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_timeout_ms, forked_from
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_timeout_ms, forked_from, serialization
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
             .formatted(schema);
 
@@ -830,6 +847,7 @@ class WorkflowDAO {
       stmt.setString(12, JSONUtil.serializeArray(originalStatus.input()));
       stmt.setObject(13, timeoutMS);
       stmt.setString(14, originalWorkflowId);
+      stmt.setString(15, originalStatus.serialization());
 
       stmt.executeUpdate();
     }

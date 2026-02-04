@@ -21,6 +21,7 @@ public class DBOSContext {
   private final WorkflowInfo parent;
   private final Duration timeout;
   private final Instant deadline;
+  private final String serialization;
 
   // private StepStatus stepStatus;
 
@@ -30,14 +31,25 @@ public class DBOSContext {
     parent = null;
     timeout = null;
     deadline = null;
+    serialization = null;
   }
 
   public DBOSContext(String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
+    this(workflowId, parent, timeout, deadline, null);
+  }
+
+  public DBOSContext(
+      String workflowId,
+      WorkflowInfo parent,
+      Duration timeout,
+      Instant deadline,
+      String serialization) {
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
     this.timeout = timeout;
     this.deadline = deadline;
+    this.serialization = serialization;
   }
 
   public DBOSContext(
@@ -54,6 +66,7 @@ public class DBOSContext {
     this.parent = other.parent;
     this.timeout = other.timeout;
     this.deadline = other.deadline;
+    this.serialization = other.serialization;
   }
 
   public boolean isInWorkflow() {
@@ -120,6 +133,10 @@ public class DBOSContext {
 
   public Instant getDeadline() {
     return deadline;
+  }
+
+  public String getSerialization() {
+    return serialization;
   }
 
   public static String workflowId() {

@@ -26,18 +26,20 @@ public record WorkflowStatusInternal(
     Long recoveryAttempts,
     Long startedAt,
     Long timeoutMs,
-    Long deadlineEpochMs) {
+    Long deadlineEpochMs,
+    String serialization) {
 
   public WorkflowStatusInternal() {
     this(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null);
+        null, null, null, null, null, null, null, null, null, null);
   }
 
   public WorkflowStatusInternal(String workflowUUID, WorkflowState state) {
     this(
         workflowUUID,
         state,
+        null,
         null,
         null,
         null,
@@ -87,6 +89,7 @@ public record WorkflowStatusInternal(
     private Long startedAt;
     private Long timeoutMs;
     private Long deadlineEpochMs;
+    private String serialization;
 
     public Builder workflowId(String workflowId) {
       this.workflowId = workflowId;
@@ -208,6 +211,11 @@ public record WorkflowStatusInternal(
       return this;
     }
 
+    public Builder serialization(String serialization) {
+      this.serialization = serialization;
+      return this;
+    }
+
     public WorkflowStatusInternal build() {
       return new WorkflowStatusInternal(
           workflowId,
@@ -233,7 +241,8 @@ public record WorkflowStatusInternal(
           recoveryAttempts,
           startedAt,
           timeoutMs,
-          deadlineEpochMs);
+          deadlineEpochMs,
+          serialization);
     }
   }
 
