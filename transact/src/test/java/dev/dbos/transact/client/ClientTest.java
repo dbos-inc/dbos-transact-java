@@ -108,9 +108,7 @@ public class ClientTest {
     qs.pause();
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
-      var options =
-          new DBOSClient.EnqueueOptions(
-              "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue");
+      var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "enqueueTest", "testQueue");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var rows = DBUtils.getWorkflowRows(dataSource);
       assertEquals(1, rows.size());
@@ -138,8 +136,7 @@ public class ClientTest {
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
       var options =
-          new DBOSClient.EnqueueOptions(
-                  "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue")
+          new DBOSClient.EnqueueOptions("ClientServiceImpl", "enqueueTest", "testQueue")
               .withDeduplicationId("plugh!");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       assertNotNull(handle);
@@ -173,9 +170,7 @@ public class ClientTest {
   @Test
   public void clientEnqueueTimeouts() throws Exception {
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
-      var options =
-          new DBOSClient.EnqueueOptions(
-              "dev.dbos.transact.client.ClientServiceImpl", "sleep", "testQueue");
+      var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "sleep", "testQueue");
 
       var handle1 =
           client.enqueueWorkflow(options.withTimeout(Duration.ofSeconds(1)), new Object[] {10000});
