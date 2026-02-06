@@ -884,7 +884,7 @@ public class SystemDatabase implements AutoCloseable {
                     stmt.setString(5, step.error() == null ? null : step.error().serializedError());
                     stmt.setString(6, step.childWorkflowId());
                     stmt.setObject(7, step.startedAtEpochMs());
-                    stmt.setObject(9, step.completedAtEpochMs());
+                    stmt.setObject(8, step.completedAtEpochMs());
 
                     stmt.executeUpdate();
                   }
