@@ -5,6 +5,7 @@ import dev.dbos.transact.conductor.Conductor;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.StreamCorruptedException;
@@ -93,6 +94,36 @@ public class JSONUtil {
   public static <T> T fromJson(String content, Class<T> valueType) {
     try {
       return mapper.readValue(content, valueType);
+    } catch (JsonProcessingException e) {
+      throw new JsonRuntimeException(e);
+    }
+  }
+
+  public static <T> T fromJson(byte[] content, Class<T> valueType) {
+    try {
+      return mapper.readValue(content, valueType);
+    } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static <T> T fromJson(InputStream content, Class<T> valueType) {
+    try {
+      return mapper.readValue(content, valueType);
+    } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static byte[] toJsonBytes(Object obj) {
+    try {
+      return mapper.writeValueAsBytes(obj);
     } catch (JsonProcessingException e) {
       throw new JsonRuntimeException(e);
     }

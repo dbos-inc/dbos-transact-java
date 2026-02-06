@@ -25,10 +25,13 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -41,6 +44,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.java_websocket.WebSocket;
+import org.java_websocket.enums.Opcode;
 import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ClientHandshake;
 import org.junit.jupiter.api.AfterEach;
@@ -236,16 +240,83 @@ public class ConductorTest {
       messageLatch.countDown();
     }
 
-    public void send(MessageType type, String requestId, Map<String, Object> fields)
+    private void sendFragmented(String message, int chunkSize) {
+      byte[] data = message.getBytes(StandardCharsets.UTF_8);
+
+      if (data.length <= chunkSize) {
+        // Message is small enough, send normally
+        this.webSocket.send(message);
+        return;
+      }
+
+      // Send first fragment
+      ByteBuffer firstChunk = ByteBuffer.wrap(data, 0, chunkSize);
+      this.webSocket.sendFragmentedFrame(Opcode.TEXT, firstChunk, false);
+
+      // Send intermediate fragments
+      int offset = chunkSize;
+      while (offset < data.length - chunkSize) {
+        ByteBuffer chunk = ByteBuffer.wrap(data, offset, chunkSize);
+        this.webSocket.sendFragmentedFrame(Opcode.TEXT, chunk, false);
+        offset += chunkSize;
+      }
+
+      // Send final fragment
+      ByteBuffer lastChunk = ByteBuffer.wrap(data, offset, data.length - offset);
+      this.webSocket.sendFragmentedFrame(Opcode.TEXT, lastChunk, true);
+    }
+
+    public void send(MessageType type, String requestId, Map<String, Object> fields, int chunkSize)
         throws Exception {
       logger.debug("sending {}", type.getValue());
 
-      Map<String, Object> message = new HashMap<>(fields);
+      Map<String, Object> message = new LinkedHashMap<>();
       message.put("type", Objects.requireNonNull(type).getValue());
       message.put("request_id", Objects.requireNonNull(requestId));
+      message.putAll(fields);
 
       String json = ConductorTest.mapper.writeValueAsString(message);
-      this.webSocket.send(json);
+      if (chunkSize > 0) {
+        sendFragmented(json, chunkSize);
+      } else {
+        this.webSocket.send(json);
+      }
+    }
+
+    public void send(MessageType type, String requestId, Map<String, Object> fields)
+        throws Exception {
+      this.send(type, requestId, fields, 1024);
+    }
+  }
+
+  @RetryingTest(3)
+  public void canHandleChunks() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String hostname = InetAddress.getLocalHost().getHostName();
+
+    when(mockExec.appVersion()).thenReturn("test-app-version");
+    when(mockExec.executorId()).thenReturn("test-executor-id");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("unknown-field", "unknown-field-value");
+      listener.send(MessageType.EXECUTOR_INFO, "12345", message, 10);
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("executor_info", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(hostname, jsonNode.get("hostname").asText());
+      assertEquals("test-app-version", jsonNode.get("application_version").asText());
+      assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
+      assertEquals("java", jsonNode.get("language").asText());
+      assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
+      assertNull(jsonNode.get("error_message"));
     }
   }
 
