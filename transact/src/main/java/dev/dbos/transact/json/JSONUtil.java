@@ -113,7 +113,51 @@ public class JSONUtil {
     try {
       return mapper.readValue(stream, valueType);
     } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static <T> T fromJson(byte[] content, Class<T> valueType) {
+    try {
+      return mapper.readValue(content, valueType);
+    } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static <T> T fromJson(InputStream content, Class<T> valueType) {
+    try {
+      return mapper.readValue(content, valueType);
+    } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static byte[] toJsonBytes(Object obj) {
+    try {
+      return mapper.writeValueAsBytes(obj);
+    } catch (JsonProcessingException e) {
       throw new JsonRuntimeException(e);
+    }
+  }
+
+  public static void toJsonStream(Object obj, OutputStream out) {
+    try {
+      mapper.writeValue(out, obj);
+    } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
     }
   }
 
