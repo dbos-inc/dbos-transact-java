@@ -157,7 +157,10 @@ public class Conductor implements AutoCloseable {
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
-      if (msg instanceof PongWebSocketFrame) {
+      if (msg instanceof PingWebSocketFrame ping) {
+        logger.debug("Received ping from conductor");
+        ctx.channel().writeAndFlush(new PongWebSocketFrame(ping.content().retain()));
+      } else if (msg instanceof PongWebSocketFrame) {
         logger.debug("Received pong from conductor");
         if (pingTimeout != null) {
           pingTimeout.cancel(false);
@@ -172,6 +175,8 @@ public class Conductor implements AutoCloseable {
           resetWebSocket();
         }
       } else if (msg instanceof ByteBuf content) {
+        logger.debug("Received {} bytes from Conductor {}", content.readableBytes(), msg.getClass().getName());
+
         BaseMessage request;
         try (InputStream is = new ByteBufInputStream(content)) {
           request = JSONUtil.fromJson(is, BaseMessage.class);
