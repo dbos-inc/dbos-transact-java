@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.io.StreamCorruptedException;
 import java.io.UncheckedIOException;
 import java.util.Arrays;
@@ -126,6 +127,17 @@ public class JSONUtil {
       return mapper.writeValueAsBytes(obj);
     } catch (JsonProcessingException e) {
       throw new JsonRuntimeException(e);
+    }
+  }
+
+  public static void toJsonStream(Object obj, OutputStream out) {
+    try {
+      mapper.writeValue(out, obj);
+    } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
     }
   }
 

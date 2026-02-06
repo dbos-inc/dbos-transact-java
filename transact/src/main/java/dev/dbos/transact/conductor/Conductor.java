@@ -11,7 +11,9 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.URI;
 import java.util.Collections;
@@ -29,7 +31,6 @@ import java.util.stream.Collectors;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
@@ -170,11 +171,81 @@ public class Conductor implements AutoCloseable {
 
         try {
           BaseResponse response = getResponse(request);
-          byte[] responseBytes = JSONUtil.toJsonBytes(response);
-          ctx.channel()
-              .writeAndFlush(new TextWebSocketFrame(Unpooled.wrappedBuffer(responseBytes)));
+          writeFragmentedResponse(ctx, response);
         } catch (Exception e) {
           logger.error("Conductor Response error", e);
+        }
+      }
+    }
+
+    private static void writeFragmentedResponse(ChannelHandlerContext ctx, BaseResponse response)
+        throws Exception {
+      int fragmentSize = 32 * 1024; // 32k
+      try (OutputStream out = new FragmentingOutputStream(ctx, fragmentSize)) {
+        JSONUtil.toJsonStream(response, out);
+      }
+    }
+
+    private static class FragmentingOutputStream extends OutputStream {
+      private final ChannelHandlerContext ctx;
+      private final int fragmentSize;
+      private ByteBuf currentBuffer;
+      private boolean firstFrame = true;
+      private boolean closed = false;
+
+      public FragmentingOutputStream(ChannelHandlerContext ctx, int fragmentSize) {
+        this.ctx = ctx;
+        this.fragmentSize = fragmentSize;
+        this.currentBuffer = ctx.alloc().buffer(fragmentSize);
+      }
+
+      @Override
+      public void write(int b) throws IOException {
+        currentBuffer.writeByte(b);
+        if (currentBuffer.readableBytes() == fragmentSize) {
+          flushBuffer(false);
+        }
+      }
+
+      @Override
+      public void write(byte[] b, int off, int len) throws IOException {
+        while (len > 0) {
+          int toCopy = Math.min(len, fragmentSize - currentBuffer.readableBytes());
+          currentBuffer.writeBytes(b, off, toCopy);
+          off += toCopy;
+          len -= toCopy;
+          if (currentBuffer.readableBytes() == fragmentSize) {
+            flushBuffer(false);
+          }
+        }
+      }
+
+      private void flushBuffer(boolean last) {
+        if (currentBuffer.readableBytes() == 0 && !last) {
+          return;
+        }
+
+        WebSocketFrame frame;
+        if (firstFrame) {
+          frame = new TextWebSocketFrame(last, 0, currentBuffer);
+          firstFrame = false;
+        } else {
+          frame = new ContinuationWebSocketFrame(last, 0, currentBuffer);
+        }
+        ctx.channel().writeAndFlush(frame);
+
+        if (!last) {
+          currentBuffer = ctx.alloc().buffer(fragmentSize);
+        } else {
+          currentBuffer = null;
+        }
+      }
+
+      @Override
+      public void close() throws IOException {
+        if (!closed) {
+          flushBuffer(true);
+          closed = true;
         }
       }
     }

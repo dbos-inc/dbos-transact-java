@@ -321,6 +321,50 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void testSendsFragmentedResponse() throws Exception {
+    class FragmentCountingListener extends MessageListener {
+      int frameCount = 0;
+
+      @Override
+      public void onWebsocketMessage(WebSocket conn, Framedata frame) {
+        if (frame.getOpcode() == Opcode.TEXT || frame.getOpcode() == Opcode.CONTINUOUS) {
+          frameCount++;
+        }
+      }
+    }
+
+    FragmentCountingListener listener = new FragmentCountingListener();
+    testServer.setListener(listener);
+
+    // Create a large list of steps to exceed 32KB
+    List<StepInfo> steps = new ArrayList<>();
+    for (int i = 0; i < 500; i++) {
+      steps.add(new StepInfo(i, "function" + i, "output" + i, null, null, null, null));
+    }
+    when(mockExec.listWorkflowSteps("large-wf")).thenReturn(steps);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_id", "large-wf");
+      listener.send(MessageType.LIST_STEPS, "12345", message);
+
+      assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+
+      // Each StepInfo is roughly 100-200 bytes. 500 steps should be > 50KB.
+      // 32KB fragment size should result in at least 2 frames.
+      assertTrue(
+          listener.frameCount > 1,
+          "Should have received more than one frame, but got " + listener.frameCount);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertEquals("list_steps", jsonNode.get("type").asText());
+      assertEquals(500, jsonNode.get("output").size());
+    }
+  }
+
+  @RetryingTest(3)
   public void canRecover() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
