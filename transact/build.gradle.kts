@@ -35,6 +35,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.20.1") // json
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.20.1")
     implementation("com.cronutils:cron-utils:9.2.1") // cron for scheduled wf
+    implementation("io.netty:netty-all:4.1.130.Final") // netty for websocket
 
     compileOnly("org.jspecify:jspecify:1.0.0")
 

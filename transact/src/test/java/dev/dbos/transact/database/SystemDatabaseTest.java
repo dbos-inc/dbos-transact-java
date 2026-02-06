@@ -53,6 +53,67 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void testDeleteWorkflows() throws Exception {
+    for (var i = 0; i < 5; i++) {
+      var wfid = "wfid-%d".formatted(i);
+      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      sysdb.initWorkflowStatus(status, 5, false, false);
+    }
+
+    var rows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(5, rows.size());
+
+    sysdb.deleteWorkflows("wfid-1", "wfid-3");
+
+    rows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(3, rows.size());
+
+    assertTrue(rows.stream().noneMatch(r -> r.workflowId().equals("wfid-1")));
+    assertTrue(rows.stream().noneMatch(r -> r.workflowId().equals("wfid-3")));
+
+    assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-0")));
+    assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-2")));
+    assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-4")));
+  }
+
+  @Test
+  public void testGetChildWorkflows() throws Exception {
+    for (var i = 0; i < 5; i++) {
+      var wfid = "wfid-%d".formatted(i);
+      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      sysdb.initWorkflowStatus(status, 5, false, false);
+    }
+
+    for (var i = 0; i < 5; i++) {
+      var parentWfId = "wfid-2";
+      var wfid = "childwfid-%d".formatted(i);
+      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      sysdb.initWorkflowStatus(status, 5, false, false);
+      sysdb.recordChildWorkflow(
+          parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
+    }
+
+    for (var i = 0; i < 5; i++) {
+      var parentWfId = "childwfid-%d".formatted(i);
+      var wfid = "grandchildwfid-%d".formatted(i);
+      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      sysdb.initWorkflowStatus(status, 5, false, false);
+      sysdb.recordChildWorkflow(
+          parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
+    }
+
+    var children = sysdb.getWorkflowChildrenInternal("wfid-2");
+    assertEquals(10, children.size());
+
+    for (var i = 0; i < 5; i++) {
+      var child = "childwfid-%d".formatted(i);
+      var grandchild = "grandchildwfid-%d".formatted(i);
+      assertTrue(children.stream().anyMatch(r -> r.equals(child)));
+      assertTrue(children.stream().anyMatch(r -> r.equals(grandchild)));
+    }
+  }
+
+  @Test
   public void testRetries() throws Exception {
     var wfid = "wfid-1";
     var status =

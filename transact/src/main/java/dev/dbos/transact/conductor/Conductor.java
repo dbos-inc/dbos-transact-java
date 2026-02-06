@@ -4,6 +4,7 @@ import dev.dbos.transact.conductor.protocol.*;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
@@ -11,19 +12,18 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.WebSocket;
-import java.net.http.WebSocket.Listener;
-import java.nio.ByteBuffer;
-import java.time.Duration;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -31,7 +31,39 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.MessageToMessageDecoder;
+import io.netty.handler.codec.http.EmptyHttpHeaders;
+import io.netty.handler.codec.http.HttpClientCodec;
+import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.ContinuationWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.PingWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolConfig;
+import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
+import io.netty.handler.codec.http.websocketx.WebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketVersion;
+import io.netty.handler.codec.json.JsonObjectDecoder;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +79,7 @@ public class Conductor implements AutoCloseable {
     map.put(MessageType.EXECUTOR_INFO, Conductor::handleExecutorInfo);
     map.put(MessageType.RECOVERY, Conductor::handleRecovery);
     map.put(MessageType.CANCEL, Conductor::handleCancel);
+    map.put(MessageType.DELETE, Conductor::handleDelete);
     map.put(MessageType.RESUME, Conductor::handleResume);
     map.put(MessageType.RESTART, Conductor::handleRestart);
     map.put(MessageType.FORK_WORKFLOW, Conductor::handleFork);
@@ -57,13 +90,15 @@ public class Conductor implements AutoCloseable {
     map.put(MessageType.GET_WORKFLOW, Conductor::handleGetWorkflow);
     map.put(MessageType.RETENTION, Conductor::handleRetention);
     map.put(MessageType.GET_METRICS, Conductor::handleGetMetrics);
+    map.put(MessageType.IMPORT_WORKFLOW, Conductor::handleImportWorkflow);
+    map.put(MessageType.EXPORT_WORKFLOW, Conductor::handleExportWorkflow);
+
     dispatchMap = Collections.unmodifiableMap(map);
   }
 
   private final int pingPeriodMs;
   private final int pingTimeoutMs;
   private final int reconnectDelayMs;
-  private final int connectTimeoutMs;
 
   private final String url;
   private final SystemDatabase systemDatabase;
@@ -71,7 +106,9 @@ public class Conductor implements AutoCloseable {
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
   private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
-  private WebSocket webSocket;
+  private Channel channel;
+  private EventLoopGroup group;
+  private NettyWebSocketHandler handler;
   private ScheduledFuture<?> pingInterval;
   private ScheduledFuture<?> pingTimeout;
   private ScheduledFuture<?> reconnectTimeout;
@@ -106,7 +143,142 @@ public class Conductor implements AutoCloseable {
     this.pingPeriodMs = builder.pingPeriodMs;
     this.pingTimeoutMs = builder.pingTimeoutMs;
     this.reconnectDelayMs = builder.reconnectDelayMs;
-    this.connectTimeoutMs = builder.connectTimeoutMs;
+  }
+
+  private class NettyWebSocketHandler extends SimpleChannelInboundHandler<Object> {
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+      if (evt == WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_COMPLETE) {
+        logger.debug("Opened connection to DBOS conductor");
+        setPingInterval(ctx.channel());
+      }
+      super.userEventTriggered(ctx, evt);
+    }
+
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+      if (msg instanceof PingWebSocketFrame ping) {
+        logger.debug("Received ping from conductor");
+        ctx.channel().writeAndFlush(new PongWebSocketFrame(ping.content().retain()));
+      } else if (msg instanceof PongWebSocketFrame) {
+        logger.debug("Received pong from conductor");
+        if (pingTimeout != null) {
+          pingTimeout.cancel(false);
+          pingTimeout = null;
+        }
+      } else if (msg instanceof CloseWebSocketFrame) {
+        logger.debug("Received close frame from conductor");
+        if (isShutdown.get()) {
+          logger.debug("Shutdown Conductor connection");
+        } else if (reconnectTimeout == null) {
+          logger.warn("onClose: Connection to conductor lost. Reconnecting");
+          resetWebSocket();
+        }
+      } else if (msg instanceof ByteBuf content) {
+        logger.debug("Received {} bytes from Conductor {}", content.readableBytes(), msg.getClass().getName());
+
+        BaseMessage request;
+        try (InputStream is = new ByteBufInputStream(content)) {
+          request = JSONUtil.fromJson(is, BaseMessage.class);
+        } catch (Exception e) {
+          logger.error("Conductor JSON Parsing error", e);
+          return;
+        }
+
+        try {
+          BaseResponse response = getResponse(request);
+          writeFragmentedResponse(ctx, response);
+        } catch (Exception e) {
+          logger.error("Conductor Response error", e);
+        }
+      }
+    }
+
+    private static void writeFragmentedResponse(ChannelHandlerContext ctx, BaseResponse response)
+        throws Exception {
+      int fragmentSize = 32 * 1024; // 32k
+      try (OutputStream out = new FragmentingOutputStream(ctx, fragmentSize)) {
+        JSONUtil.toJsonStream(response, out);
+      }
+    }
+
+    private static class FragmentingOutputStream extends OutputStream {
+      private final ChannelHandlerContext ctx;
+      private final int fragmentSize;
+      private ByteBuf currentBuffer;
+      private boolean firstFrame = true;
+      private boolean closed = false;
+
+      public FragmentingOutputStream(ChannelHandlerContext ctx, int fragmentSize) {
+        this.ctx = ctx;
+        this.fragmentSize = fragmentSize;
+        this.currentBuffer = ctx.alloc().buffer(fragmentSize);
+      }
+
+      @Override
+      public void write(int b) throws IOException {
+        currentBuffer.writeByte(b);
+        if (currentBuffer.readableBytes() == fragmentSize) {
+          flushBuffer(false);
+        }
+      }
+
+      @Override
+      public void write(byte[] b, int off, int len) throws IOException {
+        while (len > 0) {
+          int toCopy = Math.min(len, fragmentSize - currentBuffer.readableBytes());
+          currentBuffer.writeBytes(b, off, toCopy);
+          off += toCopy;
+          len -= toCopy;
+          if (currentBuffer.readableBytes() == fragmentSize) {
+            flushBuffer(false);
+          }
+        }
+      }
+
+      private void flushBuffer(boolean last) {
+        if (currentBuffer.readableBytes() == 0 && !last) {
+          return;
+        }
+
+        WebSocketFrame frame;
+        if (firstFrame) {
+          frame = new TextWebSocketFrame(last, 0, currentBuffer);
+          firstFrame = false;
+        } else {
+          frame = new ContinuationWebSocketFrame(last, 0, currentBuffer);
+        }
+        ctx.channel().writeAndFlush(frame);
+
+        if (!last) {
+          currentBuffer = ctx.alloc().buffer(fragmentSize);
+        } else {
+          currentBuffer = null;
+        }
+      }
+
+      @Override
+      public void close() throws IOException {
+        if (!closed) {
+          flushBuffer(true);
+          closed = true;
+        }
+      }
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+      logger.warn("Unexpected exception in connection to conductor. Reconnecting", cause);
+      resetWebSocket();
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) {
+      if (!isShutdown.get() && reconnectTimeout == null) {
+        logger.warn("Channel inactive: Connection to conductor lost. Reconnecting");
+        resetWebSocket();
+      }
+    }
   }
 
   public static class Builder {
@@ -117,7 +289,6 @@ public class Conductor implements AutoCloseable {
     private int pingPeriodMs = 20000;
     private int pingTimeoutMs = 15000;
     private int reconnectDelayMs = 1000;
-    private int connectTimeoutMs = 5000;
 
     public Builder(DBOSExecutor e, SystemDatabase s, String key) {
       systemDatabase = s;
@@ -143,11 +314,6 @@ public class Conductor implements AutoCloseable {
 
     Builder reconnectDelayMs(int reconnectDelayMs) {
       this.reconnectDelayMs = reconnectDelayMs;
-      return this;
-    }
-
-    Builder connectTimeoutMs(int connectTimeoutMs) {
-      this.connectTimeoutMs = connectTimeoutMs;
       return this;
     }
 
@@ -181,14 +347,18 @@ public class Conductor implements AutoCloseable {
 
       scheduler.shutdownNow();
 
-      if (webSocket != null) {
-        webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "");
-        webSocket = null;
+      if (channel != null) {
+        channel.close();
+        channel = null;
+      }
+      if (group != null) {
+        group.shutdownGracefully();
+        group = null;
       }
     }
   }
 
-  void setPingInterval(WebSocket webSocket) {
+  void setPingInterval(Channel channel) {
     logger.debug("setPingInterval");
 
     if (pingInterval != null) {
@@ -201,25 +371,20 @@ public class Conductor implements AutoCloseable {
                 return;
               }
               try {
-                // Check for null in case webSocket connects before webSocket variable is assigned
-                if (webSocket == null) {
-                  logger.debug("webSocket null, NOT sending ping to conductor");
-                  return;
-                }
-
-                if (webSocket.isOutputClosed()) {
-                  logger.debug("webSocket closed, NOT sending ping to conductor");
+                if (channel == null || !channel.isActive()) {
+                  logger.debug("channel not active, NOT sending ping to conductor");
                   return;
                 }
 
                 logger.debug("Sending ping to conductor");
-                webSocket
-                    .sendPing(ByteBuffer.allocate(0))
-                    .exceptionally(
-                        ex -> {
-                          logger.error("Failed to send ping to conductor", ex);
-                          resetWebSocket();
-                          return null;
+                channel
+                    .writeAndFlush(new PingWebSocketFrame())
+                    .addListener(
+                        future -> {
+                          if (!future.isSuccess()) {
+                            logger.error("Failed to send ping to conductor", future.cause());
+                            resetWebSocket();
+                          }
                         });
 
                 pingTimeout =
@@ -252,9 +417,14 @@ public class Conductor implements AutoCloseable {
       pingTimeout = null;
     }
 
-    if (webSocket != null) {
-      webSocket.abort();
-      webSocket = null;
+    if (channel != null) {
+      channel.close();
+      channel = null;
+    }
+
+    if (group != null) {
+      group.shutdownGracefully();
+      group = null;
     }
 
     if (isShutdown.get()) {
@@ -274,8 +444,8 @@ public class Conductor implements AutoCloseable {
   }
 
   void dispatchLoop() {
-    if (webSocket != null) {
-      logger.warn("Conductor websocket already exists");
+    if (channel != null) {
+      logger.warn("Conductor channel already exists");
       return;
     }
 
@@ -286,83 +456,97 @@ public class Conductor implements AutoCloseable {
 
     try {
       logger.debug("Connecting to conductor at {}", url);
+      URI uri = new URI(url);
+      String scheme = uri.getScheme() == null ? "ws" : uri.getScheme();
+      final String host = uri.getHost() == null ? "127.0.0.1" : uri.getHost();
+      final int port;
+      if (uri.getPort() == -1) {
+        if ("ws".equalsIgnoreCase(scheme)) {
+          port = 80;
+        } else if ("wss".equalsIgnoreCase(scheme)) {
+          port = 443;
+        } else {
+          port = -1;
+        }
+      } else {
+        port = uri.getPort();
+      }
 
-      HttpClient client = HttpClient.newHttpClient();
-      webSocket =
-          client
-              .newWebSocketBuilder()
-              .connectTimeout(Duration.ofMillis(connectTimeoutMs))
-              .buildAsync(
-                  URI.create(url),
-                  new WebSocket.Listener() {
-                    @Override
-                    public void onOpen(WebSocket webSocket) {
-                      logger.debug("Opened connection to DBOS conductor");
-                      webSocket.request(1);
-                      setPingInterval(webSocket);
-                    }
+      if (!"ws".equalsIgnoreCase(scheme) && !"wss".equalsIgnoreCase(scheme)) {
+        logger.error("Only WS(S) is supported.");
+        return;
+      }
 
-                    @Override
-                    public CompletionStage<?> onPong(WebSocket webSocket, ByteBuffer message) {
-                      logger.debug("Received pong from conductor");
-                      webSocket.request(1);
-                      if (pingTimeout != null) {
-                        pingTimeout.cancel(false);
-                        pingTimeout = null;
-                      }
-                      return null;
-                    }
+      final boolean ssl = "wss".equalsIgnoreCase(scheme);
+      final SslContext sslCtx;
+      if (ssl) {
+        sslCtx =
+            SslContextBuilder.forClient()
+                .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                .build();
+      } else {
+        sslCtx = null;
+      }
 
-                    @Override
-                    public CompletionStage<?> onClose(
-                        WebSocket webSocket, int statusCode, String reason) {
-                      if (isShutdown.get()) {
-                        logger.debug("Shutdown Conductor connection");
-                      } else if (reconnectTimeout == null) {
-                        logger.warn("onClose: Connection to conductor lost. Reconnecting");
-                        resetWebSocket();
-                      }
-                      return Listener.super.onClose(webSocket, statusCode, reason);
-                    }
+      group = new NioEventLoopGroup();
+      handler = new NettyWebSocketHandler();
 
-                    @Override
-                    public void onError(WebSocket webSocket, Throwable error) {
-                      logger.warn(
-                          "Unexpected exception in connection to conductor. Reconnecting", error);
-                      resetWebSocket();
-                    }
+      Bootstrap b = new Bootstrap();
+      b.group(group)
+          .channel(NioSocketChannel.class)
+          .handler(
+              new ChannelInitializer<SocketChannel>() {
+                @Override
+                protected void initChannel(SocketChannel ch) {
+                  var p = ch.pipeline();
+                  if (sslCtx != null) {
+                    p.addLast(sslCtx.newHandler(ch.alloc(), host, port));
+                  }
+                  p.addLast(
+                      new HttpClientCodec(),
+                      new HttpObjectAggregator(128 * 1024 * 1024), // 128MB max message size
+                      new WebSocketClientProtocolHandler(
+                          WebSocketClientProtocolConfig.newBuilder()
+                              .webSocketUri(uri)
+                              .version(WebSocketVersion.V13)
+                              .subprotocol(null)
+                              .allowExtensions(false)
+                              .customHeaders(EmptyHttpHeaders.INSTANCE)
+                              .dropPongFrames(false)
+                              .handleCloseFrames(false)
+                              .maxFramePayloadLength(128 * 1024 * 1024)
+                              .build()),
+                      new MessageToMessageDecoder<WebSocketFrame>() {
+                        @Override
+                        protected void decode(
+                            ChannelHandlerContext ctx, WebSocketFrame frame, List<Object> out) {
+                          if (frame instanceof TextWebSocketFrame
+                              || frame instanceof ContinuationWebSocketFrame) {
+                            out.add(frame.content().retain());
+                          } else {
+                            out.add(frame.retain());
+                          }
+                        }
+                      },
+                      new JsonObjectDecoder(128 * 1024 * 1024) {
+                        {
+                          setCumulator(COMPOSITE_CUMULATOR);
+                        }
+                      },
+                      handler);
+                }
+              });
 
-                    @Override
-                    public CompletionStage<?> onText(
-                        WebSocket webSocket, CharSequence data, boolean last) {
-                      BaseMessage request;
-                      webSocket.request(1);
-                      try {
-                        request = JSONUtil.fromJson(data.toString(), BaseMessage.class);
-                      } catch (Exception e) {
-                        logger.error("Conductor JSON Parsing error", e);
-                        return CompletableFuture.completedStage(null);
-                      }
+      ChannelFuture future = b.connect(host, port);
+      channel = future.channel();
+      future.addListener(
+          f -> {
+            if (!f.isSuccess()) {
+              logger.warn("Failed to connect to conductor. Reconnecting", f.cause());
+              resetWebSocket();
+            }
+          });
 
-                      String responseText;
-                      try {
-                        BaseResponse response = getResponse(request);
-                        responseText = JSONUtil.toJson(response);
-                      } catch (Exception e) {
-                        logger.error("Conductor Response error", e);
-                        return CompletableFuture.completedStage(null);
-                      }
-
-                      return webSocket
-                          .sendText(responseText, true)
-                          .exceptionally(
-                              ex -> {
-                                logger.error("Conductor sendText error", ex);
-                                return null;
-                              });
-                    }
-                  })
-              .join();
     } catch (Exception e) {
       logger.warn("Error in conductor loop. Reconnecting", e);
       resetWebSocket();
@@ -409,6 +593,17 @@ public class Conductor implements AutoCloseable {
     CancelRequest request = (CancelRequest) message;
     try {
       conductor.dbosExecutor.cancelWorkflow(request.workflow_id);
+      return new SuccessResponse(request, true);
+    } catch (Exception e) {
+      logger.error("Exception encountered when cancelling workflow {}", request.workflow_id, e);
+      return new SuccessResponse(request, e);
+    }
+  }
+
+  static BaseResponse handleDelete(Conductor conductor, BaseMessage message) {
+    DeleteRequest request = (DeleteRequest) message;
+    try {
+      conductor.dbosExecutor.deleteWorkflow(request.workflow_id, request.delete_children);
       return new SuccessResponse(request, true);
     } catch (Exception e) {
       logger.error("Exception encountered when cancelling workflow {}", request.workflow_id, e);
@@ -487,6 +682,8 @@ public class Conductor implements AutoCloseable {
 
   static BaseResponse handleListSteps(Conductor conductor, BaseMessage message) {
     ListStepsRequest request = (ListStepsRequest) message;
+    logger.info("handleListSteps {}", request.workflow_id);
+
     try {
       List<StepInfo> stepInfoList = conductor.dbosExecutor.listWorkflowSteps(request.workflow_id);
       List<ListStepsResponse.Step> steps =
@@ -561,6 +758,50 @@ public class Conductor implements AutoCloseable {
       }
     } catch (Exception e) {
       return new GetMetricsResponse(request, e);
+    }
+  }
+
+  static List<ExportedWorkflow> deserializeExportedWorkflows(String serializedWorkflow)
+      throws IOException {
+    var compressed = Base64.getDecoder().decode(serializedWorkflow);
+    try (var gis = new GZIPInputStream(new ByteArrayInputStream(compressed))) {
+      var typeRef = new TypeReference<List<ExportedWorkflow>>() {};
+      return JSONUtil.fromJson(gis, typeRef);
+    }
+  }
+
+  static String serializeExportedWorkflows(List<ExportedWorkflow> workflows) throws IOException {
+    var out = new ByteArrayOutputStream();
+    try (var gOut = new GZIPOutputStream(out)) {
+      JSONUtil.toJson(gOut, workflows);
+    }
+    return Base64.getEncoder().encodeToString(out.toByteArray());
+  }
+
+  static BaseResponse handleImportWorkflow(Conductor conductor, BaseMessage message) {
+    ImportWorkflowRequest request = (ImportWorkflowRequest) message;
+    try {
+      var exportedWorkflows = deserializeExportedWorkflows(request.serialized_workflow);
+      conductor.systemDatabase.importWorkflow(exportedWorkflows);
+      return new SuccessResponse(request, true);
+    } catch (Exception e) {
+      logger.error("Exception encountered when importing workflow", e);
+      return new SuccessResponse(request, e);
+    }
+  }
+
+  static BaseResponse handleExportWorkflow(Conductor conductor, BaseMessage message) {
+    ExportWorkflowRequest request = (ExportWorkflowRequest) message;
+    try {
+      var workflows =
+          conductor.systemDatabase.exportWorkflow(request.workflow_id, request.export_children);
+      var serializedWorkflow = serializeExportedWorkflows(workflows);
+      return new ExportWorkflowResponse(message, serializedWorkflow);
+    } catch (Exception e) {
+      var children = request.export_children ? "with children" : "";
+      logger.error(
+          "Exception encountered when exporting workflow {} {}", request.workflow_id, children, e);
+      return new ExportWorkflowResponse(request, e);
     }
   }
 }

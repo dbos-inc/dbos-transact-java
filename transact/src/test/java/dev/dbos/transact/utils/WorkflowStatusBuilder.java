@@ -9,7 +9,6 @@ import java.util.Objects;
 public class WorkflowStatusBuilder {
   private String workflowId;
   private String status;
-  private String forkedFrom;
 
   private String name;
   private String className;
@@ -39,6 +38,7 @@ public class WorkflowStatusBuilder {
 
   private Long timeoutMs;
   private Long deadlineEpochMs;
+  private String forkedFrom;
 
   public WorkflowStatus build() {
     return new WorkflowStatus(
@@ -83,11 +83,6 @@ public class WorkflowStatusBuilder {
     return this;
   }
 
-  public WorkflowStatusBuilder forkedFrom(String forkedFrom) {
-    this.forkedFrom = forkedFrom;
-    return this;
-  }
-
   public WorkflowStatusBuilder name(String name) {
     this.name = name;
     return this;
@@ -114,7 +109,7 @@ public class WorkflowStatusBuilder {
   }
 
   public WorkflowStatusBuilder error(Throwable error) {
-    this.error = ErrorResult.of(error);
+    this.error = ErrorResult.fromThrowable(error);
     return this;
   }
 
@@ -195,6 +190,11 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder deadlineEpochMs(Long deadlineEpochMs) {
     this.deadlineEpochMs = deadlineEpochMs;
+    return this;
+  }
+
+  public WorkflowStatusBuilder forkedFrom(String forkedFrom) {
+    this.forkedFrom = forkedFrom;
     return this;
   }
 }
