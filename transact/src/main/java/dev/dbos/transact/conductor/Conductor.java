@@ -685,8 +685,6 @@ public class Conductor implements AutoCloseable {
 
   static BaseResponse handleListSteps(Conductor conductor, BaseMessage message) {
     ListStepsRequest request = (ListStepsRequest) message;
-    logger.info("handleListSteps {}", request.workflow_id);
-
     try {
       List<StepInfo> stepInfoList = conductor.dbosExecutor.listWorkflowSteps(request.workflow_id);
       List<ListStepsResponse.Step> steps =
