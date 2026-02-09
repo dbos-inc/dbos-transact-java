@@ -175,7 +175,10 @@ public class Conductor implements AutoCloseable {
           resetWebSocket();
         }
       } else if (msg instanceof ByteBuf content) {
-        logger.debug("Received {} bytes from Conductor {}", content.readableBytes(), msg.getClass().getName());
+        logger.debug(
+            "Received {} bytes from Conductor {}",
+            content.readableBytes(),
+            msg.getClass().getName());
 
         BaseMessage request;
         try (InputStream is = new ByteBufInputStream(content)) {
