@@ -9,14 +9,10 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
-import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.Workflow;
-
-import java.sql.SQLException;
-
-import javax.sql.DataSource;
+import dev.dbos.transact.workflow.WorkflowClassName;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +23,7 @@ interface PatchService {
   int workflow();
 }
 
+@WorkflowClassName("PatchService")
 class PatchServiceImplOne implements PatchService {
   @Override
   @Workflow
@@ -37,6 +34,7 @@ class PatchServiceImplOne implements PatchService {
   }
 }
 
+@WorkflowClassName("PatchService")
 class PatchServiceImplTwo implements PatchService {
   @Override
   @Workflow
@@ -48,6 +46,7 @@ class PatchServiceImplTwo implements PatchService {
   }
 }
 
+@WorkflowClassName("PatchService")
 class PatchServiceImplThree implements PatchService {
   @Override
   @Workflow
@@ -63,6 +62,7 @@ class PatchServiceImplThree implements PatchService {
   }
 }
 
+@WorkflowClassName("PatchService")
 class PatchServiceImplFour implements PatchService {
   @Override
   @Workflow
@@ -74,6 +74,7 @@ class PatchServiceImplFour implements PatchService {
   }
 }
 
+@WorkflowClassName("PatchService")
 class PatchServiceImplFive implements PatchService {
   @Override
   @Workflow
@@ -151,10 +152,7 @@ public class PatchTest {
       assertEquals("DBOS.patch-v2", steps.get(0).functionName());
 
       // Verify an old execution runs the pre-patch workflow and does not store a patch marker
-      queueService.pause();
       var h2Fork1 = DBOS.forkWorkflow(h1.workflowId(), 2, new ForkOptions("impl2_fork1"));
-      updateWorkflowName(dataSource, h2.workflowId(), h2Fork1.workflowId());
-      queueService.unpause();
       assertEquals(3, h2Fork1.getResult());
       assertEquals(2, DBOS.listWorkflowSteps(h2Fork1.workflowId()).size());
 
@@ -179,20 +177,14 @@ public class PatchTest {
       assertEquals("DBOS.patch-v3", steps.get(0).functionName());
 
       // Verify an execution containing the v2 patch marker recovers to v2
-      queueService.pause();
       var h3Fork2 = DBOS.forkWorkflow(h2.workflowId(), 3, new ForkOptions("impl3_fork2"));
-      updateWorkflowName(dataSource, h3.workflowId(), h3Fork2.workflowId());
-      queueService.unpause();
       assertEquals(5, h3Fork2.getResult());
       steps = DBOS.listWorkflowSteps(h3Fork2.workflowId());
       assertEquals(3, steps.size());
       assertEquals("DBOS.patch-v2", steps.get(0).functionName());
 
       // Verify a v1 execution recovers the pre-patch workflow and does not store a patch marker
-      queueService.pause();
       var h3Fork1 = DBOS.forkWorkflow(h1.workflowId(), 2, new ForkOptions("impl3_fork1"));
-      updateWorkflowName(dataSource, h3.workflowId(), h3Fork1.workflowId());
-      queueService.unpause();
       assertEquals(3, h3Fork1.getResult());
       assertEquals(2, DBOS.listWorkflowSteps(h3Fork1.workflowId()).size());
 
@@ -213,27 +205,18 @@ public class PatchTest {
       assertEquals(2, DBOS.listWorkflowSteps(h4Fork4.workflowId()).size());
 
       // Verify an execution containing the v3 patch marker recovers to v3
-      queueService.pause();
       var h4Fork3 = DBOS.forkWorkflow(h3.workflowId(), 3, new ForkOptions("impl4_fork3"));
-      updateWorkflowName(dataSource, h4.workflowId(), h4Fork3.workflowId());
-      queueService.unpause();
       assertEquals(4, h4Fork3.getResult());
       steps = DBOS.listWorkflowSteps(h4Fork3.workflowId());
       assertEquals(3, steps.size());
       assertEquals("DBOS.patch-v3", steps.get(0).functionName());
 
       // Verify an execution containing the v2 patch marker cleanly fails
-      queueService.pause();
       var h4Fork2 = DBOS.forkWorkflow(h2.workflowId(), 3, new ForkOptions("impl4_fork2"));
-      updateWorkflowName(dataSource, h4.workflowId(), h4Fork2.workflowId());
-      queueService.unpause();
       assertThrows(DBOSUnexpectedStepException.class, () -> h4Fork2.getResult());
 
       // Verify a v1 execution cleanly fails
-      queueService.pause();
       var h4Fork1 = DBOS.forkWorkflow(h1.workflowId(), 2, new ForkOptions("impl4_fork1"));
-      updateWorkflowName(dataSource, h4.workflowId(), h4Fork1.workflowId());
-      queueService.unpause();
       assertThrows(DBOSUnexpectedStepException.class, () -> h4Fork1.getResult());
 
       // Now, let's deprecate the patch
@@ -248,67 +231,21 @@ public class PatchTest {
       assertEquals(2, DBOS.listWorkflowSteps(h5.workflowId()).size());
 
       // Verify an execution from the deprecated patch works sans patch marker
-      queueService.pause();
       var h5Fork4 = DBOS.forkWorkflow(h4.workflowId(), 3, new ForkOptions("impl5_fork4"));
-      updateWorkflowName(dataSource, h5.workflowId(), h5Fork4.workflowId());
-      queueService.unpause();
       assertEquals(4, h5Fork4.getResult());
       assertEquals(2, DBOS.listWorkflowSteps(h5Fork4.workflowId()).size());
 
       // Verify an execution containing the v3 patch marker cleanly fails
-      queueService.pause();
       var h5Fork3 = DBOS.forkWorkflow(h3.workflowId(), 3, new ForkOptions("impl5_fork3"));
-      updateWorkflowName(dataSource, h5.workflowId(), h5Fork3.workflowId());
-      queueService.unpause();
       assertThrows(DBOSUnexpectedStepException.class, () -> h5Fork3.getResult());
 
       // Verify an execution containing the v2 patch marker cleanly fails
-      queueService.pause();
       var h5Fork2 = DBOS.forkWorkflow(h2.workflowId(), 3, new ForkOptions("impl5_fork2"));
-      updateWorkflowName(dataSource, h5.workflowId(), h5Fork2.workflowId());
-      queueService.unpause();
       assertThrows(DBOSUnexpectedStepException.class, () -> h5Fork2.getResult());
 
       // Verify a v1 execution cleanly fails
-      queueService.pause();
       var h5Fork1 = DBOS.forkWorkflow(h1.workflowId(), 2, new ForkOptions("impl5_fork1"));
-      updateWorkflowName(dataSource, h5.workflowId(), h5Fork1.workflowId());
-      queueService.unpause();
       assertThrows(DBOSUnexpectedStepException.class, () -> h5Fork1.getResult());
-    }
-  }
-
-  void updateWorkflowName(DataSource dataSource, String sourceId, String destinationId)
-      throws SQLException {
-
-    var row = DBUtils.getWorkflowRow(dataSource, sourceId);
-    if (row == null) {
-      throw new RuntimeException("Source workflow %s not found".formatted(sourceId));
-    }
-
-    logger.info(
-        "updateWorkflowName {} workflow to {}",
-        destinationId,
-        RegisteredWorkflow.fullyQualifiedName(row.className(), row.instanceName(), row.name()));
-
-    var sql =
-        """
-          UPDATE %s.workflow_status
-          SET name = ?, class_name = ?, config_name = ?
-          WHERE workflow_uuid = ?
-        """
-            .formatted(SystemDatabase.sanitizeSchema(null));
-
-    try (var conn = dataSource.getConnection();
-        var ps = conn.prepareStatement(sql)) {
-      ps.setString(1, row.name());
-      ps.setString(2, row.className());
-      ps.setString(3, row.instanceName());
-      ps.setString(4, destinationId);
-
-      if (ps.executeUpdate() == 0) {
-        logger.warn("updateWorkflowName {} workflow updated 0 rows", destinationId);
-      }
     }
   }
 
