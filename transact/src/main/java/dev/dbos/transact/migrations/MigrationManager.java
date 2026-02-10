@@ -228,7 +228,7 @@ public class MigrationManager {
   public static List<String> getMigrations(String schema) {
     Objects.requireNonNull(schema);
     var migrations =
-        List.of(migration1, migration2, migration3, migration4, migration5, migration6, migration7);
+        List.of(migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -393,4 +393,11 @@ public class MigrationManager {
       """
       ALTER TABLE %1$s."workflow_status" ADD COLUMN "owner_xid" VARCHAR(40) DEFAULT NULL
       """;
+
+  static final String migration8 =
+      """
+      ALTER TABLE %1$s."workflow_status" ADD COLUMN "parent_workflow_id" TEXT DEFAULT NULL;
+      CREATE INDEX "idx_workflow_status_parent_workflow_id" ON %1$s."workflow_status" ("parent_workflow_id");
+      """;
+
 }
