@@ -40,10 +40,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.random.RandomGenerator;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -345,10 +347,18 @@ public class ConductorTest {
     FragmentCountingListener listener = new FragmentCountingListener();
     testServer.setListener(listener);
 
+    Random random = new Random();
+    String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
     // Create a large list of steps to exceed 32KB
     List<StepInfo> steps = new ArrayList<>();
-    for (int i = 0; i < 500; i++) {
-      steps.add(new StepInfo(i, "function" + i, "output" + i, null, null, null, null));
+    for (int i = 0; i < 200; i++) {
+      var builder = new StringBuilder(1024);
+      builder.append("output_%d_".formatted(i));
+      for (int j = 0; j < 1024; j++) {
+        builder.append(characters.charAt(random.nextInt(characters.length())));
+      }
+      steps.add(new StepInfo(i, "function" + i, builder.toString(), null, null, null, null));
     }
     when(mockExec.listWorkflowSteps("large-wf")).thenReturn(steps);
 
@@ -369,7 +379,7 @@ public class ConductorTest {
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertEquals("list_steps", jsonNode.get("type").asText());
-      assertEquals(500, jsonNode.get("output").size());
+      assertEquals(200, jsonNode.get("output").size());
     }
   }
 
