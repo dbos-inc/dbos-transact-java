@@ -277,12 +277,6 @@ public class Conductor implements AutoCloseable {
         }
 
         int frameSize = currentBuffer.readableBytes();
-        logger.debug(
-            "Flushing websocket frame: size={} bytes, last={}, first={}",
-            frameSize,
-            last,
-            firstFrame);
-
         WebSocketFrame frame;
         if (firstFrame) {
           frame = new TextWebSocketFrame(last, 0, currentBuffer);
@@ -296,9 +290,7 @@ public class Conductor implements AutoCloseable {
               .writeAndFlush(frame)
               .addListener(
                   future -> {
-                    if (future.isSuccess()) {
-                      logger.debug("Successfully sent websocket frame: {} bytes", frameSize);
-                    } else {
+                    if (!future.isSuccess()) {
                       logger.error(
                           "Failed to send websocket frame: {} bytes", frameSize, future.cause());
                     }
@@ -849,34 +841,28 @@ public class Conductor implements AutoCloseable {
   }
 
   static String serializeExportedWorkflows(List<ExportedWorkflow> workflows) throws IOException {
-    logger.info("Starting serialization of {} exported workflows", workflows.size());
-    long startTime = System.currentTimeMillis();
-
     var out = new ByteArrayOutputStream();
     try (var gOut = new GZIPOutputStream(out)) {
       JSONUtil.toJson(gOut, workflows);
     }
 
-    String encoded = Base64.getEncoder().encodeToString(out.toByteArray());
-    long duration = System.currentTimeMillis() - startTime;
-
-    logger.info(
-        "Completed workflow serialization: workflows={}, uncompressed={} bytes, "
-            + "compressed={} bytes, encoded={} bytes, duration={}ms",
-        workflows.size(),
-        out.size(),
-        out.toByteArray().length,
-        encoded.length(),
-        duration);
-
-    return encoded;
+    return Base64.getEncoder().encodeToString(out.toByteArray());
   }
 
   static BaseResponse handleImportWorkflow(Conductor conductor, BaseMessage message) {
     ImportWorkflowRequest request = (ImportWorkflowRequest) message;
+    long startTime = System.currentTimeMillis();
+    logger.info("Starting import workflow: id={}, export_children={}");
+
     try {
       var exportedWorkflows = deserializeExportedWorkflows(request.serialized_workflow);
+      logger.info("deserialization completed workflow count={}", exportedWorkflows.size());
       conductor.systemDatabase.importWorkflow(exportedWorkflows);
+      long duration = System.currentTimeMillis() - startTime;
+      logger.info(
+          "Database import completed: {} workflows imported, duration={}ms",
+          exportedWorkflows.size(),
+          duration);
       return new SuccessResponse(request, true);
     } catch (Exception e) {
       logger.error("Exception encountered when importing workflow", e);
