@@ -56,6 +56,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -626,6 +627,27 @@ public class DBOSExecutor implements AutoCloseable {
           return null; // void
         },
         "DBOS.cancelWorkflow",
+        null);
+  }
+
+  public void deleteWorkflow(String workflowId, boolean deleteChildren) {
+    Objects.requireNonNull(workflowId);
+    this.callFunctionAsStep(
+        () -> {
+          logger.info(
+              "Deleting workflow {}{}", workflowId, deleteChildren ? "" : " and its children");
+          if (deleteChildren) {
+            var children = systemDatabase.getWorkflowChildren(workflowId);
+            var array =
+                Stream.concat(Stream.of(workflowId), children.stream()).toArray(String[]::new);
+            systemDatabase.deleteWorkflows(array);
+          } else {
+            systemDatabase.deleteWorkflows(workflowId);
+          }
+
+          return null;
+        },
+        "DBOS.deleteWorkflow",
         null);
   }
 

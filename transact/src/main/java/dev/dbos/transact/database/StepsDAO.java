@@ -193,6 +193,12 @@ class StepsDAO {
   }
 
   List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
+      return listWorkflowSteps(connection, workflowId);
+    }
+  }
+
+  List<StepInfo> listWorkflowSteps(Connection connection, String workflowId) throws SQLException {
 
     final String sql =
         """
@@ -205,8 +211,7 @@ class StepsDAO {
 
     List<StepInfo> steps = new ArrayList<>();
 
-    try (Connection connection = dataSource.getConnection();
-        PreparedStatement stmt = connection.prepareStatement(sql)) {
+    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
 
       stmt.setString(1, workflowId);
 
@@ -233,19 +238,7 @@ class StepsDAO {
           }
 
           // Deserialize error if present
-          ErrorResult stepError = null;
-          if (errorData != null) {
-            Exception error = null;
-            try {
-              error = (Exception) JSONUtil.deserializeAppException(errorData);
-            } catch (Exception e) {
-              throw new RuntimeException(
-                  "Failed to deserialize error for function " + functionId, e);
-            }
-            var errorWrapper = JSONUtil.deserializeAppExceptionWrapper(errorData);
-            stepError = new ErrorResult(errorWrapper.type, errorWrapper.message, errorData, error);
-          }
-
+          ErrorResult stepError = ErrorResult.deserialize(errorData);
           Object outputVal = output != null ? output[0] : null;
           steps.add(
               new StepInfo(

@@ -16,8 +16,6 @@ import dev.dbos.transact.workflow.WorkflowClassName;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 interface PatchService {
   int workflow();
@@ -103,8 +101,6 @@ class PatchServiceImplFiveB implements PatchService2 {
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class PatchTest {
 
-  private static final Logger logger = LoggerFactory.getLogger(PatchTest.class);
-
   @AfterEach
   void afterEachTest() throws Exception {
     DBOS.shutdown();
@@ -113,12 +109,9 @@ public class PatchTest {
   @Test
   public void testPatch() throws Exception {
 
-    // Note, for this test we have to manually update the workflow name when forking across
-    // versions. This requires pausing and unpausing the queue service to ensure the forked
-    // workflow isn't executed until the workflow name is updated.
-
-    // This hack is required because we can't have multiple service implementations with the same
-    // name the way you can in a dynamic programming language like python.
+    // Note, we are simulating the patch service changing over time.
+    // We have multiple implementations, each aliased to "PatchService" via @WorkflowClassName.
+    // This allows us to reinitialize and re-register workflows during the test.
 
     // In production, developers would be expected to be updating services in place, so they would
     // have the same workflow name across deployed versions.
@@ -138,7 +131,6 @@ public class PatchTest {
       DBOS.launch();
 
       assertEquals("test-version", DBOSTestAccess.getDbosExecutor().appVersion());
-      var queueService = DBOSTestAccess.getQueueService();
 
       // Register and run the first version of a workflow
       var h1 = DBOS.startWorkflow(() -> proxy1.workflow(), new StartWorkflowOptions("impl1"));
@@ -306,6 +298,7 @@ public class PatchTest {
     DBUtils.recreateDB(dbosConfig);
     DBOS.reinitialize(dbosConfig);
 
+    @SuppressWarnings("unused")
     var proxy5 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplFive());
     assertThrows(
         IllegalStateException.class,

@@ -4,6 +4,7 @@ public enum MessageType {
   EXECUTOR_INFO("executor_info"),
   RECOVERY("recovery"),
   CANCEL("cancel"),
+  DELETE("delete"),
   LIST_WORKFLOWS("list_workflows"),
   LIST_QUEUED_WORKFLOWS("list_queued_workflows"),
   RESUME("resume"),
@@ -13,7 +14,9 @@ public enum MessageType {
   LIST_STEPS("list_steps"),
   FORK_WORKFLOW("fork_workflow"),
   RETENTION("retention"),
-  GET_METRICS("get_metrics");
+  GET_METRICS("get_metrics"),
+  EXPORT_WORKFLOW("export_workflow"),
+  IMPORT_WORKFLOW("import_workflow");
 
   private final String value;
 
