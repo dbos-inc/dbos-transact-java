@@ -23,6 +23,10 @@ interface PatchService {
   int workflow();
 }
 
+interface PatchService2 {
+  int workflowB();
+}
+
 @WorkflowClassName("PatchService")
 class PatchServiceImplOne implements PatchService {
   @Override
@@ -79,6 +83,17 @@ class PatchServiceImplFive implements PatchService {
   @Override
   @Workflow
   public int workflow() {
+    var a = DBOS.runStep(() -> 2, "stepTwo");
+    var b = DBOS.runStep(() -> 2, "stepTwo");
+    return a + b;
+  }
+}
+
+@WorkflowClassName("PatchService")
+class PatchServiceImplFiveB implements PatchService2 {
+  @Override
+  @Workflow
+  public int workflowB() {
     var a = DBOS.runStep(() -> 2, "stepTwo");
     var b = DBOS.runStep(() -> 2, "stepTwo");
     return a + b;
@@ -291,9 +306,14 @@ public class PatchTest {
     DBUtils.recreateDB(dbosConfig);
     DBOS.reinitialize(dbosConfig);
 
-    var proxy2 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplTwo());
+    var proxy5 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplFive());
     assertThrows(
         IllegalStateException.class,
         () -> DBOS.registerWorkflows(PatchService.class, new PatchServiceImplFour()));
+
+    // This is not allowed either, even though the methods do not overlap
+    assertThrows(
+        IllegalStateException.class,
+        () -> DBOS.registerWorkflows(PatchService2.class, new PatchServiceImplFiveB()));
   }
 }
