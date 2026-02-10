@@ -280,4 +280,20 @@ public class PatchTest {
 
     assertThrows(IllegalStateException.class, () -> proxy4.workflow());
   }
+
+  @Test
+  public void mulipleDefinitions() throws Exception {
+    var dbosConfig =
+        DBOSConfig.defaultsFromEnv("systemdbtest")
+            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
+            .withAppVersion("test-version");
+
+    DBUtils.recreateDB(dbosConfig);
+    DBOS.reinitialize(dbosConfig);
+
+    var proxy2 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplTwo());
+    assertThrows(
+        IllegalStateException.class,
+        () -> DBOS.registerWorkflows(PatchService.class, new PatchServiceImplFour()));
+  }
 }
