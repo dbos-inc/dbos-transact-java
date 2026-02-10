@@ -20,23 +20,6 @@ public record RegisteredWorkflow(
     Objects.requireNonNull(workflowMethod, "workflow method must not be null");
   }
 
-  public RegisteredWorkflow(
-      String name,
-      Object target,
-      String instanceName,
-      Method workflowMethod,
-      int maxRecoveryAttempts) {
-    this(
-        name,
-        Objects.requireNonNull(target, "workflow target object must not be null")
-            .getClass()
-            .getName(),
-        instanceName,
-        target,
-        workflowMethod,
-        maxRecoveryAttempts);
-  }
-
   public static String fullyQualifiedName(
       String className, String instanceName, String workflowName) {
     return String.format("%s/%s/%s", className, instanceName, workflowName);
