@@ -507,7 +507,7 @@ public class Conductor implements AutoCloseable {
                   }
                   p.addLast(
                       new HttpClientCodec(),
-                      new HttpObjectAggregator(128 * 1024 * 1024), // 128MB max message size
+                      new HttpObjectAggregator(256 * 1024 * 1024), // 256MB max message size
                       new WebSocketClientProtocolHandler(
                           WebSocketClientProtocolConfig.newBuilder()
                               .webSocketUri(uri)
@@ -517,7 +517,7 @@ public class Conductor implements AutoCloseable {
                               .customHeaders(EmptyHttpHeaders.INSTANCE)
                               .dropPongFrames(false)
                               .handleCloseFrames(false)
-                              .maxFramePayloadLength(128 * 1024 * 1024)
+                              .maxFramePayloadLength(256 * 1024 * 1024)
                               .build()),
                       new MessageToMessageDecoder<WebSocketFrame>() {
                         @Override
@@ -531,7 +531,7 @@ public class Conductor implements AutoCloseable {
                           }
                         }
                       },
-                      new JsonObjectDecoder(128 * 1024 * 1024) {
+                      new JsonObjectDecoder(256 * 1024 * 1024) {
                         {
                           setCumulator(COMPOSITE_CUMULATOR);
                         }
