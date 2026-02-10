@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -70,11 +71,12 @@ import org.slf4j.LoggerFactory;
 public class Conductor implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(Conductor.class);
-  private static final Map<MessageType, BiFunction<Conductor, BaseMessage, BaseResponse>>
+  private static final Map<
+          MessageType, BiFunction<Conductor, BaseMessage, CompletableFuture<BaseResponse>>>
       dispatchMap;
 
   static {
-    Map<MessageType, BiFunction<Conductor, BaseMessage, BaseResponse>> map =
+    Map<MessageType, BiFunction<Conductor, BaseMessage, CompletableFuture<BaseResponse>>> map =
         new java.util.EnumMap<>(MessageType.class);
     map.put(MessageType.EXECUTOR_INFO, Conductor::handleExecutorInfo);
     map.put(MessageType.RECOVERY, Conductor::handleRecovery);
@@ -200,16 +202,40 @@ public class Conductor implements AutoCloseable {
           logger.info(
               "Processing conductor request: type={}, id={}", request.type, request.request_id);
 
-          BaseResponse response = getResponse(request);
+          getResponseAsync(request)
+              .whenComplete(
+                  (response, throwable) -> {
+                    try {
+                      long processingTime = System.currentTimeMillis() - startTime;
+                      if (throwable != null) {
+                        logger.error(
+                            "Error processing request: type={}, id={}, duration={}ms",
+                            request.type,
+                            request.request_id,
+                            processingTime,
+                            throwable);
 
-          long processingTime = System.currentTimeMillis() - startTime;
-          logger.info(
-              "Completed processing request: type={}, id={}, duration={}ms",
-              request.type,
-              request.request_id,
-              processingTime);
-
-          writeFragmentedResponse(ctx, response);
+                        // Create an error response
+                        BaseResponse errorResponse =
+                            new BaseResponse(
+                                request.type, request.request_id, throwable.getMessage());
+                        writeFragmentedResponse(ctx, errorResponse);
+                      } else {
+                        logger.info(
+                            "Completed processing request: type={}, id={}, duration={}ms",
+                            request.type,
+                            request.request_id,
+                            processingTime);
+                        writeFragmentedResponse(ctx, response);
+                      }
+                    } catch (Exception e) {
+                      logger.error(
+                          "Error writing response for request type={}, id={}",
+                          request.type,
+                          request.request_id,
+                          e);
+                    }
+                  });
         } catch (Exception e) {
           logger.error(
               "Conductor Response error for request type={}, id={}",
@@ -625,210 +651,344 @@ public class Conductor implements AutoCloseable {
     }
   }
 
-  BaseResponse getResponse(BaseMessage message) {
-    logger.debug("getResponse {}", message.type);
+  CompletableFuture<BaseResponse> getResponseAsync(BaseMessage message) {
+    logger.debug("getResponseAsync {}", message.type);
     MessageType messageType = MessageType.fromValue(message.type);
-    BiFunction<Conductor, BaseMessage, BaseResponse> func = dispatchMap.get(messageType);
+    BiFunction<Conductor, BaseMessage, CompletableFuture<BaseResponse>> func =
+        dispatchMap.get(messageType);
     if (func != null) {
       return func.apply(this, message);
     } else {
       logger.warn("Conductor unknown message type {}", message.type);
-      return new BaseResponse(message.type, message.request_id, "Unknown message type");
+      return CompletableFuture.completedFuture(
+          new BaseResponse(message.type, message.request_id, "Unknown message type"));
     }
   }
 
-  static BaseResponse handleExecutorInfo(Conductor conductor, BaseMessage message) {
-    try {
-      String hostname = InetAddress.getLocalHost().getHostName();
-      return new ExecutorInfoResponse(
-          message,
-          conductor.dbosExecutor.executorId(),
-          conductor.dbosExecutor.appVersion(),
-          hostname);
-    } catch (Exception e) {
-      return new ExecutorInfoResponse(message, e);
-    }
+  // Consolidated async handlers
+  static CompletableFuture<BaseResponse> handleExecutorInfo(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          try {
+            String hostname = InetAddress.getLocalHost().getHostName();
+            return new ExecutorInfoResponse(
+                message,
+                conductor.dbosExecutor.executorId(),
+                conductor.dbosExecutor.appVersion(),
+                hostname);
+          } catch (Exception e) {
+            return new ExecutorInfoResponse(message, e);
+          }
+        });
   }
 
-  static BaseResponse handleRecovery(Conductor conductor, BaseMessage message) {
-    RecoveryRequest request = (RecoveryRequest) message;
-    try {
-      conductor.dbosExecutor.recoverPendingWorkflows(request.executor_ids);
-      return new SuccessResponse(request, true);
-    } catch (Exception e) {
-      logger.error("Exception encountered when recovering pending workflows", e);
-      return new SuccessResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleRecovery(Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          RecoveryRequest request = (RecoveryRequest) message;
+          try {
+            conductor.dbosExecutor.recoverPendingWorkflows(request.executor_ids);
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            logger.error("Exception encountered when recovering pending workflows", e);
+            return new SuccessResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleCancel(Conductor conductor, BaseMessage message) {
-    CancelRequest request = (CancelRequest) message;
-    try {
-      conductor.dbosExecutor.cancelWorkflow(request.workflow_id);
-      return new SuccessResponse(request, true);
-    } catch (Exception e) {
-      logger.error("Exception encountered when cancelling workflow {}", request.workflow_id, e);
-      return new SuccessResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleCancel(Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          CancelRequest request = (CancelRequest) message;
+          try {
+            conductor.dbosExecutor.cancelWorkflow(request.workflow_id);
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when cancelling workflow {}", request.workflow_id, e);
+            return new SuccessResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleDelete(Conductor conductor, BaseMessage message) {
-    DeleteRequest request = (DeleteRequest) message;
-    try {
-      conductor.dbosExecutor.deleteWorkflow(request.workflow_id, request.delete_children);
-      return new SuccessResponse(request, true);
-    } catch (Exception e) {
-      logger.error("Exception encountered when cancelling workflow {}", request.workflow_id, e);
-      return new SuccessResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleDelete(Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          DeleteRequest request = (DeleteRequest) message;
+          try {
+            conductor.dbosExecutor.deleteWorkflow(request.workflow_id, request.delete_children);
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            logger.error("Exception encountered when deleting workflow {}", request.workflow_id, e);
+            return new SuccessResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleResume(Conductor conductor, BaseMessage message) {
-    ResumeRequest request = (ResumeRequest) message;
-    try {
-      conductor.dbosExecutor.resumeWorkflow(request.workflow_id);
-      return new SuccessResponse(request, true);
-    } catch (Exception e) {
-      logger.error("Exception encountered when resuming workflow {}", request.workflow_id, e);
-      return new SuccessResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleResume(Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ResumeRequest request = (ResumeRequest) message;
+          try {
+            conductor.dbosExecutor.resumeWorkflow(request.workflow_id);
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            logger.error("Exception encountered when resuming workflow {}", request.workflow_id, e);
+            return new SuccessResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleRestart(Conductor conductor, BaseMessage message) {
-    RestartRequest request = (RestartRequest) message;
-    try {
-      ForkOptions options = new ForkOptions();
-      conductor.dbosExecutor.forkWorkflow(request.workflow_id, 0, options);
-      return new SuccessResponse(request, true);
-    } catch (Exception e) {
-      logger.error("Exception encountered when restarting workflow {}", request.workflow_id, e);
-      return new SuccessResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleRestart(Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          RestartRequest request = (RestartRequest) message;
+          try {
+            ForkOptions options = new ForkOptions();
+            conductor.dbosExecutor.forkWorkflow(request.workflow_id, 0, options);
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when restarting workflow {}", request.workflow_id, e);
+            return new SuccessResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleFork(Conductor conductor, BaseMessage message) {
-    ForkWorkflowRequest request = (ForkWorkflowRequest) message;
-    if (request.body.workflow_id == null || request.body.start_step == null) {
-      return new ForkWorkflowResponse(request, null, "Invalid Fork Workflow Request");
-    }
-    try {
-      var options =
-          new ForkOptions(request.body.new_workflow_id, request.body.application_version, null);
-      WorkflowHandle<?, ?> handle =
-          conductor.dbosExecutor.forkWorkflow(
-              request.body.workflow_id, request.body.start_step, options);
-      return new ForkWorkflowResponse(request, handle.workflowId());
-    } catch (Exception e) {
-      logger.error("Exception encountered when forking workflow {}", request, e);
-      return new ForkWorkflowResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleFork(Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ForkWorkflowRequest request = (ForkWorkflowRequest) message;
+          if (request.body.workflow_id == null || request.body.start_step == null) {
+            return new ForkWorkflowResponse(request, null, "Invalid Fork Workflow Request");
+          }
+          try {
+            var options =
+                new ForkOptions(
+                    request.body.new_workflow_id, request.body.application_version, null);
+            WorkflowHandle<?, ?> handle =
+                conductor.dbosExecutor.forkWorkflow(
+                    request.body.workflow_id, request.body.start_step, options);
+            return new ForkWorkflowResponse(request, handle.workflowId());
+          } catch (Exception e) {
+            logger.error("Exception encountered when forking workflow {}", request, e);
+            return new ForkWorkflowResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleListWorkflows(Conductor conductor, BaseMessage message) {
-    ListWorkflowsRequest request = (ListWorkflowsRequest) message;
-    try {
-      ListWorkflowsInput input = request.asInput();
-      List<WorkflowStatus> statuses = conductor.dbosExecutor.listWorkflows(input);
-      List<WorkflowsOutput> output =
-          statuses.stream().map(s -> new WorkflowsOutput(s)).collect(Collectors.toList());
-      return new WorkflowOutputsResponse(request, output);
-    } catch (Exception e) {
-      logger.error("Exception encountered when listing workflows", e);
-      return new WorkflowOutputsResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleListWorkflows(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ListWorkflowsRequest request = (ListWorkflowsRequest) message;
+          try {
+            ListWorkflowsInput input = request.asInput();
+            List<WorkflowStatus> statuses = conductor.dbosExecutor.listWorkflows(input);
+            List<WorkflowsOutput> output =
+                statuses.stream().map(s -> new WorkflowsOutput(s)).collect(Collectors.toList());
+            return new WorkflowOutputsResponse(request, output);
+          } catch (Exception e) {
+            logger.error("Exception encountered when listing workflows", e);
+            return new WorkflowOutputsResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleListQueuedWorkflows(Conductor conductor, BaseMessage message) {
-    ListQueuedWorkflowsRequest request = (ListQueuedWorkflowsRequest) message;
-    try {
-      ListWorkflowsInput input = request.asInput();
-      List<WorkflowStatus> statuses = conductor.dbosExecutor.listWorkflows(input);
-      List<WorkflowsOutput> output =
-          statuses.stream().map(s -> new WorkflowsOutput(s)).collect(Collectors.toList());
-      return new WorkflowOutputsResponse(request, output);
-    } catch (Exception e) {
-      logger.error("Exception encountered when listing workflows", e);
-      return new WorkflowOutputsResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleListQueuedWorkflows(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ListQueuedWorkflowsRequest request = (ListQueuedWorkflowsRequest) message;
+          try {
+            ListWorkflowsInput input = request.asInput();
+            List<WorkflowStatus> statuses = conductor.dbosExecutor.listWorkflows(input);
+            List<WorkflowsOutput> output =
+                statuses.stream().map(s -> new WorkflowsOutput(s)).collect(Collectors.toList());
+            return new WorkflowOutputsResponse(request, output);
+          } catch (Exception e) {
+            logger.error("Exception encountered when listing workflows", e);
+            return new WorkflowOutputsResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleListSteps(Conductor conductor, BaseMessage message) {
-    ListStepsRequest request = (ListStepsRequest) message;
-    try {
-      List<StepInfo> stepInfoList = conductor.dbosExecutor.listWorkflowSteps(request.workflow_id);
-      List<ListStepsResponse.Step> steps =
-          stepInfoList.stream()
-              .map(i -> new ListStepsResponse.Step(i))
-              .collect(Collectors.toList());
-      return new ListStepsResponse(request, steps);
-    } catch (Exception e) {
-      logger.error("Exception encountered when listing steps {}", request.workflow_id, e);
-      return new ListStepsResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleListSteps(Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ListStepsRequest request = (ListStepsRequest) message;
+          try {
+            List<StepInfo> stepInfoList =
+                conductor.dbosExecutor.listWorkflowSteps(request.workflow_id);
+            List<ListStepsResponse.Step> steps =
+                stepInfoList.stream()
+                    .map(i -> new ListStepsResponse.Step(i))
+                    .collect(Collectors.toList());
+            return new ListStepsResponse(request, steps);
+          } catch (Exception e) {
+            logger.error("Exception encountered when listing steps {}", request.workflow_id, e);
+            return new ListStepsResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleExistPendingWorkflows(Conductor conductor, BaseMessage message) {
-    ExistPendingWorkflowsRequest request = (ExistPendingWorkflowsRequest) message;
-    try {
-      List<GetPendingWorkflowsOutput> pending =
-          conductor.systemDatabase.getPendingWorkflows(
-              request.executor_id, request.application_version);
-      return new ExistPendingWorkflowsResponse(request, pending.size() > 0);
-    } catch (Exception e) {
-      logger.error("Exception encountered when checking for pending workflows", e);
-      return new ExistPendingWorkflowsResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleExistPendingWorkflows(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ExistPendingWorkflowsRequest request = (ExistPendingWorkflowsRequest) message;
+          try {
+            List<GetPendingWorkflowsOutput> pending =
+                conductor.systemDatabase.getPendingWorkflows(
+                    request.executor_id, request.application_version);
+            return new ExistPendingWorkflowsResponse(request, pending.size() > 0);
+          } catch (Exception e) {
+            logger.error("Exception encountered when checking for pending workflows", e);
+            return new ExistPendingWorkflowsResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleGetWorkflow(Conductor conductor, BaseMessage message) {
-    GetWorkflowRequest request = (GetWorkflowRequest) message;
-    try {
-      var status = conductor.systemDatabase.getWorkflowStatus(request.workflow_id);
-      WorkflowsOutput output = status == null ? null : new WorkflowsOutput(status);
-      return new GetWorkflowResponse(request, output);
-    } catch (Exception e) {
-      logger.error("Exception encountered when getting workflow {}", request.workflow_id, e);
-      return new GetWorkflowResponse(request, e);
-    }
+  static CompletableFuture<BaseResponse> handleGetWorkflow(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetWorkflowRequest request = (GetWorkflowRequest) message;
+          try {
+            var status = conductor.systemDatabase.getWorkflowStatus(request.workflow_id);
+            WorkflowsOutput output = status == null ? null : new WorkflowsOutput(status);
+            return new GetWorkflowResponse(request, output);
+          } catch (Exception e) {
+            logger.error("Exception encountered when getting workflow {}", request.workflow_id, e);
+            return new GetWorkflowResponse(request, e);
+          }
+        });
   }
 
-  static BaseResponse handleRetention(Conductor conductor, BaseMessage message) {
-    RetentionRequest request = (RetentionRequest) message;
+  static CompletableFuture<BaseResponse> handleRetention(Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          RetentionRequest request = (RetentionRequest) message;
 
-    try {
-      conductor.systemDatabase.garbageCollect(
-          request.body.gc_cutoff_epoch_ms, request.body.gc_rows_threshold);
-    } catch (Exception e) {
-      logger.error("Exception encountered garbage collecting system database", e);
-      return new SuccessResponse(request, e);
-    }
+          try {
+            conductor.systemDatabase.garbageCollect(
+                request.body.gc_cutoff_epoch_ms, request.body.gc_rows_threshold);
+          } catch (Exception e) {
+            logger.error("Exception encountered garbage collecting system database", e);
+            return new SuccessResponse(request, e);
+          }
 
-    try {
-      if (request.body.timeout_cutoff_epoch_ms != null) {
-        conductor.dbosExecutor.globalTimeout(request.body.timeout_cutoff_epoch_ms);
-      }
-    } catch (Exception e) {
-      logger.error("Exception encountered setting global timeout", e);
-      return new SuccessResponse(request, e);
-    }
+          try {
+            if (request.body.timeout_cutoff_epoch_ms != null) {
+              conductor.dbosExecutor.globalTimeout(request.body.timeout_cutoff_epoch_ms);
+            }
+          } catch (Exception e) {
+            logger.error("Exception encountered setting global timeout", e);
+            return new SuccessResponse(request, e);
+          }
 
-    return new SuccessResponse(request, true);
+          return new SuccessResponse(request, true);
+        });
   }
 
-  static BaseResponse handleGetMetrics(Conductor conductor, BaseMessage message) {
-    GetMetricsRequest request = (GetMetricsRequest) message;
+  static CompletableFuture<BaseResponse> handleGetMetrics(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetMetricsRequest request = (GetMetricsRequest) message;
 
-    try {
-      if (request.metric_class.equals("workflow_step_count")) {
-        var metrics = conductor.systemDatabase.getMetrics(request.startTime(), request.endTime());
-        return new GetMetricsResponse(request, metrics);
-      } else {
-        logger.warn("Unexpected metric class {}", request.metric_class);
-        throw new RuntimeException("Unexpected metric class %s".formatted(request.metric_class));
-      }
-    } catch (Exception e) {
-      return new GetMetricsResponse(request, e);
-    }
+          try {
+            if (request.metric_class.equals("workflow_step_count")) {
+              var metrics =
+                  conductor.systemDatabase.getMetrics(request.startTime(), request.endTime());
+              return new GetMetricsResponse(request, metrics);
+            } else {
+              logger.warn("Unexpected metric class {}", request.metric_class);
+              throw new RuntimeException(
+                  "Unexpected metric class %s".formatted(request.metric_class));
+            }
+          } catch (Exception e) {
+            return new GetMetricsResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleImportWorkflow(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ImportWorkflowRequest request = (ImportWorkflowRequest) message;
+          long startTime = System.currentTimeMillis();
+          logger.info("Starting import workflow");
+
+          try {
+            var exportedWorkflows = deserializeExportedWorkflows(request.serialized_workflow);
+            logger.info("deserialization completed workflow count={}", exportedWorkflows.size());
+            conductor.systemDatabase.importWorkflow(exportedWorkflows);
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info(
+                "Database import completed: {} workflows imported, duration={}ms",
+                exportedWorkflows.size(),
+                duration);
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            logger.error("Exception encountered when importing workflow", e);
+            return new SuccessResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleExportWorkflow(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ExportWorkflowRequest request = (ExportWorkflowRequest) message;
+          long startTime = System.currentTimeMillis();
+          logger.info(
+              "Starting export workflow: id={}, export_children={}",
+              request.workflow_id,
+              request.export_children);
+
+          try {
+            var workflows =
+                conductor.systemDatabase.exportWorkflow(
+                    request.workflow_id, request.export_children);
+
+            logger.info(
+                "Database export completed: workflow_id={}, {} workflows retrieved",
+                request.workflow_id,
+                workflows.size());
+
+            var serializedWorkflow = serializeExportedWorkflows(workflows);
+
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info(
+                "Export workflow completed: id={}, workflows={}, serialized_size={} bytes, duration={}ms",
+                request.workflow_id,
+                workflows.size(),
+                serializedWorkflow.length(),
+                duration);
+
+            return new ExportWorkflowResponse(message, serializedWorkflow);
+          } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            var children = request.export_children ? "with children" : "";
+            logger.error(
+                "Exception encountered when exporting workflow {} {} after {}ms",
+                request.workflow_id,
+                children,
+                duration,
+                e);
+            return new ExportWorkflowResponse(request, e);
+          } finally {
+            long totalDuration = System.currentTimeMillis() - startTime;
+            logger.info(
+                "handleExportWorkflow completed: id={}, total_duration={}ms",
+                request.workflow_id,
+                totalDuration);
+          }
+        });
   }
 
   static List<ExportedWorkflow> deserializeExportedWorkflows(String serializedWorkflow)
@@ -847,73 +1007,5 @@ public class Conductor implements AutoCloseable {
     }
 
     return Base64.getEncoder().encodeToString(out.toByteArray());
-  }
-
-  static BaseResponse handleImportWorkflow(Conductor conductor, BaseMessage message) {
-    ImportWorkflowRequest request = (ImportWorkflowRequest) message;
-    long startTime = System.currentTimeMillis();
-    logger.info("Starting import workflow: id={}, export_children={}");
-
-    try {
-      var exportedWorkflows = deserializeExportedWorkflows(request.serialized_workflow);
-      logger.info("deserialization completed workflow count={}", exportedWorkflows.size());
-      conductor.systemDatabase.importWorkflow(exportedWorkflows);
-      long duration = System.currentTimeMillis() - startTime;
-      logger.info(
-          "Database import completed: {} workflows imported, duration={}ms",
-          exportedWorkflows.size(),
-          duration);
-      return new SuccessResponse(request, true);
-    } catch (Exception e) {
-      logger.error("Exception encountered when importing workflow", e);
-      return new SuccessResponse(request, e);
-    }
-  }
-
-  static BaseResponse handleExportWorkflow(Conductor conductor, BaseMessage message) {
-    ExportWorkflowRequest request = (ExportWorkflowRequest) message;
-    long startTime = System.currentTimeMillis();
-    logger.info(
-        "Starting export workflow: id={}, export_children={}",
-        request.workflow_id,
-        request.export_children);
-
-    try {
-      var workflows =
-          conductor.systemDatabase.exportWorkflow(request.workflow_id, request.export_children);
-
-      logger.info(
-          "Database export completed: workflow_id={}, {} workflows retrieved",
-          request.workflow_id,
-          workflows.size());
-
-      var serializedWorkflow = serializeExportedWorkflows(workflows);
-
-      long duration = System.currentTimeMillis() - startTime;
-      logger.info(
-          "Export workflow completed: id={}, workflows={}, serialized_size={} bytes, duration={}ms",
-          request.workflow_id,
-          workflows.size(),
-          serializedWorkflow.length(),
-          duration);
-
-      return new ExportWorkflowResponse(message, serializedWorkflow);
-    } catch (Exception e) {
-      long duration = System.currentTimeMillis() - startTime;
-      var children = request.export_children ? "with children" : "";
-      logger.error(
-          "Exception encountered when exporting workflow {} {} after {}ms",
-          request.workflow_id,
-          children,
-          duration,
-          e);
-      return new ExportWorkflowResponse(request, e);
-    } finally {
-      long totalDuration = System.currentTimeMillis() - startTime;
-      logger.info(
-          "handleExportWorkflow completed: id={}, total_duration={}ms",
-          request.workflow_id,
-          totalDuration);
-    }
   }
 }
