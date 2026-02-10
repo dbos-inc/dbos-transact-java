@@ -248,7 +248,7 @@ public class Conductor implements AutoCloseable {
 
     private static void writeFragmentedResponse(ChannelHandlerContext ctx, BaseResponse response)
         throws Exception {
-      int fragmentSize = 32 * 1024; // 32k
+      int fragmentSize = 128 * 1024; // 128k
       logger.debug(
           "Starting to write fragmented response: type={}, id={}",
           response.type,
@@ -413,7 +413,7 @@ public class Conductor implements AutoCloseable {
 
   public void start() {
     logger.debug("start");
-    dispatchLoop();
+    connectWebSocket();
   }
 
   public void stop() {
@@ -529,7 +529,7 @@ public class Conductor implements AutoCloseable {
               () -> {
                 reconnectTimeout = null;
                 logger.info("Attempting websocket reconnection");
-                dispatchLoop();
+                connectWebSocket();
               },
               reconnectDelayMs,
               TimeUnit.MILLISECONDS);
@@ -538,14 +538,14 @@ public class Conductor implements AutoCloseable {
     }
   }
 
-  void dispatchLoop() {
+  void connectWebSocket() {
     if (channel != null) {
       logger.warn("Conductor channel already exists");
       return;
     }
 
     if (isShutdown.get()) {
-      logger.debug("Not starting dispatch loop as conductor is shutting down");
+      logger.debug("Not connecting web socket as conductor is shutting down");
       return;
     }
 
@@ -665,7 +665,6 @@ public class Conductor implements AutoCloseable {
     }
   }
 
-  // Consolidated async handlers
   static CompletableFuture<BaseResponse> handleExecutorInfo(
       Conductor conductor, BaseMessage message) {
     return CompletableFuture.supplyAsync(
