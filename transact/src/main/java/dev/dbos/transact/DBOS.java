@@ -104,7 +104,13 @@ public class DBOS {
         throw new IllegalStateException("Cannot register workflow after DBOS is launched");
       }
 
-      String className = implementation.getClass().getName();
+      // Use @WorkflowClassName annotation if present, otherwise use the Java class name
+      WorkflowClassName classNameAnnotation =
+          implementation.getClass().getAnnotation(WorkflowClassName.class);
+      String className =
+          (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
+              ? classNameAnnotation.value()
+              : implementation.getClass().getName();
       workflowRegistry.register(interfaceClass, implementation, className, instanceName);
 
       Method[] methods = implementation.getClass().getDeclaredMethods();

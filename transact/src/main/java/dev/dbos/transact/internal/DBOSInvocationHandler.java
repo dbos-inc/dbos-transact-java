@@ -4,6 +4,7 @@ import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowClassName;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -89,7 +90,12 @@ public class DBOSInvocationHandler implements InvocationHandler {
 
   protected Object handleWorkflow(
       Method method, Object[] args, Workflow workflow, StartWorkflowHook hook) throws Exception {
-    var className = target.getClass().getName();
+    WorkflowClassName classNameAnnotation =
+        target.getClass().getAnnotation(WorkflowClassName.class);
+    String className =
+        (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
+            ? classNameAnnotation.value()
+            : target.getClass().getName();
     var workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
     if (hook != null) {
       var invocation = new Invocation(className, instanceName, workflowName, args);
