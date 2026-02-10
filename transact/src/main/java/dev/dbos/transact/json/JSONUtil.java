@@ -28,6 +28,7 @@ import org.slf4j.LoggerFactory;
 public class JSONUtil {
 
   static {
+    // extend max JSON string length to handle large workflow import/export JSON
     StreamReadConstraints.overrideDefaultStreamReadConstraints(
         StreamReadConstraints.builder().maxStringLength(1_000_000_000).build());
   }
