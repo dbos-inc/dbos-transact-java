@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@WorkflowClassName("TheImplFormerlyNamedSimpleServiceImpl")
 public class SimpleServiceImpl implements SimpleService {
 
   private static final Logger logger = LoggerFactory.getLogger(SimpleServiceImpl.class);

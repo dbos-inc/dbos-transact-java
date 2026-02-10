@@ -2,9 +2,11 @@ package dev.dbos.transact.client;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowClassName;
 
 import java.time.Duration;
 
+@WorkflowClassName("ClientServiceImpl")
 public class ClientServiceImpl implements ClientService {
 
   @Workflow
