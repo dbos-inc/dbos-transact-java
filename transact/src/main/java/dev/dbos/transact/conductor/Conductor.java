@@ -603,6 +603,23 @@ public class Conductor implements AutoCloseable {
                   p.addLast(
                       new HttpClientCodec(),
                       new HttpObjectAggregator(256 * 1024 * 1024), // 256MB max message size
+                      new io.netty.channel.ChannelInboundHandlerAdapter() {
+                        @Override
+                        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+                          if (msg instanceof io.netty.handler.codec.http.FullHttpResponse) {
+                            io.netty.handler.codec.http.FullHttpResponse response = 
+                                (io.netty.handler.codec.http.FullHttpResponse) msg;
+                            logger.debug("HTTP Response: {} {}", 
+                                response.status().code(), response.status().reasonPhrase());
+                            logger.debug("HTTP Response headers: {}", response.headers());
+                            if (response.content().readableBytes() > 0) {
+                              String body = response.content().toString(java.nio.charset.StandardCharsets.UTF_8);
+                              logger.debug("HTTP Response body: {}", body);
+                            }
+                          }
+                          super.channelRead(ctx, msg);
+                        }
+                      },
                       new WebSocketClientProtocolHandler(
                           WebSocketClientProtocolConfig.newBuilder()
                               .webSocketUri(uri)
@@ -658,15 +675,10 @@ public class Conductor implements AutoCloseable {
     io.netty.handler.codec.http.DefaultHttpHeaders headers =
         new io.netty.handler.codec.http.DefaultHttpHeaders();
 
-    // Add standard HTTP headers that Java's HttpClient would automatically include
+    // Add only the most basic headers that Java's HttpClient would send
     headers.add("User-Agent", "Java/" + System.getProperty("java.version"));
     
-    // Add more standard headers that HttpClient would include
-    headers.add("Accept", "*/*");
-    headers.add("Accept-Language", "en-US,en;q=0.9");
-    headers.add("Accept-Encoding", "gzip, deflate, br");
-    
-    // Add proper Host header
+    // Add proper Host header (this is critical)
     try {
       URI uri = new URI(url);
       String host = uri.getHost();
@@ -678,23 +690,12 @@ public class Conductor implements AutoCloseable {
       logger.debug("Failed to extract host from URL {}", url);
     }
     
-    // Add Origin if connecting to cloud.dbos.dev (common WebSocket requirement)
-    if (url.contains("cloud.dbos.dev")) {
-      headers.add("Origin", "https://cloud.dbos.dev");
-      logger.debug("Adding Origin header for cloud.dbos.dev connection");
-    }
-    
     // Check for explicit DBOS cloud tokens in environment variables only
     String cloudToken = System.getenv("DBOS_CLOUD_TOKEN");
     if (cloudToken != null && !cloudToken.isEmpty()) {
       headers.add("Authorization", "Bearer " + cloudToken);
       logger.debug("Adding Authorization header from DBOS_CLOUD_TOKEN");
     }
-    
-    // Add Connection and Upgrade headers that browsers typically send
-    headers.add("Connection", "Upgrade");
-    headers.add("Upgrade", "websocket");
-    headers.add("Sec-WebSocket-Version", "13");
     
     // Log all headers for debugging (but hide auth values)
     logger.debug("WebSocket headers: {}", 
