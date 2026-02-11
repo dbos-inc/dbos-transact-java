@@ -407,12 +407,17 @@ public class Conductor implements AutoCloseable {
                       pipeline.addLast("http-codec", new HttpClientCodec());
                       pipeline.addLast("aggregator", new HttpObjectAggregator(65536));
                       
-                      // Add HTTP request/response logger
+                      // Add HTTP request/response logger + Origin header remover
                       pipeline.addLast("http-logger", new io.netty.channel.ChannelDuplexHandler() {
                         @Override
                         public void write(ChannelHandlerContext ctx, Object msg, io.netty.channel.ChannelPromise promise) throws Exception {
                           if (msg instanceof io.netty.handler.codec.http.HttpRequest) {
                             io.netty.handler.codec.http.HttpRequest request = (io.netty.handler.codec.http.HttpRequest) msg;
+                            
+                            // Remove the Origin header that Netty automatically adds
+                            request.headers().remove("origin");
+                            request.headers().remove("Origin"); // try both cases
+                            
                             logger.error("===== HTTP Request Debug =====");
                             logger.error("HTTP Request: {} {} {}", 
                                 request.method(), request.uri(), request.protocolVersion());
