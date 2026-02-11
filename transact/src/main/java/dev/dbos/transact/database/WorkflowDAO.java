@@ -330,7 +330,7 @@ class WorkflowDAO {
           SELECT
             workflow_uuid, status, forked_from,
             name, class_name, config_name,
-            inputs, output, error,
+            inputs, output, error, serialization,
             queue_name, deduplication_id, priority, queue_partition_key,
             executor_id, application_version, application_id,
             authenticated_user, assumed_role, authenticated_roles,
@@ -375,7 +375,7 @@ class WorkflowDAO {
             executor_id, application_version, application_id,
             authenticated_user, assumed_role, authenticated_roles,
             created_at, updated_at, recovery_attempts, started_at_epoch_ms,
-            workflow_timeout_ms, workflow_deadline_epoch_ms, serialization
+            workflow_timeout_ms, workflow_deadline_epoch_ms
         """);
 
     var loadInput = input.loadInput() == null || input.loadInput();
@@ -385,6 +385,9 @@ class WorkflowDAO {
     }
     if (loadOutput) {
       sqlBuilder.append(", output, error");
+    }
+    if (loadInput || loadOutput) {
+      sqlBuilder.append(", serialization");
     }
 
     sqlBuilder.append(" FROM %s.workflow_status ".formatted(this.schema));
@@ -517,7 +520,7 @@ class WorkflowDAO {
     String serializedInput = loadInput ? rs.getString("inputs") : null;
     String serializedOutput = loadOutput ? rs.getString("output") : null;
     String serializedError = loadOutput ? rs.getString("error") : null;
-    ErrorResult err = ErrorResult.deserialize(serializedError);
+    var err = ErrorResult.deserialize(serializedError, rs.getString("serialization"), null);
     WorkflowStatus info =
         new WorkflowStatus(
             workflow_uuid,

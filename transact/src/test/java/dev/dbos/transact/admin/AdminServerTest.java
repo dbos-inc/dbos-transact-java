@@ -487,7 +487,16 @@ class AdminServerTest {
     }
     steps.add(new StepInfo(3, "step-3", null, null, "child-wfid-3", null, null, null));
     var error = new RuntimeException("error-4");
-    steps.add(new StepInfo(4, "step-4", null, ErrorResult.fromThrowable(error), null, null, null, null));
+    steps.add(
+        new StepInfo(
+            4,
+            "step-4",
+            null,
+            ErrorResult.fromThrowable(error, null, null),
+            null,
+            null,
+            null,
+            null));
 
     when(mockDB.listWorkflowSteps(any())).thenReturn(steps);
 

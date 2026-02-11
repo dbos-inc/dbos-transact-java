@@ -357,7 +357,7 @@ public class ConductorTest {
       for (int j = 0; j < 1024; j++) {
         builder.append(characters.charAt(random.nextInt(characters.length())));
       }
-      steps.add(new StepInfo(i, "function" + i, builder.toString(), null, null, null, null));
+      steps.add(new StepInfo(i, "function" + i, builder.toString(), null, null, null, null, null));
     }
     when(mockExec.listWorkflowSteps("large-wf")).thenReturn(steps);
 
@@ -1570,7 +1570,8 @@ public class ConductorTest {
               null,
               null,
               currentTime + (i * 1000),
-              currentTime + ((i + 1) * 1000)));
+              currentTime + ((i + 1) * 1000),
+              null));
     }
 
     int eventCount = (int) (Math.random() * 8) + 2;
