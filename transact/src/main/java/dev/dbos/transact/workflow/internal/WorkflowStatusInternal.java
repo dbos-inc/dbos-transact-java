@@ -33,13 +33,14 @@ public record WorkflowStatusInternal(
   public WorkflowStatusInternal() {
     this(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null, null);
+        null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public WorkflowStatusInternal(String workflowUUID, WorkflowState state) {
     this(
         workflowUUID,
         state,
+        null,
         null,
         null,
         null,

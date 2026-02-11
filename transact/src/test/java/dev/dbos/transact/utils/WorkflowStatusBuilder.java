@@ -39,11 +39,8 @@ public class WorkflowStatusBuilder {
   private Long timeoutMs;
   private Long deadlineEpochMs;
   private String forkedFrom;
-<<<<<<< HEAD
-  private String serialization;
-=======
   private String parentWorkflowId;
->>>>>>> origin/main
+  private String serialization;
 
   public WorkflowStatus build() {
     return new WorkflowStatus(
@@ -72,11 +69,8 @@ public class WorkflowStatusBuilder {
         priority,
         partitionKey,
         forkedFrom,
-<<<<<<< HEAD
+        parentWorkflowId,
         serialization);
-=======
-        parentWorkflowId);
->>>>>>> origin/main
   }
 
   public WorkflowStatusBuilder(String workflowId) {
