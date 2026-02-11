@@ -684,31 +684,17 @@ public class Conductor implements AutoCloseable {
       logger.debug("Adding Origin header for cloud.dbos.dev connection");
     }
     
-    // Try using the conductor key itself as authorization
-    // Extract conductor key from the URL path
-    try {
-      URI uri = new URI(url);
-      String path = uri.getPath();
-      if (path != null) {
-        String[] pathParts = path.split("/");
-        if (pathParts.length > 0) {
-          String conductorKey = pathParts[pathParts.length - 1]; // Last part of path
-          if (conductorKey.startsWith("dbos_")) {
-            headers.add("Authorization", "Bearer " + conductorKey);
-            logger.debug("Adding Authorization header with conductor key");
-          }
-        }
-      }
-    } catch (Exception e) {
-      logger.debug("Failed to extract conductor key from URL {}", url);
-    }
-    
-    // Check for DBOS-specific tokens in environment variables
+    // Check for explicit DBOS cloud tokens in environment variables only
     String cloudToken = System.getenv("DBOS_CLOUD_TOKEN");
     if (cloudToken != null && !cloudToken.isEmpty()) {
       headers.add("Authorization", "Bearer " + cloudToken);
       logger.debug("Adding Authorization header from DBOS_CLOUD_TOKEN");
     }
+    
+    // Add Connection and Upgrade headers that browsers typically send
+    headers.add("Connection", "Upgrade");
+    headers.add("Upgrade", "websocket");
+    headers.add("Sec-WebSocket-Version", "13");
     
     // Log all headers for debugging (but hide auth values)
     logger.debug("WebSocket headers: {}", 
