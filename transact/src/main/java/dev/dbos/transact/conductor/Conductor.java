@@ -406,6 +406,25 @@ public class Conductor implements AutoCloseable {
                       pipeline.addLast("ssl", sslCtx.newHandler(ch.alloc(), wsUri.getHost(), port));
                       pipeline.addLast("http-codec", new HttpClientCodec());
                       pipeline.addLast("aggregator", new HttpObjectAggregator(65536));
+                      
+                      // Add HTTP request/response logger
+                      pipeline.addLast("http-logger", new io.netty.channel.ChannelDuplexHandler() {
+                        @Override
+                        public void write(ChannelHandlerContext ctx, Object msg, io.netty.channel.ChannelPromise promise) throws Exception {
+                          if (msg instanceof io.netty.handler.codec.http.HttpRequest) {
+                            io.netty.handler.codec.http.HttpRequest request = (io.netty.handler.codec.http.HttpRequest) msg;
+                            logger.error("===== HTTP Request Debug =====");
+                            logger.error("HTTP Request: {} {} {}", 
+                                request.method(), request.uri(), request.protocolVersion());
+                            logger.error("HTTP Request Headers:");
+                            request.headers().forEach(header -> 
+                                logger.error("  {}: {}", header.getKey(), header.getValue()));
+                            logger.error("===== End HTTP Request Debug =====");
+                          }
+                          super.write(ctx, msg, promise);
+                        }
+                      });
+                      
                       pipeline.addLast(
                           "websocket-handler",
                           new SimpleChannelInboundHandler<Object>() {
@@ -423,8 +442,18 @@ public class Conductor implements AutoCloseable {
 
                               if (!handshaker.isHandshakeComplete()) {
                                 try {
-                                  handshaker.finishHandshake(
-                                      ch, (io.netty.handler.codec.http.FullHttpResponse) msg);
+                                  // Log the HTTP response we received
+                                  io.netty.handler.codec.http.FullHttpResponse response = 
+                                      (io.netty.handler.codec.http.FullHttpResponse) msg;
+                                  logger.error("===== HTTP Response Debug =====");
+                                  logger.error("HTTP Response Status: {} {}", 
+                                      response.status().code(), response.status().reasonPhrase());
+                                  logger.error("HTTP Response Headers:");
+                                  response.headers().forEach(header -> 
+                                      logger.error("  {}: {}", header.getKey(), header.getValue()));
+                                  logger.error("===== End HTTP Response Debug =====");
+                                  
+                                  handshaker.finishHandshake(ch, response);
                                   logger.info("===== SUCCESSFUL WebSocket Connection =====");
                                   logger.info("Connected to DBOS conductor at: {}", url);
                                   logger.info("Channel state: {}", ch);
