@@ -292,6 +292,10 @@ public class Conductor implements AutoCloseable {
     logger.debug("DBOS__VMID: {}", System.getenv("DBOS__VMID"));
     logger.debug("DBOS__APPVERSION: {}", System.getenv("DBOS__APPVERSION"));
     
+    // Enable Java HTTP client debugging to see exact headers sent
+    System.setProperty("jdk.httpclient.HttpClient.log", "all");
+    System.setProperty("java.net.useSystemProxies", "true");
+    
     // Check for any DBOS or auth-related environment variables
     System.getenv().entrySet().stream()
         .filter(e -> e.getKey().toUpperCase().contains("DBOS") || 
