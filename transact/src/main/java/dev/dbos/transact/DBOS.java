@@ -752,6 +752,28 @@ public class DBOS {
   }
 
   /**
+   * Deletes a workflow from the system. Does not delete child workflows.
+   *
+   * @param workflowId the unique identifier of the workflow to delete. Must not be null.
+   * @throws IllegalArgumentException if workflowId is null
+   */
+  public static void deleteWorkflow(@NonNull String workflowId) {
+    deleteWorkflow(workflowId, false);
+  }
+
+  /**
+   * Deletes a workflow and optionally its child workflows from the system.
+   *
+   * @param workflowId the unique identifier of the workflow to delete. Must not be null.
+   * @param deleteChildren if true, also deletes all child workflows associated with the specified
+   *     workflow; if false, only deletes the specified workflow
+   * @throws IllegalArgumentException if workflowId is null
+   */
+  public static void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
+    executor("deleteWorkflow").deleteWorkflow(workflowId, deleteChildren);
+  }
+
+  /**
    * Retrieve a handle to a workflow, given its ID. Note that a handle is always returned, whether
    * the workflow exists or not; getStatus() can be used to tell the difference
    *
