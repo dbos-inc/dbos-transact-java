@@ -600,19 +600,6 @@ public class Conductor implements AutoCloseable {
                   p.addLast(
                       new HttpClientCodec(),
                       new HttpObjectAggregator(256 * 1024 * 1024), // 256MB max message size
-                      // Remove Origin header that Netty automatically adds to fix 403 errors
-                      new io.netty.channel.ChannelDuplexHandler() {
-                        @Override
-                        public void write(ChannelHandlerContext ctx, Object msg, io.netty.channel.ChannelPromise promise) throws Exception {
-                          if (msg instanceof io.netty.handler.codec.http.HttpRequest) {
-                            io.netty.handler.codec.http.HttpRequest request = (io.netty.handler.codec.http.HttpRequest) msg;
-                            // Remove the Origin header that causes 403 errors
-                            request.headers().remove("origin");
-                            request.headers().remove("Origin");
-                          }
-                          super.write(ctx, msg, promise);
-                        }
-                      },
                       new WebSocketClientProtocolHandler(
                           WebSocketClientProtocolConfig.newBuilder()
                               .webSocketUri(uri)
@@ -622,6 +609,7 @@ public class Conductor implements AutoCloseable {
                               .customHeaders(EmptyHttpHeaders.INSTANCE)
                               .dropPongFrames(false)
                               .handleCloseFrames(false)
+                              .generateOriginHeader(false)
                               .maxFramePayloadLength(256 * 1024 * 1024)
                               .build()),
                       new MessageToMessageDecoder<WebSocketFrame>() {
