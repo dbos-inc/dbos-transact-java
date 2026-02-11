@@ -85,8 +85,8 @@ public class ListWorkflowsRequest extends BaseMessage {
       return this;
     }
 
-    public Builder parentWorkflowId(String parent_workflow_id) {
-      this.parent_workflow_id = parent_workflow_id;
+    public Builder parentWorkflowId(String parentWorkflowId) {
+      this.parent_workflow_id = parentWorkflowId;
       return this;
     }
 

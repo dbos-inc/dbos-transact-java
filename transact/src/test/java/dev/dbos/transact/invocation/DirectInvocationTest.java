@@ -229,7 +229,6 @@ public class DirectInvocationTest {
     assertNull(step.error());
     assertEquals("simpleWorkflow", step.functionName());
     assertEquals(row1.workflowId(), step.childWorkflowId());
-   
   }
 
   @Test
