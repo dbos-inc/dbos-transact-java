@@ -27,7 +27,10 @@ public record WorkflowStatusRow(
     String inputs,
     Long startedAtEpochMs,
     String deduplicationId,
-    Integer priority) {
+    Integer priority,
+    String queuePartitionKey,
+    String forkedFrom,
+    String parentWorkflowId) {
 
   public WorkflowStatusRow(ResultSet rs) throws SQLException {
     this(
@@ -54,6 +57,9 @@ public record WorkflowStatusRow(
         rs.getString("inputs"),
         rs.getObject("started_at_epoch_ms", Long.class),
         rs.getString("deduplication_id"),
-        rs.getObject("priority", Integer.class));
+        rs.getObject("priority", Integer.class),
+        rs.getString("queue_partition_key"),
+        rs.getString("forked_from"),
+        rs.getString("parent_workflow_id"));
   }
 }

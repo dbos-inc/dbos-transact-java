@@ -30,7 +30,8 @@ public record WorkflowStatus(
     String deduplicationId,
     Integer priority,
     String queuePartitionKey,
-    String forkedFrom) {
+    String forkedFrom,
+    String parentWorkflowId) {
 
   @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)
   public Instant deadline() {
@@ -80,7 +81,8 @@ public record WorkflowStatus(
         && java.util.Objects.equals(deduplicationId, that.deduplicationId)
         && java.util.Objects.equals(priority, that.priority)
         && java.util.Objects.equals(queuePartitionKey, that.queuePartitionKey)
-        && java.util.Objects.equals(forkedFrom, that.forkedFrom);
+        && java.util.Objects.equals(forkedFrom, that.forkedFrom)
+        && java.util.Objects.equals(parentWorkflowId, that.parentWorkflowId);
   }
 
   @Override
@@ -110,6 +112,7 @@ public record WorkflowStatus(
         deduplicationId,
         priority,
         queuePartitionKey,
-        forkedFrom);
+        forkedFrom,
+        parentWorkflowId);
   }
 }

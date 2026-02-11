@@ -779,9 +779,10 @@ public class SystemDatabase implements AutoCloseable {
           executor_id, application_version, application_id,
           created_at, updated_at, started_at_epoch_ms,
           queue_name, deduplication_id, priority, queue_partition_key,
-          workflow_timeout_ms, workflow_deadline_epoch_ms, recovery_attempts, forked_from
+          workflow_timeout_ms, workflow_deadline_epoch_ms,
+          recovery_attempts, forked_from, parent_workflow_id
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -870,6 +871,7 @@ public class SystemDatabase implements AutoCloseable {
                   stmt.setObject(23, status.deadlineEpochMs());
                   stmt.setObject(24, status.recoveryAttempts());
                   stmt.setString(25, status.forkedFrom());
+                  stmt.setString(26, status.parentWorkflowId());
 
                   stmt.executeUpdate();
                 }
