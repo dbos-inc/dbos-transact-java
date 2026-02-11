@@ -3,6 +3,7 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.DebugTriggers;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
@@ -345,7 +346,7 @@ class WorkflowDAO {
       stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         if (rs.next()) {
-          return resultsToWorkflowStatus(rs, true, true);
+          return resultsToWorkflowStatus(rs, true, true, null);
         }
       }
     }
@@ -504,7 +505,7 @@ class WorkflowDAO {
 
       try (ResultSet rs = pstmt.executeQuery()) {
         while (rs.next()) {
-          WorkflowStatus info = resultsToWorkflowStatus(rs, loadInput, loadOutput);
+          WorkflowStatus info = resultsToWorkflowStatus(rs, loadInput, loadOutput, null);
           workflows.add(info);
         }
       }
@@ -514,13 +515,15 @@ class WorkflowDAO {
   }
 
   private static WorkflowStatus resultsToWorkflowStatus(
-      ResultSet rs, boolean loadInput, boolean loadOutput) throws SQLException {
+      ResultSet rs, boolean loadInput, boolean loadOutput, DBOSSerializer serializer)
+      throws SQLException {
     var workflow_uuid = rs.getString("workflow_uuid");
     String authenticatedRolesJson = rs.getString("authenticated_roles");
     String serializedInput = loadInput ? rs.getString("inputs") : null;
     String serializedOutput = loadOutput ? rs.getString("output") : null;
     String serializedError = loadOutput ? rs.getString("error") : null;
-    var err = ErrorResult.deserialize(serializedError, rs.getString("serialization"), null);
+    String serialization = loadInput || loadOutput ? rs.getString("serialization") : null;
+    var err = ErrorResult.deserialize(serializedError, serialization, null);
     WorkflowStatus info =
         new WorkflowStatus(
             workflow_uuid,
@@ -533,8 +536,8 @@ class WorkflowDAO {
             (authenticatedRolesJson != null)
                 ? (String[]) JSONUtil.deserializeToArray(authenticatedRolesJson)
                 : null,
-            (serializedInput != null) ? JSONUtil.deserializeToArray(serializedInput) : null,
-            (serializedOutput != null) ? JSONUtil.deserializeToArray(serializedOutput)[0] : null,
+            SerializationUtil.deserializePositionalArgs(serializedInput, serialization, serializer),
+            SerializationUtil.deserializeValue(serializedOutput, serialization, serializer),
             err,
             rs.getString("executor_id"),
             rs.getObject("created_at", Long.class),
