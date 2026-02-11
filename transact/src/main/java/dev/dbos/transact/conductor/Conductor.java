@@ -49,7 +49,6 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.MessageToMessageDecoder;
-import io.netty.handler.codec.http.EmptyHttpHeaders;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
@@ -606,7 +605,7 @@ public class Conductor implements AutoCloseable {
                               .version(WebSocketVersion.V13)
                               .subprotocol(null)
                               .allowExtensions(false)
-                              .customHeaders(EmptyHttpHeaders.INSTANCE)
+                              .customHeaders(createWebSocketHeaders())
                               .dropPongFrames(false)
                               .handleCloseFrames(false)
                               .maxFramePayloadLength(256 * 1024 * 1024)
@@ -649,6 +648,16 @@ public class Conductor implements AutoCloseable {
       logger.warn("Error in conductor loop. Reconnecting", e);
       resetWebSocket();
     }
+  }
+
+  private io.netty.handler.codec.http.HttpHeaders createWebSocketHeaders() {
+    io.netty.handler.codec.http.DefaultHttpHeaders headers =
+        new io.netty.handler.codec.http.DefaultHttpHeaders();
+
+    // Add standard HTTP headers that Java's HttpClient would automatically include
+    headers.add("User-Agent", "Java/" + System.getProperty("java.version"));
+
+    return headers;
   }
 
   CompletableFuture<BaseResponse> getResponseAsync(BaseMessage message) {
