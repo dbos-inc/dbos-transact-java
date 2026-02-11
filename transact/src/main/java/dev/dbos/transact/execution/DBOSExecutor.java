@@ -1442,6 +1442,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             timeoutMs,
             deadlineEpochMs,
+            parentWorkflow != null ? parentWorkflow.workflowId() : null,
             actualSerialization);
 
     WorkflowInitResult[] initResult = {null};

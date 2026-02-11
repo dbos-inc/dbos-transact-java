@@ -31,6 +31,7 @@ public record WorkflowStatus(
     Integer priority,
     String queuePartitionKey,
     String forkedFrom,
+    String parentWorkflowId,
     String serialization) {
 
   @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)
@@ -81,7 +82,8 @@ public record WorkflowStatus(
         && java.util.Objects.equals(deduplicationId, that.deduplicationId)
         && java.util.Objects.equals(priority, that.priority)
         && java.util.Objects.equals(queuePartitionKey, that.queuePartitionKey)
-        && java.util.Objects.equals(forkedFrom, that.forkedFrom);
+        && java.util.Objects.equals(forkedFrom, that.forkedFrom)
+        && java.util.Objects.equals(parentWorkflowId, that.parentWorkflowId);
   }
 
   @Override
@@ -111,6 +113,7 @@ public record WorkflowStatus(
         deduplicationId,
         priority,
         queuePartitionKey,
-        forkedFrom);
+        forkedFrom,
+        parentWorkflowId);
   }
 }

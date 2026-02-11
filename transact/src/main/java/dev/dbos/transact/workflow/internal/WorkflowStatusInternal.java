@@ -27,6 +27,7 @@ public record WorkflowStatusInternal(
     Long startedAt,
     Long timeoutMs,
     Long deadlineEpochMs,
+    String parentWorkflowId,
     String serialization) {
 
   public WorkflowStatusInternal() {
@@ -66,6 +67,7 @@ public record WorkflowStatusInternal(
 
   public static class Builder {
     private String workflowId;
+    private String parentWorkflowId;
     private WorkflowState status;
     private String name;
     private String className;
@@ -93,6 +95,11 @@ public record WorkflowStatusInternal(
 
     public Builder workflowId(String workflowId) {
       this.workflowId = workflowId;
+      return this;
+    }
+
+    public Builder parentWorkflowId(String parentWorkflowId) {
+      this.parentWorkflowId = parentWorkflowId;
       return this;
     }
 
@@ -242,6 +249,7 @@ public record WorkflowStatusInternal(
           startedAt,
           timeoutMs,
           deadlineEpochMs,
+          parentWorkflowId,
           serialization);
     }
   }

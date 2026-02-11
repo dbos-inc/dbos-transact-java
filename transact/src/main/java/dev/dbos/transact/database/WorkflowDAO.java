@@ -172,8 +172,8 @@ class WorkflowDAO {
             executor_id, application_version, application_id,
             created_at, updated_at, recovery_attempts,
             workflow_timeout_ms, workflow_deadline_epoch_ms,
-            owner_xid, serialization
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            parent_workflow_id, owner_xid, serialization
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               recovery_attempts = CASE
@@ -224,10 +224,11 @@ class WorkflowDAO {
 
       stmt.setObject(20, status.timeoutMs());
       stmt.setObject(21, status.deadlineEpochMs());
+      stmt.setString(22, status.parentWorkflowId());
 
-      stmt.setObject(22, ownerXid);
-      stmt.setString(23, status.serialization());
-      stmt.setInt(24, incrementAttempts ? 1 : 0);
+      stmt.setObject(23, ownerXid);
+      stmt.setString(24, status.serialization());
+      stmt.setInt(25, incrementAttempts ? 1 : 0);
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -329,14 +330,15 @@ class WorkflowDAO {
     var sql =
         """
           SELECT
-            workflow_uuid, status, forked_from,
+            workflow_uuid, status,
             name, class_name, config_name,
             inputs, output, error, serialization,
             queue_name, deduplication_id, priority, queue_partition_key,
             executor_id, application_version, application_id,
             authenticated_user, assumed_role, authenticated_roles,
             created_at, updated_at, recovery_attempts, started_at_epoch_ms,
-            workflow_timeout_ms, workflow_deadline_epoch_ms
+            workflow_timeout_ms, workflow_deadline_epoch_ms,
+            forked_from, parent_workflow_id
             FROM %s.workflow_status
             WHERE workflow_uuid = ?
         """
@@ -370,13 +372,14 @@ class WorkflowDAO {
     sqlBuilder.append(
         """
           SELECT
-            workflow_uuid, status, forked_from,
+            workflow_uuid, status,
             name, class_name, config_name,
             queue_name, deduplication_id, priority, queue_partition_key,
             executor_id, application_version, application_id,
             authenticated_user, assumed_role, authenticated_roles,
             created_at, updated_at, recovery_attempts, started_at_epoch_ms,
-            workflow_timeout_ms, workflow_deadline_epoch_ms
+            workflow_timeout_ms, workflow_deadline_epoch_ms,
+            forked_from, parent_workflow_id
         """);
 
     var loadInput = input.loadInput() == null || input.loadInput();
@@ -418,6 +421,10 @@ class WorkflowDAO {
     if (input.forkedFrom() != null) {
       whereConditions.add("forked_from = ?");
       parameters.add(input.forkedFrom());
+    }
+    if (input.parentWorkflowId() != null) {
+      whereConditions.add("parent_workflow_id = ?");
+      parameters.add(input.parentWorkflowId());
     }
     if (input.workflowIdPrefix() != null) {
       whereConditions.add("workflow_uuid LIKE ?");
@@ -553,6 +560,7 @@ class WorkflowDAO {
             rs.getObject("priority", Integer.class),
             rs.getString("queue_partition_key"),
             rs.getString("forked_from"),
+            rs.getString("parent_workflow_id"),
             rs.getString("serialization"));
     return info;
   }

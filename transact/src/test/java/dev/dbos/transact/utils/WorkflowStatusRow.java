@@ -28,6 +28,9 @@ public record WorkflowStatusRow(
     Long startedAtEpochMs,
     String deduplicationId,
     Integer priority,
+    String queuePartitionKey,
+    String forkedFrom,
+    String parentWorkflowId,
     String serialization) {
 
   public WorkflowStatusRow(ResultSet rs) throws SQLException {
@@ -56,6 +59,9 @@ public record WorkflowStatusRow(
         rs.getObject("started_at_epoch_ms", Long.class),
         rs.getString("deduplication_id"),
         rs.getObject("priority", Integer.class),
+        rs.getString("queue_partition_key"),
+        rs.getString("forked_from"),
+        rs.getString("parent_workflow_id"),
         rs.getString("serialization"));
   }
 }
