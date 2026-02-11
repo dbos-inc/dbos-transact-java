@@ -666,10 +666,41 @@ public class Conductor implements AutoCloseable {
     headers.add("Accept-Language", "en-US,en;q=0.9");
     headers.add("Accept-Encoding", "gzip, deflate, br");
     
+    // Add proper Host header
+    try {
+      URI uri = new URI(url);
+      String host = uri.getHost();
+      if (uri.getPort() != -1 && uri.getPort() != 443 && uri.getPort() != 80) {
+        host += ":" + uri.getPort();
+      }
+      headers.add("Host", host);
+    } catch (Exception e) {
+      logger.debug("Failed to extract host from URL {}", url);
+    }
+    
     // Add Origin if connecting to cloud.dbos.dev (common WebSocket requirement)
     if (url.contains("cloud.dbos.dev")) {
       headers.add("Origin", "https://cloud.dbos.dev");
       logger.debug("Adding Origin header for cloud.dbos.dev connection");
+    }
+    
+    // Try using the conductor key itself as authorization
+    // Extract conductor key from the URL path
+    try {
+      URI uri = new URI(url);
+      String path = uri.getPath();
+      if (path != null) {
+        String[] pathParts = path.split("/");
+        if (pathParts.length > 0) {
+          String conductorKey = pathParts[pathParts.length - 1]; // Last part of path
+          if (conductorKey.startsWith("dbos_")) {
+            headers.add("Authorization", "Bearer " + conductorKey);
+            logger.debug("Adding Authorization header with conductor key");
+          }
+        }
+      }
+    } catch (Exception e) {
+      logger.debug("Failed to extract conductor key from URL {}", url);
     }
     
     // Check for DBOS-specific tokens in environment variables
@@ -679,8 +710,11 @@ public class Conductor implements AutoCloseable {
       logger.debug("Adding Authorization header from DBOS_CLOUD_TOKEN");
     }
     
-    // Log all headers for debugging
-    logger.debug("WebSocket headers: {}", headers);
+    // Log all headers for debugging (but hide auth values)
+    logger.debug("WebSocket headers: {}", 
+        headers.names().stream()
+            .map(name -> name + "=" + (name.toLowerCase().contains("auth") ? "[REDACTED]" : headers.get(name)))
+            .collect(java.util.stream.Collectors.joining(", ")));
     
     return headers;
   }
