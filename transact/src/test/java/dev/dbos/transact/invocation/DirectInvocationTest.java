@@ -217,6 +217,8 @@ public class DirectInvocationTest {
     assertNull(row1.timeoutMs());
     assertNull(row0.deadlineEpochMs());
     assertNull(row1.deadlineEpochMs());
+    assertNull(row0.parentWorkflowId());
+    assertEquals(row0.workflowId(), row1.parentWorkflowId());
 
     var steps = DBUtils.getStepRows(dataSource, row0.workflowId());
     assertEquals(1, steps.size());
@@ -227,6 +229,7 @@ public class DirectInvocationTest {
     assertNull(step.error());
     assertEquals("simpleWorkflow", step.functionName());
     assertEquals(row1.workflowId(), step.childWorkflowId());
+   
   }
 
   @Test
@@ -278,6 +281,7 @@ public class DirectInvocationTest {
     var row1 = rows.get(1);
     assertEquals(workflowId, row0.workflowId());
     assertEquals(workflowId + "-0", row1.workflowId());
+    assertEquals(workflowId, row1.parentWorkflowId());
   }
 
   @Test
