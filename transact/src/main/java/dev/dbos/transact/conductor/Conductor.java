@@ -155,6 +155,8 @@ public class Conductor implements AutoCloseable {
       } else if (evt
           == WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_TIMEOUT) {
         logger.error("Websocket handshake timeout with conductor at {}", url);
+      } else if (evt instanceof WebSocketClientProtocolHandler.ClientHandshakeStateEvent) {
+        logger.error("Websocket handshake failed with event: {}", evt);
       }
       super.userEventTriggered(ctx, evt);
     }
@@ -343,10 +345,12 @@ public class Conductor implements AutoCloseable {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-      logger.warn(
-          "Unexpected exception in websocket connection to conductor. Channel active: {}, writable: {}",
+      logger.error(
+          "Exception in websocket connection to conductor at {}. Channel active: {}, writable: {}, Error: {}",
+          url,
           ctx.channel().isActive(),
           ctx.channel().isWritable(),
+          cause.getMessage(),
           cause);
       resetWebSocket();
     }
@@ -656,7 +660,28 @@ public class Conductor implements AutoCloseable {
 
     // Add standard HTTP headers that Java's HttpClient would automatically include
     headers.add("User-Agent", "Java/" + System.getProperty("java.version"));
-
+    
+    // Add more standard headers that HttpClient would include
+    headers.add("Accept", "*/*");
+    headers.add("Accept-Language", "en-US,en;q=0.9");
+    headers.add("Accept-Encoding", "gzip, deflate, br");
+    
+    // Add Origin if connecting to cloud.dbos.dev (common WebSocket requirement)
+    if (url.contains("cloud.dbos.dev")) {
+      headers.add("Origin", "https://cloud.dbos.dev");
+      logger.debug("Adding Origin header for cloud.dbos.dev connection");
+    }
+    
+    // Check for DBOS-specific tokens in environment variables
+    String cloudToken = System.getenv("DBOS_CLOUD_TOKEN");
+    if (cloudToken != null && !cloudToken.isEmpty()) {
+      headers.add("Authorization", "Bearer " + cloudToken);
+      logger.debug("Adding Authorization header from DBOS_CLOUD_TOKEN");
+    }
+    
+    // Log all headers for debugging
+    logger.debug("WebSocket headers: {}", headers);
+    
     return headers;
   }
 
