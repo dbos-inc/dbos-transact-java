@@ -1,6 +1,7 @@
 package dev.dbos.transact.context;
 
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
@@ -21,7 +22,7 @@ public class DBOSContext {
   private final WorkflowInfo parent;
   private final Duration timeout;
   private final Instant deadline;
-  private final String serialization;
+  private SerializationStrategy serialization;
 
   // private StepStatus stepStatus;
 
@@ -31,7 +32,7 @@ public class DBOSContext {
     parent = null;
     timeout = null;
     deadline = null;
-    serialization = null;
+    serialization = SerializationStrategy.DEFAULT;
   }
 
   public DBOSContext(String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
@@ -43,7 +44,7 @@ public class DBOSContext {
       WorkflowInfo parent,
       Duration timeout,
       Instant deadline,
-      String serialization) {
+      SerializationStrategy serialization) {
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
@@ -135,8 +136,12 @@ public class DBOSContext {
     return deadline;
   }
 
-  public String getSerialization() {
+  public SerializationStrategy getSerialization() {
     return serialization;
+  }
+
+  public void setSerializationStrategy(SerializationStrategy strat) {
+    this.serialization = strat;
   }
 
   public static String workflowId() {

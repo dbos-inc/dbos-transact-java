@@ -521,7 +521,7 @@ public class DBOS {
    * @return the serialization format name (e.g., "portable_json", "java_jackson"), or null if not
    *     in a workflow context or using default serialization
    */
-  public static @Nullable String getSerialization() {
+  public static @Nullable SerializationStrategy getSerialization() {
     var ctx = DBOSContextHolder.get();
     return ctx != null ? ctx.getSerialization() : null;
   }
@@ -557,7 +557,7 @@ public class DBOS {
       @NonNull String topic,
       @Nullable String idempotencyKey,
       @Nullable SerializationStrategy serialization) {
-    String serializationFormat = serialization != null ? serialization.formatName() : null;
+    if (serialization == null) serialization = SerializationStrategy.DEFAULT;
     executor("send")
         .send(
             destinationId,
@@ -565,7 +565,7 @@ public class DBOS {
             topic,
             instance().internalWorkflowsService,
             idempotencyKey,
-            serializationFormat);
+            serialization);
   }
 
   /**
@@ -611,13 +611,10 @@ public class DBOS {
   public static void setEvent(
       @NonNull String key, @NonNull Object value, @Nullable SerializationStrategy serialization) {
     // If no explicit serialization specified, use the workflow context's serialization
-    String serializationFormat;
-    if (serialization != null) {
-      serializationFormat = serialization.formatName();
-    } else {
-      serializationFormat = getSerialization();
+    if (serialization == null) {
+      serialization = getSerialization();
     }
-    executor("setEvent").setEvent(key, value, serializationFormat);
+    executor("setEvent").setEvent(key, value, serialization);
   }
 
   /**

@@ -93,7 +93,11 @@ class WorkflowDAO {
             throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
           }
           return new WorkflowInitResult(
-              initStatus.workflowId(), resRow.status(), resRow.deadlineEpochMs(), false);
+              initStatus.workflowId(),
+              resRow.status(),
+              resRow.deadlineEpochMs(),
+              false,
+              resRow.serialization());
         }
 
         // Upsert above already set executor assignment and incremented the recovery attempt
@@ -122,7 +126,11 @@ class WorkflowDAO {
         }
 
         return new WorkflowInitResult(
-            initStatus.workflowId(), resRow.status(), resRow.deadlineEpochMs(), true);
+            initStatus.workflowId(),
+            resRow.status(),
+            resRow.deadlineEpochMs(),
+            true,
+            resRow.serialization());
 
       } finally {
         if (shouldCommit) {
@@ -144,6 +152,7 @@ class WorkflowDAO {
       String queueName,
       Long timeoutMs,
       Long deadlineEpochMs,
+      String serialization,
       String ownerXid) {}
 
   /**
@@ -187,7 +196,7 @@ class WorkflowDAO {
                     THEN workflow_status.executor_id
                     ELSE EXCLUDED.executor_id
               END
-          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_timeout_ms, workflow_deadline_epoch_ms, owner_xid
+          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_timeout_ms, workflow_deadline_epoch_ms, owner_xid, serialization
         """
             .formatted(this.schema);
 
@@ -242,6 +251,7 @@ class WorkflowDAO {
                   rs.getString("queue_name"),
                   rs.getObject("workflow_timeout_ms", Long.class),
                   rs.getObject("workflow_deadline_epoch_ms", Long.class),
+                  rs.getString("serialization"),
                   rs.getString("owner_xid"));
 
           return result;

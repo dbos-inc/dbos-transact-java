@@ -25,6 +25,7 @@ import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Timeout;
@@ -698,7 +699,7 @@ public class DBOSExecutor implements AutoCloseable {
       String topic,
       InternalWorkflowsService internalWorkflowsService,
       String idempotencyKey,
-      String serialization) {
+      SerializationStrategy serialization) {
 
     DBOSContext ctx = DBOSContextHolder.get();
     if (ctx.isInStep()) {
@@ -708,7 +709,8 @@ public class DBOSExecutor implements AutoCloseable {
       var sendWfid =
           idempotencyKey == null ? null : "%s-%s".formatted(destinationId, idempotencyKey);
       try (var wfid = new WorkflowOptions(sendWfid).setContext()) {
-        internalWorkflowsService.sendWorkflow(destinationId, message, topic, serialization);
+        internalWorkflowsService.sendWorkflow(
+            destinationId, message, topic, serialization.formatName());
       }
       return;
     }
@@ -720,7 +722,12 @@ public class DBOSExecutor implements AutoCloseable {
     int stepFunctionId = ctx.getAndIncrementFunctionId();
 
     systemDatabase.send(
-        ctx.getWorkflowId(), stepFunctionId, destinationId, message, topic, serialization);
+        ctx.getWorkflowId(),
+        stepFunctionId,
+        destinationId,
+        message,
+        topic,
+        serialization.formatName());
   }
 
   /**
@@ -745,7 +752,7 @@ public class DBOSExecutor implements AutoCloseable {
         ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeout);
   }
 
-  public void setEvent(String key, Object value, String serialization) {
+  public void setEvent(String key, Object value, SerializationStrategy serialization) {
     logger.debug("Received setEvent for key {}", key);
 
     DBOSContext ctx = DBOSContextHolder.get();
@@ -755,7 +762,8 @@ public class DBOSExecutor implements AutoCloseable {
 
     var asStep = !ctx.isInStep();
     var stepId = ctx.isInStep() ? ctx.getCurrentFunctionId() : ctx.getAndIncrementFunctionId();
-    systemDatabase.setEvent(ctx.getWorkflowId(), stepId, key, value, asStep, serialization);
+    systemDatabase.setEvent(
+        ctx.getWorkflowId(), stepId, key, value, asStep, serialization.formatName());
   }
 
   public Object getEvent(String workflowId, String key, Duration timeout) {
@@ -1201,8 +1209,7 @@ public class DBOSExecutor implements AutoCloseable {
     if (workflowId.isEmpty()) {
       throw new IllegalArgumentException("workflowId cannot be empty");
     }
-    WorkflowInitResult initResult = null;
-    initResult =
+    WorkflowInitResult initResult =
         preInvokeWorkflow(
             systemDatabase,
             workflow.name(),
@@ -1250,7 +1257,9 @@ public class DBOSExecutor implements AutoCloseable {
                     parent,
                     options.timeoutDuration(),
                     options.deadline(),
-                    options.serialization()));
+                    SerializationUtil.PORTABLE.equals(initResult.serialization())
+                        ? SerializationStrategy.PORTABLE
+                        : SerializationStrategy.DEFAULT));
             if (Thread.currentThread().isInterrupted()) {
               logger.debug("executeWorkflow task interrupted before workflow.invoke");
               return null;

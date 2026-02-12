@@ -32,8 +32,7 @@ public final class SerializationUtil {
    * Serialize a value using the specified format.
    *
    * @param value the value to serialize
-   * @param format the serialization format ("portable_json", "java_jackson", or a custom serializer
-   *     name)
+   * @param format the serialization format ("portable_json", "java_jackson", custom name, null)
    * @param customSerializer optional custom serializer (used if format is not portable/native)
    * @return the serialized result containing the serialized string and the serializer name
    */
@@ -50,15 +49,12 @@ public final class SerializationUtil {
       return new SerializedResult(serialized, DBOSJavaSerializer.NAME);
     }
 
-    if (format == null) {
-      // Default behavior: use native serializer but don't store format (backward compatibility)
-      String serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-      return new SerializedResult(serialized, null);
-    }
-
-    // Custom serializer
+    // Default / custom
     DBOSSerializer serializer =
         customSerializer != null ? customSerializer : DBOSJavaSerializer.INSTANCE;
+    if (format != null && !serializer.name().equals(format)) {
+      throw new IllegalArgumentException("Serializer is not available");
+    }
     String serialized = serializer.stringify(value);
     return new SerializedResult(serialized, serializer.name());
   }
@@ -82,17 +78,17 @@ public final class SerializationUtil {
       return DBOSPortableSerializer.INSTANCE.parse(serializedValue);
     }
 
-    if (DBOSJavaSerializer.NAME.equals(serialization) || serialization == null) {
+    if (DBOSJavaSerializer.NAME.equals(serialization)) {
       return DBOSJavaSerializer.INSTANCE.parse(serializedValue);
     }
 
-    // Try custom serializer
-    if (customSerializer != null && customSerializer.name().equals(serialization)) {
-      return customSerializer.parse(serializedValue);
+    DBOSSerializer serializer = customSerializer;
+    if (serializer == null) serializer = DBOSJavaSerializer.INSTANCE;
+    if (serialization != null && !serializer.name().equals(serialization)) {
+      throw new IllegalArgumentException("Serialization is not available");
     }
 
-    // Fallback to native Java serializer for unknown formats
-    return DBOSJavaSerializer.INSTANCE.parse(serializedValue);
+    return serializer.parse(serializedValue);
   }
 
   // ============ Arguments Serialization ============
