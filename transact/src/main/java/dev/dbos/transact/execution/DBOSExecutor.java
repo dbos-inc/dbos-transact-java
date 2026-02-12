@@ -348,6 +348,9 @@ public class DBOSExecutor implements AutoCloseable {
   public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
     if (alertHandler != null) {
       alertHandler.invoke(name, message, metadata);
+    } else {
+      logger.warn("No AlertHandler configured; dropping alert. name='{}', message='{}', metadata={}",
+          name, message, metadata);
     }
   }
 

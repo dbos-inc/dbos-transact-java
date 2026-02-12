@@ -10,7 +10,7 @@ public class AlertRequest extends BaseMessage {
   public AlertRequest() {}
 
   public AlertRequest(String requestId, String name, String message, Map<String, String> metadata) {
-    this.type = MessageType.CANCEL.getValue();
+    this.type = MessageType.ALERT.getValue();
     this.request_id = requestId;
     this.name = name;
     this.message = message;
