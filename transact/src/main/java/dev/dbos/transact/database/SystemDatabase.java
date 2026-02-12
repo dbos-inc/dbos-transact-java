@@ -684,7 +684,7 @@ public class SystemDatabase implements AutoCloseable {
   List<WorkflowEvent> listWorkflowEvents(Connection conn, String workflowId) throws SQLException {
     var sql =
         """
-        SELECT key, value
+        SELECT key, value, serialization
         FROM %s.workflow_events
         WHERE workflow_uuid = ?
         """
@@ -697,7 +697,8 @@ public class SystemDatabase implements AutoCloseable {
         while (rs.next()) {
           var key = rs.getString("key");
           var value = rs.getString("value");
-          events.add(new WorkflowEvent(key, value));
+          var serialization = rs.getString("serialization");
+          events.add(new WorkflowEvent(key, value, serialization));
         }
       }
     }
@@ -708,7 +709,7 @@ public class SystemDatabase implements AutoCloseable {
       throws SQLException {
     var sql =
         """
-        SELECT key, value, function_id
+        SELECT key, value, function_id, serialization
         FROM %s.workflow_events_history
         WHERE workflow_uuid = ?
         """
@@ -722,7 +723,8 @@ public class SystemDatabase implements AutoCloseable {
           var key = rs.getString("key");
           var value = rs.getString("value");
           var stepId = rs.getInt("function_id");
-          history.add(new WorkflowEventHistory(key, value, stepId));
+          var serialization = rs.getString("serialization");
+          history.add(new WorkflowEventHistory(key, value, stepId, serialization));
         }
       }
     }
@@ -732,7 +734,7 @@ public class SystemDatabase implements AutoCloseable {
   List<WorkflowStream> listWorkflowStreams(Connection conn, String workflowId) throws SQLException {
     var sql =
         """
-        SELECT key, value, "offset", function_id
+        SELECT key, value, "offset", function_id, serialization
         FROM %s.streams
         WHERE workflow_uuid = ?
         """
@@ -747,7 +749,8 @@ public class SystemDatabase implements AutoCloseable {
           var value = rs.getString("value");
           var offset = rs.getInt("offset");
           var stepId = rs.getInt("function_id");
-          streams.add(new WorkflowStream(key, value, offset, stepId));
+          var serialization = rs.getString("serialization");
+          streams.add(new WorkflowStream(key, value, offset, stepId, serialization));
         }
       }
     }
@@ -792,9 +795,9 @@ public class SystemDatabase implements AutoCloseable {
           created_at, updated_at, started_at_epoch_ms,
           queue_name, deduplication_id, priority, queue_partition_key,
           workflow_timeout_ms, workflow_deadline_epoch_ms,
-          recovery_attempts, forked_from, parent_workflow_id
+          recovery_attempts, forked_from, parent_workflow_id, serialization
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -804,9 +807,10 @@ public class SystemDatabase implements AutoCloseable {
         INSERT INTO %s.operation_outputs (
           workflow_uuid, function_id, function_name,
           output, error, child_workflow_id,
-          started_at_epoch_ms, completed_at_epoch_ms
+          started_at_epoch_ms, completed_at_epoch_ms,
+          serialization
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -814,9 +818,9 @@ public class SystemDatabase implements AutoCloseable {
     var eventSQL =
         """
         INSERT INTO %s.workflow_events (
-          workflow_uuid, key, value
+          workflow_uuid, key, value, serialization
         ) VALUES (
-          ?, ?, ?
+          ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -824,9 +828,9 @@ public class SystemDatabase implements AutoCloseable {
     var eventHistorySQL =
         """
         INSERT INTO %s.workflow_events_history (
-          workflow_uuid, key, value, function_id
+          workflow_uuid, key, value, function_id, serialization
         ) VALUES (
-          ?, ?, ?, ?
+          ?, ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -834,9 +838,9 @@ public class SystemDatabase implements AutoCloseable {
     var streamsSQL =
         """
         INSERT INTO %s.streams (
-          workflow_uuid, key, value, function_id, offset
+          workflow_uuid, key, value, function_id, offset, serialization
         ) VALUES (
-          ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -884,6 +888,7 @@ public class SystemDatabase implements AutoCloseable {
                   stmt.setObject(24, status.recoveryAttempts());
                   stmt.setString(25, status.forkedFrom());
                   stmt.setString(26, status.parentWorkflowId());
+                  stmt.setString(27, status.serialization());
 
                   stmt.executeUpdate();
                 }
@@ -899,6 +904,7 @@ public class SystemDatabase implements AutoCloseable {
                     stmt.setString(6, step.childWorkflowId());
                     stmt.setObject(7, step.startedAtEpochMs());
                     stmt.setObject(8, step.completedAtEpochMs());
+                    stmt.setString(9, step.serialization());
 
                     stmt.executeUpdate();
                   }
@@ -909,6 +915,7 @@ public class SystemDatabase implements AutoCloseable {
                     stmt.setString(1, status.workflowId());
                     stmt.setString(2, event.key());
                     stmt.setString(3, event.value());
+                    stmt.setString(4, event.serialization());
 
                     stmt.executeUpdate();
                   }
@@ -920,6 +927,7 @@ public class SystemDatabase implements AutoCloseable {
                     stmt.setString(2, history.key());
                     stmt.setString(3, history.value());
                     stmt.setInt(4, history.stepId());
+                    stmt.setString(5, history.serialization());
 
                     stmt.executeUpdate();
                   }
@@ -932,6 +940,7 @@ public class SystemDatabase implements AutoCloseable {
                     stmt.setString(3, stream.value());
                     stmt.setInt(4, stream.stepId());
                     stmt.setInt(5, stream.offset());
+                    stmt.setString(6, stream.serialization());
 
                     stmt.executeUpdate();
                   }

@@ -1577,7 +1577,7 @@ public class ConductorTest {
     int eventCount = (int) (Math.random() * 8) + 2;
     List<WorkflowEvent> events = new ArrayList<>();
     for (int i = 0; i < eventCount; i++) {
-      events.add(new WorkflowEvent(prefix + "event" + (i + 1), prefix + "value" + (i + 1)));
+      events.add(new WorkflowEvent(prefix + "event" + (i + 1), prefix + "value" + (i + 1), null));
     }
 
     int historyCount = (int) (Math.random() * 8) + 2;
@@ -1587,7 +1587,7 @@ public class ConductorTest {
       String eventKey =
           eventCount > 0 ? prefix + "event" + ((i % eventCount) + 1) : prefix + "event" + (i + 1);
       eventHistory.add(
-          new WorkflowEventHistory(eventKey, prefix + "historyvalue" + (i + 1), stepId));
+          new WorkflowEventHistory(eventKey, prefix + "historyvalue" + (i + 1), stepId, null));
     }
 
     int streamCount = (int) (Math.random() * 8) + 2;
@@ -1596,7 +1596,8 @@ public class ConductorTest {
       int stepId = i % Math.max(1, stepCount); // Distribute across available steps
       int offset = i % 3; // Vary offset between 0-2
       String streamKey = prefix + "stream" + ((i % 3) + 1); // Use 3 different stream keys
-      streams.add(new WorkflowStream(streamKey, prefix + "streamvalue" + (i + 1), offset, stepId));
+      streams.add(
+          new WorkflowStream(streamKey, prefix + "streamvalue" + (i + 1), offset, stepId, null));
     }
 
     return new ExportedWorkflow(status, steps, events, eventHistory, streams);
