@@ -609,6 +609,7 @@ public class Conductor implements AutoCloseable {
                               .customHeaders(EmptyHttpHeaders.INSTANCE)
                               .dropPongFrames(false)
                               .handleCloseFrames(false)
+                              .generateOriginHeader(false)
                               .maxFramePayloadLength(256 * 1024 * 1024)
                               .build()),
                       new MessageToMessageDecoder<WebSocketFrame>() {
