@@ -1,5 +1,24 @@
 package dev.dbos.transact;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Method;
+import java.time.Duration;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
@@ -25,25 +44,6 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.Method;
-import java.time.Duration;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
-
-import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Facade for context-based access to DBOS. `DBOS` is responsible for: Lifecycle - configuring,
@@ -315,6 +315,10 @@ public class DBOS {
    */
   public static void registerLifecycleListener(@NonNull DBOSLifecycleListener listener) {
     ensureInstance().registerLifecycleListener(listener);
+  }
+
+  public static void registerAlertHandler(AlertHandler handler) {
+    ensureInstance().registerAlertHandler(handler);
   }
 
   /**
