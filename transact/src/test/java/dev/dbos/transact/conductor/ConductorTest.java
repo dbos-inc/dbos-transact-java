@@ -1,13 +1,21 @@
 package dev.dbos.transact.conductor;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
@@ -280,12 +288,12 @@ public class ConductorTest {
         throws Exception {
       logger.debug("sending {}", type.getValue());
 
-      Map<String, Object> message = new LinkedHashMap<>();
-      message.put("type", Objects.requireNonNull(type).getValue());
-      message.put("request_id", Objects.requireNonNull(requestId));
-      message.putAll(fields);
+      Map<String, Object> msg = new LinkedHashMap<>();
+      msg.put("type", Objects.requireNonNull(type).getValue());
+      msg.put("request_id", Objects.requireNonNull(requestId));
+      msg.putAll(fields);
 
-      String json = ConductorTest.mapper.writeValueAsString(message);
+      String json = ConductorTest.mapper.writeValueAsString(msg);
       if (chunkSize > 0) {
         sendFragmented(json, chunkSize);
       } else {
@@ -352,12 +360,12 @@ public class ConductorTest {
     // Create a large list of steps to exceed 32KB
     List<StepInfo> steps = new ArrayList<>();
     for (int i = 0; i < 200; i++) {
-      var builder = new StringBuilder(1024);
-      builder.append("output_%d_".formatted(i));
+      var stringBuilder = new StringBuilder(1024);
+      stringBuilder.append("output_%d_".formatted(i));
       for (int j = 0; j < 1024; j++) {
-        builder.append(characters.charAt(random.nextInt(characters.length())));
+        stringBuilder.append(characters.charAt(random.nextInt(characters.length())));
       }
-      steps.add(new StepInfo(i, "function" + i, builder.toString(), null, null, null, null));
+      steps.add(new StepInfo(i, "function" + i, stringBuilder.toString(), null, null, null, null));
     }
     when(mockExec.listWorkflowSteps("large-wf")).thenReturn(steps);
 
@@ -826,7 +834,7 @@ public class ConductorTest {
   public void canListWorkflows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
-    List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+    List<WorkflowStatus> statuses = new ArrayList<>();
     statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
@@ -900,7 +908,7 @@ public class ConductorTest {
   public void canListQueuedWorkflows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
-    List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+    List<WorkflowStatus> statuses = new ArrayList<>();
     statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
@@ -1018,7 +1026,7 @@ public class ConductorTest {
     String executorId = "exec-id";
     String appVersion = "app-version";
 
-    List<GetPendingWorkflowsOutput> outputs = new ArrayList<GetPendingWorkflowsOutput>();
+    List<GetPendingWorkflowsOutput> outputs = new ArrayList<>();
     outputs.add(new GetPendingWorkflowsOutput("wf-1", null));
     outputs.add(new GetPendingWorkflowsOutput("wf-2", "queue"));
 
@@ -1051,7 +1059,7 @@ public class ConductorTest {
     String executorId = "exec-id";
     String appVersion = "app-version";
 
-    List<GetPendingWorkflowsOutput> outputs = new ArrayList<GetPendingWorkflowsOutput>();
+    List<GetPendingWorkflowsOutput> outputs = new ArrayList<>();
     when(mockDB.getPendingWorkflows(executorId, appVersion)).thenReturn(outputs);
 
     try (Conductor conductor = builder.build()) {
@@ -1086,7 +1094,7 @@ public class ConductorTest {
     testServer.setListener(listener);
     String workflowId = "workflow-id-1";
 
-    List<StepInfo> steps = new ArrayList<StepInfo>();
+    List<StepInfo> steps = new ArrayList<>();
     steps.add(new StepInfo(0, "function1", null, null, null, null, null));
     steps.add(new StepInfo(1, "function2", null, null, null, null, null));
     steps.add(new StepInfo(2, "function3", null, null, null, null, null));
@@ -1612,5 +1620,105 @@ public class ConductorTest {
     }
 
     return workflows;
+  }
+
+  @RetryingTest(3)
+  public void canAlert() throws Exception {
+
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, String> metadata = Map.of("one", "1", "two", "2", "three", "3");
+      Map<String, Object> message =
+          Map.of(
+              "name",
+              "name-value",
+              "message",
+              "message-value",
+              "metadata",
+              metadata,
+              "unknown-field",
+              "unknown-field-value");
+      listener.send(MessageType.ALERT, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+      ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+      @SuppressWarnings("unchecked")
+      ArgumentCaptor<Map<String, String>> metadataCaptor =
+          ArgumentCaptor.forClass((Class<Map<String, String>>) (Class<?>) Map.class);
+
+      verify(mockExec)
+          .fireAlertHandler(
+              nameCaptor.capture(), messageCaptor.capture(), metadataCaptor.capture());
+
+      assertEquals("name-value", nameCaptor.getValue());
+      assertEquals("message-value", messageCaptor.getValue());
+      assertEquals(metadata, metadataCaptor.getValue());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("alert", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canAlertThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canAlertThrows error";
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockExec)
+        .fireAlertHandler(anyString(), anyString(), any());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, String> metadata = Map.of("one", "1", "two", "2", "three", "3");
+      Map<String, Object> message =
+          Map.of(
+              "name",
+              "name-value",
+              "message",
+              "message-value",
+              "metadata",
+              metadata,
+              "unknown-field",
+              "unknown-field-value");
+      listener.send(MessageType.ALERT, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+      ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+      @SuppressWarnings("unchecked")
+      ArgumentCaptor<Map<String, String>> metadataCaptor =
+          ArgumentCaptor.forClass((Class<Map<String, String>>) (Class<?>) Map.class);
+
+      verify(mockExec)
+          .fireAlertHandler(
+              nameCaptor.capture(), messageCaptor.capture(), metadataCaptor.capture());
+
+      assertEquals("name-value", nameCaptor.getValue());
+      assertEquals("message-value", messageCaptor.getValue());
+      assertEquals(metadata, metadataCaptor.getValue());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("alert", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertFalse(jsonNode.get("success").asBoolean());
+    }
   }
 }

@@ -1,23 +1,5 @@
 package dev.dbos.transact;
 
-import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.context.DBOSContextHolder;
-import dev.dbos.transact.database.ExternalState;
-import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.execution.DBOSLifecycleListener;
-import dev.dbos.transact.execution.RegisteredWorkflow;
-import dev.dbos.transact.execution.RegisteredWorkflowInstance;
-import dev.dbos.transact.execution.ThrowingRunnable;
-import dev.dbos.transact.execution.ThrowingSupplier;
-import dev.dbos.transact.internal.DBOSInvocationHandler;
-import dev.dbos.transact.internal.QueueRegistry;
-import dev.dbos.transact.internal.WorkflowRegistry;
-import dev.dbos.transact.migrations.MigrationManager;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
-import dev.dbos.transact.workflow.*;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
@@ -36,6 +18,32 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.context.DBOSContext;
+import dev.dbos.transact.context.DBOSContextHolder;
+import dev.dbos.transact.database.ExternalState;
+import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.DBOSLifecycleListener;
+import dev.dbos.transact.execution.RegisteredWorkflow;
+import dev.dbos.transact.execution.RegisteredWorkflowInstance;
+import dev.dbos.transact.execution.ThrowingRunnable;
+import dev.dbos.transact.execution.ThrowingSupplier;
+import dev.dbos.transact.internal.DBOSInvocationHandler;
+import dev.dbos.transact.internal.QueueRegistry;
+import dev.dbos.transact.internal.WorkflowRegistry;
+import dev.dbos.transact.migrations.MigrationManager;
+import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
+import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
+import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.StepOptions;
+import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowClassName;
+import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowStatus;
 
 /**
  * Facade for context-based access to DBOS. `DBOS` is responsible for: Lifecycle - configuring,
@@ -79,6 +87,7 @@ public class DBOS {
     private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
     private final QueueRegistry queueRegistry = new QueueRegistry();
     private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
+    private AlertHandler alertHandler;
 
     private DBOSConfig config;
 
@@ -183,6 +192,14 @@ public class DBOS {
       registerInternals();
     }
 
+    public void registerAlertHandler(AlertHandler handler) {
+      if (dbosExecutor.get() != null) {
+        throw new IllegalStateException("Cannot set alert handler after DBOS is launched");
+      }
+
+      this.alertHandler = handler;
+    }
+
     // package private methods for test purposes
     @Nullable DBOSExecutor getDbosExecutor() {
       return dbosExecutor.get();
@@ -216,10 +233,11 @@ public class DBOS {
         if (dbosExecutor.compareAndSet(null, executor)) {
           executor.start(
               this,
-              new HashSet<DBOSLifecycleListener>(this.lifecycleRegistry),
+              new HashSet<>(this.lifecycleRegistry),
               workflowRegistry.getWorkflowSnapshot(),
               workflowRegistry.getInstanceSnapshot(),
-              queueRegistry.getSnapshot());
+              queueRegistry.getSnapshot(),
+              alertHandler);
         }
       }
     }
