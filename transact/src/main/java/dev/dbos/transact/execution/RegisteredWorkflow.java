@@ -1,5 +1,7 @@
 package dev.dbos.transact.execution;
 
+import dev.dbos.transact.workflow.SerializationStrategy;
+
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Objects;
@@ -10,7 +12,8 @@ public record RegisteredWorkflow(
     String instanceName,
     Object target,
     Method workflowMethod,
-    int maxRecoveryAttempts) {
+    int maxRecoveryAttempts,
+    SerializationStrategy serializationStrategy) {
 
   public RegisteredWorkflow {
     Objects.requireNonNull(name, "workflow name must not be null");

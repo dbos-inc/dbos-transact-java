@@ -735,8 +735,7 @@ public class DBOSExecutor implements AutoCloseable {
       var sendWfid =
           idempotencyKey == null ? null : "%s-%s".formatted(destinationId, idempotencyKey);
       try (var wfid = new WorkflowOptions(sendWfid).setContext()) {
-        internalWorkflowsService.sendWorkflow(
-            destinationId, message, topic, serialization.formatName());
+        internalWorkflowsService.sendWorkflow(destinationId, message, topic, serialization);
       }
       return;
     }
@@ -784,6 +783,14 @@ public class DBOSExecutor implements AutoCloseable {
     DBOSContext ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
       throw new IllegalStateException("DBOS.setEvent() must be called from a workflow.");
+    }
+
+    if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
+      if (ctx.getSerialization() != null) {
+        serialization = ctx.getSerialization();
+      } else {
+        serialization = SerializationStrategy.DEFAULT;
+      }
     }
 
     var asStep = !ctx.isInStep();
@@ -1152,6 +1159,9 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     var options = new ExecutionOptions(workflowId, timeout, deadline);
+    if (workflow.serializationStrategy() != null) {
+      options = options.withSerialization(workflow.serializationStrategy().formatName());
+    }
     return executeWorkflow(workflow, args, options, parent);
   }
 

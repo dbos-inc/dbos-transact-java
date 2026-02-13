@@ -145,7 +145,13 @@ public class DBOS {
 
       String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
       workflowRegistry.register(
-          className, name, target, instanceName, method, wfTag.maxRecoveryAttempts());
+          className,
+          name,
+          target,
+          instanceName,
+          method,
+          wfTag.maxRecoveryAttempts(),
+          wfTag.serializationStrategy());
       return name;
     }
 
