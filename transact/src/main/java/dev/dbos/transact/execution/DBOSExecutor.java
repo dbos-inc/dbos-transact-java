@@ -1203,11 +1203,19 @@ public class DBOSExecutor implements AutoCloseable {
       }
     }
 
+    if (options.serialization() == null) {
+      if (workflow.serializationStrategy() != null) {
+        options = options.withSerialization(workflow.serializationStrategy().formatName());
+      }
+    }
+
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
+
+    final var foptions = options;
 
     if (options.queueName() != null) {
 
-      var queue = queues.stream().filter(q -> q.name().equals(options.queueName())).findFirst();
+      var queue = queues.stream().filter(q -> q.name().equals(foptions.queueName())).findFirst();
       if (queue.isPresent()) {
         if (queue.get().partitionedEnabled() && options.queuePartitionKey() == null) {
           throw new IllegalArgumentException(
@@ -1285,14 +1293,14 @@ public class DBOSExecutor implements AutoCloseable {
           if (res != null) throw new DBOSWorkflowExecutionConflictException(workflowId);
           try {
             logger.debug(
-                "executeWorkflow task {}({}) {}", workflow.fullyQualifiedName(), args, options);
+                "executeWorkflow task {}({}) {}", workflow.fullyQualifiedName(), args, foptions);
 
             DBOSContextHolder.set(
                 new DBOSContext(
                     workflowId,
                     parent,
-                    options.timeoutDuration(),
-                    options.deadline(),
+                    foptions.timeoutDuration(),
+                    foptions.deadline(),
                     SerializationUtil.PORTABLE.equals(initResult.serialization())
                         ? SerializationStrategy.PORTABLE
                         : SerializationStrategy.DEFAULT));
@@ -1305,7 +1313,8 @@ public class DBOSExecutor implements AutoCloseable {
               logger.debug("executeWorkflow task interrupted before postInvokeWorkflowResult");
               return null;
             }
-            postInvokeWorkflowResult(systemDatabase, workflowId, result, options.serialization());
+            postInvokeWorkflowResult(
+                systemDatabase, workflowId, result, initResult.serialization());
             return result;
           } catch (DBOSWorkflowExecutionConflictException e) {
             // don't persist execution conflict exception
@@ -1330,7 +1339,7 @@ public class DBOSExecutor implements AutoCloseable {
               throw new DBOSAwaitedWorkflowCancelledException(workflowId);
             }
 
-            postInvokeWorkflowError(systemDatabase, workflowId, actual, options.serialization());
+            postInvokeWorkflowError(systemDatabase, workflowId, actual, initResult.serialization());
             throw e;
           } finally {
             DBOSContextHolder.clear();

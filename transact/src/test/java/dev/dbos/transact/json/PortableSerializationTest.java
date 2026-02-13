@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
@@ -340,135 +341,106 @@ public class PortableSerializationTest {
    * serialization format in the database.
    */
   @Test
-  public void testSetEventWithExplicitSerialization() throws Exception {
+  public void testSetEventWithVaryingSerialization() throws Exception {
     Queue testQueue = new Queue("testq");
     DBOS.registerQueue(testQueue);
-    DBOS.registerWorkflows(ExplicitSerService.class, new ExplicitSerServiceImpl());
+    var defsvc = DBOS.registerWorkflows(ExplicitSerService.class, new ExplicitSerServiceImpl());
+    var portsvc =
+        DBOS.registerWorkflows(ExplicitSerService.class, new ExplicitSerServicePortableImpl());
 
     DBOS.launch();
 
-    // Use DBOSClient to enqueue and run the workflow
-    try (DBOSClient client = new DBOSClient(dataSource)) {
-      String workflowId = UUID.randomUUID().toString();
+    for (String sertype : new String[] {"defq", "portq", "defstart", "portstart"}) {
+      // Use DBOSClient to enqueue and run the workflow
+      try (DBOSClient client = new DBOSClient(dataSource)) {
+        String workflowId = UUID.randomUUID().toString();
+        WorkflowHandle<String, ?> handle = null;
+        boolean isPortable = sertype.startsWith("port");
 
-      var options =
-          new DBOSClient.EnqueueOptions("ExplicitSerService", "eventWorkflow", "testq")
-              .withWorkflowId(workflowId);
+        if (sertype.equals("defq")) {
+          var options =
+              new DBOSClient.EnqueueOptions("ExplicitSerService", "eventWorkflow", "testq")
+                  .withWorkflowId(workflowId);
 
-      WorkflowHandle<String, ?> handle = client.enqueueWorkflow(options, new Object[] {});
-      String result = handle.getResult();
-      assertEquals("done", result);
+          handle = client.enqueueWorkflow(options, new Object[] {});
+        }
+        if (sertype.equals("portq")) {
+          var options =
+              new DBOSClient.EnqueueOptions("ExplicitSerService", "eventWorkflow", "testq")
+                  .withWorkflowId(workflowId)
+                  .withSerialization(SerializationStrategy.PORTABLE);
 
-      // Check workflow's serialization - client-enqueued workflows get java_jackson by default
-      var wfRow = DBUtils.getWorkflowRow(dataSource, workflowId);
-      assertNotNull(wfRow);
-      assertEquals("java_jackson", wfRow.serialization());
+          handle = client.enqueueWorkflow(options, new Object[] {});
+        }
+        if (sertype.equals("defstart")) {
+          handle =
+              DBOS.startWorkflow(
+                  () -> {
+                    return defsvc.eventWorkflow();
+                  },
+                  new StartWorkflowOptions(workflowId));
+        }
+        if (sertype.equals("portstart")) {
+          handle =
+              DBOS.startWorkflow(
+                  () -> {
+                    return portsvc.eventWorkflow();
+                  },
+                  new StartWorkflowOptions(workflowId));
+        }
 
-      // Verify the events in the database have correct serialization
-      var events = DBUtils.getWorkflowEvents(dataSource, workflowId);
-      assertEquals(3, events.size());
+        String result = handle.getResult();
+        assertEquals("done", result);
 
-      // Find each event and verify serialization
-      var defaultEvent = events.stream().filter(e -> e.key().equals("defaultEvent")).findFirst();
-      var nativeEvent = events.stream().filter(e -> e.key().equals("nativeEvent")).findFirst();
-      var portableEvent = events.stream().filter(e -> e.key().equals("portableEvent")).findFirst();
+        // Check workflow's serialization
+        var wfRow = DBUtils.getWorkflowRow(dataSource, workflowId);
+        assertNotNull(wfRow);
+        var expectedSer = isPortable ? "portable_json" : "java_jackson";
+        if (!expectedSer.equals(wfRow.serialization())) {
+          System.err.println("Expected serialization does not match in: " + sertype);
+        }
+        assertEquals(expectedSer, wfRow.serialization());
 
-      assertTrue(defaultEvent.isPresent());
-      assertTrue(nativeEvent.isPresent());
-      assertTrue(portableEvent.isPresent());
+        // Verify the events in the database have correct serialization
+        var events = DBUtils.getWorkflowEvents(dataSource, workflowId);
+        assertEquals(3, events.size());
 
-      // Default setEvent inherits workflow's serialization (java_jackson in this case)
-      assertEquals("java_jackson", defaultEvent.get().serialization());
-      // Native should have java_jackson (explicitly set)
-      assertEquals("java_jackson", nativeEvent.get().serialization());
-      // Portable should have portable_json (explicitly set)
-      assertEquals("portable_json", portableEvent.get().serialization());
+        // Find each event and verify serialization
+        var defaultEvent = events.stream().filter(e -> e.key().equals("defaultEvent")).findFirst();
+        var nativeEvent = events.stream().filter(e -> e.key().equals("nativeEvent")).findFirst();
+        var portableEvent =
+            events.stream().filter(e -> e.key().equals("portableEvent")).findFirst();
 
-      // Also verify the event history
-      var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, workflowId);
-      assertEquals(3, eventHistory.size());
+        assertTrue(defaultEvent.isPresent());
+        assertTrue(nativeEvent.isPresent());
+        assertTrue(portableEvent.isPresent());
 
-      var defaultHist =
-          eventHistory.stream().filter(e -> e.key().equals("defaultEvent")).findFirst();
-      var nativeHist = eventHistory.stream().filter(e -> e.key().equals("nativeEvent")).findFirst();
-      var portableHist =
-          eventHistory.stream().filter(e -> e.key().equals("portableEvent")).findFirst();
+        // Default setEvent inherits workflow's serialization
+        assertEquals(expectedSer, defaultEvent.get().serialization());
+        // Native should have java_jackson (explicitly set)
+        assertEquals("java_jackson", nativeEvent.get().serialization());
+        // Portable should have portable_json (explicitly set)
+        assertEquals("portable_json", portableEvent.get().serialization());
 
-      assertTrue(defaultHist.isPresent());
-      assertTrue(nativeHist.isPresent());
-      assertTrue(portableHist.isPresent());
+        // Also verify the event history
+        var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, workflowId);
+        assertEquals(3, eventHistory.size());
 
-      assertEquals("java_jackson", defaultHist.get().serialization());
-      assertEquals("java_jackson", nativeHist.get().serialization());
-      assertEquals("portable_json", portableHist.get().serialization());
-    }
-  }
+        var defaultHist =
+            eventHistory.stream().filter(e -> e.key().equals("defaultEvent")).findFirst();
+        var nativeHist =
+            eventHistory.stream().filter(e -> e.key().equals("nativeEvent")).findFirst();
+        var portableHist =
+            eventHistory.stream().filter(e -> e.key().equals("portableEvent")).findFirst();
 
-  /**
-   * Tests that DBOS.setEvent() with explicit SerializationStrategy correctly stores the
-   * serialization format in the database.
-   */
-  @Test
-  public void testSetEventWithPortableSerialization() throws Exception {
-    Queue testQueue = new Queue("testq");
-    DBOS.registerQueue(testQueue);
-    DBOS.registerWorkflows(ExplicitSerService.class, new ExplicitSerServicePortableImpl());
+        assertTrue(defaultHist.isPresent());
+        assertTrue(nativeHist.isPresent());
+        assertTrue(portableHist.isPresent());
 
-    DBOS.launch();
-
-    // Use DBOSClient to enqueue and run the workflow
-    try (DBOSClient client = new DBOSClient(dataSource)) {
-      String workflowId = UUID.randomUUID().toString();
-
-      var options =
-          new DBOSClient.EnqueueOptions("ExplicitSerServicePortable", "eventWorkflow", "testq")
-              .withWorkflowId(workflowId)
-              .withSerialization(SerializationStrategy.PORTABLE);
-
-      WorkflowHandle<String, ?> handle = client.enqueueWorkflow(options, new Object[] {});
-      String result = handle.getResult();
-      assertEquals("done", result);
-
-      // Check workflow's serialization - client-enqueued workflows get java_jackson by default
-      var wfRow = DBUtils.getWorkflowRow(dataSource, workflowId);
-      assertNotNull(wfRow);
-      assertEquals("portable_json", wfRow.serialization());
-
-      // Verify the events in the database have correct serialization
-      var events = DBUtils.getWorkflowEvents(dataSource, workflowId);
-      assertEquals(3, events.size());
-
-      // Find each event and verify serialization
-      var defaultEvent = events.stream().filter(e -> e.key().equals("defaultEvent")).findFirst();
-      var nativeEvent = events.stream().filter(e -> e.key().equals("nativeEvent")).findFirst();
-      var portableEvent = events.stream().filter(e -> e.key().equals("portableEvent")).findFirst();
-
-      assertTrue(defaultEvent.isPresent());
-      assertTrue(nativeEvent.isPresent());
-      assertTrue(portableEvent.isPresent());
-
-      // Default setEvent inherits workflow's serialization (portable_json in this case)
-      assertEquals("portable_json", defaultEvent.get().serialization());
-      assertEquals("java_jackson", nativeEvent.get().serialization());
-      assertEquals("portable_json", portableEvent.get().serialization());
-
-      // Also verify the event history
-      var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, workflowId);
-      assertEquals(3, eventHistory.size());
-
-      var defaultHist =
-          eventHistory.stream().filter(e -> e.key().equals("defaultEvent")).findFirst();
-      var nativeHist = eventHistory.stream().filter(e -> e.key().equals("nativeEvent")).findFirst();
-      var portableHist =
-          eventHistory.stream().filter(e -> e.key().equals("portableEvent")).findFirst();
-
-      assertTrue(defaultHist.isPresent());
-      assertTrue(nativeHist.isPresent());
-      assertTrue(portableHist.isPresent());
-
-      assertEquals("portable_json", defaultHist.get().serialization());
-      assertEquals("java_jackson", nativeHist.get().serialization());
-      assertEquals("portable_json", portableHist.get().serialization());
+        assertEquals(expectedSer, defaultHist.get().serialization());
+        assertEquals("java_jackson", nativeHist.get().serialization());
+        assertEquals("portable_json", portableHist.get().serialization());
+      }
     }
   }
 
@@ -550,7 +522,8 @@ public class PortableSerializationTest {
     @Workflow(name = "setEventWorkflow")
     @Override
     public String setEventWorkflow() {
-      // Set event without explicit serialization - should inherit from workflow context
+      // Set event without explicit serialization - should inherit from workflow
+      // context
       DBOS.setEvent("myKey", "myValue");
       return "eventSet";
     }
@@ -591,7 +564,8 @@ public class PortableSerializationTest {
       assertNotNull(row);
       assertEquals("portable_json", row.serialization());
 
-      // Verify the event inherited portable serialization (since it was set without explicit type)
+      // Verify the event inherited portable serialization (since it was set without
+      // explicit type)
       var events = DBUtils.getWorkflowEvents(dataSource, workflowId);
       assertEquals(1, events.size());
       assertEquals("myKey", events.get(0).key());
