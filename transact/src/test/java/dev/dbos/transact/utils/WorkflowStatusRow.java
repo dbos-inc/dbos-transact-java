@@ -30,7 +30,8 @@ public record WorkflowStatusRow(
     Integer priority,
     String queuePartitionKey,
     String forkedFrom,
-    String parentWorkflowId) {
+    String parentWorkflowId,
+    String serialization) {
 
   public WorkflowStatusRow(ResultSet rs) throws SQLException {
     this(
@@ -60,6 +61,7 @@ public record WorkflowStatusRow(
         rs.getObject("priority", Integer.class),
         rs.getString("queue_partition_key"),
         rs.getString("forked_from"),
-        rs.getString("parent_workflow_id"));
+        rs.getString("parent_workflow_id"),
+        rs.getString("serialization"));
   }
 }

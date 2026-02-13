@@ -9,7 +9,7 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
-import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
 
@@ -330,7 +330,8 @@ class DBOSExecutorTest {
     long currenttime = System.currentTimeMillis();
     long newEndtime = (currenttime + 2000);
 
-    String endTimeAsJson = JSONUtil.serialize(newEndtime);
+    String endTimeAsJson =
+        SerializationUtil.serializeValue(newEndtime, null, null).serializedValue();
 
     DBUtils.updateStepEndTime(dataSource, wfid, steps.get(0).functionId(), endTimeAsJson);
 

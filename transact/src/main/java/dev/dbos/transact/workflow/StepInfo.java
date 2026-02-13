@@ -7,4 +7,5 @@ public record StepInfo(
     ErrorResult error,
     String childWorkflowId,
     Long startedAtEpochMs,
-    Long completedAtEpochMs) {}
+    Long completedAtEpochMs,
+    String serialization) {}

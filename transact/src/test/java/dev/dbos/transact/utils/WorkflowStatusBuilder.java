@@ -40,6 +40,7 @@ public class WorkflowStatusBuilder {
   private Long deadlineEpochMs;
   private String forkedFrom;
   private String parentWorkflowId;
+  private String serialization;
 
   public WorkflowStatus build() {
     return new WorkflowStatus(
@@ -68,7 +69,8 @@ public class WorkflowStatusBuilder {
         priority,
         partitionKey,
         forkedFrom,
-        parentWorkflowId);
+        parentWorkflowId,
+        serialization);
   }
 
   public WorkflowStatusBuilder(String workflowId) {
@@ -111,7 +113,7 @@ public class WorkflowStatusBuilder {
   }
 
   public WorkflowStatusBuilder error(Throwable error) {
-    this.error = ErrorResult.fromThrowable(error);
+    this.error = ErrorResult.fromThrowable(error, this.serialization, null);
     return this;
   }
 
@@ -202,6 +204,11 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder parentWorkflowId(String parentWorkflowId) {
     this.parentWorkflowId = parentWorkflowId;
+    return this;
+  }
+
+  public WorkflowStatusBuilder serialization(String serialization) {
+    this.serialization = serialization;
     return this;
   }
 }
