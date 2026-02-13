@@ -546,8 +546,8 @@ class WorkflowDAO {
             workflow_uuid,
             rs.getString("status"),
             rs.getString("name"),
-            rs.getString("class_name"),
-            rs.getString("config_name"),
+            Objects.requireNonNullElse(rs.getString("class_name"), ""),
+            Objects.requireNonNullElse(rs.getString("config_name"), ""),
             rs.getString("authenticated_user"),
             rs.getString("assumed_role"),
             (authenticatedRolesJson != null)

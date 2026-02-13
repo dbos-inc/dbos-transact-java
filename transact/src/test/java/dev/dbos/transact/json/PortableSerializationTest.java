@@ -58,8 +58,6 @@ public class PortableSerializationTest {
 
   /** Workflow interface for portable serialization tests. */
   public interface PortableTestService {
-    // Use long for timeout because portable JSON deserializes numbers as Long/Integer,
-    // not as Duration objects
     String recvWorkflow(String topic, long timeoutMs);
   }
 
@@ -76,8 +74,7 @@ public class PortableSerializationTest {
 
   /**
    * Tests that a workflow can be triggered via direct database insert using portable JSON format.
-   * This simulates the scenario where a workflow is initiated by another language (e.g.,
-   * TypeScript) using the portable serialization format.
+   * This simulates the scenario where a workflow is initiated by another language.
    */
   @Test
   public void testDirectInsertPortable() throws Exception {
@@ -116,7 +113,7 @@ public class PortableSerializationTest {
         stmt.setString(1, workflowId);
         stmt.setString(2, "recvWorkflow"); // workflow name (from @Workflow annotation)
         stmt.setString(3, "PortableTestService"); // class name alias (from @WorkflowClassName)
-        stmt.setString(4, ""); // config_name (instance name) - must be empty string, not null
+        stmt.setString(4, null);
         stmt.setString(5, "testq"); // queue name
         stmt.setString(6, "ENQUEUED"); // status
         // Portable JSON format for inputs: positionalArgs array with topic and timeout
@@ -241,8 +238,8 @@ public class PortableSerializationTest {
               .withWorkflowId(workflowId);
 
       // Use enqueuePortableWorkflow which defaults to portable serialization
-      WorkflowHandle<String, ?> handle =
-          client.enqueuePortableWorkflow(options, new Object[] {"incoming", 30000L}, null);
+      var handle =
+          client.<String>enqueuePortableWorkflow(options, new Object[] {"incoming", 30000L}, null);
 
       // Send a message using portable serialization
       client.send(
@@ -358,7 +355,7 @@ public class PortableSerializationTest {
       assertTrue(portableEvent.isPresent());
 
       // Default setEvent inherits workflow's serialization (java_jackson in this case)
-      assertEquals("java_jackson", defaultEvent.get().serialization());
+      assertEquals("java_jackson", defaultEvent.get().serialization()); // TODO this is incorrect
       // Native should have java_jackson (explicitly set)
       assertEquals("java_jackson", nativeEvent.get().serialization());
       // Portable should have portable_json (explicitly set)
@@ -452,6 +449,22 @@ public class PortableSerializationTest {
     }
   }
 
+  /** Simple workflow interface for event setting tests. */
+  public interface EventSetterService {
+    String setEventWorkflow();
+  }
+
+  @WorkflowClassName("EventSetterService")
+  public static class EventSetterServiceImpl implements EventSetterService {
+    @Workflow(name = "setEventWorkflow")
+    @Override
+    public String setEventWorkflow() {
+      // Set event without explicit serialization - should inherit from workflow context
+      DBOS.setEvent("myKey", "myValue");
+      return "eventSet";
+    }
+  }
+
   /**
    * Tests that a portable workflow (started via portable enqueue) uses portable serialization by
    * default for setEvent when no explicit serialization is specified.
@@ -493,22 +506,6 @@ public class PortableSerializationTest {
       assertEquals("myKey", events.get(0).key());
       // Event should inherit workflow's portable serialization
       assertEquals("portable_json", events.get(0).serialization());
-    }
-  }
-
-  /** Simple workflow interface for event setting tests. */
-  public interface EventSetterService {
-    String setEventWorkflow();
-  }
-
-  @WorkflowClassName("EventSetterService")
-  public static class EventSetterServiceImpl implements EventSetterService {
-    @Workflow(name = "setEventWorkflow")
-    @Override
-    public String setEventWorkflow() {
-      // Set event without explicit serialization - should inherit from workflow context
-      DBOS.setEvent("myKey", "myValue");
-      return "eventSet";
     }
   }
 

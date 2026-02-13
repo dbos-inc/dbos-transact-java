@@ -3,6 +3,7 @@ package dev.dbos.transact;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -462,18 +463,16 @@ public class DBOSClient implements AutoCloseable {
   /**
    * Enqueue a workflow using portable JSON serialization. This method is intended for
    * cross-language workflow initiation where the workflow function definition may not be available
-   * in Java. Unlike {@link #enqueueWorkflow}, this method does not validate function names or
-   * arguments.
+   * in Java.
    *
    * @param <T> Return type of workflow function
-   * @param <E> Exception thrown by workflow function
    * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
    * @param positionalArgs Positional arguments to pass to the workflow function
    * @param namedArgs Optional named arguments (for workflows that support them, e.g., Python
    *     kwargs)
    * @return WorkflowHandle for retrieving workflow ID, status, and results
    */
-  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueuePortableWorkflow(
+  public <T> @NonNull WorkflowHandle<T, PortableWorkflowException> enqueuePortableWorkflow(
       @NonNull EnqueueOptions options,
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs) {
@@ -525,11 +524,6 @@ public class DBOSClient implements AutoCloseable {
     /** Create SendOptions with portable JSON serialization. */
     public static SendOptions portable() {
       return new SendOptions(SerializationStrategy.PORTABLE);
-    }
-
-    /** Create SendOptions with native Java serialization. */
-    public static SendOptions nativeSerialization() {
-      return new SendOptions(SerializationStrategy.NATIVE);
     }
   }
 
