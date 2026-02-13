@@ -1,22 +1,23 @@
 package dev.dbos.transact.conductor.protocol;
 
 public enum MessageType {
-  EXECUTOR_INFO("executor_info"),
-  RECOVERY("recovery"),
+  ALERT("alert"),
   CANCEL("cancel"),
   DELETE("delete"),
-  LIST_WORKFLOWS("list_workflows"),
-  LIST_QUEUED_WORKFLOWS("list_queued_workflows"),
-  RESUME("resume"),
-  RESTART("restart"),
-  GET_WORKFLOW("get_workflow"),
+  EXECUTOR_INFO("executor_info"),
   EXIST_PENDING_WORKFLOWS("exist_pending_workflows"),
-  LIST_STEPS("list_steps"),
-  FORK_WORKFLOW("fork_workflow"),
-  RETENTION("retention"),
-  GET_METRICS("get_metrics"),
   EXPORT_WORKFLOW("export_workflow"),
-  IMPORT_WORKFLOW("import_workflow");
+  FORK_WORKFLOW("fork_workflow"),
+  GET_METRICS("get_metrics"),
+  GET_WORKFLOW("get_workflow"),
+  IMPORT_WORKFLOW("import_workflow"),
+  LIST_QUEUED_WORKFLOWS("list_queued_workflows"),
+  LIST_STEPS("list_steps"),
+  LIST_WORKFLOWS("list_workflows"),
+  RECOVERY("recovery"),
+  RESTART("restart"),
+  RESUME("resume"),
+  RETENTION("retention");
 
   private final String value;
 

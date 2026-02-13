@@ -1,5 +1,6 @@
 package dev.dbos.transact.execution;
 
+import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
@@ -15,7 +16,11 @@ import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
-import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
+import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.Invocation;
@@ -51,7 +56,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -85,6 +96,7 @@ public class DBOSExecutor implements AutoCloseable {
   private Conductor conductor;
   private ExecutorService executorService;
   private ScheduledExecutorService timeoutScheduler;
+  private AlertHandler alertHandler;
   private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
   public DBOSExecutor(DBOSConfig config) {
@@ -119,7 +131,8 @@ public class DBOSExecutor implements AutoCloseable {
       Set<DBOSLifecycleListener> listenerSet,
       Map<String, RegisteredWorkflow> workflowMap,
       Map<String, RegisteredWorkflowInstance> instanceMap,
-      List<Queue> queues) {
+      List<Queue> queues,
+      AlertHandler alertHandler) {
 
     if (isRunning.compareAndSet(false, true)) {
       logger.info("DBOS Executor starting");
@@ -128,6 +141,7 @@ public class DBOSExecutor implements AutoCloseable {
       this.instanceMap = Collections.unmodifiableMap(instanceMap);
       this.queues = Collections.unmodifiableList(queues);
       this.listeners = listenerSet;
+      this.alertHandler = alertHandler;
 
       if (this.appVersion == null || this.appVersion.isEmpty()) {
         List<Class<?>> registeredClasses =
@@ -329,6 +343,18 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     return Optional.empty();
+  }
+
+  public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
+    if (alertHandler != null) {
+      alertHandler.invoke(name, message, metadata);
+    } else {
+      logger.warn(
+          "No AlertHandler configured; dropping alert. name='{}', message='{}', metadata={}",
+          name,
+          message,
+          metadata);
+    }
   }
 
   WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) {
