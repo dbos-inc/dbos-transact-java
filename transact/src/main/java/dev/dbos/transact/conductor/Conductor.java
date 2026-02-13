@@ -1,6 +1,34 @@
 package dev.dbos.transact.conductor;
 
-import dev.dbos.transact.conductor.protocol.*;
+import dev.dbos.transact.conductor.protocol.AlertRequest;
+import dev.dbos.transact.conductor.protocol.BaseMessage;
+import dev.dbos.transact.conductor.protocol.BaseResponse;
+import dev.dbos.transact.conductor.protocol.CancelRequest;
+import dev.dbos.transact.conductor.protocol.DeleteRequest;
+import dev.dbos.transact.conductor.protocol.ExecutorInfoResponse;
+import dev.dbos.transact.conductor.protocol.ExistPendingWorkflowsRequest;
+import dev.dbos.transact.conductor.protocol.ExistPendingWorkflowsResponse;
+import dev.dbos.transact.conductor.protocol.ExportWorkflowRequest;
+import dev.dbos.transact.conductor.protocol.ExportWorkflowResponse;
+import dev.dbos.transact.conductor.protocol.ForkWorkflowRequest;
+import dev.dbos.transact.conductor.protocol.ForkWorkflowResponse;
+import dev.dbos.transact.conductor.protocol.GetMetricsRequest;
+import dev.dbos.transact.conductor.protocol.GetMetricsResponse;
+import dev.dbos.transact.conductor.protocol.GetWorkflowRequest;
+import dev.dbos.transact.conductor.protocol.GetWorkflowResponse;
+import dev.dbos.transact.conductor.protocol.ImportWorkflowRequest;
+import dev.dbos.transact.conductor.protocol.ListQueuedWorkflowsRequest;
+import dev.dbos.transact.conductor.protocol.ListStepsRequest;
+import dev.dbos.transact.conductor.protocol.ListStepsResponse;
+import dev.dbos.transact.conductor.protocol.ListWorkflowsRequest;
+import dev.dbos.transact.conductor.protocol.MessageType;
+import dev.dbos.transact.conductor.protocol.RecoveryRequest;
+import dev.dbos.transact.conductor.protocol.RestartRequest;
+import dev.dbos.transact.conductor.protocol.ResumeRequest;
+import dev.dbos.transact.conductor.protocol.RetentionRequest;
+import dev.dbos.transact.conductor.protocol.SuccessResponse;
+import dev.dbos.transact.conductor.protocol.WorkflowOutputsResponse;
+import dev.dbos.transact.conductor.protocol.WorkflowsOutput;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JSONUtil;
@@ -78,22 +106,23 @@ public class Conductor implements AutoCloseable {
   static {
     Map<MessageType, BiFunction<Conductor, BaseMessage, CompletableFuture<BaseResponse>>> map =
         new java.util.EnumMap<>(MessageType.class);
-    map.put(MessageType.EXECUTOR_INFO, Conductor::handleExecutorInfo);
-    map.put(MessageType.RECOVERY, Conductor::handleRecovery);
+    map.put(MessageType.ALERT, Conductor::handleAlert);
     map.put(MessageType.CANCEL, Conductor::handleCancel);
     map.put(MessageType.DELETE, Conductor::handleDelete);
-    map.put(MessageType.RESUME, Conductor::handleResume);
-    map.put(MessageType.RESTART, Conductor::handleRestart);
+    map.put(MessageType.EXECUTOR_INFO, Conductor::handleExecutorInfo);
+    map.put(MessageType.EXIST_PENDING_WORKFLOWS, Conductor::handleExistPendingWorkflows);
+    map.put(MessageType.EXPORT_WORKFLOW, Conductor::handleExportWorkflow);
     map.put(MessageType.FORK_WORKFLOW, Conductor::handleFork);
-    map.put(MessageType.LIST_WORKFLOWS, Conductor::handleListWorkflows);
+    map.put(MessageType.GET_METRICS, Conductor::handleGetMetrics);
+    map.put(MessageType.GET_WORKFLOW, Conductor::handleGetWorkflow);
+    map.put(MessageType.IMPORT_WORKFLOW, Conductor::handleImportWorkflow);
     map.put(MessageType.LIST_QUEUED_WORKFLOWS, Conductor::handleListQueuedWorkflows);
     map.put(MessageType.LIST_STEPS, Conductor::handleListSteps);
-    map.put(MessageType.EXIST_PENDING_WORKFLOWS, Conductor::handleExistPendingWorkflows);
-    map.put(MessageType.GET_WORKFLOW, Conductor::handleGetWorkflow);
+    map.put(MessageType.LIST_WORKFLOWS, Conductor::handleListWorkflows);
+    map.put(MessageType.RECOVERY, Conductor::handleRecovery);
+    map.put(MessageType.RESTART, Conductor::handleRestart);
+    map.put(MessageType.RESUME, Conductor::handleResume);
     map.put(MessageType.RETENTION, Conductor::handleRetention);
-    map.put(MessageType.GET_METRICS, Conductor::handleGetMetrics);
-    map.put(MessageType.IMPORT_WORKFLOW, Conductor::handleImportWorkflow);
-    map.put(MessageType.EXPORT_WORKFLOW, Conductor::handleExportWorkflow);
 
     dispatchMap = Collections.unmodifiableMap(map);
   }
@@ -1007,5 +1036,19 @@ public class Conductor implements AutoCloseable {
     }
 
     return Base64.getEncoder().encodeToString(out.toByteArray());
+  }
+
+  static CompletableFuture<BaseResponse> handleAlert(Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          AlertRequest request = (AlertRequest) message;
+          try {
+            conductor.dbosExecutor.fireAlertHandler(
+                request.name, request.message, request.metadata);
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            return new SuccessResponse(request, e);
+          }
+        });
   }
 }
