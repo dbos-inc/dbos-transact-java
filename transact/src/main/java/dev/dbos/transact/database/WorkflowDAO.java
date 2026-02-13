@@ -875,7 +875,11 @@ class WorkflowDAO {
       stmt.setString(9, JSONUtil.serializeArray(originalStatus.authenticatedRoles()));
       stmt.setString(10, originalStatus.assumedRole());
       stmt.setString(11, Constants.DBOS_INTERNAL_QUEUE);
-      stmt.setString(12, JSONUtil.serializeArray(originalStatus.input()));
+      stmt.setString(
+          12,
+          SerializationUtil.serializeArgs(
+                  originalStatus.input(), null, originalStatus.serialization(), null)
+              .serializedValue());
       stmt.setObject(13, timeoutMS);
       stmt.setString(14, originalWorkflowId);
       stmt.setString(15, originalStatus.serialization());

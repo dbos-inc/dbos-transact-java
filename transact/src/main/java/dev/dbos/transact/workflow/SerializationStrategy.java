@@ -3,21 +3,22 @@ package dev.dbos.transact.workflow;
 import dev.dbos.transact.json.SerializationUtil;
 
 /**
- * Serialization strategy for workflow arguments and messages.
+ * Serialization strategy for workflow arguments, results, events, messages, and streams.
  *
  * <p>This enum represents the strategic choice of serialization format at the client level. The
  * actual serialization format name used in the database is determined by the strategy:
  *
  * <ul>
- *   <li>{@link #DEFAULT} - Uses the default format for this language (native Java serialization)
  *   <li>{@link #PORTABLE} - Uses portable JSON format for cross-language compatibility
  *   <li>{@link #NATIVE} - Explicitly uses the native format for this language
+ *   <li>{@link #DEFAULT} - Uses the default format for this language (native Java serialization,
+ *       unless context dictates portable)
  * </ul>
  */
 public enum SerializationStrategy {
   /**
    * Use the default serialization for this language. For Java, this is the native Java
-   * serialization format ({@code java_jackson}).
+   * serialization format ({@code java_jackson}), except if the running workflow is portable.
    */
   DEFAULT(null),
 
@@ -30,7 +31,7 @@ public enum SerializationStrategy {
 
   /**
    * Explicitly use the native serialization format for this language. For Java, this is {@code
-   * java_jackson}. This is equivalent to {@link #DEFAULT} but makes the choice explicit.
+   * java_jackson}.
    */
   NATIVE(SerializationUtil.NATIVE);
 

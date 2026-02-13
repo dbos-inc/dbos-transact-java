@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +41,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
   }
 
   @Override
-  public String stringify(Object value) {
+  public String stringify(Object value, boolean _noHistoricalWrapper) {
     try {
       return mapper.writeValueAsString(toPortable(value));
     } catch (JsonProcessingException e) {
@@ -51,7 +50,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
   }
 
   @Override
-  public Object parse(String text) {
+  public Object parse(String text, boolean _noHistoricalWrapper) {
     if (text == null) {
       return null;
     }
@@ -65,9 +64,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
   /** Serialize workflow arguments in portable format. */
   public String stringifyArgs(Object[] positionalArgs, Map<String, Object> namedArgs) {
     JsonWorkflowArgs args =
-        new JsonWorkflowArgs(
-            positionalArgs != null ? Arrays.asList(toPortableArray(positionalArgs)) : null,
-            namedArgs != null ? toPortableMap(namedArgs) : null);
+        new JsonWorkflowArgs(positionalArgs, namedArgs != null ? toPortableMap(namedArgs) : null);
     try {
       return mapper.writeValueAsString(args);
     } catch (JsonProcessingException e) {

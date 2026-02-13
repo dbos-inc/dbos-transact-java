@@ -499,7 +499,7 @@ public class PortableSerializationTest {
       assertTrue(nativeNotif.isPresent());
       assertTrue(portableNotif.isPresent());
 
-      // Default should have null serialization (backward compatible)
+      // Default should have native serialization (backward compatible)
       assertEquals("java_jackson", defaultNotif.get().serialization());
       // Native should have java_jackson
       assertEquals("java_jackson", nativeNotif.get().serialization());

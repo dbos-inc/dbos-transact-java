@@ -15,15 +15,17 @@ public interface DBOSSerializer {
    * Serialize a value to a string.
    *
    * @param value The value to serialize
+   * @param noHistoricalWrapper The value is not expected to have a wrapper enclosing array
    * @return The serialized string representation
    */
-  String stringify(Object value);
+  String stringify(Object value, boolean noHistoricalWrapper);
 
   /**
    * Deserialize a string back to a value.
    *
    * @param text A serialized string (potentially null)
+   * @param noHistoricalWrapper The value is not expected to have a wrapper enclosing array
    * @return The deserialized value, or null if the input was null
    */
-  Object parse(String text);
+  Object parse(String text, boolean noHistoricalWrapper);
 }

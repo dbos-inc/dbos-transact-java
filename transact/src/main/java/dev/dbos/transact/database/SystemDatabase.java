@@ -4,6 +4,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -868,11 +869,26 @@ public class SystemDatabase implements AutoCloseable {
                           ? null
                           : JSONUtil.serializeArray(status.authenticatedRoles()));
                   stmt.setString(
-                      9, status.output() == null ? null : JSONUtil.serialize(status.output()));
+                      9,
+                      status.output() == null
+                          ? null
+                          : SerializationUtil.serializeValue(
+                                  status.output(), status.serialization(), null)
+                              .serializedValue());
                   stmt.setString(
-                      10, status.error() == null ? null : status.error().serializedError());
+                      10,
+                      status.error() == null
+                          ? null
+                          : SerializationUtil.serializeError(
+                                  status.error().throwable(), status.serialization(), null)
+                              .serializedValue());
                   stmt.setString(
-                      11, status.input() == null ? null : JSONUtil.serializeArray(status.input()));
+                      11,
+                      status.input() == null
+                          ? null
+                          : SerializationUtil.serializeArgs(
+                                  status.input(), null, status.serialization(), null)
+                              .serializedValue());
                   stmt.setString(12, status.executorId());
                   stmt.setString(13, status.appVersion());
                   stmt.setString(14, status.appId());
@@ -899,7 +915,12 @@ public class SystemDatabase implements AutoCloseable {
                     stmt.setInt(2, step.functionId());
                     stmt.setString(3, step.functionName());
                     stmt.setString(
-                        4, step.output() == null ? null : JSONUtil.serialize(step.output()));
+                        4,
+                        step.output() == null
+                            ? null
+                            : SerializationUtil.serializeValue(
+                                    step.output(), step.serialization(), null)
+                                .serializedValue());
                     stmt.setString(5, step.error() == null ? null : step.error().serializedError());
                     stmt.setString(6, step.childWorkflowId());
                     stmt.setObject(7, step.startedAtEpochMs());
