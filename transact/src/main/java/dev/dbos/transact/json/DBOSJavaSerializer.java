@@ -32,4 +32,20 @@ public class DBOSJavaSerializer implements DBOSSerializer {
     if (noHistoricalWrapper) return vi;
     return vi[0];
   }
+
+  @Override
+  public String stringifyThrowable(Throwable throwable) {
+    if (throwable == null) {
+      return null;
+    }
+    return JSONUtil.serializeAppException(throwable);
+  }
+
+  @Override
+  public Throwable parseThrowable(String text) {
+    if (text == null) {
+      return null;
+    }
+    return JSONUtil.deserializeAppException(text);
+  }
 }

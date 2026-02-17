@@ -24,7 +24,6 @@ import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.Invocation;
-import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -450,10 +449,16 @@ public class DBOSExecutor implements AutoCloseable {
       functionResult = fn.execute();
     } catch (Exception e) {
       if (inWorkflow) {
-        String jsonError = JSONUtil.serializeAppException(e);
+        var jsonError = SerializationUtil.serializeError(e, null, null);
         StepResult r =
             new StepResult(
-                ctx.getWorkflowId(), nextFuncId, functionName, null, jsonError, childWfId, null);
+                ctx.getWorkflowId(),
+                nextFuncId,
+                functionName,
+                null,
+                jsonError.serializedValue(),
+                childWfId,
+                jsonError.serialization());
         systemDatabase.recordStepResultTxn(r, startTime);
       }
       throw (E) e;
@@ -620,15 +625,16 @@ public class DBOSExecutor implements AutoCloseable {
       systemDatabase.recordStepResultTxn(stepResult, startTime);
       return result;
     } else {
+      var serError = SerializationUtil.serializeError(eThrown, null, null);
       StepResult stepResult =
           new StepResult(
               workflowId,
               stepFunctionId,
               stepName,
               null,
-              JSONUtil.serializeAppException(eThrown),
+              serError.serializedValue(),
               childWfId,
-              null);
+              serError.serialization());
       systemDatabase.recordStepResultTxn(stepResult, startTime);
       throw (E) eThrown;
     }

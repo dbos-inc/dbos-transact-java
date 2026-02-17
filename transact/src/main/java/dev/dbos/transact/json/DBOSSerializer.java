@@ -28,4 +28,20 @@ public interface DBOSSerializer {
    * @return The deserialized value, or null if the input was null
    */
   Object parse(String text, boolean noHistoricalWrapper);
+
+  /**
+   * Serialize a Throwable to a string.
+   *
+   * @param throwable The value to serialize
+   * @return The serialized string representation
+   */
+  String stringifyThrowable(Throwable throwable);
+
+  /**
+   * Deserialize a string back to a value.
+   *
+   * @param text A serialized string (potentially null)
+   * @return The deserialized Throwable, or null if the input was null
+   */
+  Throwable parseThrowable(String text);
 }

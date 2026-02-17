@@ -85,7 +85,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
   }
 
   /** Serialize an error in portable format. */
-  public String stringifyError(Throwable error) {
+  public String stringifyThrowable(Throwable error) {
     JsonWorkflowErrorData errorData =
         new JsonWorkflowErrorData(
             error.getClass().getSimpleName(),
@@ -100,7 +100,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
   }
 
   /** Deserialize an error from portable format. */
-  public PortableWorkflowException parseError(String text) {
+  public Throwable parseThrowable(String text) {
     if (text == null) {
       return null;
     }

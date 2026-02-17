@@ -174,28 +174,32 @@ public final class SerializationUtil {
    * Serialize an error using the specified format.
    *
    * @param error the error to serialize
-   * @param format the serialization format
+   * @param serialization the serialization format
    * @param customSerializer optional custom serializer
    * @return the serialized result
    */
   public static SerializedResult serializeError(
-      Throwable error, String format, DBOSSerializer customSerializer) {
+      Throwable error, String serialization, DBOSSerializer customSerializer) {
 
-    if (PORTABLE.equals(format)) {
-      String serialized = DBOSPortableSerializer.INSTANCE.stringifyError(error);
+    if (PORTABLE.equals(serialization)) {
+      String serialized = DBOSPortableSerializer.INSTANCE.stringifyThrowable(error);
       return new SerializedResult(serialized, DBOSPortableSerializer.NAME);
     }
 
-    if (NATIVE.equals(format) || format == null) {
+    if (NATIVE.equals(serialization)) {
       // Use the existing Java error serialization
-      String serialized = JSONUtil.serializeAppException(error);
+      String serialized = DBOSJavaSerializer.INSTANCE.stringifyThrowable(error);
       return new SerializedResult(serialized, DBOSJavaSerializer.NAME);
     }
 
+    DBOSSerializer serializer = customSerializer;
+    if (serializer == null) serializer = DBOSJavaSerializer.INSTANCE;
+    if (serialization != null && !serializer.name().equals(serialization)) {
+      throw new IllegalArgumentException("Serialization is not available");
+    }
+
     // Custom serializer - use native Java format
-    String serialized = JSONUtil.serializeAppException(error);
-    DBOSSerializer serializer =
-        customSerializer != null ? customSerializer : DBOSJavaSerializer.INSTANCE;
+    String serialized = serializer.stringifyThrowable(error);
     return new SerializedResult(serialized, serializer.name());
   }
 
@@ -215,20 +219,20 @@ public final class SerializationUtil {
     }
 
     if (DBOSPortableSerializer.NAME.equals(serialization)) {
-      return DBOSPortableSerializer.INSTANCE.parseError(serializedValue);
+      return DBOSPortableSerializer.INSTANCE.parseThrowable(serializedValue);
     }
 
     if (DBOSJavaSerializer.NAME.equals(serialization) || serialization == null) {
-      return JSONUtil.deserializeAppException(serializedValue);
+      return DBOSJavaSerializer.INSTANCE.parseThrowable(serializedValue);
     }
 
-    // Try custom or fall back to Java
-    try {
-      return JSONUtil.deserializeAppException(serializedValue);
-    } catch (Exception e) {
-      // Return a generic exception with the message
-      return new RuntimeException("Deserialization failed for format: " + serialization, e);
+    DBOSSerializer serializer = customSerializer;
+    if (serializer == null) serializer = DBOSJavaSerializer.INSTANCE;
+    if (serialization != null && !serializer.name().equals(serialization)) {
+      throw new IllegalArgumentException("Serialization is not available");
     }
+
+    return serializer.parseThrowable(serializedValue);
   }
 
   /**
