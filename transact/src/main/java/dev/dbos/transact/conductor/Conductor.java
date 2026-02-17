@@ -155,21 +155,27 @@ public class Conductor implements AutoCloseable {
     String appName = dbosExecutor.appName();
     Objects.requireNonNull(appName, "App Name must not be null to use Conductor");
 
-    String domain = builder.domain;
-    if (domain == null) {
+    var hostname = builder.domain;
+    if (hostname == null) {
       String dbosDomain = System.getenv("DBOS_DOMAIN");
       if (dbosDomain == null || dbosDomain.trim().isEmpty()) {
-        domain = "wss://cloud.dbos.dev";
+        hostname = "cloud.dbos.dev";
       } else {
-        domain = "wss://" + dbosDomain.trim();
+        hostname = dbosDomain.trim();
       }
-      domain += "/conductor/v1alpha1";
     } else {
       // ensure there is no trailing slash
-      domain = domain.replaceAll("/$", "");
+      hostname = hostname.replaceAll("/$", "");
     }
 
-    this.url = domain + "/websocket/" + appName + "/" + builder.conductorKey;
+    // Determine protocol based on hostname (use ws for localhost, wss for others)
+    var protocol =
+        (hostname.startsWith("localhost:") || hostname.startsWith("127.0.0.1:")) ? "ws" : "wss";
+
+    this.url =
+        String.format(
+            "%s://%s/conductor/v1alpha1/websocket/%s/%s",
+            protocol, hostname, appName, builder.conductorKey);
 
     this.pingPeriodMs = builder.pingPeriodMs;
     this.pingTimeoutMs = builder.pingTimeoutMs;
