@@ -7,6 +7,7 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.json.PortableSerializationTest.EventSetterService;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.SerializationStrategy;
@@ -18,6 +19,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -651,6 +654,59 @@ public class PortableSerializationTest {
       assertEquals("defaultValue", defaultVal);
       assertEquals("nativeValue", nativeVal);
       assertEquals("portableValue", portableVal);
+    }
+  }
+
+  /** Simple workflow interface for more JSON expressiveness. */
+  public interface SerializedTypesService {
+    String checkWorkflow(
+        String sv, boolean bv, double dv, ArrayList<String> sva, Map<String, Object> mapv);
+  }
+
+  @WorkflowClassName("SerializedTypesService")
+  public static class SerializedTypesServiceImpl implements SerializedTypesService {
+    @Workflow(name = "checkWorkflow")
+    @Override
+    public String checkWorkflow(
+        String sv, boolean bv, double dv, ArrayList<String> sva, Map<String, Object> mapv) {
+      return sv + bv + dv + sva + mapv;
+    }
+  }
+
+  /** Tests that errors thrown from portable workflows are stored in portable JSON format. */
+  @Test
+  public void testArgSerialization() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+
+    DBOS.registerWorkflows(SerializedTypesService.class, new SerializedTypesServiceImpl());
+
+    DBOS.launch();
+
+    try (DBOSClient client = new DBOSClient(dataSource)) {
+      String workflowId = UUID.randomUUID().toString();
+
+      // Enqueue with portable serialization
+      var options =
+          new DBOSClient.EnqueueOptions("SerializedTypesService", "checkWorkflow", "testq")
+              .withWorkflowId(workflowId)
+              .withSerialization(SerializationStrategy.PORTABLE);
+
+      WorkflowHandle<String, ?> handle =
+          client.enqueueWorkflow(
+              options,
+              new Object[] {
+                "Apex", true, 1.01, new String[] {"hello", "world"}, Map.of("K3Y", "VALU3")
+              });
+
+      var rv = handle.getResult();
+
+      // Verify the workflow stored error in portable format
+      var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertNotNull(row);
+      assertEquals("portable_json", row.serialization());
+      assertEquals("SUCCESS", row.status());
+      assertEquals("Apextrue1.01[hello, world]{K3Y=VALU3}", rv);
     }
   }
 }
