@@ -169,8 +169,12 @@ public class Conductor implements AutoCloseable {
     }
 
     // Determine protocol based on hostname (use ws for localhost, wss for others)
-    var protocol =
-        (hostname.startsWith("localhost:") || hostname.startsWith("127.0.0.1:")) ? "ws" : "wss";
+    boolean isLocalHost =
+        "localhost".equals(hostname)
+            || hostname.startsWith("localhost:")
+            || "127.0.0.1".equals(hostname)
+            || hostname.startsWith("127.0.0.1:");
+    var protocol = isLocalHost ? "ws" : "wss";
 
     this.url =
         String.format(
