@@ -460,10 +460,16 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     // Record the successful result
-    String jsonOutput = JSONUtil.serialize(functionResult);
+    var toSaveSer = SerializationUtil.serializeValue(functionResult, null, null);
     StepResult o =
         new StepResult(
-            ctx.getWorkflowId(), nextFuncId, functionName, jsonOutput, null, childWfId, null);
+            ctx.getWorkflowId(),
+            nextFuncId,
+            functionName,
+            toSaveSer.serializedValue(),
+            null,
+            childWfId,
+            toSaveSer.serialization());
     systemDatabase.recordStepResultTxn(o, startTime);
 
     return functionResult;
@@ -566,7 +572,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     int currAttempts = 1;
-    String serializedOutput = null;
+    SerializationUtil.SerializedResult serializedOutput = null;
     Exception eThrown = null;
     T result = null;
     boolean shouldRetry = true;
@@ -576,7 +582,7 @@ public class DBOSExecutor implements AutoCloseable {
         ctx.setStepFunctionId(stepFunctionId);
         result = function.execute();
         shouldRetry = false;
-        serializedOutput = JSONUtil.serialize(result);
+        serializedOutput = SerializationUtil.serializeValue(result, null, null);
         eThrown = null;
       } catch (Exception e) {
         Throwable actual =
@@ -604,7 +610,13 @@ public class DBOSExecutor implements AutoCloseable {
     if (eThrown == null) {
       StepResult stepResult =
           new StepResult(
-              workflowId, stepFunctionId, stepName, serializedOutput, null, childWfId, null);
+              workflowId,
+              stepFunctionId,
+              stepName,
+              serializedOutput.serializedValue(),
+              null,
+              childWfId,
+              serializedOutput.serialization());
       systemDatabase.recordStepResultTxn(stepResult, startTime);
       return result;
     } else {

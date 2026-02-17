@@ -3,7 +3,6 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
-import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
 
@@ -255,9 +254,17 @@ class NotificationsDAO {
 
         // Record operation result
         Object toSave = recvdMessage;
+        var toSaveSer = SerializationUtil.serializeValue(toSave, null, null);
         StepResult output =
-            new StepResult(workflowUuid, functionId, functionName, null, null, null, null)
-                .withOutput(JSONUtil.serialize(toSave));
+            new StepResult(
+                    workflowUuid,
+                    functionId,
+                    functionName,
+                    null,
+                    null,
+                    null,
+                    toSaveSer.serialization())
+                .withOutput(toSaveSer.serializedValue());
         StepsDAO.recordStepResultTxn(
             output, startTime, System.currentTimeMillis(), conn, this.schema);
 
@@ -480,6 +487,7 @@ class NotificationsDAO {
 
       // Record the output if it's in a workflow
       if (callerCtx != null) {
+        var toSaveSer = SerializationUtil.serializeValue(value, null, null);
         StepResult output =
             new StepResult(
                     callerCtx.workflowId(),
@@ -488,8 +496,8 @@ class NotificationsDAO {
                     null,
                     null,
                     null,
-                    null)
-                .withOutput(JSONUtil.serialize(value));
+                    toSaveSer.serialization())
+                .withOutput(toSaveSer.serializedValue());
         StepsDAO.recordStepResultTxn(
             dataSource, output, startTime, System.currentTimeMillis(), this.schema);
       }
