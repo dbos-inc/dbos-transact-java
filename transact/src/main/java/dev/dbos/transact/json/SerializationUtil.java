@@ -1,5 +1,6 @@
 package dev.dbos.transact.json;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -165,7 +166,11 @@ public final class SerializationUtil {
       throw new IllegalArgumentException("Serialization is not available");
     }
 
-    return (Object[]) serializer.parse(serializedValue, true);
+    Object parsed = serializer.parse(serializedValue, true);
+    if (parsed instanceof List<?> list) {
+      return list.toArray();
+    }
+    return (Object[]) parsed;
   }
 
   // ============ Error Serialization ============
