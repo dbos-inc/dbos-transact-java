@@ -3,6 +3,7 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
@@ -48,6 +49,7 @@ public class SystemDatabase implements AutoCloseable {
   private final DataSource dataSource;
   private final String schema;
   private final boolean created;
+  private final DBOSSerializer serializer;
 
   private final WorkflowDAO workflowDAO;
   private final StepsDAO stepsDAO;
@@ -55,32 +57,41 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
 
-  private SystemDatabase(DataSource dataSource, String schema, boolean created) {
+  private SystemDatabase(DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
     this.schema = sanitizeSchema(schema);
     this.dataSource = dataSource;
     this.created = created;
+    this.serializer = serializer;
 
-    stepsDAO = new StepsDAO(dataSource, this.schema);
-    workflowDAO = new WorkflowDAO(dataSource, this.schema);
+    stepsDAO = new StepsDAO(dataSource, this.schema, serializer);
+    workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
     queuesDAO = new QueuesDAO(dataSource, this.schema);
     notificationService = new NotificationService(dataSource);
-    notificationsDAO = new NotificationsDAO(dataSource, notificationService, this.schema);
+    notificationsDAO = new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
-    this(createDataSource(url, user, password), schema, true);
+    this(createDataSource(url, user, password), schema, true, null);
+  }
+
+  public SystemDatabase(String url, String user, String password, String schema, DBOSSerializer serializer) {
+    this(createDataSource(url, user, password), schema, true, serializer);
   }
 
   public SystemDatabase(DataSource dataSource, String schema) {
-    this(dataSource, schema, false);
+    this(dataSource, schema, false, null);
+  }
+
+  public SystemDatabase(DataSource dataSource, String schema, DBOSSerializer serializer) {
+    this(dataSource, schema, false, serializer);
   }
 
   public static SystemDatabase create(DBOSConfig config) {
     if (config.dataSource() == null) {
       return new SystemDatabase(
-          config.databaseUrl(), config.dbUser(), config.dbPassword(), config.databaseSchema());
+          config.databaseUrl(), config.dbUser(), config.dbPassword(), config.databaseSchema(), config.serializer());
     } else {
-      return new SystemDatabase(config.dataSource(), config.databaseSchema());
+      return new SystemDatabase(config.dataSource(), config.databaseSchema(), config.serializer());
     }
   }
 
@@ -873,21 +884,21 @@ public class SystemDatabase implements AutoCloseable {
                       status.output() == null
                           ? null
                           : SerializationUtil.serializeValue(
-                                  status.output(), status.serialization(), null)
+                                  status.output(), status.serialization(), this.serializer)
                               .serializedValue());
                   stmt.setString(
                       10,
                       status.error() == null
                           ? null
                           : SerializationUtil.serializeError(
-                                  status.error().throwable(), status.serialization(), null)
+                                  status.error().throwable(), status.serialization(), this.serializer)
                               .serializedValue());
                   stmt.setString(
                       11,
                       status.input() == null
                           ? null
                           : SerializationUtil.serializeArgs(
-                                  status.input(), null, status.serialization(), null)
+                                  status.input(), null, status.serialization(), this.serializer)
                               .serializedValue());
                   stmt.setString(12, status.executorId());
                   stmt.setString(13, status.appVersion());
@@ -919,7 +930,7 @@ public class SystemDatabase implements AutoCloseable {
                         step.output() == null
                             ? null
                             : SerializationUtil.serializeValue(
-                                    step.output(), step.serialization(), null)
+                                    step.output(), step.serialization(), this.serializer)
                                 .serializedValue());
                     stmt.setString(5, step.error() == null ? null : step.error().serializedError());
                     stmt.setString(6, step.childWorkflowId());

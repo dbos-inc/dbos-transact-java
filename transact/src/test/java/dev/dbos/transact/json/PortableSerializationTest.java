@@ -7,7 +7,6 @@ import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.json.PortableSerializationTest.EventSetterService;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.SerializationStrategy;
@@ -15,13 +14,17 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
@@ -707,6 +710,254 @@ public class PortableSerializationTest {
       assertEquals("portable_json", row.serialization());
       assertEquals("SUCCESS", row.status());
       assertEquals("Apextrue1.01[hello, world]{K3Y=VALU3}", rv);
+    }
+  }
+
+  // ============ Custom Serializer Tests ============
+
+  /** A test custom serializer that base64-encodes JSON. */
+  static class TestBase64Serializer implements DBOSSerializer {
+    private static final ObjectMapper mapper = new ObjectMapper();
+
+    @Override
+    public String name() {
+      return "custom_base64";
+    }
+
+    @Override
+    public String stringify(Object value, boolean noHistoricalWrapper) {
+      try {
+        String json = mapper.writeValueAsString(value);
+        return Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to serialize", e);
+      }
+    }
+
+    @Override
+    public Object parse(String text, boolean noHistoricalWrapper) {
+      if (text == null) return null;
+      try {
+        String json = new String(Base64.getDecoder().decode(text), StandardCharsets.UTF_8);
+        return mapper.readValue(json, Object.class);
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to deserialize", e);
+      }
+    }
+
+    @Override
+    public String stringifyThrowable(Throwable throwable) {
+      try {
+        var errorMap = Map.of("class", throwable.getClass().getName(), "message",
+            throwable.getMessage() != null ? throwable.getMessage() : "");
+        String json = mapper.writeValueAsString(errorMap);
+        return Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to serialize throwable", e);
+      }
+    }
+
+    @Override
+    public Throwable parseThrowable(String text) {
+      if (text == null) return null;
+      try {
+        String json = new String(Base64.getDecoder().decode(text), StandardCharsets.UTF_8);
+        @SuppressWarnings("unchecked")
+        var map = (Map<String, String>) mapper.readValue(json, Map.class);
+        return new RuntimeException(map.get("message"));
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to deserialize throwable", e);
+      }
+    }
+  }
+
+  /** Workflow interface for custom serializer tests. */
+  public interface CustomSerService {
+    String customSerWorkflow(String input);
+  }
+
+  @WorkflowClassName("CustomSerService")
+  public static class CustomSerServiceImpl implements CustomSerService {
+    @Workflow(name = "customSerWorkflow")
+    @Override
+    public String customSerWorkflow(String input) {
+      DBOS.setEvent("testKey", "eventValue-" + input);
+      Object msg = DBOS.recv("testTopic", Duration.ofSeconds(30));
+      return "result:" + input + ":" + msg;
+    }
+  }
+
+  /**
+   * Tests that a custom serializer configured via DBOSConfig is used for all serialization.
+   */
+  @Test
+  public void testCustomSerializer() throws Exception {
+    // Shutdown existing DBOS from @BeforeEach
+    DBOS.shutdown();
+
+    // Reinitialize with custom serializer
+    var customConfig = dbosConfig.withSerializer(new TestBase64Serializer());
+    DBOS.reinitialize(customConfig);
+
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    CustomSerService svc =
+        DBOS.registerWorkflows(CustomSerService.class, new CustomSerServiceImpl());
+
+    DBOS.launch();
+
+    String workflowId = UUID.randomUUID().toString();
+
+    // Start the workflow via queue
+    try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
+      var options =
+          new DBOSClient.EnqueueOptions("CustomSerService", "customSerWorkflow", "testq")
+              .withWorkflowId(workflowId);
+
+      WorkflowHandle<String, ?> handle =
+          client.enqueueWorkflow(options, new Object[] {"hello"});
+
+      // Send a message
+      client.send(workflowId, "worldMsg", "testTopic", null);
+
+      // Wait for result
+      String result = handle.getResult();
+      assertEquals("result:hello:worldMsg", result);
+
+      // Verify DB rows have custom serialization format
+      var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertNotNull(row);
+      assertEquals("custom_base64", row.serialization());
+
+      // Verify the event was stored with custom serialization
+      var events = DBUtils.getWorkflowEvents(dataSource, workflowId);
+      var testEvent = events.stream().filter(e -> e.key().equals("testKey")).findFirst();
+      assertTrue(testEvent.isPresent());
+      assertEquals("custom_base64", testEvent.get().serialization());
+
+      // Verify getEvent works through custom serializer
+      Object eventVal = client.getEvent(workflowId, "testKey", Duration.ofSeconds(5));
+      assertEquals("eventValue-hello", eventVal);
+    }
+  }
+
+  /**
+   * Tests that data written with the default serializer is readable after switching to a custom
+   * serializer, and vice versa (SerializationUtil dispatches based on stored format name).
+   */
+  @Test
+  public void testCustomSerializerInterop() throws Exception {
+    // Phase 1: Launch with default serializer, run a workflow
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl());
+    DBOS.launch();
+
+    String wfId1 = UUID.randomUUID().toString();
+    try (DBOSClient client = new DBOSClient(dataSource)) {
+      var options =
+          new DBOSClient.EnqueueOptions("EventSetterService", "setEventWorkflow", "testq")
+              .withWorkflowId(wfId1);
+      var handle = client.enqueueWorkflow(options, new Object[] {});
+      assertEquals("eventSet", handle.getResult());
+    }
+
+    // Verify Phase 1 data is java_jackson
+    var row1 = DBUtils.getWorkflowRow(dataSource, wfId1);
+    assertNotNull(row1);
+    assertEquals("java_jackson", row1.serialization());
+
+    DBOS.shutdown();
+
+    // Phase 2: Relaunch with custom serializer
+    var customConfig = dbosConfig.withSerializer(new TestBase64Serializer());
+    DBOS.reinitialize(customConfig);
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl());
+    DBOS.launch();
+
+    String wfId2 = UUID.randomUUID().toString();
+    try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
+      var options =
+          new DBOSClient.EnqueueOptions("EventSetterService", "setEventWorkflow", "testq")
+              .withWorkflowId(wfId2);
+      var handle = client.enqueueWorkflow(options, new Object[] {});
+      assertEquals("eventSet", handle.getResult());
+
+      // Read event from Phase 1 (java_jackson) - should still be readable
+      Object val1 = client.getEvent(wfId1, "myKey", Duration.ofSeconds(5));
+      assertEquals("myValue", val1);
+
+      // Read event from Phase 2 (custom_base64) - should be readable
+      Object val2 = client.getEvent(wfId2, "myKey", Duration.ofSeconds(5));
+      assertEquals("myValue", val2);
+    }
+
+    // Verify Phase 2 data uses custom serialization
+    var row2 = DBUtils.getWorkflowRow(dataSource, wfId2);
+    assertNotNull(row2);
+    assertEquals("custom_base64", row2.serialization());
+
+    DBOS.shutdown();
+
+    // Phase 3: Relaunch with custom serializer again, verify Phase 2 data still readable
+    DBOS.reinitialize(customConfig);
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl());
+    DBOS.launch();
+
+    try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
+      Object val2 = client.getEvent(wfId2, "myKey", Duration.ofSeconds(5));
+      assertEquals("myValue", val2);
+    }
+  }
+
+  /**
+   * Tests that data written with a custom serializer becomes unreadable if that serializer is
+   * removed.
+   */
+  @Test
+  public void testCustomSerializerRemoved() throws Exception {
+    // Shutdown existing DBOS from @BeforeEach
+    DBOS.shutdown();
+
+    // Launch with custom serializer
+    var customConfig = dbosConfig.withSerializer(new TestBase64Serializer());
+    DBOS.reinitialize(customConfig);
+
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl());
+    DBOS.launch();
+
+    String wfId = UUID.randomUUID().toString();
+    try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
+      var options =
+          new DBOSClient.EnqueueOptions("EventSetterService", "setEventWorkflow", "testq")
+              .withWorkflowId(wfId);
+      var handle = client.enqueueWorkflow(options, new Object[] {});
+      assertEquals("eventSet", handle.getResult());
+    }
+
+    // Verify it's stored with custom_base64
+    var row = DBUtils.getWorkflowRow(dataSource, wfId);
+    assertNotNull(row);
+    assertEquals("custom_base64", row.serialization());
+
+    DBOS.shutdown();
+
+    // Relaunch WITHOUT custom serializer
+    DBOS.reinitialize(dbosConfig);
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl());
+    DBOS.launch();
+
+    // Attempt to getEvent on the custom-serialized workflow - should fail
+    try (DBOSClient client = new DBOSClient(dataSource)) {
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> client.getEvent(wfId, "myKey", Duration.ofSeconds(2)),
+          "Serialization is not available");
     }
   }
 }

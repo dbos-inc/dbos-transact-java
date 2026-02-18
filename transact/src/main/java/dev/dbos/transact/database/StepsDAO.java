@@ -2,6 +2,7 @@ package dev.dbos.transact.database;
 
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.DebugTriggers;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
@@ -26,10 +27,12 @@ class StepsDAO {
 
   private final DataSource dataSource;
   private final String schema;
+  private final DBOSSerializer serializer;
 
-  StepsDAO(DataSource ds, String schema) {
+  StepsDAO(DataSource ds, String schema, DBOSSerializer serializer) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
+    this.serializer = serializer;
   }
 
   static void recordStepResultTxn(
@@ -234,7 +237,7 @@ class StepsDAO {
           Object outputVal = null;
           if (outputData != null) {
             try {
-              outputVal = SerializationUtil.deserializeValue(outputData, serialization, null);
+              outputVal = SerializationUtil.deserializeValue(outputData, serialization, this.serializer);
             } catch (Exception e) {
               throw new RuntimeException(
                   "Failed to deserialize output for function " + functionId, e);
@@ -242,7 +245,7 @@ class StepsDAO {
           }
 
           // Deserialize error if present
-          ErrorResult stepError = ErrorResult.deserialize(errorData, serialization, null);
+          ErrorResult stepError = ErrorResult.deserialize(errorData, serialization, this.serializer);
           steps.add(
               new StepInfo(
                   functionId,
@@ -262,7 +265,7 @@ class StepsDAO {
 
   void sleep(String workflowUuid, int functionId, Duration duration) throws SQLException {
     var sleepDuration =
-        StepsDAO.durableSleepDuration(dataSource, workflowUuid, functionId, duration, this.schema);
+        StepsDAO.durableSleepDuration(dataSource, workflowUuid, functionId, duration, this.schema, this.serializer);
     logger.debug("Sleeping for duration {}", sleepDuration);
     try {
       Thread.sleep(sleepDuration.toMillis());
@@ -273,7 +276,8 @@ class StepsDAO {
   }
 
   static Duration durableSleepDuration(
-      DataSource dataSource, String workflowUuid, int functionId, Duration duration, String schema)
+      DataSource dataSource, String workflowUuid, int functionId, Duration duration, String schema,
+      DBOSSerializer serializer)
       throws SQLException {
 
     Objects.requireNonNull(schema);
@@ -296,7 +300,7 @@ class StepsDAO {
       }
       Object deserialized =
           SerializationUtil.deserializeValue(
-              recordedOutput.output(), recordedOutput.serialization(), null);
+              recordedOutput.output(), recordedOutput.serialization(), serializer);
       endTime = ((Number) deserialized).longValue();
     } else {
       logger.debug(

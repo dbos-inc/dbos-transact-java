@@ -24,6 +24,7 @@ import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.Invocation;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -78,6 +79,7 @@ public class DBOSExecutor implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
   private final DBOSConfig config;
+  private final DBOSSerializer serializer;
 
   private boolean dbosCloud;
   private String appVersion;
@@ -102,6 +104,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
+    this.serializer = config.serializer();
 
     if (config.conductorKey() != null && config.executorId() != null) {
       throw new IllegalArgumentException(
@@ -408,17 +411,17 @@ public class DBOSExecutor implements AutoCloseable {
     return handles;
   }
 
-  private static void postInvokeWorkflowResult(
+  private void postInvokeWorkflowResult(
       SystemDatabase systemDatabase, String workflowId, Object result, String serialization) {
 
-    var serialized = SerializationUtil.serializeValue(result, serialization, null);
+    var serialized = SerializationUtil.serializeValue(result, serialization, this.serializer);
     systemDatabase.recordWorkflowOutput(workflowId, serialized.serializedValue());
   }
 
-  private static void postInvokeWorkflowError(
+  private void postInvokeWorkflowError(
       SystemDatabase systemDatabase, String workflowId, Throwable error, String serialization) {
 
-    var serialized = SerializationUtil.serializeError(error, serialization, null);
+    var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
     systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
   }
 
@@ -449,7 +452,7 @@ public class DBOSExecutor implements AutoCloseable {
       functionResult = fn.execute();
     } catch (Exception e) {
       if (inWorkflow) {
-        var jsonError = SerializationUtil.serializeError(e, null, null);
+        var jsonError = SerializationUtil.serializeError(e, null, this.serializer);
         StepResult r =
             new StepResult(
                 ctx.getWorkflowId(),
@@ -465,7 +468,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     // Record the successful result
-    var toSaveSer = SerializationUtil.serializeValue(functionResult, null, null);
+    var toSaveSer = SerializationUtil.serializeValue(functionResult, null, this.serializer);
     StepResult o =
         new StepResult(
             ctx.getWorkflowId(),
@@ -505,11 +508,11 @@ public class DBOSExecutor implements AutoCloseable {
       throws E {
     if (result.output() != null) {
       Object outputValue =
-          SerializationUtil.deserializeValue(result.output(), result.serialization(), null);
+          SerializationUtil.deserializeValue(result.output(), result.serialization(), this.serializer);
       return (T) outputValue;
     } else if (result.error() != null) {
       Throwable t =
-          SerializationUtil.deserializeError(result.error(), result.serialization(), null);
+          SerializationUtil.deserializeError(result.error(), result.serialization(), this.serializer);
       if (t instanceof Exception) {
         throw (E) t;
       } else {
@@ -562,14 +565,14 @@ public class DBOSExecutor implements AutoCloseable {
       String output = recordedResult.output();
       if (output != null) {
         Object outputValue =
-            SerializationUtil.deserializeValue(output, recordedResult.serialization(), null);
+            SerializationUtil.deserializeValue(output, recordedResult.serialization(), this.serializer);
         return (T) outputValue;
       }
 
       String error = recordedResult.error();
       if (error != null) {
         var throwable =
-            SerializationUtil.deserializeError(error, recordedResult.serialization(), null);
+            SerializationUtil.deserializeError(error, recordedResult.serialization(), this.serializer);
         if (!(throwable instanceof Exception))
           throw new RuntimeException(throwable.getMessage(), throwable);
         throw (E) throwable;
@@ -587,7 +590,7 @@ public class DBOSExecutor implements AutoCloseable {
         ctx.setStepFunctionId(stepFunctionId);
         result = function.execute();
         shouldRetry = false;
-        serializedOutput = SerializationUtil.serializeValue(result, null, null);
+        serializedOutput = SerializationUtil.serializeValue(result, null, this.serializer);
         eThrown = null;
       } catch (Exception e) {
         Throwable actual =
@@ -625,7 +628,7 @@ public class DBOSExecutor implements AutoCloseable {
       systemDatabase.recordStepResultTxn(stepResult, startTime);
       return result;
     } else {
-      var serError = SerializationUtil.serializeError(eThrown, null, null);
+      var serError = SerializationUtil.serializeError(eThrown, null, this.serializer);
       StepResult stepResult =
           new StepResult(
               workflowId,
@@ -1262,7 +1265,8 @@ public class DBOSExecutor implements AutoCloseable {
           executorId(),
           appVersion(),
           appId(),
-          systemDatabase);
+          systemDatabase,
+          this.serializer);
     }
 
     logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
@@ -1292,7 +1296,8 @@ public class DBOSExecutor implements AutoCloseable {
             options.deadline(),
             options.isRecoveryRequest,
             options.isDequeuedRequest,
-            options.serialization());
+            options.serialization(),
+            this.serializer);
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
     }
@@ -1398,7 +1403,8 @@ public class DBOSExecutor implements AutoCloseable {
       String executorId,
       String appVersion,
       String appId,
-      SystemDatabase systemDatabase) {
+      SystemDatabase systemDatabase,
+      DBOSSerializer serializer) {
 
     logger.debug(
         "enqueueWorkflow {}({}) {}",
@@ -1436,7 +1442,8 @@ public class DBOSExecutor implements AutoCloseable {
           options.deadline(),
           options.isRecoveryRequest,
           options.isDequeuedRequest,
-          options.serialization());
+          options.serialization(),
+          serializer);
       return new WorkflowHandleDBPoll<T, E>(workflowId);
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", workflowId);
@@ -1468,13 +1475,14 @@ public class DBOSExecutor implements AutoCloseable {
       Instant deadline,
       boolean isRecoveryRequest,
       boolean isDequeuedRequest,
-      String serialization) {
+      String serialization,
+      DBOSSerializer serializer) {
 
     if (inputs == null) {
       inputs = new Object[0];
     }
     // Serialize inputs using the specified serialization format
-    var serializedArgs = SerializationUtil.serializeArgs(inputs, null, serialization, null);
+    var serializedArgs = SerializationUtil.serializeArgs(inputs, null, serialization, serializer);
     String inputString = serializedArgs.serializedValue();
     String actualSerialization = serializedArgs.serialization();
     var startTime = System.currentTimeMillis();

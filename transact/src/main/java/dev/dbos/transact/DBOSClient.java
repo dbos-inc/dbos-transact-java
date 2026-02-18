@@ -3,6 +3,7 @@ package dev.dbos.transact;
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -59,6 +60,7 @@ public class DBOSClient implements AutoCloseable {
   }
 
   private final @NonNull SystemDatabase systemDatabase;
+  private final @Nullable DBOSSerializer serializer;
 
   /**
    * Construct a DBOSClient, by providing system database access credentials
@@ -68,7 +70,7 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    */
   public DBOSClient(@NonNull String url, @NonNull String user, @NonNull String password) {
-    this(url, user, password, null);
+    this(url, user, password, null, null);
   }
 
   /**
@@ -84,7 +86,26 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String user,
       @NonNull String password,
       @Nullable String schema) {
-    systemDatabase = new SystemDatabase(url, user, password, schema);
+    this(url, user, password, schema, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing system database access credentials
+   *
+   * @param url System database JDBC URL
+   * @param user System database user
+   * @param password System database credential / password
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   */
+  public DBOSClient(
+      @NonNull String url,
+      @NonNull String user,
+      @NonNull String password,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer) {
+    this.serializer = serializer;
+    systemDatabase = new SystemDatabase(url, user, password, schema, serializer);
   }
 
   /**
@@ -93,7 +114,7 @@ public class DBOSClient implements AutoCloseable {
    * @param dataSource System database data source
    */
   public DBOSClient(@NonNull DataSource dataSource) {
-    this(dataSource, null);
+    this(dataSource, null, null);
   }
 
   /**
@@ -103,7 +124,19 @@ public class DBOSClient implements AutoCloseable {
    * @param schema Database schema for DBOS tables
    */
   public DBOSClient(@NonNull DataSource dataSource, @Nullable String schema) {
-    systemDatabase = new SystemDatabase(dataSource, schema);
+    this(dataSource, schema, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing a configured data source
+   *
+   * @param dataSource System database data source
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   */
+  public DBOSClient(@NonNull DataSource dataSource, @Nullable String schema, @Nullable DBOSSerializer serializer) {
+    this.serializer = serializer;
+    systemDatabase = new SystemDatabase(dataSource, schema, serializer);
   }
 
   @Override
@@ -457,7 +490,8 @@ public class DBOSClient implements AutoCloseable {
         null,
         null,
         options.appVersion,
-        systemDatabase);
+        systemDatabase,
+        this.serializer);
   }
 
   /**
@@ -483,7 +517,7 @@ public class DBOSClient implements AutoCloseable {
     // Serialize arguments in portable format
     SerializationUtil.SerializedResult serializedArgs =
         SerializationUtil.serializeArgs(
-            positionalArgs, namedArgs, SerializationUtil.PORTABLE, null);
+            positionalArgs, namedArgs, SerializationUtil.PORTABLE, this.serializer);
 
     // Create workflow status directly with portable serialization
     var statusBuilder =

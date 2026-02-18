@@ -31,11 +31,13 @@ class WorkflowDAO {
 
   private final DataSource dataSource;
   private final String schema;
+  private final DBOSSerializer serializer;
   private long getResultPollingIntervalMs = 1000;
 
-  WorkflowDAO(DataSource ds, String schema) {
+  WorkflowDAO(DataSource ds, String schema, DBOSSerializer serializer) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
+    this.serializer = serializer;
   }
 
   void speedUpPollingForTest() {
@@ -358,7 +360,7 @@ class WorkflowDAO {
       stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         if (rs.next()) {
-          return resultsToWorkflowStatus(rs, true, true, null);
+          return resultsToWorkflowStatus(rs, true, true, this.serializer);
         }
       }
     }
@@ -522,7 +524,7 @@ class WorkflowDAO {
 
       try (ResultSet rs = pstmt.executeQuery()) {
         while (rs.next()) {
-          WorkflowStatus info = resultsToWorkflowStatus(rs, loadInput, loadOutput, null);
+          WorkflowStatus info = resultsToWorkflowStatus(rs, loadInput, loadOutput, this.serializer);
           workflows.add(info);
         }
       }
@@ -540,7 +542,7 @@ class WorkflowDAO {
     String serializedOutput = loadOutput ? rs.getString("output") : null;
     String serializedError = loadOutput ? rs.getString("error") : null;
     String serialization = loadInput || loadOutput ? rs.getString("serialization") : null;
-    var err = ErrorResult.deserialize(serializedError, serialization, null);
+    var err = ErrorResult.deserialize(serializedError, serialization, serializer);
     WorkflowStatus info =
         new WorkflowStatus(
             workflow_uuid,
@@ -635,12 +637,12 @@ class WorkflowDAO {
               case SUCCESS:
                 String output = rs.getString("output");
                 Object outputValue =
-                    SerializationUtil.deserializeValue(output, serialization, null);
+                    SerializationUtil.deserializeValue(output, serialization, this.serializer);
                 return Result.success((T) outputValue);
 
               case ERROR:
                 String error = rs.getString("error");
-                Throwable t = SerializationUtil.deserializeError(error, serialization, null);
+                Throwable t = SerializationUtil.deserializeError(error, serialization, this.serializer);
                 return Result.failure(t);
               case CANCELLED:
                 throw new DBOSAwaitedWorkflowCancelledException(workflowId);
@@ -825,7 +827,8 @@ class WorkflowDAO {
             status,
             applicationVersion,
             timeoutMS,
-            this.schema);
+            this.schema,
+            this.serializer);
 
         // Copy operation outputs if starting from step > 0
         if (startStep > 0) {
@@ -850,7 +853,8 @@ class WorkflowDAO {
       WorkflowStatus originalStatus,
       String applicationVersion,
       Long timeoutMS,
-      String schema)
+      String schema,
+      DBOSSerializer serializer)
       throws SQLException {
     Objects.requireNonNull(schema);
 
@@ -878,7 +882,7 @@ class WorkflowDAO {
       stmt.setString(
           12,
           SerializationUtil.serializeArgs(
-                  originalStatus.input(), null, originalStatus.serialization(), null)
+                  originalStatus.input(), null, originalStatus.serialization(), serializer)
               .serializedValue());
       stmt.setObject(13, timeoutMS);
       stmt.setString(14, originalWorkflowId);
