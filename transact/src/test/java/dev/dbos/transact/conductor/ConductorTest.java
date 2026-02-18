@@ -91,7 +91,7 @@ public class ConductorTest {
 
     int port = testServer.getPort();
     assertTrue(port != 0, "Invalid Web Socket Server port");
-    String domain = String.format("localhost:%d", port);
+    String domain = String.format("ws://localhost:%d", port);
 
     mockDB = mock(SystemDatabase.class);
     mockExec = mock(DBOSExecutor.class);
@@ -126,8 +126,7 @@ public class ConductorTest {
     try (Conductor conductor = builder.build()) {
       conductor.start();
       assertTrue(listener.latch.await(10, TimeUnit.SECONDS), "latch timed out");
-      assertEquals(
-          "/conductor/v1alpha1/websocket/test-app-name/conductor-key", listener.resourceDescriptor);
+      assertEquals("/websocket/test-app-name/conductor-key", listener.resourceDescriptor);
     }
   }
 
