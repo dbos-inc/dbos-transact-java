@@ -57,7 +57,8 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
 
-  private SystemDatabase(DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
+  private SystemDatabase(
+      DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
     this.schema = sanitizeSchema(schema);
     this.dataSource = dataSource;
     this.created = created;
@@ -67,14 +68,16 @@ public class SystemDatabase implements AutoCloseable {
     workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
     queuesDAO = new QueuesDAO(dataSource, this.schema);
     notificationService = new NotificationService(dataSource);
-    notificationsDAO = new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
+    notificationsDAO =
+        new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
     this(createDataSource(url, user, password), schema, true, null);
   }
 
-  public SystemDatabase(String url, String user, String password, String schema, DBOSSerializer serializer) {
+  public SystemDatabase(
+      String url, String user, String password, String schema, DBOSSerializer serializer) {
     this(createDataSource(url, user, password), schema, true, serializer);
   }
 
@@ -89,7 +92,11 @@ public class SystemDatabase implements AutoCloseable {
   public static SystemDatabase create(DBOSConfig config) {
     if (config.dataSource() == null) {
       return new SystemDatabase(
-          config.databaseUrl(), config.dbUser(), config.dbPassword(), config.databaseSchema(), config.serializer());
+          config.databaseUrl(),
+          config.dbUser(),
+          config.dbPassword(),
+          config.databaseSchema(),
+          config.serializer());
     } else {
       return new SystemDatabase(config.dataSource(), config.databaseSchema(), config.serializer());
     }
@@ -891,7 +898,9 @@ public class SystemDatabase implements AutoCloseable {
                       status.error() == null
                           ? null
                           : SerializationUtil.serializeError(
-                                  status.error().throwable(), status.serialization(), this.serializer)
+                                  status.error().throwable(),
+                                  status.serialization(),
+                                  this.serializer)
                               .serializedValue());
                   stmt.setString(
                       11,

@@ -30,7 +30,8 @@ class NotificationsDAO {
   private NotificationService notificationService;
   private long dbPollingIntervalEventMs = 10000;
 
-  NotificationsDAO(DataSource ds, NotificationService nService, String schema, DBOSSerializer serializer) {
+  NotificationsDAO(
+      DataSource ds, NotificationService nService, String schema, DBOSSerializer serializer) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
     this.notificationService = nService;
@@ -197,7 +198,12 @@ class NotificationsDAO {
           // Support OAOO sleep
           actualTimeout =
               StepsDAO.durableSleepDuration(
-                      dataSource, workflowUuid, timeoutFunctionId, timeout, this.schema, this.serializer)
+                      dataSource,
+                      workflowUuid,
+                      timeoutFunctionId,
+                      timeout,
+                      this.schema,
+                      this.serializer)
                   .toMillis();
           checkedDBForSleep = true;
           targetTime = nowTime + actualTimeout;
@@ -250,7 +256,8 @@ class NotificationsDAO {
               String serializedMessage = rs.getString("message");
               String serialization = rs.getString("serialization");
               recvdMessage =
-                  SerializationUtil.deserializeValue(serializedMessage, serialization, this.serializer);
+                  SerializationUtil.deserializeValue(
+                      serializedMessage, serialization, this.serializer);
             }
           }
         }
@@ -452,7 +459,9 @@ class NotificationsDAO {
             if (rs.next()) {
               String serializedValue = rs.getString("value");
               String serialization = rs.getString("serialization");
-              value = SerializationUtil.deserializeValue(serializedValue, serialization, this.serializer);
+              value =
+                  SerializationUtil.deserializeValue(
+                      serializedValue, serialization, this.serializer);
               hasExistingNotification = true;
             }
           }

@@ -237,7 +237,8 @@ class StepsDAO {
           Object outputVal = null;
           if (outputData != null) {
             try {
-              outputVal = SerializationUtil.deserializeValue(outputData, serialization, this.serializer);
+              outputVal =
+                  SerializationUtil.deserializeValue(outputData, serialization, this.serializer);
             } catch (Exception e) {
               throw new RuntimeException(
                   "Failed to deserialize output for function " + functionId, e);
@@ -245,7 +246,8 @@ class StepsDAO {
           }
 
           // Deserialize error if present
-          ErrorResult stepError = ErrorResult.deserialize(errorData, serialization, this.serializer);
+          ErrorResult stepError =
+              ErrorResult.deserialize(errorData, serialization, this.serializer);
           steps.add(
               new StepInfo(
                   functionId,
@@ -265,7 +267,8 @@ class StepsDAO {
 
   void sleep(String workflowUuid, int functionId, Duration duration) throws SQLException {
     var sleepDuration =
-        StepsDAO.durableSleepDuration(dataSource, workflowUuid, functionId, duration, this.schema, this.serializer);
+        StepsDAO.durableSleepDuration(
+            dataSource, workflowUuid, functionId, duration, this.schema, this.serializer);
     logger.debug("Sleeping for duration {}", sleepDuration);
     try {
       Thread.sleep(sleepDuration.toMillis());
@@ -276,7 +279,11 @@ class StepsDAO {
   }
 
   static Duration durableSleepDuration(
-      DataSource dataSource, String workflowUuid, int functionId, Duration duration, String schema,
+      DataSource dataSource,
+      String workflowUuid,
+      int functionId,
+      Duration duration,
+      String schema,
       DBOSSerializer serializer)
       throws SQLException {
 

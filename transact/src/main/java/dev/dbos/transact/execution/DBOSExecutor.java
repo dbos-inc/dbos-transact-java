@@ -508,11 +508,13 @@ public class DBOSExecutor implements AutoCloseable {
       throws E {
     if (result.output() != null) {
       Object outputValue =
-          SerializationUtil.deserializeValue(result.output(), result.serialization(), this.serializer);
+          SerializationUtil.deserializeValue(
+              result.output(), result.serialization(), this.serializer);
       return (T) outputValue;
     } else if (result.error() != null) {
       Throwable t =
-          SerializationUtil.deserializeError(result.error(), result.serialization(), this.serializer);
+          SerializationUtil.deserializeError(
+              result.error(), result.serialization(), this.serializer);
       if (t instanceof Exception) {
         throw (E) t;
       } else {
@@ -565,14 +567,16 @@ public class DBOSExecutor implements AutoCloseable {
       String output = recordedResult.output();
       if (output != null) {
         Object outputValue =
-            SerializationUtil.deserializeValue(output, recordedResult.serialization(), this.serializer);
+            SerializationUtil.deserializeValue(
+                output, recordedResult.serialization(), this.serializer);
         return (T) outputValue;
       }
 
       String error = recordedResult.error();
       if (error != null) {
         var throwable =
-            SerializationUtil.deserializeError(error, recordedResult.serialization(), this.serializer);
+            SerializationUtil.deserializeError(
+                error, recordedResult.serialization(), this.serializer);
         if (!(throwable instanceof Exception))
           throw new RuntimeException(throwable.getMessage(), throwable);
         throw (E) throwable;

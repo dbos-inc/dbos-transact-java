@@ -134,7 +134,10 @@ public class DBOSClient implements AutoCloseable {
    * @param schema Database schema for DBOS tables
    * @param serializer Custom serializer for serialization/deserialization
    */
-  public DBOSClient(@NonNull DataSource dataSource, @Nullable String schema, @Nullable DBOSSerializer serializer) {
+  public DBOSClient(
+      @NonNull DataSource dataSource,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer) {
     this.serializer = serializer;
     systemDatabase = new SystemDatabase(dataSource, schema, serializer);
   }

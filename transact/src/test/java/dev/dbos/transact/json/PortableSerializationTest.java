@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -748,8 +747,12 @@ public class PortableSerializationTest {
     @Override
     public String stringifyThrowable(Throwable throwable) {
       try {
-        var errorMap = Map.of("class", throwable.getClass().getName(), "message",
-            throwable.getMessage() != null ? throwable.getMessage() : "");
+        var errorMap =
+            Map.of(
+                "class",
+                throwable.getClass().getName(),
+                "message",
+                throwable.getMessage() != null ? throwable.getMessage() : "");
         String json = mapper.writeValueAsString(errorMap);
         return Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
       } catch (Exception e) {
@@ -787,9 +790,7 @@ public class PortableSerializationTest {
     }
   }
 
-  /**
-   * Tests that a custom serializer configured via DBOSConfig is used for all serialization.
-   */
+  /** Tests that a custom serializer configured via DBOSConfig is used for all serialization. */
   @Test
   public void testCustomSerializer() throws Exception {
     // Shutdown existing DBOS from @BeforeEach
@@ -814,8 +815,7 @@ public class PortableSerializationTest {
           new DBOSClient.EnqueueOptions("CustomSerService", "customSerWorkflow", "testq")
               .withWorkflowId(workflowId);
 
-      WorkflowHandle<String, ?> handle =
-          client.enqueueWorkflow(options, new Object[] {"hello"});
+      WorkflowHandle<String, ?> handle = client.enqueueWorkflow(options, new Object[] {"hello"});
 
       // Send a message
       client.send(workflowId, "worldMsg", "testTopic", null);

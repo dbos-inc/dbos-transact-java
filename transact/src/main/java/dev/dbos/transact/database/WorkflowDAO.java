@@ -642,7 +642,8 @@ class WorkflowDAO {
 
               case ERROR:
                 String error = rs.getString("error");
-                Throwable t = SerializationUtil.deserializeError(error, serialization, this.serializer);
+                Throwable t =
+                    SerializationUtil.deserializeError(error, serialization, this.serializer);
                 return Result.failure(t);
               case CANCELLED:
                 throw new DBOSAwaitedWorkflowCancelledException(workflowId);
