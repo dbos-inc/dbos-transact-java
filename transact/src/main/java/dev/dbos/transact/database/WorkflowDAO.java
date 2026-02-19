@@ -331,6 +331,22 @@ class WorkflowDAO {
     }
   }
 
+  String getWorkflowSerialization(String workflowId) throws SQLException {
+    var sql =
+        "SELECT serialization FROM %s.workflow_status WHERE workflow_uuid = ?"
+            .formatted(this.schema);
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          return rs.getString("serialization");
+        }
+      }
+    }
+    return null;
+  }
+
   WorkflowStatus getWorkflowStatus(String workflowId) throws SQLException {
 
     try (var conn = dataSource.getConnection()) {

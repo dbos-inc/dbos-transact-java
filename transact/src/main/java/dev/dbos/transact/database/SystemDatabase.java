@@ -274,6 +274,13 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
+  public String getWorkflowSerialization(String workflowId) {
+    return dbRetry(
+        () -> {
+          return workflowDAO.getWorkflowSerialization(workflowId);
+        });
+  }
+
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return dbRetry(
         () -> {

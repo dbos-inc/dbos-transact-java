@@ -24,6 +24,7 @@ import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.Invocation;
+import dev.dbos.transact.json.ArgumentCoercion;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
@@ -1194,7 +1195,27 @@ public class DBOSExecutor implements AutoCloseable {
       String workflowId, boolean isRecoveryRequest, boolean isDequeuedRequest) {
     logger.debug("executeWorkflowById {}", workflowId);
 
-    var status = systemDatabase.getWorkflowStatus(workflowId);
+    WorkflowStatus status;
+    try {
+      status = systemDatabase.getWorkflowStatus(workflowId);
+    } catch (Exception e) {
+      logger.error("Failed to load workflow status for {}", workflowId, e);
+      // The serialization column is likely fine — it's the inputs that failed to parse.
+      // Fetch it separately so the error is recorded in the correct format.
+      String serialization = null;
+      try {
+        serialization = systemDatabase.getWorkflowSerialization(workflowId);
+      } catch (Exception ignored) {
+        // Best-effort; fall through with null to use default serializer
+      }
+      postInvokeWorkflowError(
+          systemDatabase,
+          workflowId,
+          new RuntimeException("Failed to deserialize workflow inputs: " + e.getMessage(), e),
+          serialization);
+      throw new RuntimeException("Failed to load workflow " + workflowId, e);
+    }
+
     if (status == null) {
       logger.error("Workflow not found {}", workflowId);
       throw new DBOSNonExistentWorkflowException(workflowId);
@@ -1208,6 +1229,18 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (workflow == null) {
       throw new DBOSWorkflowFunctionNotFoundException(workflowId, wfName);
+    }
+
+    // Coerce deserialized arguments to match the method's expected parameter types.
+    // Portable JSON deserializes to generic types (Integer, ArrayList, LinkedHashMap)
+    // which may not match the method signature (long, String[], custom POJOs).
+    // Other serializers may have similar issues (e.g., dates as strings).
+    try {
+      inputs = ArgumentCoercion.coerceArguments(inputs, workflow.workflowMethod());
+    } catch (IllegalArgumentException e) {
+      logger.error("Argument coercion failed for workflow {}", workflowId, e);
+      postInvokeWorkflowError(systemDatabase, workflowId, e, status.serialization());
+      throw e;
     }
 
     var options =

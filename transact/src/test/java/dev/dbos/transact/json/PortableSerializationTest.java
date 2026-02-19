@@ -8,6 +8,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.WorkflowStatusRow;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
@@ -19,6 +20,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Map;
@@ -958,6 +961,427 @@ public class PortableSerializationTest {
           IllegalArgumentException.class,
           () -> client.getEvent(wfId, "myKey", Duration.ofSeconds(2)),
           "Serialization is not available");
+    }
+  }
+
+  // ============ Argument Validation & Coercion Tests ============
+
+  /**
+   * Helper to insert a workflow_status row with the given inputs string and portable_json
+   * serialization.
+   */
+  private void insertPortableWorkflowRow(
+      String workflowId, String className, String workflowName, String queueName, String inputsJson)
+      throws Exception {
+    try (Connection conn = dataSource.getConnection()) {
+      String sql =
+          """
+          INSERT INTO dbos.workflow_status(
+            workflow_uuid, name, class_name, config_name,
+            queue_name, status, inputs, created_at, serialization
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, workflowId);
+        stmt.setString(2, workflowName);
+        stmt.setString(3, className);
+        stmt.setString(4, null);
+        stmt.setString(5, queueName);
+        stmt.setString(6, "ENQUEUED");
+        stmt.setString(7, inputsJson);
+        stmt.setLong(8, System.currentTimeMillis());
+        stmt.setString(9, "portable_json");
+        stmt.executeUpdate();
+      }
+    }
+  }
+
+  /**
+   * Helper to wait for a workflow to reach a terminal state (SUCCESS or ERROR), polling the DB
+   * directly.
+   */
+  private WorkflowStatusRow waitForWorkflowTerminal(String workflowId, Duration timeout)
+      throws Exception {
+    long deadline = System.currentTimeMillis() + timeout.toMillis();
+    while (System.currentTimeMillis() < deadline) {
+      var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+      if (row != null && ("SUCCESS".equals(row.status()) || "ERROR".equals(row.status()))) {
+        return row;
+      }
+      Thread.sleep(200);
+    }
+    throw new AssertionError("Workflow " + workflowId + " did not reach terminal state in time");
+  }
+
+  /**
+   * Tests that completely invalid (unparseable) JSON in the inputs column results in the workflow
+   * being marked as ERROR rather than being stuck in PENDING forever.
+   */
+  @Test
+  public void testInvalidJsonInput() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
+    DBOS.launch();
+
+    String workflowId = UUID.randomUUID().toString();
+    insertPortableWorkflowRow(
+        workflowId, "PortableTestService", "recvWorkflow", "testq", "this is not json at all");
+
+    // The workflow should be marked as ERROR (not stuck in PENDING)
+    var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
+    assertEquals("ERROR", row.status());
+    assertNotNull(row.error());
+    assertTrue(
+        row.error().contains("deserialize") || row.error().contains("parse"),
+        "Error should mention deserialization failure, got: " + row.error());
+  }
+
+  /**
+   * Tests that a wrong number of arguments (too few) results in the workflow being marked as ERROR
+   * with a clear message.
+   */
+  @Test
+  public void testWrongArgumentCount() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
+    DBOS.launch();
+
+    String workflowId = UUID.randomUUID().toString();
+    // recvWorkflow expects (String, long) = 2 args, but we provide only 1
+    insertPortableWorkflowRow(
+        workflowId,
+        "PortableTestService",
+        "recvWorkflow",
+        "testq",
+        "{\"positionalArgs\":[\"only_one_arg\"]}");
+
+    var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
+    assertEquals("ERROR", row.status());
+    assertNotNull(row.error());
+    assertTrue(
+        row.error().contains("Expected 2") || row.error().contains("argument"),
+        "Error should mention argument count mismatch, got: " + row.error());
+  }
+
+  /**
+   * Tests that an incompatible argument type (JSON object where String is expected) results in the
+   * workflow being marked as ERROR.
+   */
+  @Test
+  public void testIncompatibleArgType() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
+    DBOS.launch();
+
+    String workflowId = UUID.randomUUID().toString();
+    // recvWorkflow expects (String, long), but first arg is a JSON object
+    insertPortableWorkflowRow(
+        workflowId,
+        "PortableTestService",
+        "recvWorkflow",
+        "testq",
+        "{\"positionalArgs\":[{\"key\":\"val\"}, 30000]}");
+
+    var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
+    assertEquals("ERROR", row.status());
+    assertNotNull(row.error());
+  }
+
+  /**
+   * Tests that Integer→long coercion works automatically. Portable JSON deserializes 30000 as
+   * Integer, but recvWorkflow expects a long parameter.
+   */
+  @Test
+  public void testCoercibleTypeMismatch() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    PortableTestService service =
+        DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
+    DBOS.launch();
+
+    String workflowId = UUID.randomUUID().toString();
+
+    // Insert workflow with Integer value where long is expected
+    insertPortableWorkflowRow(
+        workflowId,
+        "PortableTestService",
+        "recvWorkflow",
+        "testq",
+        "{\"positionalArgs\":[\"incoming\",30000]}");
+
+    // Also insert a notification so the workflow can complete
+    try (Connection conn = dataSource.getConnection()) {
+      String insertNotificationSql =
+          """
+          INSERT INTO dbos.notifications(
+            destination_uuid, topic, message, serialization
+          )
+          VALUES (?, ?, ?, ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(insertNotificationSql)) {
+        stmt.setString(1, workflowId);
+        stmt.setString(2, "incoming");
+        stmt.setString(3, "\"HelloCoercion\"");
+        stmt.setString(4, "portable_json");
+        stmt.executeUpdate();
+      }
+    }
+
+    // The workflow should succeed thanks to Integer→long coercion
+    WorkflowHandle<String, ?> handle = DBOS.retrieveWorkflow(workflowId);
+    String result = handle.getResult();
+    assertEquals("received:HelloCoercion", result);
+
+    var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertNotNull(row);
+    assertEquals("SUCCESS", row.status());
+  }
+
+  /**
+   * Tests that portable JSON array/object types are coerced correctly to match the expected method
+   * parameter types (ArrayList, Map).
+   */
+  @Test
+  public void testCoercibleArrayAndMapTypes() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(SerializedTypesService.class, new SerializedTypesServiceImpl());
+    DBOS.launch();
+
+    String workflowId = UUID.randomUUID().toString();
+
+    // checkWorkflow(String sv, boolean bv, double dv, ArrayList<String> sva, Map<String,Object>
+    // mapv)
+    // Portable JSON will deserialize: string, boolean, number (Double), array (ArrayList), object
+    // (LinkedHashMap)
+    // The coercion should handle: Double→double, ArrayList→ArrayList<String>,
+    // LinkedHashMap→Map<String,Object>
+    insertPortableWorkflowRow(
+        workflowId,
+        "SerializedTypesService",
+        "checkWorkflow",
+        "testq",
+        "{\"positionalArgs\":[\"Apex\",true,1.01,[\"hello\",\"world\"],{\"K3Y\":\"VALU3\"}]}");
+
+    WorkflowHandle<String, ?> handle = DBOS.retrieveWorkflow(workflowId);
+    String result = handle.getResult();
+    assertEquals("Apextrue1.01[hello, world]{K3Y=VALU3}", result);
+
+    var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertNotNull(row);
+    assertEquals("SUCCESS", row.status());
+  }
+
+  /** Workflow interface for testing date/time coercion from ISO-8601 strings. */
+  public interface DateTimeService {
+    String dateWorkflow(Instant instant, OffsetDateTime offsetDt);
+  }
+
+  @WorkflowClassName("DateTimeService")
+  public static class DateTimeServiceImpl implements DateTimeService {
+    @Workflow(name = "dateWorkflow")
+    @Override
+    public String dateWorkflow(Instant instant, OffsetDateTime offsetDt) {
+      return "instant:" + instant + ",odt:" + offsetDt;
+    }
+  }
+
+  /**
+   * Tests that ISO-8601 date strings from portable JSON are coerced to Java temporal types
+   * (Instant, OffsetDateTime). JSON has no native date type, so dates always arrive as strings.
+   */
+  @Test
+  public void testDateTimeCoercion() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(DateTimeService.class, new DateTimeServiceImpl());
+    DBOS.launch();
+
+    String workflowId = UUID.randomUUID().toString();
+
+    // ISO-8601 strings that should be coerced to Instant and OffsetDateTime
+    insertPortableWorkflowRow(
+        workflowId,
+        "DateTimeService",
+        "dateWorkflow",
+        "testq",
+        "{\"positionalArgs\":[\"2025-06-15T10:30:00Z\",\"2025-06-15T10:30:00+02:00\"]}");
+
+    WorkflowHandle<String, ?> handle = DBOS.retrieveWorkflow(workflowId);
+    String result = handle.getResult();
+
+    // Verify the strings were correctly coerced to temporal types.
+    // The OffsetDateTime may normalize the offset (e.g., +02:00 → parsed then toString'd as 08:30Z)
+    assertTrue(result.contains("instant:2025-06-15T10:30:00Z"), "Got: " + result);
+    assertTrue(result.startsWith("instant:") && result.contains(",odt:"), "Got: " + result);
+    // Verify the OffsetDateTime parsed correctly by checking the instant it represents
+    // "2025-06-15T10:30:00+02:00" = "2025-06-15T08:30:00Z"
+    assertTrue(result.contains("odt:2025-06-15T08:30Z"), "Got: " + result);
+
+    var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertNotNull(row);
+    assertEquals("SUCCESS", row.status());
+  }
+
+  /**
+   * Tests that a bogus (unparseable) notification message inserted directly into the notifications
+   * table causes the receiving workflow to fail with ERROR rather than hang.
+   */
+  @Test
+  public void testBogusNotificationMessage() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
+    DBOS.launch();
+
+    String workflowId = UUID.randomUUID().toString();
+
+    // Enqueue a valid workflow that will call recv("incoming", 30000)
+    insertPortableWorkflowRow(
+        workflowId,
+        "PortableTestService",
+        "recvWorkflow",
+        "testq",
+        "{\"positionalArgs\":[\"incoming\",30000]}");
+
+    // Insert a bogus notification — completely unparseable content
+    try (Connection conn = dataSource.getConnection()) {
+      String sql =
+          """
+          INSERT INTO dbos.notifications(destination_uuid, topic, message, serialization)
+          VALUES (?, ?, ?, ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, workflowId);
+        stmt.setString(2, "incoming");
+        stmt.setString(3, "this is not valid json at all!!!");
+        stmt.setString(4, "portable_json");
+        stmt.executeUpdate();
+      }
+    }
+
+    // The workflow should fail with ERROR (not hang forever)
+    var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
+    assertEquals("ERROR", row.status());
+    assertNotNull(row.error());
+  }
+
+  /**
+   * Tests that a notification with a mismatched serialization format (unknown serializer name)
+   * causes the receiving workflow to fail with ERROR.
+   */
+  @Test
+  public void testNotificationUnknownSerialization() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
+    DBOS.launch();
+
+    String workflowId = UUID.randomUUID().toString();
+
+    insertPortableWorkflowRow(
+        workflowId,
+        "PortableTestService",
+        "recvWorkflow",
+        "testq",
+        "{\"positionalArgs\":[\"incoming\",30000]}");
+
+    // Insert a notification with an unknown serialization format
+    try (Connection conn = dataSource.getConnection()) {
+      String sql =
+          """
+          INSERT INTO dbos.notifications(destination_uuid, topic, message, serialization)
+          VALUES (?, ?, ?, ?)
+          """;
+      try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+        stmt.setString(1, workflowId);
+        stmt.setString(2, "incoming");
+        stmt.setString(3, "\"hello\"");
+        stmt.setString(4, "nonexistent_serializer_v99");
+        stmt.executeUpdate();
+      }
+    }
+
+    var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
+    assertEquals("ERROR", row.status());
+    assertNotNull(row.error());
+  }
+
+  // ============ Enqueue Round-Trip Date/Time Tests ============
+
+  /**
+   * Tests that dates round-trip correctly through portable enqueue → workflow execution → result.
+   */
+  @Test
+  public void testDateTimeRoundTripPortableEnqueue() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(DateTimeService.class, new DateTimeServiceImpl());
+    DBOS.launch();
+
+    Instant instant = Instant.parse("2025-06-15T10:30:00Z");
+    OffsetDateTime odt = OffsetDateTime.parse("2025-06-15T12:30:00+02:00");
+
+    try (DBOSClient client = new DBOSClient(dataSource)) {
+      String workflowId = UUID.randomUUID().toString();
+
+      var options =
+          new DBOSClient.EnqueueOptions("DateTimeService", "dateWorkflow", "testq")
+              .withWorkflowId(workflowId)
+              .withSerialization(SerializationStrategy.PORTABLE);
+
+      WorkflowHandle<String, ?> handle =
+          client.enqueueWorkflow(options, new Object[] {instant, odt});
+
+      String result = handle.getResult();
+      assertTrue(result.contains("instant:2025-06-15T10:30:00Z"), "Got: " + result);
+      // OffsetDateTime "2025-06-15T12:30:00+02:00" = "2025-06-15T10:30:00Z"
+      assertTrue(result.contains("odt:2025-06-15T10:30Z"), "Got: " + result);
+
+      var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertEquals("portable_json", row.serialization());
+      assertEquals("SUCCESS", row.status());
+    }
+  }
+
+  /**
+   * Tests that dates round-trip correctly through native (java_jackson) enqueue → workflow
+   * execution → result. Note: the native Jackson serializer normalizes OffsetDateTime to UTC during
+   * round-trip, so the original offset is not preserved.
+   */
+  @Test
+  public void testDateTimeRoundTripNativeEnqueue() throws Exception {
+    Queue testQueue = new Queue("testq");
+    DBOS.registerQueue(testQueue);
+    DBOS.registerWorkflows(DateTimeService.class, new DateTimeServiceImpl());
+    DBOS.launch();
+
+    Instant instant = Instant.parse("2025-06-15T10:30:00Z");
+    OffsetDateTime odt = OffsetDateTime.parse("2025-06-15T12:30:00+02:00");
+
+    try (DBOSClient client = new DBOSClient(dataSource)) {
+      String workflowId = UUID.randomUUID().toString();
+
+      var options =
+          new DBOSClient.EnqueueOptions("DateTimeService", "dateWorkflow", "testq")
+              .withWorkflowId(workflowId);
+
+      WorkflowHandle<String, ?> handle =
+          client.enqueueWorkflow(options, new Object[] {instant, odt});
+
+      String result = handle.getResult();
+      assertTrue(result.contains("instant:2025-06-15T10:30:00Z"), "Got: " + result);
+      // Native Jackson normalizes OffsetDateTime to UTC: +02:00 offset → Z
+      // "2025-06-15T12:30:00+02:00" represents the same instant as "2025-06-15T10:30:00Z"
+      assertTrue(result.contains("odt:2025-06-15T10:30Z"), "Got: " + result);
+
+      var row = DBUtils.getWorkflowRow(dataSource, workflowId);
+      assertEquals("java_jackson", row.serialization());
+      assertEquals("SUCCESS", row.status());
     }
   }
 }
