@@ -237,7 +237,9 @@ public class MigrationManager {
             migration6,
             migration7,
             migration8,
-            migration9);
+            migration9,
+            migration10,
+            migration11);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -269,7 +271,7 @@ public class MigrationManager {
           inputs TEXT,
           started_at_epoch_ms BIGINT,
           deduplication_id TEXT,
-          priority INTEGER NOT NULL DEFAULT 0
+          priority INT4 NOT NULL DEFAULT 0
       );
 
       CREATE INDEX workflow_status_created_at_index ON %1$s.workflow_status (created_at);
@@ -282,7 +284,7 @@ public class MigrationManager {
 
       CREATE TABLE %1$s.operation_outputs (
           workflow_uuid TEXT NOT NULL,
-          function_id INTEGER NOT NULL,
+          function_id INT4 NOT NULL,
           function_name TEXT NOT NULL DEFAULT '',
           output TEXT,
           error TEXT,
@@ -293,11 +295,11 @@ public class MigrationManager {
       );
 
       CREATE TABLE %1$s.notifications (
+          message_uuid TEXT NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY, -- Built-in function
           destination_uuid TEXT NOT NULL,
           topic TEXT,
           message TEXT NOT NULL,
           created_at_epoch_ms BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
-          message_uuid TEXT NOT NULL DEFAULT gen_random_uuid(), -- Built-in function
           FOREIGN KEY (destination_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
@@ -346,7 +348,7 @@ public class MigrationManager {
           workflow_uuid TEXT NOT NULL,
           key TEXT NOT NULL,
           value TEXT NOT NULL,
-          "offset" INTEGER NOT NULL,
+          "offset" INT4 NOT NULL,
           PRIMARY KEY (workflow_uuid, key, "offset"),
           FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
@@ -388,14 +390,14 @@ public class MigrationManager {
       """
       CREATE TABLE %1$s.workflow_events_history (
           workflow_uuid TEXT NOT NULL,
-          function_id INTEGER NOT NULL,
+          function_id INT4 NOT NULL,
           key TEXT NOT NULL,
           value TEXT NOT NULL,
           PRIMARY KEY (workflow_uuid, function_id, key),
           FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
-      ALTER TABLE %1$s.streams ADD COLUMN function_id INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE %1$s.streams ADD COLUMN function_id INT4 NOT NULL DEFAULT 0;
       """;
 
   static final String migration7 =
@@ -410,6 +412,34 @@ public class MigrationManager {
       """;
 
   static final String migration9 =
+      """
+      CREATE TABLE %1$s.workflow_schedules (
+          schedule_id TEXT PRIMARY KEY,
+          schedule_name TEXT NOT NULL UNIQUE,
+          workflow_name TEXT NOT NULL,
+          workflow_class_name TEXT,
+          schedule TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'ACTIVE',
+          context TEXT NOT NULL
+      );
+      """;
+
+  static final String migration10 =
+      """
+      DO $$
+      BEGIN
+          IF NOT EXISTS (
+              SELECT 1 FROM information_schema.table_constraints
+              WHERE table_schema = '%1$s'
+              AND table_name = 'notifications'
+              AND constraint_type = 'PRIMARY KEY'
+          ) THEN
+              ALTER TABLE %1$s.notifications ADD PRIMARY KEY (message_uuid);
+          END IF;
+      END $$;
+      """;
+
+  static final String migration11 =
       """
       ALTER TABLE %1$s."workflow_status" ADD COLUMN "serialization" TEXT DEFAULT NULL;
       ALTER TABLE %1$s."notifications" ADD COLUMN "serialization" TEXT DEFAULT NULL;
