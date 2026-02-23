@@ -3,6 +3,7 @@ package dev.dbos.transact.migrations;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
@@ -20,6 +21,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class MigrationManagerTest {
@@ -71,6 +74,7 @@ class MigrationManagerTest {
 
   public static void assertTableExists(
       DatabaseMetaData metaData, String tableName, String schemaName) throws Exception {
+    schemaName = SystemDatabase.sanitizeSchema(schemaName);
     try (ResultSet rs = metaData.getTables(null, schemaName, tableName, null)) {
       assertTrue(rs.next(), "Table %s should exist in schema %s".formatted(tableName, schemaName));
     }
@@ -92,10 +96,16 @@ class MigrationManagerTest {
     }
   }
 
-  @Test
-  void testRunMigrations_customSchema() throws Exception {
+  @ParameterizedTest
+  @ValueSource(strings = {"invalid\"schema", "invalid'schema"})
+  void testRunMigrations_fails_invalid_schema(String invalidSchema) throws Exception {
+    dbosConfig = dbosConfig.withDatabaseSchema(invalidSchema);
+    assertThrows(IllegalArgumentException.class, () -> MigrationManager.runMigrations(dbosConfig));
+  }
 
-    var schema = "F8nny_sCHem@-n@m3";
+  @ParameterizedTest
+  @ValueSource(strings = {"F8nny_sCHem@-n@m3", "embedded\0null"})
+  void testRunMigrations_customSchema(String schema) throws Exception {
     dbosConfig = dbosConfig.withDatabaseSchema(schema);
     MigrationManager.runMigrations(dbosConfig);
 

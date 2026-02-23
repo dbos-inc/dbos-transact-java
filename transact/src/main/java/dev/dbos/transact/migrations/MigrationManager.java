@@ -59,6 +59,10 @@ public class MigrationManager {
     Objects.requireNonNull(ds, "Data Source must not be null");
     schema = SystemDatabase.sanitizeSchema(schema);
 
+    if (schema.contains("'") || schema.contains("\"")) {
+      throw new IllegalArgumentException("Schema name must not contain single or double quotes");
+    }
+
     try (var conn = ds.getConnection()) {
       ensureDbosSchema(conn, schema);
       ensureMigrationTable(conn, schema);

@@ -37,9 +37,7 @@ public class SystemDatabase implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
 
   public static String sanitizeSchema(String schema) {
-    return Objects.requireNonNullElse(schema, Constants.DB_SCHEMA)
-        .replace("\0", "")
-        .replace("\"", "\"\"");
+    return Objects.requireNonNullElse(schema, Constants.DB_SCHEMA).replace("\0", "");
   }
 
   private final DataSource dataSource;
