@@ -37,11 +37,9 @@ public class SystemDatabase implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(SystemDatabase.class);
 
   public static String sanitizeSchema(String schema) {
-    schema =
-        Objects.requireNonNullElse(schema, Constants.DB_SCHEMA)
-            .replace("\0", "")
-            .replace("\"", "\"\"");
-    return "\"%s\"".formatted(schema);
+    return Objects.requireNonNullElse(schema, Constants.DB_SCHEMA)
+        .replace("\0", "")
+        .replace("\"", "\"\"");
   }
 
   private final DataSource dataSource;
@@ -425,7 +423,7 @@ public class SystemDatabase implements AutoCloseable {
         () -> {
           final String sql =
               """
-                SELECT value, update_seq, update_time FROM %s.event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ?
+                SELECT value, update_seq, update_time FROM "%s".event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ?
               """
                   .formatted(this.schema);
 
@@ -456,7 +454,7 @@ public class SystemDatabase implements AutoCloseable {
         () -> {
           final var sql =
               """
-                INSERT INTO %s.event_dispatch_kv (
+                INSERT INTO "%s".event_dispatch_kv (
                 service_name, workflow_fn_name, key, value, update_time, update_seq)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT (service_name, workflow_fn_name, key)
@@ -509,7 +507,7 @@ public class SystemDatabase implements AutoCloseable {
           final var wfSQL =
               """
                 SELECT name, COUNT(workflow_uuid) as count
-                FROM %s.workflow_status
+                FROM "%s".workflow_status
                 WHERE created_at >= ? AND created_at < ?
                 GROUP BY name
               """
@@ -517,7 +515,7 @@ public class SystemDatabase implements AutoCloseable {
           final var stepSQL =
               """
                 SELECT function_name, COUNT(*) as count
-                FROM %s.operation_outputs
+                FROM "%s".operation_outputs
                 WHERE completed_at_epoch_ms >= ? AND completed_at_epoch_ms < ?
                 GROUP BY function_name
               """
@@ -559,7 +557,7 @@ public class SystemDatabase implements AutoCloseable {
     var sql =
         """
           SELECT function_name
-          FROM %s.operation_outputs
+          FROM "%s".operation_outputs
           WHERE workflow_uuid = ? AND function_id = ?
         """
             .formatted(this.schema);
@@ -613,7 +611,7 @@ public class SystemDatabase implements AutoCloseable {
 
     var sql =
         """
-          DELETE FROM %s.workflow_status
+          DELETE FROM "%s".workflow_status
           WHERE workflow_uuid = ANY(?);
         """
             .formatted(this.schema);
@@ -642,7 +640,7 @@ public class SystemDatabase implements AutoCloseable {
     var sql =
         """
           SELECT child_workflow_id
-          FROM %s.operation_outputs
+          FROM "%s".operation_outputs
           WHERE workflow_uuid = ? AND child_workflow_id IS NOT NULL
         """
             .formatted(this.schema);
@@ -673,7 +671,7 @@ public class SystemDatabase implements AutoCloseable {
     var sql =
         """
         SELECT key, value
-        FROM %s.workflow_events
+        FROM "%s".workflow_events
         WHERE workflow_uuid = ?
         """
             .formatted(this.schema);
@@ -697,7 +695,7 @@ public class SystemDatabase implements AutoCloseable {
     var sql =
         """
         SELECT key, value, function_id
-        FROM %s.workflow_events_history
+        FROM "%s".workflow_events_history
         WHERE workflow_uuid = ?
         """
             .formatted(this.schema);
@@ -721,7 +719,7 @@ public class SystemDatabase implements AutoCloseable {
     var sql =
         """
         SELECT key, value, "offset", function_id
-        FROM %s.streams
+        FROM "%s".streams
         WHERE workflow_uuid = ?
         """
             .formatted(this.schema);
@@ -771,7 +769,7 @@ public class SystemDatabase implements AutoCloseable {
   public void importWorkflow(List<ExportedWorkflow> workflows) {
     var wfSQL =
         """
-        INSERT INTO %s.workflow_status (
+        INSERT INTO "%s".workflow_status (
           workflow_uuid, status,
           name, class_name, config_name,
           authenticated_user, assumed_role, authenticated_roles,
@@ -789,7 +787,7 @@ public class SystemDatabase implements AutoCloseable {
 
     var stepSQL =
         """
-        INSERT INTO %s.operation_outputs (
+        INSERT INTO "%s".operation_outputs (
           workflow_uuid, function_id, function_name,
           output, error, child_workflow_id,
           started_at_epoch_ms, completed_at_epoch_ms
@@ -801,7 +799,7 @@ public class SystemDatabase implements AutoCloseable {
 
     var eventSQL =
         """
-        INSERT INTO %s.workflow_events (
+        INSERT INTO "%s".workflow_events (
           workflow_uuid, key, value
         ) VALUES (
           ?, ?, ?
@@ -811,7 +809,7 @@ public class SystemDatabase implements AutoCloseable {
 
     var eventHistorySQL =
         """
-        INSERT INTO %s.workflow_events_history (
+        INSERT INTO "%s".workflow_events_history (
           workflow_uuid, key, value, function_id
         ) VALUES (
           ?, ?, ?, ?
@@ -821,7 +819,7 @@ public class SystemDatabase implements AutoCloseable {
 
     var streamsSQL =
         """
-        INSERT INTO %s.streams (
+        INSERT INTO "%s".streams (
           workflow_uuid, key, value, function_id, offset
         ) VALUES (
           ?, ?, ?, ?, ?

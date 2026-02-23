@@ -74,7 +74,7 @@ class NotificationsDAO {
         // Insert notification
         final String sql =
             """
-              INSERT INTO %s.notifications (destination_uuid, topic, message) VALUES (?, ?, ?)
+              INSERT INTO "%s".notifications (destination_uuid, topic, message) VALUES (?, ?, ?)
             """
                 .formatted(this.schema);
 
@@ -162,7 +162,7 @@ class NotificationsDAO {
         try (Connection conn = dataSource.getConnection()) {
           final String sql =
               """
-                SELECT topic FROM %s.notifications WHERE destination_uuid = ? AND topic = ?
+                SELECT topic FROM "%s".notifications WHERE destination_uuid = ? AND topic = ?
               """
                   .formatted(this.schema);
 
@@ -214,12 +214,12 @@ class NotificationsDAO {
             """
               WITH oldest_entry AS (
                   SELECT destination_uuid, topic, message, created_at_epoch_ms
-                  FROM %1$s.notifications
+                  FROM "%1$s".notifications
                   WHERE destination_uuid = ? AND topic = ?
                   ORDER BY created_at_epoch_ms ASC
                   LIMIT 1
               )
-              DELETE FROM %1$s.notifications
+              DELETE FROM "%1$s".notifications
               WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry)
                 AND topic = (SELECT topic FROM oldest_entry)
                 AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry)
@@ -263,7 +263,7 @@ class NotificationsDAO {
       throws SQLException {
     final String eventSql =
         """
-          INSERT INTO %s.workflow_events (workflow_uuid, key, value)
+          INSERT INTO "%s".workflow_events (workflow_uuid, key, value)
           VALUES (?, ?, ?)
           ON CONFLICT (workflow_uuid, key)
           DO UPDATE SET value = EXCLUDED.value
@@ -279,7 +279,7 @@ class NotificationsDAO {
 
     final String eventHistorySql =
         """
-          INSERT INTO %s.workflow_events_history (workflow_uuid, function_id, key, value)
+          INSERT INTO "%s".workflow_events_history (workflow_uuid, function_id, key, value)
           VALUES (?, ?, ?, ?)
           ON CONFLICT (workflow_uuid, key, function_id)
           DO UPDATE SET value = EXCLUDED.value
@@ -382,7 +382,7 @@ class NotificationsDAO {
       Object value = null;
       final String sql =
           """
-            SELECT value FROM %s.workflow_events WHERE workflow_uuid = ? AND key = ?
+            SELECT value FROM "%s".workflow_events WHERE workflow_uuid = ? AND key = ?
           """
               .formatted(this.schema);
 

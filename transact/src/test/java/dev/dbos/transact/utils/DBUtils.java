@@ -215,7 +215,7 @@ public class DBUtils {
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds, String schema)
       throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
-    String sql = "SELECT * FROM %s.workflow_status ORDER BY created_at".formatted(schema);
+    String sql = "SELECT * FROM \"%s\".workflow_status ORDER BY created_at".formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
@@ -235,7 +235,7 @@ public class DBUtils {
   public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId, String schema)
       throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
-    var sql = "SELECT * FROM %s.workflow_status WHERE workflow_uuid = ?".formatted(schema);
+    var sql = "SELECT * FROM \"%s\".workflow_status WHERE workflow_uuid = ?".formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -258,7 +258,7 @@ public class DBUtils {
       DataSource ds, String workflowId, String schema) throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     var sql =
-        "SELECT * FROM %s.operation_outputs WHERE workflow_uuid = ? ORDER BY function_id"
+        "SELECT * FROM \"%s\".operation_outputs WHERE workflow_uuid = ? ORDER BY function_id"
             .formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.prepareStatement(sql)) {
@@ -288,7 +288,7 @@ public class DBUtils {
     try (var conn = ds.getConnection(); ) {
       var stmt =
           conn.prepareStatement(
-              "SELECT * FROM %s.workflow_events WHERE workflow_uuid = ?".formatted(schema));
+              "SELECT * FROM \"%s\".workflow_events WHERE workflow_uuid = ?".formatted(schema));
       stmt.setString(1, workflowId);
       var rs = stmt.executeQuery();
       List<Event> rows = new ArrayList<>();
@@ -316,7 +316,7 @@ public class DBUtils {
     try (var conn = ds.getConnection(); ) {
       var stmt =
           conn.prepareStatement(
-              "SELECT * FROM %s.workflow_events_history WHERE workflow_uuid = ?".formatted(schema));
+              "SELECT * FROM \"%s\".workflow_events_history WHERE workflow_uuid = ?".formatted(schema));
       stmt.setString(1, workflowId);
       var rs = stmt.executeQuery();
       List<EventHistory> rows = new ArrayList<>();
@@ -340,7 +340,7 @@ public class DBUtils {
     schema = SystemDatabase.sanitizeSchema(schema);
     var sql =
         """
-      SELECT COUNT(*) FROM %s.workflow_status
+      SELECT COUNT(*) FROM "%s".workflow_status
       WHERE queue_name IS NOT NULL
         AND queue_name != ?
         AND status IN ('ENQUEUED', 'PENDING')
