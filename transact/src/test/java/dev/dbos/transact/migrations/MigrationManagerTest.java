@@ -162,14 +162,16 @@ class MigrationManagerTest {
       MigrationManager.ensureDbosSchema(conn, Constants.DB_SCHEMA);
       MigrationManager.ensureMigrationTable(conn, Constants.DB_SCHEMA);
 
-      // Run only the original migration1 (before primary key was added) to populate database with initial structure
+      // Run only the original migration1 (before primary key was added) to populate database with
+      // initial structure
       var originalMigration1 = getOriginalMigration1().formatted(Constants.DB_SCHEMA);
       try (var stmt = conn.createStatement()) {
         stmt.execute(originalMigration1);
       }
 
       // Update migration version to 1
-      var insertSql = "INSERT INTO \"%s\".dbos_migrations (version) VALUES (1)".formatted(Constants.DB_SCHEMA);
+      var insertSql =
+          "INSERT INTO \"%s\".dbos_migrations (version) VALUES (1)".formatted(Constants.DB_SCHEMA);
       try (var stmt = conn.prepareStatement(insertSql)) {
         stmt.executeUpdate();
       }
@@ -191,16 +193,22 @@ class MigrationManagerTest {
     }
   }
 
-  private static void assertNotificationTableHasPrimaryKey(DatabaseMetaData metaData, String tableName, String schemaName) throws Exception {
+  private static void assertNotificationTableHasPrimaryKey(
+      DatabaseMetaData metaData, String tableName, String schemaName) throws Exception {
     try (ResultSet rs = metaData.getPrimaryKeys(null, schemaName, tableName)) {
-      assertTrue(rs.next(), "Table %s should have a primary key in schema %s".formatted(tableName, schemaName));
-      assertEquals("message_uuid", rs.getString("COLUMN_NAME"), "Primary key should be on message_uuid column");
+      assertTrue(
+          rs.next(),
+          "Table %s should have a primary key in schema %s".formatted(tableName, schemaName));
+      assertEquals(
+          "message_uuid",
+          rs.getString("COLUMN_NAME"),
+          "Primary key should be on message_uuid column");
     }
   }
 
   /**
-   * Returns the original migration1 before primary key was added to notifications table.
-   * This represents the state before migration10 was introduced to defensively add the primary key.
+   * Returns the original migration1 before primary key was added to notifications table. This
+   * represents the state before migration10 was introduced to defensively add the primary key.
    */
   private static String getOriginalMigration1() {
     return """

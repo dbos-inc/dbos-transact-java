@@ -316,7 +316,8 @@ public class DBUtils {
     try (var conn = ds.getConnection(); ) {
       var stmt =
           conn.prepareStatement(
-              "SELECT * FROM \"%s\".workflow_events_history WHERE workflow_uuid = ?".formatted(schema));
+              "SELECT * FROM \"%s\".workflow_events_history WHERE workflow_uuid = ?"
+                  .formatted(schema));
       stmt.setString(1, workflowId);
       var rs = stmt.executeQuery();
       List<EventHistory> rows = new ArrayList<>();

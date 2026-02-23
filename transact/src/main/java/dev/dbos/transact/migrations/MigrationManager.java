@@ -165,7 +165,8 @@ public class MigrationManager {
   public static int getCurrentSysDbVersion(Connection conn, String schema) {
     Objects.requireNonNull(schema, "schema must not be null");
     var sql =
-        "SELECT version FROM \"%s\".dbos_migrations ORDER BY version DESC limit 1".formatted(schema);
+        "SELECT version FROM \"%s\".dbos_migrations ORDER BY version DESC limit 1"
+            .formatted(schema);
     try (var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
       if (rs.next()) {
@@ -211,7 +212,8 @@ public class MigrationManager {
         }
 
         if (rowCount == 0) {
-          var insertSql = "INSERT INTO \"%s\".dbos_migrations (version) VALUES (?)".formatted(schema);
+          var insertSql =
+              "INSERT INTO \"%s\".dbos_migrations (version) VALUES (?)".formatted(schema);
           try (var stmt = conn.prepareStatement(insertSql)) {
             stmt.setLong(1, migrationIndex);
             stmt.executeUpdate();
