@@ -400,7 +400,7 @@ public class InteropTest {
           new DBOSClient.EnqueueOptions("interop", "namedArgsWorkflow", "interopq")
               .withWorkflowId(workflowId);
 
-      var handle = client.<String>enqueuePortableWorkflow(options, new Object[] {}, namedArgs);
+      client.<String>enqueuePortableWorkflow(options, new Object[] {}, namedArgs);
 
       // Java doesn't use named args but can pass them to Python.
       // For this test, let's verify the stored format matches what Python produces.

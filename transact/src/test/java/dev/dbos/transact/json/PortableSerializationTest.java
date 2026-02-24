@@ -91,8 +91,7 @@ public class PortableSerializationTest {
     Queue testQueue = new Queue("testq");
     DBOS.registerQueue(testQueue);
 
-    PortableTestService service =
-        DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
+    DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
 
     DBOS.launch();
 
@@ -183,8 +182,7 @@ public class PortableSerializationTest {
     Queue testQueue = new Queue("testq");
     DBOS.registerQueue(testQueue);
 
-    PortableTestService service =
-        DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
+    DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
 
     DBOS.launch();
 
@@ -232,8 +230,7 @@ public class PortableSerializationTest {
     Queue testQueue = new Queue("testq");
     DBOS.registerQueue(testQueue);
 
-    PortableTestService service =
-        DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
+    DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
 
     DBOS.launch();
 
@@ -805,8 +802,8 @@ public class PortableSerializationTest {
 
     Queue testQueue = new Queue("testq");
     DBOS.registerQueue(testQueue);
-    CustomSerService svc =
-        DBOS.registerWorkflows(CustomSerService.class, new CustomSerServiceImpl());
+
+    DBOS.registerWorkflows(CustomSerService.class, new CustomSerServiceImpl());
 
     DBOS.launch();
 
@@ -1099,8 +1096,7 @@ public class PortableSerializationTest {
   public void testCoercibleTypeMismatch() throws Exception {
     Queue testQueue = new Queue("testq");
     DBOS.registerQueue(testQueue);
-    PortableTestService service =
-        DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
+    DBOS.registerWorkflows(PortableTestService.class, new PortableTestServiceImpl());
     DBOS.launch();
 
     String workflowId = UUID.randomUUID().toString();

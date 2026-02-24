@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class CustomSchemaTest {
   private static DBOSConfig dbosConfig;
-  private static final String schema = "C$+0m'";
+  private static final String schema = "F8nny_sCHem@-n@m3";
   private HawkService proxy;
   private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);

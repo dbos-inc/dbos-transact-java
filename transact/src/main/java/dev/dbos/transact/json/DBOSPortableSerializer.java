@@ -167,7 +167,6 @@ public class DBOSPortableSerializer implements DBOSSerializer {
     return result;
   }
 
-  @SuppressWarnings("unchecked")
   private Map<String, Object> toPortableMap(Map<String, Object> map) {
     java.util.HashMap<String, Object> result = new java.util.HashMap<>();
     for (Map.Entry<String, Object> entry : map.entrySet()) {
