@@ -62,7 +62,7 @@ class QueuesDAO {
         var limiterQuery =
             """
               SELECT COUNT(*)
-              FROM %s.workflow_status
+              FROM "%s".workflow_status
               WHERE queue_name = ?
               AND status != ?
               AND started_at_epoch_ms > ?
@@ -100,7 +100,7 @@ class QueuesDAO {
         String pendingQuery =
             """
               SELECT executor_id, COUNT(*) as task_count
-              FROM %s.workflow_status
+              FROM "%s".workflow_status
               WHERE queue_name = ? AND status = ?
             """
                 .formatted(this.schema);
@@ -170,7 +170,7 @@ class QueuesDAO {
       var query =
           """
               SELECT workflow_uuid
-              FROM %s.workflow_status
+              FROM "%s".workflow_status
               WHERE queue_name = ?
                 AND status = ?
                 AND (application_version = ? OR application_version IS NULL)
@@ -226,7 +226,7 @@ class QueuesDAO {
       List<String> updatedWorkflowIds = new ArrayList<>();
       String updateQuery =
           """
-        UPDATE %s.workflow_status
+        UPDATE "%s".workflow_status
         SET status = ?,
             application_version = ?,
             executor_id = ?,
@@ -273,7 +273,7 @@ class QueuesDAO {
 
     final String sql =
         """
-          UPDATE %s.workflow_status
+          UPDATE "%s".workflow_status
           SET started_at_epoch_ms = NULL, status = ?
           WHERE workflow_uuid = ? AND queue_name IS NOT NULL AND status = ?
         """
@@ -294,7 +294,7 @@ class QueuesDAO {
     final String sql =
         """
           SELECT DISTINCT queue_partition_key
-          FROM %s.workflow_status
+          FROM "%s".workflow_status
           WHERE queue_name = ?
             AND status = ?
             AND queue_partition_key IS NOT NULL

@@ -55,7 +55,7 @@ class StepsDAO {
     Objects.requireNonNull(schema);
     String sql =
         """
-          INSERT INTO %s.operation_outputs
+          INSERT INTO "%s".operation_outputs
             (workflow_uuid, function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT DO NOTHING RETURNING completed_at_epoch_ms
@@ -132,7 +132,7 @@ class StepsDAO {
     Objects.requireNonNull(schema);
     final String sql =
         """
-          SELECT status FROM %s.workflow_status WHERE workflow_uuid = ?
+          SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
         """
             .formatted(schema);
 
@@ -158,7 +158,7 @@ class StepsDAO {
     String operationOutputSql =
         """
           SELECT output, error, function_name
-          FROM %s.operation_outputs
+          FROM "%s".operation_outputs
           WHERE workflow_uuid = ? AND function_id = ?
         """
             .formatted(schema);
@@ -203,7 +203,7 @@ class StepsDAO {
     final String sql =
         """
           SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms
-          FROM %s.operation_outputs
+          FROM "%s".operation_outputs
           WHERE workflow_uuid = ?
           ORDER BY function_id;
         """
