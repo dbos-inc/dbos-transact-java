@@ -51,11 +51,12 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationService notificationService;
 
   private SystemDatabase(DataSource dataSource, String schema, boolean created) {
-    this.schema = sanitizeSchema(schema);
+    schema = sanitizeSchema(schema);
     if (schema.contains("'") || schema.contains("\"")) {
       throw new IllegalArgumentException("Schema name must not contain single or double quotes");
     }
 
+    this.schema = schema;
     this.dataSource = dataSource;
     this.created = created;
 
