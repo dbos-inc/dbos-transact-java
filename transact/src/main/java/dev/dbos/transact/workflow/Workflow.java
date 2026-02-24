@@ -11,4 +11,6 @@ public @interface Workflow {
   String name() default "";
 
   int maxRecoveryAttempts() default -1;
+
+  SerializationStrategy serializationStrategy() default SerializationStrategy.DEFAULT;
 }

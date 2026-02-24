@@ -3,7 +3,8 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
-import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -25,13 +26,16 @@ class NotificationsDAO {
 
   private final DataSource dataSource;
   private final String schema;
+  private final DBOSSerializer serializer;
   private NotificationService notificationService;
   private long dbPollingIntervalEventMs = 10000;
 
-  NotificationsDAO(DataSource ds, NotificationService nService, String schema) {
+  NotificationsDAO(
+      DataSource ds, NotificationService nService, String schema, DBOSSerializer serializer) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
     this.notificationService = nService;
+    this.serializer = serializer;
   }
 
   void speedUpPollingForTest() {
@@ -39,7 +43,12 @@ class NotificationsDAO {
   }
 
   void send(
-      String workflowUuid, int functionId, String destinationUuid, Object message, String topic)
+      String workflowUuid,
+      int functionId,
+      String destinationUuid,
+      Object message,
+      String topic,
+      String serialization)
       throws SQLException {
 
     var startTime = System.currentTimeMillis();
@@ -71,17 +80,22 @@ class NotificationsDAO {
               finalTopic);
         }
 
-        // Insert notification
+        // Serialize the message using the specified format
+        SerializationUtil.SerializedResult serializedMsg =
+            SerializationUtil.serializeValue(message, serialization, this.serializer);
+
+        // Insert notification with serialization format
         final String sql =
             """
-              INSERT INTO "%s".notifications (destination_uuid, topic, message) VALUES (?, ?, ?)
+              INSERT INTO "%s".notifications (destination_uuid, topic, message, serialization) VALUES (?, ?, ?, ?)
             """
                 .formatted(this.schema);
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, destinationUuid);
           stmt.setString(2, finalTopic);
-          stmt.setString(3, JSONUtil.serialize(message));
+          stmt.setString(3, serializedMsg.serializedValue());
+          stmt.setString(4, serializedMsg.serialization());
           stmt.executeUpdate();
         } catch (SQLException e) {
           // Foreign key violation
@@ -92,7 +106,7 @@ class NotificationsDAO {
         }
 
         // Record operation result
-        var output = new StepResult(workflowUuid, functionId, functionName);
+        var output = new StepResult(workflowUuid, functionId, functionName, null, null, null, null);
         StepsDAO.recordStepResultTxn(
             output, startTime, System.currentTimeMillis(), conn, this.schema);
 
@@ -128,8 +142,8 @@ class NotificationsDAO {
     if (recordedOutput != null) {
       logger.debug("Replaying recv, id: {}, topic: {}", functionId, finalTopic);
       if (recordedOutput.output() != null) {
-        Object[] dSerOut = JSONUtil.deserializeToArray(recordedOutput.output());
-        return dSerOut == null ? null : dSerOut[0];
+        return SerializationUtil.deserializeValue(
+            recordedOutput.output(), recordedOutput.serialization(), this.serializer);
       } else {
         throw new RuntimeException("No output recorded in the last recv");
       }
@@ -184,7 +198,12 @@ class NotificationsDAO {
           // Support OAOO sleep
           actualTimeout =
               StepsDAO.durableSleepDuration(
-                      dataSource, workflowUuid, timeoutFunctionId, timeout, this.schema)
+                      dataSource,
+                      workflowUuid,
+                      timeoutFunctionId,
+                      timeout,
+                      this.schema,
+                      this.serializer)
                   .toMillis();
           checkedDBForSleep = true;
           targetTime = nowTime + actualTimeout;
@@ -213,7 +232,7 @@ class NotificationsDAO {
         final String sql =
             """
               WITH oldest_entry AS (
-                  SELECT destination_uuid, topic, message, created_at_epoch_ms
+                  SELECT destination_uuid, topic, message, serialization, created_at_epoch_ms
                   FROM "%1$s".notifications
                   WHERE destination_uuid = ? AND topic = ?
                   ORDER BY created_at_epoch_ms ASC
@@ -223,11 +242,11 @@ class NotificationsDAO {
               WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry)
                 AND topic = (SELECT topic FROM oldest_entry)
                 AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry)
-              RETURNING message
+              RETURNING message, serialization
             """
                 .formatted(this.schema);
 
-        Object[] recvdSermessage = null;
+        Object recvdMessage = null;
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, workflowUuid);
           stmt.setString(2, finalTopic);
@@ -235,16 +254,27 @@ class NotificationsDAO {
           try (ResultSet rs = stmt.executeQuery()) {
             if (rs.next()) {
               String serializedMessage = rs.getString("message");
-              recvdSermessage = JSONUtil.deserializeToArray(serializedMessage);
+              String serialization = rs.getString("serialization");
+              recvdMessage =
+                  SerializationUtil.deserializeValue(
+                      serializedMessage, serialization, this.serializer);
             }
           }
         }
 
         // Record operation result
-        Object toSave = recvdSermessage == null ? null : recvdSermessage[0];
+        Object toSave = recvdMessage;
+        var toSaveSer = SerializationUtil.serializeValue(toSave, null, this.serializer);
         StepResult output =
-            new StepResult(workflowUuid, functionId, functionName)
-                .withOutput(JSONUtil.serialize(toSave));
+            new StepResult(
+                    workflowUuid,
+                    functionId,
+                    functionName,
+                    null,
+                    null,
+                    null,
+                    toSaveSer.serialization())
+                .withOutput(toSaveSer.serializedValue());
         StepsDAO.recordStepResultTxn(
             output, startTime, System.currentTimeMillis(), conn, this.schema);
 
@@ -259,14 +289,19 @@ class NotificationsDAO {
   }
 
   private void setEvent(
-      Connection conn, String workflowId, int functionId, String key, String message)
+      Connection conn,
+      String workflowId,
+      int functionId,
+      String key,
+      String message,
+      String serialization)
       throws SQLException {
     final String eventSql =
         """
-          INSERT INTO "%s".workflow_events (workflow_uuid, key, value)
-          VALUES (?, ?, ?)
+          INSERT INTO "%s".workflow_events (workflow_uuid, key, value, serialization)
+          VALUES (?, ?, ?, ?)
           ON CONFLICT (workflow_uuid, key)
-          DO UPDATE SET value = EXCLUDED.value
+          DO UPDATE SET value = EXCLUDED.value, serialization = EXCLUDED.serialization
         """
             .formatted(this.schema);
 
@@ -274,15 +309,16 @@ class NotificationsDAO {
       stmt.setString(1, workflowId);
       stmt.setString(2, key);
       stmt.setString(3, message);
+      stmt.setString(4, serialization);
       stmt.executeUpdate();
     }
 
     final String eventHistorySql =
         """
-          INSERT INTO "%s".workflow_events_history (workflow_uuid, function_id, key, value)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO "%s".workflow_events_history (workflow_uuid, function_id, key, value, serialization)
+          VALUES (?, ?, ?, ?, ?)
           ON CONFLICT (workflow_uuid, key, function_id)
-          DO UPDATE SET value = EXCLUDED.value
+          DO UPDATE SET value = EXCLUDED.value, serialization = EXCLUDED.serialization
         """
             .formatted(this.schema);
 
@@ -291,16 +327,26 @@ class NotificationsDAO {
       stmt.setInt(2, functionId);
       stmt.setString(3, key);
       stmt.setString(4, message);
+      stmt.setString(5, serialization);
       stmt.executeUpdate();
     }
   }
 
-  void setEvent(String workflowId, int functionId, String key, Object message, boolean asStep)
+  void setEvent(
+      String workflowId,
+      int functionId,
+      String key,
+      Object message,
+      boolean asStep,
+      String serialization)
       throws SQLException {
 
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.setEvent";
-    String serializedMessage = JSONUtil.serialize(message);
+
+    // Serialize the message using the specified format
+    SerializationUtil.SerializedResult serializedResult =
+        SerializationUtil.serializeValue(message, serialization, this.serializer);
 
     try (Connection conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
@@ -321,11 +367,18 @@ class NotificationsDAO {
           }
         }
 
-        this.setEvent(conn, workflowId, functionId, key, serializedMessage);
+        this.setEvent(
+            conn,
+            workflowId,
+            functionId,
+            key,
+            serializedResult.serializedValue(),
+            serializedResult.serialization());
 
         if (asStep) {
           // Record the operation result
-          StepResult output = new StepResult(workflowId, functionId, functionName);
+          StepResult output =
+              new StepResult(workflowId, functionId, functionName, null, null, null, null);
           StepsDAO.recordStepResultTxn(
               output, startTime, System.currentTimeMillis(), conn, this.schema);
         }
@@ -361,8 +414,8 @@ class NotificationsDAO {
       if (recordedOutput != null) {
         logger.debug("Replaying getEvent, id: {}, key: {}", callerCtx.functionId(), key);
         if (recordedOutput.output() != null) {
-          Object[] outputArray = JSONUtil.deserializeToArray(recordedOutput.output());
-          return outputArray == null ? null : outputArray[0];
+          return SerializationUtil.deserializeValue(
+              recordedOutput.output(), recordedOutput.serialization(), this.serializer);
         } else {
           throw new RuntimeException("No output recorded in the last getEvent");
         }
@@ -382,7 +435,7 @@ class NotificationsDAO {
       Object value = null;
       final String sql =
           """
-            SELECT value FROM "%s".workflow_events WHERE workflow_uuid = ? AND key = ?
+            SELECT value, serialization FROM "%s".workflow_events WHERE workflow_uuid = ? AND key = ?
           """
               .formatted(this.schema);
 
@@ -405,8 +458,10 @@ class NotificationsDAO {
           try (ResultSet rs = stmt.executeQuery()) {
             if (rs.next()) {
               String serializedValue = rs.getString("value");
-              Object[] valueArray = JSONUtil.deserializeToArray(serializedValue);
-              value = valueArray == null ? null : valueArray[0];
+              String serialization = rs.getString("serialization");
+              value =
+                  SerializationUtil.deserializeValue(
+                      serializedValue, serialization, this.serializer);
               hasExistingNotification = true;
             }
           }
@@ -424,7 +479,8 @@ class NotificationsDAO {
                       callerCtx.workflowId(),
                       callerCtx.timeoutFunctionId(),
                       timeout,
-                      this.schema)
+                      this.schema,
+                      this.serializer)
                   .toMillis();
           targetTime = System.currentTimeMillis() + actualTimeout;
           checkedDBForSleep = true;
@@ -444,9 +500,17 @@ class NotificationsDAO {
 
       // Record the output if it's in a workflow
       if (callerCtx != null) {
+        var toSaveSer = SerializationUtil.serializeValue(value, null, this.serializer);
         StepResult output =
-            new StepResult(callerCtx.workflowId(), callerCtx.functionId(), functionName)
-                .withOutput(JSONUtil.serialize(value));
+            new StepResult(
+                    callerCtx.workflowId(),
+                    callerCtx.functionId(),
+                    functionName,
+                    null,
+                    null,
+                    null,
+                    toSaveSer.serialization())
+                .withOutput(toSaveSer.serializedValue());
         StepsDAO.recordStepResultTxn(
             dataSource, output, startTime, System.currentTimeMillis(), this.schema);
       }

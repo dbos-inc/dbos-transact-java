@@ -275,7 +275,7 @@ public class DBUtils {
     }
   }
 
-  public record Event(String key, String value) {}
+  public record Event(String key, String value, String serialization) {}
 
   public static List<Event> getWorkflowEvents(DataSource ds, String workflowId)
       throws SQLException {
@@ -296,14 +296,15 @@ public class DBUtils {
       while (rs.next()) {
         var key = rs.getString("key");
         var value = rs.getString("value");
-        rows.add(new Event(key, value));
+        var serialization = rs.getString("serialization");
+        rows.add(new Event(key, value, serialization));
       }
 
       return rows;
     }
   }
 
-  public record EventHistory(int stepId, String key, String value) {}
+  public record EventHistory(int stepId, String key, String value, String serialization) {}
 
   public static List<EventHistory> getWorkflowEventHistory(DataSource ds, String workflowId)
       throws SQLException {
@@ -326,10 +327,41 @@ public class DBUtils {
         var stepId = rs.getInt("function_id");
         var key = rs.getString("key");
         var value = rs.getString("value");
-        rows.add(new EventHistory(stepId, key, value));
+        var serialization = rs.getString("serialization");
+        rows.add(new EventHistory(stepId, key, value, serialization));
       }
 
       return rows;
+    }
+  }
+
+  public record Notification(
+      String destinationUuid, String topic, String message, String serialization) {}
+
+  public static List<Notification> getNotifications(DataSource ds, String destinationUuid)
+      throws SQLException {
+    return getNotifications(ds, destinationUuid, null);
+  }
+
+  public static List<Notification> getNotifications(
+      DataSource ds, String destinationUuid, String schema) throws SQLException {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    var sql =
+        "SELECT * FROM %s.notifications WHERE destination_uuid = ? ORDER BY created_at_epoch_ms"
+            .formatted(schema);
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, destinationUuid);
+      try (var rs = stmt.executeQuery()) {
+        List<Notification> rows = new ArrayList<>();
+        while (rs.next()) {
+          var topic = rs.getString("topic");
+          var message = rs.getString("message");
+          var serialization = rs.getString("serialization");
+          rows.add(new Notification(destinationUuid, topic, message, serialization));
+        }
+        return rows;
+      }
     }
   }
 

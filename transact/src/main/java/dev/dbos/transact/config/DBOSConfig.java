@@ -1,6 +1,7 @@
 package dev.dbos.transact.config;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.Queue;
 
 import java.util.Arrays;
@@ -29,7 +30,8 @@ public record DBOSConfig(
     @Nullable String executorId,
     @Nullable String databaseSchema,
     boolean enablePatching,
-    @NonNull Set<String> listenQueues) {
+    @NonNull Set<String> listenQueues,
+    @Nullable DBOSSerializer serializer) {
 
   public DBOSConfig {
     if (appName == null || appName.isEmpty()) {
@@ -57,7 +59,7 @@ public record DBOSConfig(
         appName, null, null, null, null, false, // adminServer
         3001, // adminServerPort
         true, // migrate
-        null, null, null, null, null, false, null);
+        null, null, null, null, null, false, null, null);
   }
 
   public static @NonNull DBOSConfig defaultsFromEnv(@NonNull String appName) {
@@ -87,7 +89,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withDatabaseUrl(@Nullable String v) {
@@ -106,7 +109,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withDbUser(@Nullable String v) {
@@ -125,7 +129,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withDbPassword(@Nullable String v) {
@@ -144,7 +149,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withDataSource(@Nullable DataSource v) {
@@ -163,7 +169,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withAdminServer(boolean v) {
@@ -182,7 +189,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withAdminServerPort(int v) {
@@ -201,7 +209,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withMigrate(boolean v) {
@@ -220,7 +229,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withConductorKey(@Nullable String v) {
@@ -239,7 +249,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withConductorDomain(@Nullable String v) {
@@ -258,7 +269,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withAppVersion(@Nullable String v) {
@@ -277,7 +289,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withExecutorId(@Nullable String v) {
@@ -296,7 +309,8 @@ public record DBOSConfig(
         v,
         databaseSchema,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withDatabaseSchema(@Nullable String v) {
@@ -315,7 +329,8 @@ public record DBOSConfig(
         executorId,
         v,
         enablePatching,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig withEnablePatching() {
@@ -342,7 +357,8 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         v,
-        listenQueues);
+        listenQueues,
+        serializer);
   }
 
   public @NonNull DBOSConfig enableAdminServer() {
@@ -389,6 +405,27 @@ public record DBOSConfig(
         executorId,
         databaseSchema,
         enablePatching,
+        v,
+        serializer);
+  }
+
+  public @NonNull DBOSConfig withSerializer(@Nullable DBOSSerializer v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
         v);
   }
 
@@ -398,7 +435,8 @@ public record DBOSConfig(
     return ("DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, "
             + "dataSource=%s, dbSchema=%s, adminServer=%s, adminServerPort=%d, "
             + "migrate=%s, conductorKey=%s, conductorDomain=%s, "
-            + "appVersion=%s, executorId=%s, enablePatching=%s, listenQueues=%s]")
+            + "appVersion=%s, executorId=%s, enablePatching=%s, listenQueues=%s, "
+            + "serializer=%s]")
         .formatted(
             appName,
             databaseUrl,
@@ -413,6 +451,7 @@ public record DBOSConfig(
             appVersion,
             executorId,
             enablePatching,
-            listenQueues);
+            listenQueues,
+            serializer != null ? serializer.name() : null);
   }
 }

@@ -3,7 +3,9 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -43,6 +45,7 @@ public class SystemDatabase implements AutoCloseable {
   private final DataSource dataSource;
   private final String schema;
   private final boolean created;
+  private final DBOSSerializer serializer;
 
   private final WorkflowDAO workflowDAO;
   private final StepsDAO stepsDAO;
@@ -50,7 +53,8 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
 
-  private SystemDatabase(DataSource dataSource, String schema, boolean created) {
+  private SystemDatabase(
+      DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
     schema = sanitizeSchema(schema);
     if (schema.contains("'") || schema.contains("\"")) {
       throw new IllegalArgumentException("Schema name must not contain single or double quotes");
@@ -59,28 +63,43 @@ public class SystemDatabase implements AutoCloseable {
     this.schema = schema;
     this.dataSource = dataSource;
     this.created = created;
+    this.serializer = serializer;
 
-    stepsDAO = new StepsDAO(dataSource, this.schema);
-    workflowDAO = new WorkflowDAO(dataSource, this.schema);
+    stepsDAO = new StepsDAO(dataSource, this.schema, serializer);
+    workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
     queuesDAO = new QueuesDAO(dataSource, this.schema);
     notificationService = new NotificationService(dataSource);
-    notificationsDAO = new NotificationsDAO(dataSource, notificationService, this.schema);
+    notificationsDAO =
+        new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
-    this(createDataSource(url, user, password), schema, true);
+    this(createDataSource(url, user, password), schema, true, null);
+  }
+
+  public SystemDatabase(
+      String url, String user, String password, String schema, DBOSSerializer serializer) {
+    this(createDataSource(url, user, password), schema, true, serializer);
   }
 
   public SystemDatabase(DataSource dataSource, String schema) {
-    this(dataSource, schema, false);
+    this(dataSource, schema, false, null);
+  }
+
+  public SystemDatabase(DataSource dataSource, String schema, DBOSSerializer serializer) {
+    this(dataSource, schema, false, serializer);
   }
 
   public static SystemDatabase create(DBOSConfig config) {
     if (config.dataSource() == null) {
       return new SystemDatabase(
-          config.databaseUrl(), config.dbUser(), config.dbPassword(), config.databaseSchema());
+          config.databaseUrl(),
+          config.dbUser(),
+          config.dbPassword(),
+          config.databaseSchema(),
+          config.serializer());
     } else {
-      return new SystemDatabase(config.dataSource(), config.databaseSchema());
+      return new SystemDatabase(config.dataSource(), config.databaseSchema(), config.serializer());
     }
   }
 
@@ -256,6 +275,13 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
+  public String getWorkflowSerialization(String workflowId) {
+    return dbRetry(
+        () -> {
+          return workflowDAO.getWorkflowSerialization(workflowId);
+        });
+  }
+
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return dbRetry(
         () -> {
@@ -345,11 +371,17 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void send(
-      String workflowId, int functionId, String destinationId, Object message, String topic) {
+      String workflowId,
+      int functionId,
+      String destinationId,
+      Object message,
+      String topic,
+      String serialization) {
 
     dbRetry(
         () -> {
-          notificationsDAO.send(workflowId, functionId, destinationId, message, topic);
+          notificationsDAO.send(
+              workflowId, functionId, destinationId, message, topic, serialization);
           return null;
         });
   }
@@ -364,11 +396,16 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void setEvent(
-      String workflowId, int functionId, String key, Object message, boolean asStep) {
+      String workflowId,
+      int functionId,
+      String key,
+      Object message,
+      boolean asStep,
+      String serialization) {
 
     dbRetry(
         () -> {
-          notificationsDAO.setEvent(workflowId, functionId, key, message, asStep);
+          notificationsDAO.setEvent(workflowId, functionId, key, message, asStep, serialization);
           return null;
         });
   }
@@ -585,7 +622,8 @@ public class SystemDatabase implements AutoCloseable {
           try (Connection conn = dataSource.getConnection()) {
             var checkpointName = getCheckpointName(conn, workflowId, functionId);
             if (checkpointName == null) {
-              var output = new StepResult(workflowId, functionId, patchName);
+              var output =
+                  new StepResult(workflowId, functionId, patchName, null, null, null, null);
               StepsDAO.recordStepResultTxn(
                   output, System.currentTimeMillis(), null, conn, this.schema);
               return true;
@@ -673,7 +711,7 @@ public class SystemDatabase implements AutoCloseable {
   List<WorkflowEvent> listWorkflowEvents(Connection conn, String workflowId) throws SQLException {
     var sql =
         """
-        SELECT key, value
+        SELECT key, value, serialization
         FROM "%s".workflow_events
         WHERE workflow_uuid = ?
         """
@@ -686,7 +724,8 @@ public class SystemDatabase implements AutoCloseable {
         while (rs.next()) {
           var key = rs.getString("key");
           var value = rs.getString("value");
-          events.add(new WorkflowEvent(key, value));
+          var serialization = rs.getString("serialization");
+          events.add(new WorkflowEvent(key, value, serialization));
         }
       }
     }
@@ -697,7 +736,7 @@ public class SystemDatabase implements AutoCloseable {
       throws SQLException {
     var sql =
         """
-        SELECT key, value, function_id
+        SELECT key, value, function_id, serialization
         FROM "%s".workflow_events_history
         WHERE workflow_uuid = ?
         """
@@ -711,7 +750,8 @@ public class SystemDatabase implements AutoCloseable {
           var key = rs.getString("key");
           var value = rs.getString("value");
           var stepId = rs.getInt("function_id");
-          history.add(new WorkflowEventHistory(key, value, stepId));
+          var serialization = rs.getString("serialization");
+          history.add(new WorkflowEventHistory(key, value, stepId, serialization));
         }
       }
     }
@@ -721,7 +761,7 @@ public class SystemDatabase implements AutoCloseable {
   List<WorkflowStream> listWorkflowStreams(Connection conn, String workflowId) throws SQLException {
     var sql =
         """
-        SELECT key, value, "offset", function_id
+        SELECT key, value, "offset", function_id, serialization
         FROM "%s".streams
         WHERE workflow_uuid = ?
         """
@@ -736,7 +776,8 @@ public class SystemDatabase implements AutoCloseable {
           var value = rs.getString("value");
           var offset = rs.getInt("offset");
           var stepId = rs.getInt("function_id");
-          streams.add(new WorkflowStream(key, value, offset, stepId));
+          var serialization = rs.getString("serialization");
+          streams.add(new WorkflowStream(key, value, offset, stepId, serialization));
         }
       }
     }
@@ -781,9 +822,9 @@ public class SystemDatabase implements AutoCloseable {
           created_at, updated_at, started_at_epoch_ms,
           queue_name, deduplication_id, priority, queue_partition_key,
           workflow_timeout_ms, workflow_deadline_epoch_ms,
-          recovery_attempts, forked_from, parent_workflow_id
+          recovery_attempts, forked_from, parent_workflow_id, serialization
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -793,9 +834,10 @@ public class SystemDatabase implements AutoCloseable {
         INSERT INTO "%s".operation_outputs (
           workflow_uuid, function_id, function_name,
           output, error, child_workflow_id,
-          started_at_epoch_ms, completed_at_epoch_ms
+          started_at_epoch_ms, completed_at_epoch_ms,
+          serialization
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -803,9 +845,9 @@ public class SystemDatabase implements AutoCloseable {
     var eventSQL =
         """
         INSERT INTO "%s".workflow_events (
-          workflow_uuid, key, value
+          workflow_uuid, key, value, serialization
         ) VALUES (
-          ?, ?, ?
+          ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -813,9 +855,9 @@ public class SystemDatabase implements AutoCloseable {
     var eventHistorySQL =
         """
         INSERT INTO "%s".workflow_events_history (
-          workflow_uuid, key, value, function_id
+          workflow_uuid, key, value, function_id, serialization
         ) VALUES (
-          ?, ?, ?, ?
+          ?, ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -823,9 +865,9 @@ public class SystemDatabase implements AutoCloseable {
     var streamsSQL =
         """
         INSERT INTO "%s".streams (
-          workflow_uuid, key, value, function_id, offset
+          workflow_uuid, key, value, function_id, offset, serialization
         ) VALUES (
-          ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -853,11 +895,28 @@ public class SystemDatabase implements AutoCloseable {
                           ? null
                           : JSONUtil.serializeArray(status.authenticatedRoles()));
                   stmt.setString(
-                      9, status.output() == null ? null : JSONUtil.serialize(status.output()));
+                      9,
+                      status.output() == null
+                          ? null
+                          : SerializationUtil.serializeValue(
+                                  status.output(), status.serialization(), this.serializer)
+                              .serializedValue());
                   stmt.setString(
-                      10, status.error() == null ? null : status.error().serializedError());
+                      10,
+                      status.error() == null
+                          ? null
+                          : SerializationUtil.serializeError(
+                                  status.error().throwable(),
+                                  status.serialization(),
+                                  this.serializer)
+                              .serializedValue());
                   stmt.setString(
-                      11, status.input() == null ? null : JSONUtil.serializeArray(status.input()));
+                      11,
+                      status.input() == null
+                          ? null
+                          : SerializationUtil.serializeArgs(
+                                  status.input(), null, status.serialization(), this.serializer)
+                              .serializedValue());
                   stmt.setString(12, status.executorId());
                   stmt.setString(13, status.appVersion());
                   stmt.setString(14, status.appId());
@@ -873,6 +932,7 @@ public class SystemDatabase implements AutoCloseable {
                   stmt.setObject(24, status.recoveryAttempts());
                   stmt.setString(25, status.forkedFrom());
                   stmt.setString(26, status.parentWorkflowId());
+                  stmt.setString(27, status.serialization());
 
                   stmt.executeUpdate();
                 }
@@ -883,11 +943,17 @@ public class SystemDatabase implements AutoCloseable {
                     stmt.setInt(2, step.functionId());
                     stmt.setString(3, step.functionName());
                     stmt.setString(
-                        4, step.output() == null ? null : JSONUtil.serialize(step.output()));
+                        4,
+                        step.output() == null
+                            ? null
+                            : SerializationUtil.serializeValue(
+                                    step.output(), step.serialization(), this.serializer)
+                                .serializedValue());
                     stmt.setString(5, step.error() == null ? null : step.error().serializedError());
                     stmt.setString(6, step.childWorkflowId());
                     stmt.setObject(7, step.startedAtEpochMs());
                     stmt.setObject(8, step.completedAtEpochMs());
+                    stmt.setString(9, step.serialization());
 
                     stmt.executeUpdate();
                   }
@@ -898,6 +964,7 @@ public class SystemDatabase implements AutoCloseable {
                     stmt.setString(1, status.workflowId());
                     stmt.setString(2, event.key());
                     stmt.setString(3, event.value());
+                    stmt.setString(4, event.serialization());
 
                     stmt.executeUpdate();
                   }
@@ -909,6 +976,7 @@ public class SystemDatabase implements AutoCloseable {
                     stmt.setString(2, history.key());
                     stmt.setString(3, history.value());
                     stmt.setInt(4, history.stepId());
+                    stmt.setString(5, history.serialization());
 
                     stmt.executeUpdate();
                   }
@@ -921,6 +989,7 @@ public class SystemDatabase implements AutoCloseable {
                     stmt.setString(3, stream.value());
                     stmt.setInt(4, stream.stepId());
                     stmt.setInt(5, stream.offset());
+                    stmt.setString(6, stream.serialization());
 
                     stmt.executeUpdate();
                   }

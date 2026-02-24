@@ -31,7 +31,8 @@ public record WorkflowStatus(
     Integer priority,
     String queuePartitionKey,
     String forkedFrom,
-    String parentWorkflowId) {
+    String parentWorkflowId,
+    String serialization) {
 
   @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)
   public Instant deadline() {

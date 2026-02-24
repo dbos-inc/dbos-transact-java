@@ -3,7 +3,11 @@ package dev.dbos.transact.admin;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
-public record WorkflowsOutput(
+/**
+ * This record object is used only within the admin server to convert to JSON using the admin
+ * server's preferred response format.
+ */
+record WorkflowsOutput(
     String WorkflowUUID,
     String Status,
     String WorkflowName,

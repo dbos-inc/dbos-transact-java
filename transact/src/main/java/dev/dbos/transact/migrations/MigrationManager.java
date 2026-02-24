@@ -244,7 +244,8 @@ public class MigrationManager {
             migration7,
             migration8,
             migration9,
-            migration10);
+            migration10,
+            migration11);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -442,5 +443,15 @@ public class MigrationManager {
               ALTER TABLE "%1$s".notifications ADD PRIMARY KEY (message_uuid);
           END IF;
       END $$;
+      """;
+
+  static final String migration11 =
+      """
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s"."notifications" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s"."workflow_events" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s"."workflow_events_history" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s"."operation_outputs" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s"."streams" ADD COLUMN "serialization" TEXT DEFAULT NULL;
       """;
 }
