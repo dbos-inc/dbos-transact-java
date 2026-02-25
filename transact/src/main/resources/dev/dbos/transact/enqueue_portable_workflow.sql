@@ -10,13 +10,14 @@ CREATE OR REPLACE FUNCTION "dbos".enqueue_portable_workflow(
   p_deduplication_id TEXT DEFAULT NULL,
   p_priority INTEGER DEFAULT NULL,
   p_queue_partition_key TEXT DEFAULT NULL,
-  p_serialized_inputs TEXT,
-  p_serialization_format TEXT,
+  p_positional_args JSON[],
+  p_named_args JSON,
   p_parent_workflow_id TEXT DEFAULT NULL
 ) RETURNS TEXT AS $$
 DECLARE
   v_workflow_id TEXT;
   v_init_result RECORD;
+  v_serialized_inputs TEXT;
 BEGIN
   -- Validate required parameters
   IF p_workflow_name IS NULL OR p_workflow_name = '' THEN
@@ -27,17 +28,16 @@ BEGIN
     RAISE EXCEPTION 'Queue name cannot be null or empty';
   END IF;
   
-  IF p_class_name IS NULL OR p_class_name = '' THEN
-    RAISE EXCEPTION 'Class name cannot be null or empty';
+  -- Validate p_named_args is an object if not null
+  IF p_named_args IS NOT NULL AND jsonb_typeof(p_named_args::jsonb) != 'object' THEN
+    RAISE EXCEPTION 'Named args must be a JSON object';
   END IF;
   
-  IF p_serialized_inputs IS NULL THEN
-    RAISE EXCEPTION 'Serialized inputs cannot be null';
-  END IF;
-  
-  IF p_serialization_format IS NULL OR p_serialization_format = '' THEN
-    RAISE EXCEPTION 'Serialization format cannot be null or empty';
-  END IF;
+  -- Serialize the arguments in portable format
+  v_serialized_inputs := json_build_object(
+    'positionalArgs', COALESCE(p_positional_args, '[]'::json[]),
+    'namedArgs', COALESCE(p_named_args, '{}')
+  )::TEXT;
   
   -- Generate UUID if workflow ID not provided
   v_workflow_id := COALESCE(p_workflow_id, gen_random_uuid()::TEXT);
@@ -46,7 +46,7 @@ BEGIN
   SELECT * FROM "dbos".init_workflow_status(
     v_workflow_id,
     'ENQUEUED',
-    p_serialized_inputs,
+    v_serialized_inputs,
     p_workflow_name,
     p_class_name,
     COALESCE(p_config_name, ''),
@@ -64,7 +64,7 @@ BEGIN
     p_deadline_epoch_ms,
     p_parent_workflow_id,
     NULL, -- owner_xid (will be set by init_workflow_status)
-    p_serialization_format,
+    'portable_json', -- serialization_format
     NULL, -- max_retries
     FALSE, -- is_recovery_request
     FALSE  -- is_dequeued_request
