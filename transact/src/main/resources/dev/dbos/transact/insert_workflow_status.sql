@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION "dbos".insert_workflow_status(
+CREATE FUNCTION "dbos".insert_workflow_status(
   p_workflow_uuid TEXT,
   p_status TEXT,
   p_inputs TEXT,
@@ -19,8 +19,7 @@ CREATE OR REPLACE FUNCTION "dbos".insert_workflow_status(
   p_workflow_deadline_epoch_ms BIGINT,
   p_parent_workflow_id TEXT,
   p_owner_xid TEXT,
-  p_serialization TEXT,
-  p_increment_attempts BOOLEAN
+  p_serialization TEXT
 ) RETURNS TABLE (
   recovery_attempts INTEGER,
   status TEXT,
@@ -36,7 +35,6 @@ CREATE OR REPLACE FUNCTION "dbos".insert_workflow_status(
 DECLARE
   v_now BIGINT := EXTRACT(epoch FROM now()) * 1000;
   v_recovery_attempts INTEGER := CASE WHEN p_status = 'ENQUEUED' THEN 0 ELSE 1 END;
-  v_increment_attempts INTEGER := CASE WHEN p_increment_attempts THEN 1 ELSE 0 END;
   v_priority INTEGER := COALESCE(p_priority, 0);
 BEGIN
   -- Validate workflow UUID
@@ -66,11 +64,7 @@ BEGIN
   )
   ON CONFLICT (workflow_uuid)
   DO UPDATE SET
-    recovery_attempts = CASE
-        WHEN EXCLUDED.status != 'ENQUEUED'
-          THEN workflow_status.recovery_attempts + v_increment_attempts
-          ELSE workflow_status.recovery_attempts
-    END,
+    recovery_attempts = workflow_status.recovery_attempts,
     updated_at = EXCLUDED.updated_at,
     executor_id = CASE
         WHEN EXCLUDED.status = 'ENQUEUED'

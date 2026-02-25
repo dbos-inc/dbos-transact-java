@@ -1,8 +1,10 @@
-CREATE OR REPLACE FUNCTION "dbos".enqueue_portable_workflow(
+CREATE FUNCTION "dbos".enqueue_portable_workflow(
   p_workflow_name TEXT,
   p_queue_name TEXT,
-  p_class_name TEXT,
-  p_config_name TEXT DEFAULT '',
+  p_positional_args JSON[] DEFAULT '[]'::JSON[],
+  p_named_args JSON DEFAULT '{}'::JSON,
+  p_class_name TEXT DEFAULT NULL,
+  p_config_name TEXT DEFAULT NULL,
   p_workflow_id TEXT DEFAULT NULL,
   p_app_version TEXT DEFAULT NULL,
   p_timeout_ms BIGINT DEFAULT NULL,
@@ -10,8 +12,6 @@ CREATE OR REPLACE FUNCTION "dbos".enqueue_portable_workflow(
   p_deduplication_id TEXT DEFAULT NULL,
   p_priority INTEGER DEFAULT NULL,
   p_queue_partition_key TEXT DEFAULT NULL,
-  p_positional_args JSON[],
-  p_named_args JSON,
   p_parent_workflow_id TEXT DEFAULT NULL
 ) RETURNS TEXT AS $$
 DECLARE
@@ -35,8 +35,8 @@ BEGIN
   
   -- Serialize the arguments in portable format
   v_serialized_inputs := json_build_object(
-    'positionalArgs', COALESCE(p_positional_args, '[]'::json[]),
-    'namedArgs', COALESCE(p_named_args, '{}')
+    'positionalArgs', p_positional_args,
+    'namedArgs', p_named_args
   )::TEXT;
   
   -- Generate UUID if workflow ID not provided
@@ -49,7 +49,7 @@ BEGIN
     v_serialized_inputs,
     p_workflow_name,
     p_class_name,
-    COALESCE(p_config_name, ''),
+    p_config_name,
     p_queue_name,
     p_deduplication_id,
     COALESCE(p_priority, 0),
@@ -63,11 +63,7 @@ BEGIN
     p_timeout_ms,
     p_deadline_epoch_ms,
     p_parent_workflow_id,
-    NULL, -- owner_xid (will be set by init_workflow_status)
-    'portable_json', -- serialization_format
-    NULL, -- max_retries
-    FALSE, -- is_recovery_request
-    FALSE  -- is_dequeued_request
+    'portable_json' -- serialization_format
   ) INTO v_init_result;
   
   -- Return the workflow ID

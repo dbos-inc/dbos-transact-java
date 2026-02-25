@@ -1,7 +1,7 @@
-CREATE OR REPLACE FUNCTION "dbos".send_message(
+CREATE FUNCTION "dbos".send_message(
   p_destination_id TEXT,
   p_message JSON,
-  p_topic TEXT,
+  p_topic TEXT DEFAULT NULL,
   p_idempotency_key TEXT DEFAULT NULL
 ) RETURNS TEXT AS $$
 DECLARE
@@ -46,11 +46,7 @@ BEGIN
     NULL, -- timeout_ms
     NULL, -- deadline_epoch_ms
     NULL, -- parent_workflow_id
-    NULL, -- owner_xid
-    'portable_json', -- serialization_format (always portable JSON)
-    NULL, -- max_retries
-    FALSE, -- is_recovery_request
-    FALSE  -- is_dequeued_request
+    'portable_json' -- serialization_format (always portable JSON)
   ) INTO v_init_result;
   
   -- Send the message by inserting into the notifications table

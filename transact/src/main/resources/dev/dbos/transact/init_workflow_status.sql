@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION "dbos".init_workflow_status(
+CREATE FUNCTION "dbos".init_workflow_status(
   p_workflow_uuid TEXT,
   p_status TEXT,
   p_inputs TEXT,
@@ -18,11 +18,7 @@ CREATE OR REPLACE FUNCTION "dbos".init_workflow_status(
   p_workflow_timeout_ms BIGINT,
   p_workflow_deadline_epoch_ms BIGINT,
   p_parent_workflow_id TEXT,
-  p_owner_xid TEXT,
-  p_serialization TEXT,
-  p_max_retries INTEGER,
-  p_is_recovery_request BOOLEAN,
-  p_is_dequeued_request BOOLEAN
+  p_serialization TEXT
 ) RETURNS TABLE (
   workflow_uuid TEXT,
   status TEXT,
@@ -39,7 +35,7 @@ CREATE OR REPLACE FUNCTION "dbos".init_workflow_status(
 -- This could affect workflow recovery counting and metadata for untouched workflows.
 --
 DECLARE
-  v_increment_attempts BOOLEAN := p_is_recovery_request OR p_is_dequeued_request;
+  v_owner_xid TEXT := gen_random_uuid()::TEXT;
   v_insert_result RECORD;
 BEGIN
   -- Validate workflow UUID
@@ -54,8 +50,7 @@ BEGIN
     p_authenticated_user, p_assumed_role, p_authenticated_roles,
     p_executor_id, p_application_version, p_application_id,
     p_workflow_timeout_ms, p_workflow_deadline_epoch_ms,
-    p_parent_workflow_id, p_owner_xid, p_serialization,
-    v_increment_attempts
+    p_parent_workflow_id, v_owner_xid, p_serialization
   ) INTO v_insert_result;
   
   -- Validate workflow metadata matches
@@ -72,10 +67,7 @@ BEGIN
   END IF;
   
   -- If there is an existing DB record and we aren't here to recover it, leave it be
-  IF v_insert_result.owner_xid != p_owner_xid AND NOT p_is_recovery_request AND NOT p_is_dequeued_request THEN
-    IF v_insert_result.status = 'MAX_RECOVERY_ATTEMPTS_EXCEEDED' THEN
-      RAISE EXCEPTION 'DBOS_MAX_RECOVERY_ATTEMPTS_EXCEEDED: Workflow % exceeded maximum recovery attempts: %', p_workflow_uuid, p_max_retries;
-    END IF;
+  IF v_insert_result.owner_xid != v_owner_xid THEN
     
     -- Return existing workflow info without executing
     workflow_uuid := p_workflow_uuid;
@@ -85,19 +77,6 @@ BEGIN
     serialization := v_insert_result.serialization;
     RETURN NEXT;
     RETURN;
-  END IF;
-  
-  -- Check max retries exceeded
-  IF p_max_retries IS NOT NULL AND v_insert_result.recovery_attempts > p_max_retries + 1 THEN
-    UPDATE "dbos".workflow_status
-    SET 
-      status = 'MAX_RECOVERY_ATTEMPTS_EXCEEDED',
-      deduplication_id = NULL,
-      started_at_epoch_ms = NULL,
-      queue_name = NULL
-    WHERE workflow_uuid = p_workflow_uuid AND status = 'PENDING';
-    
-    RAISE EXCEPTION 'DBOS_MAX_RECOVERY_ATTEMPTS_EXCEEDED: Workflow % exceeded maximum recovery attempts: %', p_workflow_uuid, p_max_retries;
   END IF;
   
   -- Return successful result
