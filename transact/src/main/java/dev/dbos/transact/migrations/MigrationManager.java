@@ -245,7 +245,8 @@ public class MigrationManager {
             migration8,
             migration9,
             migration10,
-            migration11);
+            migration11,
+            migration12);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -453,5 +454,269 @@ public class MigrationManager {
       ALTER TABLE "%1$s"."workflow_events_history" ADD COLUMN "serialization" TEXT DEFAULT NULL;
       ALTER TABLE "%1$s"."operation_outputs" ADD COLUMN "serialization" TEXT DEFAULT NULL;
       ALTER TABLE "%1$s"."streams" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      """;
+
+  static final String migration12 =
+      """
+      -- Add PL/pgSQL functions for portable workflow client
+      
+      CREATE FUNCTION "%1$s"._init_workflow_status(
+        p_workflow_uuid TEXT,
+        p_status TEXT,
+        p_inputs TEXT,
+        p_name TEXT,
+        p_class_name TEXT,
+        p_config_name TEXT,
+        p_queue_name TEXT,
+        p_deduplication_id TEXT,
+        p_priority INTEGER,
+        p_queue_partition_key TEXT,
+        p_application_version TEXT,
+        p_workflow_timeout_ms BIGINT,
+        p_workflow_deadline_epoch_ms BIGINT,
+        p_parent_workflow_id TEXT,
+        p_serialization TEXT
+      ) RETURNS VOID AS $$
+      --
+      -- INTERNAL FUNCTION: Only intended to be called by send_message and enqueue_workflow.
+      -- The underscore prefix indicates this is an internal implementation detail.
+      --
+      DECLARE
+        v_owner_xid TEXT := gen_random_uuid()::TEXT;
+        v_now BIGINT := EXTRACT(epoch FROM now()) * 1000;
+        v_recovery_attempts INTEGER := CASE WHEN p_status = 'ENQUEUED' THEN 0 ELSE 1 END;
+        v_priority INTEGER := COALESCE(p_priority, 0);
+        -- Variables to validate existing workflow metadata
+        v_existing_name TEXT;
+        v_existing_class_name TEXT;
+        v_existing_config_name TEXT;
+      BEGIN
+        -- Validate workflow UUID
+        IF p_workflow_uuid IS NULL OR p_workflow_uuid = '' THEN
+          RAISE EXCEPTION 'Workflow UUID cannot be null or empty';
+        END IF;
+        
+        -- Validate workflow name
+        IF p_name IS NULL OR p_name = '' THEN
+          RAISE EXCEPTION 'Workflow name cannot be null or empty';
+        END IF;
+        
+        -- Validate status is one of the allowed values
+        IF p_status NOT IN ('PENDING', 'SUCCESS', 'ERROR', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED', 'CANCELLED', 'ENQUEUED') THEN
+          RAISE EXCEPTION 'Invalid status: %%. Status must be one of: PENDING, SUCCESS, ERROR, MAX_RECOVERY_ATTEMPTS_EXCEEDED, CANCELLED, ENQUEUED', p_status;
+        END IF;
+        
+        -- Atomic insert with conflict resolution
+        INSERT INTO "%1$s".workflow_status (
+          workflow_uuid, status, inputs,
+          name, class_name, config_name,
+          queue_name, deduplication_id, priority, queue_partition_key,
+          application_version,
+          created_at, updated_at, recovery_attempts,
+          workflow_timeout_ms, workflow_deadline_epoch_ms,
+          parent_workflow_id, owner_xid, serialization
+        ) VALUES (
+          p_workflow_uuid, p_status, p_inputs,
+          p_name, p_class_name, p_config_name,
+          p_queue_name, p_deduplication_id, v_priority, p_queue_partition_key,
+          p_application_version,
+          v_now, v_now, v_recovery_attempts,
+          p_workflow_timeout_ms, p_workflow_deadline_epoch_ms,
+          p_parent_workflow_id, v_owner_xid, p_serialization
+        )
+        ON CONFLICT (workflow_uuid)
+        DO UPDATE SET
+          updated_at = EXCLUDED.updated_at
+        RETURNING name, class_name, config_name
+        INTO v_existing_name, v_existing_class_name, v_existing_config_name;
+
+        -- Validate workflow metadata matches
+        IF v_existing_name IS DISTINCT FROM p_name THEN
+          RAISE EXCEPTION 'DBOS_CONFLICTING_WORKFLOW: Workflow already exists with a different function name: %%, but the provided function name is: %%', v_existing_name, p_name;
+        END IF;
+        
+        IF v_existing_class_name IS DISTINCT FROM p_class_name THEN
+          RAISE EXCEPTION 'DBOS_CONFLICTING_WORKFLOW: Workflow already exists with a different class name: %%, but the provided class name is: %%', v_existing_class_name, p_class_name;
+        END IF;
+        
+        IF v_existing_config_name IS DISTINCT FROM p_config_name THEN
+          RAISE EXCEPTION 'DBOS_CONFLICTING_WORKFLOW: Workflow already exists with a different class configuration: %%, but the provided class configuration is: %%', v_existing_config_name, p_config_name;
+        END IF;
+        
+      EXCEPTION
+        WHEN unique_violation THEN
+          -- Handle duplicate deduplication_id
+          IF SQLERRM LIKE '%%deduplication_id%%' THEN
+            RAISE EXCEPTION 'DBOS_QUEUE_DUPLICATED: Workflow %% with queue %% and deduplication ID %% already exists', p_workflow_uuid, COALESCE(p_queue_name, ''), COALESCE(p_deduplication_id, '');
+          END IF;
+          RAISE;
+        WHEN OTHERS THEN
+          -- Re-raise custom exceptions and other errors
+          RAISE;
+      END;
+      $$ LANGUAGE plpgsql;
+      
+      CREATE FUNCTION "%1$s".send_message(
+        p_destination_id TEXT,
+        p_message JSON,
+        p_topic TEXT DEFAULT NULL,
+        p_idempotency_key TEXT DEFAULT NULL
+      ) RETURNS TEXT AS $$
+      DECLARE
+        v_idempotency_key TEXT;
+        v_workflow_id TEXT;
+        v_topic TEXT;
+        v_current_time_ms BIGINT := extract(epoch from now()) * 1000;
+      BEGIN
+        -- Validate required parameters
+        IF p_destination_id IS NULL OR p_destination_id = '' THEN
+          RAISE EXCEPTION 'Destination ID cannot be null or empty';
+        END IF;
+        
+        -- Generate UUID if idempotency key not provided
+        v_idempotency_key := COALESCE(p_idempotency_key, gen_random_uuid()::TEXT);
+        
+        -- Handle null topic
+        v_topic := COALESCE(p_topic, '__null__topic__');
+        
+        -- Create workflow ID by combining destination ID and idempotency key
+        v_workflow_id := p_destination_id || '-' || v_idempotency_key;
+        
+        -- Initialize temporary workflow status for sending
+        PERFORM "%1$s"._init_workflow_status(
+          v_workflow_id,
+          'SUCCESS', -- WorkflowState.SUCCESS
+          NULL, -- inputs (not needed for send workflow)
+          'temp_workflow-send-client', -- workflow_name
+          NULL, -- class_name
+          NULL, -- config_name
+          NULL, -- queue_name (not queued)
+          NULL, -- deduplication_id
+          NULL, -- priority
+          NULL, -- queue_partition_key
+          NULL, -- app_version
+          NULL, -- timeout_ms
+          NULL, -- deadline_epoch_ms
+          NULL, -- parent_workflow_id
+          'portable_json' -- serialization_format (always portable JSON)
+        );
+        
+        -- Send the message by inserting into the notifications table
+        INSERT INTO "%1$s".notifications (
+          destination_uuid,
+          topic,
+          message,
+          serialization
+        ) VALUES (
+          p_destination_id,
+          v_topic,
+          p_message::TEXT, -- serialize message as JSON text
+          'portable_json'
+        );
+        
+        -- Record this send operation as a step in the temporary workflow
+        INSERT INTO "%1$s".operation_outputs (
+          workflow_uuid,
+          function_id,
+          function_name,
+          output,
+          error,
+          child_workflow_id,
+          started_at_epoch_ms,
+          completed_at_epoch_ms,
+          serialization
+        ) VALUES (
+          v_workflow_id,
+          0, -- function_id (step 0 for send operation)
+          'DBOS.send', -- function_name
+          NULL, -- output (send doesn't return anything)
+          NULL, -- error
+          NULL, -- child_workflow_id
+          v_current_time_ms, -- started_at_epoch_ms
+          v_current_time_ms, -- completed_at_epoch_ms
+          'portable_json' -- serialization
+        );
+        
+        -- Return the workflow ID used for this send operation
+        RETURN v_workflow_id;
+        
+      EXCEPTION
+        WHEN OTHERS THEN
+          -- Re-raise any exceptions
+          RAISE;
+      END;
+      $$ LANGUAGE plpgsql;
+      
+      CREATE FUNCTION "%1$s".enqueue_workflow(
+        p_workflow_name TEXT,
+        p_queue_name TEXT,
+        p_positional_args JSON[] DEFAULT ARRAY[]::JSON[],
+        p_named_args JSON DEFAULT '{}'::JSON,
+        p_class_name TEXT DEFAULT NULL,
+        p_config_name TEXT DEFAULT NULL,
+        p_workflow_id TEXT DEFAULT NULL,
+        p_app_version TEXT DEFAULT NULL,
+        p_timeout_ms BIGINT DEFAULT NULL,
+        p_deadline_epoch_ms BIGINT DEFAULT NULL,
+        p_deduplication_id TEXT DEFAULT NULL,
+        p_priority INTEGER DEFAULT NULL,
+        p_queue_partition_key TEXT DEFAULT NULL,
+        p_parent_workflow_id TEXT DEFAULT NULL
+      ) RETURNS TEXT AS $$
+      DECLARE
+        v_workflow_id TEXT;
+        v_serialized_inputs TEXT;
+      BEGIN
+        -- Validate required parameters
+        IF p_workflow_name IS NULL OR p_workflow_name = '' THEN
+          RAISE EXCEPTION 'Workflow name cannot be null or empty';
+        END IF;
+        
+        IF p_queue_name IS NULL OR p_queue_name = '' THEN
+          RAISE EXCEPTION 'Queue name cannot be null or empty';
+        END IF;
+        
+        -- Validate p_named_args is an object if not null
+        IF p_named_args IS NOT NULL AND jsonb_typeof(p_named_args::jsonb) != 'object' THEN
+          RAISE EXCEPTION 'Named args must be a JSON object';
+        END IF;
+        
+        -- Serialize the arguments in portable format
+        v_serialized_inputs := json_build_object(
+          'positionalArgs', p_positional_args,
+          'namedArgs', p_named_args
+        )::TEXT;
+        
+        -- Generate UUID if workflow ID not provided
+        v_workflow_id := COALESCE(p_workflow_id, gen_random_uuid()::TEXT);
+        
+        -- Call _init_workflow_status to enqueue the workflow
+        PERFORM "%1$s"._init_workflow_status(
+          v_workflow_id,
+          'ENQUEUED',
+          v_serialized_inputs,
+          p_workflow_name,
+          p_class_name,
+          p_config_name,
+          p_queue_name,
+          p_deduplication_id,
+          COALESCE(p_priority, 0),
+          p_queue_partition_key,
+          p_app_version,
+          p_timeout_ms,
+          p_deadline_epoch_ms,
+          p_parent_workflow_id,
+          'portable_json' -- serialization_format
+        );
+        
+        -- Return the workflow ID
+        RETURN v_workflow_id;
+        
+      EXCEPTION
+        WHEN OTHERS THEN
+          -- Re-raise any exceptions from _init_workflow_status
+          RAISE;
+      END;
+      $$ LANGUAGE plpgsql;
       """;
 }
