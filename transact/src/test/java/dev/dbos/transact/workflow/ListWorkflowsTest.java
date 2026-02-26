@@ -597,7 +597,10 @@ public class ListWorkflowsTest {
     assertEquals(10, wfs.size());
 
     // inputs column is not fetched; deserializePositionalArgs(null, ...) returns [] not null
-    wfs.forEach(wf -> { assertNotNull(wf.input()); });
+    wfs.forEach(
+        wf -> {
+          assertNotNull(wf.input());
+        });
 
     // Core metadata fields must still be populated
     wfs.forEach(
