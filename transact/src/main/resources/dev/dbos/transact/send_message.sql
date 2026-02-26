@@ -9,7 +9,6 @@ DECLARE
   v_workflow_id TEXT;
   v_topic TEXT;
   v_current_time_ms BIGINT := extract(epoch from now()) * 1000;
-  v_init_result RECORD;
 BEGIN
   -- Validate required parameters
   IF p_destination_id IS NULL OR p_destination_id = '' THEN
@@ -26,7 +25,7 @@ BEGIN
   v_workflow_id := p_destination_id || '-' || v_idempotency_key;
   
   -- Initialize temporary workflow status for sending
-  SELECT * FROM "dbos".init_workflow_status(
+  PERFORM "dbos"._init_workflow_status(
     v_workflow_id,
     'SUCCESS', -- WorkflowState.SUCCESS
     NULL, -- inputs (not needed for send workflow)
@@ -37,17 +36,12 @@ BEGIN
     NULL, -- deduplication_id
     NULL, -- priority
     NULL, -- queue_partition_key
-    NULL, -- authenticated_user
-    NULL, -- assumed_role
-    NULL, -- authenticated_roles
-    NULL, -- executor_id
     NULL, -- app_version
-    NULL, -- application_id
     NULL, -- timeout_ms
     NULL, -- deadline_epoch_ms
     NULL, -- parent_workflow_id
     'portable_json' -- serialization_format (always portable JSON)
-  ) INTO v_init_result;
+  );
   
   -- Send the message by inserting into the notifications table
   INSERT INTO "dbos".notifications (
