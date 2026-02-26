@@ -608,7 +608,7 @@ public class MigrationManager {
           message,
           serialization
         ) VALUES (
-          p_destination_id,
+          v_workflow_id,
           v_topic,
           p_message::TEXT, -- serialize message as JSON text
           'portable_json'
