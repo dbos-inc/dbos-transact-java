@@ -561,7 +561,7 @@ public class MigrationManager {
         p_message JSON,
         p_topic TEXT DEFAULT NULL,
         p_idempotency_key TEXT DEFAULT NULL
-      ) RETURNS TEXT AS $$
+      ) RETURNS void AS $$
       DECLARE
         v_idempotency_key TEXT;
         v_workflow_id TEXT;
@@ -601,7 +601,13 @@ public class MigrationManager {
           'portable_json' -- serialization_format (always portable JSON)
         );
 
-        -- TODO: check operation_outputs table 
+        -- Check if operation_outputs row exists for v_workflow_id and function_id 0
+        IF EXISTS (
+          SELECT 1 FROM "%1$s".operation_outputs
+          WHERE workflow_uuid = v_workflow_id AND function_id = 0
+        ) THEN
+          RETURN;
+        END IF;
 
         -- Send the message by inserting into the notifications table
         INSERT INTO "%1$s".notifications (
@@ -639,13 +645,6 @@ public class MigrationManager {
           'portable_json' -- serialization
         );
 
-        -- Return the workflow ID used for this send operation
-        RETURN v_workflow_id;
-
-      EXCEPTION
-        WHEN OTHERS THEN
-          -- Re-raise any exceptions
-          RAISE;
       END;
       $$ LANGUAGE plpgsql;
 
