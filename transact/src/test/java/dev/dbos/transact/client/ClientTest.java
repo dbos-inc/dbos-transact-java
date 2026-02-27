@@ -215,7 +215,6 @@ public class ClientTest {
 
     for (var workflowStatusRow : workflowRows) {
       assertEquals("SUCCESS", workflowStatusRow.status());
-      assertEquals("SUCCESS", workflowStatusRow.status());
     }
   }
 
