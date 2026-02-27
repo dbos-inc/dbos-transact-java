@@ -459,7 +459,7 @@ public class MigrationManager {
   static final String migration12 =
       """
       -- Add PL/pgSQL functions for portable workflow client
-      
+
       CREATE FUNCTION "%1$s"._init_workflow_status(
         p_workflow_uuid TEXT,
         p_status TEXT,
@@ -495,17 +495,17 @@ public class MigrationManager {
         IF p_workflow_uuid IS NULL OR p_workflow_uuid = '' THEN
           RAISE EXCEPTION 'Workflow UUID cannot be null or empty';
         END IF;
-        
+
         -- Validate workflow name
         IF p_name IS NULL OR p_name = '' THEN
           RAISE EXCEPTION 'Workflow name cannot be null or empty';
         END IF;
-        
+
         -- Validate status is one of the allowed values
         IF p_status NOT IN ('PENDING', 'SUCCESS', 'ERROR', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED', 'CANCELLED', 'ENQUEUED') THEN
           RAISE EXCEPTION 'Invalid status: %%. Status must be one of: PENDING, SUCCESS, ERROR, MAX_RECOVERY_ATTEMPTS_EXCEEDED, CANCELLED, ENQUEUED', p_status;
         END IF;
-        
+
         -- Atomic insert with conflict resolution
         INSERT INTO "%1$s".workflow_status (
           workflow_uuid, status, inputs,
@@ -534,15 +534,15 @@ public class MigrationManager {
         IF v_existing_name IS DISTINCT FROM p_name THEN
           RAISE EXCEPTION 'DBOS_CONFLICTING_WORKFLOW: Workflow already exists with a different function name: %%, but the provided function name is: %%', v_existing_name, p_name;
         END IF;
-        
+
         IF v_existing_class_name IS DISTINCT FROM p_class_name THEN
           RAISE EXCEPTION 'DBOS_CONFLICTING_WORKFLOW: Workflow already exists with a different class name: %%, but the provided class name is: %%', v_existing_class_name, p_class_name;
         END IF;
-        
+
         IF v_existing_config_name IS DISTINCT FROM p_config_name THEN
           RAISE EXCEPTION 'DBOS_CONFLICTING_WORKFLOW: Workflow already exists with a different class configuration: %%, but the provided class configuration is: %%', v_existing_config_name, p_config_name;
         END IF;
-        
+
       EXCEPTION
         WHEN unique_violation THEN
           -- Handle duplicate deduplication_id
@@ -555,7 +555,7 @@ public class MigrationManager {
           RAISE;
       END;
       $$ LANGUAGE plpgsql;
-      
+
       CREATE FUNCTION "%1$s".send_message(
         p_destination_id TEXT,
         p_message JSON,
@@ -572,16 +572,16 @@ public class MigrationManager {
         IF p_destination_id IS NULL OR p_destination_id = '' THEN
           RAISE EXCEPTION 'Destination ID cannot be null or empty';
         END IF;
-        
+
         -- Generate UUID if idempotency key not provided
         v_idempotency_key := COALESCE(p_idempotency_key, gen_random_uuid()::TEXT);
-        
+
         -- Handle null topic
         v_topic := COALESCE(p_topic, '__null__topic__');
-        
+
         -- Create workflow ID by combining destination ID and idempotency key
         v_workflow_id := p_destination_id || '-' || v_idempotency_key;
-        
+
         -- Initialize temporary workflow status for sending
         PERFORM "%1$s"._init_workflow_status(
           v_workflow_id,
@@ -600,7 +600,7 @@ public class MigrationManager {
           NULL, -- parent_workflow_id
           'portable_json' -- serialization_format (always portable JSON)
         );
-        
+
         -- Send the message by inserting into the notifications table
         INSERT INTO "%1$s".notifications (
           destination_uuid,
@@ -613,7 +613,7 @@ public class MigrationManager {
           p_message::TEXT, -- serialize message as JSON text
           'portable_json'
         );
-        
+
         -- Record this send operation as a step in the temporary workflow
         INSERT INTO "%1$s".operation_outputs (
           workflow_uuid,
@@ -636,17 +636,17 @@ public class MigrationManager {
           v_current_time_ms, -- completed_at_epoch_ms
           'portable_json' -- serialization
         );
-        
+
         -- Return the workflow ID used for this send operation
         RETURN v_workflow_id;
-        
+
       EXCEPTION
         WHEN OTHERS THEN
           -- Re-raise any exceptions
           RAISE;
       END;
       $$ LANGUAGE plpgsql;
-      
+
       CREATE FUNCTION "%1$s".enqueue_workflow(
         p_workflow_name TEXT,
         p_queue_name TEXT,
@@ -654,6 +654,7 @@ public class MigrationManager {
         p_named_args JSON DEFAULT '{}'::JSON,
         p_class_name TEXT DEFAULT NULL,
         p_config_name TEXT DEFAULT NULL,
+
         p_workflow_id TEXT DEFAULT NULL,
         p_app_version TEXT DEFAULT NULL,
         p_timeout_ms BIGINT DEFAULT NULL,
@@ -671,25 +672,25 @@ public class MigrationManager {
         IF p_workflow_name IS NULL OR p_workflow_name = '' THEN
           RAISE EXCEPTION 'Workflow name cannot be null or empty';
         END IF;
-        
+
         IF p_queue_name IS NULL OR p_queue_name = '' THEN
           RAISE EXCEPTION 'Queue name cannot be null or empty';
         END IF;
-        
+
         -- Validate p_named_args is an object if not null
         IF p_named_args IS NOT NULL AND jsonb_typeof(p_named_args::jsonb) != 'object' THEN
           RAISE EXCEPTION 'Named args must be a JSON object';
         END IF;
-        
+
         -- Serialize the arguments in portable format
         v_serialized_inputs := json_build_object(
           'positionalArgs', p_positional_args,
           'namedArgs', p_named_args
         )::TEXT;
-        
+
         -- Generate UUID if workflow ID not provided
         v_workflow_id := COALESCE(p_workflow_id, gen_random_uuid()::TEXT);
-        
+
         -- Call _init_workflow_status to enqueue the workflow
         PERFORM "%1$s"._init_workflow_status(
           v_workflow_id,
@@ -708,10 +709,10 @@ public class MigrationManager {
           p_parent_workflow_id,
           'portable_json' -- serialization_format
         );
-        
+
         -- Return the workflow ID
         RETURN v_workflow_id;
-        
+
       EXCEPTION
         WHEN OTHERS THEN
           -- Re-raise any exceptions from _init_workflow_status
