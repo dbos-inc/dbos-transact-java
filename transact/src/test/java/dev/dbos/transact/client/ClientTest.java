@@ -147,27 +147,6 @@ public class ClientTest {
   }
 
   @Test
-  public void clientSend() throws Exception {
-
-    var handle = DBOS.startWorkflow(() -> service.sendTest(42));
-
-    var idempotencyKey = UUID.randomUUID().toString();
-
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
-      client.send(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
-    }
-
-    var workflowId = "%s-%s".formatted(handle.workflowId(), idempotencyKey);
-    var sendHandle = DBOS.retrieveWorkflow(workflowId);
-    assertNotNull(sendHandle);
-    var status = sendHandle.getStatus();
-    assertNotNull(status);
-    assertEquals("SUCCESS", status.status());
-
-    assertEquals("42-test.message", handle.getResult());
-  }
-
-  @Test
   public void clientEnqueueTimeouts() throws Exception {
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
       var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "sleep", "testQueue");
@@ -198,5 +177,68 @@ public class ClientTest {
           "CANCELLED",
           stat2.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
     }
+  }
+
+  @Test
+  public void clientSendWithIdempotencyKey() throws Exception {
+
+    var handle = DBOS.startWorkflow(() -> service.sendTest(42));
+    var idempotencyKey = UUID.randomUUID().toString();
+
+    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+      client.send(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
+    }
+
+    var workflowId = "%s-%s".formatted(handle.workflowId(), idempotencyKey);
+    var sendHandle = DBOS.retrieveWorkflow(workflowId);
+    assertNotNull(sendHandle);
+    var status = sendHandle.getStatus();
+    assertNotNull(status);
+    assertEquals("SUCCESS", status.status());
+
+    assertEquals("42-test.message", handle.getResult());
+  }
+
+  @Test
+  public void clientSendNoIdempotencyKey() throws Exception {
+
+    var handle = DBOS.startWorkflow(() -> service.sendTest(42));
+
+    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+      client.send(handle.workflowId(), "test.message", "test-topic", null);
+    }
+
+    assertEquals("42-test.message", handle.getResult());
+
+    var workflowRows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(2, workflowRows.size());
+
+    for (var workflowStatusRow : workflowRows) {
+      assertEquals("SUCCESS", workflowStatusRow.status());
+    }
+  }
+
+  @Test
+  public void clientSendWithIdempotencyKeyTwice() throws Exception {
+
+    var handle = DBOS.startWorkflow(() -> service.sendTest(42));
+    var idempotencyKey = UUID.randomUUID().toString();
+
+    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+      client.send(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
+      client.send(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
+    }
+
+    var workflowId = "%s-%s".formatted(handle.workflowId(), idempotencyKey);
+    var stepRows = DBUtils.getStepRows(dataSource, workflowId);
+    assertEquals(1, stepRows.size());
+
+    var sendHandle = DBOS.retrieveWorkflow(workflowId);
+    assertNotNull(sendHandle);
+    var status = sendHandle.getStatus();
+    assertNotNull(status);
+    assertEquals("SUCCESS", status.status());
+
+    assertEquals("42-test.message", handle.getResult());
   }
 }
