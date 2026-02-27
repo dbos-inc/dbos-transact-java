@@ -150,7 +150,6 @@ public class ClientTest {
   public void clientSend() throws Exception {
 
     var handle = DBOS.startWorkflow(() -> service.sendTest(42));
-
     var idempotencyKey = UUID.randomUUID().toString();
 
     try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {

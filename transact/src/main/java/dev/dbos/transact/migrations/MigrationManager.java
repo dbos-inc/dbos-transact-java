@@ -601,6 +601,8 @@ public class MigrationManager {
           'portable_json' -- serialization_format (always portable JSON)
         );
 
+        -- TODO: check operation_outputs table 
+
         -- Send the message by inserting into the notifications table
         INSERT INTO "%1$s".notifications (
           destination_uuid,
@@ -608,7 +610,7 @@ public class MigrationManager {
           message,
           serialization
         ) VALUES (
-          v_workflow_id,
+          p_destination_id,
           v_topic,
           p_message::TEXT, -- serialize message as JSON text
           'portable_json'

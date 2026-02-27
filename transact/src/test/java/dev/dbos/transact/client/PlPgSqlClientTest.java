@@ -20,6 +20,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
@@ -70,6 +71,25 @@ public class PlPgSqlClientTest {
   }
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
+
+  String sendHelper(String destinationId, Object message, String topic, String idempotencyKey) throws Exception {
+    var jsonMessage = MAPPER.writeValueAsString(message);
+
+    String sql =
+        "SELECT dbos.send_message(?, ?::json, ?, ?)";
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareCall(sql)) {
+
+      stmt.setString(1, destinationId);
+      stmt.setString(2, jsonMessage);
+      stmt.setString(3, topic);
+      stmt.setString(4, idempotencyKey);
+
+      try (ResultSet rs = stmt.executeQuery()) {
+        return rs.next() ? rs.getString(1) : null;
+      }
+    }
+  }
 
   String enqueueHelper(EnqueueOptions options, Object[] args) throws Exception {
 
@@ -180,4 +200,23 @@ public class PlPgSqlClientTest {
         });
     assertEquals("CANCELLED", handle2.getStatus().status());
   }
+
+  @Test
+  public void clientSend() throws Exception {
+
+    var handle = DBOS.startWorkflow(() -> service.sendTest(42));
+    var idempotencyKey = UUID.randomUUID().toString();
+
+    sendHelper(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
+
+    var workflowId = "%s-%s".formatted(handle.workflowId(), idempotencyKey);
+    var sendHandle = DBOS.retrieveWorkflow(workflowId);
+    assertNotNull(sendHandle);
+    var status = sendHandle.getStatus();
+    assertNotNull(status);
+    assertEquals("SUCCESS", status.status());
+
+    assertEquals("42-test.message", handle.getResult());
+  }
+
 }
