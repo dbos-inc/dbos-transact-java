@@ -13,6 +13,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
@@ -48,12 +49,14 @@ class NotificationsDAO {
       String destinationUuid,
       Object message,
       String topic,
+      String messageUuid,
       String serialization)
       throws SQLException {
 
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.send";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
+    String finalMessageUuid = (messageUuid != null) ? messageUuid : UUID.randomUUID().toString();
 
     try (Connection conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
@@ -87,7 +90,10 @@ class NotificationsDAO {
         // Insert notification with serialization format
         final String sql =
             """
-              INSERT INTO "%s".notifications (destination_uuid, topic, message, serialization) VALUES (?, ?, ?, ?)
+              INSERT INTO "%s".notifications
+                (destination_uuid, topic, message, serialization, message_uuid)
+              VALUES (?, ?, ?, ?, ?)
+              ON CONFLICT (message_uuid) DO NOTHING
             """
                 .formatted(this.schema);
 
@@ -96,6 +102,7 @@ class NotificationsDAO {
           stmt.setString(2, finalTopic);
           stmt.setString(3, serializedMsg.serializedValue());
           stmt.setString(4, serializedMsg.serialization());
+          stmt.setString(5, finalMessageUuid);
           stmt.executeUpdate();
         } catch (SQLException e) {
           // Foreign key violation
@@ -120,6 +127,43 @@ class NotificationsDAO {
         }
         throw e;
       }
+    }
+  }
+
+  void sendDirect(
+      String destinationUuid,
+      Object message,
+      String topic,
+      String messageUuid,
+      String serialization)
+      throws SQLException {
+    String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
+    String finalMessageUuid = (messageUuid != null) ? messageUuid : UUID.randomUUID().toString();
+    var serializedMsg = SerializationUtil.serializeValue(message, serialization, this.serializer);
+
+    final String sql =
+        """
+          INSERT INTO "%s".notifications
+            (destination_uuid, topic, message, message_uuid, serialization)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT (message_uuid) DO NOTHING
+        """
+            .formatted(this.schema);
+
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, destinationUuid);
+      stmt.setString(2, finalTopic);
+      stmt.setString(3, serializedMsg.serializedValue());
+      stmt.setString(4, finalMessageUuid);
+      stmt.setString(5, serializedMsg.serialization());
+      stmt.executeUpdate();
+    } catch (SQLException e) {
+      // Foreign key violation
+      if ("23503".equals(e.getSQLState())) {
+        throw new DBOSNonExistentWorkflowException(destinationUuid);
+      }
+      throw e;
     }
   }
 
@@ -176,7 +220,7 @@ class NotificationsDAO {
         try (Connection conn = dataSource.getConnection()) {
           final String sql =
               """
-                SELECT topic FROM "%s".notifications WHERE destination_uuid = ? AND topic = ?
+                SELECT topic FROM "%s".notifications WHERE destination_uuid = ? AND topic = ? AND consumed = FALSE
               """
                   .formatted(this.schema);
 
@@ -228,21 +272,25 @@ class NotificationsDAO {
       conn.setAutoCommit(false);
 
       try {
-        // Find and delete the oldest entry for this workflow+topic
+        // Find and mark consumed the oldest entry for this workflow+topic
+        // Note, JDBC doesn't support positional parameters, so we have to set the same parameters multiple times
         final String sql =
             """
-              WITH oldest_entry AS (
-                  SELECT destination_uuid, topic, message, serialization, created_at_epoch_ms
+              UPDATE "%1$s".notifications
+              SET consumed = true
+              WHERE destination_uuid = ?
+                AND topic = ?
+                AND consumed = false
+                AND message_uuid = (
+                  SELECT message_uuid
                   FROM "%1$s".notifications
-                  WHERE destination_uuid = ? AND topic = ?
+                  WHERE destination_uuid = ?
+                    AND topic = ?
+                    AND consumed = false
                   ORDER BY created_at_epoch_ms ASC
                   LIMIT 1
-              )
-              DELETE FROM "%1$s".notifications
-              WHERE destination_uuid = (SELECT destination_uuid FROM oldest_entry)
-                AND topic = (SELECT topic FROM oldest_entry)
-                AND created_at_epoch_ms = (SELECT created_at_epoch_ms FROM oldest_entry)
-              RETURNING message, serialization
+                )
+              RETURNING notifications.message, notifications.serialization`
             """
                 .formatted(this.schema);
 
@@ -250,6 +298,8 @@ class NotificationsDAO {
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
           stmt.setString(1, workflowUuid);
           stmt.setString(2, finalTopic);
+          stmt.setString(3, workflowUuid);
+          stmt.setString(4, finalTopic);
 
           try (ResultSet rs = stmt.executeQuery()) {
             if (rs.next()) {

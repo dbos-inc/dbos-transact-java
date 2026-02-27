@@ -778,6 +778,7 @@ public class DBOSExecutor implements AutoCloseable {
         destinationId,
         message,
         topic,
+        idempotencyKey,
         serialization.formatName());
   }
 

@@ -245,7 +245,8 @@ public class MigrationManager {
             migration8,
             migration9,
             migration10,
-            migration11);
+            migration11,
+            migration12);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -453,5 +454,11 @@ public class MigrationManager {
       ALTER TABLE "%1$s"."workflow_events_history" ADD COLUMN "serialization" TEXT DEFAULT NULL;
       ALTER TABLE "%1$s"."operation_outputs" ADD COLUMN "serialization" TEXT DEFAULT NULL;
       ALTER TABLE "%1$s"."streams" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      """;
+
+  static final String migration12 =
+      """
+      ALTER TABLE "%1$s"."notifications" ADD COLUMN "consumed" BOOLEAN NOT NULL DEFAULT FALSE;
+      CREATE INDEX "idx_notifications_unconsumed" ON "%1$s"."notifications" ("destination_uuid", "topic") WHERE consumed = FALSE;
       """;
 }
