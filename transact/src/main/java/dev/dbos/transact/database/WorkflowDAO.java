@@ -589,7 +589,7 @@ class WorkflowDAO {
             rs.getString("queue_partition_key"),
             rs.getString("forked_from"),
             rs.getString("parent_workflow_id"),
-            rs.getString("serialization"));
+            serialization);
     return info;
   }
 
