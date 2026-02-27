@@ -37,7 +37,6 @@ public class PlPgSqlClientTest {
   private static final String dbUser = "postgres";
   private static final String dbPassword = System.getenv("PGPASSWORD");
 
-  @SuppressWarnings("unused")
   private ClientService service;
 
   private HikariDataSource dataSource;
@@ -71,25 +70,6 @@ public class PlPgSqlClientTest {
   }
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
-
-  String sendHelper(String destinationId, Object message, String topic, String idempotencyKey) throws Exception {
-    var jsonMessage = MAPPER.writeValueAsString(message);
-
-    String sql =
-        "SELECT dbos.send_message(?, ?::json, ?, ?)";
-    try (var conn = dataSource.getConnection();
-        var stmt = conn.prepareCall(sql)) {
-
-      stmt.setString(1, destinationId);
-      stmt.setString(2, jsonMessage);
-      stmt.setString(3, topic);
-      stmt.setString(4, idempotencyKey);
-
-      try (ResultSet rs = stmt.executeQuery()) {
-        return rs.next() ? rs.getString(1) : null;
-      }
-    }
-  }
 
   String enqueueHelper(EnqueueOptions options, Object[] args) throws Exception {
 
@@ -201,8 +181,24 @@ public class PlPgSqlClientTest {
     assertEquals("CANCELLED", handle2.getStatus().status());
   }
 
+  void sendHelper(String destinationId, Object message, String topic, String idempotencyKey)
+      throws Exception {
+    var jsonMessage = MAPPER.writeValueAsString(message);
+
+    String sql = "SELECT dbos.send_message(?, ?::json, ?, ?)";
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareCall(sql)) {
+
+      stmt.setString(1, destinationId);
+      stmt.setString(2, jsonMessage);
+      stmt.setString(3, topic);
+      stmt.setString(4, idempotencyKey);
+      stmt.execute();
+    }
+  }
+
   @Test
-  public void clientSend() throws Exception {
+  public void clientSendWithIdempotencyKey() throws Exception {
 
     var handle = DBOS.startWorkflow(() -> service.sendTest(42));
     var idempotencyKey = UUID.randomUUID().toString();
@@ -219,4 +215,40 @@ public class PlPgSqlClientTest {
     assertEquals("42-test.message", handle.getResult());
   }
 
+  @Test
+  public void clientSendNoIdempotencyKey() throws Exception {
+
+    var handle = DBOS.startWorkflow(() -> service.sendTest(42));
+
+    sendHelper(handle.workflowId(), "test.message", "test-topic", null);
+
+    assertEquals("42-test.message", handle.getResult());
+
+    var workflowRows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(2, workflowRows.size());
+
+    for (var workflowStatusRow : workflowRows) {
+      assertEquals("SUCCESS", workflowStatusRow.status());
+      assertEquals("SUCCESS", workflowStatusRow.status());
+    }
+  }
+
+  @Test
+  public void clientSendWithIdempotencyKeyTwice() throws Exception {
+
+    var handle = DBOS.startWorkflow(() -> service.sendTest(42));
+    var idempotencyKey = UUID.randomUUID().toString();
+
+    sendHelper(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
+    sendHelper(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
+
+    var workflowId = "%s-%s".formatted(handle.workflowId(), idempotencyKey);
+    var sendHandle = DBOS.retrieveWorkflow(workflowId);
+    assertNotNull(sendHandle);
+    var status = sendHandle.getStatus();
+    assertNotNull(status);
+    assertEquals("SUCCESS", status.status());
+
+    assertEquals("42-test.message", handle.getResult());
+  }
 }
