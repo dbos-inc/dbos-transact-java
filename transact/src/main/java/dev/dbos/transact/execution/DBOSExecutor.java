@@ -10,7 +10,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
-import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.Result;
@@ -27,7 +26,6 @@ import dev.dbos.transact.internal.Invocation;
 import dev.dbos.transact.json.ArgumentCoercion;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -745,11 +743,35 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  // helper function to send a message from outside of a workflow.
+  // Note, changes to send will make this method unnessary, but we're doing the work in stages
+  public static void send(
+      String destinationId,
+      Object message,
+      String topic,
+      String idempotencyKey,
+      SerializationStrategy serialization,
+      SystemDatabase systemDatabase) {
+    if (idempotencyKey == null) {
+      idempotencyKey = UUID.randomUUID().toString();
+    }
+    var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
+    var serializationFormat =
+        serialization != null ? serialization.formatName() : SerializationUtil.NATIVE;
+
+    var status =
+        WorkflowStatusInternal.builder(workflowId, WorkflowState.SUCCESS)
+            .name("temp_workflow-send-client")
+            .serialization(serializationFormat)
+            .build();
+    systemDatabase.initWorkflowStatus(status, null, false, false);
+    systemDatabase.send(status.workflowId(), 0, destinationId, message, topic, serializationFormat);
+  }
+
   public void send(
       String destinationId,
       Object message,
       String topic,
-      InternalWorkflowsService internalWorkflowsService,
       String idempotencyKey,
       SerializationStrategy serialization) {
 
@@ -757,28 +779,25 @@ public class DBOSExecutor implements AutoCloseable {
     if (ctx.isInStep()) {
       throw new IllegalStateException("DBOS.send() must not be called from within a step.");
     }
+
     if (!ctx.isInWorkflow()) {
-      var sendWfid =
-          idempotencyKey == null ? null : "%s-%s".formatted(destinationId, idempotencyKey);
-      try (var wfid = new WorkflowOptions(sendWfid).setContext()) {
-        internalWorkflowsService.sendWorkflow(destinationId, message, topic, serialization);
+      DBOSExecutor.send(
+          destinationId, message, topic, idempotencyKey, serialization, systemDatabase);
+    } else {
+      if (idempotencyKey != null) {
+        throw new IllegalArgumentException(
+            "Invalid call to `DBOS.send` with an idempotency key from within a workflow");
       }
-      return;
-    }
+      int stepFunctionId = ctx.getAndIncrementFunctionId();
 
-    if (idempotencyKey != null) {
-      throw new IllegalArgumentException(
-          "Invalid call to `DBOS.send` with an idempotency key from within a workflow");
+      systemDatabase.send(
+          ctx.getWorkflowId(),
+          stepFunctionId,
+          destinationId,
+          message,
+          topic,
+          serialization.formatName());
     }
-    int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-    systemDatabase.send(
-        ctx.getWorkflowId(),
-        stepFunctionId,
-        destinationId,
-        message,
-        topic,
-        serialization.formatName());
   }
 
   /**
