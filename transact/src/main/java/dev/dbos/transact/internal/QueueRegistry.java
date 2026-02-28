@@ -1,5 +1,6 @@
 package dev.dbos.transact.internal;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.workflow.Queue;
 
 import java.util.List;
@@ -10,10 +11,16 @@ import org.slf4j.LoggerFactory;
 
 public class QueueRegistry {
   private final ConcurrentHashMap<String, Queue> registry = new ConcurrentHashMap<>();
+  private final Queue internalQueue = new Queue(Constants.DBOS_INTERNAL_QUEUE);
 
   private static final Logger logger = LoggerFactory.getLogger(QueueRegistry.class);
 
   public void register(Queue queue) {
+    if (queue.name().equals(Constants.DBOS_INTERNAL_QUEUE)) {
+      throw new IllegalArgumentException(
+          String.format("%s is a reserved queue name", Constants.DBOS_INTERNAL_QUEUE));
+    }
+
     if (queue.concurrency() != null
         && queue.workerConcurrency() != null
         && queue.workerConcurrency() > queue.concurrency()) {
@@ -32,6 +39,9 @@ public class QueueRegistry {
   }
 
   public Queue get(String queueName) {
+    if (queueName.equals(Constants.DBOS_INTERNAL_QUEUE)) {
+      return internalQueue;
+    }
     return registry.get(queueName);
   }
 

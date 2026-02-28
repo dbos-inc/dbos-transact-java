@@ -595,24 +595,8 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String topic,
       @Nullable String idempotencyKey,
       @Nullable SendOptions options) {
-    if (idempotencyKey == null) {
-      idempotencyKey = UUID.randomUUID().toString();
-    }
-    var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
-
-    String serializationFormat =
-        (options != null && options.serialization() != null)
-            ? options.serialization().formatName()
-            : null;
-
-    var status =
-        WorkflowStatusInternal.builder(workflowId, WorkflowState.SUCCESS)
-            .name("temp_workflow-send-client")
-            .serialization(
-                serializationFormat != null ? serializationFormat : SerializationUtil.NATIVE)
-            .build();
-    systemDatabase.initWorkflowStatus(status, null, false, false);
-    systemDatabase.send(status.workflowId(), 0, destinationId, message, topic, serializationFormat);
+    var serStrategy = options != null ? options.serialization() : null;
+    DBOSExecutor.send(destinationId, message, topic, idempotencyKey, serStrategy, systemDatabase);
   }
 
   /**

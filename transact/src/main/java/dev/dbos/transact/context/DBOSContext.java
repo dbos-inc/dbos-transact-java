@@ -163,4 +163,9 @@ public class DBOSContext {
     var ctx = DBOSContextHolder.get();
     return ctx == null ? false : ctx.isInStep();
   }
+
+  public static SerializationStrategy serializationStrategy() {
+    var ctx = DBOSContextHolder.get();
+    return ctx != null ? ctx.getSerialization() : null;
+  }
 }
