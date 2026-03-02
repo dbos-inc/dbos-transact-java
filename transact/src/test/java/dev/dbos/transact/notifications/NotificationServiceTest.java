@@ -37,13 +37,22 @@ interface NotService {
   String concWorkflow(String topic);
 
   String disallowedRecvInStep();
+
+  String recvOneMessage();
+
+  String recvTwoMessages();
+
+  void sendFromWF(String destination, String msg, String idempotencyKey);
+
+  void sendFromStep(String destination, String msg, String idempotencyKey);
 }
 
 class NotServiceImpl implements NotService {
 
   final CountDownLatch recvReadyLatch = new CountDownLatch(1);
+  final CountDownLatch recvTwoLatch = new CountDownLatch(1);
 
-  @Workflow(name = "sendWorkflow")
+  @Workflow
   public void sendWorkflow(String target, String topic, String msg) {
     try {
       // Wait for recv to signal that it's ready
@@ -57,14 +66,14 @@ class NotServiceImpl implements NotService {
     // DBOS.send(target, msg, topic);
   }
 
-  @Workflow(name = "recvWorkflow")
+  @Workflow
   public String recvWorkflow(String topic, Duration timeout) {
     recvReadyLatch.countDown();
     String msg = (String) DBOS.recv(topic, timeout);
     return msg;
   }
 
-  @Workflow(name = "recvMultiple")
+  @Workflow
   public String recvMultiple(String topic) {
     recvReadyLatch.countDown();
     String msg1 = (String) DBOS.recv(topic, Duration.ofSeconds(5));
@@ -73,7 +82,7 @@ class NotServiceImpl implements NotService {
     return msg1 + msg2 + msg3;
   }
 
-  @Workflow(name = "recvCount")
+  @Workflow
   public int recvCount(String topic) {
     try {
       recvReadyLatch.await();
@@ -89,17 +98,41 @@ class NotServiceImpl implements NotService {
     return rc;
   }
 
-  @Workflow(name = "concWorkflow")
+  @Workflow
   public String concWorkflow(String topic) {
     recvReadyLatch.countDown();
     String message = (String) DBOS.recv(topic, Duration.ofSeconds(5));
     return message;
   }
 
-  @Workflow(name = "disallowedRecv")
+  @Workflow
   public String disallowedRecvInStep() {
     DBOS.runStep(() -> DBOS.recv("a", Duration.ofSeconds(0)), "recv");
     return "Done";
+  }
+
+  @Workflow
+  public String recvTwoMessages() {
+    String msg1 = (String) DBOS.recv(null, Duration.ofSeconds(10));
+    recvTwoLatch.countDown();
+    String msg2 = (String) DBOS.recv(null, Duration.ofSeconds(2));
+    return "%s-%s".formatted(msg1, msg2);
+  }
+
+  @Workflow
+  public String recvOneMessage() {
+    String msg1 = (String) DBOS.recv(null, Duration.ofSeconds(10));
+    return msg1;
+  }
+
+  @Workflow
+  public void sendFromWF(String destination, String msg, String idempotencyKey) {
+    DBOS.send(destination, msg, null, idempotencyKey);
+  }
+
+  @Workflow
+  public void sendFromStep(String destination, String msg, String idempotencyKey) {
+    DBOS.runStep(() -> DBOS.send(destination, msg, null, idempotencyKey), "send");
   }
 }
 
@@ -360,7 +393,7 @@ class NotificationServiceTest {
   }
 
   @Test
-  public void recv_sleep() throws Exception {
+  public void recvSleep() throws Exception {
 
     NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
     DBOS.launch();
@@ -421,5 +454,94 @@ class NotificationServiceTest {
 
     List<WorkflowStatus> wfs = DBOS.listWorkflows(null);
     assertEquals(1, wfs.size());
+  }
+
+  @Test
+  public void sendSameIdempotencyKeyTest() throws Exception {
+    // Sending with the same idempotency key twice delivers only one message.
+
+    var impl = new NotServiceImpl();
+    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
+    DBOS.launch();
+
+    var handle = DBOS.startWorkflow(() -> notService.recvTwoMessages());
+
+    String idempotencyKey = UUID.randomUUID().toString();
+
+    DBOS.send(handle.workflowId(), "hello", null, idempotencyKey);
+    impl.recvTwoLatch.await();
+    // reusing tghe same idempotency key should not result in a duplicate message
+    DBOS.send(handle.workflowId(), "hello again", null, idempotencyKey);
+
+    // The second recv times out (returns null), proving only one message was delivered.
+    assertEquals("hello-null", handle.getResult());
+  }
+
+  @Test
+  public void sendDifferentIdempotencyKeyTest() throws Exception {
+    // Different idempotency keys deliver separate messages.
+
+    var impl = new NotServiceImpl();
+    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
+    DBOS.launch();
+
+    var handle = DBOS.startWorkflow(() -> notService.recvTwoMessages());
+
+    DBOS.send(handle.workflowId(), "a", null, UUID.randomUUID().toString());
+    impl.recvTwoLatch.await();
+    DBOS.send(handle.workflowId(), "b", null, UUID.randomUUID().toString());
+
+    assertEquals("a-b", handle.getResult());
+  }
+
+  @Test
+  public void sendSameIdempotencyKeyFromWorkflowTest() throws Exception {
+    // Send from a workflow with same idempotency key twice delivers only one message.
+
+    var impl = new NotServiceImpl();
+    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
+    DBOS.launch();
+
+    var handle = DBOS.startWorkflow(() -> notService.recvTwoMessages());
+
+    String idempotencyKey = UUID.randomUUID().toString();
+    notService.sendFromWF(handle.workflowId(), "hello", idempotencyKey);
+    impl.recvTwoLatch.await();
+    notService.sendFromWF(handle.workflowId(), "hello again", idempotencyKey);
+
+    // The second recv times out (returns null), proving only one message was delivered.
+    assertEquals("hello-null", handle.getResult());
+  }
+
+  @Test
+  public void sendFromStep() throws Exception {
+    // Send from a step (without idempotency key).
+
+    var impl = new NotServiceImpl();
+    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
+    DBOS.launch();
+
+    var handle = DBOS.startWorkflow(() -> notService.recvOneMessage());
+    notService.sendFromStep(handle.workflowId(), "hello", null);
+
+    assertEquals("hello", handle.getResult());
+  }
+
+  @Test
+  public void sendFromStepWithIdempotencyKey() throws Exception {
+    // Send from a step with same idempotency key twice delivers only one message.
+
+    var impl = new NotServiceImpl();
+    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
+    DBOS.launch();
+
+    var handle = DBOS.startWorkflow(() -> notService.recvTwoMessages());
+
+    String idempotencyKey = UUID.randomUUID().toString();
+    notService.sendFromStep(handle.workflowId(), "hello", idempotencyKey);
+    impl.recvTwoLatch.await();
+    notService.sendFromStep(handle.workflowId(), "hello again", idempotencyKey);
+
+    assertEquals("hello-null", handle.getResult());
   }
 }
