@@ -44,19 +44,20 @@ class NotificationsDAO {
   }
 
   void send(
-      String workflowUuid,
-      int functionId,
-      String destinationUuid,
+      String workflowId,
+      int stepId,
+      String destinationId,
       Object message,
       String topic,
-      String messageUuid,
+      String messageId,
       String serialization)
       throws SQLException {
 
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.send";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
-    String finalMessageUuid = (messageUuid != null) ? messageUuid : UUID.randomUUID().toString();
+    String finalMessageId = (messageId != null) ? messageId : UUID.randomUUID().toString();
+    var serializedMsg = SerializationUtil.serializeValue(message, serialization, this.serializer);
 
     try (Connection conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
@@ -64,28 +65,23 @@ class NotificationsDAO {
       try {
         // Check if operation was already executed
         StepResult recordedOutput =
-            StepsDAO.checkStepExecutionTxn(
-                workflowUuid, functionId, functionName, conn, this.schema);
+            StepsDAO.checkStepExecutionTxn(workflowId, stepId, functionName, conn, this.schema);
 
         if (recordedOutput != null) {
           logger.debug(
               "Replaying send, id: {}, destination_uuid: {}, topic: {}",
-              functionId,
-              destinationUuid,
+              stepId,
+              destinationId,
               finalTopic);
           conn.commit();
           return;
         } else {
           logger.debug(
               "Running send, id: {}, destination_uuid: {}, topic: {}",
-              functionId,
-              destinationUuid,
+              stepId,
+              destinationId,
               finalTopic);
         }
-
-        // Serialize the message using the specified format
-        SerializationUtil.SerializedResult serializedMsg =
-            SerializationUtil.serializeValue(message, serialization, this.serializer);
 
         // Insert notification with serialization format
         final String sql =
@@ -98,22 +94,22 @@ class NotificationsDAO {
                 .formatted(this.schema);
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-          stmt.setString(1, destinationUuid);
+          stmt.setString(1, destinationId);
           stmt.setString(2, finalTopic);
           stmt.setString(3, serializedMsg.serializedValue());
           stmt.setString(4, serializedMsg.serialization());
-          stmt.setString(5, finalMessageUuid);
+          stmt.setString(5, finalMessageId);
           stmt.executeUpdate();
         } catch (SQLException e) {
           // Foreign key violation
           if ("23503".equals(e.getSQLState())) {
-            throw new DBOSNonExistentWorkflowException(destinationUuid);
+            throw new DBOSNonExistentWorkflowException(destinationId);
           }
           throw e;
         }
 
         // Record operation result
-        var output = new StepResult(workflowUuid, functionId, functionName, null, null, null, null);
+        var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
         StepsDAO.recordStepResultTxn(
             output, startTime, System.currentTimeMillis(), conn, this.schema);
 
@@ -131,14 +127,10 @@ class NotificationsDAO {
   }
 
   void sendDirect(
-      String destinationUuid,
-      Object message,
-      String topic,
-      String messageUuid,
-      String serialization)
+      String destinationId, Object message, String topic, String messageId, String serialization)
       throws SQLException {
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
-    String finalMessageUuid = (messageUuid != null) ? messageUuid : UUID.randomUUID().toString();
+    String finalMessageId = (messageId != null) ? messageId : UUID.randomUUID().toString();
     var serializedMsg = SerializationUtil.serializeValue(message, serialization, this.serializer);
 
     final String sql =
@@ -152,23 +144,22 @@ class NotificationsDAO {
 
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, destinationUuid);
+      stmt.setString(1, destinationId);
       stmt.setString(2, finalTopic);
       stmt.setString(3, serializedMsg.serializedValue());
-      stmt.setString(4, finalMessageUuid);
+      stmt.setString(4, finalMessageId);
       stmt.setString(5, serializedMsg.serialization());
       stmt.executeUpdate();
     } catch (SQLException e) {
       // Foreign key violation
       if ("23503".equals(e.getSQLState())) {
-        throw new DBOSNonExistentWorkflowException(destinationUuid);
+        throw new DBOSNonExistentWorkflowException(destinationId);
       }
       throw e;
     }
   }
 
-  Object recv(
-      String workflowUuid, int functionId, int timeoutFunctionId, String topic, Duration timeout)
+  Object recv(String workflowId, int stepId, int timeoutFunctionId, String topic, Duration timeout)
       throws SQLException {
 
     var startTime = System.currentTimeMillis();
@@ -177,14 +168,13 @@ class NotificationsDAO {
 
     // First, check for previous executions
     StepResult recordedOutput = null;
-
     try (Connection c = dataSource.getConnection()) {
       recordedOutput =
-          StepsDAO.checkStepExecutionTxn(workflowUuid, functionId, functionName, c, this.schema);
+          StepsDAO.checkStepExecutionTxn(workflowId, stepId, functionName, c, this.schema);
     }
 
     if (recordedOutput != null) {
-      logger.debug("Replaying recv, id: {}, topic: {}", functionId, finalTopic);
+      logger.debug("Replaying recv, id: {}, topic: {}", stepId, finalTopic);
       if (recordedOutput.output() != null) {
         return SerializationUtil.deserializeValue(
             recordedOutput.output(), recordedOutput.serialization(), this.serializer);
@@ -192,13 +182,12 @@ class NotificationsDAO {
         throw new RuntimeException("No output recorded in the last recv");
       }
     } else {
-      logger.debug(
-          "Running recv, wfid {}, id: {}, topic: {}", workflowUuid, functionId, finalTopic);
+      logger.debug("Running recv, wfid {}, id: {}, topic: {}", workflowId, stepId, finalTopic);
     }
 
     // Insert a condition to the notifications map
-    String payload = workflowUuid + "::" + finalTopic;
-    NotificationService.LockConditionPair lockPair = new NotificationService.LockConditionPair();
+    String payload = workflowId + "::" + finalTopic;
+    var lockPair = new NotificationService.LockConditionPair();
 
     // Timeout / deadline for the notification
     double actualTimeout = timeout.toMillis();
@@ -210,7 +199,7 @@ class NotificationsDAO {
       boolean success = notificationService.registerNotificationCondition(payload, lockPair);
       if (!success) {
         // if this happens, the workflow is executing concurrently
-        throw new DBOSWorkflowExecutionConflictException(workflowUuid);
+        throw new DBOSWorkflowExecutionConflictException(workflowId);
       }
 
       while (true) {
@@ -220,12 +209,13 @@ class NotificationsDAO {
         try (Connection conn = dataSource.getConnection()) {
           final String sql =
               """
-                SELECT topic FROM "%s".notifications WHERE destination_uuid = ? AND topic = ? AND consumed = FALSE
+              SELECT topic FROM "%s".notifications
+              WHERE destination_uuid = ? AND topic = ? AND consumed = FALSE
               """
                   .formatted(this.schema);
 
           try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, workflowUuid);
+            stmt.setString(1, workflowId);
             stmt.setString(2, finalTopic);
             try (ResultSet rs = stmt.executeQuery()) {
               hasExistingNotification = rs.next();
@@ -243,7 +233,7 @@ class NotificationsDAO {
           actualTimeout =
               StepsDAO.durableSleepDuration(
                       dataSource,
-                      workflowUuid,
+                      workflowId,
                       timeoutFunctionId,
                       timeout,
                       this.schema,
@@ -267,69 +257,61 @@ class NotificationsDAO {
       notificationService.unregisterNotificationCondition(payload);
     }
 
-    // Transactionally consume and return the message if it's in the database
+    // nsactionally consume and return the oldest unconsumed message, or null if none.
     try (Connection conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
 
       try {
         // Find and mark consumed the oldest entry for this workflow+topic
-        // Note, JDBC doesn't support positional parameters, so we have to set the same parameters multiple times
         final String sql =
             """
-              UPDATE "%1$s".notifications
-              SET consumed = true
-              WHERE destination_uuid = ?
-                AND topic = ?
-                AND consumed = false
-                AND message_uuid = (
-                  SELECT message_uuid
-                  FROM "%1$s".notifications
-                  WHERE destination_uuid = ?
-                    AND topic = ?
-                    AND consumed = false
-                  ORDER BY created_at_epoch_ms ASC
-                  LIMIT 1
-                )
-              RETURNING notifications.message, notifications.serialization`
+            UPDATE "%1$s".notifications
+            SET consumed = TRUE
+            WHERE destination_uuid = ?
+              AND topic = ?
+              AND consumed = FALSE
+              AND message_uuid = (
+                SELECT message_uuid FROM "%1$s".notifications
+                WHERE destination_uuid = ?
+                  AND topic = ?
+                  AND consumed = FALSE
+                ORDER BY created_at_epoch_ms ASC
+                LIMIT 1
+              )
+            RETURNING message, serialization`
             """
                 .formatted(this.schema);
 
-        Object recvdMessage = null;
+        String serializedMessage = null;
+        String serialization = null;
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-          stmt.setString(1, workflowUuid);
+          // Note, JDBC doesn't support positional parameters, so we have to set the same parameters
+          // multiple times
+          stmt.setString(1, workflowId);
           stmt.setString(2, finalTopic);
-          stmt.setString(3, workflowUuid);
+          stmt.setString(3, workflowId);
           stmt.setString(4, finalTopic);
 
           try (ResultSet rs = stmt.executeQuery()) {
             if (rs.next()) {
-              String serializedMessage = rs.getString("message");
-              String serialization = rs.getString("serialization");
-              recvdMessage =
-                  SerializationUtil.deserializeValue(
-                      serializedMessage, serialization, this.serializer);
+              serializedMessage = rs.getString("message");
+              serialization = rs.getString("serialization");
             }
           }
         }
 
+        var recvdMessage =
+            SerializationUtil.deserializeValue(serializedMessage, serialization, this.serializer);
+
         // Record operation result
-        Object toSave = recvdMessage;
-        var toSaveSer = SerializationUtil.serializeValue(toSave, null, this.serializer);
         StepResult output =
-            new StepResult(
-                    workflowUuid,
-                    functionId,
-                    functionName,
-                    null,
-                    null,
-                    null,
-                    toSaveSer.serialization())
-                .withOutput(toSaveSer.serializedValue());
+            new StepResult(workflowId, stepId, functionName, null, null, null, serialization)
+                .withOutput(serializedMessage);
         StepsDAO.recordStepResultTxn(
             output, startTime, System.currentTimeMillis(), conn, this.schema);
 
         conn.commit();
-        return toSave;
+        return recvdMessage;
 
       } catch (Exception e) {
         conn.rollback();
