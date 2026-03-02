@@ -568,7 +568,7 @@ public class DBOS {
   public static void send(
       @NonNull String destinationId,
       @NonNull Object message,
-      @NonNull String topic,
+      @Nullable String topic,
       @Nullable String idempotencyKey) {
     send(destinationId, message, topic, idempotencyKey, null);
   }
@@ -600,7 +600,7 @@ public class DBOS {
    * @param topic topic to which the message is send
    */
   public static void send(
-      @NonNull String destinationId, @NonNull Object message, @NonNull String topic) {
+      @NonNull String destinationId, @NonNull Object message, @Nullable String topic) {
     DBOS.send(destinationId, message, topic, null, null);
   }
 

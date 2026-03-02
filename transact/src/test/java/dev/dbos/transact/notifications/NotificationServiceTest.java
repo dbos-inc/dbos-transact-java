@@ -470,7 +470,7 @@ class NotificationServiceTest {
 
     DBOS.send(handle.workflowId(), "hello", null, idempotencyKey);
     impl.recvTwoLatch.await();
-    // reusing tghe same idempotency key should not result in a duplicate message
+    // reusing the same idempotency key should not result in a duplicate message
     DBOS.send(handle.workflowId(), "hello again", null, idempotencyKey);
 
     // The second recv times out (returns null), proving only one message was delivered.

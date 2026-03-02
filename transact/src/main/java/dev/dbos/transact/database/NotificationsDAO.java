@@ -56,8 +56,6 @@ class NotificationsDAO {
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.send";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
-    String finalMessageId = (messageId != null) ? messageId : UUID.randomUUID().toString();
-    var serializedMsg = SerializationUtil.serializeValue(message, serialization, this.serializer);
 
     try (Connection conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
@@ -82,6 +80,10 @@ class NotificationsDAO {
               destinationId,
               finalTopic);
         }
+
+        var finalMessageId = (messageId != null) ? messageId : UUID.randomUUID().toString();
+        var serializedMsg =
+            SerializationUtil.serializeValue(message, serialization, this.serializer);
 
         // Insert notification with serialization format
         final String sql =
@@ -285,8 +287,8 @@ class NotificationsDAO {
         String serializedMessage = null;
         String serialization = null;
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-          // Note, JDBC doesn't support positional parameters, so we have to set the same parameters
-          // multiple times
+          // JDBC uses positional parameters (?), and each placeholder must be bound explicitly,
+          // so we need to set the same values again for the nested SELECT
           stmt.setString(1, workflowId);
           stmt.setString(2, finalTopic);
           stmt.setString(3, workflowId);
@@ -305,8 +307,8 @@ class NotificationsDAO {
 
         // Record operation result
         StepResult output =
-            new StepResult(workflowId, stepId, functionName, null, null, null, serialization)
-                .withOutput(serializedMessage);
+            new StepResult(
+                workflowId, stepId, functionName, serializedMessage, null, null, serialization);
         StepsDAO.recordStepResultTxn(
             output, startTime, System.currentTimeMillis(), conn, this.schema);
 
