@@ -257,7 +257,7 @@ class NotificationsDAO {
       notificationService.unregisterNotificationCondition(payload);
     }
 
-    // nsactionally consume and return the oldest unconsumed message, or null if none.
+    // Transactionally consume and return the oldest unconsumed message, or null if none.
     try (Connection conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
 
