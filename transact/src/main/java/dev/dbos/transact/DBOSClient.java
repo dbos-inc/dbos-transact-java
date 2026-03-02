@@ -596,13 +596,12 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String idempotencyKey,
       @Nullable SendOptions options) {
 
-    var messageId = (idempotencyKey != null) ? idempotencyKey : UUID.randomUUID().toString();
     String serializationFormat =
         (options != null && options.serialization() != null)
             ? options.serialization().formatName()
             : null;
 
-    systemDatabase.sendDirect(destinationId, message, topic, messageId, serializationFormat);
+    systemDatabase.sendDirect(destinationId, message, topic, idempotencyKey, serializationFormat);
   }
 
   /**

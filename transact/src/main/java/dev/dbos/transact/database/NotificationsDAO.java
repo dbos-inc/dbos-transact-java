@@ -278,7 +278,7 @@ class NotificationsDAO {
                 ORDER BY created_at_epoch_ms ASC
                 LIMIT 1
               )
-            RETURNING message, serialization`
+            RETURNING message, serialization
             """
                 .formatted(this.schema);
 
