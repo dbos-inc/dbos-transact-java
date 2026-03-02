@@ -9,6 +9,10 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Workflow;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,6 +22,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+@interface TestLifecycleAnnotation {
+  int count() default 4;
+}
 
 interface LifecycleTestWorkflows {
   public int runWf1(int nClasses, int nWfs);
@@ -140,7 +150,7 @@ public class LifecycleTest {
   void checkThatItAllHappened() throws Exception {
     // Pretend this is an external event
     var total = svc.runThemAll();
-    assertEquals(3, impl.nInstances); // One of these is internal... for better or worse
+    assertEquals(2, impl.nInstances);
     assertEquals(4, impl.nWfs);
     assertEquals(14, svc.annotationCount);
     assertEquals(30, total);
@@ -154,7 +164,7 @@ public class LifecycleTest {
   void deactivateLifecycleListeners() throws Exception {
     // Pretend this is an external event
     var total = svc.runThemAll();
-    assertEquals(3, impl.nInstances); // One of these is internal... for better or worse
+    assertEquals(2, impl.nInstances);
     assertEquals(4, impl.nWfs);
     assertEquals(14, svc.annotationCount);
     assertEquals(30, total);
