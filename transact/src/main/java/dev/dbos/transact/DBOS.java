@@ -14,8 +14,6 @@ import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.migrations.MigrationManager;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsServiceImpl;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -91,8 +89,6 @@ public class DBOS {
     private AlertHandler alertHandler;
 
     private DBOSConfig config;
-
-    private InternalWorkflowsService internalWorkflowsService;
 
     private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
 
@@ -186,8 +182,6 @@ public class DBOS {
     }
 
     private void registerInternals() {
-      internalWorkflowsService =
-          registerWorkflows(InternalWorkflowsService.class, new InternalWorkflowsServiceImpl());
       this.registerQueue(new Queue(Constants.DBOS_INTERNAL_QUEUE));
     }
 
@@ -591,18 +585,11 @@ public class DBOS {
   public static void send(
       @NonNull String destinationId,
       @NonNull Object message,
-      @NonNull String topic,
+      @Nullable String topic,
       @Nullable String idempotencyKey,
       @Nullable SerializationStrategy serialization) {
     if (serialization == null) serialization = SerializationStrategy.DEFAULT;
-    executor("send")
-        .send(
-            destinationId,
-            message,
-            topic,
-            instance().internalWorkflowsService,
-            idempotencyKey,
-            serialization);
+    executor("send").send(destinationId, message, topic, idempotencyKey, serialization);
   }
 
   /**

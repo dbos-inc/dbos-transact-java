@@ -10,7 +10,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.context.WorkflowInfo;
-import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.Result;
@@ -27,7 +26,6 @@ import dev.dbos.transact.internal.Invocation;
 import dev.dbos.transact.json.ArgumentCoercion;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.tempworkflows.InternalWorkflowsService;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -749,37 +747,24 @@ public class DBOSExecutor implements AutoCloseable {
       String destinationId,
       Object message,
       String topic,
-      InternalWorkflowsService internalWorkflowsService,
       String idempotencyKey,
       SerializationStrategy serialization) {
 
     DBOSContext ctx = DBOSContextHolder.get();
-    if (ctx.isInStep()) {
-      throw new IllegalStateException("DBOS.send() must not be called from within a step.");
+    if (ctx.isInWorkflow() && !ctx.isInStep()) {
+      int stepId = ctx.getAndIncrementFunctionId();
+      systemDatabase.send(
+          ctx.getWorkflowId(),
+          stepId,
+          destinationId,
+          message,
+          topic,
+          idempotencyKey,
+          serialization.formatName());
+    } else {
+      systemDatabase.sendDirect(
+          destinationId, message, topic, idempotencyKey, serialization.formatName());
     }
-    if (!ctx.isInWorkflow()) {
-      var sendWfid =
-          idempotencyKey == null ? null : "%s-%s".formatted(destinationId, idempotencyKey);
-      try (var wfid = new WorkflowOptions(sendWfid).setContext()) {
-        internalWorkflowsService.sendWorkflow(destinationId, message, topic, serialization);
-      }
-      return;
-    }
-
-    if (idempotencyKey != null) {
-      throw new IllegalArgumentException(
-          "Invalid call to `DBOS.send` with an idempotency key from within a workflow");
-    }
-    int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-    systemDatabase.send(
-        ctx.getWorkflowId(),
-        stepFunctionId,
-        destinationId,
-        message,
-        topic,
-        idempotencyKey,
-        serialization.formatName());
   }
 
   /**
