@@ -27,6 +27,27 @@ import org.junit.jupiter.params.provider.ValueSource;
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class MigrationManagerTest {
 
+  // Expected tables after migrations
+  private static final String[] EXPECTED_TABLES = {
+    "application_versions",
+    "event_dispatch_kv",
+    "notifications",
+    "operation_outputs",
+    "streams",
+    "workflow_events_history",
+    "workflow_events",
+    "workflow_schedules",
+    "workflow_status"
+  };
+
+  // Expected functions after migrations
+  private static final String[] EXPECTED_FUNCTIONS = {
+    "notifications_function",
+    "workflow_events_function",
+    "enqueue_workflow",
+    "send_message"
+  };
+
   private HikariDataSource dataSource;
   private DBOSConfig dbosConfig;
 
@@ -56,18 +77,13 @@ class MigrationManagerTest {
       DatabaseMetaData metaData = conn.getMetaData();
 
       // Verify all expected tables exist in the dbos schema
-      assertTableExists(metaData, "application_versions");
-      assertTableExists(metaData, "event_dispatch_kv");
-      assertTableExists(metaData, "notifications");
-      assertTableExists(metaData, "operation_outputs");
-      assertTableExists(metaData, "streams");
-      assertTableExists(metaData, "workflow_events_history");
-      assertTableExists(metaData, "workflow_events");
-      assertTableExists(metaData, "workflow_schedules");
-      assertTableExists(metaData, "workflow_status");
+      for (String table : EXPECTED_TABLES) {
+        assertTableExists(metaData, table);
+      }
 
-      assertFunctionExists(metaData, "notifications_function");
-      assertFunctionExists(metaData, "workflow_events_function");
+      for (String function : EXPECTED_FUNCTIONS) {
+        assertFunctionExists(metaData, function);
+      }
 
       var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
       var version = getVersion(conn);
@@ -135,19 +151,14 @@ class MigrationManagerTest {
     try (Connection conn = dataSource.getConnection()) {
       DatabaseMetaData metaData = conn.getMetaData();
 
-      // Verify all expected tables exist in the dbos schema
-      assertTableExists(metaData, "application_versions", schema);
-      assertTableExists(metaData, "event_dispatch_kv", schema);
-      assertTableExists(metaData, "notifications", schema);
-      assertTableExists(metaData, "operation_outputs", schema);
-      assertTableExists(metaData, "streams", schema);
-      assertTableExists(metaData, "workflow_events_history", schema);
-      assertTableExists(metaData, "workflow_events", schema);
-      assertTableExists(metaData, "workflow_schedules", schema);
-      assertTableExists(metaData, "workflow_status", schema);
+      // Verify all expected tables exist in the custom schema
+      for (String table : EXPECTED_TABLES) {
+        assertTableExists(metaData, table, schema);
+      }
 
-      assertFunctionExists(metaData, "notifications_function", schema);
-      assertFunctionExists(metaData, "workflow_events_function", schema);
+      for (String function : EXPECTED_FUNCTIONS) {
+        assertFunctionExists(metaData, function, schema);
+      }
 
       var migrations = new ArrayList<>(MigrationManager.getMigrations(schema));
       var version = getVersion(conn, schema);
