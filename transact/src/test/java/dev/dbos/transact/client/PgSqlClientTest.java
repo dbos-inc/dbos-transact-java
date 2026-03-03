@@ -1,5 +1,6 @@
 package dev.dbos.transact.client;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -204,32 +205,28 @@ public class PgSqlClientTest {
     var idempotencyKey = UUID.randomUUID().toString();
 
     sendHelper(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
-
-    var workflowId = "%s-%s".formatted(handle.workflowId(), idempotencyKey);
-    var sendHandle = DBOS.retrieveWorkflow(workflowId);
-    assertNotNull(sendHandle);
-    var status = sendHandle.getStatus();
-    assertNotNull(status);
-    assertEquals("SUCCESS", status.status());
-
     assertEquals("42-test.message", handle.getResult());
+
+    var notifications = DBUtils.getNotifications(dataSource, handle.workflowId());
+    assertEquals(1, notifications.size());
+    var notification = notifications.get(0);
+    assertEquals(idempotencyKey, notification.messageUuid());
+    assertTrue(notification.consumed());
   }
 
   @Test
   public void clientSendNoIdempotencyKey() throws Exception {
 
     var handle = DBOS.startWorkflow(() -> service.sendTest(42));
-
     sendHelper(handle.workflowId(), "test.message", "test-topic", null);
-
     assertEquals("42-test.message", handle.getResult());
 
-    var workflowRows = DBUtils.getWorkflowRows(dataSource);
-    assertEquals(2, workflowRows.size());
-
-    for (var workflowStatusRow : workflowRows) {
-      assertEquals("SUCCESS", workflowStatusRow.status());
-    }
+    var notifications = DBUtils.getNotifications(dataSource, handle.workflowId());
+    assertEquals(1, notifications.size());
+    var notification = notifications.get(0);
+    assertNotNull(notification.messageUuid());
+    assertDoesNotThrow(() -> UUID.fromString(notification.messageUuid()));
+    assertTrue(notification.consumed());
   }
 
   @Test
@@ -241,13 +238,12 @@ public class PgSqlClientTest {
     sendHelper(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
     sendHelper(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
 
-    var workflowId = "%s-%s".formatted(handle.workflowId(), idempotencyKey);
-    var sendHandle = DBOS.retrieveWorkflow(workflowId);
-    assertNotNull(sendHandle);
-    var status = sendHandle.getStatus();
-    assertNotNull(status);
-    assertEquals("SUCCESS", status.status());
-
     assertEquals("42-test.message", handle.getResult());
+
+    var notifications = DBUtils.getNotifications(dataSource, handle.workflowId());
+    assertEquals(1, notifications.size());
+    var notification = notifications.get(0);
+    assertEquals(idempotencyKey, notification.messageUuid());
+    assertTrue(notification.consumed());
   }
 }
