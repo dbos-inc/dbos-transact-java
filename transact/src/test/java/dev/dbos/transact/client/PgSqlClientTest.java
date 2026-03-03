@@ -7,18 +7,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSClient;
-import dev.dbos.transact.DBOSClient.EnqueueOptions;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.execution.ThrowingRunnable;
+import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -72,55 +71,36 @@ public class PgSqlClientTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  String enqueueHelper(EnqueueOptions options, Object[] args) throws Exception {
-
-    var jsonArgs = new String[args.length];
-    for (int i = 0; i < args.length; i++) {
-      jsonArgs[i] = MAPPER.writeValueAsString(args[i]);
-    }
-
-    String sql =
-        "SELECT dbos.enqueue_workflow(?::text, ?::text, ?::json[], ?::json, ?::text, ?::text, ?::text, ?::text, ?::bigint, ?::bigint, ?::text, ?::integer, ?::text, ?::text)";
-
-    try (var conn = dataSource.getConnection();
-        var stmt = conn.prepareCall(sql)) {
-
-      var argsArray = conn.createArrayOf("json", jsonArgs);
-      var timeout = options.timeout() != null ? options.timeout().toMillis() : null;
-      var deadline = options.deadline() != null ? options.deadline().toEpochMilli() : null;
-
-      stmt.setString(1, options.workflowName());
-      stmt.setString(2, options.queueName());
-      stmt.setObject(3, argsArray);
-      stmt.setObject(4, "{}"); // named_args
-      stmt.setString(5, options.className());
-      stmt.setString(6, options.instanceName());
-
-      stmt.setString(7, options.workflowId());
-      stmt.setString(8, options.appVersion());
-      stmt.setObject(9, timeout);
-      stmt.setObject(10, deadline);
-      stmt.setString(11, options.deduplicationId());
-      stmt.setObject(12, options.priority());
-      stmt.setString(13, options.queuePartitionKey());
-      stmt.setNull(14, Types.VARCHAR);
-
-      try (ResultSet rs = stmt.executeQuery()) {
-        return rs.next() ? rs.getString(1) : null;
-      } finally {
-        argsArray.free();
-      }
-    }
-  }
-
   @Test
   public void clientEnqueue() throws Exception {
 
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
-    var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "enqueueTest", "testQueue");
-    var workflowId = enqueueHelper(options, new Object[] {"42", "spam"});
+    ThrowingSupplier<String, Exception> enqueueSupplier =
+        () -> {
+          var sql = "SELECT dbos.enqueue_workflow(?, ?, ?, class_name => ?)";
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareCall(sql)) {
+            stmt.setString(1, "enqueueTest");
+            stmt.setString(2, "testQueue");
+            var argsArray =
+                conn.createArrayOf(
+                    "json",
+                    new String[] {
+                      MAPPER.writeValueAsString("42"), MAPPER.writeValueAsString("spam")
+                    });
+            stmt.setObject(3, argsArray);
+            stmt.setString(4, "ClientServiceImpl");
+            try (ResultSet rs = stmt.executeQuery()) {
+              return rs.next() ? rs.getString(1) : null;
+            } finally {
+              argsArray.free();
+            }
+          }
+        };
+
+    String workflowId = enqueueSupplier.execute();
     assertNotNull(workflowId);
 
     var rows = DBUtils.getWorkflowRows(dataSource);
@@ -146,21 +126,60 @@ public class PgSqlClientTest {
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
 
-    var options =
-        new DBOSClient.EnqueueOptions("ClientServiceImpl", "enqueueTest", "testQueue")
-            .withDeduplicationId("plugh!");
+    ThrowingSupplier<String, Exception> enqueueSupplier =
+        () -> {
+          var sql = "SELECT dbos.enqueue_workflow(?, ?, ?, class_name => ?, deduplication_id => ?)";
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareCall(sql)) {
+            stmt.setString(1, "enqueueTest");
+            stmt.setString(2, "testQueue");
+            var argsArray =
+                conn.createArrayOf(
+                    "json",
+                    new String[] {
+                      MAPPER.writeValueAsString("42"), MAPPER.writeValueAsString("spam")
+                    });
+            stmt.setObject(3, argsArray);
+            stmt.setString(4, "ClientServiceImpl");
+            stmt.setString(5, "plugh!");
+            try (ResultSet rs = stmt.executeQuery()) {
+              return rs.next() ? rs.getString(1) : null;
+            } finally {
+              argsArray.free();
+            }
+          }
+        };
 
-    var workflowId = enqueueHelper(options, new Object[] {"42", "spam"});
+    String workflowId = enqueueSupplier.execute();
+
     assertNotNull(workflowId);
-    assertThrows(PSQLException.class, () -> enqueueHelper(options, new Object[] {"17", "eggs"}));
+    assertThrows(PSQLException.class, () -> enqueueSupplier.execute());
   }
 
   @Test
-  public void clientEnqueueTimeouts() throws Exception {
+  public void clientEnqueueTimeout() throws Exception {
 
-    var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "sleep", "testQueue");
+    ThrowingSupplier<String, Exception> enqueueSupplier =
+        () -> {
+          var sql = "SELECT dbos.enqueue_workflow(?, ?, ?, class_name => ?, timeout_ms => ?)";
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareCall(sql)) {
+            stmt.setString(1, "sleep");
+            stmt.setString(2, "testQueue");
+            var argsArray =
+                conn.createArrayOf("json", new String[] {MAPPER.writeValueAsString(10000)});
+            stmt.setObject(3, argsArray);
+            stmt.setString(4, "ClientServiceImpl");
+            stmt.setLong(5, Duration.ofSeconds(1).toMillis());
+            try (ResultSet rs = stmt.executeQuery()) {
+              return rs.next() ? rs.getString(1) : null;
+            } finally {
+              argsArray.free();
+            }
+          }
+        };
 
-    var wfid1 = enqueueHelper(options.withTimeout(Duration.ofSeconds(1)), new Object[] {10000});
+    var wfid1 = enqueueSupplier.execute();
     var handle1 = DBOS.retrieveWorkflow(wfid1);
     assertThrows(
         DBOSAwaitedWorkflowCancelledException.class,
@@ -168,34 +187,40 @@ public class PgSqlClientTest {
           handle1.getResult();
         });
     assertEquals("CANCELLED", handle1.getStatus().status());
+  }
 
-    var wfid2 =
-        enqueueHelper(
-            options.withDeadline(Instant.ofEpochMilli(System.currentTimeMillis() + 1000)),
-            new Object[] {10000});
-    var handle2 = DBOS.retrieveWorkflow(wfid2);
+  @Test
+  public void clientEnqueueDeadline() throws Exception {
+
+    ThrowingSupplier<String, Exception> enqueueSupplier =
+        () -> {
+          var sql =
+              "SELECT dbos.enqueue_workflow(?, ?, ?, class_name => ?, deadline_epoch_ms => ?)";
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareCall(sql)) {
+            stmt.setString(1, "sleep");
+            stmt.setString(2, "testQueue");
+            var argsArray =
+                conn.createArrayOf("json", new String[] {MAPPER.writeValueAsString(10000)});
+            stmt.setObject(3, argsArray);
+            stmt.setString(4, "ClientServiceImpl");
+            stmt.setLong(5, Instant.ofEpochMilli(System.currentTimeMillis() + 1000).toEpochMilli());
+            try (ResultSet rs = stmt.executeQuery()) {
+              return rs.next() ? rs.getString(1) : null;
+            } finally {
+              argsArray.free();
+            }
+          }
+        };
+
+    var wfid1 = enqueueSupplier.execute();
+    var handle1 = DBOS.retrieveWorkflow(wfid1);
     assertThrows(
         DBOSAwaitedWorkflowCancelledException.class,
         () -> {
-          handle2.getResult();
+          handle1.getResult();
         });
-    assertEquals("CANCELLED", handle2.getStatus().status());
-  }
-
-  void sendHelper(String destinationId, Object message, String topic, String idempotencyKey)
-      throws Exception {
-    var jsonMessage = MAPPER.writeValueAsString(message);
-
-    String sql = "SELECT dbos.send_message(?, ?::json, ?, ?)";
-    try (var conn = dataSource.getConnection();
-        var stmt = conn.prepareCall(sql)) {
-
-      stmt.setString(1, destinationId);
-      stmt.setString(2, jsonMessage);
-      stmt.setString(3, topic);
-      stmt.setString(4, idempotencyKey);
-      stmt.execute();
-    }
+    assertEquals("CANCELLED", handle1.getStatus().status());
   }
 
   @Test
@@ -204,7 +229,20 @@ public class PgSqlClientTest {
     var handle = DBOS.startWorkflow(() -> service.sendTest(42));
     var idempotencyKey = UUID.randomUUID().toString();
 
-    sendHelper(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
+    ThrowingRunnable<Exception> sendAction =
+        () -> {
+          var sql = "SELECT dbos.send_message(?, ?::json, topic => ?, idempotency_key => ?)";
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareCall(sql)) {
+            stmt.setString(1, handle.workflowId());
+            stmt.setString(2, MAPPER.writeValueAsString("test.message"));
+            stmt.setString(3, "test-topic");
+            stmt.setString(4, idempotencyKey);
+            stmt.execute();
+          }
+        };
+
+    sendAction.execute();
     assertEquals("42-test.message", handle.getResult());
 
     var notifications = DBUtils.getNotifications(dataSource, handle.workflowId());
@@ -218,7 +256,20 @@ public class PgSqlClientTest {
   public void clientSendNoIdempotencyKey() throws Exception {
 
     var handle = DBOS.startWorkflow(() -> service.sendTest(42));
-    sendHelper(handle.workflowId(), "test.message", "test-topic", null);
+
+    ThrowingRunnable<Exception> sendAction =
+        () -> {
+          var sql = "SELECT dbos.send_message(?, ?::json, topic => ?)";
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareCall(sql)) {
+            stmt.setString(1, handle.workflowId());
+            stmt.setString(2, MAPPER.writeValueAsString("test.message"));
+            stmt.setString(3, "test-topic");
+            stmt.execute();
+          }
+        };
+
+    sendAction.execute();
     assertEquals("42-test.message", handle.getResult());
 
     var notifications = DBUtils.getNotifications(dataSource, handle.workflowId());
@@ -235,8 +286,21 @@ public class PgSqlClientTest {
     var handle = DBOS.startWorkflow(() -> service.sendTest(42));
     var idempotencyKey = UUID.randomUUID().toString();
 
-    sendHelper(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
-    sendHelper(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
+    ThrowingRunnable<Exception> sendAction =
+        () -> {
+          var sql = "SELECT dbos.send_message(?, ?::json, topic => ?, idempotency_key => ?)";
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareCall(sql)) {
+            stmt.setString(1, handle.workflowId());
+            stmt.setString(2, MAPPER.writeValueAsString("test.message"));
+            stmt.setString(3, "test-topic");
+            stmt.setString(4, idempotencyKey);
+            stmt.execute();
+          }
+        };
+
+    sendAction.execute();
+    sendAction.execute();
 
     assertEquals("42-test.message", handle.getResult());
 
@@ -251,10 +315,18 @@ public class PgSqlClientTest {
   public void invalidSend() throws Exception {
     var invalidWorkflowId = UUID.randomUUID().toString();
 
-    var ex =
-        assertThrows(
-            PSQLException.class, () -> sendHelper(invalidWorkflowId, "test.message", null, null));
+    ThrowingRunnable<Exception> sendAction =
+        () -> {
+          var sql = "SELECT dbos.send_message(?, ?::json)";
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareCall(sql)) {
+            stmt.setString(1, invalidWorkflowId);
+            stmt.setString(2, MAPPER.writeValueAsString("test.message"));
+            stmt.execute();
+          }
+        };
 
+    var ex = assertThrows(PSQLException.class, sendAction::execute);
     assertTrue(ex.getMessage().contains(invalidWorkflowId));
   }
 }
