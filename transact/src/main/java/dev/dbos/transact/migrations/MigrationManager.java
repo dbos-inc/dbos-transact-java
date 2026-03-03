@@ -470,8 +470,7 @@ public class MigrationManager {
           deadline_epoch_ms BIGINT DEFAULT NULL,
           deduplication_id TEXT DEFAULT NULL,
           priority INTEGER DEFAULT NULL,
-          queue_partition_key TEXT DEFAULT NULL,
-          parent_workflow_id TEXT DEFAULT NULL
+          queue_partition_key TEXT DEFAULT NULL
       ) RETURNS TEXT AS $$
       DECLARE
           v_workflow_id TEXT;
@@ -515,7 +514,7 @@ public class MigrationManager {
               application_version,
               created_at, updated_at, recovery_attempts,
               workflow_timeout_ms, workflow_deadline_epoch_ms,
-              parent_workflow_id, owner_xid, serialization
+              owner_xid, serialization
           ) VALUES (
               v_workflow_id, 'ENQUEUED', v_serialized_inputs,
               enqueue_workflow.workflow_name, enqueue_workflow.class_name, enqueue_workflow.config_name,
@@ -523,7 +522,7 @@ public class MigrationManager {
               enqueue_workflow.app_version,
               v_now, v_now, v_recovery_attempts,
               enqueue_workflow.timeout_ms, enqueue_workflow.deadline_epoch_ms,
-              enqueue_workflow.parent_workflow_id, v_owner_xid, 'portable_json'
+              v_owner_xid, 'portable_json'
           )
           ON CONFLICT (workflow_uuid)
           DO UPDATE SET
@@ -559,11 +558,11 @@ public class MigrationManager {
           destination_id TEXT,
           message JSON,
           topic TEXT DEFAULT NULL,
-          message_id TEXT DEFAULT NULL
+          idempotency_key TEXT DEFAULT NULL
       ) RETURNS VOID AS $$
       DECLARE
           v_topic TEXT := COALESCE(topic, '__null__topic__');
-          v_message_id TEXT := COALESCE(message_id, gen_random_uuid()::TEXT);
+          v_message_id TEXT := COALESCE(idempotency_key, gen_random_uuid()::TEXT);
       BEGIN
           INSERT INTO "%1$s".notifications (
               destination_uuid, topic, message, message_uuid, serialization
