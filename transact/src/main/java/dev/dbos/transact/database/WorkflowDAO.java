@@ -558,7 +558,6 @@ class WorkflowDAO {
     String serializedOutput = loadOutput ? rs.getString("output") : null;
     String serializedError = loadOutput ? rs.getString("error") : null;
     String serialization = loadInput || loadOutput ? rs.getString("serialization") : null;
-    var err = ErrorResult.deserialize(serializedError, serialization, serializer);
     WorkflowStatus info =
         new WorkflowStatus(
             workflow_uuid,
@@ -571,9 +570,14 @@ class WorkflowDAO {
             (authenticatedRolesJson != null)
                 ? (String[]) JSONUtil.deserializeToArray(authenticatedRolesJson)
                 : null,
-            SerializationUtil.deserializePositionalArgs(serializedInput, serialization, serializer),
-            SerializationUtil.deserializeValue(serializedOutput, serialization, serializer),
-            err,
+            loadInput
+                ? SerializationUtil.deserializePositionalArgs(
+                    serializedInput, serialization, serializer)
+                : null,
+            loadOutput
+                ? SerializationUtil.deserializeValue(serializedOutput, serialization, serializer)
+                : null,
+            loadOutput ? ErrorResult.deserialize(serializedError, serialization, serializer) : null,
             rs.getString("executor_id"),
             rs.getObject("created_at", Long.class),
             rs.getObject("updated_at", Long.class),
