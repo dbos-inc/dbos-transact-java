@@ -28,7 +28,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class MigrationManagerTest {
 
   // Expected tables after migrations
-  private static final String[] EXPECTED_TABLES = {
+  static final String[] EXPECTED_TABLES = {
     "application_versions",
     "event_dispatch_kv",
     "notifications",
@@ -41,7 +41,7 @@ class MigrationManagerTest {
   };
 
   // Expected functions after migrations
-  private static final String[] EXPECTED_FUNCTIONS = {
+  static final String[] EXPECTED_FUNCTIONS = {
     "notifications_function", "workflow_events_function", "enqueue_workflow", "send_message"
   };
 

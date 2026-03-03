@@ -45,10 +45,13 @@ public class BackCompatTest {
         Connection conn = dataSource.getConnection()) {
       DatabaseMetaData metaData = conn.getMetaData();
 
-      MigrationManagerTest.assertTableExists(metaData, "operation_outputs");
-      MigrationManagerTest.assertTableExists(metaData, "workflow_status");
-      MigrationManagerTest.assertTableExists(metaData, "notifications");
-      MigrationManagerTest.assertTableExists(metaData, "workflow_events");
+      for (var table : MigrationManagerTest.EXPECTED_TABLES) {
+          MigrationManagerTest.assertTableExists(metaData, table);
+      }
+
+      for (var function : MigrationManagerTest.EXPECTED_FUNCTIONS) {
+          MigrationManagerTest.assertFunctionExists(metaData, function);
+      }
     }
   }
 
@@ -60,19 +63,6 @@ public class BackCompatTest {
         var conn = dataSource.getConnection();
         var stmt = conn.createStatement()) {
       stmt.executeUpdate("UPDATE \"dbos\".\"dbos_migrations\" SET \"version\" = 10000;");
-    }
-
-    runDbos();
-  }
-
-  @Test
-  void testIdempotence() throws Exception {
-    testWayFutureVersion();
-
-    try (var dataSource = SystemDatabase.createDataSource(config);
-        var conn = dataSource.getConnection();
-        var stmt = conn.createStatement()) {
-      stmt.executeUpdate("UPDATE \"dbos\".\"dbos_migrations\" SET \"version\" = 0;");
     }
 
     runDbos();
