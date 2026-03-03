@@ -46,11 +46,11 @@ public class BackCompatTest {
       DatabaseMetaData metaData = conn.getMetaData();
 
       for (var table : MigrationManagerTest.EXPECTED_TABLES) {
-          MigrationManagerTest.assertTableExists(metaData, table);
+        MigrationManagerTest.assertTableExists(metaData, table);
       }
 
       for (var function : MigrationManagerTest.EXPECTED_FUNCTIONS) {
-          MigrationManagerTest.assertFunctionExists(metaData, function);
+        MigrationManagerTest.assertFunctionExists(metaData, function);
       }
     }
   }
