@@ -53,7 +53,7 @@ public class WorkflowsOutput {
         authenticatedRoles != null && authenticatedRoles.length > 0
             ? JSONUtil.serializeArray(authenticatedRoles)
             : null;
-    this.Input = input != null ? JSONUtil.serializeArray(input) : null;
+    this.Input = input != null ? JSONUtil.toJson(input) : null;
     this.Output = output != null ? JSONUtil.toJson(output) : null;
     this.Request = null; // not used in Java TX
     this.Error =
