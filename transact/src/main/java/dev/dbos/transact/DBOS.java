@@ -1075,7 +1075,7 @@ public class DBOS {
   public static void send(
       @NonNull String destinationId,
       @NonNull Object message,
-      @NonNull String topic,
+      @Nullable String topic,
       @Nullable String idempotencyKey) {
     send(destinationId, message, topic, idempotencyKey, null);
   }
@@ -1104,7 +1104,7 @@ public class DBOS {
   public static void send(
       @NonNull String destinationId,
       @NonNull Object message,
-      @NonNull String topic,
+      @Nullable String topic,
       @Nullable String idempotencyKey,
       @Nullable SerializationStrategy serialization) {
     ensureInstance().send(destinationId, message, topic, idempotencyKey, serialization);

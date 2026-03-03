@@ -595,8 +595,13 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String topic,
       @Nullable String idempotencyKey,
       @Nullable SendOptions options) {
-    var serStrategy = options != null ? options.serialization() : null;
-    DBOSExecutor.send(destinationId, message, topic, idempotencyKey, serStrategy, systemDatabase);
+
+    String serializationFormat =
+        (options != null && options.serialization() != null)
+            ? options.serialization().formatName()
+            : null;
+
+    systemDatabase.sendDirect(destinationId, message, topic, idempotencyKey, serializationFormat);
   }
 
   /**

@@ -372,26 +372,34 @@ public class SystemDatabase implements AutoCloseable {
 
   public void send(
       String workflowId,
-      int functionId,
+      int stepId,
       String destinationId,
       Object message,
       String topic,
+      String messageId,
       String serialization) {
-
     dbRetry(
         () -> {
           notificationsDAO.send(
-              workflowId, functionId, destinationId, message, topic, serialization);
+              workflowId, stepId, destinationId, message, topic, messageId, serialization);
+          return null;
+        });
+  }
+
+  public void sendDirect(
+      String destinationId, Object message, String topic, String messageId, String serialization) {
+    dbRetry(
+        () -> {
+          notificationsDAO.sendDirect(destinationId, message, topic, messageId, serialization);
           return null;
         });
   }
 
   public Object recv(
-      String workflowId, int functionId, int timeoutFunctionId, String topic, Duration timeout) {
-
+      String workflowId, int stepId, int timeoutStepId, String topic, Duration timeout) {
     return dbRetry(
         () -> {
-          return notificationsDAO.recv(workflowId, functionId, timeoutFunctionId, topic, timeout);
+          return notificationsDAO.recv(workflowId, stepId, timeoutStepId, topic, timeout);
         });
   }
 

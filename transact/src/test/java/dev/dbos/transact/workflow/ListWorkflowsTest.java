@@ -596,10 +596,10 @@ public class ListWorkflowsTest {
     List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput().withLoadInput(false));
     assertEquals(10, wfs.size());
 
-    // inputs column is not fetched; deserializePositionalArgs(null, ...) returns [] not null
+    // inputs column is not fetched; input is null
     wfs.forEach(
         wf -> {
-          assertNotNull(wf.input());
+          assertNull(wf.input());
         });
 
     // Core metadata fields must still be populated
@@ -650,10 +650,10 @@ public class ListWorkflowsTest {
 
     assertEquals(10, wfs.size());
 
-    // Payload columns are not fetched; output/error are null, input deserializes to [] not null
+    // Payload columns are not fetched; input/output/error are null
     wfs.forEach(
         wf -> {
-          assertTrue(wf.input() == null || wf.input().length == 0);
+          assertNull(wf.input());
           assertNull(wf.output());
           assertNull(wf.error());
         });

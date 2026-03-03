@@ -743,31 +743,6 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  // helper function to send a message from outside of a workflow.
-  // Note, changes to send will make this method unnessary, but we're doing the work in stages
-  public static void send(
-      String destinationId,
-      Object message,
-      String topic,
-      String idempotencyKey,
-      SerializationStrategy serialization,
-      SystemDatabase systemDatabase) {
-    if (idempotencyKey == null) {
-      idempotencyKey = UUID.randomUUID().toString();
-    }
-    var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
-    var serializationFormat =
-        serialization != null ? serialization.formatName() : SerializationUtil.NATIVE;
-
-    var status =
-        WorkflowStatusInternal.builder(workflowId, WorkflowState.SUCCESS)
-            .name("temp_workflow-send-client")
-            .serialization(serializationFormat)
-            .build();
-    systemDatabase.initWorkflowStatus(status, null, false, false);
-    systemDatabase.send(status.workflowId(), 0, destinationId, message, topic, serializationFormat);
-  }
-
   public void send(
       String destinationId,
       Object message,
@@ -776,27 +751,19 @@ public class DBOSExecutor implements AutoCloseable {
       SerializationStrategy serialization) {
 
     DBOSContext ctx = DBOSContextHolder.get();
-    if (ctx.isInStep()) {
-      throw new IllegalStateException("DBOS.send() must not be called from within a step.");
-    }
-
-    if (!ctx.isInWorkflow()) {
-      DBOSExecutor.send(
-          destinationId, message, topic, idempotencyKey, serialization, systemDatabase);
-    } else {
-      if (idempotencyKey != null) {
-        throw new IllegalArgumentException(
-            "Invalid call to `DBOS.send` with an idempotency key from within a workflow");
-      }
-      int stepFunctionId = ctx.getAndIncrementFunctionId();
-
+    if (ctx.isInWorkflow() && !ctx.isInStep()) {
+      int stepId = ctx.getAndIncrementFunctionId();
       systemDatabase.send(
           ctx.getWorkflowId(),
-          stepFunctionId,
+          stepId,
           destinationId,
           message,
           topic,
+          idempotencyKey,
           serialization.formatName());
+    } else {
+      systemDatabase.sendDirect(
+          destinationId, message, topic, idempotencyKey, serialization.formatName());
     }
   }
 
