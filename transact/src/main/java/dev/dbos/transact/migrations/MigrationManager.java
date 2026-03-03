@@ -3,17 +3,17 @@ package dev.dbos.transact.migrations;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.List;
-import java.util.Objects;
-import java.util.ArrayList;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 import javax.sql.DataSource;
 
@@ -246,7 +246,8 @@ public class MigrationManager {
         if (is == null) {
           break;
         }
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+        try (BufferedReader reader =
+            new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
           StringBuilder sb = new StringBuilder();
           String line;
           while ((line = reader.readLine()) != null) {

@@ -42,10 +42,7 @@ class MigrationManagerTest {
 
   // Expected functions after migrations
   private static final String[] EXPECTED_FUNCTIONS = {
-    "notifications_function",
-    "workflow_events_function",
-    "enqueue_workflow",
-    "send_message"
+    "notifications_function", "workflow_events_function", "enqueue_workflow", "send_message"
   };
 
   private HikariDataSource dataSource;
@@ -104,17 +101,17 @@ class MigrationManagerTest {
     }
   }
 
-  public static void assertFunctionExists(DatabaseMetaData metaData, String functionName) throws Exception {
+  public static void assertFunctionExists(DatabaseMetaData metaData, String functionName)
+      throws Exception {
     assertFunctionExists(metaData, functionName, Constants.DB_SCHEMA);
   }
 
-  public static void assertFunctionExists(DatabaseMetaData metaData, String functionName, String schemaName) throws Exception {
+  public static void assertFunctionExists(
+      DatabaseMetaData metaData, String functionName, String schemaName) throws Exception {
     schemaName = SystemDatabase.sanitizeSchema(schemaName);
     try (ResultSet rs = metaData.getFunctions(null, schemaName, functionName)) {
       assertTrue(
-        rs.next(),
-        "Function %s should exist in schema %s".formatted(functionName, schemaName)
-      );
+          rs.next(), "Function %s should exist in schema %s".formatted(functionName, schemaName));
     }
   }
 
