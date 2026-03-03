@@ -56,10 +56,18 @@ class MigrationManagerTest {
       DatabaseMetaData metaData = conn.getMetaData();
 
       // Verify all expected tables exist in the dbos schema
-      assertTableExists(metaData, "operation_outputs");
-      assertTableExists(metaData, "workflow_status");
+      assertTableExists(metaData, "application_versions");
+      assertTableExists(metaData, "event_dispatch_kv");
       assertTableExists(metaData, "notifications");
+      assertTableExists(metaData, "operation_outputs");
+      assertTableExists(metaData, "streams");
+      assertTableExists(metaData, "workflow_events_history");
       assertTableExists(metaData, "workflow_events");
+      assertTableExists(metaData, "workflow_schedules");
+      assertTableExists(metaData, "workflow_status");
+
+      assertFunctionExists(metaData, "notifications_function");
+      assertFunctionExists(metaData, "workflow_events_function");
 
       var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
       var version = getVersion(conn);
@@ -77,6 +85,20 @@ class MigrationManagerTest {
     schemaName = SystemDatabase.sanitizeSchema(schemaName);
     try (ResultSet rs = metaData.getTables(null, schemaName, tableName, null)) {
       assertTrue(rs.next(), "Table %s should exist in schema %s".formatted(tableName, schemaName));
+    }
+  }
+
+  public static void assertFunctionExists(DatabaseMetaData metaData, String functionName) throws Exception {
+    assertFunctionExists(metaData, functionName, Constants.DB_SCHEMA);
+  }
+
+  public static void assertFunctionExists(DatabaseMetaData metaData, String functionName, String schemaName) throws Exception {
+    schemaName = SystemDatabase.sanitizeSchema(schemaName);
+    try (ResultSet rs = metaData.getFunctions(null, schemaName, functionName)) {
+      assertTrue(
+        rs.next(),
+        "Function %s should exist in schema %s".formatted(functionName, schemaName)
+      );
     }
   }
 
@@ -114,10 +136,18 @@ class MigrationManagerTest {
       DatabaseMetaData metaData = conn.getMetaData();
 
       // Verify all expected tables exist in the dbos schema
-      assertTableExists(metaData, "operation_outputs", schema);
-      assertTableExists(metaData, "workflow_status", schema);
+      assertTableExists(metaData, "application_versions", schema);
+      assertTableExists(metaData, "event_dispatch_kv", schema);
       assertTableExists(metaData, "notifications", schema);
+      assertTableExists(metaData, "operation_outputs", schema);
+      assertTableExists(metaData, "streams", schema);
+      assertTableExists(metaData, "workflow_events_history", schema);
       assertTableExists(metaData, "workflow_events", schema);
+      assertTableExists(metaData, "workflow_schedules", schema);
+      assertTableExists(metaData, "workflow_status", schema);
+
+      assertFunctionExists(metaData, "notifications_function", schema);
+      assertFunctionExists(metaData, "workflow_events_function", schema);
 
       var migrations = new ArrayList<>(MigrationManager.getMigrations(schema));
       var version = getVersion(conn, schema);
