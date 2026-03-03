@@ -461,4 +461,14 @@ public class MigrationManager {
       ALTER TABLE "%1$s"."notifications" ADD COLUMN "consumed" BOOLEAN NOT NULL DEFAULT FALSE;
       CREATE INDEX "idx_notifications_unconsumed" ON "%1$s"."notifications" ("destination_uuid", "topic") WHERE consumed = FALSE;
       """;
+
+  static final String migration13 =
+      """
+      CREATE TABLE "%1$s".application_versions (
+        version_id TEXT NOT NULL PRIMARY KEY,
+        version_name TEXT NOT NULL UNIQUE,
+        version_timestamp BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint,
+        created_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint
+      );
+      """;
 }
