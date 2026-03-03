@@ -11,6 +11,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 
@@ -190,6 +191,19 @@ public class ClientTest {
       assertEquals(
           "CANCELLED",
           stat2.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+    }
+  }
+
+  @Test
+  public void invalidSend() throws Exception {
+    var invalidWorkflowId = UUID.randomUUID().toString();
+
+    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+      var ex =
+          assertThrows(
+              DBOSNonExistentWorkflowException.class,
+              () -> client.send(invalidWorkflowId, "test.message", null, null));
+      assertTrue(ex.getMessage().contains(invalidWorkflowId));
     }
   }
 }

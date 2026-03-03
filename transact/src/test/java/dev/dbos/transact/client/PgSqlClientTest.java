@@ -246,4 +246,15 @@ public class PgSqlClientTest {
     assertEquals(idempotencyKey, notification.messageUuid());
     assertTrue(notification.consumed());
   }
+
+  @Test
+  public void invalidSend() throws Exception {
+    var invalidWorkflowId = UUID.randomUUID().toString();
+
+    var ex =
+        assertThrows(
+            PSQLException.class, () -> sendHelper(invalidWorkflowId, "test.message", null, null));
+
+    assertTrue(ex.getMessage().contains(invalidWorkflowId));
+  }
 }
