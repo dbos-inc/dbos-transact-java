@@ -3,6 +3,7 @@ package dev.dbos.transact.internal;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.workflow.Queue;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -50,6 +51,8 @@ public class QueueRegistry {
   }
 
   public List<Queue> getSnapshot() {
-    return List.copyOf(registry.values());
+    var queues = new ArrayList<>(registry.values());
+    queues.add(internalQueue);
+    return List.copyOf(queues);
   }
 }

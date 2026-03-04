@@ -254,13 +254,6 @@ public class DBOS {
       return dbosExecutor.get();
     }
 
-    // // package private method for test purposes
-    // void clearRegistry() {
-    //   workflowRegistry.clear();
-    //   queueRegistry.clear();
-    //   lifecycleRegistry.clear();
-    // }
-
     /**
      * Launch DBOS, and start recovery. All workflows, queues, and other objects should be
      * registered before launch
@@ -811,8 +804,10 @@ public class DBOS {
    * private method for test purposes
    */
   static void reinitialize(DBOSConfig config) {
-    var instance = new DBOS.Instance(config);
-    globalInstance.set(instance);
+    var previousInstnace = globalInstance.getAndSet(new DBOS.Instance(config));
+    if (previousInstnace != null) {
+      previousInstnace.shutdown();
+    }
   }
 
   private static Instance ensureInstance() {

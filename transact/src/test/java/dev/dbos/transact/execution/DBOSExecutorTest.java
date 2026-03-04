@@ -8,6 +8,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
@@ -151,41 +152,40 @@ class DBOSExecutorTest {
     assertTrue(error);
   }
 
-  // @Test
-  // void workflowFunctionNotfound() throws Exception {
+  @Test
+  void workflowFunctionNotfound() throws Exception {
+    ExecutingService executingService =
+        DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+    DBOS.launch();
 
-  //   ExecutingService executingService =
-  //       DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
-  //   DBOS.launch();
+    String result = null;
 
-  //   String result = null;
+    String wfid = "wf-123";
+    try (var id = new WorkflowOptions(wfid).setContext()) {
+      result = executingService.workflowMethod("test-item");
+    }
 
-  //   String wfid = "wf-123";
-  //   try (var id = new WorkflowOptions(wfid).setContext()) {
-  //     result = executingService.workflowMethod("test-item");
-  //   }
+    assertEquals("test-itemtest-item", result);
 
-  //   assertEquals("test-itemtest-item", result);
+    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
+    assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
-  //   List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
-  //   assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
+    DBOS.shutdown();
+    DBOSTestAccess.reinitialize(dbosConfig); // reinitialize to clear out the registry
+    DBOS.launch(); 
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
-  //   DBOS.shutdown();
-  //   DBOSTestAccess.clearRegistry(); // clear out the registry
-  //   DBOS.launch(); // restart dbos
-  //   var dbosExecutor = DBOSTestAccess.getDbosExecutor();
+    boolean error = false;
+    try {
+      dbosExecutor.executeWorkflowById(wfid, false, false);
+    } catch (Exception e) {
+      error = true;
+      assert e instanceof DBOSWorkflowFunctionNotFoundException
+          : "Expected WorkflowFunctionNotfoundException but got " + e.getClass().getName();
+    }
 
-  //   boolean error = false;
-  //   try {
-  //     dbosExecutor.executeWorkflowById(wfid, false, false);
-  //   } catch (Exception e) {
-  //     error = true;
-  //     assert e instanceof DBOSWorkflowFunctionNotFoundException
-  //         : "Expected WorkflowFunctionNotfoundException but got " + e.getClass().getName();
-  //   }
-
-  //   assertTrue(error);
-  // }
+    assertTrue(error);
+  }
 
   @Test
   public void executeWithStep() throws Exception {
