@@ -210,7 +210,6 @@ class MigrationManagerTest {
         "Migrations should run successfully multiple times");
   }
 
-
   @Test
   public void extractDbAndPostgresUrl() {
     var originalUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys?user=alice&ssl=true";
