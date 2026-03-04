@@ -1417,7 +1417,7 @@ public class DBOSExecutor implements AutoCloseable {
     return new WorkflowHandleFuture<T, E>(this, workflowId, future);
   }
 
-  public static <T, E extends Exception> String enqueueWorkflow(
+  public static String enqueueWorkflow(
       String name,
       String className,
       String instanceName,

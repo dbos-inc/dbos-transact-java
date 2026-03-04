@@ -259,8 +259,7 @@ public class DBOS {
      * registered before launch
      */
     public void launch() {
-      var ver = DBOS.version();
-      logger.info("Launching DBOS {}", ver == null ? "<unknown version>" : "v" + ver);
+      logger.info("Launching DBOS v{}", DBOS.version());
 
       if (dbosExecutor.get() == null) {
         var executor = new DBOSExecutor(config);
@@ -804,9 +803,9 @@ public class DBOS {
    * private method for test purposes
    */
   static void reinitialize(DBOSConfig config) {
-    var previousInstnace = globalInstance.getAndSet(new DBOS.Instance(config));
-    if (previousInstnace != null) {
-      previousInstnace.shutdown();
+    var previousInstance = globalInstance.getAndSet(new DBOS.Instance(config));
+    if (previousInstance != null) {
+      previousInstance.shutdown();
     }
   }
 
@@ -1115,7 +1114,7 @@ public class DBOS {
    * @param timeout duration after which the call times out
    * @return the message if there is one or else null
    */
-  public static @Nullable Object recv(@NonNull String topic, @NonNull Duration timeout) {
+  public static @Nullable Object recv(@Nullable String topic, @NonNull Duration timeout) {
     return ensureInstance().recv(topic, timeout);
   }
 
