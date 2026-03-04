@@ -121,6 +121,51 @@ public class PgSqlClientTest {
     assertEquals("SUCCESS", stat.status());
   }
 
+  @FunctionalInterface
+  public interface ThrowingFunction<P, T, E extends Exception> {
+    T execute(P param) throws E;
+  }
+
+  @Test
+  public void clientEnqueueInvalidWorkflowName() throws Exception {
+    final var workflowId = UUID.randomUUID().toString();
+
+    ThrowingFunction<String, String, Exception> enqueueSupplier =
+        (workflowName) -> {
+          var sql = "SELECT dbos.enqueue_workflow(?, ?, ?, workflow_id => ?, class_name => ?)";
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareCall(sql)) {
+            stmt.setString(1, workflowName);
+            stmt.setString(2, "testQueue");
+            var argsArray =
+                conn.createArrayOf(
+                    "json",
+                    new String[] {
+                      MAPPER.writeValueAsString("42"), MAPPER.writeValueAsString("spam")
+                    });
+            stmt.setObject(3, argsArray);
+            stmt.setString(4, workflowId);
+            stmt.setString(5, "ClientServiceImpl");
+            try (ResultSet rs = stmt.executeQuery()) {
+              return rs.next() ? rs.getString(1) : null;
+            } finally {
+              argsArray.free();
+            }
+          }
+        };
+
+    String retValue = enqueueSupplier.execute("enqueueTest");
+    assertEquals(workflowId, retValue);
+
+    var ex = assertThrows(PSQLException.class, () -> enqueueSupplier.execute("wrong name"));
+    assertTrue(ex.getMessage().startsWith("ERROR: Conflicting DBOS workflow name"));
+    assertTrue(
+        ex.getMessage()
+            .contains(
+                "Workflow %s exists with name %s, but the provided workflow name is: %s"
+                    .formatted(workflowId, "enqueueTest", "wrong name")));
+  }
+
   @Test
   public void clientEnqueueDeDupe() throws Exception {
     var qs = DBOSTestAccess.getQueueService();
@@ -153,7 +198,11 @@ public class PgSqlClientTest {
     String workflowId = enqueueSupplier.execute();
 
     assertNotNull(workflowId);
-    assertThrows(PSQLException.class, () -> enqueueSupplier.execute());
+    var ex = assertThrows(PSQLException.class, () -> enqueueSupplier.execute());
+    assertTrue(ex.getMessage().startsWith("ERROR: DBOS queue duplicated"));
+    assertTrue(
+        ex.getMessage()
+            .contains(" with queue testQueue and deduplication ID plugh! already exists"));
   }
 
   @Test
@@ -327,6 +376,8 @@ public class PgSqlClientTest {
         };
 
     var ex = assertThrows(PSQLException.class, sendAction::execute);
-    assertTrue(ex.getMessage().contains(invalidWorkflowId));
+    var expected = "Destination workflow %s does not exist".formatted(invalidWorkflowId);
+    assertTrue(ex.getMessage().startsWith("ERROR: DBOS non-existent workflow"));
+    assertTrue(ex.getMessage().contains(expected));
   }
 }
