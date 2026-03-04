@@ -195,6 +195,23 @@ class MigrationManagerTest {
   }
 
   @Test
+  void testWayFutureVersion() throws Exception {
+    testRunMigrations_CreatesTables();
+
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate("UPDATE \"dbos\".\"dbos_migrations\" SET \"version\" = 10000;");
+    }
+
+    assertDoesNotThrow(
+        () -> {
+          MigrationManager.runMigrations(dbosConfig);
+        },
+        "Migrations should run successfully multiple times");
+  }
+
+
+  @Test
   public void extractDbAndPostgresUrl() {
     var originalUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys?user=alice&ssl=true";
     var pair = MigrationManager.extractDbAndPostgresUrl(originalUrl);
