@@ -45,7 +45,7 @@ public class TimeoutTest {
     DBUtils.recreateDB(dbosConfig);
     dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
   }
 
   @AfterEach

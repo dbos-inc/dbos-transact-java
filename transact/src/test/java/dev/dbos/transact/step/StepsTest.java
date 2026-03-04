@@ -3,6 +3,7 @@ package dev.dbos.transact.step;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
@@ -30,7 +31,7 @@ public class StepsTest {
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
 
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
   }
 
   @AfterEach

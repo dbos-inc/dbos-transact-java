@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
@@ -45,7 +46,7 @@ public class DirectInvocationTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
     var impl = new HawkServiceImpl();
     proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);

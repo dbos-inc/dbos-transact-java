@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
@@ -110,7 +111,7 @@ public class InteropTest {
   void beforeEachTest() throws Exception {
     DBUtils.recreateDB(dbosConfig);
     dataSource = SystemDatabase.createDataSource(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
   }
 
   @AfterEach

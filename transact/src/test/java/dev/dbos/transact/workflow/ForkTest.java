@@ -188,7 +188,7 @@ public class ForkTest {
     dataSource = SystemDatabase.createDataSource(dbosConfig);
 
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
 
     impl = new ForkTestServiceImpl();
     proxy = DBOS.registerWorkflows(ForkTestService.class, impl);

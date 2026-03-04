@@ -53,7 +53,7 @@ class RecoveryServiceTest {
     DBUtils.recreateDB(dbosConfig);
     dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
     executingService =
         DBOS.registerWorkflows(
             ExecutingService.class, executingServiceImpl = new ExecutingServiceImpl());
@@ -166,7 +166,7 @@ class RecoveryServiceTest {
 
     DBOS.shutdown();
 
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
     // dbos = DBOS.getInstance();
 
     // need to register again

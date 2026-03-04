@@ -56,7 +56,7 @@ public class MetricsTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(config);
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     proxy = DBOS.registerWorkflows(MetricsService.class, new MetricsServiceImpl());
     DBOS.launch();
   }
