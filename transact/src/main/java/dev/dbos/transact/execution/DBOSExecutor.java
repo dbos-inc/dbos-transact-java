@@ -195,7 +195,7 @@ public class DBOSExecutor implements AutoCloseable {
       listeners.add(schedulerService);
 
       for (var listener : listeners) {
-        listener.dbosLaunched();
+        listener.dbosLaunched(dbos);
       }
 
       var recoveryTask =
@@ -649,7 +649,7 @@ public class DBOSExecutor implements AutoCloseable {
   /** Retrieve the workflowHandle for the workflowId */
   public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {
     logger.debug("retrieveWorkflow {}", workflowId);
-    return new WorkflowHandleDBPoll<R, E>(workflowId);
+    return new WorkflowHandleDBPoll<>(this, workflowId);
   }
 
   public void sleep(Duration duration) {
@@ -1277,19 +1277,21 @@ public class DBOSExecutor implements AutoCloseable {
             "queue %s does not exist".formatted(options.queueName()));
       }
 
-      return enqueueWorkflow(
-          workflow.name(),
-          workflow.className(),
-          workflow.instanceName(),
-          maxRetries,
-          args,
-          options,
-          parent,
-          executorId(),
-          appVersion(),
-          appId(),
-          systemDatabase,
-          this.serializer);
+      var workflowId =
+          enqueueWorkflow(
+              workflow.name(),
+              workflow.className(),
+              workflow.instanceName(),
+              maxRetries,
+              args,
+              options,
+              parent,
+              executorId(),
+              appVersion(),
+              appId(),
+              systemDatabase,
+              this.serializer);
+      return new WorkflowHandleDBPoll<>(this, workflowId);
     }
 
     logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
@@ -1412,10 +1414,10 @@ public class DBOSExecutor implements AutoCloseable {
           TimeUnit.MILLISECONDS);
     }
 
-    return new WorkflowHandleFuture<T, E>(workflowId, future, this);
+    return new WorkflowHandleFuture<T, E>(this, workflowId, future);
   }
 
-  public static <T, E extends Exception> WorkflowHandle<T, E> enqueueWorkflow(
+  public static <T, E extends Exception> String enqueueWorkflow(
       String name,
       String className,
       String instanceName,
@@ -1467,10 +1469,10 @@ public class DBOSExecutor implements AutoCloseable {
           options.isDequeuedRequest,
           options.serialization(),
           serializer);
-      return new WorkflowHandleDBPoll<T, E>(workflowId);
+      return workflowId;
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", workflowId);
-      return new WorkflowHandleDBPoll<T, E>(workflowId);
+      return workflowId;
     } catch (Throwable e) {
       var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
       logger.error("enqueueWorkflow", actual);

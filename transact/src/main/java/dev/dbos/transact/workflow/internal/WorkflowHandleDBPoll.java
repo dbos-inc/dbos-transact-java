@@ -1,13 +1,15 @@
 package dev.dbos.transact.workflow.internal;
 
-import dev.dbos.transact.DBOS;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 public class WorkflowHandleDBPoll<T, E extends Exception> implements WorkflowHandle<T, E> {
-  private String workflowId;
+  private final DBOSExecutor executor;
+  private final String workflowId;
 
-  public WorkflowHandleDBPoll(String workflowId) {
+  public WorkflowHandleDBPoll(DBOSExecutor executor, String workflowId) {
+    this.executor = executor;
     this.workflowId = workflowId;
   }
 
@@ -18,11 +20,11 @@ public class WorkflowHandleDBPoll<T, E extends Exception> implements WorkflowHan
 
   @Override
   public T getResult() throws E {
-    return DBOS.getResult(this.workflowId);
+    return executor.getResult(this.workflowId);
   }
 
   @Override
   public WorkflowStatus getStatus() {
-    return DBOS.getWorkflowStatus(workflowId);
+    return executor.getWorkflowStatus(workflowId);
   }
 }

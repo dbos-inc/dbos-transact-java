@@ -61,6 +61,7 @@ class LifecycleTestWorkflowsImpl implements LifecycleTestWorkflows {
 }
 
 class TestLifecycleService implements DBOSLifecycleListener {
+  private DBOS.Instance dbos;
   public int launchCount = 0;
   public int shutdownCount = 0;
   public int nInstances = 0;
@@ -70,13 +71,14 @@ class TestLifecycleService implements DBOSLifecycleListener {
   public ArrayList<RegisteredWorkflow> wfs = new ArrayList<>();
 
   @Override
-  public void dbosLaunched() {
+  public void dbosLaunched(DBOS.Instance dbos) {
+    this.dbos = dbos;
     var expectedParams = new Class<?>[] {int.class, int.class};
 
     ++launchCount;
 
-    nInstances = DBOS.getRegisteredWorkflowInstances().size();
-    var wfs = DBOS.getRegisteredWorkflows();
+    nInstances = dbos.getRegisteredWorkflowInstances().size();
+    var wfs = dbos.getRegisteredWorkflows();
     for (var wf : wfs) {
       var method = wf.workflowMethod();
       var tag = method.getAnnotation(TestLifecycleAnnotation.class);
@@ -105,7 +107,7 @@ class TestLifecycleService implements DBOSLifecycleListener {
     int total = 0;
     for (var wf : wfs) {
       Object[] args = {nInstances, nWfs};
-      var h = DBOS.startWorkflow(wf, args, new StartWorkflowOptions(UUID.randomUUID().toString()));
+      var h = dbos.startWorkflow(wf, args, new StartWorkflowOptions(UUID.randomUUID().toString()));
       total += (Integer) h.getResult();
     }
     return total;

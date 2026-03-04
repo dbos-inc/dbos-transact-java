@@ -35,6 +35,7 @@ public class SchedulerService implements DBOSLifecycleListener {
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING53));
 
   private final String schedulerQueueName;
+  private DBOS.Instance dbos;
   private final AtomicReference<ScheduledExecutorService> scheduler = new AtomicReference<>();
 
   public SchedulerService(String defSchedulerQueue) {
@@ -59,7 +60,8 @@ public class SchedulerService implements DBOSLifecycleListener {
     cronParser.parse(skedTag.cron());
   }
 
-  public void dbosLaunched() {
+  public void dbosLaunched(DBOS.Instance dbos) {
+    this.dbos = dbos;
     if (this.scheduler.get() == null) {
       var scheduler = Executors.newScheduledThreadPool(4);
       if (this.scheduler.compareAndSet(null, scheduler)) {
@@ -69,6 +71,7 @@ public class SchedulerService implements DBOSLifecycleListener {
   }
 
   public void dbosShutDown() {
+    this.dbos = null;
     var scheduler = this.scheduler.getAndSet(null);
     if (scheduler != null) {
       List<Runnable> notRun = scheduler.shutdownNow();
@@ -82,7 +85,7 @@ public class SchedulerService implements DBOSLifecycleListener {
   private ZonedDateTime getLastTime(ScheduledWorkflow swf) {
     if (!swf.ignoreMissed()) {
       var state =
-          DBOS.getExternalState(
+          dbos.getExternalState(
               "DBOS.SchedulerService", swf.workflow().fullyQualifiedName(), "lastTime");
       if (state.isPresent()) {
         return ZonedDateTime.parse(state.get().value());
@@ -97,7 +100,7 @@ public class SchedulerService implements DBOSLifecycleListener {
     }
 
     var state =
-        DBOS.upsertExternalState(
+        dbos.upsertExternalState(
             new ExternalState(
                 "DBOS.SchedulerService",
                 swf.workflow().fullyQualifiedName(),
@@ -115,7 +118,7 @@ public class SchedulerService implements DBOSLifecycleListener {
 
     // collect all workflows that have an @Scheduled annotation
     List<ScheduledWorkflow> scheduledWorkflows = new ArrayList<>();
-    for (var wf : DBOS.getRegisteredWorkflows()) {
+    for (var wf : dbos.getRegisteredWorkflows()) {
       var method = wf.workflowMethod();
       var skedTag = method.getAnnotation(Scheduled.class);
       if (skedTag == null) {
@@ -134,7 +137,7 @@ public class SchedulerService implements DBOSLifecycleListener {
           skedTag.queue() != null && !skedTag.queue().isEmpty()
               ? skedTag.queue()
               : this.schedulerQueueName;
-      var q = DBOS.getQueue(queue);
+      var q = dbos.getQueue(queue);
       if (!q.isPresent()) {
         logger.error(
             "Scheduled workflow {} refers to undefined queue {}", wf.fullyQualifiedName(), queue);
@@ -202,7 +205,7 @@ public class SchedulerService implements DBOSLifecycleListener {
                 String workflowId =
                     String.format("sched-%s-%s", workflowName, scheduledTime.toString());
                 var options = new StartWorkflowOptions(workflowId).withQueue(swf.queue());
-                DBOS.startWorkflow(swf.workflow(), args, options);
+                dbos.startWorkflow(swf.workflow(), args, options);
                 nextTime = setLastTime(swf, scheduledTime);
               } catch (Exception e) {
                 logger.error("Scheduled task exception {}", workflowName, e);
