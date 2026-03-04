@@ -27,6 +27,24 @@ import org.junit.jupiter.params.provider.ValueSource;
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class MigrationManagerTest {
 
+  // Expected tables after migrations
+  static final String[] EXPECTED_TABLES = {
+    "application_versions",
+    "event_dispatch_kv",
+    "notifications",
+    "operation_outputs",
+    "streams",
+    "workflow_events_history",
+    "workflow_events",
+    "workflow_schedules",
+    "workflow_status"
+  };
+
+  // Expected functions after migrations
+  static final String[] EXPECTED_FUNCTIONS = {
+    "notifications_function", "workflow_events_function", "enqueue_workflow", "send_message"
+  };
+
   private HikariDataSource dataSource;
   private DBOSConfig dbosConfig;
 
@@ -56,10 +74,13 @@ class MigrationManagerTest {
       DatabaseMetaData metaData = conn.getMetaData();
 
       // Verify all expected tables exist in the dbos schema
-      assertTableExists(metaData, "operation_outputs");
-      assertTableExists(metaData, "workflow_status");
-      assertTableExists(metaData, "notifications");
-      assertTableExists(metaData, "workflow_events");
+      for (String table : EXPECTED_TABLES) {
+        assertTableExists(metaData, table);
+      }
+
+      for (String function : EXPECTED_FUNCTIONS) {
+        assertFunctionExists(metaData, function);
+      }
 
       var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
       var version = getVersion(conn);
@@ -77,6 +98,20 @@ class MigrationManagerTest {
     schemaName = SystemDatabase.sanitizeSchema(schemaName);
     try (ResultSet rs = metaData.getTables(null, schemaName, tableName, null)) {
       assertTrue(rs.next(), "Table %s should exist in schema %s".formatted(tableName, schemaName));
+    }
+  }
+
+  public static void assertFunctionExists(DatabaseMetaData metaData, String functionName)
+      throws Exception {
+    assertFunctionExists(metaData, functionName, Constants.DB_SCHEMA);
+  }
+
+  public static void assertFunctionExists(
+      DatabaseMetaData metaData, String functionName, String schemaName) throws Exception {
+    schemaName = SystemDatabase.sanitizeSchema(schemaName);
+    try (ResultSet rs = metaData.getFunctions(null, schemaName, functionName)) {
+      assertTrue(
+          rs.next(), "Function %s should exist in schema %s".formatted(functionName, schemaName));
     }
   }
 
@@ -113,11 +148,14 @@ class MigrationManagerTest {
     try (Connection conn = dataSource.getConnection()) {
       DatabaseMetaData metaData = conn.getMetaData();
 
-      // Verify all expected tables exist in the dbos schema
-      assertTableExists(metaData, "operation_outputs", schema);
-      assertTableExists(metaData, "workflow_status", schema);
-      assertTableExists(metaData, "notifications", schema);
-      assertTableExists(metaData, "workflow_events", schema);
+      // Verify all expected tables exist in the custom schema
+      for (String table : EXPECTED_TABLES) {
+        assertTableExists(metaData, table, schema);
+      }
+
+      for (String function : EXPECTED_FUNCTIONS) {
+        assertFunctionExists(metaData, function, schema);
+      }
 
       var migrations = new ArrayList<>(MigrationManager.getMigrations(schema));
       var version = getVersion(conn, schema);
@@ -154,6 +192,22 @@ class MigrationManagerTest {
         ResultSet rs = conn.getMetaData().getTables(null, null, "dummy_table", null)) {
       Assertions.assertTrue(rs.next(), "Expected 'dummy_table' to exist after new migration.");
     }
+  }
+
+  @Test
+  void testWayFutureVersion() throws Exception {
+    testRunMigrations_CreatesTables();
+
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.createStatement()) {
+      stmt.executeUpdate("UPDATE \"dbos\".\"dbos_migrations\" SET \"version\" = 10000;");
+    }
+
+    assertDoesNotThrow(
+        () -> {
+          MigrationManager.runMigrations(dbosConfig);
+        },
+        "Migrations should run successfully multiple times");
   }
 
   @Test
