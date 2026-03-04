@@ -336,7 +336,12 @@ public class DBUtils {
   }
 
   public record Notification(
-      String destinationUuid, String topic, String message, String serialization) {}
+      String messageUuid,
+      String topic,
+      String message,
+      long createdAtEpochMs,
+      String serialization,
+      boolean consumed) {}
 
   public static List<Notification> getNotifications(DataSource ds, String destinationUuid)
       throws SQLException {
@@ -355,10 +360,15 @@ public class DBUtils {
       try (var rs = stmt.executeQuery()) {
         List<Notification> rows = new ArrayList<>();
         while (rs.next()) {
+          var messageUuid = rs.getString("message_uuid");
           var topic = rs.getString("topic");
           var message = rs.getString("message");
           var serialization = rs.getString("serialization");
-          rows.add(new Notification(destinationUuid, topic, message, serialization));
+          var createdAtEpochMs = rs.getLong("created_at_epoch_ms");
+          var consumed = rs.getBoolean("consumed");
+          rows.add(
+              new Notification(
+                  messageUuid, topic, message, createdAtEpochMs, serialization, consumed));
         }
         return rows;
       }
