@@ -172,7 +172,7 @@ class DBOSExecutorTest {
 
     DBOS.shutdown();
     DBOSTestAccess.reinitialize(dbosConfig); // reinitialize to clear out the registry
-    DBOS.launch(); 
+    DBOS.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     boolean error = false;
