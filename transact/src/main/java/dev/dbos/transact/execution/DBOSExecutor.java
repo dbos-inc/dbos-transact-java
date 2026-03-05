@@ -17,6 +17,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
@@ -1471,6 +1472,10 @@ public class DBOSExecutor implements AutoCloseable {
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", workflowId);
       return new WorkflowHandleDBPoll<T, E>(workflowId);
+    } catch (DBOSQueueDuplicatedException e) {
+      logger.debug(
+          "Workflow queue {} reused deduplicationId {}", e.queueName(), e.deduplicationId());
+      throw e;
     } catch (Throwable e) {
       var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
       logger.error("enqueueWorkflow", actual);
