@@ -812,7 +812,7 @@ class WorkflowDAO {
   String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options)
       throws SQLException {
 
-    Objects.requireNonNull(options);
+    options = Objects.requireNonNullElseGet(options, ForkOptions::new);
 
     var status = getWorkflowStatus(originalWorkflowId);
     if (status == null) {
