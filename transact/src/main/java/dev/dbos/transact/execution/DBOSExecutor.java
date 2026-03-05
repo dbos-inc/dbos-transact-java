@@ -1089,6 +1089,10 @@ public class DBOSExecutor implements AutoCloseable {
     logger.debug("startWorkflow {}", options);
 
     var invocation = captureInvocation(supplier);
+    if (invocation.executor() != this) {
+      throw new IllegalStateException(
+          "The @Workflow method must be called on the DBOS instance passed to the startWorkflow lambda");
+    }
     var workflow = getWorkflow(invocation);
 
     var ctx = DBOSContextHolder.get();

@@ -208,6 +208,12 @@ public class DBUtils {
     return DriverManager.getConnection(config.databaseUrl(), config.dbUser(), config.dbPassword());
   }
 
+  public static List<WorkflowStatusRow> getWorkflowRows(DBOSConfig config) throws SQLException {
+    try (var ds = SystemDatabase.createDataSource(config)) {
+      return getWorkflowRows(ds);
+    }
+  }
+
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) throws SQLException {
     return getWorkflowRows(ds, null);
   }

@@ -97,13 +97,14 @@ public class DBOSInvocationHandler implements InvocationHandler {
             ? classNameAnnotation.value()
             : target.getClass().getName();
     var workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
+    var executor = executorSupplier.get();
+
     if (hook != null) {
-      var invocation = new Invocation(className, instanceName, workflowName, args);
+      var invocation = new Invocation(executor, className, instanceName, workflowName, args);
       hook.invoke(invocation);
       return defaultReturn(method);
     }
 
-    var executor = executorSupplier.get();
     if (executor == null) {
       throw new IllegalStateException("executorSupplier returned null");
     }
