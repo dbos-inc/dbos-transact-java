@@ -157,11 +157,13 @@ fun getRegisteredWorkflows() = DBOS.getRegisteredWorkflows()
 @JvmSynthetic
 fun getRegisteredWorkflowInstances() = DBOS.getRegisteredWorkflowInstances()
 
+/**
 @JvmSynthetic
 fun getExternalState(service: String, workflowName: String, key: String) = DBOS.getExternalState(service, workflowName, key)
 
 @JvmSynthetic
 fun upsertExternalState(state: ExternalState) = DBOS.upsertExternalState(state)
+*/
 
 @JvmSynthetic
 fun patch(name: String) = DBOS.patch(name)

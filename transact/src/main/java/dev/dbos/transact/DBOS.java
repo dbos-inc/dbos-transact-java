@@ -911,6 +911,56 @@ public class DBOS {
   }
 
   /**
+   * Get all workflows registered with DBOS.
+   *
+   * @return list of all registered workflow methods
+   */
+  public static @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
+    // TODO: no step wrapping in executor
+    return ensureInstance().getRegisteredWorkflows();
+  }
+
+  /**
+   * Get all workflow classes registered with DBOS.
+   *
+   * @return list of all class instances containing registered workflow methods
+   */
+  public static @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
+    // TODO: no step wrapping in executor
+    return ensureInstance().getRegisteredWorkflowInstances();
+  }
+
+  /**
+   * Retrieve a queue definition
+   *
+   * @param queueName Name of the queue
+   * @return Queue definition for given `queueName`
+   */
+  public static @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
+    // TODO: no step wrapping in executor
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null ? executor.getQueue(queueName) : ensureInstance().getQueue(queueName);
+  }
+
+  /**
+   * Retrieve a handle to a workflow, given its ID. Note that a handle is always returned, whether
+   * the workflow exists or not; getStatus() can be used to tell the difference
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Checked exception thrown by the workflow function, if any
+   * @param workflowId ID of the workflow to retrieve
+   * @return Workflow handle for the provided workflow ID
+   */
+  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> retrieveWorkflow(
+      @NonNull String workflowId) {
+    // TODO: no step wrapping in executor
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null
+        ? executor.<T, E>retrieveWorkflow(workflowId)
+        : ensureInstance().retrieveWorkflow(workflowId);
+  }
+
+  /**
    * Get the ID of the current running workflow, or `null` if a workflow is not in progress
    *
    * @return Current workflow ID
@@ -953,36 +1003,15 @@ public class DBOS {
   }
 
   /**
-   * Retrieve a queue definition
+   * Start or enqueue a workflow with no return value, using default options
    *
-   * @param queueName Name of the queue
-   * @return Queue definition for given `queueName`
-   */
-  public static @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
-    return ensureInstance().getQueue(queueName);
-  }
-
-  /**
-   * Durable sleep. Use this instead of Thread.sleep, especially in workflows. On restart or during
-   * recovery the original expected wakeup time is honoured as opposed to sleeping all over again.
-   *
-   * @param duration amount of time to sleep
-   */
-  public static void sleep(@NonNull Duration duration) {
-    ensureInstance().sleep(duration);
-  }
-
-  /**
-   * Start or enqueue a workflow with default options
-   *
-   * @param <T> Return type of the workflow
    * @param <E> Type of checked exception thrown by the workflow, if any
-   * @param supplier A lambda that calls exactly one workflow function
+   * @param runnable A lambda that calls exactly one workflow function
    * @return A handle to the enqueued or running workflow
    */
-  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
-      @NonNull ThrowingSupplier<T, E> supplier) {
-    return ensureInstance().startWorkflow(supplier, new StartWorkflowOptions());
+  public static <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
+      @NonNull ThrowingRunnable<E> runnable) {
+    return DBOS.startWorkflow(runnable, new StartWorkflowOptions());
   }
 
   /**
@@ -995,19 +1024,20 @@ public class DBOS {
    */
   public static <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
       @NonNull ThrowingRunnable<E> runnable, @NonNull StartWorkflowOptions options) {
-    return ensureInstance().startWorkflow(runnable, options);
+    return DBOS.startWorkflow(runnable.asSupplier(), options);
   }
 
   /**
-   * Start or enqueue a workflow with no return value, using default options
+   * Start or enqueue a workflow with default options
    *
+   * @param <T> Return type of the workflow
    * @param <E> Type of checked exception thrown by the workflow, if any
-   * @param runnable A lambda that calls exactly one workflow function
+   * @param supplier A lambda that calls exactly one workflow function
    * @return A handle to the enqueued or running workflow
    */
-  public static <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
-      @NonNull ThrowingRunnable<E> runnable) {
-    return ensureInstance().startWorkflow(runnable, new StartWorkflowOptions());
+  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
+      @NonNull ThrowingSupplier<T, E> supplier) {
+    return DBOS.startWorkflow(supplier, new StartWorkflowOptions());
   }
 
   /**
@@ -1021,44 +1051,65 @@ public class DBOS {
    */
   public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
       @NonNull ThrowingSupplier<T, E> supplier, @NonNull StartWorkflowOptions options) {
-    return ensureInstance().startWorkflow(supplier, options);
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null
+        ? executor.startWorkflow(supplier, options)
+        : ensureInstance().startWorkflow(supplier, options);
   }
 
   /**
-   * Execute a workflow based on registration and arguments. This is expected to be used by event
-   * listeners, not app code.
+   * Run the provided function as a step; this variant is for functions with no return value
    *
-   * @param regWorkflow Registration of the workflow. @see getRegisteredWorkflows
-   * @param args Workflow function arguments
-   * @param options Execution options, such as ID, queue, and timeout/deadline
-   * @return WorkflowHandle to the executed workflow
+   * @param <E> Checked exception thrown by the step, if any
+   * @param stepfunc function or lambda to run
+   * @param name Name of the step, for tracing and recording in the system database
+   * @throws E
    */
-  public static WorkflowHandle<?, ?> startWorkflow(
-      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
-    return ensureInstance().startWorkflow(regWorkflow, args, options);
+  public static <E extends Exception> void runStep(
+      @NonNull ThrowingRunnable<E> stepfunc, @NonNull String name) throws E {
+    DBOS.runStep(stepfunc, new StepOptions(name));
   }
 
   /**
-   * Get the result of a workflow, or rethrow the exception thrown by the workflow
+   * Run the provided function as a step; this variant is for functions with no return value
    *
-   * @param <T> Return type of the workflow
-   * @param <E> Checked exception type, if any, thrown by the workflow
-   * @param workflowId ID of the workflow to retrieve
-   * @return Return value of the workflow
-   * @throws E if the workflow threw an exception
+   * @param <E> Checked exception thrown by the step, if any
+   * @param stepfunc function or lambda to run
+   * @param opts step name, and retry options for running the step
+   * @throws E
    */
-  public static <T, E extends Exception> T getResult(@NonNull String workflowId) throws E {
-    return ensureInstance().getResult(workflowId);
+  public static <E extends Exception> void runStep(
+      @NonNull ThrowingRunnable<E> stepfunc, @NonNull StepOptions opts) throws E {
+    DBOS.runStep(stepfunc.asSupplier(), opts);
   }
 
   /**
-   * Get the status of a workflow
+   * Run the provided function as a step; this variant is for functions with a return value
    *
-   * @param workflowId ID of the workflow to query
-   * @return Current workflow status for the provided workflowId, or null.
+   * @param <E> Checked exception thrown by the step, if any
+   * @param stepfunc function or lambda to run
+   * @param name name of the step, for tracing and to record in the system database
+   * @throws E
    */
-  public static @Nullable WorkflowStatus getWorkflowStatus(@NonNull String workflowId) {
-    return ensureInstance().getWorkflowStatus(workflowId);
+  public static <T, E extends Exception> T runStep(
+      @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull String name) throws E {
+    return DBOS.runStep(stepfunc, new StepOptions(name));
+  }
+
+  /**
+   * Run the provided function as a step; this variant is for functions with a return value
+   *
+   * @param <E> Checked exception thrown by the step, if any
+   * @param stepfunc function or lambda to run
+   * @param opts step name, and retry options for running the step
+   * @throws E
+   */
+  public static <T, E extends Exception> T runStep(
+      @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull StepOptions opts) throws E {
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null
+        ? executor.runStepInternal(stepfunc, opts, null)
+        : ensureInstance().runStep(stepfunc, opts);
   }
 
   /**
@@ -1074,7 +1125,7 @@ public class DBOS {
       @NonNull Object message,
       @Nullable String topic,
       @Nullable String idempotencyKey) {
-    ensureInstance().send(destinationId, message, topic, idempotencyKey);
+    DBOS.send(destinationId, message, topic, idempotencyKey, null);
   }
 
   /**
@@ -1086,7 +1137,7 @@ public class DBOS {
    */
   public static void send(
       @NonNull String destinationId, @NonNull Object message, @NonNull String topic) {
-    ensureInstance().send(destinationId, message, topic);
+    DBOS.send(destinationId, message, topic, null, null);
   }
 
   /**
@@ -1104,7 +1155,12 @@ public class DBOS {
       @Nullable String topic,
       @Nullable String idempotencyKey,
       @Nullable SerializationStrategy serialization) {
-    ensureInstance().send(destinationId, message, topic, idempotencyKey, serialization);
+    var executor = DBOSContext.dbosExecutor();
+    if (executor != null) {
+      executor.send(destinationId, message, topic, idempotencyKey, serialization);
+    } else {
+      ensureInstance().send(destinationId, message, topic, idempotencyKey, serialization);
+    }
   }
 
   /**
@@ -1115,7 +1171,8 @@ public class DBOS {
    * @return the message if there is one or else null
    */
   public static @Nullable Object recv(@Nullable String topic, @NonNull Duration timeout) {
-    return ensureInstance().recv(topic, timeout);
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null ? executor.recv(topic, timeout) : ensureInstance().recv(topic, timeout);
   }
 
   /**
@@ -1125,7 +1182,7 @@ public class DBOS {
    * @param value data that is published
    */
   public static void setEvent(@NonNull String key, @NonNull Object value) {
-    ensureInstance().setEvent(key, value);
+    DBOS.setEvent(key, value, null);
   }
 
   /**
@@ -1137,7 +1194,12 @@ public class DBOS {
    */
   public static void setEvent(
       @NonNull String key, @NonNull Object value, @Nullable SerializationStrategy serialization) {
-    ensureInstance().setEvent(key, value, serialization);
+    var executor = DBOSContext.dbosExecutor();
+    if (executor != null) {
+      executor.setEvent(key, value, serialization);
+    } else {
+      ensureInstance().setEvent(key, value, serialization);
+    }
   }
 
   /**
@@ -1150,61 +1212,39 @@ public class DBOS {
    */
   public static @Nullable Object getEvent(
       @NonNull String workflowId, @NonNull String key, @NonNull Duration timeout) {
-    return ensureInstance().getEvent(workflowId, key, timeout);
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null
+        ? executor.getEvent(workflowId, key, timeout)
+        : ensureInstance().getEvent(workflowId, key, timeout);
   }
 
   /**
-   * Run the provided function as a step; this variant is for functions with a return value
+   * Get the result of a workflow, or rethrow the exception thrown by the workflow
    *
-   * @param <E> Checked exception thrown by the step, if any
-   * @param stepfunc function or lambda to run
-   * @param name name of the step, for tracing and to record in the system database
-   * @throws E
+   * @param <T> Return type of the workflow
+   * @param <E> Checked exception type, if any, thrown by the workflow
+   * @param workflowId ID of the workflow to retrieve
+   * @return Return value of the workflow
+   * @throws E if the workflow threw an exception
    */
-  public static <T, E extends Exception> T runStep(
-      @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull String name) throws E {
-
-    return ensureInstance().runStep(stepfunc, name);
+  public static <T, E extends Exception> T getResult(@NonNull String workflowId) throws E {
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null
+        ? executor.<T, E>getResult(workflowId)
+        : ensureInstance().<T, E>getResult(workflowId);
   }
 
   /**
-   * Run the provided function as a step; this variant is for functions with no return value
+   * Get the status of a workflow
    *
-   * @param <E> Checked exception thrown by the step, if any
-   * @param stepfunc function or lambda to run
-   * @param opts step name, and retry options for running the step
-   * @throws E
+   * @param workflowId ID of the workflow to query
+   * @return Current workflow status for the provided workflowId, or null.
    */
-  public static <E extends Exception> void runStep(
-      @NonNull ThrowingRunnable<E> stepfunc, @NonNull StepOptions opts) throws E {
-    ensureInstance().runStep(stepfunc, opts);
-  }
-
-  /**
-   * Run the provided function as a step; this variant is for functions with no return value
-   *
-   * @param <E> Checked exception thrown by the step, if any
-   * @param stepfunc function or lambda to run
-   * @param name Name of the step, for tracing and recording in the system database
-   * @throws E
-   */
-  public static <E extends Exception> void runStep(
-      @NonNull ThrowingRunnable<E> stepfunc, @NonNull String name) throws E {
-    ensureInstance().runStep(stepfunc, name);
-  }
-
-  /**
-   * Run the provided function as a step; this variant is for functions with a return value
-   *
-   * @param <E> Checked exception thrown by the step, if any
-   * @param stepfunc function or lambda to run
-   * @param opts step name, and retry options for running the step
-   * @throws E
-   */
-  public static <T, E extends Exception> T runStep(
-      @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull StepOptions opts) throws E {
-
-    return ensureInstance().runStep(stepfunc, opts);
+  public static @Nullable WorkflowStatus getWorkflowStatus(@NonNull String workflowId) {
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null
+        ? executor.getWorkflowStatus(workflowId)
+        : ensureInstance().getWorkflowStatus(workflowId);
   }
 
   /**
@@ -1217,7 +1257,10 @@ public class DBOS {
    */
   public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
       @NonNull String workflowId) {
-    return ensureInstance().resumeWorkflow(workflowId);
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null
+        ? executor.<T, E>resumeWorkflow(workflowId)
+        : ensureInstance().resumeWorkflow(workflowId);
   }
 
   /***
@@ -1228,7 +1271,27 @@ public class DBOS {
    * @param workflowId ID of the workflow to cancel
    */
   public static void cancelWorkflow(@NonNull String workflowId) {
-    ensureInstance().cancelWorkflow(workflowId);
+    var executor = DBOSContext.dbosExecutor();
+    if (executor != null) {
+      executor.cancelWorkflow(workflowId);
+    } else {
+      ensureInstance().cancelWorkflow(workflowId);
+    }
+  }
+
+  /**
+   * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
+   * provided step are copied over
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Checked exception thrown by the workflow function, if any
+   * @param workflowId Original workflow Id
+   * @param startStep Start execution from this step. Prior steps copied over
+   * @return handle to the workflow
+   */
+  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
+      @NonNull String workflowId, int startStep) {
+    return DBOS.forkWorkflow(workflowId, startStep, null);
   }
 
   /**
@@ -1244,22 +1307,10 @@ public class DBOS {
    */
   public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
       @NonNull String workflowId, int startStep, @NonNull ForkOptions options) {
-    return ensureInstance().forkWorkflow(workflowId, startStep, options);
-  }
-
-  /**
-   * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
-   * provided step are copied over
-   *
-   * @param <T> Return type of the workflow function
-   * @param <E> Checked exception thrown by the workflow function, if any
-   * @param workflowId Original workflow Id
-   * @param startStep Start execution from this step. Prior steps copied over
-   * @return handle to the workflow
-   */
-  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
-      @NonNull String workflowId, int startStep) {
-    return ensureInstance().forkWorkflow(workflowId, startStep);
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null
+        ? executor.<T, E>forkWorkflow(workflowId, startStep, options)
+        : ensureInstance().forkWorkflow(workflowId, startStep, options);
   }
 
   /**
@@ -1269,7 +1320,7 @@ public class DBOS {
    * @throws IllegalArgumentException if workflowId is null
    */
   public static void deleteWorkflow(@NonNull String workflowId) {
-    ensureInstance().deleteWorkflow(workflowId);
+    DBOS.deleteWorkflow(workflowId, false);
   }
 
   /**
@@ -1281,21 +1332,12 @@ public class DBOS {
    * @throws IllegalArgumentException if workflowId is null
    */
   public static void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
-    ensureInstance().deleteWorkflow(workflowId, deleteChildren);
-  }
-
-  /**
-   * Retrieve a handle to a workflow, given its ID. Note that a handle is always returned, whether
-   * the workflow exists or not; getStatus() can be used to tell the difference
-   *
-   * @param <T> Return type of the workflow function
-   * @param <E> Checked exception thrown by the workflow function, if any
-   * @param workflowId ID of the workflow to retrieve
-   * @return Workflow handle for the provided workflow ID
-   */
-  public static <T, E extends Exception> @NonNull WorkflowHandle<T, E> retrieveWorkflow(
-      @NonNull String workflowId) {
-    return ensureInstance().retrieveWorkflow(workflowId);
+    var executor = DBOSContext.dbosExecutor();
+    if (executor != null) {
+      executor.deleteWorkflow(workflowId, deleteChildren);
+    } else {
+      ensureInstance().deleteWorkflow(workflowId, deleteChildren);
+    }
   }
 
   /**
@@ -1305,7 +1347,8 @@ public class DBOS {
    * @return a list of workflow status {@link WorkflowStatus}
    */
   public static @NonNull List<WorkflowStatus> listWorkflows(@NonNull ListWorkflowsInput input) {
-    return ensureInstance().listWorkflows(input);
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null ? executor.listWorkflows(input) : ensureInstance().listWorkflows(input);
   }
 
   /**
@@ -1315,51 +1358,24 @@ public class DBOS {
    * @return list of step information {@link StepInfo}
    */
   public static @NonNull List<StepInfo> listWorkflowSteps(@NonNull String workflowId) {
-    return ensureInstance().listWorkflowSteps(workflowId);
+    var executor = DBOSContext.dbosExecutor();
+    return executor != null
+        ? executor.listWorkflowSteps(workflowId)
+        : ensureInstance().listWorkflowSteps(workflowId);
   }
 
   /**
-   * Get all workflows registered with DBOS.
+   * Durable sleep. Use this instead of Thread.sleep, especially in workflows. On restart or during
+   * recovery the original expected wakeup time is honoured as opposed to sleeping all over again.
    *
-   * @return list of all registered workflow methods
+   * @param duration amount of time to sleep
    */
-  public static @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
-    return ensureInstance().getRegisteredWorkflows();
-  }
-
-  /**
-   * Get all workflow classes registered with DBOS.
-   *
-   * @return list of all class instances containing registered workflow methods
-   */
-  public static @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
-    return ensureInstance().getRegisteredWorkflowInstances();
-  }
-
-  /**
-   * Get a system database record stored by an external service A unique value is stored per
-   * combination of service, workflowName, and key
-   *
-   * @param service Identity of the service maintaining the record
-   * @param workflowName Fully qualified name of the workflow
-   * @param key Key assigned within the service+workflow
-   * @return Value associated with the service+workflow+key combination
-   */
-  public static Optional<ExternalState> getExternalState(
-      String service, String workflowName, String key) {
-    return ensureInstance().getExternalState(service, workflowName, key);
-  }
-
-  /**
-   * Insert or update a system database record stored by an external service A timestamped unique
-   * value is stored per combination of service, workflowName, and key
-   *
-   * @param state ExternalState containing the service, workflow, key, and value to store
-   * @return Value associated with the service+workflow+key combination, in case the stored value
-   *     already had a higher version or timestamp
-   */
-  public static ExternalState upsertExternalState(ExternalState state) {
-    return ensureInstance().upsertExternalState(state);
+  public static void sleep(@NonNull Duration duration) {
+    var executor = DBOSContext.dbosExecutor();
+    if (executor == null) {
+      throw new IllegalStateException("DBOS.sleep must be called from a workflow");
+    }
+    executor.sleep(duration);
   }
 
   /**
@@ -1377,7 +1393,11 @@ public class DBOS {
    *     workflow
    */
   public static boolean patch(@NonNull String patchName) {
-    return ensureInstance().patch(patchName);
+    var executor = DBOSContext.dbosExecutor();
+    if (executor == null) {
+      throw new IllegalStateException("DBOS.patch must be called from a workflow");
+    }
+    return executor.patch(patchName);
   }
 
   /**
@@ -1393,6 +1413,10 @@ public class DBOS {
    *     workflow
    */
   public static boolean deprecatePatch(@NonNull String patchName) {
-    return ensureInstance().deprecatePatch(patchName);
+    var executor = DBOSContext.dbosExecutor();
+    if (executor == null) {
+      throw new IllegalStateException("DBOS.deprecatePatch must be called from a workflow");
+    }
+    return executor.deprecatePatch(patchName);
   }
 }

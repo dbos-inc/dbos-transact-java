@@ -12,9 +12,7 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
-import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Timeout;
-import dev.dbos.transact.workflow.Workflow;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -28,88 +26,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-class HawkServiceInstanceImpl implements HawkService {
-  private final DBOS.Instance dbos;
-  private HawkService proxy;
-
-  public HawkServiceInstanceImpl(DBOS.Instance dbos) {
-    this.dbos = dbos;
-  }
-
-  public void setProxy(HawkService proxy) {
-    this.proxy = proxy;
-  }
-
-  @Workflow
-  @Override
-  public String simpleWorkflow() {
-    return LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-  }
-
-  @Workflow
-  @Override
-  public String sleepWorkflow(long sleepSec) {
-    var duration = Duration.ofSeconds(sleepSec);
-    try {
-      Thread.sleep(duration.toMillis());
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new RuntimeException(e);
-    }
-    return LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-  }
-
-  @Workflow
-  @Override
-  public String parentWorkflow() {
-    return proxy.simpleWorkflow();
-  }
-
-  @Workflow
-  @Override
-  public String parentStartWorkflow() {
-    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow());
-    return handle.getResult();
-  }
-
-  @Workflow
-  @Override
-  public String parentSleepWorkflow(Long timeoutSec, long sleepSec) {
-    var duration =
-        timeoutSec == null
-            ? Timeout.inherit()
-            : timeoutSec == 0L ? Timeout.none() : Timeout.of(Duration.ofSeconds(timeoutSec));
-    var options = new WorkflowOptions().withTimeout(duration);
-    try (var o = options.setContext()) {
-      return proxy.sleepWorkflow(sleepSec);
-    }
-  }
-
-  @Step
-  @Override
-  public Instant nowStep() {
-    return Instant.now();
-  }
-
-  @Workflow
-  @Override
-  public Instant stepWorkflow() {
-    return proxy.nowStep();
-  }
-
-  @Step
-  @Override
-  public String illegalStep() {
-    return proxy.simpleWorkflow();
-  }
-
-  @Workflow
-  @Override
-  public String illegalWorkflow() {
-    return proxy.illegalStep();
-  }
-}
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class InstanceTest {
@@ -131,11 +47,8 @@ public class InstanceTest {
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
 
-    // Note, manually injecting the DBOS instance here is a poor developer experience
-    // Opened https://github.com/dbos-inc/dbos-transact-java/issues/296 to track improving this
-
     dbos = new DBOS.Instance(dbosConfig);
-    var impl = new HawkServiceInstanceImpl(dbos);
+    var impl = new HawkServiceImpl();
     proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
@@ -162,7 +75,7 @@ public class InstanceTest {
     assertDoesNotThrow(() -> UUID.fromString((String) row.workflowId()));
     assertEquals("SUCCESS", row.status());
     assertEquals("simpleWorkflow", row.name());
-    assertEquals("dev.dbos.transact.invocation.HawkServiceInstanceImpl", row.className());
+    assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", row.className());
     assertNotNull(row.output());
     assertNull(row.error());
     assertNull(row.timeoutMs());

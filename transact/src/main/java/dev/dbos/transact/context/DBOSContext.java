@@ -1,6 +1,7 @@
 package dev.dbos.transact.context;
 
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Timeout;
 
@@ -9,6 +10,8 @@ import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
 public class DBOSContext {
+
+  DBOSExecutor dbosExecutor;
 
   // assigned context options
   String nextWorkflowId;
@@ -27,6 +30,7 @@ public class DBOSContext {
   // private StepStatus stepStatus;
 
   public DBOSContext() {
+    dbosExecutor = null;
     workflowId = null;
     functionId = -1;
     parent = null;
@@ -35,16 +39,23 @@ public class DBOSContext {
     serialization = SerializationStrategy.DEFAULT;
   }
 
-  public DBOSContext(String workflowId, WorkflowInfo parent, Duration timeout, Instant deadline) {
-    this(workflowId, parent, timeout, deadline, null);
+  public DBOSContext(
+      DBOSExecutor dbosExecutor,
+      String workflowId,
+      WorkflowInfo parent,
+      Duration timeout,
+      Instant deadline) {
+    this(dbosExecutor, workflowId, parent, timeout, deadline, null);
   }
 
   public DBOSContext(
+      DBOSExecutor dbosExecutor,
       String workflowId,
       WorkflowInfo parent,
       Duration timeout,
       Instant deadline,
       SerializationStrategy serialization) {
+    this.dbosExecutor = dbosExecutor;
     this.workflowId = workflowId;
     this.functionId = 0;
     this.parent = parent;
@@ -58,6 +69,7 @@ public class DBOSContext {
       StartWorkflowOptions options,
       Integer functionId,
       CompletableFuture<String> future) {
+    this.dbosExecutor = other.dbosExecutor;
     this.nextWorkflowId = other.nextWorkflowId;
     this.nextTimeout = other.nextTimeout;
     this.nextDeadline = other.nextDeadline;
@@ -144,6 +156,10 @@ public class DBOSContext {
     this.serialization = strat;
   }
 
+  public DBOSExecutor getDbosExecutor() {
+    return dbosExecutor;
+  }
+
   public static String workflowId() {
     var ctx = DBOSContextHolder.get();
     return ctx == null ? null : ctx.workflowId;
@@ -167,5 +183,10 @@ public class DBOSContext {
   public static SerializationStrategy serializationStrategy() {
     var ctx = DBOSContextHolder.get();
     return ctx != null ? ctx.getSerialization() : null;
+  }
+
+  public static DBOSExecutor dbosExecutor() {
+    var ctx = DBOSContextHolder.get();
+    return ctx != null ? ctx.getDbosExecutor() : null;
   }
 }
