@@ -5,7 +5,6 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -54,8 +53,6 @@ class NotificationsDAO {
       String serialization)
       throws SQLException {
 
-    serialization =
-        Objects.requireNonNullElse(serialization, SerializationStrategy.DEFAULT.formatName());
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.send";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
