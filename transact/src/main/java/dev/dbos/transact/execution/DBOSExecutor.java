@@ -1350,7 +1350,6 @@ public class DBOSExecutor implements AutoCloseable {
 
             DBOSContextHolder.set(
                 new DBOSContext(
-                    this,
                     workflowId,
                     parent,
                     foptions.timeoutDuration(),
