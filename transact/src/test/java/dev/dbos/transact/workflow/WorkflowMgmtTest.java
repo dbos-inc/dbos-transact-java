@@ -26,6 +26,8 @@ interface MgmtService {
   int simpleWorkflow(int input) throws InterruptedException;
 
   void stepTimingWorkflow() throws InterruptedException;
+
+  String helloWorkflow(String name);
 }
 
 class MgmtServiceImpl implements MgmtService {
@@ -59,6 +61,11 @@ class MgmtServiceImpl implements MgmtService {
     DBOS.setEvent("key", "value");
     DBOS.listWorkflows(new ListWorkflowsInput());
     DBOS.recv(null, Duration.ofSeconds(1));
+  }
+
+  @Workflow
+  public String helloWorkflow(String name) {
+    return "Hello, %s!".formatted(name);
   }
 }
 
@@ -214,5 +221,43 @@ public class WorkflowMgmtTest extends DbSetupTestBase {
     assertEquals(3, impl.stepsExecuted());
 
     assertEquals(WorkflowState.SUCCESS.name(), origHandle.getStatus().status());
+  }
+
+  @Test
+  public void testListWorkflowsDontLoadInputOutput() throws Exception {
+    var handle = DBOS.startWorkflow(() -> proxy.helloWorkflow("Chuck"));
+    assertEquals("Hello, Chuck!", handle.getResult());
+
+    var input =
+        new ListWorkflowsInput()
+            .withWorkflowId(handle.workflowId())
+            .withLoadInput(false)
+            .withLoadOutput(false);
+    var workflows = DBOS.listWorkflows(input);
+    assertEquals(1, workflows.size());
+    var workflow = workflows.get(0);
+    assertEquals(handle.workflowId(), workflow.workflowId());
+    assertNull(workflow.input());
+    assertNull(workflow.output());
+    assertNull(workflow.error());
+    assertNull(workflow.serialization());
+  }
+
+  @Test
+  public void testListWorkflowsLoadInputOutput() throws Exception {
+    var handle = DBOS.startWorkflow(() -> proxy.helloWorkflow("Chuck"));
+    assertEquals("Hello, Chuck!", handle.getResult());
+
+    // loadInput/loadOutput default to true
+    var input = new ListWorkflowsInput().withWorkflowId(handle.workflowId());
+    var workflows = DBOS.listWorkflows(input);
+    assertEquals(1, workflows.size());
+    var workflow = workflows.get(0);
+    assertEquals(handle.workflowId(), workflow.workflowId());
+    assertEquals(1, workflow.input().length);
+    assertEquals("Chuck", workflow.input()[0]);
+    assertEquals("Hello, Chuck!", workflow.output());
+    assertNull(workflow.error());
+    assertEquals("java_jackson", workflow.serialization());
   }
 }

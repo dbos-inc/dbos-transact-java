@@ -5,7 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.dbos.transact.*;
+import dev.dbos.transact.Constants;
+import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.DbSetupTestBase;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -22,12 +26,9 @@ import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Semaphore;
 
-import javax.sql.DataSource;
-
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
-import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +37,7 @@ public class QueuesTest extends DbSetupTestBase {
 
   private static final Logger logger = LoggerFactory.getLogger(QueuesTest.class);
 
-  private static DataSource dataSource;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
@@ -48,6 +49,7 @@ public class QueuesTest extends DbSetupTestBase {
 
   @AfterEach
   void afterEachTest() throws Exception {
+    dataSource.close();
     DBOS.shutdown();
   }
 
@@ -136,7 +138,7 @@ public class QueuesTest extends DbSetupTestBase {
     }
   }
 
-  @RetryingTest(3)
+  @Test
   public void testPriority() throws Exception {
 
     Queue firstQ =
@@ -218,7 +220,7 @@ public class QueuesTest extends DbSetupTestBase {
     }
   }
 
-  @RetryingTest(3)
+  @Test
   void testListQueuedWorkflow() throws Exception {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
@@ -277,11 +279,9 @@ public class QueuesTest extends DbSetupTestBase {
   public void multipleQueues() throws Exception {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
-    DBOS.registerQueue(firstQ);
-    ServiceQ serviceQ1 = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
-
     Queue secondQ = new Queue("secondQueue").withConcurrency(1).withWorkerConcurrency(1);
-    DBOS.registerQueue(secondQ);
+    DBOS.registerQueues(firstQ, secondQ);
+    ServiceQ serviceQ1 = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
     ServiceI serviceI = DBOS.registerWorkflows(ServiceI.class, new ServiceIImpl());
 
     DBOS.launch();
@@ -572,7 +572,7 @@ public class QueuesTest extends DbSetupTestBase {
     assertEquals("inputqinputq", result);
   }
 
-  @RetryingTest(3)
+  @Test
   public void testQueueConcurrencyUnderRecovery() throws Exception {
     Queue queue = new Queue("test_queue").withConcurrency(2);
     DBOS.registerQueue(queue);
@@ -591,12 +591,11 @@ public class QueuesTest extends DbSetupTestBase {
     var opt3 = new StartWorkflowOptions("wf3").withQueue(queue);
     var handle3 = DBOS.startWorkflow(() -> service.noopWorkflow(2), opt3);
 
-    for (Semaphore e : impl.wfSemaphores) {
-      e.acquire();
-      e.drainPermits();
-    }
+    // each call to blockedWorkflow releases the semaphore once,
+    // so block waiting on both calls to release
+    impl.wfSemaphore.acquire(2);
 
-    assertEquals(2, impl.counter);
+    assertEquals(2, impl.counter.get());
     assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().status());
     assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().status());
     assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().status());
@@ -631,7 +630,7 @@ public class QueuesTest extends DbSetupTestBase {
     assertTrue(expectedWorkflowIds.contains(localHandles.get(0).workflowId()));
     assertTrue(expectedWorkflowIds.contains(localHandles.get(1).workflowId()));
 
-    assertEquals(2, impl.counter);
+    assertEquals(2, impl.counter.get());
     // Recovery sets back to enqueued.
     //   The enqueued run will get skipped (first run is still blocked)
     assertEquals(WorkflowState.ENQUEUED.toString(), handle1.getStatus().status());
@@ -654,8 +653,7 @@ public class QueuesTest extends DbSetupTestBase {
 
     Queue queueOne = new Queue("queueOne");
     Queue queueTwo = new Queue("queueTwo");
-    DBOS.registerQueue(queueOne);
-    DBOS.registerQueue(queueTwo);
+    DBOS.registerQueues(queueOne, queueTwo);
 
     ServiceQ serviceQ = DBOS.registerWorkflows(ServiceQ.class, new ServiceQImpl());
     DBOS.launch();

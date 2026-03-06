@@ -208,6 +208,8 @@ public class DirectInvocationTest extends DbSetupTestBase {
     assertNull(row1.timeoutMs());
     assertNull(row0.deadlineEpochMs());
     assertNull(row1.deadlineEpochMs());
+    assertNull(row0.parentWorkflowId());
+    assertEquals(row0.workflowId(), row1.parentWorkflowId());
 
     var steps = DBUtils.getStepRows(dataSource, row0.workflowId());
     assertEquals(1, steps.size());
@@ -269,6 +271,7 @@ public class DirectInvocationTest extends DbSetupTestBase {
     var row1 = rows.get(1);
     assertEquals(workflowId, row0.workflowId());
     assertEquals(workflowId + "-0", row1.workflowId());
+    assertEquals(workflowId, row1.parentWorkflowId());
   }
 
   @Test

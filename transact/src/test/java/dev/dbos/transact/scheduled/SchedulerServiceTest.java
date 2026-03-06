@@ -16,7 +16,6 @@ import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junitpioneer.jupiter.RetryingTest;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class SchedulerServiceTest extends DbSetupTestBase {
@@ -34,7 +33,7 @@ class SchedulerServiceTest extends DbSetupTestBase {
     DBOS.shutdown();
   }
 
-  @RetryingTest(3)
+  @Test
   public void simpleScheduledWorkflow() throws Exception {
 
     var impl = new SkedServiceImpl();
@@ -88,10 +87,12 @@ class SchedulerServiceTest extends DbSetupTestBase {
     assertTrue(q2workflows.size() >= 1);
     assertEquals("q2", q2workflows.get(0).queueName());
 
+    DBOS.shutdown();
+
     // See about makeup work (ignore missed)
     var timeToSleep = 5000 - (System.currentTimeMillis() - timeAsOfShutdown);
     Thread.sleep(timeToSleep < 0 ? 0 : timeToSleep);
-    schedulerService.dbosLaunched();
+    DBOS.launch();
     Thread.sleep(2000);
 
     int count1imb = impl.everySecondCounterIgnoreMissed;

@@ -20,6 +20,7 @@ import java.util.List;
 
 import javax.sql.DataSource;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,8 +29,7 @@ import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class RecoveryServiceTest extends DbSetupTestBase {
-
-  private static DataSource dataSource;
+  private HikariDataSource dataSource;
   private Queue testQueue;
   private SystemDatabase systemDatabase;
   private DBOSExecutor dbosExecutor;
@@ -40,7 +40,7 @@ class RecoveryServiceTest extends DbSetupTestBase {
   @BeforeEach
   void setUp() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
 
     DBOSTestAccess.reinitialize(dbosConfig);
     executingService =
@@ -58,6 +58,7 @@ class RecoveryServiceTest extends DbSetupTestBase {
 
   @AfterEach
   void afterEachTest() throws Exception {
+    dataSource.close();
     DBOS.shutdown();
   }
 

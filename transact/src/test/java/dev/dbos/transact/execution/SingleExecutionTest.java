@@ -7,6 +7,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Step;
@@ -18,6 +19,7 @@ import java.sql.SQLException;
 import java.sql.SQLTransientException;
 import java.util.UUID;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -257,9 +259,12 @@ public class SingleExecutionTest extends DbSetupTestBase {
   private static TryConcExec2 concImpl;
   private static TryConcExec2Ifc concIfc;
 
+  private static HikariDataSource dataSource;
+
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
     DBOSTestAccess.reinitialize(dbosConfig);
 
     execImpl = new TryConcExec();
@@ -283,6 +288,7 @@ public class SingleExecutionTest extends DbSetupTestBase {
 
   @AfterEach
   void afterEachTest() throws Exception {
+    dataSource.close();
     DBOS.shutdown();
   }
 

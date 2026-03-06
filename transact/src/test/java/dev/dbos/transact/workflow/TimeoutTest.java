@@ -18,25 +18,29 @@ import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class TimeoutTest extends DbSetupTestBase {
 
-  private static DataSource dataSource;
+  private HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    TimeoutTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
 
     DBOSTestAccess.reinitialize(dbosConfig);
   }
 
   @AfterEach
   void afterEachTest() throws SQLException, Exception {
+    dataSource.close();
     DBOS.shutdown();
   }
 
@@ -321,6 +325,8 @@ public class TimeoutTest extends DbSetupTestBase {
     assertEquals(WorkflowState.CANCELLED.name(), childStatus);
   }
 
+  private static final Logger logger = LoggerFactory.getLogger(TimeoutTest.class);
+
   @Test
   public void parentTimeoutInheritedByChild() throws Exception {
 
@@ -340,11 +346,29 @@ public class TimeoutTest extends DbSetupTestBase {
           }
         });
 
-    String parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus().status();
-    assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
+    try {
+      String parentStatus = DBOS.retrieveWorkflow(wfid1).getStatus().status();
+      assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
+    } finally {
+      var row = DBUtils.getWorkflowRow(dataSource, wfid1);
+      if (!row.status().equals("CANCELLED")) {
+        logger.warn("{}: {}", wfid1, row);
+      }
+    }
 
-    String childStatus = DBOS.retrieveWorkflow("childwf").getStatus().status();
-    assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+    var childWfId = "childwf";
+    var handle = DBOS.retrieveWorkflow(childWfId);
+    assertThrows(Exception.class, () -> handle.getResult());
+
+    try {
+      String childStatus = DBOS.retrieveWorkflow(childWfId).getStatus().status();
+      assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+    } finally {
+      var row = DBUtils.getWorkflowRow(dataSource, childWfId);
+      if (!row.status().equals("CANCELLED")) {
+        logger.warn("{}: {}", childWfId, row);
+      }
+    }
   }
 
   @Test

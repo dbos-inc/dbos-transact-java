@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
@@ -22,7 +22,6 @@ import java.util.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -45,11 +44,10 @@ import org.junit.jupiter.api.Test;
  * </ul>
  */
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class InteropTest {
+public class InteropTest extends DbSetupTestBase {
 
   private static final ObjectMapper mapper = new ObjectMapper();
 
-  private static DBOSConfig dbosConfig;
   private HikariDataSource dataSource;
 
   // ============================================================================
@@ -100,18 +98,12 @@ public class InteropTest {
   // Golden event value JSON
   static final String GOLDEN_EVENT_JSON = "{\"flag\":true,\"num\":42,\"text\":\"hello-interop\"}";
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    InteropTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("interoptest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
-
   @BeforeEach
   void beforeEachTest() throws Exception {
-    DBUtils.recreateDB(dbosConfig);
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
+    var config = createConfigFromEnv("interoptest");
+    DBUtils.recreateDB(config);
+    dataSource = SystemDatabase.createDataSource(config);
+    DBOSTestAccess.reinitialize(config);
   }
 
   @AfterEach

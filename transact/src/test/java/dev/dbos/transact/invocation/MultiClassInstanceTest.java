@@ -175,8 +175,9 @@ public class MultiClassInstanceTest extends DbSetupTestBase {
           "SUCCESS",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
-      var dataSource = SystemDatabase.createDataSource(dbosConfig);
-      DBUtils.setWorkflowState(dataSource, handle.workflowId(), WorkflowState.PENDING.name());
+      try (var dataSource = SystemDatabase.createDataSource(dbosConfig)) {
+        DBUtils.setWorkflowState(dataSource, handle.workflowId(), WorkflowState.PENDING.name());
+      }
       stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(
           "PENDING",

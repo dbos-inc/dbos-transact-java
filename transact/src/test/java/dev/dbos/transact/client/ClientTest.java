@@ -11,6 +11,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 
@@ -181,7 +182,7 @@ public class ClientTest extends DbSetupTestBase {
   public void invalidSend() throws Exception {
     var invalidWorkflowId = UUID.randomUUID().toString();
 
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = getDBOSClient()) {
       var ex =
           assertThrows(
               DBOSNonExistentWorkflowException.class,

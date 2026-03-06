@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -16,7 +17,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,7 +39,7 @@ class TestServiceImpl implements TestService {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class MultiDbosInstanceTest {
+public class MultiDbosInstanceTest extends DbSetupTestBase {
 
   private static DBOSConfig dbosConfigA;
   private DBOS.Instance dbosA;
@@ -53,18 +53,14 @@ public class MultiDbosInstanceTest {
   private TestService proxyB;
   private Queue queueB;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfigA =
-        DBOSConfig.defaultsFromEnv("MultiDbosInstanceTestA")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_multi_a");
-    dbosConfigB =
-        DBOSConfig.defaultsFromEnv("MultiDbosInstanceTestB")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_multi_b");
-  }
-
   @BeforeEach
   void beforeEachTest() throws Exception {
+    dbosConfigA =
+        createConfigFromEnv("MultiDbosInstanceTestA")
+            .withDatabaseUrl(getJdbcUrl("dbos_java_multi_a"));
+    dbosConfigB =
+        createConfigFromEnv("MultiDbosInstanceTestB")
+            .withDatabaseUrl(getJdbcUrl("dbos_java_multi_b"));
     DBUtils.recreateDB(dbosConfigA);
     dbosA = new DBOS.Instance(dbosConfigA);
     implA = new TestServiceImpl(dbosA);

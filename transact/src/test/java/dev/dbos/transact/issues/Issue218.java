@@ -90,6 +90,7 @@ public class Issue218 extends DbSetupTestBase {
 
   @AfterEach
   void afterEachTest() throws Exception {
+    dataSource.close();
     DBOS.shutdown();
   }
 

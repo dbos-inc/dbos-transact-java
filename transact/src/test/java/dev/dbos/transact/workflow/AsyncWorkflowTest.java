@@ -21,9 +21,9 @@ public class AsyncWorkflowTest extends DbSetupTestBase {
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-
-    DBOSTestAccess.reinitialize(dbosConfig);
+    var config = dbosConfig.withAdminServer(true);
+    DBUtils.recreateDB(config);
+    DBOSTestAccess.reinitialize(config);
   }
 
   @AfterEach

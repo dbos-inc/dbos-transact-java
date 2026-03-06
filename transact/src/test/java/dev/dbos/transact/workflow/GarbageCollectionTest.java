@@ -57,7 +57,6 @@ class GCTestServiceImpl implements GCTestService {
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class GarbageCollectionTest extends DbSetupTestBase {
-
   private GCTestServiceImpl impl;
   private GCTestService proxy;
 

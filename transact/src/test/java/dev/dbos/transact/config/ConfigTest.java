@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.DbSetupTestBase;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.invocation.HawkService;
@@ -27,8 +28,10 @@ import java.util.stream.Collectors;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.maven.artifact.versioning.ComparableVersion;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.postgresql.ds.PGSimpleDataSource;
 import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
 import uk.org.webcompere.systemstubs.jupiter.SystemStub;
 import uk.org.webcompere.systemstubs.jupiter.SystemStubsExtension;
@@ -45,7 +48,10 @@ public class ConfigTest extends DbSetupTestBase {
     envVars.set("DBOS__APPVERSION", "test-env-app-version");
     envVars.set("DBOS__APPID", "test-env-app-id");
 
-    var config = dbosConfig.withAppVersion("test-app-version").withExecutorId("test-executor-id");
+    var config =
+        createConfig("config-test")
+            .withAppVersion("test-app-version")
+            .withExecutorId("test-executor-id");
 
     DBOSTestAccess.reinitialize(config);
     try {
@@ -66,7 +72,7 @@ public class ConfigTest extends DbSetupTestBase {
     envVars.set("DBOS__APPVERSION", "test-env-app-version");
     envVars.set("DBOS__APPID", "test-env-app-id");
 
-    var config = dbosConfig;
+    var config = createConfig("config-test");
 
     DBOSTestAccess.reinitialize(config);
     try {
@@ -88,7 +94,10 @@ public class ConfigTest extends DbSetupTestBase {
     envVars.set("DBOS__APPVERSION", "test-env-app-version");
     envVars.set("DBOS__APPID", "test-env-app-id");
 
-    var config = dbosConfig.withAppVersion("test-app-version").withExecutorId("test-executor-id");
+    var config =
+        createConfig("config-test")
+            .withAppVersion("test-app-version")
+            .withExecutorId("test-executor-id");
 
     DBOSTestAccess.reinitialize(config);
     try {
@@ -104,7 +113,7 @@ public class ConfigTest extends DbSetupTestBase {
 
   @Test
   public void localExecutorId() throws Exception {
-    var config = dbosConfig;
+    var config = createConfig("config-test");
 
     DBOSTestAccess.reinitialize(config);
     try {
@@ -119,7 +128,7 @@ public class ConfigTest extends DbSetupTestBase {
 
   @Test
   public void conductorExecutorId() throws Exception {
-    var config = dbosConfig.withConductorKey("test-conductor-key");
+    var config = createConfigFromEnv("config-test").withConductorKey("test-conductor-key");
 
     DBOSTestAccess.reinitialize(config);
     try {
@@ -136,7 +145,9 @@ public class ConfigTest extends DbSetupTestBase {
   @Test
   public void cantSetExecutorIdWhenUsingConductor() throws Exception {
     var config =
-        dbosConfig.withConductorKey("test-conductor-key").withExecutorId("test-executor-id");
+        createConfigFromEnv("config-test")
+            .withConductorKey("test-conductor-key")
+            .withExecutorId("test-executor-id");
 
     DBOSTestAccess.reinitialize(config);
     try {
@@ -167,7 +178,7 @@ public class ConfigTest extends DbSetupTestBase {
 
   @Test
   public void calcAppVersion() throws Exception {
-    var config = dbosConfig;
+    var config = createConfig("config-test");
 
     DBOSTestAccess.reinitialize(config);
     try {
@@ -185,7 +196,49 @@ public class ConfigTest extends DbSetupTestBase {
   }
 
   @Test
-  public void configDataSource() throws Exception {
+  public void configPGSimpleDataSource() throws Exception {
+    var url = dbosConfig.databaseUrl();
+    var user = dbosConfig.dbUser();
+    var password = dbosConfig.dbPassword();
+    DBUtils.recreateDB(url, user, password);
+
+    PGSimpleDataSource ds = new PGSimpleDataSource();
+    ds.setServerNames(new String[] {postgres.getHost()});
+    ds.setDatabaseName(postgres.getDatabaseName());
+    ds.setUser(user);
+    ds.setPassword(password);
+    ds.setPortNumbers(new int[] {postgres.getFirstMappedPort()});
+
+    var config =
+        DBOSConfig.defaults("config-test")
+            .withDataSource(ds)
+            // Intentionally set an invalid URL and credentials to verify that when a DataSource
+            // is provided, these values are ignored and do not affect connectivity.
+            .withDatabaseUrl("completely-invalid-url")
+            .withDbUser("invalid-user")
+            .withDbPassword("invalid-password");
+
+    DBOSTestAccess.reinitialize(config);
+
+    var impl = new HawkServiceImpl();
+    var proxy = DBOS.registerWorkflows(HawkService.class, impl);
+    impl.setProxy(proxy);
+
+    try {
+      DBOS.launch();
+
+      var options = new StartWorkflowOptions("dswfid");
+      var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
+      var result = handle.getResult();
+      assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
+      assertEquals("SUCCESS", handle.getStatus().status());
+    } finally {
+      DBOS.shutdown();
+    }
+  }
+
+  @Test
+  public void configHikariDataSource() throws Exception {
 
     var poolName = "dbos-configDataSource";
     var url = dbosConfig.databaseUrl();
@@ -200,39 +253,48 @@ public class ConfigTest extends DbSetupTestBase {
     hikariConfig.setPassword(password);
     hikariConfig.setPoolName(poolName);
 
-    var dataSource = new HikariDataSource(hikariConfig);
-    assertFalse(dataSource.isClosed());
-    var config =
-        DBOSConfig.defaults("config-test")
-            .withDataSource(dataSource)
-            .withDatabaseUrl("completely-invalid-url")
-            .withDbUser("invalid-user")
-            .withDbPassword("invalid-password");
+    try (var dataSource = new HikariDataSource(hikariConfig)) {
+      assertFalse(dataSource.isClosed());
+      var config =
+          DBOSConfig.defaults("config-test")
+              .withDataSource(dataSource)
+              // Intentionally set an invalid URL and credentials to verify that when a DataSource
+              // is provided, these values are ignored and do not affect connectivity.
+              .withDatabaseUrl("completely-invalid-url")
+              .withDbUser("invalid-user")
+              .withDbPassword("invalid-password");
 
-    DBOSTestAccess.reinitialize(config);
-    assertFalse(dataSource.isClosed());
+      DBOSTestAccess.reinitialize(config);
+      assertFalse(dataSource.isClosed());
 
-    var impl = new HawkServiceImpl();
-    var proxy = DBOS.registerWorkflows(HawkService.class, impl);
-    impl.setProxy(proxy);
+      var impl = new HawkServiceImpl();
+      var proxy = DBOS.registerWorkflows(HawkService.class, impl);
+      impl.setProxy(proxy);
 
-    try {
-      DBOS.launch();
+      try {
+        DBOS.launch();
 
-      var sysdb = DBOSTestAccess.getSystemDatabase();
-      var dbConfig = DBTestAccess.getHikariConfig(sysdb);
-      assertEquals(poolName, dbConfig.getPoolName());
+        var sysdb = DBOSTestAccess.getSystemDatabase();
+        var dbConfig = DBTestAccess.getHikariConfig(sysdb);
+        assertTrue(dbConfig.isPresent());
+        assertEquals(poolName, dbConfig.get().getPoolName());
 
-      var result = proxy.simpleWorkflow();
-      assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
-
-    } finally {
-      DBOS.shutdown();
+        var options = new StartWorkflowOptions("dswfid");
+        var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
+        var result = handle.getResult();
+        assertEquals(LocalDate.now().format(DateTimeFormatter.ISO_DATE), result);
+        assertEquals("SUCCESS", handle.getStatus().status());
+      } finally {
+        DBOS.shutdown();
+      }
     }
   }
 
   @Test
   public void dbosVersion() throws Exception {
+    Assumptions.assumeFalse(
+        DBOS.version().equals("${projectVersion}"), "skipping, DBOS version not set");
+
     assertNotNull(DBOS.version());
     assertFalse(DBOS.version().contains("unknown"));
     var version = assertDoesNotThrow(() -> new ComparableVersion(DBOS.version()));
@@ -246,9 +308,9 @@ public class ConfigTest extends DbSetupTestBase {
   public void appVersion() throws Exception {
     try {
       envVars.set("DBOS__APPID", "test-env-app-id");
-      var config = dbosConfig;
-      DBUtils.recreateDB(config);
-      DBOSTestAccess.reinitialize(config);
+      var dbosConfig = createConfigFromEnv("systemdbtest");
+      DBUtils.recreateDB(dbosConfig);
+      DBOSTestAccess.reinitialize(dbosConfig);
 
       var proxy = DBOS.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl());
       DBOS.launch();

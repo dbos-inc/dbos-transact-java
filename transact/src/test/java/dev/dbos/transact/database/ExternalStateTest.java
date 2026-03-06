@@ -20,8 +20,7 @@ public class ExternalStateTest extends DbSetupTestBase {
   private static SystemDatabase systemDatabase;
 
   @BeforeAll
-  static void onetimeSetup() throws Exception {
-
+  protected static void onetimeSetup() throws Exception {
     DBUtils.recreateDB(dbosConfig);
     MigrationManager.runMigrations(dbosConfig);
     systemDatabase = SystemDatabase.create(dbosConfig);

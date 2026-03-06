@@ -9,7 +9,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Queue;
 
@@ -20,7 +19,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
-import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,7 +26,6 @@ import org.junit.jupiter.api.Test;
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class StartWorkflowTest extends DbSetupTestBase {
   private HawkService proxy;
-  private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
 
   @BeforeEach
@@ -39,17 +36,14 @@ public class StartWorkflowTest extends DbSetupTestBase {
     proxy = DBOS.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    DBOS.registerQueue(new Queue("queue"));
-    DBOS.registerQueue(new Queue("partitioned-queue").withPartitionedEnabled(true));
+    DBOS.registerQueues(
+        new Queue("queue"), new Queue("partitioned-queue").withPartitionedEnabled(true));
 
     DBOS.launch();
-
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach
   void afterEachTest() throws Exception {
-    dataSource.close();
     DBOS.shutdown();
   }
 

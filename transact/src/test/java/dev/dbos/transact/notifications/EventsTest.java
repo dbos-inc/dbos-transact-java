@@ -25,9 +25,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import javax.sql.DataSource;
-
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -155,14 +155,21 @@ class EventsServiceImpl implements EventsService {
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class EventsTest extends DbSetupTestBase {
 
-  private static DataSource dataSource;
-
   private EventsService proxy;
   private EventsServiceImpl impl;
 
+  @BeforeAll
+  protected static void onetimeSetup() throws Exception {
+    dataSource = DbSetupTestBase.dataSource;
+  }
+
+  @AfterAll
+  static void oneTimeShutdown() throws Exception {
+    dataSource.close();
+  }
+
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    dataSource = DbSetupTestBase.dataSource;
     DBUtils.recreateDB(dbosConfig);
     DBOSTestAccess.reinitialize(dbosConfig);
     impl = new EventsServiceImpl();

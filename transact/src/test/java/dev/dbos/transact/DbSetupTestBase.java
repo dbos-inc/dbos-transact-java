@@ -16,7 +16,7 @@ public class DbSetupTestBase {
   protected static HikariDataSource dataSource;
 
   @BeforeAll
-  static void onetimeSetup() {
+  protected static void onetimeSetup() throws Exception {
     postgres.start();
     dbosConfig =
         DBOSConfig.defaults("systemdbtest")
@@ -27,11 +27,29 @@ public class DbSetupTestBase {
   }
 
   @AfterAll
-  static void afterAll() {
+  protected static void afterAll() throws Exception {
     postgres.stop();
   }
 
   protected DBOSClient getDBOSClient() {
     return new DBOSClient(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+  }
+
+  protected static DBOSConfig createConfig(String appName) {
+    return DBOSConfig.defaults(appName)
+        .withDatabaseUrl(postgres.getJdbcUrl())
+        .withDbUser(postgres.getUsername())
+        .withDbPassword(postgres.getPassword());
+  }
+
+  protected static DBOSConfig createConfigFromEnv(String appName) {
+    return DBOSConfig.defaultsFromEnv(appName)
+        .withDatabaseUrl(postgres.getJdbcUrl())
+        .withDbUser(postgres.getUsername())
+        .withDbPassword(postgres.getPassword());
+  }
+
+  protected static String getJdbcUrl(String databaseName) {
+    return postgres.getJdbcUrl().replaceFirst("/[^/?]+(\\?.*)?$", "/" + databaseName + "$1");
   }
 }

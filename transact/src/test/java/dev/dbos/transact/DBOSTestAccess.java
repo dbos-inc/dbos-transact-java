@@ -19,7 +19,7 @@ public class DBOSTestAccess {
   }
 
   public static void reinitialize(DBOSConfig config) {
-    DBOSTestAccess.reinitialize(config);
+    DBOS.reinitialize(config);
   }
 
   // public static void clearRegistry() {
