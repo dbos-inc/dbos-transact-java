@@ -945,8 +945,8 @@ public class DBOS {
   /**
    * Get the serialization format of the current workflow context.
    *
-   * @return the serialization format name (e.g., "portable_json", "java_jackson"), or null if not
-   *     in a workflow context or using default serialization
+   * @return the SerializationStrategy (e.g., "portable_json", "java_jackson"), or null if not in a
+   *     workflow context or using default serialization
    */
   public static @Nullable SerializationStrategy serializationStrategy() {
     return DBOSContext.serializationStrategy();

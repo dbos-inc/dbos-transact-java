@@ -46,6 +46,7 @@ public class DBOSInvocationHandler implements InvocationHandler {
             new DBOSInvocationHandler(implementation, instanceName, executor));
   }
 
+  @Override
   public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
 
     var implMethod = target.getClass().getMethod(method.getName(), method.getParameterTypes());
@@ -98,15 +99,14 @@ public class DBOSInvocationHandler implements InvocationHandler {
             : target.getClass().getName();
     var workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
     var executor = executorSupplier.get();
+    if (executor == null) {
+      throw new IllegalStateException("executorSupplier returned null");
+    }
 
     if (hook != null) {
       var invocation = new Invocation(executor, className, instanceName, workflowName, args);
       hook.invoke(invocation);
       return defaultReturn(method);
-    }
-
-    if (executor == null) {
-      throw new IllegalStateException("executorSupplier returned null");
     }
 
     var handle = executor.invokeWorkflow(className, instanceName, workflowName, args);
