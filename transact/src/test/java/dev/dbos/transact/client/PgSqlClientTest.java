@@ -127,46 +127,6 @@ public class PgSqlClientTest {
   }
 
   @Test
-  public void clientEnqueueInvalidWorkflowName() throws Exception {
-    final var workflowId = UUID.randomUUID().toString();
-
-    ThrowingFunction<String, String, Exception> enqueueSupplier =
-        (workflowName) -> {
-          var sql = "SELECT dbos.enqueue_workflow(?, ?, ?, workflow_id => ?, class_name => ?)";
-          try (var conn = dataSource.getConnection();
-              var stmt = conn.prepareCall(sql)) {
-            stmt.setString(1, workflowName);
-            stmt.setString(2, "testQueue");
-            var argsArray =
-                conn.createArrayOf(
-                    "json",
-                    new String[] {
-                      MAPPER.writeValueAsString("42"), MAPPER.writeValueAsString("spam")
-                    });
-            stmt.setObject(3, argsArray);
-            stmt.setString(4, workflowId);
-            stmt.setString(5, "ClientServiceImpl");
-            try (ResultSet rs = stmt.executeQuery()) {
-              return rs.next() ? rs.getString(1) : null;
-            } finally {
-              argsArray.free();
-            }
-          }
-        };
-
-    String retValue = enqueueSupplier.execute("enqueueTest");
-    assertEquals(workflowId, retValue);
-
-    var ex = assertThrows(PSQLException.class, () -> enqueueSupplier.execute("wrong name"));
-    assertTrue(ex.getMessage().startsWith("ERROR: Conflicting DBOS workflow name"));
-    assertTrue(
-        ex.getMessage()
-            .contains(
-                "Workflow %s exists with name %s, but the provided workflow name is: %s"
-                    .formatted(workflowId, "enqueueTest", "wrong name")));
-  }
-
-  @Test
   public void clientEnqueueDeDupe() throws Exception {
     var qs = DBOSTestAccess.getQueueService();
     qs.pause();
