@@ -5,8 +5,10 @@ import dev.dbos.transact.conductor.Conductor;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.io.StreamCorruptedException;
 import java.io.UncheckedIOException;
 import java.util.Arrays;
@@ -15,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -22,12 +26,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class JSONUtil {
+
+  static {
+    // extend max JSON string length to handle large workflow import/export JSON
+    StreamReadConstraints.overrideDefaultStreamReadConstraints(
+        StreamReadConstraints.builder().maxStringLength(1_000_000_000).build());
+  }
+
   private static final Logger logger = LoggerFactory.getLogger(Conductor.class);
 
   private static final ObjectMapper mapper = new ObjectMapper();
 
   public static class JsonRuntimeException extends RuntimeException {
-    public JsonRuntimeException(JsonProcessingException cause) {
+    public JsonRuntimeException(Exception cause) {
       super(cause.getMessage(), cause);
       setStackTrace(cause.getStackTrace());
       for (Throwable suppressed : cause.getSuppressed()) {
@@ -90,11 +101,71 @@ public class JSONUtil {
     }
   }
 
+  public static void toJson(OutputStream out, Object obj) {
+    try {
+      mapper.writeValue(out, obj);
+    } catch (IOException e) {
+      throw new JsonRuntimeException(e);
+    }
+  }
+
   public static <T> T fromJson(String content, Class<T> valueType) {
     try {
       return mapper.readValue(content, valueType);
     } catch (JsonProcessingException e) {
       throw new JsonRuntimeException(e);
+    }
+  }
+
+  public static <T> T fromJson(InputStream stream, TypeReference<T> valueType) {
+    try {
+      return mapper.readValue(stream, valueType);
+    } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static <T> T fromJson(byte[] content, Class<T> valueType) {
+    try {
+      return mapper.readValue(content, valueType);
+    } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static <T> T fromJson(InputStream content, Class<T> valueType) {
+    try {
+      return mapper.readValue(content, valueType);
+    } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static byte[] toJsonBytes(Object obj) {
+    try {
+      return mapper.writeValueAsBytes(obj);
+    } catch (JsonProcessingException e) {
+      throw new JsonRuntimeException(e);
+    }
+  }
+
+  public static void toJsonStream(Object obj, OutputStream out) {
+    try {
+      mapper.writeValue(out, obj);
+    } catch (IOException e) {
+      if (e instanceof JsonProcessingException) {
+        throw new JsonRuntimeException((JsonProcessingException) e);
+      }
+      throw new RuntimeException(e);
     }
   }
 

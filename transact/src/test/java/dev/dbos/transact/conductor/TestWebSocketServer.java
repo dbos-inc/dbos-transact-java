@@ -1,10 +1,14 @@
 package dev.dbos.transact.conductor;
 
 import java.net.InetSocketAddress;
+import java.util.Collections;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 import org.java_websocket.WebSocket;
+import org.java_websocket.WebSocketImpl;
+import org.java_websocket.drafts.Draft_6455;
+import org.java_websocket.exceptions.InvalidDataException;
 import org.java_websocket.framing.Framedata;
 import org.java_websocket.framing.PingFrame;
 import org.java_websocket.framing.PongFrame;
@@ -28,6 +32,8 @@ class TestWebSocketServer extends WebSocketServer {
 
     default void onMessage(WebSocket conn, String message) {}
 
+    default void onWebsocketMessage(WebSocket conn, Framedata frame) {}
+
     default void onClose(WebSocket conn, int code, String reason, boolean remote) {}
   }
 
@@ -35,8 +41,33 @@ class TestWebSocketServer extends WebSocketServer {
   private WebSocketTestListener listener;
   private Semaphore startEvent = new Semaphore(0);
 
+  private static class InterceptingDraft extends Draft_6455 {
+    TestWebSocketServer server;
+
+    @Override
+    public void processFrame(WebSocketImpl webSocketImpl, Framedata frame)
+        throws InvalidDataException {
+      if (server != null && server.listener != null) {
+        server.listener.onWebsocketMessage(webSocketImpl, frame);
+      }
+      super.processFrame(webSocketImpl, frame);
+    }
+
+    @Override
+    public Draft_6455 copyInstance() {
+      InterceptingDraft copy = new InterceptingDraft();
+      copy.server = this.server;
+      return copy;
+    }
+  }
+
   public TestWebSocketServer(int port) {
-    super(new InetSocketAddress(port));
+    this(port, new InterceptingDraft());
+  }
+
+  private TestWebSocketServer(int port, InterceptingDraft draft) {
+    super(new InetSocketAddress(port), Collections.singletonList(draft));
+    draft.server = this;
   }
 
   public void setListener(WebSocketTestListener listener) {

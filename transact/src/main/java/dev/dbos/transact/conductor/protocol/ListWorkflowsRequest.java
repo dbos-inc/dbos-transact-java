@@ -20,6 +20,7 @@ public class ListWorkflowsRequest extends BaseMessage {
     public String end_time;
     public String status;
     public String forked_from;
+    public String parent_workflow_id;
     public String application_version;
     public Integer limit;
     public Integer offset;
@@ -36,6 +37,7 @@ public class ListWorkflowsRequest extends BaseMessage {
     private String end_time;
     private String status;
     private String forked_from;
+    private String parent_workflow_id;
     private String application_version;
     private Integer limit;
     private Integer offset;
@@ -83,6 +85,11 @@ public class ListWorkflowsRequest extends BaseMessage {
       return this;
     }
 
+    public Builder parentWorkflowId(String parentWorkflowId) {
+      this.parent_workflow_id = parentWorkflowId;
+      return this;
+    }
+
     public Builder applicationVersion(String application_version) {
       this.application_version = application_version;
       return this;
@@ -116,6 +123,7 @@ public class ListWorkflowsRequest extends BaseMessage {
       body.end_time = this.end_time;
       body.status = this.status;
       body.forked_from = this.forked_from;
+      body.parent_workflow_id = this.parent_workflow_id;
       body.application_version = this.application_version;
       body.limit = this.limit;
       body.offset = this.offset;
@@ -136,6 +144,7 @@ public class ListWorkflowsRequest extends BaseMessage {
         .withEndTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null)
         .withStatus(body.status)
         .withForkedFrom(body.forked_from)
+        .withParentWorkflowId(body.parent_workflow_id)
         .withApplicationVersion(body.application_version)
         .withLimit(body.limit)
         .withOffset(body.offset)

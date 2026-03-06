@@ -1,9 +1,14 @@
 package dev.dbos.transact;
 
+import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.json.PortableWorkflowException;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -14,13 +19,42 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+
+class ClientWorkflowHandle<T, E extends Exception> implements WorkflowHandle<T, E> {
+
+  private final SystemDatabase systemDatabase;
+  private final String workflowId;
+
+  public ClientWorkflowHandle(SystemDatabase systemDatabase, String workflowId) {
+    this.systemDatabase = systemDatabase;
+    this.workflowId = workflowId;
+  }
+
+  @Override
+  public String workflowId() {
+    return workflowId;
+  }
+
+  @Override
+  public T getResult() throws E {
+    var result = systemDatabase.<T>awaitWorkflowResult(workflowId);
+    return Result.<T, E>process(result);
+  }
+
+  @Override
+  public WorkflowStatus getStatus() {
+    return systemDatabase.getWorkflowStatus(workflowId);
+  }
+}
 
 /**
  * DBOSClient allows external programs to interact with DBOS apps via direct system database access.
@@ -42,7 +76,8 @@ public class DBOSClient implements AutoCloseable {
 
     @Override
     public T getResult() throws E {
-      return systemDatabase.awaitWorkflowResult(workflowId);
+      var result = systemDatabase.<T>awaitWorkflowResult(workflowId);
+      return Result.<T, E>process(result);
     }
 
     @Override
@@ -52,6 +87,7 @@ public class DBOSClient implements AutoCloseable {
   }
 
   private final @NonNull SystemDatabase systemDatabase;
+  private final @Nullable DBOSSerializer serializer;
 
   /**
    * Construct a DBOSClient, by providing system database access credentials
@@ -61,7 +97,7 @@ public class DBOSClient implements AutoCloseable {
    * @param password System database credential / password
    */
   public DBOSClient(@NonNull String url, @NonNull String user, @NonNull String password) {
-    this(url, user, password, null);
+    this(url, user, password, null, null);
   }
 
   /**
@@ -77,8 +113,26 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String user,
       @NonNull String password,
       @Nullable String schema) {
-    var dataSource = SystemDatabase.createDataSource(url, user, password, 0, 0);
-    systemDatabase = new SystemDatabase(dataSource, schema);
+    this(url, user, password, schema, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing system database access credentials
+   *
+   * @param url System database JDBC URL
+   * @param user System database user
+   * @param password System database credential / password
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   */
+  public DBOSClient(
+      @NonNull String url,
+      @NonNull String user,
+      @NonNull String password,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer) {
+    this.serializer = serializer;
+    systemDatabase = new SystemDatabase(url, user, password, schema, serializer);
   }
 
   /**
@@ -86,8 +140,8 @@ public class DBOSClient implements AutoCloseable {
    *
    * @param dataSource System database data source
    */
-  public DBOSClient(@NonNull HikariDataSource dataSource) {
-    this(dataSource, null);
+  public DBOSClient(@NonNull DataSource dataSource) {
+    this(dataSource, null, null);
   }
 
   /**
@@ -96,8 +150,23 @@ public class DBOSClient implements AutoCloseable {
    * @param dataSource System database data source
    * @param schema Database schema for DBOS tables
    */
-  public DBOSClient(@NonNull HikariDataSource dataSource, @Nullable String schema) {
-    systemDatabase = new SystemDatabase(dataSource, schema);
+  public DBOSClient(@NonNull DataSource dataSource, @Nullable String schema) {
+    this(dataSource, schema, null);
+  }
+
+  /**
+   * Construct a DBOSClient, by providing a configured data source
+   *
+   * @param dataSource System database data source
+   * @param schema Database schema for DBOS tables
+   * @param serializer Custom serializer for serialization/deserialization
+   */
+  public DBOSClient(
+      @NonNull DataSource dataSource,
+      @Nullable String schema,
+      @Nullable DBOSSerializer serializer) {
+    this.serializer = serializer;
+    systemDatabase = new SystemDatabase(dataSource, schema, serializer);
   }
 
   @Override
@@ -121,7 +190,8 @@ public class DBOSClient implements AutoCloseable {
       @Nullable Instant deadline,
       @Nullable String deduplicationId,
       @Nullable Integer priority,
-      @Nullable String queuePartitionKey) {
+      @Nullable String queuePartitionKey,
+      @Nullable SerializationStrategy serialization) {
 
     public EnqueueOptions {
       if (Objects.requireNonNull(workflowName, "EnqueueOptions workflowName must not be null")
@@ -167,7 +237,7 @@ public class DBOSClient implements AutoCloseable {
     /** Construct `EnqueueOptions` with a minimum set of required options */
     public EnqueueOptions(
         @NonNull String className, @NonNull String workflowName, @NonNull String queueName) {
-      this(workflowName, queueName, className, "", null, null, null, null, null, null, null);
+      this(workflowName, queueName, className, "", null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -188,7 +258,8 @@ public class DBOSClient implements AutoCloseable {
           this.deadline,
           this.deduplicationId,
           this.priority,
-          this.queuePartitionKey);
+          this.queuePartitionKey,
+          this.serialization);
     }
 
     /**
@@ -210,7 +281,8 @@ public class DBOSClient implements AutoCloseable {
           this.deadline,
           this.deduplicationId,
           this.priority,
-          this.queuePartitionKey);
+          this.queuePartitionKey,
+          this.serialization);
     }
 
     /**
@@ -232,7 +304,8 @@ public class DBOSClient implements AutoCloseable {
           this.deadline,
           this.deduplicationId,
           this.priority,
-          this.queuePartitionKey);
+          this.queuePartitionKey,
+          this.serialization);
     }
 
     /**
@@ -254,7 +327,8 @@ public class DBOSClient implements AutoCloseable {
           this.deadline,
           this.deduplicationId,
           this.priority,
-          this.queuePartitionKey);
+          this.queuePartitionKey,
+          this.serialization);
     }
 
     /**
@@ -276,7 +350,8 @@ public class DBOSClient implements AutoCloseable {
           deadline,
           this.deduplicationId,
           this.priority,
-          this.queuePartitionKey);
+          this.queuePartitionKey,
+          this.serialization);
     }
 
     /**
@@ -298,7 +373,8 @@ public class DBOSClient implements AutoCloseable {
           this.deadline,
           deduplicationId,
           this.priority,
-          this.queuePartitionKey);
+          this.queuePartitionKey,
+          this.serialization);
     }
 
     /**
@@ -320,7 +396,8 @@ public class DBOSClient implements AutoCloseable {
           this.deadline,
           this.deduplicationId,
           this.priority,
-          this.queuePartitionKey);
+          this.queuePartitionKey,
+          this.serialization);
     }
 
     /**
@@ -341,7 +418,8 @@ public class DBOSClient implements AutoCloseable {
           this.deadline,
           this.deduplicationId,
           priority,
-          this.queuePartitionKey);
+          this.queuePartitionKey,
+          this.serialization);
     }
 
     /**
@@ -364,7 +442,33 @@ public class DBOSClient implements AutoCloseable {
           this.deadline,
           this.deduplicationId,
           this.priority,
-          partitionKey);
+          partitionKey,
+          this.serialization);
+    }
+
+    /**
+     * Specify the serialization strategy for the workflow arguments.
+     *
+     * @param serialization The serialization strategy ({@link SerializationStrategy#PORTABLE} for
+     *     cross-language compatibility, {@link SerializationStrategy#NATIVE} for Java-specific, or
+     *     {@link SerializationStrategy#DEFAULT} for the default behavior)
+     * @return New `EnqueueOptions` with the serialization strategy set
+     */
+    public @NonNull EnqueueOptions withSerialization(
+        @Nullable SerializationStrategy serialization) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.queueName,
+          this.className,
+          this.instanceName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          this.queuePartitionKey,
+          serialization);
     }
 
     /**
@@ -390,29 +494,106 @@ public class DBOSClient implements AutoCloseable {
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
       @NonNull EnqueueOptions options, @Nullable Object[] args) {
 
-    return DBOSExecutor.enqueueWorkflow(
-        Objects.requireNonNull(
-            options.workflowName(), "EnqueueOptions workflowName must not be null"),
-        Objects.requireNonNull(options.className(), "EnqueueOptions className must not be null"),
-        Objects.requireNonNullElse(options.instanceName(), ""),
-        null,
-        args,
-        new DBOSExecutor.ExecutionOptions(
-            Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString()),
-            Timeout.of(options.timeout()),
-            options.deadline,
+    String serializationFormat =
+        options.serialization() != null ? options.serialization().formatName() : null;
+
+    var workflowId =
+        DBOSExecutor.enqueueWorkflow(
             Objects.requireNonNull(
-                options.queueName(), "EnqueueOptions queueName must not be null"),
-            options.deduplicationId,
-            options.priority,
-            options.queuePartitionKey,
-            false,
-            false),
-        null,
-        null,
-        null,
-        options.appVersion,
-        systemDatabase);
+                options.workflowName(), "EnqueueOptions workflowName must not be null"),
+            Objects.requireNonNull(
+                options.className(), "EnqueueOptions className must not be null"),
+            Objects.requireNonNullElse(options.instanceName(), ""),
+            null,
+            args,
+            new DBOSExecutor.ExecutionOptions(
+                Objects.requireNonNullElseGet(
+                    options.workflowId(), () -> UUID.randomUUID().toString()),
+                Timeout.of(options.timeout()),
+                options.deadline,
+                Objects.requireNonNull(
+                    options.queueName(), "EnqueueOptions queueName must not be null"),
+                options.deduplicationId,
+                options.priority,
+                options.queuePartitionKey,
+                false,
+                false,
+                serializationFormat),
+            null,
+            null,
+            null,
+            options.appVersion,
+            systemDatabase,
+            this.serializer);
+
+    return new ClientWorkflowHandle<>(systemDatabase, workflowId);
+  }
+
+  /**
+   * Enqueue a workflow using portable JSON serialization. This method is intended for
+   * cross-language workflow initiation where the workflow function definition may not be available
+   * in Java.
+   *
+   * @param <T> Return type of workflow function
+   * @param options `DBOSClient.EnqueueOptions` for enqueuing the workflow
+   * @param positionalArgs Positional arguments to pass to the workflow function
+   * @param namedArgs Optional named arguments (for workflows that support them, e.g., Python
+   *     kwargs)
+   * @return WorkflowHandle for retrieving workflow ID, status, and results
+   */
+  public <T> @NonNull WorkflowHandle<T, PortableWorkflowException> enqueuePortableWorkflow(
+      @NonNull EnqueueOptions options,
+      @Nullable Object[] positionalArgs,
+      @Nullable Map<String, Object> namedArgs) {
+
+    String workflowId =
+        Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString());
+
+    // Serialize arguments in portable format
+    SerializationUtil.SerializedResult serializedArgs =
+        SerializationUtil.serializeArgs(
+            positionalArgs, namedArgs, SerializationUtil.PORTABLE, this.serializer);
+
+    // Create workflow status directly with portable serialization
+    var statusBuilder =
+        WorkflowStatusInternal.builder(workflowId, WorkflowState.ENQUEUED)
+            .name(options.workflowName())
+            .className(options.className())
+            .instanceName(Objects.requireNonNullElse(options.instanceName(), ""))
+            .queueName(options.queueName())
+            .inputs(serializedArgs.serializedValue())
+            .serialization(serializedArgs.serialization())
+            .createdAt(System.currentTimeMillis())
+            .deduplicationId(options.deduplicationId())
+            .priority(Objects.requireNonNullElse(options.priority(), 0))
+            .queuePartitionKey(options.queuePartitionKey())
+            .appVersion(options.appVersion());
+
+    if (options.timeout() != null) {
+      statusBuilder.timeoutMs(options.timeout().toMillis());
+    }
+    if (options.deadline() != null) {
+      statusBuilder.deadlineEpochMs(options.deadline().toEpochMilli());
+    }
+
+    var status = statusBuilder.build();
+
+    systemDatabase.initWorkflowStatus(status, null, false, false);
+
+    return new WorkflowHandleClient<>(workflowId);
+  }
+
+  /** Options for sending a message. */
+  public record SendOptions(@Nullable SerializationStrategy serialization) {
+    /** Create SendOptions with default serialization. */
+    public static SendOptions defaults() {
+      return new SendOptions(SerializationStrategy.DEFAULT);
+    }
+
+    /** Create SendOptions with portable JSON serialization. */
+    public static SendOptions portable() {
+      return new SendOptions(SerializationStrategy.PORTABLE);
+    }
   }
 
   /**
@@ -428,17 +609,31 @@ public class DBOSClient implements AutoCloseable {
       @NonNull Object message,
       @NonNull String topic,
       @Nullable String idempotencyKey) {
-    if (idempotencyKey == null) {
-      idempotencyKey = UUID.randomUUID().toString();
-    }
-    var workflowId = "%s-%s".formatted(destinationId, idempotencyKey);
+    send(destinationId, message, topic, idempotencyKey, null);
+  }
 
-    var status =
-        WorkflowStatusInternal.builder(workflowId, WorkflowState.SUCCESS)
-            .name("temp_workflow-send-client")
-            .build();
-    systemDatabase.initWorkflowStatus(status, null, false, false);
-    systemDatabase.send(status.workflowId(), 0, destinationId, message, topic);
+  /**
+   * Send a message to a workflow with serialization options
+   *
+   * @param destinationId workflowId of the workflow to receive the message
+   * @param message Message contents
+   * @param topic Topic for the message
+   * @param idempotencyKey If specified, use the value to ensure exactly-once send semantics
+   * @param options Optional send options including serialization type
+   */
+  public void send(
+      @NonNull String destinationId,
+      @NonNull Object message,
+      @NonNull String topic,
+      @Nullable String idempotencyKey,
+      @Nullable SendOptions options) {
+
+    String serializationFormat =
+        (options != null && options.serialization() != null)
+            ? options.serialization().formatName()
+            : null;
+
+    systemDatabase.sendDirect(destinationId, message, topic, idempotencyKey, serializationFormat);
   }
 
   /**

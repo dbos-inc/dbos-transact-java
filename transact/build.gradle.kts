@@ -1,7 +1,12 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import com.vanniktech.maven.publish.DeploymentValidation
+
 plugins {
     id("java")
     id("java-library")
-    id("com.vanniktech.maven.publish") version "0.34.0"
+    kotlin("jvm") version "2.3.0"
+    id("com.vanniktech.maven.publish") version "0.36.0"
 }
 
 tasks.withType<JavaCompile> {
@@ -23,35 +28,39 @@ tasks.named("build") {
 }
 
 dependencies {
-    api("org.slf4j:slf4j-api:2.0.13") // logging api
+    api("org.slf4j:slf4j-api:2.0.17") // logging api
 
-    implementation("org.postgresql:postgresql:42.7.2")
-    implementation("com.zaxxer:HikariCP:5.0.1") // Connection pool
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.17.0") // json
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.0")
+    implementation("org.postgresql:postgresql:42.7.9")
+    implementation("com.zaxxer:HikariCP:7.0.2") // Connection pool
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.20.1") // json
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.20.1")
     implementation("com.cronutils:cron-utils:9.2.1") // cron for scheduled wf
+    implementation("io.netty:netty-all:4.1.130.Final") // netty for websocket
 
     compileOnly("org.jspecify:jspecify:1.0.0")
 
-    testImplementation(platform("org.junit:junit-bom:5.12.1"))
+    testImplementation(platform("org.junit:junit-bom:6.0.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.junit-pioneer:junit-pioneer:2.3.0")
     testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.8")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-    testImplementation("org.java-websocket:Java-WebSocket:1.5.6")
-    testImplementation("ch.qos.logback:logback-classic:1.5.6")
-    testImplementation("org.mockito:mockito-core:5.12.0")
-    testImplementation("io.rest-assured:rest-assured:5.4.0")
-    testImplementation("io.rest-assured:json-path:5.4.0")
-    testImplementation("io.rest-assured:xml-path:5.4.0")
-    testImplementation("org.testcontainers:testcontainers-postgresql:2.0.3")
-    testImplementation("org.apache.maven:maven-artifact:3.9.11")
+    testImplementation("org.java-websocket:Java-WebSocket:1.6.0")
+    testImplementation("ch.qos.logback:logback-classic:1.5.24")
+    testImplementation("org.mockito:mockito-core:5.21.0")
+    testImplementation("io.rest-assured:rest-assured:6.0.0")
+    testImplementation("io.rest-assured:json-path:6.0.0")
+    testImplementation("io.rest-assured:xml-path:6.0.0")
+    testImplementation("org.apache.maven:maven-artifact:3.9.12")
 }
 
+val projectVersion = project.version.toString()
+
 tasks.processResources {
+    inputs.property("version", projectVersion)
+
     filesMatching("**/app.properties") {
-        expand(mapOf("projectVersion" to project.version))
+        expand(mapOf("projectVersion" to projectVersion))
     }
 }
 
@@ -73,10 +82,20 @@ tasks.test {
     }
 }
 
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions {
+        // jvmTarget now uses the JvmTarget enum instead of a String
+        jvmTarget.set(JvmTarget.JVM_17)
+        
+        // freeCompilerArgs is now a Property/ListProperty, so we use .add() or .addAll()
+        freeCompilerArgs.add("-Xjsr305=strict")
+    }
+}
+
 val publishingToMavenCentral = gradle.startParameter.taskNames.any { it.contains("publishToMavenCentral") }
 
 mavenPublishing {
-    publishToMavenCentral(automaticRelease = true)
+    publishToMavenCentral(automaticRelease = true, validateDeployment = DeploymentValidation.NONE)
     if (publishingToMavenCentral) {
         signAllPublications()
     }

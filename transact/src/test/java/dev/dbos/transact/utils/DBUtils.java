@@ -208,6 +208,12 @@ public class DBUtils {
     return DriverManager.getConnection(config.databaseUrl(), config.dbUser(), config.dbPassword());
   }
 
+  public static List<WorkflowStatusRow> getWorkflowRows(DBOSConfig config) throws SQLException {
+    try (var ds = SystemDatabase.createDataSource(config)) {
+      return getWorkflowRows(ds);
+    }
+  }
+
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds) throws SQLException {
     return getWorkflowRows(ds, null);
   }
@@ -215,7 +221,7 @@ public class DBUtils {
   public static List<WorkflowStatusRow> getWorkflowRows(DataSource ds, String schema)
       throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
-    String sql = "SELECT * FROM %s.workflow_status ORDER BY created_at".formatted(schema);
+    String sql = "SELECT * FROM \"%s\".workflow_status ORDER BY created_at".formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
@@ -235,7 +241,7 @@ public class DBUtils {
   public static WorkflowStatusRow getWorkflowRow(DataSource ds, String workflowId, String schema)
       throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
-    var sql = "SELECT * FROM %s.workflow_status WHERE workflow_uuid = ?".formatted(schema);
+    var sql = "SELECT * FROM \"%s\".workflow_status WHERE workflow_uuid = ?".formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -258,7 +264,7 @@ public class DBUtils {
       DataSource ds, String workflowId, String schema) throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     var sql =
-        "SELECT * FROM %s.operation_outputs WHERE workflow_uuid = ? ORDER BY function_id"
+        "SELECT * FROM \"%s\".operation_outputs WHERE workflow_uuid = ? ORDER BY function_id"
             .formatted(schema);
     try (var conn = ds.getConnection();
         var stmt = conn.prepareStatement(sql)) {
@@ -275,7 +281,7 @@ public class DBUtils {
     }
   }
 
-  public record Event(String key, String value) {}
+  public record Event(String key, String value, String serialization) {}
 
   public static List<Event> getWorkflowEvents(DataSource ds, String workflowId)
       throws SQLException {
@@ -288,7 +294,7 @@ public class DBUtils {
     try (var conn = ds.getConnection(); ) {
       var stmt =
           conn.prepareStatement(
-              "SELECT * FROM %s.workflow_events WHERE workflow_uuid = ?".formatted(schema));
+              "SELECT * FROM \"%s\".workflow_events WHERE workflow_uuid = ?".formatted(schema));
       stmt.setString(1, workflowId);
       var rs = stmt.executeQuery();
       List<Event> rows = new ArrayList<>();
@@ -296,14 +302,15 @@ public class DBUtils {
       while (rs.next()) {
         var key = rs.getString("key");
         var value = rs.getString("value");
-        rows.add(new Event(key, value));
+        var serialization = rs.getString("serialization");
+        rows.add(new Event(key, value, serialization));
       }
 
       return rows;
     }
   }
 
-  public record EventHistory(int stepId, String key, String value) {}
+  public record EventHistory(int stepId, String key, String value, String serialization) {}
 
   public static List<EventHistory> getWorkflowEventHistory(DataSource ds, String workflowId)
       throws SQLException {
@@ -316,7 +323,8 @@ public class DBUtils {
     try (var conn = ds.getConnection(); ) {
       var stmt =
           conn.prepareStatement(
-              "SELECT * FROM %s.workflow_events_history WHERE workflow_uuid = ?".formatted(schema));
+              "SELECT * FROM \"%s\".workflow_events_history WHERE workflow_uuid = ?"
+                  .formatted(schema));
       stmt.setString(1, workflowId);
       var rs = stmt.executeQuery();
       List<EventHistory> rows = new ArrayList<>();
@@ -325,10 +333,51 @@ public class DBUtils {
         var stepId = rs.getInt("function_id");
         var key = rs.getString("key");
         var value = rs.getString("value");
-        rows.add(new EventHistory(stepId, key, value));
+        var serialization = rs.getString("serialization");
+        rows.add(new EventHistory(stepId, key, value, serialization));
       }
 
       return rows;
+    }
+  }
+
+  public record Notification(
+      String messageUuid,
+      String topic,
+      String message,
+      long createdAtEpochMs,
+      String serialization,
+      boolean consumed) {}
+
+  public static List<Notification> getNotifications(DataSource ds, String destinationUuid)
+      throws SQLException {
+    return getNotifications(ds, destinationUuid, null);
+  }
+
+  public static List<Notification> getNotifications(
+      DataSource ds, String destinationUuid, String schema) throws SQLException {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    var sql =
+        "SELECT * FROM %s.notifications WHERE destination_uuid = ? ORDER BY created_at_epoch_ms"
+            .formatted(schema);
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, destinationUuid);
+      try (var rs = stmt.executeQuery()) {
+        List<Notification> rows = new ArrayList<>();
+        while (rs.next()) {
+          var messageUuid = rs.getString("message_uuid");
+          var topic = rs.getString("topic");
+          var message = rs.getString("message");
+          var serialization = rs.getString("serialization");
+          var createdAtEpochMs = rs.getLong("created_at_epoch_ms");
+          var consumed = rs.getBoolean("consumed");
+          rows.add(
+              new Notification(
+                  messageUuid, topic, message, createdAtEpochMs, serialization, consumed));
+        }
+        return rows;
+      }
     }
   }
 
@@ -340,7 +389,7 @@ public class DBUtils {
     schema = SystemDatabase.sanitizeSchema(schema);
     var sql =
         """
-      SELECT COUNT(*) FROM %s.workflow_status
+      SELECT COUNT(*) FROM "%s".workflow_status
       WHERE queue_name IS NOT NULL
         AND queue_name != ?
         AND status IN ('ENQUEUED', 'PENDING')

@@ -101,23 +101,25 @@ public class QueueService {
 
             private void processPartition(String partition) {
               var partitionLog = Objects.requireNonNullElse(partition, "<null>");
-              var workflowIds =
-                  systemDatabase.getAndStartQueuedWorkflows(
-                      queue, executorId, appVersion, partition);
-              if (workflowIds.size() > 0) {
-                logger.debug(
-                    "Retrieved {} workflows from {} partition of queue {}",
-                    workflowIds.size(),
-                    partitionLog,
-                    queue.name());
-              }
-              for (var workflowId : workflowIds) {
-                logger.debug(
-                    "Starting workflow {} from {} partition of queue {}",
-                    workflowId,
-                    partitionLog,
-                    queue.name());
-                dbosExecutor.executeWorkflowById(workflowId, false, true);
+              if (!paused.get()) {
+                var workflowIds =
+                    systemDatabase.getAndStartQueuedWorkflows(
+                        queue, executorId, appVersion, partition);
+                if (workflowIds.size() > 0) {
+                  logger.debug(
+                      "Retrieved {} workflows from {} partition of queue {}",
+                      workflowIds.size(),
+                      partitionLog,
+                      queue.name());
+                }
+                for (var workflowId : workflowIds) {
+                  logger.debug(
+                      "Starting workflow {} from {} partition of queue {}",
+                      workflowId,
+                      partitionLog,
+                      queue.name());
+                  dbosExecutor.executeWorkflowById(workflowId, false, true);
+                }
               }
             }
 
@@ -130,11 +132,6 @@ public class QueueService {
               }
 
               try {
-                if (paused.get()) {
-                  pollingInterval = minPollingInterval;
-                  return;
-                }
-
                 if (queue.partitionedEnabled()) {
                   var partitions = systemDatabase.getQueuePartitions(queue.name());
                   for (var partition : partitions) {

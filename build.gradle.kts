@@ -1,6 +1,7 @@
 plugins {
     id("pmd")
-    id("com.diffplug.spotless") version "8.0.0"
+    id("com.diffplug.spotless") version "8.1.0"
+    id("com.github.ben-manes.versions") version "0.53.0"
 }
 
 fun runCommand(vararg args: String): String {
@@ -80,6 +81,7 @@ println("DBOS Transact version: $calculatedVersion")
 allprojects {
     group = "dev.dbos"
     version = calculatedVersion
+    extra["commitCount"] = "$commitCount"
 
     repositories {
         mavenCentral()
@@ -90,7 +92,8 @@ allprojects {
 subprojects {
     apply(plugin = "java")
     apply(plugin = "pmd")
-    apply(plugin = "com.diffplug.spotless")  // Spotless plugin
+    apply(plugin = "com.diffplug.spotless")
+    apply(plugin = "com.github.ben-manes.versions")
 
     // PMD configuration
     extensions.configure<org.gradle.api.plugins.quality.PmdExtension> {
@@ -111,11 +114,33 @@ subprojects {
         }
     }
 
+    tasks.withType<com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask> {
+        rejectVersionIf {
+            val isUnstable = listOf("alpha", "beta", "rc", "cr", "m", "preview", "b", "ea")
+                .any { qualifier -> candidate.version.lowercase().contains(qualifier) }
+            
+            val isStable = listOf("release", "final", "ga")
+                .any { qualifier -> currentVersion.lowercase().contains(qualifier) }
+
+            isUnstable && !isStable
+        }
+    }
+
     plugins.withId("java") {
-        extensions.configure<JavaPluginExtension> {
-            toolchain {
-                languageVersion.set(JavaLanguageVersion.of(17))
-            }
+        // Force the published bytecode to be Java 17
+        extensions.getByType<JavaPluginExtension>().apply {
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
+        }
+
+        // Allow the compiler to see higher-version APIs for reflection but keep the bytecode target at 17.
+        tasks.withType<JavaCompile> {
+            options.release.set(17) 
+        }
+
+        // use the environment's JDK instead of the toolchain's JDK for tests
+        tasks.withType<Test> {
+            javaLauncher.set(null as JavaLauncher?) 
         }
 
         tasks.named<Jar>("jar") {

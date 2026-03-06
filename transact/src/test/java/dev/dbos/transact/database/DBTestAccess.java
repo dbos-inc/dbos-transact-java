@@ -5,10 +5,12 @@
  */
 package dev.dbos.transact.database;
 
+import java.util.Optional;
+
 import com.zaxxer.hikari.HikariConfig;
 
 public class DBTestAccess {
-  public static HikariConfig getHikariConfig(SystemDatabase sysdb) {
+  public static Optional<HikariConfig> getHikariConfig(SystemDatabase sysdb) {
     return sysdb.getConfig();
   }
 }

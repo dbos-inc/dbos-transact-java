@@ -1,6 +1,5 @@
 package dev.dbos.transact.workflow.internal;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.execution.DBOSExecutor;
@@ -13,11 +12,11 @@ import java.util.concurrent.Future;
 
 public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHandle<T, E> {
 
-  private String workflowId;
-  private Future<T> futureResult;
-  private DBOSExecutor executor;
+  private final DBOSExecutor executor;
+  private final String workflowId;
+  private final Future<T> futureResult;
 
-  public WorkflowHandleFuture(String workflowId, Future<T> future, DBOSExecutor executor) {
+  public WorkflowHandleFuture(DBOSExecutor executor, String workflowId, Future<T> future) {
     this.workflowId = workflowId;
     this.futureResult = future;
     this.executor = executor;
@@ -58,6 +57,6 @@ public class WorkflowHandleFuture<T, E extends Exception> implements WorkflowHan
 
   @Override
   public WorkflowStatus getStatus() {
-    return DBOS.getWorkflowStatus(workflowId);
+    return executor.getWorkflowStatus(workflowId);
   }
 }

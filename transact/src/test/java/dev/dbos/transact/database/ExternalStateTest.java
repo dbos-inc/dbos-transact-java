@@ -24,7 +24,7 @@ public class ExternalStateTest extends DbSetupTestBase {
 
     DBUtils.recreateDB(dbosConfig);
     MigrationManager.runMigrations(dbosConfig);
-    systemDatabase = new SystemDatabase(dbosConfig);
+    systemDatabase = SystemDatabase.create(dbosConfig);
   }
 
   @AfterAll

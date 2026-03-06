@@ -9,7 +9,6 @@ import java.util.Objects;
 public class WorkflowStatusBuilder {
   private String workflowId;
   private String status;
-  private String forkedFrom;
 
   private String name;
   private String className;
@@ -39,6 +38,9 @@ public class WorkflowStatusBuilder {
 
   private Long timeoutMs;
   private Long deadlineEpochMs;
+  private String forkedFrom;
+  private String parentWorkflowId;
+  private String serialization;
 
   public WorkflowStatus build() {
     return new WorkflowStatus(
@@ -66,7 +68,9 @@ public class WorkflowStatusBuilder {
         deduplicationId,
         priority,
         partitionKey,
-        forkedFrom);
+        forkedFrom,
+        parentWorkflowId,
+        serialization);
   }
 
   public WorkflowStatusBuilder(String workflowId) {
@@ -80,11 +84,6 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder status(WorkflowState state) {
     this.status = state.name();
-    return this;
-  }
-
-  public WorkflowStatusBuilder forkedFrom(String forkedFrom) {
-    this.forkedFrom = forkedFrom;
     return this;
   }
 
@@ -114,7 +113,7 @@ public class WorkflowStatusBuilder {
   }
 
   public WorkflowStatusBuilder error(Throwable error) {
-    this.error = ErrorResult.of(error);
+    this.error = ErrorResult.fromThrowable(error, this.serialization, null);
     return this;
   }
 
@@ -195,6 +194,21 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder deadlineEpochMs(Long deadlineEpochMs) {
     this.deadlineEpochMs = deadlineEpochMs;
+    return this;
+  }
+
+  public WorkflowStatusBuilder forkedFrom(String forkedFrom) {
+    this.forkedFrom = forkedFrom;
+    return this;
+  }
+
+  public WorkflowStatusBuilder parentWorkflowId(String parentWorkflowId) {
+    this.parentWorkflowId = parentWorkflowId;
+    return this;
+  }
+
+  public WorkflowStatusBuilder serialization(String serialization) {
+    this.serialization = serialization;
     return this;
   }
 }

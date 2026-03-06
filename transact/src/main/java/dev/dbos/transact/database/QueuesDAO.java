@@ -11,17 +11,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class QueuesDAO {
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
 
-  private final HikariDataSource dataSource;
+  private final DataSource dataSource;
   private final String schema;
 
-  QueuesDAO(HikariDataSource ds, String schema) {
+  QueuesDAO(DataSource ds, String schema) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
   }
@@ -36,9 +37,6 @@ class QueuesDAO {
    */
   List<String> getAndStartQueuedWorkflows(
       Queue queue, String executorId, String appVersion, String partitionKey) throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     if (partitionKey != null && partitionKey.length() == 0) {
       partitionKey = null;
@@ -64,7 +62,7 @@ class QueuesDAO {
         var limiterQuery =
             """
               SELECT COUNT(*)
-              FROM %s.workflow_status
+              FROM "%s".workflow_status
               WHERE queue_name = ?
               AND status != ?
               AND started_at_epoch_ms > ?
@@ -102,7 +100,7 @@ class QueuesDAO {
         String pendingQuery =
             """
               SELECT executor_id, COUNT(*) as task_count
-              FROM %s.workflow_status
+              FROM "%s".workflow_status
               WHERE queue_name = ? AND status = ?
             """
                 .formatted(this.schema);
@@ -172,7 +170,7 @@ class QueuesDAO {
       var query =
           """
               SELECT workflow_uuid
-              FROM %s.workflow_status
+              FROM "%s".workflow_status
               WHERE queue_name = ?
                 AND status = ?
                 AND (application_version = ? OR application_version IS NULL)
@@ -228,7 +226,7 @@ class QueuesDAO {
       List<String> updatedWorkflowIds = new ArrayList<>();
       String updateQuery =
           """
-        UPDATE %s.workflow_status
+        UPDATE "%s".workflow_status
         SET status = ?,
             application_version = ?,
             executor_id = ?,
@@ -272,13 +270,10 @@ class QueuesDAO {
   }
 
   boolean clearQueueAssignment(String workflowId) throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     final String sql =
         """
-          UPDATE %s.workflow_status
+          UPDATE "%s".workflow_status
           SET started_at_epoch_ms = NULL, status = ?
           WHERE workflow_uuid = ? AND queue_name IS NOT NULL AND status = ?
         """
@@ -295,14 +290,11 @@ class QueuesDAO {
   }
 
   List<String> getQueuePartitions(String queueName) throws SQLException {
-    if (dataSource.isClosed()) {
-      throw new IllegalStateException("Database is closed!");
-    }
 
     final String sql =
         """
           SELECT DISTINCT queue_partition_key
-          FROM %s.workflow_status
+          FROM "%s".workflow_status
           WHERE queue_name = ?
             AND status = ?
             AND queue_partition_key IS NOT NULL

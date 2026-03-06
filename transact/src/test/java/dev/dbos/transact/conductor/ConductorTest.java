@@ -1,12 +1,21 @@
 package dev.dbos.transact.conductor;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.conductor.TestWebSocketServer.WebSocketTestListener;
@@ -16,22 +25,30 @@ import dev.dbos.transact.database.MetricData;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
+import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.WorkflowEvent;
+import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -41,12 +58,15 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.java_websocket.WebSocket;
+import org.java_websocket.enums.Opcode;
 import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ClientHandshake;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junitpioneer.jupiter.RetryingTest;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
+import org.mockito.MockitoAnnotations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +81,7 @@ public class ConductorTest {
   TestWebSocketServer testServer;
 
   static final ObjectMapper mapper =
-      new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+      new ObjectMapper().setDefaultPropertyInclusion(JsonInclude.Include.NON_EMPTY);
 
   @BeforeEach
   void beforeEach() throws Exception {
@@ -77,6 +97,8 @@ public class ConductorTest {
     mockExec = mock(DBOSExecutor.class);
     when(mockExec.appName()).thenReturn("test-app-name");
     builder = new Conductor.Builder(mockExec, mockDB, "conductor-key").domain(domain);
+
+    MockitoAnnotations.openMocks(this);
   }
 
   @AfterEach
@@ -236,16 +258,136 @@ public class ConductorTest {
       messageLatch.countDown();
     }
 
-    public void send(MessageType type, String requestId, Map<String, Object> fields)
+    private void sendFragmented(String message, int chunkSize) {
+      byte[] data = message.getBytes(StandardCharsets.UTF_8);
+
+      if (data.length <= chunkSize) {
+        // Message is small enough, send normally
+        this.webSocket.send(message);
+        return;
+      }
+
+      // Send first fragment
+      ByteBuffer firstChunk = ByteBuffer.wrap(data, 0, chunkSize);
+      this.webSocket.sendFragmentedFrame(Opcode.TEXT, firstChunk, false);
+
+      // Send intermediate fragments
+      int offset = chunkSize;
+      while (offset < data.length - chunkSize) {
+        ByteBuffer chunk = ByteBuffer.wrap(data, offset, chunkSize);
+        this.webSocket.sendFragmentedFrame(Opcode.TEXT, chunk, false);
+        offset += chunkSize;
+      }
+
+      // Send final fragment
+      ByteBuffer lastChunk = ByteBuffer.wrap(data, offset, data.length - offset);
+      this.webSocket.sendFragmentedFrame(Opcode.TEXT, lastChunk, true);
+    }
+
+    public void send(MessageType type, String requestId, Map<String, Object> fields, int chunkSize)
         throws Exception {
       logger.debug("sending {}", type.getValue());
 
-      Map<String, Object> message = new HashMap<>(fields);
-      message.put("type", Objects.requireNonNull(type).getValue());
-      message.put("request_id", Objects.requireNonNull(requestId));
+      Map<String, Object> msg = new LinkedHashMap<>();
+      msg.put("type", Objects.requireNonNull(type).getValue());
+      msg.put("request_id", Objects.requireNonNull(requestId));
+      msg.putAll(fields);
 
-      String json = ConductorTest.mapper.writeValueAsString(message);
-      this.webSocket.send(json);
+      String json = ConductorTest.mapper.writeValueAsString(msg);
+      if (chunkSize > 0) {
+        sendFragmented(json, chunkSize);
+      } else {
+        this.webSocket.send(json);
+      }
+    }
+
+    public void send(MessageType type, String requestId, Map<String, Object> fields)
+        throws Exception {
+      this.send(type, requestId, fields, 1024);
+    }
+  }
+
+  @RetryingTest(3)
+  public void canHandleChunks() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String hostname = InetAddress.getLocalHost().getHostName();
+
+    when(mockExec.appVersion()).thenReturn("test-app-version");
+    when(mockExec.executorId()).thenReturn("test-executor-id");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("unknown-field", "unknown-field-value");
+      listener.send(MessageType.EXECUTOR_INFO, "12345", message, 10);
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("executor_info", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(hostname, jsonNode.get("hostname").asText());
+      assertEquals("test-app-version", jsonNode.get("application_version").asText());
+      assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
+      assertEquals("java", jsonNode.get("language").asText());
+      assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
+      assertNull(jsonNode.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void testSendsFragmentedResponse() throws Exception {
+    class FragmentCountingListener extends MessageListener {
+      int frameCount = 0;
+
+      @Override
+      public void onWebsocketMessage(WebSocket conn, Framedata frame) {
+        if (frame.getOpcode() == Opcode.TEXT || frame.getOpcode() == Opcode.CONTINUOUS) {
+          frameCount++;
+        }
+      }
+    }
+
+    FragmentCountingListener listener = new FragmentCountingListener();
+    testServer.setListener(listener);
+
+    Random random = new Random();
+    String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    // Create a large list of steps to exceed 32KB
+    List<StepInfo> steps = new ArrayList<>();
+    for (int i = 0; i < 200; i++) {
+      var stringBuilder = new StringBuilder(1024);
+      stringBuilder.append("output_%d_".formatted(i));
+      for (int j = 0; j < 1024; j++) {
+        stringBuilder.append(characters.charAt(random.nextInt(characters.length())));
+      }
+      steps.add(
+          new StepInfo(i, "function" + i, stringBuilder.toString(), null, null, null, null, null));
+    }
+    when(mockExec.listWorkflowSteps("large-wf")).thenReturn(steps);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_id", "large-wf");
+      listener.send(MessageType.LIST_STEPS, "12345", message);
+
+      assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
+
+      // Each StepInfo is roughly 100-200 bytes. 500 steps should be > 50KB.
+      // 32KB fragment size should result in at least 2 frames.
+      assertTrue(
+          listener.frameCount > 1,
+          "Should have received more than one frame, but got " + listener.frameCount);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertEquals("list_steps", jsonNode.get("type").asText());
+      assertEquals(200, jsonNode.get("output").size());
     }
   }
 
@@ -395,6 +537,80 @@ public class ConductorTest {
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
       assertEquals("cancel", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertFalse(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canDelete() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of(
+              "workflow_id",
+              workflowId,
+              "delete_children",
+              Boolean.TRUE,
+              "unknown-field",
+              "unknown-field-value");
+      listener.send(MessageType.DELETE, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      // Verify that deleteWorkflow was called with the correct argument
+      verify(mockExec).deleteWorkflow(workflowId, true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("delete", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canDeleteThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canDeleteThrows error";
+    String workflowId = "sample-wf-id";
+
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockExec)
+        .deleteWorkflow(anyString(), anyBoolean());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of(
+              "workflow_id",
+              workflowId,
+              "delete_children",
+              Boolean.TRUE,
+              "unknown-field",
+              "unknown-field-value");
+      listener.send(MessageType.DELETE, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).deleteWorkflow(workflowId, true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("delete", jsonNode.get("type").asText());
       assertEquals("12345", jsonNode.get("request_id").asText());
       assertEquals(errorMessage, jsonNode.get("error_message").asText());
       assertFalse(jsonNode.get("success").asBoolean());
@@ -619,7 +835,7 @@ public class ConductorTest {
   public void canListWorkflows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
-    List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+    List<WorkflowStatus> statuses = new ArrayList<>();
     statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
@@ -693,7 +909,7 @@ public class ConductorTest {
   public void canListQueuedWorkflows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
-    List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+    List<WorkflowStatus> statuses = new ArrayList<>();
     statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
@@ -811,7 +1027,7 @@ public class ConductorTest {
     String executorId = "exec-id";
     String appVersion = "app-version";
 
-    List<GetPendingWorkflowsOutput> outputs = new ArrayList<GetPendingWorkflowsOutput>();
+    List<GetPendingWorkflowsOutput> outputs = new ArrayList<>();
     outputs.add(new GetPendingWorkflowsOutput("wf-1", null));
     outputs.add(new GetPendingWorkflowsOutput("wf-2", "queue"));
 
@@ -844,7 +1060,7 @@ public class ConductorTest {
     String executorId = "exec-id";
     String appVersion = "app-version";
 
-    List<GetPendingWorkflowsOutput> outputs = new ArrayList<GetPendingWorkflowsOutput>();
+    List<GetPendingWorkflowsOutput> outputs = new ArrayList<>();
     when(mockDB.getPendingWorkflows(executorId, appVersion)).thenReturn(outputs);
 
     try (Conductor conductor = builder.build()) {
@@ -879,12 +1095,12 @@ public class ConductorTest {
     testServer.setListener(listener);
     String workflowId = "workflow-id-1";
 
-    List<StepInfo> steps = new ArrayList<StepInfo>();
-    steps.add(new StepInfo(0, "function1", null, null, null, null, null));
-    steps.add(new StepInfo(1, "function2", null, null, null, null, null));
-    steps.add(new StepInfo(2, "function3", null, null, null, null, null));
-    steps.add(new StepInfo(3, "function4", null, null, null, null, null));
-    steps.add(new StepInfo(4, "function5", null, null, null, null, null));
+    List<StepInfo> steps = new ArrayList<>();
+    steps.add(new StepInfo(0, "function1", null, null, null, null, null, null));
+    steps.add(new StepInfo(1, "function2", null, null, null, null, null, null));
+    steps.add(new StepInfo(2, "function3", null, null, null, null, null, null));
+    steps.add(new StepInfo(3, "function4", null, null, null, null, null, null));
+    steps.add(new StepInfo(4, "function5", null, null, null, null, null, null));
 
     when(mockExec.listWorkflowSteps(workflowId)).thenReturn(steps);
 
@@ -1175,6 +1391,337 @@ public class ConductorTest {
       assertEquals("get_metrics", jsonNode.get("type").asText());
       assertEquals("12345", jsonNode.get("request_id").asText());
       assertEquals(errorMessage, jsonNode.get("error_message").asText());
+    }
+  }
+
+  @Captor ArgumentCaptor<List<ExportedWorkflow>> workflowListCaptor;
+
+  @RetryingTest(3)
+  public void canImport() throws Exception {
+
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    var workflows = createTestExportedWorkflows();
+    var serialized = Conductor.serializeExportedWorkflows(workflows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of("serialized_workflow", serialized, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.IMPORT_WORKFLOW, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).importWorkflow(workflowListCaptor.capture());
+      assertTrue(workflows.equals(workflowListCaptor.getValue()));
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("import_workflow", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canImportThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canImportThrows error";
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).importWorkflow(any());
+
+    var workflows = createTestExportedWorkflows();
+    var serialized = Conductor.serializeExportedWorkflows(workflows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of("serialized_workflow", serialized, "unknown-field", "unknown-field-value");
+      listener.send(MessageType.IMPORT_WORKFLOW, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).importWorkflow(any());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("import_workflow", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertFalse(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canExportThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canExportThrows error";
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockDB)
+        .exportWorkflow(anyString(), anyBoolean());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of(
+              "workflow_id",
+              "abc-123",
+              "export_children",
+              true,
+              "unknown-field",
+              "unknown-field-value");
+      listener.send(MessageType.EXPORT_WORKFLOW, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockDB).exportWorkflow("abc-123", true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("export_workflow", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertNull(jsonNode.get("serialized_workflow"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canExport() throws Exception {
+
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    var workflows = createTestExportedWorkflows();
+    var serialized = Conductor.serializeExportedWorkflows(workflows);
+
+    when(mockDB.exportWorkflow(anyString(), anyBoolean())).thenReturn(workflows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of(
+              "workflow_id",
+              "abc-123",
+              "export_children",
+              true,
+              "unknown-field",
+              "unknown-field-value");
+      listener.send(MessageType.EXPORT_WORKFLOW, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockDB).exportWorkflow("abc-123", true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("export_workflow", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertEquals(serialized, jsonNode.get("serialized_workflow").asText());
+    }
+  }
+
+  private static ExportedWorkflow createTestExportedWorkflow(int index) {
+    String suffix = index > 0 ? "-" + index : "";
+    WorkflowStatus status =
+        new WorkflowStatusBuilder(
+                "test-workflow-id-%d%s".formatted(System.currentTimeMillis(), suffix))
+            .status(
+                index > 0
+                    ? WorkflowState.values()[index % WorkflowState.values().length]
+                    : WorkflowState.SUCCESS)
+            .name("TestWorkflow" + (index > 0 ? (index + 1) : ""))
+            .className("dev.dbos.transact.test.TestClass" + (index > 0 ? (index + 1) : ""))
+            .instanceName("test-instance" + (index > 0 ? "-" + (index + 1) : ""))
+            .authenticatedUser("test-user" + (index > 0 ? "-" + (index + 1) : ""))
+            .assumedRole("test-role" + (index > 0 ? "-" + (index + 1) : ""))
+            .authenticatedRoles(new String[] {"role1", "role2"})
+            .input(new Object[] {"input1", "input2"})
+            .output("test-output" + (index > 0 ? "-" + (index + 1) : ""))
+            .error(null)
+            .executorId("test-executor" + (index > 0 ? "-" + (index + 1) : ""))
+            .createdAt(System.currentTimeMillis() - (5000L * (index + 1)))
+            .updatedAt(System.currentTimeMillis() - (1000L * (index + 1)))
+            .appVersion(index > 0 ? "1." + index + ".0" : "1.0.0")
+            .appId("test-app" + (index > 0 ? "-" + (index + 1) : ""))
+            .recoveryAttempts(index)
+            .queueName("test-queue" + (index > 0 ? "-" + (index + 1) : ""))
+            .timeoutMs(30000L + (index * 5000L))
+            .deadlineEpochMs(System.currentTimeMillis() + (60000L * (index + 1)))
+            .startedAtEpochMs(System.currentTimeMillis() - (index * 1000L))
+            .deduplicationId("test-dedup-id" + (index > 0 ? "-" + (index + 1) : ""))
+            .priority(index + 1)
+            .partitionKey("test-partition" + (index > 0 ? "-" + (index + 1) : ""))
+            .forkedFrom(index > 0 ? "parent-workflow-" + index : null)
+            .build();
+
+    int stepCount = (int) (Math.random() * 8) + 2;
+    List<StepInfo> steps = new ArrayList<>();
+    long currentTime = System.currentTimeMillis() + (index * 10000L);
+    String prefix = index > 0 ? "wf" + (index + 1) + "_" : "";
+    for (int i = 0; i < stepCount; i++) {
+      steps.add(
+          new StepInfo(
+              i,
+              prefix + "function" + (i + 1),
+              prefix + "result" + (i + 1),
+              null,
+              null,
+              currentTime + (i * 1000),
+              currentTime + ((i + 1) * 1000),
+              null));
+    }
+
+    int eventCount = (int) (Math.random() * 8) + 2;
+    List<WorkflowEvent> events = new ArrayList<>();
+    for (int i = 0; i < eventCount; i++) {
+      events.add(new WorkflowEvent(prefix + "event" + (i + 1), prefix + "value" + (i + 1), null));
+    }
+
+    int historyCount = (int) (Math.random() * 8) + 2;
+    List<WorkflowEventHistory> eventHistory = new ArrayList<>();
+    for (int i = 0; i < historyCount; i++) {
+      int stepId = i % Math.max(1, stepCount); // Distribute across available steps
+      String eventKey =
+          eventCount > 0 ? prefix + "event" + ((i % eventCount) + 1) : prefix + "event" + (i + 1);
+      eventHistory.add(
+          new WorkflowEventHistory(eventKey, prefix + "historyvalue" + (i + 1), stepId, null));
+    }
+
+    int streamCount = (int) (Math.random() * 8) + 2;
+    List<WorkflowStream> streams = new ArrayList<>();
+    for (int i = 0; i < streamCount; i++) {
+      int stepId = i % Math.max(1, stepCount); // Distribute across available steps
+      int offset = i % 3; // Vary offset between 0-2
+      String streamKey = prefix + "stream" + ((i % 3) + 1); // Use 3 different stream keys
+      streams.add(
+          new WorkflowStream(streamKey, prefix + "streamvalue" + (i + 1), offset, stepId, null));
+    }
+
+    return new ExportedWorkflow(status, steps, events, eventHistory, streams);
+  }
+
+  // Helper method to create multiple test ExportedWorkflow instances
+  private static List<ExportedWorkflow> createTestExportedWorkflows() {
+    // Create a random number of workflows (1-5)
+    int workflowCount = (int) (Math.random() * 5) + 2;
+    List<ExportedWorkflow> workflows = new ArrayList<>();
+
+    for (int i = 0; i < workflowCount; i++) {
+      workflows.add(createTestExportedWorkflow(i));
+    }
+
+    return workflows;
+  }
+
+  @RetryingTest(3)
+  public void canAlert() throws Exception {
+
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, String> metadata = Map.of("one", "1", "two", "2", "three", "3");
+      Map<String, Object> message =
+          Map.of(
+              "name",
+              "name-value",
+              "message",
+              "message-value",
+              "metadata",
+              metadata,
+              "unknown-field",
+              "unknown-field-value");
+      listener.send(MessageType.ALERT, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+      ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+      @SuppressWarnings("unchecked")
+      ArgumentCaptor<Map<String, String>> metadataCaptor =
+          ArgumentCaptor.forClass((Class<Map<String, String>>) (Class<?>) Map.class);
+
+      verify(mockExec)
+          .fireAlertHandler(
+              nameCaptor.capture(), messageCaptor.capture(), metadataCaptor.capture());
+
+      assertEquals("name-value", nameCaptor.getValue());
+      assertEquals("message-value", messageCaptor.getValue());
+      assertEquals(metadata, metadataCaptor.getValue());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("alert", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canAlertThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canAlertThrows error";
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockExec)
+        .fireAlertHandler(anyString(), anyString(), any());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, String> metadata = Map.of("one", "1", "two", "2", "three", "3");
+      Map<String, Object> message =
+          Map.of(
+              "name",
+              "name-value",
+              "message",
+              "message-value",
+              "metadata",
+              metadata,
+              "unknown-field",
+              "unknown-field-value");
+      listener.send(MessageType.ALERT, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+      ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+      @SuppressWarnings("unchecked")
+      ArgumentCaptor<Map<String, String>> metadataCaptor =
+          ArgumentCaptor.forClass((Class<Map<String, String>>) (Class<?>) Map.class);
+
+      verify(mockExec)
+          .fireAlertHandler(
+              nameCaptor.capture(), messageCaptor.capture(), metadataCaptor.capture());
+
+      assertEquals("name-value", nameCaptor.getValue());
+      assertEquals("message-value", messageCaptor.getValue());
+      assertEquals(metadata, metadataCaptor.getValue());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("alert", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(errorMessage, jsonNode.get("error_message").asText());
+      assertFalse(jsonNode.get("success").asBoolean());
     }
   }
 }

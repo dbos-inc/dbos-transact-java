@@ -11,6 +11,7 @@ public record ListQueuedWorkflowsRequest(
     String end_time,
     String status,
     String fork_from,
+    String parent_workflow_id,
     String queue_name,
     Integer limit,
     Integer offset,
@@ -37,6 +38,7 @@ public record ListQueuedWorkflowsRequest(
         queue_name,
         true, // queuesOnly: only list queued workflows
         null, // Executor IDs
-        fork_from);
+        fork_from,
+        parent_workflow_id); // parent workflow id
   }
 }

@@ -3,6 +3,7 @@ package dev.dbos.transact.internal;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
 import dev.dbos.transact.execution.SchedulerService;
+import dev.dbos.transact.workflow.SerializationStrategy;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -29,11 +30,19 @@ public class WorkflowRegistry {
       Object target,
       String instanceName,
       Method method,
-      int maxRecoveryAttempts) {
+      int maxRecoveryAttempts,
+      SerializationStrategy serializationStrategy) {
 
     var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
     var regWorkflow =
-        new RegisteredWorkflow(workflowName, target, instanceName, method, maxRecoveryAttempts);
+        new RegisteredWorkflow(
+            workflowName,
+            className,
+            instanceName,
+            target,
+            method,
+            maxRecoveryAttempts,
+            serializationStrategy);
     SchedulerService.validateScheduledWorkflow(regWorkflow);
 
     var previous = wfRegistry.putIfAbsent(fqName, regWorkflow);

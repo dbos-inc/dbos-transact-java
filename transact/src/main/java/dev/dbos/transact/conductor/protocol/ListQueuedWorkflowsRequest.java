@@ -17,6 +17,7 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
     public String end_time;
     public String status;
     public String forked_from;
+    public String parent_workflow_id;
     public String queue_name;
     public Integer limit;
     public Integer offset;
@@ -30,6 +31,7 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
     private String end_time;
     private String status;
     private String forked_from;
+    private String parent_workflow_id;
     private String queue_name;
     private Integer limit;
     private Integer offset;
@@ -58,6 +60,11 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
 
     public Builder forkedFrom(String forkedFrom) {
       this.forked_from = forkedFrom;
+      return this;
+    }
+
+    public Builder parentWorkflowId(String parentWorkflowId) {
+      this.parent_workflow_id = parentWorkflowId;
       return this;
     }
 
@@ -97,6 +104,7 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
       body.end_time = this.end_time;
       body.status = this.status;
       body.forked_from = this.forked_from;
+      body.parent_workflow_id = this.parent_workflow_id;
       body.queue_name = this.queue_name;
       body.limit = this.limit;
       body.offset = this.offset;
@@ -117,6 +125,7 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
         .withEndTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null)
         .withStatus(body.status)
         .withForkedFrom(body.forked_from)
+        .withParentWorkflowId(body.parent_workflow_id)
         .withQueueName(body.queue_name)
         .withLimit(body.limit)
         .withOffset(body.offset)

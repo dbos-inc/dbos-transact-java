@@ -31,12 +31,15 @@ public class WorkflowsOutput {
   public String Priority;
   public String QueuePartitionKey;
   public String ForkedFrom;
+  public String ParentWorkflowID;
+  public String DequeuedAt;
 
   public WorkflowsOutput(WorkflowStatus status) {
     Object[] input = status.input();
     Object output = status.output();
     Long createdAt = status.createdAt();
     Long updatedAt = status.updatedAt();
+    Long startedAt = status.startedAtEpochMs();
     String[] authenticatedRoles = status.authenticatedRoles();
 
     this.WorkflowUUID = status.workflowId();
@@ -50,7 +53,7 @@ public class WorkflowsOutput {
         authenticatedRoles != null && authenticatedRoles.length > 0
             ? JSONUtil.serializeArray(authenticatedRoles)
             : null;
-    this.Input = input != null ? JSONUtil.serializeArray(input) : null;
+    this.Input = input != null ? JSONUtil.toJson(input) : null;
     this.Output = output != null ? JSONUtil.toJson(output) : null;
     this.Request = null; // not used in Java TX
     this.Error =
@@ -69,5 +72,7 @@ public class WorkflowsOutput {
     this.Priority = Objects.requireNonNullElse(status.priority(), 0).toString();
     this.QueuePartitionKey = status.queuePartitionKey();
     this.ForkedFrom = status.forkedFrom();
+    this.ParentWorkflowID = status.parentWorkflowId();
+    this.DequeuedAt = startedAt != null ? Long.toString(startedAt) : null;
   }
 }

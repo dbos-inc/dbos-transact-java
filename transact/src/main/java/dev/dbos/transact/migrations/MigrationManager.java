@@ -10,23 +10,14 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Objects;
 
-import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class MigrationManager {
 
   private static final Logger logger = LoggerFactory.getLogger(MigrationManager.class);
-  private static final List<String> IGNORABLE_SQL_STATES =
-      List.of(
-          // Relation / object already exists
-          "42P07", // duplicate_table
-          "42710", // duplicate_object (e.g., index)
-          "42701", // duplicate_column
-          "42P06", // duplicate_schema
-          // Uniqueness (e.g., insert seed rows twice)
-          "23505" // unique_violation
-          );
 
   public static void runMigrations(DBOSConfig config) {
     Objects.requireNonNull(config, "DBOS Config must not be null");
@@ -34,8 +25,10 @@ public class MigrationManager {
     if (config.dataSource() != null) {
       runMigrations(config.dataSource(), config.databaseSchema());
     } else {
-      createDatabaseIfNotExists(config);
-      try (var ds = SystemDatabase.createDataSource(config)) {
+      createDatabaseIfNotExists(config.databaseUrl(), config.dbUser(), config.dbPassword());
+      try (var ds =
+          SystemDatabase.createDataSource(
+              config.databaseUrl(), config.dbUser(), config.dbPassword())) {
         runMigrations(ds, config.databaseSchema());
       }
     }
@@ -47,14 +40,18 @@ public class MigrationManager {
     Objects.requireNonNull(password, "database password must not be null");
 
     createDatabaseIfNotExists(url, user, password);
-    try (var ds = SystemDatabase.createDataSource(url, user, password, 0, 0)) {
+    try (var ds = SystemDatabase.createDataSource(url, user, password)) {
       runMigrations(ds, schema);
     }
   }
 
-  private static void runMigrations(HikariDataSource ds, String schema) {
+  private static void runMigrations(DataSource ds, String schema) {
     Objects.requireNonNull(ds, "Data Source must not be null");
     schema = SystemDatabase.sanitizeSchema(schema);
+
+    if (schema.contains("'") || schema.contains("\"")) {
+      throw new IllegalArgumentException("Schema name must not contain single or double quotes");
+    }
 
     try (var conn = ds.getConnection()) {
       ensureDbosSchema(conn, schema);
@@ -63,15 +60,6 @@ public class MigrationManager {
       runDbosMigrations(conn, schema, migrations);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
-    }
-  }
-
-  public static void createDatabaseIfNotExists(DBOSConfig config) {
-    Objects.requireNonNull(config, "DBOS Config must not be null");
-    if (config.dataSource() != null) {
-      logger.debug("DBOSConfig specifies data source, skipping createDatabaseIfNotExists");
-    } else {
-      createDatabaseIfNotExists(config.databaseUrl(), config.dbUser(), config.dbPassword());
     }
   }
 
@@ -138,7 +126,7 @@ public class MigrationManager {
     }
 
     try (var stmt = conn.createStatement()) {
-      stmt.execute("CREATE SCHEMA IF NOT EXISTS %s".formatted(schema));
+      stmt.execute("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(schema));
     } catch (SQLException e) {
       logger.warn("SQLException thrown creating the {} schema", schema, e);
     }
@@ -161,7 +149,7 @@ public class MigrationManager {
 
     try (var stmt = conn.createStatement()) {
       stmt.execute(
-          "CREATE TABLE IF NOT EXISTS %s.dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)"
+          "CREATE TABLE IF NOT EXISTS \"%s\".dbos_migrations (version BIGINT NOT NULL PRIMARY KEY)"
               .formatted(schema));
     } catch (SQLException e) {
       logger.warn("SQLException thrown creating the dbos_migrations table", e);
@@ -171,7 +159,8 @@ public class MigrationManager {
   public static int getCurrentSysDbVersion(Connection conn, String schema) {
     Objects.requireNonNull(schema, "schema must not be null");
     var sql =
-        "SELECT version FROM %s.dbos_migrations ORDER BY version DESC limit 1".formatted(schema);
+        "SELECT version FROM \"%s\".dbos_migrations ORDER BY version DESC limit 1"
+            .formatted(schema);
     try (var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
       if (rs.next()) {
@@ -198,27 +187,19 @@ public class MigrationManager {
       try (var stmt = conn.createStatement()) {
         stmt.execute(migrations.get(i));
       } catch (SQLException e) {
-        if (IGNORABLE_SQL_STATES.contains(e.getSQLState())) {
-          logger.warn(
-              "Ignoring migration {} error; Migration was likely already applied. Occurred while executing {}",
-              migrationIndex,
-              migrations.get(i));
-        } else {
-          throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
-        }
+        throw new RuntimeException("Failed to run migration %d".formatted(migrationIndex), e);
       }
 
       try {
-        int rowCount = 0;
-        var updateSQL = "UPDATE %s.dbos_migrations SET version = ?".formatted(schema);
-        try (var stmt = conn.prepareStatement(updateSQL)) {
-          stmt.setLong(1, migrationIndex);
-          rowCount = stmt.executeUpdate();
-        }
-
-        if (rowCount == 0) {
-          var insertSql = "INSERT INTO %s.dbos_migrations (version) VALUES (?)".formatted(schema);
-          try (var stmt = conn.prepareStatement(insertSql)) {
+        if (lastApplied == 0) {
+          var sql = "INSERT INTO \"%s\".dbos_migrations (version) VALUES (?)".formatted(schema);
+          try (var stmt = conn.prepareStatement(sql)) {
+            stmt.setLong(1, migrationIndex);
+            stmt.executeUpdate();
+          }
+        } else {
+          var sql = "UPDATE \"%s\".dbos_migrations SET version = ?".formatted(schema);
+          try (var stmt = conn.prepareStatement(sql)) {
             stmt.setLong(1, migrationIndex);
             stmt.executeUpdate();
           }
@@ -234,7 +215,21 @@ public class MigrationManager {
   public static List<String> getMigrations(String schema) {
     Objects.requireNonNull(schema);
     var migrations =
-        List.of(migration1, migration2, migration3, migration4, migration5, migration6, migration7);
+        List.of(
+            migration1,
+            migration2,
+            migration3,
+            migration4,
+            migration5,
+            migration6,
+            migration7,
+            migration8,
+            migration9,
+            migration10,
+            migration11,
+            migration12,
+            migration13,
+            migration14);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -242,7 +237,7 @@ public class MigrationManager {
       """
       CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-      CREATE TABLE %1$s.workflow_status (
+      CREATE TABLE "%1$s".workflow_status (
           workflow_uuid TEXT PRIMARY KEY,
           status TEXT,
           name TEXT,
@@ -266,42 +261,42 @@ public class MigrationManager {
           inputs TEXT,
           started_at_epoch_ms BIGINT,
           deduplication_id TEXT,
-          priority INTEGER NOT NULL DEFAULT 0
+          priority INT4 NOT NULL DEFAULT 0
       );
 
-      CREATE INDEX workflow_status_created_at_index ON %1$s.workflow_status (created_at);
-      CREATE INDEX workflow_status_executor_id_index ON %1$s.workflow_status (executor_id);
-      CREATE INDEX workflow_status_status_index ON %1$s.workflow_status (status);
+      CREATE INDEX workflow_status_created_at_index ON "%1$s".workflow_status (created_at);
+      CREATE INDEX workflow_status_executor_id_index ON "%1$s".workflow_status (executor_id);
+      CREATE INDEX workflow_status_status_index ON "%1$s".workflow_status (status);
 
-      ALTER TABLE %1$s.workflow_status
+      ALTER TABLE "%1$s".workflow_status
       ADD CONSTRAINT uq_workflow_status_queue_name_dedup_id
       UNIQUE (queue_name, deduplication_id);
 
-      CREATE TABLE %1$s.operation_outputs (
+      CREATE TABLE "%1$s".operation_outputs (
           workflow_uuid TEXT NOT NULL,
-          function_id INTEGER NOT NULL,
+          function_id INT4 NOT NULL,
           function_name TEXT NOT NULL DEFAULT '',
           output TEXT,
           error TEXT,
           child_workflow_id TEXT,
           PRIMARY KEY (workflow_uuid, function_id),
-          FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
+          FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
 
-      CREATE TABLE %1$s.notifications (
+      CREATE TABLE "%1$s".notifications (
+          message_uuid TEXT NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY, -- Built-in function
           destination_uuid TEXT NOT NULL,
           topic TEXT,
           message TEXT NOT NULL,
           created_at_epoch_ms BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000::numeric)::bigint,
-          message_uuid TEXT NOT NULL DEFAULT gen_random_uuid(), -- Built-in function
-          FOREIGN KEY (destination_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
+          FOREIGN KEY (destination_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
-      CREATE INDEX idx_workflow_topic ON %1$s.notifications (destination_uuid, topic);
+      CREATE INDEX idx_workflow_topic ON "%1$s".notifications (destination_uuid, topic);
 
       -- Create notification function
-      CREATE OR REPLACE FUNCTION %1$s.notifications_function() RETURNS TRIGGER AS $$
+      CREATE OR REPLACE FUNCTION "%1$s".notifications_function() RETURNS TRIGGER AS $$
       DECLARE
           payload text := NEW.destination_uuid || '::' || NEW.topic;
       BEGIN
@@ -312,20 +307,20 @@ public class MigrationManager {
 
       -- Create notification trigger
       CREATE TRIGGER dbos_notifications_trigger
-      AFTER INSERT ON %1$s.notifications
-      FOR EACH ROW EXECUTE FUNCTION %1$s.notifications_function();
+      AFTER INSERT ON "%1$s".notifications
+      FOR EACH ROW EXECUTE FUNCTION "%1$s".notifications_function();
 
-      CREATE TABLE %1$s.workflow_events (
+      CREATE TABLE "%1$s".workflow_events (
           workflow_uuid TEXT NOT NULL,
           key TEXT NOT NULL,
           value TEXT NOT NULL,
           PRIMARY KEY (workflow_uuid, key),
-          FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
+          FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
 
       -- Create events function
-      CREATE OR REPLACE FUNCTION %1$s.workflow_events_function() RETURNS TRIGGER AS $$
+      CREATE OR REPLACE FUNCTION "%1$s".workflow_events_function() RETURNS TRIGGER AS $$
       DECLARE
           payload text := NEW.workflow_uuid || '::' || NEW.key;
       BEGIN
@@ -336,20 +331,20 @@ public class MigrationManager {
 
       -- Create events trigger
       CREATE TRIGGER dbos_workflow_events_trigger
-      AFTER INSERT ON %1$s.workflow_events
-      FOR EACH ROW EXECUTE FUNCTION %1$s.workflow_events_function();
+      AFTER INSERT ON "%1$s".workflow_events
+      FOR EACH ROW EXECUTE FUNCTION "%1$s".workflow_events_function();
 
-      CREATE TABLE %1$s.streams (
+      CREATE TABLE "%1$s".streams (
           workflow_uuid TEXT NOT NULL,
           key TEXT NOT NULL,
           value TEXT NOT NULL,
-          "offset" INTEGER NOT NULL,
+          "offset" INT4 NOT NULL,
           PRIMARY KEY (workflow_uuid, key, "offset"),
-          FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
+          FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
 
-      CREATE TABLE %1$s.event_dispatch_kv (
+      CREATE TABLE "%1$s".event_dispatch_kv (
           service_name TEXT NOT NULL,
           workflow_fn_name TEXT NOT NULL,
           key TEXT NOT NULL,
@@ -362,41 +357,228 @@ public class MigrationManager {
 
   static final String migration2 =
       """
-      ALTER TABLE %1$s.workflow_status ADD COLUMN queue_partition_key TEXT;
+      ALTER TABLE "%1$s".workflow_status ADD COLUMN queue_partition_key TEXT;
       """;
 
   static final String migration3 =
       """
-      create index "idx_workflow_status_queue_status_started" on %1$s."workflow_status" ("queue_name", "status", "started_at_epoch_ms")
+      create index "idx_workflow_status_queue_status_started" on "%1$s"."workflow_status" ("queue_name", "status", "started_at_epoch_ms")
       """;
 
   static final String migration4 =
       """
-      ALTER TABLE %1$s.workflow_status ADD COLUMN forked_from TEXT;
-      CREATE INDEX "idx_workflow_status_forked_from" ON %1$s."workflow_status" ("forked_from");
+      ALTER TABLE "%1$s".workflow_status ADD COLUMN forked_from TEXT;
+      CREATE INDEX "idx_workflow_status_forked_from" ON "%1$s"."workflow_status" ("forked_from");
       """;
 
   static final String migration5 =
       """
-      ALTER TABLE %1$s.operation_outputs ADD COLUMN started_at_epoch_ms BIGINT, ADD COLUMN completed_at_epoch_ms BIGINT;
+      ALTER TABLE "%1$s".operation_outputs ADD COLUMN started_at_epoch_ms BIGINT, ADD COLUMN completed_at_epoch_ms BIGINT;
       """;
 
   static final String migration6 =
       """
-      CREATE TABLE %1$s.workflow_events_history (
+      CREATE TABLE "%1$s".workflow_events_history (
           workflow_uuid TEXT NOT NULL,
-          function_id INTEGER NOT NULL,
+          function_id INT4 NOT NULL,
           key TEXT NOT NULL,
           value TEXT NOT NULL,
           PRIMARY KEY (workflow_uuid, function_id, key),
-          FOREIGN KEY (workflow_uuid) REFERENCES %1$s.workflow_status(workflow_uuid)
+          FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
-      ALTER TABLE %1$s.streams ADD COLUMN function_id INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE "%1$s".streams ADD COLUMN function_id INT4 NOT NULL DEFAULT 0;
       """;
 
   static final String migration7 =
       """
-      ALTER TABLE %1$s."workflow_status" ADD COLUMN "owner_xid" VARCHAR(40) DEFAULT NULL
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "owner_xid" VARCHAR(40) DEFAULT NULL
+      """;
+
+  static final String migration8 =
+      """
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "parent_workflow_id" TEXT DEFAULT NULL;
+      CREATE INDEX "idx_workflow_status_parent_workflow_id" ON "%1$s"."workflow_status" ("parent_workflow_id");
+      """;
+
+  static final String migration9 =
+      """
+      CREATE TABLE "%1$s".workflow_schedules (
+          schedule_id TEXT PRIMARY KEY,
+          schedule_name TEXT NOT NULL UNIQUE,
+          workflow_name TEXT NOT NULL,
+          workflow_class_name TEXT,
+          schedule TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'ACTIVE',
+          context TEXT NOT NULL
+      );
+      """;
+
+  static final String migration10 =
+      """
+      DO $$
+      BEGIN
+          IF NOT EXISTS (
+              SELECT 1 FROM information_schema.table_constraints
+              WHERE table_schema = '%1$s'
+              AND table_name = 'notifications'
+              AND constraint_type = 'PRIMARY KEY'
+          ) THEN
+              ALTER TABLE "%1$s".notifications ADD PRIMARY KEY (message_uuid);
+          END IF;
+      END $$;
+      """;
+
+  static final String migration11 =
+      """
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s"."notifications" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s"."workflow_events" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s"."workflow_events_history" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s"."operation_outputs" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s"."streams" ADD COLUMN "serialization" TEXT DEFAULT NULL;
+      """;
+
+  static final String migration12 =
+      """
+      ALTER TABLE "%1$s"."notifications" ADD COLUMN "consumed" BOOLEAN NOT NULL DEFAULT FALSE;
+      CREATE INDEX "idx_notifications_unconsumed" ON "%1$s"."notifications" ("destination_uuid", "topic") WHERE consumed = FALSE;
+      """;
+
+  static final String migration13 =
+      """
+      CREATE TABLE "%1$s".application_versions (
+        version_id TEXT NOT NULL PRIMARY KEY,
+        version_name TEXT NOT NULL UNIQUE,
+        version_timestamp BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint,
+        created_at BIGINT NOT NULL DEFAULT (EXTRACT(epoch FROM now()) * 1000.0)::bigint
+      );
+      """;
+
+  static final String migration14 =
+      """
+      CREATE FUNCTION "%1$s".enqueue_workflow(
+          workflow_name TEXT,
+          queue_name TEXT,
+          positional_args JSON[] DEFAULT ARRAY[]::JSON[],
+          named_args JSON DEFAULT '{}'::JSON,
+          class_name TEXT DEFAULT NULL,
+          config_name TEXT DEFAULT NULL,
+          workflow_id TEXT DEFAULT NULL,
+          app_version TEXT DEFAULT NULL,
+          timeout_ms BIGINT DEFAULT NULL,
+          deadline_epoch_ms BIGINT DEFAULT NULL,
+          deduplication_id TEXT DEFAULT NULL,
+          priority INTEGER DEFAULT NULL,
+          queue_partition_key TEXT DEFAULT NULL
+      ) RETURNS TEXT AS $$
+      DECLARE
+          v_workflow_id TEXT;
+          v_serialized_inputs TEXT;
+          v_owner_xid TEXT;
+          v_now BIGINT;
+          v_recovery_attempts INTEGER := 0;
+          v_priority INTEGER;
+          v_existing_name TEXT;
+          v_existing_class_name TEXT;
+          v_existing_config_name TEXT;
+      BEGIN
+
+          -- Validate required parameters
+          IF workflow_name IS NULL OR workflow_name = '' THEN
+              RAISE EXCEPTION 'Workflow name cannot be null or empty';
+          END IF;
+          IF queue_name IS NULL OR queue_name = '' THEN
+              RAISE EXCEPTION 'Queue name cannot be null or empty';
+          END IF;
+          IF named_args IS NOT NULL AND jsonb_typeof(named_args::jsonb) != 'object' THEN
+              RAISE EXCEPTION 'Named args must be a JSON object';
+          END IF;
+          IF workflow_id IS NOT NULL AND workflow_id = '' THEN
+              RAISE EXCEPTION 'Workflow ID cannot be an empty string if provided.';
+          END IF;
+
+          v_workflow_id := COALESCE(workflow_id, gen_random_uuid()::TEXT);
+          v_owner_xid := gen_random_uuid()::TEXT;
+          v_priority := COALESCE(priority, 0);
+          v_serialized_inputs := json_build_object(
+              'positionalArgs', positional_args,
+              'namedArgs', named_args
+          )::TEXT;
+          v_now := EXTRACT(epoch FROM now()) * 1000;
+
+          INSERT INTO "%1$s".workflow_status (
+              workflow_uuid, status, inputs,
+              name, class_name, config_name,
+              queue_name, deduplication_id, priority, queue_partition_key,
+              application_version,
+              created_at, updated_at, recovery_attempts,
+              workflow_timeout_ms, workflow_deadline_epoch_ms,
+              parent_workflow_id, owner_xid, serialization
+          ) VALUES (
+              v_workflow_id, 'ENQUEUED', v_serialized_inputs,
+              workflow_name, class_name, config_name,
+              queue_name, deduplication_id, v_priority, queue_partition_key,
+              app_version,
+              v_now, v_now, v_recovery_attempts,
+              timeout_ms, deadline_epoch_ms,
+              NULL, v_owner_xid, 'portable_json'
+          )
+          ON CONFLICT (workflow_uuid)
+          DO UPDATE SET
+              updated_at = EXCLUDED.updated_at
+          RETURNING workflow_status.name, workflow_status.class_name, workflow_status.config_name
+          INTO v_existing_name, v_existing_class_name, v_existing_config_name;
+
+          -- Validate workflow metadata matches
+          IF v_existing_name IS DISTINCT FROM workflow_name THEN
+              RAISE EXCEPTION 'Conflicting DBOS workflow name'
+                 USING DETAIL = format('Workflow %%s exists with name %%s, but the provided workflow name is: %%s', v_workflow_id, v_existing_name, workflow_name),
+                      ERRCODE = 'invalid_parameter_value';
+          END IF;
+          IF v_existing_class_name IS DISTINCT FROM class_name THEN
+              RAISE EXCEPTION 'Conflicting DBOS workflow class_name'
+                 USING DETAIL = format('Workflow %%s exists with class_name %%s, but the provided class_name is: %%s', v_workflow_id, v_existing_class_name, class_name),
+                      ERRCODE = 'invalid_parameter_value';
+          END IF;
+          IF v_existing_config_name IS DISTINCT FROM config_name THEN
+              RAISE EXCEPTION 'Conflicting DBOS workflow config_name'
+                 USING DETAIL = format('Workflow %%s exists with config_name %%s, but the provided config_name is: %%s', v_workflow_id, v_existing_config_name, config_name),
+                      ERRCODE = 'invalid_parameter_value';
+          END IF;
+
+          RETURN v_workflow_id;
+
+      EXCEPTION
+          WHEN unique_violation THEN
+              RAISE EXCEPTION 'DBOS queue duplicated'
+                 USING DETAIL = format('Workflow %%s with queue %%s and deduplication ID %%s already exists', v_workflow_id, queue_name, deduplication_id),
+                      ERRCODE = 'unique_violation';
+      END;
+      $$ LANGUAGE plpgsql;
+
+      CREATE FUNCTION "%1$s".send_message(
+          destination_id TEXT,
+          message JSON,
+          topic TEXT DEFAULT NULL,
+          idempotency_key TEXT DEFAULT NULL
+      ) RETURNS VOID AS $$
+      DECLARE
+          v_topic TEXT := COALESCE(topic, '__null__topic__');
+          v_message_id TEXT := COALESCE(idempotency_key, gen_random_uuid()::TEXT);
+      BEGIN
+          INSERT INTO "%1$s".notifications (
+              destination_uuid, topic, message, message_uuid, serialization
+          ) VALUES (
+              destination_id, v_topic, message, v_message_id, 'portable_json'
+          )
+          ON CONFLICT (message_uuid) DO NOTHING;
+      EXCEPTION
+          WHEN foreign_key_violation THEN
+              RAISE EXCEPTION 'DBOS non-existent workflow'
+                 USING DETAIL = format('Destination workflow %%s does not exist', destination_id),
+                      ERRCODE = 'foreign_key_violation';
+      END;
+      $$ LANGUAGE plpgsql;
       """;
 }

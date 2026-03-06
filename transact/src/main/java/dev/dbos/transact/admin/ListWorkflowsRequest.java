@@ -14,6 +14,7 @@ public record ListWorkflowsRequest(
     String status,
     String application_version,
     String fork_from,
+    String parent_workflow_id,
     Integer limit,
     Integer offset,
     Boolean sort_desc,
@@ -38,9 +39,10 @@ public record ListWorkflowsRequest(
         workflow_id_prefix,
         load_input,
         load_output,
-        null,
-        false,
+        null, // queueName
+        false, // queuesOnly
         null, // Executor IDs
-        fork_from);
+        fork_from,
+        parent_workflow_id);
   }
 }
