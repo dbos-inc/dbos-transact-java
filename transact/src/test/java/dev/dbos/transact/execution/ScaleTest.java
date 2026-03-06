@@ -55,7 +55,7 @@ public class ScaleTest {
   @BeforeEach
   void setUp() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
   }
 
   @AfterEach

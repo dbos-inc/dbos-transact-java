@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
@@ -56,7 +57,7 @@ public class PortableSerializationTest {
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
     dataSource = SystemDatabase.createDataSource(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
   }
 
   @AfterEach
@@ -798,7 +799,7 @@ public class PortableSerializationTest {
 
     // Reinitialize with custom serializer
     var customConfig = dbosConfig.withSerializer(new TestBase64Serializer());
-    DBOS.reinitialize(customConfig);
+    DBOSTestAccess.reinitialize(customConfig);
 
     Queue testQueue = new Queue("testq");
     DBOS.registerQueue(testQueue);
@@ -871,7 +872,7 @@ public class PortableSerializationTest {
 
     // Phase 2: Relaunch with custom serializer
     var customConfig = dbosConfig.withSerializer(new TestBase64Serializer());
-    DBOS.reinitialize(customConfig);
+    DBOSTestAccess.reinitialize(customConfig);
     DBOS.registerQueue(testQueue);
     DBOS.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl());
     DBOS.launch();
@@ -901,7 +902,7 @@ public class PortableSerializationTest {
     DBOS.shutdown();
 
     // Phase 3: Relaunch with custom serializer again, verify Phase 2 data still readable
-    DBOS.reinitialize(customConfig);
+    DBOSTestAccess.reinitialize(customConfig);
     DBOS.registerQueue(testQueue);
     DBOS.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl());
     DBOS.launch();
@@ -923,7 +924,7 @@ public class PortableSerializationTest {
 
     // Launch with custom serializer
     var customConfig = dbosConfig.withSerializer(new TestBase64Serializer());
-    DBOS.reinitialize(customConfig);
+    DBOSTestAccess.reinitialize(customConfig);
 
     Queue testQueue = new Queue("testq");
     DBOS.registerQueue(testQueue);
@@ -947,7 +948,7 @@ public class PortableSerializationTest {
     DBOS.shutdown();
 
     // Relaunch WITHOUT custom serializer
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
     DBOS.registerQueue(testQueue);
     DBOS.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl());
     DBOS.launch();

@@ -27,7 +27,7 @@ inline fun <reified T : Any> registerWorkflows(implementation: T, instanceName: 
 }
 
 @JvmSynthetic
-fun registerQueue(queue: Queue): Queue = DBOS.registerQueue(queue)
+fun registerQueue(queue: Queue) = DBOS.registerQueue(queue)
 
 @JvmSynthetic
 fun registerLifecycleListener(listener: DBOSLifecycleListener) = DBOS.registerLifecycleListener(listener)

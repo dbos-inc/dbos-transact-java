@@ -56,7 +56,7 @@ public class ConfigTest {
             .withAppVersion("test-app-version")
             .withExecutorId("test-executor-id");
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -81,7 +81,7 @@ public class ConfigTest {
             .withDbUser("postgres")
             .withDbPassword(System.getenv("PGPASSWORD"));
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -109,7 +109,7 @@ public class ConfigTest {
             .withAppVersion("test-app-version")
             .withExecutorId("test-executor-id");
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -129,7 +129,7 @@ public class ConfigTest {
             .withDbUser("postgres")
             .withDbPassword(System.getenv("PGPASSWORD"));
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -147,7 +147,7 @@ public class ConfigTest {
             .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
             .withConductorKey("test-conductor-key");
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -167,7 +167,7 @@ public class ConfigTest {
             .withConductorKey("test-conductor-key")
             .withExecutorId("test-executor-id");
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       assertThrows(IllegalArgumentException.class, () -> DBOS.launch());
     } finally {
@@ -202,7 +202,7 @@ public class ConfigTest {
             .withDbUser("postgres")
             .withDbPassword(System.getenv(Constants.POSTGRES_PASSWORD_ENV_VAR));
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -240,7 +240,7 @@ public class ConfigTest {
             .withDbUser("invalid-user")
             .withDbPassword("invalid-password");
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
 
     var impl = new HawkServiceImpl();
     var proxy = DBOS.registerWorkflows(HawkService.class, impl);
@@ -286,7 +286,7 @@ public class ConfigTest {
               .withDbUser("invalid-user")
               .withDbPassword("invalid-password");
 
-      DBOS.reinitialize(config);
+      DBOSTestAccess.reinitialize(config);
       assertFalse(dataSource.isClosed());
 
       var impl = new HawkServiceImpl();
@@ -334,7 +334,7 @@ public class ConfigTest {
           DBOSConfig.defaultsFromEnv("systemdbtest")
               .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
       DBUtils.recreateDB(dbosConfig);
-      DBOS.reinitialize(dbosConfig);
+      DBOSTestAccess.reinitialize(dbosConfig);
 
       var proxy = DBOS.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl());
       DBOS.launch();

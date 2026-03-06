@@ -125,7 +125,7 @@ public class PatchTest {
     try (var dataSource = SystemDatabase.createDataSource(dbosConfig)) {
 
       DBUtils.recreateDB(dbosConfig);
-      DBOS.reinitialize(dbosConfig);
+      DBOSTestAccess.reinitialize(dbosConfig);
 
       var proxy1 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplOne());
       DBOS.launch();
@@ -140,7 +140,7 @@ public class PatchTest {
 
       // Recreate DBOS with a new (patched) version of a workflow
       DBOS.shutdown();
-      DBOS.reinitialize(dbosConfig);
+      DBOSTestAccess.reinitialize(dbosConfig);
       var proxy2 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplTwo());
       DBOS.launch();
 
@@ -165,7 +165,7 @@ public class PatchTest {
 
       // Recreate DBOS with another new (patched) version of a workflow
       DBOS.shutdown();
-      DBOS.reinitialize(dbosConfig);
+      DBOSTestAccess.reinitialize(dbosConfig);
       var proxy3 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplThree());
       DBOS.launch();
 
@@ -197,7 +197,7 @@ public class PatchTest {
 
       // Now, let's deprecate the patch
       DBOS.shutdown();
-      DBOS.reinitialize(dbosConfig);
+      DBOSTestAccess.reinitialize(dbosConfig);
       var proxy4 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplFour());
       DBOS.launch();
 
@@ -228,7 +228,7 @@ public class PatchTest {
 
       // Now, let's deprecate the patch
       DBOS.shutdown();
-      DBOS.reinitialize(dbosConfig);
+      DBOSTestAccess.reinitialize(dbosConfig);
       var proxy5 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplFive());
       DBOS.launch();
 
@@ -264,7 +264,7 @@ public class PatchTest {
             .withAppVersion("test-version");
 
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
 
     var proxy2 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplTwo());
     DBOS.launch();
@@ -280,7 +280,7 @@ public class PatchTest {
             .withAppVersion("test-version");
 
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
 
     var proxy4 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplFour());
     DBOS.launch();
@@ -296,7 +296,7 @@ public class PatchTest {
             .withAppVersion("test-version");
 
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
 
     @SuppressWarnings("unused")
     var proxy5 = DBOS.registerWorkflows(PatchService.class, new PatchServiceImplFive());

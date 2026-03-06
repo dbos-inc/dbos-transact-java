@@ -44,7 +44,7 @@ class DBOSExecutorTest {
     DBUtils.recreateDB(dbosConfig);
     dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
   }
 
   @AfterEach
@@ -154,7 +154,6 @@ class DBOSExecutorTest {
 
   @Test
   void workflowFunctionNotfound() throws Exception {
-
     ExecutingService executingService =
         DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
     DBOS.launch();
@@ -172,8 +171,8 @@ class DBOSExecutorTest {
     assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
 
     DBOS.shutdown();
-    DBOSTestAccess.clearRegistry(); // clear out the registry
-    DBOS.launch(); // restart dbos
+    DBOSTestAccess.reinitialize(dbosConfig); // reinitialize to clear out the registry
+    DBOS.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor();
 
     boolean error = false;

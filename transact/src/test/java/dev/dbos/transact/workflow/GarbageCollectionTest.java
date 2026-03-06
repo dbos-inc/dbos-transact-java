@@ -73,7 +73,7 @@ public class GarbageCollectionTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
 
     impl = new GCTestServiceImpl();
     proxy = DBOS.registerWorkflows(GCTestService.class, impl);

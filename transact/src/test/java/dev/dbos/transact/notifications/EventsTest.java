@@ -179,7 +179,7 @@ public class EventsTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
     impl = new EventsServiceImpl();
     proxy = DBOS.registerWorkflows(EventsService.class, impl);
     DBOS.launch();

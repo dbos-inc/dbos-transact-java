@@ -7,13 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.Workflow;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -28,9 +29,92 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+class HawkServiceInstanceImpl implements HawkService {
+  private final DBOS.Instance dbos;
+  private HawkService proxy;
+
+  public HawkServiceInstanceImpl(DBOS.Instance dbos) {
+    this.dbos = dbos;
+  }
+
+  public void setProxy(HawkService proxy) {
+    this.proxy = proxy;
+  }
+
+  @Workflow
+  @Override
+  public String simpleWorkflow() {
+    return LocalDate.now().format(DateTimeFormatter.ISO_DATE);
+  }
+
+  @Workflow
+  @Override
+  public String sleepWorkflow(long sleepSec) {
+    var duration = Duration.ofSeconds(sleepSec);
+    try {
+      Thread.sleep(duration.toMillis());
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException(e);
+    }
+    return LocalDate.now().format(DateTimeFormatter.ISO_DATE);
+  }
+
+  @Workflow
+  @Override
+  public String parentWorkflow() {
+    return proxy.simpleWorkflow();
+  }
+
+  @Workflow
+  @Override
+  public String parentStartWorkflow() {
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow());
+    return handle.getResult();
+  }
+
+  @Workflow
+  @Override
+  public String parentSleepWorkflow(Long timeoutSec, long sleepSec) {
+    var duration =
+        timeoutSec == null
+            ? Timeout.inherit()
+            : timeoutSec == 0L ? Timeout.none() : Timeout.of(Duration.ofSeconds(timeoutSec));
+    var options = new WorkflowOptions().withTimeout(duration);
+    try (var o = options.setContext()) {
+      return proxy.sleepWorkflow(sleepSec);
+    }
+  }
+
+  @Step
+  @Override
+  public Instant nowStep() {
+    return Instant.now();
+  }
+
+  @Workflow
+  @Override
+  public Instant stepWorkflow() {
+    return proxy.nowStep();
+  }
+
+  @Step
+  @Override
+  public String illegalStep() {
+    return proxy.simpleWorkflow();
+  }
+
+  @Workflow
+  @Override
+  public String illegalWorkflow() {
+    return proxy.illegalStep();
+  }
+}
+
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class DirectInvocationTest {
+public class InstanceTest {
   private static DBOSConfig dbosConfig;
+  private DBOS.Instance dbos;
   private HawkService proxy;
   private HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
@@ -46,12 +130,16 @@ public class DirectInvocationTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-    var impl = new HawkServiceImpl();
-    proxy = DBOS.registerWorkflows(HawkService.class, impl);
+
+    // Note, manually injecting the DBOS instance here is a poor developer experience
+    // Opened https://github.com/dbos-inc/dbos-transact-java/issues/296 to track improving this
+
+    dbos = new DBOS.Instance(dbosConfig);
+    var impl = new HawkServiceInstanceImpl(dbos);
+    proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    DBOS.launch();
+    dbos.launch();
 
     dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
@@ -59,7 +147,7 @@ public class DirectInvocationTest {
   @AfterEach
   void afterEachTest() throws Exception {
     dataSource.close();
-    DBOS.shutdown();
+    dbos.shutdown();
   }
 
   @Test
@@ -74,7 +162,7 @@ public class DirectInvocationTest {
     assertDoesNotThrow(() -> UUID.fromString((String) row.workflowId()));
     assertEquals("SUCCESS", row.status());
     assertEquals("simpleWorkflow", row.name());
-    assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", row.className());
+    assertEquals("dev.dbos.transact.invocation.HawkServiceInstanceImpl", row.className());
     assertNotNull(row.output());
     assertNull(row.error());
     assertNull(row.timeoutMs());
@@ -297,7 +385,6 @@ public class DirectInvocationTest {
     assertEquals(2, rows.size());
     var row0 = rows.get(0);
     var row1 = rows.get(1);
-
     assertEquals(10000L, row0.timeoutMs());
     assertEquals(10000L, row1.timeoutMs());
     assertNotNull(row0.deadlineEpochMs());
@@ -373,7 +460,7 @@ public class DirectInvocationTest {
     var wf = wfs.get(0);
     assertNotNull(wf.workflowId());
 
-    var steps = DBOS.listWorkflowSteps(wf.workflowId());
+    var steps = dbos.listWorkflowSteps(wf.workflowId());
     assertEquals(1, steps.size());
     var step = steps.get(0);
     assertEquals(0, step.functionId());
