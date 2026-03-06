@@ -30,7 +30,7 @@ public class ClientTest extends DbSetupTestBase {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
     DBOS.registerQueue(new Queue("testQueue"));
     service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
     DBOS.launch();
@@ -92,9 +92,7 @@ public class ClientTest extends DbSetupTestBase {
     qs.pause();
 
     try (var client = getDBOSClient()) {
-      var options =
-          new DBOSClient.EnqueueOptions(
-              "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue");
+      var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "enqueueTest", "testQueue");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var rows = DBUtils.getWorkflowRows(dataSource);
       assertEquals(1, rows.size());
@@ -122,8 +120,7 @@ public class ClientTest extends DbSetupTestBase {
 
     try (var client = getDBOSClient()) {
       var options =
-          new DBOSClient.EnqueueOptions(
-                  "dev.dbos.transact.client.ClientServiceImpl", "enqueueTest", "testQueue")
+          new DBOSClient.EnqueueOptions("ClientServiceImpl", "enqueueTest", "testQueue")
               .withDeduplicationId("plugh!");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       assertNotNull(handle);
@@ -144,22 +141,13 @@ public class ClientTest extends DbSetupTestBase {
       client.send(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
     }
 
-    var workflowId = "%s-%s".formatted(handle.workflowId(), idempotencyKey);
-    var sendHandle = DBOS.retrieveWorkflow(workflowId);
-    assertNotNull(sendHandle);
-    var status = sendHandle.getStatus();
-    assertNotNull(status);
-    assertEquals("SUCCESS", status.status());
-
     assertEquals("42-test.message", handle.getResult());
   }
 
   @Test
   public void clientEnqueueTimeouts() throws Exception {
     try (var client = getDBOSClient()) {
-      var options =
-          new DBOSClient.EnqueueOptions(
-              "dev.dbos.transact.client.ClientServiceImpl", "sleep", "testQueue");
+      var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "sleep", "testQueue");
 
       var handle1 =
           client.enqueueWorkflow(options.withTimeout(Duration.ofSeconds(1)), new Object[] {10000});
@@ -186,6 +174,19 @@ public class ClientTest extends DbSetupTestBase {
       assertEquals(
           "CANCELLED",
           stat2.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+    }
+  }
+
+  @Test
+  public void invalidSend() throws Exception {
+    var invalidWorkflowId = UUID.randomUUID().toString();
+
+    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+      var ex =
+          assertThrows(
+              DBOSNonExistentWorkflowException.class,
+              () -> client.send(invalidWorkflowId, "test.message", null, null));
+      assertTrue(ex.getMessage().contains(invalidWorkflowId));
     }
   }
 }

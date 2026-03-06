@@ -164,7 +164,7 @@ public class EventsTest extends DbSetupTestBase {
   void beforeEachTest() throws SQLException {
     dataSource = DbSetupTestBase.dataSource;
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
     impl = new EventsServiceImpl();
     proxy = DBOS.registerWorkflows(EventsService.class, impl);
     DBOS.launch();

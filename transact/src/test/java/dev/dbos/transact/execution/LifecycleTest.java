@@ -21,7 +21,7 @@ public class LifecycleTest extends DbSetupTestBase {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
 
     impl = new LifecycleTestWorkflowsImpl();
     DBOS.registerWorkflows(LifecycleTestWorkflows.class, impl, "inst1");

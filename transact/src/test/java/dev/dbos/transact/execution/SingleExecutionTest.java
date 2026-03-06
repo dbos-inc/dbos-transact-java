@@ -260,7 +260,7 @@ public class SingleExecutionTest extends DbSetupTestBase {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
 
     execImpl = new TryConcExec();
     execIfc = DBOS.registerWorkflows(TryConcExecIfc.class, execImpl);

@@ -32,7 +32,7 @@ public class TimeoutTest extends DbSetupTestBase {
     DBUtils.recreateDB(dbosConfig);
     TimeoutTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
   }
 
   @AfterEach

@@ -43,7 +43,7 @@ public class QueuesTest extends DbSetupTestBase {
     DBUtils.recreateDB(dbosConfig);
     dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
   }
 
   @AfterEach
@@ -650,7 +650,7 @@ public class QueuesTest extends DbSetupTestBase {
   @Test
   public void testListenQueue() throws Exception {
     var config = dbosConfig.withListenQueue("queueOne");
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
 
     Queue queueOne = new Queue("queueOne");
     Queue queueTwo = new Queue("queueTwo");

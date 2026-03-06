@@ -32,7 +32,7 @@ class DBOSExecutorTest extends DbSetupTestBase {
     DBUtils.recreateDB(dbosConfig);
     DBOSExecutorTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
   }
 
   @AfterEach

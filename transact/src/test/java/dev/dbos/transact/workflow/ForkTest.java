@@ -174,7 +174,7 @@ public class ForkTest extends DbSetupTestBase {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
 
     impl = new ForkTestServiceImpl();
     proxy = DBOS.registerWorkflows(ForkTestService.class, impl);

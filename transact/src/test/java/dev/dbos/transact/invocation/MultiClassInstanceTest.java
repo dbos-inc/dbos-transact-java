@@ -23,7 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class MultiInstTest extends DbSetupTestBase {
+public class MultiClassInstanceTest extends DbSetupTestBase {
   HawkServiceImpl himpl;
   BearServiceImpl bimpla;
   BearServiceImpl bimpl1;
@@ -35,7 +35,7 @@ public class MultiInstTest extends DbSetupTestBase {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     DBUtils.recreateDB(dbosConfig);
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
     himpl = new HawkServiceImpl();
     bimpla = new BearServiceImpl();
     bimpl1 = new BearServiceImpl();

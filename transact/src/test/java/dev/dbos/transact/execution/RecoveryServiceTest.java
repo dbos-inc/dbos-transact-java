@@ -42,7 +42,7 @@ class RecoveryServiceTest extends DbSetupTestBase {
     DBUtils.recreateDB(dbosConfig);
     RecoveryServiceTest.dataSource = SystemDatabase.createDataSource(dbosConfig);
 
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
     executingService =
         DBOS.registerWorkflows(
             ExecutingService.class, executingServiceImpl = new ExecutingServiceImpl());
@@ -154,7 +154,7 @@ class RecoveryServiceTest extends DbSetupTestBase {
 
     DBOS.shutdown();
 
-    DBOS.reinitialize(dbosConfig);
+    DBOSTestAccess.reinitialize(dbosConfig);
     // dbos = DBOS.getInstance();
 
     // need to register again

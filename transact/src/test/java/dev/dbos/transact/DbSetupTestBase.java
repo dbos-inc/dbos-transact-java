@@ -22,8 +22,7 @@ public class DbSetupTestBase {
         DBOSConfig.defaults("systemdbtest")
             .withDatabaseUrl(postgres.getJdbcUrl())
             .withDbUser(postgres.getUsername())
-            .withDbPassword(postgres.getPassword())
-            .withMaximumPoolSize(2);
+            .withDbPassword(postgres.getPassword());
     dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 

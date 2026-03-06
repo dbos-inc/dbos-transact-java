@@ -35,8 +35,7 @@ class MigrationManagerTest extends DbSetupTestBase {
         DBOSConfig.defaultsFromEnv("migrationtest")
             .withDatabaseUrl(postgres.getJdbcUrl())
             .withDbUser(postgres.getUsername())
-            .withDbPassword(postgres.getPassword())
-            .withMaximumPoolSize(2);
+            .withDbPassword(postgres.getPassword());
 
     DBUtils.recreateDB(dbosConfig);
     testDataSource = SystemDatabase.createDataSource(dbosConfig);

@@ -47,7 +47,7 @@ public class ConfigTest extends DbSetupTestBase {
 
     var config = dbosConfig.withAppVersion("test-app-version").withExecutorId("test-executor-id");
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -68,7 +68,7 @@ public class ConfigTest extends DbSetupTestBase {
 
     var config = dbosConfig;
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -90,7 +90,7 @@ public class ConfigTest extends DbSetupTestBase {
 
     var config = dbosConfig.withAppVersion("test-app-version").withExecutorId("test-executor-id");
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -106,7 +106,7 @@ public class ConfigTest extends DbSetupTestBase {
   public void localExecutorId() throws Exception {
     var config = dbosConfig;
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -121,7 +121,7 @@ public class ConfigTest extends DbSetupTestBase {
   public void conductorExecutorId() throws Exception {
     var config = dbosConfig.withConductorKey("test-conductor-key");
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -138,7 +138,7 @@ public class ConfigTest extends DbSetupTestBase {
     var config =
         dbosConfig.withConductorKey("test-conductor-key").withExecutorId("test-executor-id");
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       assertThrows(IllegalArgumentException.class, () -> DBOS.launch());
     } finally {
@@ -169,7 +169,7 @@ public class ConfigTest extends DbSetupTestBase {
   public void calcAppVersion() throws Exception {
     var config = dbosConfig;
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     try {
       DBOS.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor();
@@ -209,7 +209,7 @@ public class ConfigTest extends DbSetupTestBase {
             .withDbUser("invalid-user")
             .withDbPassword("invalid-password");
 
-    DBOS.reinitialize(config);
+    DBOSTestAccess.reinitialize(config);
     assertFalse(dataSource.isClosed());
 
     var impl = new HawkServiceImpl();
@@ -248,7 +248,7 @@ public class ConfigTest extends DbSetupTestBase {
       envVars.set("DBOS__APPID", "test-env-app-id");
       var config = dbosConfig;
       DBUtils.recreateDB(config);
-      DBOS.reinitialize(config);
+      DBOSTestAccess.reinitialize(config);
 
       var proxy = DBOS.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl());
       DBOS.launch();
