@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
@@ -18,7 +18,6 @@ import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledForJreRange;
@@ -27,17 +26,8 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.condition.JRE;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-class DBOSExecutorTest {
-
-  private static DBOSConfig dbosConfig;
+class DBOSExecutorTest extends DbSetupTestBase {
   private HikariDataSource dataSource;
-
-  @BeforeAll
-  public static void onetimeBefore() {
-    DBOSExecutorTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
 
   @BeforeEach
   void setUp() throws SQLException {

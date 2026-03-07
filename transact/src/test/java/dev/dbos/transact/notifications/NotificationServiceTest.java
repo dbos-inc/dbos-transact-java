@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.*;
@@ -21,7 +21,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -138,17 +137,7 @@ class NotServiceImpl implements NotService {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-class NotificationServiceTest {
-
-  private static DBOSConfig dbosConfig;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    NotificationServiceTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+class NotificationServiceTest extends DbSetupTestBase {
 
   @BeforeEach
   void beforeEachTest() throws SQLException {

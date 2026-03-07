@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
@@ -25,7 +26,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-class MigrationManagerTest {
+class MigrationManagerTest extends DbSetupTestBase {
 
   // Expected tables after migrations
   static final String[] EXPECTED_TABLES = {
@@ -52,8 +53,7 @@ class MigrationManagerTest {
   void setup() throws Exception {
 
     dbosConfig =
-        DBOSConfig.defaultsFromEnv("migrationtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys_mm_test");
+        createConfigFromEnv("migrationtest").withDatabaseUrl(getJdbcUrl("dbos_java_sys_mm_test"));
 
     DBUtils.recreateDB(dbosConfig);
     dataSource = SystemDatabase.createDataSource(dbosConfig);
@@ -212,11 +212,11 @@ class MigrationManagerTest {
 
   @Test
   public void extractDbAndPostgresUrl() {
-    var originalUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys?user=alice&ssl=true";
+    var originalUrl = getJdbcUrl("dbos_java_sys") + "?user=alice&ssl=true";
     var pair = MigrationManager.extractDbAndPostgresUrl(originalUrl);
 
     assertEquals("dbos_java_sys", pair.database());
-    assertEquals("jdbc:postgresql://localhost:5432/postgres?user=alice&ssl=true", pair.url());
+    assertEquals(getJdbcUrl("postgres") + "?user=alice&ssl=true", pair.url());
   }
 
   @Test

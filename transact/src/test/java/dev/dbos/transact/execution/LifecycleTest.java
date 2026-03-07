@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Workflow;
 
@@ -19,7 +19,6 @@ import java.util.Arrays;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -115,22 +114,15 @@ class TestLifecycleService implements DBOSLifecycleListener {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class LifecycleTest {
-  private static DBOSConfig dbosConfig;
+public class LifecycleTest extends DbSetupTestBase {
   private static LifecycleTestWorkflowsImpl impl;
   private static TestLifecycleService svc;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("lifecycletest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
-
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
+    var config = createConfigFromEnv("lifecycletest");
+    DBUtils.recreateDB(config);
+    DBOSTestAccess.reinitialize(config);
 
     impl = new LifecycleTestWorkflowsImpl();
     DBOS.registerWorkflows(LifecycleTestWorkflows.class, impl, "inst1");

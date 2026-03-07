@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSUnexpectedStepException;
 import dev.dbos.transact.utils.DBUtils;
@@ -99,7 +99,7 @@ class PatchServiceImplFiveB implements PatchService2 {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class PatchTest {
+public class PatchTest extends DbSetupTestBase {
 
   @AfterEach
   void afterEachTest() throws Exception {
@@ -117,10 +117,7 @@ public class PatchTest {
     // have the same workflow name across deployed versions.
 
     var dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withEnablePatching()
-            .withAppVersion("test-version");
+        createConfigFromEnv("systemdbtest").withEnablePatching().withAppVersion("test-version");
 
     try (var dataSource = SystemDatabase.createDataSource(dbosConfig)) {
 
@@ -258,10 +255,7 @@ public class PatchTest {
 
   @Test
   public void patchThrowsNotConfigured() throws Exception {
-    var dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withAppVersion("test-version");
+    var dbosConfig = createConfigFromEnv("systemdbtest").withAppVersion("test-version");
 
     DBUtils.recreateDB(dbosConfig);
     DBOSTestAccess.reinitialize(dbosConfig);
@@ -274,10 +268,7 @@ public class PatchTest {
 
   @Test
   public void deprecatePatchThrowsNotConfigured() throws Exception {
-    var dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withAppVersion("test-version");
+    var dbosConfig = createConfigFromEnv("systemdbtest").withAppVersion("test-version");
 
     DBUtils.recreateDB(dbosConfig);
     DBOSTestAccess.reinitialize(dbosConfig);
@@ -290,10 +281,7 @@ public class PatchTest {
 
   @Test
   public void mulipleDefinitions() throws Exception {
-    var dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withAppVersion("test-version");
+    var dbosConfig = createConfigFromEnv("systemdbtest").withAppVersion("test-version");
 
     DBUtils.recreateDB(dbosConfig);
     DBOSTestAccess.reinitialize(dbosConfig);

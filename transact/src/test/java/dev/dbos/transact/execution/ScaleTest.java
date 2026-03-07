@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -14,7 +14,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -40,17 +39,8 @@ class ScaleServiceImpl implements ScaleService {
 }
 
 @org.junit.jupiter.api.Timeout(value = 5, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class ScaleTest {
+public class ScaleTest extends DbSetupTestBase {
   private static final Logger logger = LoggerFactory.getLogger(ScaleTest.class);
-
-  private static DBOSConfig dbosConfig;
-
-  @BeforeAll
-  public static void onetimeBefore() {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
 
   @BeforeEach
   void setUp() throws SQLException {

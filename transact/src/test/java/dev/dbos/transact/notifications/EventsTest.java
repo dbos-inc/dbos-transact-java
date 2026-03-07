@@ -7,10 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Workflow;
@@ -26,7 +25,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -155,20 +153,14 @@ class EventsServiceImpl implements EventsService {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class EventsTest {
-
-  private static DBOSConfig dbosConfig;
-  private static HikariDataSource dataSource;
+public class EventsTest extends DbSetupTestBase {
 
   private EventsService proxy;
   private EventsServiceImpl impl;
 
   @BeforeAll
-  static void onetimeSetup() throws Exception {
-    EventsTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
+  protected static void onetimeSetup() throws Exception {
+    dataSource = DbSetupTestBase.dataSource;
   }
 
   @AfterAll

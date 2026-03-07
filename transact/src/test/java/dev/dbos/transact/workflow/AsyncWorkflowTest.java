@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
 
@@ -17,24 +17,13 @@ import java.util.List;
 import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class AsyncWorkflowTest {
-
-  private static DBOSConfig dbosConfig;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    AsyncWorkflowTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withAdminServer(true);
-  }
+public class AsyncWorkflowTest extends DbSetupTestBase {
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-
-    DBOSTestAccess.reinitialize(dbosConfig);
+    var config = dbosConfig.withAdminServer(true);
+    DBUtils.recreateDB(config);
+    DBOSTestAccess.reinitialize(config);
   }
 
   @AfterEach

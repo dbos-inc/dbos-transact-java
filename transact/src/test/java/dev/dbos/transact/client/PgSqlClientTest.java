@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.execution.ThrowingRunnable;
@@ -25,30 +25,15 @@ import java.util.UUID;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.util.PSQLException;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class PgSqlClientTest {
-  private static DBOSConfig dbosConfig;
-  private static final String dbUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
-  private static final String dbUser = "postgres";
-  private static final String dbPassword = System.getenv("PGPASSWORD");
-
+public class PgSqlClientTest extends DbSetupTestBase {
   private ClientService service;
 
   private HikariDataSource dataSource;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaults("systemdbtest")
-            .withDatabaseUrl(dbUrl)
-            .withDbUser(dbUser)
-            .withDbPassword(dbPassword);
-  }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
@@ -58,9 +43,7 @@ public class PgSqlClientTest {
     service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
     DBOS.launch();
 
-    dataSource =
-        SystemDatabase.createDataSource(
-            dbosConfig.databaseUrl(), dbosConfig.dbUser(), dbosConfig.dbPassword());
+    dataSource = SystemDatabase.createDataSource(dbosConfig);
   }
 
   @AfterEach

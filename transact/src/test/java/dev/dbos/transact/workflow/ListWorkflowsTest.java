@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.DbSetupTestBase;
 import dev.dbos.transact.utils.DBUtils;
 
 import java.sql.Connection;
@@ -42,9 +42,7 @@ import org.junit.jupiter.api.*;
  * Status totals: SUCCESS=7, ERROR=2, CANCELLED=1
  */
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-public class ListWorkflowsTest {
-
-  private static DBOSConfig dbosConfig;
+public class ListWorkflowsTest extends DbSetupTestBase {
 
   /**
    * Fixed base epoch-ms. All {@code created_at} values are {@code baseTime + offset}, guaranteeing
@@ -53,10 +51,7 @@ public class ListWorkflowsTest {
   private static long baseTime;
 
   @BeforeAll
-  static void onetimeSetup() throws Exception {
-    ListWorkflowsTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
+  protected static void onetimeSetup() throws Exception {
     DBUtils.recreateDB(dbosConfig);
     DBOSTestAccess.reinitialize(dbosConfig);
     DBOS.launch();

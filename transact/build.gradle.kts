@@ -52,6 +52,7 @@ dependencies {
     testImplementation("io.rest-assured:json-path:6.0.0")
     testImplementation("io.rest-assured:xml-path:6.0.0")
     testImplementation("org.apache.maven:maven-artifact:3.9.12")
+    testImplementation("org.testcontainers:testcontainers-postgresql:2.0.3")
 }
 
 val projectVersion = project.version.toString()
