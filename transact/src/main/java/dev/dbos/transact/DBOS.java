@@ -785,7 +785,7 @@ public class DBOS {
    * Initializes the singleton instance of DBOS with config. Should be called once during app
    * startup, before launch. @DBOSConfig config dbos configuration
    */
-  public static void configure(DBOSConfig config) {
+  public static Instance configure(DBOSConfig config) {
     if (globalInstance.get() != null) {
       throw new IllegalStateException("DBOS is already configured");
     }
@@ -795,6 +795,9 @@ public class DBOS {
     if (!updated) {
       throw new IllegalStateException("DBOS is already configured");
     }
+
+    // TODO: https://github.com/dbos-inc/dbos-transact-java/issues/299
+    return globalInstance.get();
   }
 
   /**
