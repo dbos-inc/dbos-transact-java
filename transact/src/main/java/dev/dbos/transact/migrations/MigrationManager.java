@@ -442,7 +442,7 @@ public class MigrationManager {
   static final String migration12 =
       """
       ALTER TABLE "%1$s"."notifications" ADD COLUMN "consumed" BOOLEAN NOT NULL DEFAULT FALSE;
-      CREATE INDEX "idx_notifications_unconsumed" ON "%1$s"."notifications" ("destination_uuid", "topic") WHERE consumed = FALSE;
+      CREATE INDEX "idx_notifications" ON "%1$s"."notifications" ("destination_uuid", "topic");
       """;
 
   static final String migration13 =
