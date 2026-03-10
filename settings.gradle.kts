@@ -1,4 +1,4 @@
-rootProject.name = "transact"
+rootProject.name = "dbos-transact-java"
 include("transact", "transact-cli")
 
 plugins {
