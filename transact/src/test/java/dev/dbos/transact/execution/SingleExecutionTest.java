@@ -7,35 +7,33 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 
-import java.sql.SQLException;
 import java.sql.SQLTransientException;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class SingleExecutionTest {
-  public static interface TryConcExecIfc {
-    public void testConcStep() throws InterruptedException;
+  public interface TryConcExecIfc {
+    void testConcStep() throws InterruptedException;
 
-    public void testConcWorkflow() throws InterruptedException;
+    void testConcWorkflow() throws InterruptedException;
 
-    public String step1() throws InterruptedException;
+    String step1() throws InterruptedException;
 
-    public String testWorkflow() throws InterruptedException;
+    String testWorkflow() throws InterruptedException;
   }
 
   public static class TryConcExec implements TryConcExecIfc {
@@ -47,6 +45,7 @@ public class SingleExecutionTest {
 
     TryConcExecIfc self;
 
+    @Override
     @Step()
     public void testConcStep() throws InterruptedException {
       ++TryConcExec.concExec;
@@ -55,6 +54,7 @@ public class SingleExecutionTest {
       --TryConcExec.concExec;
     }
 
+    @Override
     @Workflow()
     public void testConcWorkflow() throws InterruptedException {
       ++TryConcExec.concWf;
@@ -65,19 +65,21 @@ public class SingleExecutionTest {
       --TryConcExec.concWf;
     }
 
+    @Override
     @Step()
     public String step1() throws InterruptedException {
       Thread.sleep(1000);
       return "Yay!";
     }
 
+    @Override
     @Workflow()
     public String testWorkflow() throws InterruptedException {
       return self.step1();
     }
   }
 
-  public static interface CatchPlainException1Ifc {
+  public interface CatchPlainException1Ifc {
     void testStartAction() throws InterruptedException;
 
     void testCompleteAction() throws InterruptedException;
@@ -96,12 +98,14 @@ public class SingleExecutionTest {
 
     CatchPlainException1Ifc self;
 
+    @Override
     @Step()
     public void testStartAction() throws InterruptedException {
       Thread.sleep(1000);
       CatchPlainException1.started = true;
     }
 
+    @Override
     @Step()
     public void testCompleteAction() throws InterruptedException {
       assertEquals(CatchPlainException1.started, true);
@@ -109,6 +113,7 @@ public class SingleExecutionTest {
       CatchPlainException1.completed = true;
     }
 
+    @Override
     @Step()
     public void testCancelAction() {
       CatchPlainException1.aborted = true;
@@ -120,6 +125,7 @@ public class SingleExecutionTest {
       assertEquals("Trouble?", "None!");
     }
 
+    @Override
     @Workflow()
     public void testConcWorkflow() throws InterruptedException {
       try {
@@ -145,7 +151,7 @@ public class SingleExecutionTest {
     }
   }
 
-  public static interface UsingFinallyClauseIfc {
+  public interface UsingFinallyClauseIfc {
     void testStartAction() throws InterruptedException;
 
     void testCompleteAction() throws InterruptedException;
@@ -163,12 +169,14 @@ public class SingleExecutionTest {
     static boolean trouble = false;
     UsingFinallyClauseIfc self;
 
+    @Override
     @Step()
     public void testStartAction() throws InterruptedException {
       Thread.sleep(1000);
       UsingFinallyClause.started = true;
     }
 
+    @Override
     @Step()
     public void testCompleteAction() throws InterruptedException {
       assertTrue(UsingFinallyClause.started);
@@ -176,6 +184,7 @@ public class SingleExecutionTest {
       UsingFinallyClause.completed = true;
     }
 
+    @Override
     @Step()
     public void testCancelAction() {
       UsingFinallyClause.aborted = true;
@@ -187,6 +196,7 @@ public class SingleExecutionTest {
       assertEquals("Trouble?", "None!");
     }
 
+    @Override
     @Workflow()
     public void testConcWorkflow() throws InterruptedException {
       var finished = false;
@@ -217,7 +227,7 @@ public class SingleExecutionTest {
     }
   }
 
-  public static interface TryConcExec2Ifc {
+  public interface TryConcExec2Ifc {
     void step1() throws InterruptedException;
 
     void step2() throws InterruptedException;
@@ -231,6 +241,7 @@ public class SingleExecutionTest {
 
     TryConcExec2Ifc self;
 
+    @Override
     @Step()
     public void step1() throws InterruptedException {
       // This makes the step take a while ... sometimes.
@@ -240,11 +251,13 @@ public class SingleExecutionTest {
       TryConcExec2.curStep = 1;
     }
 
+    @Override
     @Step()
     public void step2() {
       TryConcExec2.curStep = 2;
     }
 
+    @Override
     @Workflow()
     public void testConcWorkflow() throws InterruptedException {
       self.step1();
@@ -252,76 +265,78 @@ public class SingleExecutionTest {
     }
   }
 
-  private static DBOSConfig dbosConfig;
-  private static TryConcExec execImpl;
-  private static TryConcExecIfc execIfc;
-  private static CatchPlainException1 catchImpl;
-  private static CatchPlainException1Ifc catchIfc;
-  private static UsingFinallyClause finallyImpl;
-  private static UsingFinallyClauseIfc finallyIfc;
-  private static TryConcExec2 concImpl;
-  private static TryConcExec2Ifc concIfc;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  private static HikariDataSource dataSource;
+  DBOSConfig dbosConfig;
+  @AutoClose DBOS.Instance dbos;
+  @AutoClose HikariDataSource dataSource;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-  }
-
-  @AfterAll
-  static void onetimeShutdown() throws Exception {
-    dataSource.close();
-  }
+  TryConcExecIfc execIfc;
+  CatchPlainException1Ifc catchIfc;
+  UsingFinallyClauseIfc finallyIfc;
+  TryConcExec2Ifc concIfc;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS.Instance(dbosConfig);
+    dataSource = pgContainer.dataSource();
 
-    execImpl = new TryConcExec();
-    execIfc = DBOS.registerWorkflows(TryConcExecIfc.class, execImpl);
+    TryConcExec.concExec = 0;
+    TryConcExec.maxConc = 0;
+    TryConcExec.concWf = 0;
+    TryConcExec.maxWf = 0;
+
+    CatchPlainException1.execNum = 0;
+    CatchPlainException1.started = false;
+    CatchPlainException1.completed = false;
+    CatchPlainException1.aborted = false;
+    CatchPlainException1.trouble = false;
+
+    UsingFinallyClause.execNum = 0;
+    UsingFinallyClause.started = false;
+    UsingFinallyClause.completed = false;
+    UsingFinallyClause.aborted = false;
+    UsingFinallyClause.trouble = false;
+
+    TryConcExec2.curExec = 0;
+    TryConcExec2.curStep = 0;
+
+    var execImpl = new TryConcExec();
+    execIfc = dbos.registerWorkflows(TryConcExecIfc.class, execImpl);
     execImpl.self = execIfc;
 
-    catchImpl = new CatchPlainException1();
-    catchIfc = DBOS.registerWorkflows(CatchPlainException1Ifc.class, catchImpl);
+    var catchImpl = new CatchPlainException1();
+    catchIfc = dbos.registerWorkflows(CatchPlainException1Ifc.class, catchImpl);
     catchImpl.self = catchIfc;
 
-    finallyImpl = new UsingFinallyClause();
-    finallyIfc = DBOS.registerWorkflows(UsingFinallyClauseIfc.class, finallyImpl);
+    var finallyImpl = new UsingFinallyClause();
+    finallyIfc = dbos.registerWorkflows(UsingFinallyClauseIfc.class, finallyImpl);
     finallyImpl.self = finallyIfc;
 
-    concImpl = new TryConcExec2();
-    concIfc = DBOS.registerWorkflows(TryConcExec2Ifc.class, concImpl);
+    var concImpl = new TryConcExec2();
+    concIfc = dbos.registerWorkflows(TryConcExec2Ifc.class, concImpl);
     concImpl.self = concIfc;
 
-    DBOS.launch();
+    dbos.launch();
   }
 
-  @AfterEach
-  void afterEachTest() throws Exception {
-    DBOS.shutdown();
-  }
-
-  static WorkflowHandle<?, ?> reexecuteWorkflowById(String id) throws Exception {
+  WorkflowHandle<?, ?> reexecuteWorkflowById(String id) throws Exception {
     DBUtils.setWorkflowState(dataSource, id, WorkflowState.PENDING.toString());
-    return DBOSTestAccess.getDbosExecutor().executeWorkflowById(id, true, false);
+    return DBOSTestAccess.getDbosExecutor(dbos).executeWorkflowById(id, true, false);
   }
 
   @Test
   void concStartWorkflow() throws Exception {
     var workflowUUID = UUID.randomUUID().toString();
     var wfh1 =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> {
               execIfc.testConcWorkflow();
             },
             new StartWorkflowOptions(workflowUUID));
     var wfh2 =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> {
               execIfc.testConcWorkflow();
             },
@@ -345,13 +360,13 @@ public class SingleExecutionTest {
     var workflowUUID = UUID.randomUUID().toString();
 
     var wfh1 =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> {
               catchIfc.testConcWorkflow();
             },
             new StartWorkflowOptions(workflowUUID));
     var wfh2 =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> {
               catchIfc.testConcWorkflow();
             },
@@ -371,14 +386,14 @@ public class SingleExecutionTest {
     var workflowUUID = UUID.randomUUID().toString();
 
     var wfh1 =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> {
               finallyIfc.testConcWorkflow();
             },
             new StartWorkflowOptions(workflowUUID));
 
     var wfh2 =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> {
               finallyIfc.testConcWorkflow();
             },
@@ -399,13 +414,13 @@ public class SingleExecutionTest {
     var workflowUUID = UUID.randomUUID().toString();
 
     var wfh1 =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> {
               concIfc.testConcWorkflow();
             },
             new StartWorkflowOptions(workflowUUID));
     var wfh2 =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> {
               concIfc.testConcWorkflow();
             },
