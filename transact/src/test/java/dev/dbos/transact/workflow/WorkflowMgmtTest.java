@@ -9,7 +9,6 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.PgContainer;
 
-import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,61 +18,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-interface MgmtService {
-  int simpleWorkflow(int input) throws InterruptedException;
-
-  void stepTimingWorkflow() throws InterruptedException;
-
-  String helloWorkflow(String name);
-}
-
-class MgmtServiceImpl implements MgmtService {
-
-  private final DBOS.Instance dbos;
-  private int stepsExecuted;
-  public CountDownLatch mainLatch = new CountDownLatch(1);
-  public CountDownLatch workLatch = new CountDownLatch(1);
-
-  public MgmtServiceImpl(DBOS.Instance dbos) {
-    this.dbos = dbos;
-  }
-
-  public int stepsExecuted() {
-    return this.stepsExecuted;
-  }
-
-  @Override
-  @Workflow(name = "myworkflow")
-  public int simpleWorkflow(int input) throws InterruptedException {
-
-    dbos.runStep(() -> ++stepsExecuted, "stepOne");
-    mainLatch.countDown();
-    workLatch.await();
-    dbos.runStep(() -> ++stepsExecuted, "stepTwo");
-    dbos.runStep(() -> ++stepsExecuted, "stepThree");
-
-    return input;
-  }
-
-  @Override
-  @Workflow
-  public void stepTimingWorkflow() throws InterruptedException {
-    for (var i = 0; i < 5; i++) {
-      dbos.runStep(() -> Thread.sleep(100), "stepTimingStep");
-    }
-
-    dbos.setEvent("key", "value");
-    dbos.listWorkflows(new ListWorkflowsInput());
-    dbos.recv(null, Duration.ofSeconds(1));
-  }
-
-  @Override
-  @Workflow
-  public String helloWorkflow(String name) {
-    return "Hello, %s!".formatted(name);
-  }
-}
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 @org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)

@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.client.ClientService;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
@@ -32,7 +31,6 @@ public class SystemDatabaseTest {
 
   @AutoClose DBOS.Instance dbos;
   @AutoClose HikariDataSource dataSource;
-  ClientService service;
 
   @BeforeEach
   void beforeEach() {

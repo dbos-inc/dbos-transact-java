@@ -7,23 +7,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowState;
 
-import java.sql.SQLException;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
-import javax.sql.DataSource;
-
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -68,61 +65,52 @@ class PartitionsTestServiceImpl implements PartitionsTestService {
   public String blockedWorkflow() throws InterruptedException {
     waitingLatch.countDown();
     blockingLatch.await();
-    assertNotNull(DBOS.workflowId());
-    return DBOS.workflowId();
+    assertNotNull(DBOSContext.workflowId());
+    return DBOSContext.workflowId();
   }
 
   @Override
   @Workflow
   public String normalWorkflow() {
-    assertNotNull(DBOS.workflowId());
-    return DBOS.workflowId();
+    assertNotNull(DBOSContext.workflowId());
+    return DBOSContext.workflowId();
   }
 }
 
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class PartitionedQueuesTest {
-  private static DBOSConfig dbosConfig;
-  private static DataSource dataSource;
-  private static final String dbUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
-  private static final String dbUser = "postgres";
-  private static final String dbPassword = System.getenv("PGPASSWORD");
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig = DBOSConfig.defaultsFromEnv("systemdbtest").withDatabaseUrl(dbUrl);
-  }
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+
+  private DBOSConfig dbosConfig;
+  @AutoClose private DBOS.Instance dbos;
+  @AutoClose private HikariDataSource dataSource;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-
-    DBOSTestAccess.reinitialize(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    DBOS.shutdown();
+  void setup() {
+    this.dbosConfig = pgContainer.dbosConfig();
+    this.dbos = new DBOS.Instance(dbosConfig);
+    this.dataSource = pgContainer.dataSource();
   }
 
   @Test
   public void testResumingQueuedPartitionedWorkflows() throws Exception {
     Queue queue = new Queue("testQueue").withConcurrency(1).withPartitionedEnabled(true);
-    DBOS.registerQueue(queue);
+    dbos.registerQueue(queue);
 
     var impl = new ResumingTestServiceImpl();
-    var proxy = DBOS.registerWorkflows(ResumingTestService.class, impl);
-    DBOS.launch();
+    var proxy = dbos.registerWorkflows(ResumingTestService.class, impl);
+    dbos.launch();
 
     var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("key");
     var wfid = UUID.randomUUID().toString();
 
     // Enqueue a blocked workflow and two regular workflows on a queue with concurrency 1
-    var blockedHandle = DBOS.startWorkflow(() -> proxy.stuckWorkflow(), options);
+    var blockedHandle = dbos.startWorkflow(() -> proxy.stuckWorkflow(), options);
     var regHandle1 =
-        DBOS.startWorkflow(() -> proxy.regularWorkflow(), options.withWorkflowId(wfid));
-    var regHandle2 = DBOS.startWorkflow(() -> proxy.regularWorkflow(), options);
+        dbos.startWorkflow(() -> proxy.regularWorkflow(), options.withWorkflowId(wfid));
+    var regHandle2 = dbos.startWorkflow(() -> proxy.regularWorkflow(), options);
 
     // Verify that the blocked workflow starts and is PENDING while the regular workflows remain
     // ENQUEUED.
@@ -132,7 +120,7 @@ public class PartitionedQueuesTest {
     assertEquals(WorkflowState.ENQUEUED.toString(), regHandle2.getStatus().status());
 
     // Resume a regular workflow. Verify it completes.
-    DBOS.resumeWorkflow(wfid);
+    dbos.resumeWorkflow(wfid);
     assertEquals(42, regHandle1.getResult());
     assertEquals(WorkflowState.SUCCESS.toString(), regHandle1.getStatus().status());
 
@@ -148,11 +136,11 @@ public class PartitionedQueuesTest {
   public void testQueuePartitions() throws Exception {
     Queue queue = new Queue("testQueue").withWorkerConcurrency(1).withPartitionedEnabled(true);
     Queue partitionlessQueue = new Queue("partitionless-queue");
-    DBOS.registerQueues(queue, partitionlessQueue);
+    dbos.registerQueues(queue, partitionlessQueue);
 
     var impl = new PartitionsTestServiceImpl();
-    var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);
-    DBOS.launch();
+    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    dbos.launch();
 
     var blockedPartitionKey = "blocked";
     var normalPartitionKey = "normal";
@@ -162,8 +150,8 @@ public class PartitionedQueuesTest {
     // but the normal workflow is stuck behind it.
     var options =
         new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey(blockedPartitionKey);
-    var blockedBlockedHandle = DBOS.startWorkflow(() -> proxy.blockedWorkflow(), options);
-    var blockedNormalHandle = DBOS.startWorkflow(() -> proxy.normalWorkflow(), options);
+    var blockedBlockedHandle = dbos.startWorkflow(() -> proxy.blockedWorkflow(), options);
+    var blockedNormalHandle = dbos.startWorkflow(() -> proxy.normalWorkflow(), options);
 
     impl.waitingLatch.await();
     assertEquals(WorkflowState.PENDING.toString(), blockedBlockedHandle.getStatus().status());
@@ -173,7 +161,7 @@ public class PartitionedQueuesTest {
 
     // Enqueue a normal workflow on the other partition and verify it runs normally
     var normalHandle =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> proxy.normalWorkflow(), options.withQueuePartitionKey(normalPartitionKey));
     assertEquals(normalHandle.workflowId(), normalHandle.getResult());
 
@@ -182,7 +170,7 @@ public class PartitionedQueuesTest {
     assertEquals(blockedBlockedHandle.workflowId(), blockedBlockedHandle.getResult());
     assertEquals(blockedNormalHandle.workflowId(), blockedNormalHandle.getResult());
 
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = pgContainer.dbosClient()) {
       var className = "dev.dbos.transact.queue.PartitionsTestServiceImpl";
       var wfName = "normalWorkflow";
       var nqOptions =
@@ -196,21 +184,21 @@ public class PartitionedQueuesTest {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            DBOS.startWorkflow(
+            dbos.startWorkflow(
                 () -> proxy.normalWorkflow(), new StartWorkflowOptions().withQueue(queue)));
 
     // Deduplication is not supported for partitioned queues
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            DBOS.startWorkflow(
+            dbos.startWorkflow(
                 () -> proxy.normalWorkflow(), options.withDeduplicationId("dedupe")));
 
     // You can only enqueue with a partition key on a partitioned queue
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            DBOS.startWorkflow(
+            dbos.startWorkflow(
                 () -> proxy.normalWorkflow(),
                 new StartWorkflowOptions()
                     .withQueue(partitionlessQueue)
@@ -222,50 +210,50 @@ public class PartitionedQueuesTest {
   @Test
   public void testPartitionKeyWithoutQueue() throws Exception {
     var impl = new PartitionsTestServiceImpl();
-    var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);
-    DBOS.launch();
+    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    dbos.launch();
 
     var options = new StartWorkflowOptions().withQueuePartitionKey("partition-1");
     assertThrows(
         IllegalArgumentException.class,
-        () -> DBOS.startWorkflow(() -> proxy.normalWorkflow(), options));
+        () -> dbos.startWorkflow(() -> proxy.normalWorkflow(), options));
   }
 
   @Test
   public void testPartitionKeyOnNonPartitionedQueue() throws Exception {
     var queue = new Queue("non-partitioned-queue");
-    DBOS.registerQueue(queue);
+    dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
-    var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);
-    DBOS.launch();
+    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    dbos.launch();
 
     var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("partition-1");
     assertThrows(
         IllegalArgumentException.class,
-        () -> DBOS.startWorkflow(() -> proxy.normalWorkflow(), options));
+        () -> dbos.startWorkflow(() -> proxy.normalWorkflow(), options));
   }
 
   @Test
   public void testPartitionedQueueWithoutPartitionKey() throws Exception {
     var queue = new Queue("partitioned-queue").withPartitionedEnabled(true);
-    DBOS.registerQueue(queue);
+    dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
-    var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);
-    DBOS.launch();
+    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    dbos.launch();
 
     var options = new StartWorkflowOptions().withQueue(queue);
     assertThrows(
         IllegalArgumentException.class,
-        () -> DBOS.startWorkflow(() -> proxy.normalWorkflow(), options));
+        () -> dbos.startWorkflow(() -> proxy.normalWorkflow(), options));
   }
 
   @Test
   public void testPartitionKeyWithDeduplicationID() throws Exception {
     var queue = new Queue("partitioned-queue").withPartitionedEnabled(true);
-    DBOS.registerQueue(queue);
+    dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
-    var proxy = DBOS.registerWorkflows(PartitionsTestService.class, impl);
-    DBOS.launch();
+    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    dbos.launch();
 
     var options =
         new StartWorkflowOptions()
@@ -274,6 +262,6 @@ public class PartitionedQueuesTest {
             .withDeduplicationId("dedupe");
     assertThrows(
         IllegalArgumentException.class,
-        () -> DBOS.startWorkflow(() -> proxy.normalWorkflow(), options));
+        () -> dbos.startWorkflow(() -> proxy.normalWorkflow(), options));
   }
 }

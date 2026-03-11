@@ -7,58 +7,12 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-interface GCTestService {
-
-  int testWorkflow(int x);
-
-  String gcBlockedWorkflow() throws InterruptedException;
-
-  String timeoutBlockedWorkflow();
-}
-
-class GCTestServiceImpl implements GCTestService {
-
-  private final DBOS.Instance dbos;
-
-  public CountDownLatch gcLatch = new CountDownLatch(1);
-  public CountDownLatch timeoutLatch = new CountDownLatch(1);
-
-  public GCTestServiceImpl(DBOS.Instance dbos) {
-    this.dbos = dbos;
-  }
-
-  @Workflow
-  @Override
-  public int testWorkflow(int x) {
-    dbos.runStep(() -> x, "testStep");
-    return x;
-  }
-
-  @Workflow
-  @Override
-  public String gcBlockedWorkflow() throws InterruptedException {
-    gcLatch.await();
-    return DBOS.workflowId();
-  }
-
-  @Workflow
-  @Override
-  public String timeoutBlockedWorkflow() {
-    while (timeoutLatch.getCount() > 0) {
-      dbos.sleep(Duration.ofMillis(100));
-    }
-    return DBOS.workflowId();
-  }
-}
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 @org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)

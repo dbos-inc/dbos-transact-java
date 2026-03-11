@@ -1,6 +1,5 @@
 package dev.dbos.transact;
 
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSExecutorTestAccess;
@@ -24,30 +23,8 @@ public class DBOSTestAccess {
     return DBOSExecutorTestAccess.getSystemDatabase(exec);
   }
 
-  public static DBOSExecutor getDbosExecutor() {
-    return DBOS.getDbosExecutor();
-  }
-
-  public static void reinitialize(DBOSConfig config) {
-    DBOS.reinitialize(config);
-  }
-
-  // public static void clearRegistry() {
-  //   DBOS.instance().clearRegistry();
-  // }
-
-  public static SystemDatabase getSystemDatabase() {
-    var exec = getDbosExecutor();
-    return DBOSExecutorTestAccess.getSystemDatabase(exec);
-  }
-
-  public static QueueService getQueueService() {
-    var exec = getDbosExecutor();
-    return DBOSExecutorTestAccess.getQueueService(exec);
-  }
-
-  public static SchedulerService getSchedulerService() {
-    var exec = getDbosExecutor();
+  public static SchedulerService getSchedulerService(DBOS.Instance dbos) {
+    var exec = getDbosExecutor(dbos);
     return DBOSExecutorTestAccess.getSchedulerService(exec);
   }
 }
