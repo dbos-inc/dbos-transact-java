@@ -10,8 +10,7 @@ import dev.dbos.transact.workflow.Workflow;
 import java.time.Instant;
 import java.util.stream.Collectors;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
 
 interface MetricsService {
@@ -48,27 +47,15 @@ class MetricsServiceImpl implements MetricsService {
 @org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class MetricsTest {
 
-  final PgContainer pgContainer = new PgContainer();
-
-  @BeforeEach
-  void beforeEach() {
-    pgContainer.start();
-  }
-
-  @AfterEach
-  void afterEach() {
-    pgContainer.stop();
-  }
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
   @Test
   public void testGetMetrics() throws Exception {
-
     var dbosConfig = pgContainer.dbosConfig();
-    var dbos = new DBOS.Instance(dbosConfig);
-    var proxy = dbos.registerWorkflows(MetricsService.class, new MetricsServiceImpl(dbos));
-    dbos.launch();
+    try (var dbos = new DBOS.Instance(dbosConfig)) {
+      var proxy = dbos.registerWorkflows(MetricsService.class, new MetricsServiceImpl(dbos));
+      dbos.launch();
 
-    try {
       // create some metrics data before the start time
       assertEquals("a", proxy.testWorkflowA());
       assertEquals("b", proxy.testWorkflowB());
@@ -105,8 +92,6 @@ public class MetricsTest {
       assertEquals(1, metricsMap.get("workflow_count:testWorkflowB"));
       assertEquals(4, metricsMap.get("step_count:testStepX"));
       assertEquals(1, metricsMap.get("step_count:testStepY"));
-    } finally {
-      dbos.shutdown();
     }
   }
 }

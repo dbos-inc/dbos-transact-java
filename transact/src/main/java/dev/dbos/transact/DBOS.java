@@ -80,7 +80,7 @@ public class DBOS {
     return version;
   }
 
-  public static class Instance {
+  public static class Instance implements AutoCloseable {
     private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
     private final QueueRegistry queueRegistry = new QueueRegistry();
     private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
@@ -98,6 +98,11 @@ public class DBOS {
       }
 
       this.config = config;
+    }
+
+    @Override
+    public void close() throws Exception {
+      shutdown();
     }
 
     public String version() {

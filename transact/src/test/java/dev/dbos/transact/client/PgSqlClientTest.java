@@ -26,7 +26,7 @@ import java.util.UUID;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.util.PSQLException;
@@ -37,17 +37,15 @@ public class PgSqlClientTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  final PgContainer pgContainer = new PgContainer();
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
   DBOSConfig dbosConfig;
-  DBOS.Instance dbos;
-  HikariDataSource dataSource;
+  @AutoClose DBOS.Instance dbos;
+  @AutoClose HikariDataSource dataSource;
   ClientService service;
 
   @BeforeEach
   void beforeEach() {
-    pgContainer.start();
-
     dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS.Instance(dbosConfig);
     dataSource = pgContainer.dataSource();
@@ -56,13 +54,6 @@ public class PgSqlClientTest {
     service = dbos.registerWorkflows(ClientService.class, new ClientServiceImpl(dbos));
 
     dbos.launch();
-  }
-
-  @AfterEach
-  void afterEach() {
-    dbos.shutdown();
-    dataSource.close();
-    pgContainer.stop();
   }
 
   @Test

@@ -24,9 +24,8 @@ import java.util.stream.Collectors;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.maven.artifact.versioning.ComparableVersion;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
@@ -59,19 +58,7 @@ class ExecutorTestServiceImpl implements ExecutorTestService {
 @org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class ConfigTest {
 
-  final PgContainer pgContainer = new PgContainer();
-
-  // @SystemStub private EnvironmentVariables envVars = new EnvironmentVariables();
-
-  @BeforeEach
-  void beforeEach() {
-    pgContainer.start();
-  }
-
-  @AfterEach
-  void afterEach() {
-    pgContainer.stop();
-  }
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
   @Test
   @Execution(ExecutionMode.SAME_THREAD)
@@ -195,12 +182,9 @@ public class ConfigTest {
             .dbosConfig()
             .withConductorKey("test-conductor-key")
             .withExecutorId("test-executor-id");
-    var dbos = new DBOS.Instance(config);
 
-    try {
+    try (var dbos = new DBOS.Instance(config)) {
       assertThrows(IllegalArgumentException.class, () -> dbos.launch());
-    } finally {
-      dbos.shutdown();
     }
   }
 

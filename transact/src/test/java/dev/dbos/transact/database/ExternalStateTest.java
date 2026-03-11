@@ -11,32 +11,24 @@ import dev.dbos.transact.utils.PgContainer;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 @org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class ExternalStateTest {
-  final PgContainer pgContainer = new PgContainer();
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  SystemDatabase systemDatabase;
+  @AutoClose SystemDatabase systemDatabase;
   DBOSConfig dbosConfig;
 
   @BeforeEach
   void beforeEach() {
-    pgContainer.start();
-
     dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
 
     systemDatabase = SystemDatabase.create(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEach() {
-    systemDatabase.close();
-    pgContainer.stop();
   }
 
   @Test

@@ -26,17 +26,15 @@ import org.junit.jupiter.api.*;
 @org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class ClientTest {
 
-  final PgContainer pgContainer = new PgContainer();
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
   DBOSConfig dbosConfig;
-  DBOS.Instance dbos;
-  HikariDataSource dataSource;
+  @AutoClose DBOS.Instance dbos;
+  @AutoClose HikariDataSource dataSource;
   ClientService service;
 
   @BeforeEach
   void beforeEach() {
-    pgContainer.start();
-
     dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS.Instance(dbosConfig);
     dataSource = pgContainer.dataSource();
@@ -45,13 +43,6 @@ public class ClientTest {
     service = dbos.registerWorkflows(ClientService.class, new ClientServiceImpl(dbos));
 
     dbos.launch();
-  }
-
-  @AfterEach
-  void afterEach() {
-    dbos.shutdown();
-    dataSource.close();
-    pgContainer.stop();
   }
 
   @Test

@@ -25,7 +25,7 @@ import java.util.UUID;
 import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -117,30 +117,21 @@ class DisruptiveServiceImpl implements DisruptiveService {
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class SystemDatabaseTest {
 
-  final PgContainer pgContainer = new PgContainer();
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
   DBOSConfig dbosConfig;
-  SystemDatabase sysdb;
+  @AutoClose SystemDatabase sysdb;
 
-  DBOS.Instance dbos;
-  HikariDataSource dataSource;
+  @AutoClose DBOS.Instance dbos;
+  @AutoClose HikariDataSource dataSource;
   ClientService service;
 
   @BeforeEach
   void beforeEach() {
-    pgContainer.start();
-
     dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
     sysdb = SystemDatabase.create(dbosConfig);
     dataSource = pgContainer.dataSource();
-  }
-
-  @AfterEach
-  void afterEach() {
-    dataSource.close();
-    sysdb.close();
-    pgContainer.stop();
   }
 
   @Test
