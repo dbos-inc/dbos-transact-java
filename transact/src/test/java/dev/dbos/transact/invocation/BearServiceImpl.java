@@ -8,8 +8,13 @@ import dev.dbos.transact.workflow.Workflow;
 import java.time.Instant;
 
 public class BearServiceImpl implements BearService {
+  private final DBOS.Instance dbos;
   public int nWfCalls = 0;
   private BearService proxy;
+
+  public BearServiceImpl(DBOS.Instance dbos) {
+    this.dbos = dbos;
+  }
 
   public void setProxy(BearService proxy) {
     this.proxy = proxy;
@@ -36,8 +41,8 @@ public class BearServiceImpl implements BearService {
   @Workflow
   @Override
   public String listSteps(String wfid) {
-    var ll1 = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId(wfid)).size();
-    var ll2 = DBOS.listWorkflowSteps(wfid).size();
+    var ll1 = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowId(wfid)).size();
+    var ll2 = dbos.listWorkflowSteps(wfid).size();
 
     return String.format("%d %d", ll1, ll2);
   }

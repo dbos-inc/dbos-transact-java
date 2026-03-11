@@ -5,9 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Workflow;
 
@@ -15,8 +14,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,43 +38,37 @@ class TestServiceImpl implements TestService {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class MultiDbosInstanceTest {
 
-  private static DBOSConfig dbosConfigA;
-  private DBOS.Instance dbosA;
+  @AutoClose final PgContainer pgContainerA = new PgContainer();
+  @AutoClose DBOS.Instance dbosA;
+  @AutoClose HikariDataSource dataSourceA;
   private TestService proxyA;
   private TestServiceImpl implA;
   private Queue queueA;
 
-  private static DBOSConfig dbosConfigB;
-  private DBOS.Instance dbosB;
+  @AutoClose final PgContainer pgContainerB = new PgContainer();
+  @AutoClose DBOS.Instance dbosB;
+  @AutoClose HikariDataSource dataSourceB;
   private TestServiceImpl implB;
   private TestService proxyB;
   private Queue queueB;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfigA =
-        DBOSConfig.defaultsFromEnv("MultiDbosInstanceTestA")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_multi_a");
-    dbosConfigB =
-        DBOSConfig.defaultsFromEnv("MultiDbosInstanceTestB")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_multi_b");
-  }
-
   @BeforeEach
   void beforeEachTest() throws Exception {
-    DBUtils.recreateDB(dbosConfigA);
+    var dbosConfigA = pgContainerA.dbosConfig("MultiDbosInstanceTestA");
     dbosA = new DBOS.Instance(dbosConfigA);
+    dataSourceA = pgContainerA.dataSource();
     implA = new TestServiceImpl(dbosA);
     proxyA = dbosA.registerWorkflows(TestService.class, implA);
     queueA = new Queue("queueA");
     dbosA.registerQueue(queueA);
-
     dbosA.launch();
 
-    DBUtils.recreateDB(dbosConfigB);
+    var dbosConfigB = pgContainerB.dbosConfig("MultiDbosInstanceTestB");
     dbosB = new DBOS.Instance(dbosConfigB);
+    dataSourceB = pgContainerB.dataSource();
     implB = new TestServiceImpl(dbosB);
     proxyB = dbosB.registerWorkflows(TestService.class, implB);
     queueB = new Queue("queueB");
@@ -83,23 +76,17 @@ public class MultiDbosInstanceTest {
     dbosB.launch();
   }
 
-  @AfterEach
-  void afterEachTest() throws Exception {
-    dbosA.shutdown();
-    dbosB.shutdown();
-  }
-
   @Test
   public void testDirectMultipleInstances() throws Exception {
     var wfidA = UUID.randomUUID().toString();
     String resultA;
-    try (var o = new WorkflowOptions(wfidA).setContext()) {
+    try (var o = new dev.dbos.transact.context.WorkflowOptions(wfidA).setContext()) {
       resultA = proxyA.testWorkflow("hawk");
     }
 
     var wfidB = UUID.randomUUID().toString();
     String resultB;
-    try (var o = new WorkflowOptions(wfidB).setContext()) {
+    try (var o = new dev.dbos.transact.context.WorkflowOptions(wfidB).setContext()) {
       resultB = proxyB.testWorkflow("bear");
     }
 
@@ -107,8 +94,8 @@ public class MultiDbosInstanceTest {
     assertEquals("Hello hawk, today is " + formattedCurrentDate, resultA);
     assertEquals("Hello bear, today is " + formattedCurrentDate, resultB);
 
-    var rowsA = DBUtils.getWorkflowRows(dbosConfigA);
-    var rowsB = DBUtils.getWorkflowRows(dbosConfigB);
+    var rowsA = DBUtils.getWorkflowRows(dataSourceA);
+    var rowsB = DBUtils.getWorkflowRows(dataSourceB);
     assertEquals(1, rowsA.size());
     assertEquals(1, rowsB.size());
     assertEquals(wfidA, rowsA.get(0).workflowId());
@@ -126,8 +113,8 @@ public class MultiDbosInstanceTest {
     assertEquals("Hello hawk, today is " + formattedCurrentDate, handleA.getResult());
     assertEquals("Hello bear, today is " + formattedCurrentDate, handleB.getResult());
 
-    var rowsA = DBUtils.getWorkflowRows(dbosConfigA);
-    var rowsB = DBUtils.getWorkflowRows(dbosConfigB);
+    var rowsA = DBUtils.getWorkflowRows(dataSourceA);
+    var rowsB = DBUtils.getWorkflowRows(dataSourceB);
     assertEquals(1, rowsA.size());
     assertEquals(1, rowsB.size());
     assertEquals(handleA.workflowId(), rowsA.get(0).workflowId());

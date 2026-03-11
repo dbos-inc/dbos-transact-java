@@ -7,15 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Timeout;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -23,43 +20,30 @@ import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class DirectInvocationTest {
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose DBOS.Instance dbos;
   private HawkService proxy;
-  private HikariDataSource dataSource;
+  @AutoClose HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
-
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-    var impl = new HawkServiceImpl();
-    proxy = DBOS.registerWorkflows(HawkService.class, impl);
+  void beforeEachTest() {
+    var dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS.Instance(dbosConfig);
+    var impl = new HawkServiceImpl(dbos);
+    proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    DBOS.launch();
+    dbos.launch();
 
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    dataSource.close();
-    DBOS.shutdown();
+    dataSource = pgContainer.dataSource();
   }
 
   @Test
@@ -373,7 +357,7 @@ public class DirectInvocationTest {
     var wf = wfs.get(0);
     assertNotNull(wf.workflowId());
 
-    var steps = DBOS.listWorkflowSteps(wf.workflowId());
+    var steps = dbos.listWorkflowSteps(wf.workflowId());
     assertEquals(1, steps.size());
     var step = steps.get(0);
     assertEquals(0, step.functionId());

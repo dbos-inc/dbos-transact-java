@@ -12,7 +12,12 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 public class HawkServiceImpl implements HawkService {
+  private final DBOS.Instance dbos;
   private HawkService proxy;
+
+  public HawkServiceImpl(DBOS.Instance dbos) {
+    this.dbos = dbos;
+  }
 
   public void setProxy(HawkService proxy) {
     this.proxy = proxy;
@@ -46,7 +51,7 @@ public class HawkServiceImpl implements HawkService {
   @Workflow
   @Override
   public String parentStartWorkflow() {
-    var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow());
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow());
     return handle.getResult();
   }
 
