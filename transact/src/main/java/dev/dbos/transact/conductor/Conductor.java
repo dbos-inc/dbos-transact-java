@@ -72,8 +72,9 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.MultiThreadIoEventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.nio.NioIoHandler;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.MessageToMessageDecoder;
@@ -612,7 +613,7 @@ public class Conductor implements AutoCloseable {
         sslCtx = null;
       }
 
-      group = new NioEventLoopGroup();
+      group = new MultiThreadIoEventLoopGroup(0, NioIoHandler.newFactory());
       handler = new NettyWebSocketHandler();
 
       Bootstrap b = new Bootstrap();
