@@ -141,43 +141,14 @@ private MyService register(DBOS.Instance dbos) {
 
 ## Target Files for Refactoring
 
-The following directories and files are identified as needing refactoring (not exhaustive):
-
-### `transact/src/test/java/dev/dbos/transact/workflow/`
-- `AsyncWorkflowTest.java`
-- `ForkTest.java`
-- `GarbageCollectionTest.java`
-- `ListWorkflowsTest.java`
-- `QueueChildWorkflowTest.java`
-- `SimpleServiceImpl.java` (Update implementation)
-- `SyncWorkflowTest.java`
-- `TimeoutTest.java`
-- `UnifiedProxyTest.java`
-- `WorkflowMgmtTest.java`
-
-### `transact/src/test/java/dev/dbos/transact/database/`
-- `ExternalStateTest.java`
-- `MetricsTest.java`
-- `ChaosTest.java`
-- `SystemDatabaseTest.java`
-
-### `transact/src/test/java/dev/dbos/transact/json/`
-- `InteropTest.java`
-
-### `transact/src/test/java/dev/dbos/transact/execution/`
-- Multiple files...
-
-### Other directories:
-- `admin/`
-- `conductor/`
-- `config/`
-- `invocation/`
-- `issues/`
-- `migrations/`
-- `notifications/`
-- `queue/`
-- `scheduled/`
-- `step/`
+- transact/src/test/java/dev/dbos/transact/json/InteropTest.java                                                                                               │
+- transact/src/test/java/dev/dbos/transact/json/PortableSerializationTest.java                                                                                 │
+- transact/src/test/java/dev/dbos/transact/notifications/EventsTest.java                                                                                       │
+- transact/src/test/java/dev/dbos/transact/notifications/NotificationServiceTest.java                                                                          │
+- transact/src/test/java/dev/dbos/transact/queue/PartitionedQueuesTest.java                                                                                    │
+- transact/src/test/java/dev/dbos/transact/queue/QueuesTest.java                                                                                               │
+- transact/src/test/java/dev/dbos/transact/scheduled/SchedulerServiceTest.java                                                                                 │
+- transact/src/test/java/dev/dbos/transact/scheduled/SkedService.java     
 
 ---
 
@@ -189,3 +160,6 @@ The following directories and files are identified as needing refactoring (not e
 4. **Verify**: Run the refactored tests using `./gradlew test --tests <ClassName>`.
 5. **Iterate**: Move to the next directory until all tests are migrated.
 6. **Final Cleanup**: Ensure no static `DBOS` methods are called in `src/test`.
+
+
+## Test files that still need to be updated

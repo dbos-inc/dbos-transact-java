@@ -156,19 +156,4 @@ public class SystemDatabaseTest {
 
     assertTrue(before.equals(after));
   }
-
-  void logWorkflowDetails(String wfid, String name) throws Exception {
-    var wfstat = DBOS.getWorkflowStatus(wfid);
-    System.out.println(
-        String.format("Workflow (%s) ID: %s. Status %s", name, wfid, wfstat.status()));
-    var steps = DBOS.listWorkflowSteps(wfid);
-    for (var step : steps) {
-      System.out.println(
-          String.format("  - # %d %s %s", step.functionId(), step.functionName(), step.output()));
-    }
-    var events = DBUtils.getWorkflowEvents(dataSource, wfid);
-    for (var event : events) {
-      System.out.println(String.format("  $ %s", event));
-    }
-  }
 }
