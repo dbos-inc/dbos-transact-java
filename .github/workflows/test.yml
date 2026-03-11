@@ -20,18 +20,18 @@ jobs:
           - jdk-distro: graalvm
             jdk-version: 17.0.12
 
-    services:
-      postgres:
-        image: sibedge/postgres-plv8:16.3-3.2.2
-        env:
-          POSTGRES_PASSWORD: dbos
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
+    # services:
+    #   postgres:
+    #     image: sibedge/postgres-plv8:16.3-3.2.2
+    #     env:
+    #       POSTGRES_PASSWORD: dbos
+    #     options: >-
+    #       --health-cmd pg_isready
+    #       --health-interval 10s
+    #       --health-timeout 5s
+    #       --health-retries 5
+    #     ports:
+    #       - 5432:5432
 
     steps:
       - name: Checkout code
