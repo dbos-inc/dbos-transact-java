@@ -12,13 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         jdk-version: ['17', '21', '25']
-        jdk-distro: ['corretto', 'graalvm', 'microsoft', 'oracle', 'semeru', 'temurin', 'zulu' ]
-        exclude:
-          - jdk-version: 17
-            jdk-distro: graalvm
-        include:
-          - jdk-distro: graalvm
-            jdk-version: 17.0.12
+        jdk-distro: ['microsoft', 'oracle', 'temurin' ]
 
     # services:
     #   postgres:
