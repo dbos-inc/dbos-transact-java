@@ -9,6 +9,12 @@ import java.time.Duration;
 @WorkflowClassName("ClientServiceImpl")
 public class ClientServiceImpl implements ClientService {
 
+  private final DBOS.Instance dbos;
+
+  public ClientServiceImpl(DBOS.Instance dbos) {
+    this.dbos = dbos;
+  }
+
   @Workflow
   public String enqueueTest(int i, String s) {
     return String.format("%d-%s", i, s);
@@ -16,7 +22,7 @@ public class ClientServiceImpl implements ClientService {
 
   @Workflow
   public String sendTest(int i) {
-    var message = DBOS.recv("test-topic", Duration.ofSeconds(10));
+    var message = dbos.recv("test-topic", Duration.ofSeconds(10));
     return String.format("%d-%s", i, message);
   }
 

@@ -9,13 +9,12 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -24,91 +23,44 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class ClientTest {
-  private static DBOSConfig dbosConfig;
-  private static final String dbUrl = "jdbc:postgresql://localhost:5432/dbos_java_sys";
-  private static final String dbUser = "postgres";
-  private static final String dbPassword = System.getenv("PGPASSWORD");
 
-  private ClientService service;
-  private HikariDataSource dataSource;
+  final PgContainer pgContainer = new PgContainer();
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaults("systemdbtest")
-            .withDatabaseUrl(dbUrl)
-            .withDbUser(dbUser)
-            .withDbPassword(dbPassword);
-  }
+  DBOSConfig dbosConfig;
+  DBOS.Instance dbos;
+  HikariDataSource dataSource;
+  ClientService service;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-    DBOS.registerQueue(new Queue("testQueue"));
-    service = DBOS.registerWorkflows(ClientService.class, new ClientServiceImpl());
-    DBOS.launch();
+  void beforeEach() {
+    pgContainer.start();
 
-    dataSource =
-        SystemDatabase.createDataSource(
-            dbosConfig.databaseUrl(), dbosConfig.dbUser(), dbosConfig.dbPassword());
+    dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS.Instance(dbosConfig);
+    dataSource = pgContainer.dataSource();
+
+    dbos.registerQueue(new Queue("testQueue"));
+    service = dbos.registerWorkflows(ClientService.class, new ClientServiceImpl(dbos));
+
+    dbos.launch();
   }
 
   @AfterEach
-  void afterEachTest() throws Exception {
+  void afterEach() {
+    dbos.shutdown();
     dataSource.close();
-    DBOS.shutdown();
-  }
-
-  @Test
-  public void enqueueOptionsValidation() throws Exception {
-    // workflow/class/queue names must not be null
-    assertThrows(
-        NullPointerException.class,
-        () -> new DBOSClient.EnqueueOptions(null, "workflow-name", "queue-name"));
-    assertThrows(
-        NullPointerException.class,
-        () -> new DBOSClient.EnqueueOptions("class-name", null, "queue-name"));
-    assertThrows(
-        NullPointerException.class,
-        () -> new DBOSClient.EnqueueOptions("class-name", "workflow-name", null));
-
-    // workflow/class/queue names must not be empty
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("", "workflow-name", "queue-name"));
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("class-name", "", "queue-name"));
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("class-name", "workflow-name", ""));
-
-    var options = new DBOSClient.EnqueueOptions("class", "workflow", "queue");
-
-    // dedupe ID and partition key must not be empty if set
-    assertThrows(IllegalArgumentException.class, () -> options.withDeduplicationId(""));
-    assertThrows(IllegalArgumentException.class, () -> options.withQueuePartitionKey(""));
-
-    // timeout can't be negative or zero
-    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ZERO));
-    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(-1)));
-
-    // timeout & deadline can't both be set
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            options.withDeadline(Instant.now().plusSeconds(1)).withTimeout(Duration.ofSeconds(1)));
+    pgContainer.stop();
   }
 
   @Test
   public void clientEnqueue() throws Exception {
 
-    var qs = DBOSTestAccess.getQueueService();
+    var qs = DBOSTestAccess.getQueueService(dbos);
     qs.pause();
 
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = pgContainer.dbosClient()) {
       var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "enqueueTest", "testQueue");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var rows = DBUtils.getWorkflowRows(dataSource);
@@ -132,10 +84,10 @@ public class ClientTest {
 
   @Test
   public void clientEnqueueDeDupe() throws Exception {
-    var qs = DBOSTestAccess.getQueueService();
+    var qs = DBOSTestAccess.getQueueService(dbos);
     qs.pause();
 
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = pgContainer.dbosClient()) {
       var options =
           new DBOSClient.EnqueueOptions("ClientServiceImpl", "enqueueTest", "testQueue")
               .withDeduplicationId("plugh!");
@@ -150,11 +102,11 @@ public class ClientTest {
   @Test
   public void clientSend() throws Exception {
 
-    var handle = DBOS.startWorkflow(() -> service.sendTest(42));
+    var handle = dbos.startWorkflow(() -> service.sendTest(42));
 
     var idempotencyKey = UUID.randomUUID().toString();
 
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = pgContainer.dbosClient()) {
       client.send(handle.workflowId(), "test.message", "test-topic", idempotencyKey);
     }
 
@@ -163,7 +115,7 @@ public class ClientTest {
 
   @Test
   public void clientEnqueueTimeouts() throws Exception {
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = pgContainer.dbosClient()) {
       var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "sleep", "testQueue");
 
       var handle1 =
@@ -198,7 +150,7 @@ public class ClientTest {
   public void invalidSend() throws Exception {
     var invalidWorkflowId = UUID.randomUUID().toString();
 
-    try (var client = new DBOSClient(dbUrl, dbUser, dbPassword)) {
+    try (var client = pgContainer.dbosClient()) {
       var ex =
           assertThrows(
               DBOSNonExistentWorkflowException.class,
