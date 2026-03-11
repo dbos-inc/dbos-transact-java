@@ -5,16 +5,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -29,13 +27,19 @@ interface GCTestService {
 
 class GCTestServiceImpl implements GCTestService {
 
+  private final DBOS.Instance dbos;
+
   public CountDownLatch gcLatch = new CountDownLatch(1);
   public CountDownLatch timeoutLatch = new CountDownLatch(1);
+
+  public GCTestServiceImpl(DBOS.Instance dbos) {
+    this.dbos = dbos;
+  }
 
   @Workflow
   @Override
   public int testWorkflow(int x) {
-    DBOS.runStep(() -> x, "testStep");
+    dbos.runStep(() -> x, "testStep");
     return x;
   }
 
@@ -50,50 +54,43 @@ class GCTestServiceImpl implements GCTestService {
   @Override
   public String timeoutBlockedWorkflow() {
     while (timeoutLatch.getCount() > 0) {
-      DBOS.sleep(Duration.ofMillis(100));
+      dbos.sleep(Duration.ofMillis(100));
     }
     return DBOS.workflowId();
   }
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class GarbageCollectionTest {
 
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+
+  DBOSConfig dbosConfig;
+  @AutoClose DBOS.Instance dbos;
+
   private GCTestServiceImpl impl;
   private GCTestService proxy;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
-
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS.Instance(dbosConfig);
 
-    impl = new GCTestServiceImpl();
-    proxy = DBOS.registerWorkflows(GCTestService.class, impl);
+    impl = new GCTestServiceImpl(dbos);
+    proxy = dbos.registerWorkflows(GCTestService.class, impl);
 
-    DBOS.launch();
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    DBOS.shutdown();
+    dbos.launch();
   }
 
   @Test
   void garbageCollection() throws Exception {
     int numWorkflows = 10;
 
-    var systemDatabase = DBOSTestAccess.getSystemDatabase();
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
 
     // Start one blocked workflow and 10 normal workflows
-    WorkflowHandle<String, ?> handle = DBOS.startWorkflow(() -> proxy.gcBlockedWorkflow());
+    WorkflowHandle<String, ?> handle = dbos.startWorkflow(() -> proxy.gcBlockedWorkflow());
     for (int i = 0; i < numWorkflows; i++) {
       int result = proxy.testWorkflow(i);
       assertEquals(i, result);
@@ -146,11 +143,11 @@ public class GarbageCollectionTest {
   void globalTimeout() throws Exception {
     int numWorkflows = 10;
 
-    var dbosExecutor = DBOSTestAccess.getDbosExecutor();
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
     List<WorkflowHandle<String, ?>> handles = new ArrayList<>();
     for (int i = 0; i < numWorkflows; i++) {
-      handles.add(DBOS.startWorkflow(() -> proxy.timeoutBlockedWorkflow()));
+      handles.add(dbos.startWorkflow(() -> proxy.timeoutBlockedWorkflow()));
     }
 
     Thread.sleep(1000L);
@@ -158,7 +155,7 @@ public class GarbageCollectionTest {
     // Wait one second, start one final workflow, then timeout all workflows started
     // more than one second ago
     WorkflowHandle<String, ?> finalHandle =
-        DBOS.startWorkflow(() -> proxy.timeoutBlockedWorkflow());
+        dbos.startWorkflow(() -> proxy.timeoutBlockedWorkflow());
 
     dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);
     for (var handle : handles) {

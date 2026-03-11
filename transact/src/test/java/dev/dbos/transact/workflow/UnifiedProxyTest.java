@@ -3,54 +3,41 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 
-import java.sql.SQLException;
 import java.util.List;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class UnifiedProxyTest {
 
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    UnifiedProxyTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+  DBOSConfig dbosConfig;
+  @AutoClose DBOS.Instance dbos;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-
-    DBOSTestAccess.reinitialize(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEachTest() {
-    DBOS.shutdown();
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS.Instance(dbosConfig);
   }
 
   @Test
   public void optionsWithCall() throws Exception {
 
-    SimpleService simpleService =
-        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
     Queue q = new Queue("simpleQ");
-    DBOS.registerQueue(q);
+    dbos.registerQueue(q);
 
-    DBOS.launch();
+    dbos.launch();
 
     // synchronous
     String wfid1 = "wf-123";
@@ -67,7 +54,7 @@ public class UnifiedProxyTest {
     options = new WorkflowOptions(wfid2);
     WorkflowHandle<String, ?> handle = null;
     try (var id = options.setContext()) {
-      handle = DBOS.startWorkflow(() -> simpleService.workWithString("test-item-async"));
+      handle = dbos.startWorkflow(() -> simpleService.workWithString("test-item-async"));
     }
 
     result = handle.getResult();
@@ -79,29 +66,28 @@ public class UnifiedProxyTest {
     String wfid3 = "wf-125";
     var startOptions = new StartWorkflowOptions(wfid3).withQueue(q);
 
-    DBOS.startWorkflow(() -> simpleService.workWithString("test-item-q"), startOptions);
+    dbos.startWorkflow(() -> simpleService.workWithString("test-item-q"), startOptions);
 
-    handle = DBOS.retrieveWorkflow(wfid3);
+    handle = dbos.retrieveWorkflow(wfid3);
     result = (String) handle.getResult();
     assertEquals("Processed: test-item-q", result);
     assertEquals(wfid3, handle.workflowId());
     assertEquals("SUCCESS", handle.getStatus().status());
 
     ListWorkflowsInput input = new ListWorkflowsInput().withWorkflowId(wfid3);
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(input);
+    List<WorkflowStatus> wfs = dbos.listWorkflows(input);
     assertEquals("simpleQ", wfs.get(0).queueName());
   }
 
   @Test
   public void syncParentWithQueuedChildren() throws Exception {
 
-    SimpleService simpleService =
-        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
 
-    DBOS.registerQueue(new Queue("childQ"));
-    DBOS.launch();
-
+    dbos.registerQueue(new Queue("childQ"));
     simpleService.setSimpleService(simpleService);
+    dbos.launch();
 
     String wfid1 = "wf-123";
     WorkflowOptions options = new WorkflowOptions(wfid1);
@@ -113,11 +99,11 @@ public class UnifiedProxyTest {
 
     for (int i = 0; i < 3; i++) {
       String wid = "child" + i;
-      WorkflowHandle<?, ?> h = DBOS.retrieveWorkflow(wid);
+      WorkflowHandle<?, ?> h = dbos.retrieveWorkflow(wid);
       assertEquals(wid, h.getResult());
     }
 
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(wfs.size(), 4);
 
     assertEquals(wfid1, wfs.get(0).workflowId());

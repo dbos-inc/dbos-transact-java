@@ -3,21 +3,18 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -33,37 +30,45 @@ interface MgmtService {
 
 class MgmtServiceImpl implements MgmtService {
 
+  private final DBOS.Instance dbos;
   private int stepsExecuted;
   public CountDownLatch mainLatch = new CountDownLatch(1);
   public CountDownLatch workLatch = new CountDownLatch(1);
+
+  public MgmtServiceImpl(DBOS.Instance dbos) {
+    this.dbos = dbos;
+  }
 
   public int stepsExecuted() {
     return this.stepsExecuted;
   }
 
+  @Override
   @Workflow(name = "myworkflow")
   public int simpleWorkflow(int input) throws InterruptedException {
 
-    DBOS.runStep(() -> ++stepsExecuted, "stepOne");
+    dbos.runStep(() -> ++stepsExecuted, "stepOne");
     mainLatch.countDown();
     workLatch.await();
-    DBOS.runStep(() -> ++stepsExecuted, "stepTwo");
-    DBOS.runStep(() -> ++stepsExecuted, "stepThree");
+    dbos.runStep(() -> ++stepsExecuted, "stepTwo");
+    dbos.runStep(() -> ++stepsExecuted, "stepThree");
 
     return input;
   }
 
+  @Override
   @Workflow
   public void stepTimingWorkflow() throws InterruptedException {
     for (var i = 0; i < 5; i++) {
-      DBOS.runStep(() -> Thread.sleep(100), "stepTimingStep");
+      dbos.runStep(() -> Thread.sleep(100), "stepTimingStep");
     }
 
-    DBOS.setEvent("key", "value");
-    DBOS.listWorkflows(new ListWorkflowsInput());
-    DBOS.recv(null, Duration.ofSeconds(1));
+    dbos.setEvent("key", "value");
+    dbos.listWorkflows(new ListWorkflowsInput());
+    dbos.recv(null, Duration.ofSeconds(1));
   }
 
+  @Override
   @Workflow
   public String helloWorkflow(String name) {
     return "Hello, %s!".formatted(name);
@@ -71,50 +76,41 @@ class MgmtServiceImpl implements MgmtService {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class WorkflowMgmtTest {
 
   private static final Logger logger = LoggerFactory.getLogger(WorkflowMgmtTest.class);
 
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+
+  DBOSConfig dbosConfig;
+  @AutoClose DBOS.Instance dbos;
 
   private MgmtService proxy;
   private MgmtServiceImpl impl;
   private Queue myqueue;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    WorkflowMgmtTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
-
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS.Instance(dbosConfig);
 
-    impl = new MgmtServiceImpl();
-    proxy = DBOS.registerWorkflows(MgmtService.class, impl);
+    impl = new MgmtServiceImpl(dbos);
+    proxy = dbos.registerWorkflows(MgmtService.class, impl);
 
     myqueue = new Queue("myqueue");
-    DBOS.registerQueue(myqueue);
+    dbos.registerQueue(myqueue);
 
-    DBOS.launch();
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    DBOS.shutdown();
+    dbos.launch();
   }
 
   @Test
   public void testStepTiming() throws Exception {
     var start = System.currentTimeMillis();
-    var handle = DBOS.startWorkflow(() -> proxy.stepTimingWorkflow());
+    var handle = dbos.startWorkflow(() -> proxy.stepTimingWorkflow());
     assertDoesNotThrow(() -> handle.getResult());
 
-    var steps = DBOS.listWorkflowSteps(handle.workflowId());
+    var steps = dbos.listWorkflowSteps(handle.workflowId());
     assertEquals(9, steps.size());
     for (var step : steps) {
       assertNotNull(step.startedAtEpochMs());
@@ -131,27 +127,27 @@ public class WorkflowMgmtTest {
   public void asyncCancelResumeTest() throws Exception {
     String workflowId = "asyncCancelResumeTest:%d".formatted(System.currentTimeMillis());
     var options = new StartWorkflowOptions(workflowId);
-    WorkflowHandle<Integer, ?> h = DBOS.startWorkflow(() -> proxy.simpleWorkflow(23), options);
+    WorkflowHandle<Integer, ?> h = dbos.startWorkflow(() -> proxy.simpleWorkflow(23), options);
 
     impl.mainLatch.await();
-    DBOS.cancelWorkflow(workflowId);
+    dbos.cancelWorkflow(workflowId);
     impl.workLatch.countDown();
 
     assertEquals(1, impl.stepsExecuted());
     assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().status());
 
-    WorkflowHandle<Integer, ?> handle = DBOS.resumeWorkflow(workflowId);
+    WorkflowHandle<Integer, ?> handle = dbos.resumeWorkflow(workflowId);
 
     assertEquals(23, handle.getResult());
     assertEquals(3, impl.stepsExecuted());
 
     // resume again
 
-    handle = DBOS.resumeWorkflow(workflowId);
+    handle = dbos.resumeWorkflow(workflowId);
 
     assertEquals(23, handle.getResult());
     assertEquals(3, impl.stepsExecuted());
-    h = DBOS.retrieveWorkflow(workflowId);
+    h = dbos.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
 
     logger.info("Test completed");
@@ -183,7 +179,7 @@ public class WorkflowMgmtTest {
     e.submit(
         () -> {
           impl.mainLatch.await();
-          DBOS.cancelWorkflow(workflowId);
+          dbos.cancelWorkflow(workflowId);
           impl.workLatch.countDown();
           testLatch.countDown();
           // return a value to force using Callable<T> submit overload
@@ -192,14 +188,14 @@ public class WorkflowMgmtTest {
 
     testLatch.await();
 
-    var handle = DBOS.resumeWorkflow(workflowId);
+    var handle = dbos.resumeWorkflow(workflowId);
 
     assertEquals(23, handle.getResult());
     assertEquals(3, impl.stepsExecuted());
 
     // resume again
 
-    handle = DBOS.resumeWorkflow(workflowId);
+    handle = dbos.resumeWorkflow(workflowId);
 
     assertEquals(23, handle.getResult());
     assertEquals(3, impl.stepsExecuted());
@@ -209,24 +205,24 @@ public class WorkflowMgmtTest {
   public void queuedCancelResumeTest() throws Exception {
     String workflowId = "wfid1";
     var options = new StartWorkflowOptions(workflowId).withQueue(myqueue);
-    var origHandle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(23), options);
+    var origHandle = dbos.startWorkflow(() -> proxy.simpleWorkflow(23), options);
 
     impl.mainLatch.await();
-    DBOS.cancelWorkflow(workflowId);
+    dbos.cancelWorkflow(workflowId);
     impl.workLatch.countDown();
 
     assertEquals(1, impl.stepsExecuted());
-    var h = DBOS.retrieveWorkflow(workflowId);
+    var h = dbos.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().status());
 
-    var handle = DBOS.resumeWorkflow(workflowId);
+    var handle = dbos.resumeWorkflow(workflowId);
 
     assertEquals(23, handle.getResult());
     assertEquals(3, impl.stepsExecuted());
 
     // resume again
 
-    handle = DBOS.resumeWorkflow(workflowId);
+    handle = dbos.resumeWorkflow(workflowId);
 
     assertEquals(23, handle.getResult());
     assertEquals(3, impl.stepsExecuted());
@@ -236,7 +232,7 @@ public class WorkflowMgmtTest {
 
   @Test
   public void testListWorkflowsDontLoadInputOutput() throws Exception {
-    var handle = DBOS.startWorkflow(() -> proxy.helloWorkflow("Chuck"));
+    var handle = dbos.startWorkflow(() -> proxy.helloWorkflow("Chuck"));
     assertEquals("Hello, Chuck!", handle.getResult());
 
     var input =
@@ -244,7 +240,7 @@ public class WorkflowMgmtTest {
             .withWorkflowId(handle.workflowId())
             .withLoadInput(false)
             .withLoadOutput(false);
-    var workflows = DBOS.listWorkflows(input);
+    var workflows = dbos.listWorkflows(input);
     assertEquals(1, workflows.size());
     var workflow = workflows.get(0);
     assertEquals(handle.workflowId(), workflow.workflowId());
@@ -256,12 +252,12 @@ public class WorkflowMgmtTest {
 
   @Test
   public void testListWorkflowsLoadInputOutput() throws Exception {
-    var handle = DBOS.startWorkflow(() -> proxy.helloWorkflow("Chuck"));
+    var handle = dbos.startWorkflow(() -> proxy.helloWorkflow("Chuck"));
     assertEquals("Hello, Chuck!", handle.getResult());
 
     // loadInput/loadOutput default to true
     var input = new ListWorkflowsInput().withWorkflowId(handle.workflowId());
-    var workflows = DBOS.listWorkflows(input);
+    var workflows = dbos.listWorkflows(input);
     assertEquals(1, workflows.size());
     var workflow = workflows.get(0);
     assertEquals(handle.workflowId(), workflow.workflowId());

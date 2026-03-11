@@ -3,65 +3,51 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 
-import java.sql.SQLException;
 import java.util.List;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class QueueChildWorkflowTest {
 
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    QueueChildWorkflowTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+  DBOSConfig dbosConfig;
+  @AutoClose DBOS.Instance dbos;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-
-    DBOSTestAccess.reinitialize(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    DBOS.shutdown();
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS.Instance(dbosConfig);
   }
 
   @Test
   public void multipleChildren() throws Exception {
 
     Queue childQ = new Queue("childQ").withConcurrency(5).withWorkerConcurrency(5);
-    DBOS.registerQueue(childQ);
+    dbos.registerQueue(childQ);
 
-    SimpleService simpleService =
-        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
-
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
     simpleService.setSimpleService(simpleService);
 
-    DBOS.launch();
+    dbos.launch();
 
     var handle =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> simpleService.workflowWithMultipleChildren("123"),
             new StartWorkflowOptions().withQueue(childQ));
 
     assertEquals("123abcdefghi", (String) handle.getResult());
 
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(4, wfs.size());
     assertEquals(handle.workflowId(), wfs.get(0).workflowId());
@@ -76,7 +62,7 @@ public class QueueChildWorkflowTest {
     assertEquals("child3", wfs.get(3).workflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).status());
 
-    List<StepInfo> steps = DBOS.listWorkflowSteps(handle.workflowId());
+    List<StepInfo> steps = dbos.listWorkflowSteps(handle.workflowId());
     assertEquals(6, steps.size());
     assertEquals("child1", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
@@ -98,23 +84,22 @@ public class QueueChildWorkflowTest {
   public void nestedChildren() throws Exception {
 
     Queue childQ = new Queue("childQ").withConcurrency(5).withWorkerConcurrency(5);
-    DBOS.registerQueue(childQ);
+    dbos.registerQueue(childQ);
 
-    SimpleService simpleService =
-        DBOS.registerWorkflows(SimpleService.class, new SimpleServiceImpl());
-
+    SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
+    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
     simpleService.setSimpleService(simpleService);
 
-    DBOS.launch();
+    dbos.launch();
 
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> simpleService.grandParent("123"),
         new StartWorkflowOptions("wf-123456").withQueue(childQ));
 
-    var handle = DBOS.retrieveWorkflow("wf-123456");
+    var handle = dbos.retrieveWorkflow("wf-123456");
     assertEquals("p-c-gc-123", handle.getResult());
 
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
 
     assertEquals(3, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());
@@ -126,14 +111,14 @@ public class QueueChildWorkflowTest {
     assertEquals("child5", wfs.get(2).workflowId());
     assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).status());
 
-    List<StepInfo> steps = DBOS.listWorkflowSteps("wf-123456");
+    List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(2, steps.size());
     assertEquals("child4", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
     assertEquals("childWorkflow4", steps.get(0).functionName());
     assertEquals("DBOS.getResult", steps.get(1).functionName());
 
-    steps = DBOS.listWorkflowSteps("child4");
+    steps = dbos.listWorkflowSteps("child4");
     assertEquals(2, steps.size());
     assertEquals("child5", steps.get(0).childWorkflowId());
     assertEquals(0, steps.get(0).functionId());
