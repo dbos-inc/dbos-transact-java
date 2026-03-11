@@ -4,16 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
 
-import java.sql.SQLException;
 import java.time.Instant;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,84 +22,91 @@ interface MetricsService {
 
 class MetricsServiceImpl implements MetricsService {
 
+  private final DBOS.Instance dbos;
+
+  public MetricsServiceImpl(DBOS.Instance dbos) {
+    this.dbos = dbos;
+  }
+
   @Override
   @Workflow
   public String testWorkflowA() {
-    DBOS.runStep(() -> "x", "testStepX");
-    DBOS.runStep(() -> "x", "testStepX");
+    dbos.runStep(() -> "x", "testStepX");
+    dbos.runStep(() -> "x", "testStepX");
     return "a";
   }
 
   @Override
   @Workflow
   public String testWorkflowB() {
-    DBOS.runStep(() -> "y", "testStepY");
+    dbos.runStep(() -> "y", "testStepY");
     return "b";
   }
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class MetricsTest {
-  private static DBOSConfig config;
-  private MetricsService proxy;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    config =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+  final PgContainer pgContainer = new PgContainer();
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(config);
-    DBOSTestAccess.reinitialize(config);
-    proxy = DBOS.registerWorkflows(MetricsService.class, new MetricsServiceImpl());
-    DBOS.launch();
+  void beforeEach() {
+    pgContainer.start();
   }
 
   @AfterEach
-  void afterEachTest() throws Exception {
-    DBOS.shutdown();
+  void afterEach() {
+    pgContainer.stop();
   }
 
   @Test
   public void testGetMetrics() throws Exception {
-    // create some metrics data before the start time
-    assertEquals("a", proxy.testWorkflowA());
-    assertEquals("b", proxy.testWorkflowB());
 
-    // Record start time before creating workflows
-    var start = Instant.now();
+    var dbosConfig = pgContainer.dbosConfig();
+    var dbos = new DBOS.Instance(dbosConfig);
+    var proxy = dbos.registerWorkflows(MetricsService.class, new MetricsServiceImpl(dbos));
+    dbos.launch();
 
-    // Execute workflows to create metrics data
-    assertEquals("a", proxy.testWorkflowA());
-    assertEquals("a", proxy.testWorkflowA());
-    assertEquals("b", proxy.testWorkflowB());
+    try {
+      // create some metrics data before the start time
+      assertEquals("a", proxy.testWorkflowA());
+      assertEquals("b", proxy.testWorkflowB());
 
-    // Record end time after creating workflows
-    var end = Instant.now();
+      // Record start time before creating workflows
+      var start = Instant.now();
 
-    // create some metrics data after the end time
-    assertEquals("a", proxy.testWorkflowA());
-    assertEquals("b", proxy.testWorkflowB());
+      // Execute workflows to create metrics data
+      assertEquals("a", proxy.testWorkflowA());
+      assertEquals("a", proxy.testWorkflowA());
+      assertEquals("b", proxy.testWorkflowB());
 
-    // Query metrics
-    var sysdb = DBOSTestAccess.getSystemDatabase();
-    var metrics = sysdb.getMetrics(start, end);
-    assertEquals(4, metrics.size());
+      // Record end time after creating workflows
+      var end = Instant.now();
 
-    // Convert to map for easier assertion
-    var metricsMap =
-        metrics.stream()
-            .collect(
-                Collectors.toMap(
-                    m -> "%s:%s".formatted(m.metricType(), m.metricName()), m -> m.value()));
+      // create some metrics data after the end time
+      assertEquals("a", proxy.testWorkflowA());
+      assertEquals("b", proxy.testWorkflowB());
 
-    // Verify step counts
-    assertEquals(2, metricsMap.get("workflow_count:testWorkflowA"));
-    assertEquals(1, metricsMap.get("workflow_count:testWorkflowB"));
-    assertEquals(4, metricsMap.get("step_count:testStepX"));
-    assertEquals(1, metricsMap.get("step_count:testStepY"));
+      // Query metrics
+      var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+      var metrics = sysdb.getMetrics(start, end);
+      assertEquals(4, metrics.size());
+
+      // Convert to map for easier assertion
+      var metricsMap =
+          metrics.stream()
+              .collect(
+                  Collectors.toMap(
+                      m -> "%s:%s".formatted(m.metricType(), m.metricName()), m -> m.value()));
+
+      // Verify step counts
+      assertEquals(2, metricsMap.get("workflow_count:testWorkflowA"));
+      assertEquals(1, metricsMap.get("workflow_count:testWorkflowB"));
+      assertEquals(4, metricsMap.get("step_count:testStepX"));
+      assertEquals(1, metricsMap.get("step_count:testStepY"));
+    } finally {
+      dbos.shutdown();
+    }
   }
 }
