@@ -47,7 +47,7 @@ public class TimeoutTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
 
     dbos.launch();
 
@@ -69,7 +69,7 @@ public class TimeoutTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
 
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
@@ -126,7 +126,7 @@ public class TimeoutTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
     Queue simpleQ = new Queue("simpleQ");
     dbos.registerQueue(simpleQ);
 
@@ -153,7 +153,7 @@ public class TimeoutTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
     Queue simpleQ = new Queue("simpleQ");
     dbos.registerQueue(simpleQ);
 
@@ -185,7 +185,7 @@ public class TimeoutTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
 
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
@@ -212,7 +212,7 @@ public class TimeoutTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
 
     dbos.launch();
     var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
@@ -243,7 +243,7 @@ public class TimeoutTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
 
     dbos.launch();
     var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -269,7 +269,7 @@ public class TimeoutTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
 
     dbos.launch();
 
@@ -299,7 +299,7 @@ public class TimeoutTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
 
     dbos.launch();
 
@@ -330,7 +330,7 @@ public class TimeoutTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     var simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
 
     dbos.launch();
 
@@ -374,7 +374,7 @@ public class TimeoutTest {
   public void parentAsyncTimeoutInheritedByChild() throws Exception {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     var simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
 
     dbos.launch();
 

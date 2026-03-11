@@ -136,7 +136,7 @@ public class SyncWorkflowTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
     dbos.launch();
 
     String result = null;
@@ -168,7 +168,7 @@ public class SyncWorkflowTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
     dbos.launch();
 
     try (var id = new WorkflowOptions("wf-123456").setContext()) {
@@ -219,7 +219,7 @@ public class SyncWorkflowTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
     dbos.launch();
 
     try (var id = new WorkflowOptions("wf-123456").setContext()) {

@@ -16,7 +16,7 @@ public class SimpleServiceImpl implements SimpleService {
 
   private final DBOS.Instance dbos;
 
-  private SimpleService simpleService;
+  private SimpleService self;
 
   public int executionCount = 0;
 
@@ -24,9 +24,8 @@ public class SimpleServiceImpl implements SimpleService {
     this.dbos = dbos;
   }
 
-  @Override
-  public void setSimpleService(SimpleService service) {
-    this.simpleService = service;
+  public void setSelf(SimpleService self) {
+    this.self = self;
   }
 
   @Override
@@ -48,7 +47,7 @@ public class SimpleServiceImpl implements SimpleService {
   public String parentWorkflowWithoutSet(String input) {
     String result = input;
 
-    result = result + simpleService.childWorkflow("abc");
+    result = result + self.childWorkflow("abc");
 
     return result;
   }
@@ -65,17 +64,17 @@ public class SimpleServiceImpl implements SimpleService {
     String result = input;
 
     try (var id = new WorkflowOptions("child1").setContext()) {
-      simpleService.childWorkflow("abc");
+      self.childWorkflow("abc");
     }
     result = result + dbos.retrieveWorkflow("child1").getResult();
 
     try (var id = new WorkflowOptions("child2").setContext()) {
-      simpleService.childWorkflow2("def");
+      self.childWorkflow2("def");
     }
     result = result + dbos.retrieveWorkflow("child2").getResult();
 
     try (var id = new WorkflowOptions("child3").setContext()) {
-      simpleService.childWorkflow3("ghi");
+      self.childWorkflow3("ghi");
     }
     result = result + dbos.retrieveWorkflow("child3").getResult();
 
@@ -99,7 +98,7 @@ public class SimpleServiceImpl implements SimpleService {
   public String childWorkflow4(String input) throws Exception {
     String result = input;
     try (var id = new WorkflowOptions("child5").setContext()) {
-      simpleService.grandchildWorkflow(input);
+      self.grandchildWorkflow(input);
     }
     result = "c-" + dbos.retrieveWorkflow("child5").getResult();
     return result;
@@ -116,7 +115,7 @@ public class SimpleServiceImpl implements SimpleService {
   public String grandParent(String input) throws Exception {
     String result = input;
     try (var id = new WorkflowOptions("child4").setContext()) {
-      simpleService.childWorkflow4(input);
+      self.childWorkflow4(input);
     }
     result = "p-" + dbos.retrieveWorkflow("child4").getResult();
     return result;
@@ -133,7 +132,7 @@ public class SimpleServiceImpl implements SimpleService {
 
       String wid = "child" + i;
       var options = new StartWorkflowOptions(wid).withQueue(childQ);
-      dbos.startWorkflow(() -> simpleService.childWorkflow(wid), options);
+      dbos.startWorkflow(() -> self.childWorkflow(wid), options);
     }
 
     return "QueuedChildren";
@@ -143,8 +142,8 @@ public class SimpleServiceImpl implements SimpleService {
   @Workflow(name = "longWorkflow")
   public String longWorkflow(String input) {
 
-    simpleService.stepWithSleep(1);
-    simpleService.stepWithSleep(1);
+    self.stepWithSleep(1);
+    self.stepWithSleep(1);
 
     logger.info("Done with longWorkflow");
     return input + input;
@@ -185,8 +184,7 @@ public class SimpleServiceImpl implements SimpleService {
     }
 
     var handle =
-        dbos.startWorkflow(
-            () -> simpleService.childWorkflowWithSleep(input, sleepSeconds), options);
+        dbos.startWorkflow(() -> self.childWorkflowWithSleep(input, sleepSeconds), options);
 
     Thread.sleep(sleepSeconds * 500);
 
@@ -221,7 +219,7 @@ public class SimpleServiceImpl implements SimpleService {
         () -> {
           dbos.startWorkflow(
               () -> {
-                simpleService.childWorkflow("No");
+                self.childWorkflow("No");
               });
         },
         "startWfInStep");
@@ -234,7 +232,7 @@ public class SimpleServiceImpl implements SimpleService {
         () -> {
           dbos.startWorkflow(
               () -> {
-                simpleService.childWorkflow("Maybe");
+                self.childWorkflow("Maybe");
               },
               new StartWorkflowOptions(childId));
         },

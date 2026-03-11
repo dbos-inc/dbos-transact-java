@@ -113,7 +113,7 @@ public class AsyncWorkflowTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
     dbos.launch();
 
     WorkflowHandle<String, ?> handle =
@@ -144,7 +144,7 @@ public class AsyncWorkflowTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
     dbos.launch();
 
     WorkflowHandle<String, ?> handle =
@@ -192,7 +192,7 @@ public class AsyncWorkflowTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
     dbos.launch();
 
     WorkflowHandle<String, ?> handle =
@@ -249,7 +249,7 @@ public class AsyncWorkflowTest {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
     dbos.launch();
 
     var wfh = dbos.startWorkflow(() -> simpleService.childWorkflow("Base"));

@@ -86,7 +86,7 @@ public class UnifiedProxyTest {
     SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
 
     dbos.registerQueue(new Queue("childQ"));
-    simpleService.setSimpleService(simpleService);
+    impl.setSelf(simpleService);
     dbos.launch();
 
     String wfid1 = "wf-123";
