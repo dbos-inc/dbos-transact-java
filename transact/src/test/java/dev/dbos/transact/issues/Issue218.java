@@ -7,116 +7,109 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.DBOS.Instance;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-interface Example {
+interface Issue218Service {
 
   public void taskWorkflow(int i) throws Exception;
 
   public void parentParallel() throws Exception;
 }
 
-class ExampleImpl implements Example {
+class Issue218ServiceImpl implements Issue218Service {
 
+  private static final Logger logger = LoggerFactory.getLogger(Issue218ServiceImpl.class);
+
+  private final DBOS.Instance dbos;
   private final Queue queue;
-  private Example proxy;
+  private Issue218Service proxy;
 
-  public ExampleImpl(Queue queue) {
+  public Issue218ServiceImpl(DBOS.Instance dbos, Queue queue) {
+    this.dbos = dbos;
     this.queue = queue;
   }
 
-  public void setProxy(Example proxy) {
+  public void setProxy(Issue218Service proxy) {
     this.proxy = proxy;
   }
 
   @Workflow(name = "task-workflow")
   public void taskWorkflow(int i) throws Exception {
-    System.out.printf("Task %d started%n", i);
+    logger.info("Task {} started", i);
     Thread.sleep(i * 100);
-    System.out.printf("Task %d completed%n", i);
+    logger.info("Task {} completed", i);
   }
 
   @Workflow(name = "parent-parallel")
   public void parentParallel() throws Exception {
-    System.out.println("parent-parallel started");
+    logger.info("parent-parallel started");
     List<WorkflowHandle<Void, Exception>> handles = new ArrayList<>();
     for (int i = 0; i < 10; i++) {
       final int index = i;
       WorkflowHandle<Void, Exception> handle =
-          DBOS.startWorkflow(
+          dbos.startWorkflow(
               () -> this.proxy.taskWorkflow(index),
               new StartWorkflowOptions().withQueue(this.queue));
       handles.add(handle);
     }
-    System.out.println("parent-parallel submitted all child tasks");
+    logger.info("parent-parallel submitted all child tasks");
     for (WorkflowHandle<Void, Exception> handle : handles) {
       try {
         handle.getResult();
       } catch (Exception e) {
-        System.out.println("Task failed " + e);
+        logger.error("Task failed", e);
         throw e;
       }
     }
-    System.out.println("parent-parallel completed");
+    logger.info("parent-parallel completed");
   }
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class Issue218 {
-  private static DBOSConfig dbosConfig;
-  private HikariDataSource dataSource;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+  final Queue queue = new Queue("test-queue");
+
+  DBOSConfig dbosConfig;
+  @AutoClose HikariDataSource dataSource;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    dataSource.close();
-    DBOS.shutdown();
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
+    dataSource = pgContainer.dataSource();
   }
 
   @Test
   void issue218() throws Exception {
 
-    var queue = new Queue("test-queue");
-    DBOS.registerQueue(queue);
-    var impl = new ExampleImpl(queue);
-    Example proxy = DBOS.registerWorkflows(Example.class, impl);
-    impl.setProxy(proxy);
+    String wfid;
+    try (var dbos = new DBOS.Instance(dbosConfig)) {
 
-    DBOS.launch();
+      var proxy = register(dbos);
+      dbos.launch();
 
-    var handle = DBOS.startWorkflow(() -> proxy.parentParallel());
-    var wfid = handle.workflowId();
-    DBOS.shutdown();
+      var handle = dbos.startWorkflow(() -> proxy.parentParallel());
+      wfid = handle.workflowId();
+    }
 
     var rows = DBUtils.getWorkflowRows(dataSource);
     for (var row : rows) {
@@ -131,8 +124,12 @@ public class Issue218 {
       assertTrue(step.childWorkflowId().startsWith(wfid));
     }
 
-    DBOS.launch();
-    assertDoesNotThrow(() -> DBOS.getResult(wfid));
+    try (var dbos = new DBOS.Instance(dbosConfig)) {
+      register(dbos);
+      dbos.launch();
+
+      assertDoesNotThrow(() -> dbos.getResult(wfid));
+    }
 
     rows = DBUtils.getWorkflowRows(dataSource);
     for (var row : rows) {
@@ -157,5 +154,13 @@ public class Issue218 {
         assertNotNull(step.completedAt());
       }
     }
+  }
+
+  private Issue218Service register(Instance dbos) {
+    dbos.registerQueue(queue);
+    var impl = new Issue218ServiceImpl(dbos, queue);
+    var proxy = dbos.registerWorkflows(Issue218Service.class, impl);
+    impl.setProxy(proxy);
+    return proxy;
   }
 }
