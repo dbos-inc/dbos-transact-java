@@ -3,49 +3,35 @@ package dev.dbos.transact.step;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.*;
 
-import java.sql.SQLException;
 import java.util.List;
 
 import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class StepsTest {
 
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    StepsTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+  DBOSConfig dbosConfig;
+  @AutoClose DBOS.Instance dbos;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-
-    DBOSTestAccess.reinitialize(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEachTest() throws SQLException, Exception {
-    DBOS.shutdown();
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS.Instance(dbosConfig);
   }
 
   @Test
-  public void workflowWithStepsSync() throws SQLException {
-    ServiceB serviceB = DBOS.registerWorkflows(ServiceB.class, new ServiceBImpl());
-
-    ServiceA serviceA = DBOS.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
-
-    DBOS.launch();
+  public void workflowWithStepsSync() throws Exception {
+    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
+    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
+    dbos.launch();
 
     String wid = "sync123";
 
@@ -55,7 +41,7 @@ public class StepsTest {
       assertEquals("hellohello", result);
     }
 
-    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wid);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
 
     String[] names = {"step1", "step2", "step3", "step4", "step5"};
@@ -75,12 +61,10 @@ public class StepsTest {
   }
 
   @Test
-  public void workflowWithStepsSyncError() throws SQLException {
-    ServiceB serviceB = DBOS.registerWorkflows(ServiceB.class, new ServiceBImpl());
-
-    ServiceA serviceA = DBOS.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
-
-    DBOS.launch();
+  public void workflowWithStepsSyncError() throws Exception {
+    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
+    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
+    dbos.launch();
 
     var before = System.currentTimeMillis();
     String wid = "sync123er";
@@ -89,7 +73,7 @@ public class StepsTest {
       assertEquals("hellohello", result);
     }
 
-    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wid);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
     assertEquals(5, stepInfos.size());
 
     for (var i = 0; i < stepInfos.size(); i++) {
@@ -112,11 +96,10 @@ public class StepsTest {
   }
 
   @Test
-  public void workflowWithInlineSteps() throws SQLException {
+  public void workflowWithInlineSteps() throws Exception {
     ServiceWFAndStep service =
-        DBOS.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
-
-    DBOS.launch();
+        dbos.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl(dbos));
+    dbos.launch();
 
     var before = System.currentTimeMillis();
     String wid = "wfWISwww123";
@@ -124,10 +107,10 @@ public class StepsTest {
       service.aWorkflowWithInlineSteps("input");
     }
 
-    WorkflowHandle<String, RuntimeException> handle = DBOS.retrieveWorkflow(wid);
+    WorkflowHandle<String, RuntimeException> handle = dbos.retrieveWorkflow(wid);
     assertEquals("input5", (String) handle.getResult());
 
-    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wid);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wid);
     assertEquals(1, stepInfos.size());
 
     for (var i = 0; i < stepInfos.size(); i++) {
@@ -147,11 +130,9 @@ public class StepsTest {
 
   @Test
   public void asyncworkflowWithSteps() throws Exception {
-    ServiceB serviceB = DBOS.registerWorkflows(ServiceB.class, new ServiceBImpl());
-
-    ServiceA serviceA = DBOS.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
-
-    DBOS.launch();
+    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
+    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
+    dbos.launch();
 
     var before = System.currentTimeMillis();
     String workflowId = "wf-1234";
@@ -159,10 +140,10 @@ public class StepsTest {
       serviceA.workflowWithSteps("hello");
     }
 
-    var handle = DBOS.retrieveWorkflow(workflowId);
+    var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals("hellohello", (String) handle.getResult());
 
-    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(workflowId);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
     assertEquals(5, stepInfos.size());
 
     String[] names = {"step1", "step2", "step3", "step4", "step5"};
@@ -183,12 +164,11 @@ public class StepsTest {
 
   @Test
   public void sameInterfaceWorkflowWithSteps() throws Exception {
-    ServiceWFAndStep service =
-        DBOS.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
+    ServiceWFAndStepImpl impl = new ServiceWFAndStepImpl(dbos);
+    ServiceWFAndStep service = dbos.registerWorkflows(ServiceWFAndStep.class, impl);
+    dbos.launch();
 
-    DBOS.launch();
-
-    service.setSelf(service);
+    impl.setSelf(service);
 
     String workflowId = "wf-same-1234";
 
@@ -196,10 +176,10 @@ public class StepsTest {
       service.aWorkflow("hello");
     }
 
-    var handle = DBOS.retrieveWorkflow(workflowId);
+    var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals("helloonetwo", (String) handle.getResult());
 
-    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(workflowId);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
     assertEquals(2, stepInfos.size());
 
     assertEquals("step1", stepInfos.get(0).functionName());
@@ -213,32 +193,26 @@ public class StepsTest {
 
   @Test
   public void stepOutsideWorkflow() throws Exception {
-
-    ServiceB serviceB = DBOS.registerWorkflows(ServiceB.class, new ServiceBImpl());
-
-    DBOS.launch();
+    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
+    dbos.launch();
 
     String result = serviceB.step2("abcde");
     assertEquals("abcde", result);
 
-    serviceB = new ServiceBImpl();
-    result = serviceB.step2("hello");
+    result = new ServiceBImpl().step2("hello");
     assertEquals("hello", result);
 
-    DBOS.shutdown();
-
-    result = serviceB.step2("pqrstu");
+    result = new ServiceBImpl().step2("pqrstu");
     assertEquals("pqrstu", result);
   }
 
   @Test
   public void stepRetryLogic() throws Exception {
-    ServiceWFAndStep service =
-        DBOS.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
+    ServiceWFAndStepImpl impl = new ServiceWFAndStepImpl(dbos);
+    ServiceWFAndStep service = dbos.registerWorkflows(ServiceWFAndStep.class, impl);
+    dbos.launch();
 
-    DBOS.launch();
-
-    service.setSelf(service);
+    impl.setSelf(service);
 
     var before = System.currentTimeMillis();
     String workflowId = "wf-stepretrytest-1234";
@@ -246,11 +220,11 @@ public class StepsTest {
       service.stepRetryWorkflow("hello");
     }
 
-    var handle = DBOS.retrieveWorkflow(workflowId);
+    var handle = dbos.retrieveWorkflow(workflowId);
     String expectedRes = "2 Retries: 2.  No retry: 1.  Backoff timeout: 2.";
     assertEquals(expectedRes, (String) handle.getResult());
 
-    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(workflowId);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(workflowId);
     assertEquals(3, stepInfos.size());
 
     for (var i = 0; i < stepInfos.size(); i++) {
@@ -276,16 +250,15 @@ public class StepsTest {
   @Test
   public void inlineStepRetryLogic() throws Exception {
     ServiceWFAndStep service =
-        DBOS.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl());
-
-    DBOS.launch();
+        dbos.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl(dbos));
+    dbos.launch();
 
     String workflowId = "wf-inlinestepretrytest-1234";
     try (var id = new WorkflowOptions(workflowId).setContext()) {
       service.inlineStepRetryWorkflow("input");
     }
 
-    var handle = DBOS.retrieveWorkflow(workflowId);
+    var handle = dbos.retrieveWorkflow(workflowId);
     String expectedRes = "2 Retries: 2.";
     assertEquals(expectedRes, (String) handle.getResult());
   }

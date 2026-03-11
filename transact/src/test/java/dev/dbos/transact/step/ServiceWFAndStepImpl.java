@@ -7,38 +7,48 @@ import dev.dbos.transact.workflow.Workflow;
 
 public class ServiceWFAndStepImpl implements ServiceWFAndStep {
 
+  private final DBOS.Instance dbos;
+
   private ServiceWFAndStep self;
+
+  public ServiceWFAndStepImpl(DBOS.Instance dbos) {
+    this.dbos = dbos;
+  }
 
   public void setSelf(ServiceWFAndStep serviceWFAndStep) {
     self = serviceWFAndStep;
   }
 
+  @Override
   @Workflow(name = "myworkflow")
   public String aWorkflow(String input) {
-
     String s1 = self.stepOne("one");
     String s2 = self.stepTwo("two");
     return input + s1 + s2;
   }
 
+  @Override
   @Step(name = "step1")
   public String stepOne(String input) {
     return input;
   }
 
+  @Override
   @Step(name = "step2")
   public String stepTwo(String input) {
     return input;
   }
 
+  @Override
   @Workflow(name = "aWorkflowWithInlineSteps")
   public String aWorkflowWithInlineSteps(String input) {
-    var len = DBOS.runStep(() -> input.length(), new StepOptions("stringLength"));
+    var len = dbos.runStep(() -> input.length(), new StepOptions("stringLength"));
     return (input + len);
   }
 
   int stepWithRetryRuns = 0;
 
+  @Override
   @Step(
       name = "stepWith2Retries",
       retriesAllowed = true,
@@ -52,6 +62,7 @@ public class ServiceWFAndStepImpl implements ServiceWFAndStep {
 
   int stepWithNoRetryRuns = 0;
 
+  @Override
   @Step(name = "stepWithNoRetriesAllowed", retriesAllowed = false)
   public String stepWithNoRetriesAllowed(String input) throws Exception {
     ++stepWithNoRetryRuns;
@@ -61,6 +72,7 @@ public class ServiceWFAndStepImpl implements ServiceWFAndStep {
   long startedTime = 0;
   int stepWithLongRetryRuns = 0;
 
+  @Override
   @Step(
       name = "stepWithLongRetry",
       maxAttempts = 3,
@@ -81,6 +93,7 @@ public class ServiceWFAndStepImpl implements ServiceWFAndStep {
     throw new Exception("Not enough time passed yet");
   }
 
+  @Override
   @Workflow(name = "retryTestWorkflow")
   public String stepRetryWorkflow(String input) {
     long ctime = System.currentTimeMillis();
@@ -136,6 +149,7 @@ public class ServiceWFAndStepImpl implements ServiceWFAndStep {
     return result;
   }
 
+  @Override
   @Workflow(name = "inlineStepRetryTestWorkflow")
   public String inlineStepRetryWorkflow(String input) {
     long ctime = System.currentTimeMillis();
@@ -144,7 +158,7 @@ public class ServiceWFAndStepImpl implements ServiceWFAndStep {
     try {
       result =
           result
-              + DBOS.runStep(
+              + dbos.runStep(
                   () -> {
                     ++this.stepWithRetryRuns;
                     throw new Exception("Will not ever run");

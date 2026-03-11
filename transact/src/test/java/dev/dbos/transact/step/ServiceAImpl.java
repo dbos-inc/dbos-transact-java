@@ -2,18 +2,20 @@ package dev.dbos.transact.step;
 
 import dev.dbos.transact.workflow.Workflow;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class ServiceAImpl implements ServiceA {
 
-  private ServiceB serviceBproxy;
+  private static final Logger logger = LoggerFactory.getLogger(ServiceAImpl.class);
+
+  private final ServiceB serviceBproxy;
 
   ServiceAImpl(ServiceB b) {
     this.serviceBproxy = b;
   }
 
-  public void setServiceB(ServiceB serviceB) {
-    serviceBproxy = serviceB;
-  }
-
+  @Override
   @Workflow(name = "workflowWithSteps")
   public String workflowWithSteps(String input) {
     serviceBproxy.step1("one");
@@ -21,8 +23,7 @@ public class ServiceAImpl implements ServiceA {
     try {
       serviceBproxy.step3("three", false);
     } catch (Exception e) {
-      // Nothing to do
-      System.out.println(e.getMessage());
+      logger.info(e.getMessage());
     }
     serviceBproxy.step4("four");
     serviceBproxy.step5("five");
@@ -30,6 +31,7 @@ public class ServiceAImpl implements ServiceA {
     return input + input;
   }
 
+  @Override
   @Workflow(name = "workflowWithStepsError")
   public String workflowWithStepError(String input) {
     serviceBproxy.step1("one");
@@ -37,8 +39,7 @@ public class ServiceAImpl implements ServiceA {
     try {
       serviceBproxy.step3("three", true);
     } catch (Exception e) {
-      // Nothing to do
-      System.out.println(e.getMessage());
+      logger.info(e.getMessage());
     }
     serviceBproxy.step4("four");
     serviceBproxy.step5("five");
