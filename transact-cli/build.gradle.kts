@@ -1,6 +1,6 @@
 plugins {
     application
-    id("com.gradleup.shadow") version "9.3.1"
+    id("com.gradleup.shadow") version "9.3.2"
 }
 
 application {
@@ -9,14 +9,15 @@ application {
 
 dependencies {
     implementation(project(":transact"))
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.20.1")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.20.1")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.21.1")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.1")
     implementation("info.picocli:picocli:4.7.7")
     runtimeOnly("org.slf4j:slf4j-simple:2.0.17")
 
-    testImplementation(platform("org.junit:junit-bom:6.0.2"))
+    testImplementation(platform("org.junit:junit-bom:6.0.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.testcontainers:testcontainers-postgresql:2.0.3")
 }
 
 tasks.test {
@@ -24,17 +25,22 @@ tasks.test {
     testLogging {
         events("passed", "skipped", "failed")
         showStandardStreams = true
-
-        afterSuite(KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
-            if (desc.parent == null) {
+    }
+    
+    addTestListener(object : TestListener {
+        override fun beforeSuite(suite: TestDescriptor) {}
+        override fun beforeTest(testDescriptor: TestDescriptor) {}
+        override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {}
+        override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+            if (suite.parent == null) {
                 println("\nTest Results:")
                 println("  Tests run: ${result.testCount}")
                 println("  Passed: ${result.successfulTestCount}")
                 println("  Failed: ${result.failedTestCount}")
                 println("  Skipped: ${result.skippedTestCount}")
             }
-        }))
-    }
+        }
+    })
 }
 
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {

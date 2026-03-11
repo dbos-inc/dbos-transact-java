@@ -5,7 +5,7 @@ import com.vanniktech.maven.publish.DeploymentValidation
 plugins {
     id("java")
     id("java-library")
-    kotlin("jvm") version "2.3.0"
+    kotlin("jvm") version "2.3.10"
     id("com.vanniktech.maven.publish") version "0.36.0"
 }
 
@@ -30,28 +30,28 @@ tasks.named("build") {
 dependencies {
     api("org.slf4j:slf4j-api:2.0.17") // logging api
 
-    implementation("org.postgresql:postgresql:42.7.9")
+    implementation("org.postgresql:postgresql:42.7.10")
     implementation("com.zaxxer:HikariCP:7.0.2") // Connection pool
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.20.1") // json
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.20.1")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.21.1") // json
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.1")
     implementation("com.cronutils:cron-utils:9.2.1") // cron for scheduled wf
-    implementation("io.netty:netty-all:4.1.130.Final") // netty for websocket
+    implementation("io.netty:netty-all:4.2.10.Final") // netty for websocket
 
     compileOnly("org.jspecify:jspecify:1.0.0")
 
-    testImplementation(platform("org.junit:junit-bom:6.0.2"))
+    testImplementation(platform("org.junit:junit-bom:6.0.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.junit-pioneer:junit-pioneer:2.3.0")
     testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.8")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     testImplementation("org.java-websocket:Java-WebSocket:1.6.0")
-    testImplementation("ch.qos.logback:logback-classic:1.5.24")
-    testImplementation("org.mockito:mockito-core:5.21.0")
+    testImplementation("ch.qos.logback:logback-classic:1.5.32")
+    testImplementation("org.mockito:mockito-core:5.22.0")
     testImplementation("io.rest-assured:rest-assured:6.0.0")
     testImplementation("io.rest-assured:json-path:6.0.0")
     testImplementation("io.rest-assured:xml-path:6.0.0")
-    testImplementation("org.apache.maven:maven-artifact:3.9.12")
+    testImplementation("org.apache.maven:maven-artifact:3.9.13")
     testImplementation("org.testcontainers:testcontainers-postgresql:2.0.3")
 }
 
@@ -70,17 +70,22 @@ tasks.test {
     testLogging {
         events("passed", "skipped", "failed")
         showStandardStreams = true
-
-        afterSuite(KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
-            if (desc.parent == null) {
+    }
+    
+    addTestListener(object : TestListener {
+        override fun beforeSuite(suite: TestDescriptor) {}
+        override fun beforeTest(testDescriptor: TestDescriptor) {}
+        override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {}
+        override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+            if (suite.parent == null) {
                 println("\nTest Results:")
                 println("  Tests run: ${result.testCount}")
                 println("  Passed: ${result.successfulTestCount}")
                 println("  Failed: ${result.failedTestCount}")
                 println("  Skipped: ${result.skippedTestCount}")
             }
-        }))
-    }
+        }
+    })
 }
 
 tasks.withType<KotlinCompile>().configureEach {
