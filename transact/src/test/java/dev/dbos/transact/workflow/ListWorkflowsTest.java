@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.Connection;
@@ -15,6 +14,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
+import javax.sql.DataSource;
+
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 
 /**
@@ -42,219 +44,200 @@ import org.junit.jupiter.api.*;
  * Status totals: SUCCESS=7, ERROR=2, CANCELLED=1
  */
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class ListWorkflowsTest {
 
-  static PgContainer pgContainer;
-  static DBOSConfig dbosConfig;
-  static DBOS.Instance dbos;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose HikariDataSource dataSource;
+  DBOSConfig dbosConfig;
+  @AutoClose DBOS.Instance dbos;
+  final long baseTime = System.currentTimeMillis();
 
   /**
    * Fixed base epoch-ms. All {@code created_at} values are {@code baseTime + offset}, guaranteeing
    * stable ascending order regardless of when the test runs.
    */
-  private static long baseTime;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    pgContainer = new PgContainer();
+  @BeforeEach
+  void beforeEach() throws Exception {
     dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS.Instance(dbosConfig);
     dbos.launch();
-    baseTime = System.currentTimeMillis();
-    populateWorkflowsStatic();
-  }
-
-  @AfterAll
-  static void onetimeTeardown() throws Exception {
-    dbos.shutdown();
-    pgContainer.close();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helper: direct DB insertion
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Insert one row into {@code "dbos".workflow_status} using a direct JDBC connection. Any
-   * parameter can be {@code null}; required non-null columns ({@code created_at}, {@code
-   * updated_at}) use the supplied {@code createdAtMs}.
-   */
-  private static void insertWorkflow(
-      String uuid,
-      String status,
-      String name,
-      String className,
-      String configName,
-      String queueName,
-      String executorId,
-      String appVersion,
-      String authUser,
-      String parentWorkflowId,
-      String forkedFrom,
-      long createdAtMs)
-      throws SQLException {
-    final String sql =
-        """
-          INSERT INTO "dbos".workflow_status
-            (workflow_uuid, status, name, class_name, config_name,
-             queue_name, executor_id, application_version, authenticated_user,
-             parent_workflow_id, forked_from, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """;
-    try (Connection conn = DBUtils.getConnection(dbosConfig);
-        PreparedStatement ps = conn.prepareStatement(sql)) {
-      ps.setString(1, uuid);
-      ps.setString(2, status);
-      ps.setString(3, name);
-      ps.setString(4, className);
-      ps.setString(5, configName);
-      ps.setString(6, queueName); // nullable
-      ps.setString(7, executorId);
-      ps.setString(8, appVersion);
-      ps.setString(9, authUser); // nullable
-      ps.setString(10, parentWorkflowId); // nullable
-      ps.setString(11, forkedFrom); // nullable
-      ps.setLong(12, createdAtMs);
-      ps.setLong(13, createdAtMs);
-      ps.executeUpdate();
-    }
+    dataSource = pgContainer.dataSource();
+    populateWorkflows(dataSource, baseTime);
   }
 
   /** Inserts the 10 standard test rows described in the class-level javadoc. */
-  private static void populateWorkflowsStatic() throws SQLException {
-    long b = baseTime;
-    // @formatter:off
-    insertWorkflow(
-        "wf-alpha-1",
-        "SUCCESS",
-        "alpha",
-        "ClassA",
-        "instA",
-        null,
-        "exec-1",
-        "v1.0",
-        "user-a",
-        null,
-        null,
-        b + 100);
-    insertWorkflow(
-        "wf-child-1",
-        "SUCCESS",
-        "child",
-        "ClassA",
-        "instA",
-        null,
-        "exec-1",
-        "v1.0",
-        "user-a",
-        "wf-alpha-1",
-        null,
-        b + 150);
-    insertWorkflow(
-        "wf-alpha-2",
-        "SUCCESS",
-        "alpha",
-        "ClassA",
-        "instA",
-        null,
-        "exec-1",
-        "v1.0",
-        "user-a",
-        null,
-        null,
-        b + 200);
-    insertWorkflow(
-        "wf-alpha-3",
-        "ERROR",
-        "alpha",
-        "ClassA",
-        "instB",
-        null,
-        "exec-2",
-        "v1.0",
-        "user-b",
-        null,
-        null,
-        b + 300);
-    insertWorkflow(
-        "wf-beta-1",
-        "SUCCESS",
-        "beta",
-        "ClassB",
-        "instB",
-        "q1",
-        "exec-2",
-        "v1.0",
-        "user-a",
-        null,
-        null,
-        b + 400);
-    insertWorkflow(
-        "wf-queue-3",
-        "SUCCESS",
-        "queueWf",
-        "ClassD",
-        "instC",
-        "q3",
-        "exec-2",
-        "v1.0",
-        "user-b",
-        null,
-        null,
-        b + 450);
-    insertWorkflow(
-        "wf-beta-2",
-        "CANCELLED",
-        "beta",
-        "ClassB",
-        "instB",
-        null,
-        "exec-1",
-        "v2.0",
-        "user-b",
-        null,
-        null,
-        b + 500);
-    insertWorkflow(
-        "wf-gamma-1",
-        "SUCCESS",
-        "gamma",
-        "ClassC",
-        "instA",
-        null,
-        "exec-1",
-        "v2.0",
-        "user-a",
-        null,
-        null,
-        b + 600);
-    insertWorkflow(
-        "wf-forked-1",
-        "SUCCESS",
-        "gamma",
-        "ClassC",
-        "instA",
-        null,
-        "exec-1",
-        "v2.0",
-        "user-a",
-        null,
-        "wf-alpha-1",
-        b + 650);
-    insertWorkflow(
-        "wf-gamma-2",
-        "ERROR",
-        "gamma",
-        "ClassC",
-        "instA",
-        "q2",
-        "exec-2",
-        "v2.0",
-        "user-b",
-        null,
-        null,
-        b + 700);
-    // @formatter:on
+  private static void populateWorkflows(DataSource dataSource, long baseTime) throws SQLException {
+    final String sql =
+        """
+            INSERT INTO "dbos".workflow_status
+                (workflow_uuid, status, name, class_name, config_name,
+                 queue_name, executor_id, application_version, authenticated_user,
+                 parent_workflow_id, forked_from, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+    try (Connection conn = dataSource.getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql)) {
+      // @formatter:off
+      Object[][] workflows = {
+        {
+          "wf-alpha-1",
+          "SUCCESS",
+          "alpha",
+          "ClassA",
+          "instA",
+          null,
+          "exec-1",
+          "v1.0",
+          "user-a",
+          null,
+          null,
+          baseTime + 100
+        },
+        {
+          "wf-child-1",
+          "SUCCESS",
+          "child",
+          "ClassA",
+          "instA",
+          null,
+          "exec-1",
+          "v1.0",
+          "user-a",
+          "wf-alpha-1",
+          null,
+          baseTime + 150
+        },
+        {
+          "wf-alpha-2",
+          "SUCCESS",
+          "alpha",
+          "ClassA",
+          "instA",
+          null,
+          "exec-1",
+          "v1.0",
+          "user-a",
+          null,
+          null,
+          baseTime + 200
+        },
+        {
+          "wf-alpha-3",
+          "ERROR",
+          "alpha",
+          "ClassA",
+          "instB",
+          null,
+          "exec-2",
+          "v1.0",
+          "user-b",
+          null,
+          null,
+          baseTime + 300
+        },
+        {
+          "wf-beta-1",
+          "SUCCESS",
+          "beta",
+          "ClassB",
+          "instB",
+          "q1",
+          "exec-2",
+          "v1.0",
+          "user-a",
+          null,
+          null,
+          baseTime + 400
+        },
+        {
+          "wf-queue-3",
+          "SUCCESS",
+          "queueWf",
+          "ClassD",
+          "instC",
+          "q3",
+          "exec-2",
+          "v1.0",
+          "user-b",
+          null,
+          null,
+          baseTime + 450
+        },
+        {
+          "wf-beta-2",
+          "CANCELLED",
+          "beta",
+          "ClassB",
+          "instB",
+          null,
+          "exec-1",
+          "v2.0",
+          "user-b",
+          null,
+          null,
+          baseTime + 500
+        },
+        {
+          "wf-gamma-1",
+          "SUCCESS",
+          "gamma",
+          "ClassC",
+          "instA",
+          null,
+          "exec-1",
+          "v2.0",
+          "user-a",
+          null,
+          null,
+          baseTime + 600
+        },
+        {
+          "wf-forked-1",
+          "SUCCESS",
+          "gamma",
+          "ClassC",
+          "instA",
+          null,
+          "exec-1",
+          "v2.0",
+          "user-a",
+          null,
+          "wf-alpha-1",
+          baseTime + 650
+        },
+        {
+          "wf-gamma-2",
+          "ERROR",
+          "gamma",
+          "ClassC",
+          "instA",
+          "q2",
+          "exec-2",
+          "v2.0",
+          "user-b",
+          null,
+          null,
+          baseTime + 700
+        }
+      };
+      // @formatter:on
+      for (Object[] wf : workflows) {
+        for (int i = 0; i < wf.length; i++) {
+          if (wf[i] == null) {
+            ps.setObject(i + 1, null);
+          } else if (wf[i] instanceof Long) {
+            ps.setLong(i + 1, (Long) wf[i]);
+          } else {
+            ps.setString(i + 1, wf[i].toString());
+          }
+        }
+        // updated_at = created_at
+        ps.setLong(13, (Long) wf[11]);
+        ps.addBatch();
+      }
+      ps.executeBatch();
+    }
   }
 
   // ---------------------------------------------------------------------------
