@@ -103,6 +103,7 @@ class ChaosServiceImpl implements ChaosService {
   }
 }
 
+// TODO: finish this test, run it many times but only in cloud
 // @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ChaosTest {
   private static final Logger logger = LoggerFactory.getLogger(ChaosTest.class);

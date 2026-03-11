@@ -12,8 +12,6 @@ public interface ExecutingService {
 
   void sleepingWorkflow(double seconds);
 
-  void setExecutingService(ExecutingService service);
-
   void stepWithNoReturn();
 
   public static class MyAppException extends Exception {
