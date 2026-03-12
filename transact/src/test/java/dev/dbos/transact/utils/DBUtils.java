@@ -281,14 +281,14 @@ public class DBUtils {
     }
   }
 
-  public record Event(String key, String value, String serialization) {}
+  public record EventRow(String key, String value, String serialization) {}
 
-  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId)
+  public static List<EventRow> getWorkflowEvents(DataSource ds, String workflowId)
       throws SQLException {
     return getWorkflowEvents(ds, workflowId, null);
   }
 
-  public static List<Event> getWorkflowEvents(DataSource ds, String workflowId, String schema)
+  public static List<EventRow> getWorkflowEvents(DataSource ds, String workflowId, String schema)
       throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     try (var conn = ds.getConnection(); ) {
@@ -297,27 +297,27 @@ public class DBUtils {
               "SELECT * FROM \"%s\".workflow_events WHERE workflow_uuid = ?".formatted(schema));
       stmt.setString(1, workflowId);
       var rs = stmt.executeQuery();
-      List<Event> rows = new ArrayList<>();
+      List<EventRow> rows = new ArrayList<>();
 
       while (rs.next()) {
         var key = rs.getString("key");
         var value = rs.getString("value");
         var serialization = rs.getString("serialization");
-        rows.add(new Event(key, value, serialization));
+        rows.add(new EventRow(key, value, serialization));
       }
 
       return rows;
     }
   }
 
-  public record EventHistory(int stepId, String key, String value, String serialization) {}
+  public record EventHistoryRow(int stepId, String key, String value, String serialization) {}
 
-  public static List<EventHistory> getWorkflowEventHistory(DataSource ds, String workflowId)
+  public static List<EventHistoryRow> getWorkflowEventHistory(DataSource ds, String workflowId)
       throws SQLException {
     return getWorkflowEventHistory(ds, workflowId, null);
   }
 
-  public static List<EventHistory> getWorkflowEventHistory(
+  public static List<EventHistoryRow> getWorkflowEventHistory(
       DataSource ds, String workflowId, String schema) throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     try (var conn = ds.getConnection(); ) {
@@ -327,14 +327,14 @@ public class DBUtils {
                   .formatted(schema));
       stmt.setString(1, workflowId);
       var rs = stmt.executeQuery();
-      List<EventHistory> rows = new ArrayList<>();
+      List<EventHistoryRow> rows = new ArrayList<>();
 
       while (rs.next()) {
         var stepId = rs.getInt("function_id");
         var key = rs.getString("key");
         var value = rs.getString("value");
         var serialization = rs.getString("serialization");
-        rows.add(new EventHistory(stepId, key, value, serialization));
+        rows.add(new EventHistoryRow(stepId, key, value, serialization));
       }
 
       return rows;

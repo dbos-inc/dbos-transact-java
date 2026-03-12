@@ -12,50 +12,44 @@ jobs:
       fail-fast: false
       matrix:
         jdk-version: ['17', '21', '25']
-        jdk-distro: ['corretto', 'graalvm', 'microsoft', 'oracle', 'semeru', 'temurin', 'zulu' ]
-        exclude:
-          - jdk-version: 17
-            jdk-distro: graalvm
-        include:
-          - jdk-distro: graalvm
-            jdk-version: 17.0.12
+        jdk-distro: ['microsoft', 'oracle', 'temurin' ]
 
-    services:
-      postgres:
-        image: sibedge/postgres-plv8:16.3-3.2.2
-        env:
-          POSTGRES_PASSWORD: dbos
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
+    # services:
+    #   postgres:
+    #     image: sibedge/postgres-plv8:16.3-3.2.2
+    #     env:
+    #       POSTGRES_PASSWORD: dbos
+    #     options: >-
+    #       --health-cmd pg_isready
+    #       --health-interval 10s
+    #       --health-timeout 5s
+    #       --health-retries 5
+    #     ports:
+    #       - 5432:5432
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0 # fetch-depth 0 needed for version calculation
 
       - name: Set up JDK ${{ matrix.jdk-distro }} ${{ matrix.jdk-version }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: ${{ matrix.jdk-version }}
           distribution: ${{ matrix.jdk-distro }}
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
-      - name: Wait for PostgreSQL
-        run: |
-          until pg_isready -h localhost -p 5432 -U postgres; do
-            echo "Waiting for PostgreSQL..."
-            sleep 2
-          done
-        env:
-          PGPASSWORD: dbos
+      # - name: Wait for PostgreSQL
+      #   run: |
+      #     until pg_isready -h localhost -p 5432 -U postgres; do
+      #       echo "Waiting for PostgreSQL..."
+      #       sleep 2
+      #     done
+      #   env:
+      #     PGPASSWORD: dbos
 
       - name: Run tests
         run: ./gradlew clean build
@@ -72,7 +66,7 @@ jobs:
         if: always()
 
       - name: Upload JDK ${{ matrix.jdk-distro }} ${{ matrix.jdk-version }} test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results-${{ matrix.jdk-version }}-${{ matrix.jdk-distro }}

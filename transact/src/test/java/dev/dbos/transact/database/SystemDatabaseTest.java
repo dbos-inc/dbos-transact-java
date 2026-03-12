@@ -6,50 +6,38 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
-import java.sql.SQLException;
-import java.util.UUID;
-
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class SystemDatabaseTest {
-  private static DBOSConfig config;
-  private SystemDatabase sysdb;
-  private HikariDataSource dataSource;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    config =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+
+  DBOSConfig dbosConfig;
+  @AutoClose SystemDatabase sysdb;
+
+  @AutoClose DBOS dbos;
+  @AutoClose HikariDataSource dataSource;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(config);
-    MigrationManager.runMigrations(config);
-    sysdb = SystemDatabase.create(config);
-    dataSource =
-        SystemDatabase.createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword());
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    dataSource.close();
-    sysdb.close();
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
+    MigrationManager.runMigrations(dbosConfig);
+    sysdb = SystemDatabase.create(dbosConfig);
+    dataSource = pgContainer.dataSource();
   }
 
   @Test
@@ -165,48 +153,5 @@ public class SystemDatabaseTest {
     var after = DBUtils.getWorkflowRow(dataSource, wfid);
 
     assertTrue(before.equals(after));
-  }
-
-  void logWorkflowDetails(String wfid, String name) throws Exception {
-    var wfstat = DBOS.getWorkflowStatus(wfid);
-    System.out.println(
-        String.format("Workflow (%s) ID: %s. Status %s", name, wfid, wfstat.status()));
-    var steps = DBOS.listWorkflowSteps(wfid);
-    for (var step : steps) {
-      System.out.println(
-          String.format("  - # %d %s %s", step.functionId(), step.functionName(), step.output()));
-    }
-    var events = DBUtils.getWorkflowEvents(dataSource, wfid);
-    for (var event : events) {
-      System.out.println(String.format("  $ %s", event));
-    }
-  }
-
-  // @RepeatedTest(100)
-  public void testSysDbWfDisruption() throws Exception {
-    var dsvci = new DisruptiveServiceImpl();
-    dsvci.setDS(dataSource);
-    var dsvc = DBOS.registerWorkflows(DisruptiveService.class, dsvci, UUID.randomUUID().toString());
-    dsvci.setSelf(dsvc);
-    DBOS.launch();
-    DBOSTestAccess.getSystemDatabase().speedUpPollingForTest();
-    try {
-      assertEquals("Hehehe", dsvc.dbLossBetweenSteps());
-
-      assertEquals("Hehehe", dsvc.runChildWf());
-
-      var h1 = DBOS.startWorkflow(() -> dsvc.wfPart1());
-      var h2 = DBOS.startWorkflow(() -> dsvc.wfPart2(h1.workflowId()));
-
-      if (!"Part1hello1".equals(h1.getResult()) || !"Part2v1".equals(h2.getResult())) {
-        logWorkflowDetails(h1.workflowId(), "Part 1 Details");
-        logWorkflowDetails(h2.workflowId(), "Part 2 Details");
-      }
-
-      assertEquals("Part1hello1", h1.getResult());
-      assertEquals("Part2v1", h2.getResult());
-    } finally {
-      DBOS.shutdown();
-    }
   }
 }

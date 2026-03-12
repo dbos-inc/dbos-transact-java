@@ -5,166 +5,107 @@ package dev.dbos.transact
 
 import dev.dbos.transact.execution.ThrowingRunnable
 import dev.dbos.transact.execution.ThrowingSupplier
-import dev.dbos.transact.execution.DBOSLifecycleListener
 import dev.dbos.transact.workflow.WorkflowHandle
 import dev.dbos.transact.workflow.StepOptions
-import dev.dbos.transact.workflow.ForkOptions
-import dev.dbos.transact.workflow.Queue
-import dev.dbos.transact.workflow.ListWorkflowsInput
-import dev.dbos.transact.registerLifecycleListener
-import dev.dbos.transact.config.DBOSConfig
-import dev.dbos.transact.listWorkflowSteps
-import dev.dbos.transact.database.ExternalState
-import java.time.Duration
+import dev.dbos.transact.StartWorkflowOptions
+
+// Note: there is no Kotlin extension for startWorkflow with just a lambda parameter.
+// Kotlin prefers members over extensions, and automatically SAM-converts lambdas to functional
+// interfaces (like ThrowingSupplier), so such an extension would be unreachable — the Java member
+// wins before the extension is considered. This does not affect overloads that also take a
+// StartWorkflowOptions parameter, since those signatures are distinct from any Java member.
+// For the no-options case, we provide beginWorkflow as a uniquely-named alternative.
 
 /**
- * Marks this as 'synthetic' so Java compilers ignore it, 
- * but Kotlin compilers see it perfectly.
+ * Starts a workflow using trailing lambda syntax, with the given [options].
+ *
+ * This is a Kotlin-friendly alternative to [DBOS.startWorkflow] that places the lambda last,
+ * enabling trailing lambda call syntax. The exception type is fixed to [Exception].
+ *
+ * @param T the return type of the workflow
+ * @param options workflow options such as workflow ID
+ * @param block the workflow body to execute
+ * @return a [WorkflowHandle] for retrieving the workflow result
  */
 @JvmSynthetic
-inline fun <reified T : Any> registerWorkflows(implementation: T, instanceName: String = ""): T {
-    return DBOS.registerWorkflows(T::class.java, implementation, instanceName)
+fun <T> DBOS.startWorkflow(
+    options: StartWorkflowOptions,
+    block: () -> T
+): WorkflowHandle<T, Exception> {
+    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() }, options)
 }
 
+/**
+ * Starts a workflow using trailing lambda syntax, with default options.
+ *
+ * Named `beginWorkflow` rather than `startWorkflow` to avoid an unresolvable collision with the
+ * Java member `startWorkflow(ThrowingSupplier)`: Kotlin SAM-converts lambdas to functional
+ * interfaces and prefers members over extensions, making a same-named extension unreachable.
+ *
+ * @param T the return type of the workflow
+ * @param block the workflow body to execute
+ * @return a [WorkflowHandle] for retrieving the workflow result
+ */
 @JvmSynthetic
-fun registerQueue(queue: Queue) = DBOS.registerQueue(queue)
-
-@JvmSynthetic
-fun registerLifecycleListener(listener: DBOSLifecycleListener) = DBOS.registerLifecycleListener(listener)
-
-@JvmSynthetic
-fun configure(config: DBOSConfig) = DBOS.configure(config)
-
-@JvmSynthetic
-fun launch() = DBOS.launch()
-
-@JvmSynthetic
-fun shutdown() = DBOS.shutdown()
-
-@get:JvmSynthetic
-val workflowId: String?
-    get() = DBOS.workflowId()
-
-@get:JvmSynthetic
-val stepId: Int?
-    get() = DBOS.stepId()
-
-@get:JvmSynthetic
-val inWorkflow: Boolean
-    get() = DBOS.inWorkflow()
-
-@get:JvmSynthetic
-val inStep: Boolean
-    get() = DBOS.inStep()
-
-@JvmSynthetic
-fun getQueue(queueName: String) = DBOS.getQueue(queueName)
-
-@JvmSynthetic
-fun sleep(duration: Duration) = DBOS.sleep(duration)
-
-@JvmSynthetic
-fun <T> startWorkflow(block: () -> T): WorkflowHandle<T, Exception> {
-    return DBOS.startWorkflow(ThrowingSupplier<T, Exception> { block() })
+fun <T> DBOS.beginWorkflow(
+    block: () -> T
+): WorkflowHandle<T, Exception> {
+    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() })
 }
 
+/**
+ * Starts a workflow using trailing lambda syntax, with the given [options].
+ *
+ * This overload mirrors [beginWorkflow] but accepts [StartWorkflowOptions], provided as a
+ * convenience so callers can use either name consistently.
+ *
+ * @param T the return type of the workflow
+ * @param options workflow options such as workflow ID
+ * @param block the workflow body to execute
+ * @return a [WorkflowHandle] for retrieving the workflow result
+ */
 @JvmSynthetic
-fun <T> startWorkflow(workflowId: String, block: () -> T): WorkflowHandle<T, Exception> {
-    return DBOS.startWorkflow(ThrowingSupplier<T, Exception> { block() }, StartWorkflowOptions(workflowId))
+fun <T> DBOS.beginWorkflow(
+    options: StartWorkflowOptions,
+    block: () -> T
+): WorkflowHandle<T, Exception> {
+    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() }, options)
 }
 
+/**
+ * Runs a step using trailing lambda syntax, with the given [options].
+ *
+ * This is a Kotlin-friendly alternative to [DBOS.runStep] that places the lambda last,
+ * enabling trailing lambda call syntax. The exception type is fixed to [Exception].
+ *
+ * @param T the return type of the step
+ * @param options step options such as step name and retry policy
+ * @param block the step body to execute
+ * @return the result of the step
+ */
 @JvmSynthetic
-fun <T> startWorkflow(options: StartWorkflowOptions, block: () -> T): WorkflowHandle<T, Exception> {
-    return DBOS.startWorkflow(ThrowingSupplier<T, Exception> { block() }, options)
+fun <T> DBOS.runStep(
+    options: StepOptions,
+    block: () -> T
+): T {
+    return this.runStep(ThrowingSupplier<T, Exception> { block() }, options)
 }
 
+/**
+ * Runs a step using trailing lambda syntax, with the given [name].
+ *
+ * This is a Kotlin-friendly alternative to [DBOS.runStep] that places the lambda last,
+ * enabling trailing lambda call syntax. The exception type is fixed to [Exception].
+ *
+ * @param T the return type of the step
+ * @param name the name of the step
+ * @param block the step body to execute
+ * @return the result of the step
+ */
 @JvmSynthetic
-@JvmName("startWorkflowUnit")
-fun startWorkflow(block: () -> Unit): WorkflowHandle<Void, Exception> {
-    return DBOS.startWorkflow(ThrowingRunnable<Exception> { block() })
+fun <T> DBOS.runStep(
+    name: String,
+    block: () -> T
+): T {
+    return this.runStep(ThrowingSupplier<T, Exception> { block() }, name)
 }
-
-@JvmSynthetic
-@JvmName("startWorkflowUnit")
-fun startWorkflow(workflowId: String, block: () -> Unit): WorkflowHandle<Void, Exception> {
-    return DBOS.startWorkflow(ThrowingRunnable<Exception> { block() }, StartWorkflowOptions(workflowId))
-}
-
-@JvmSynthetic
-@JvmName("startWorkflowUnit")
-fun startWorkflow(options: StartWorkflowOptions, block: () -> Unit): WorkflowHandle<Void, Exception> {
-    return DBOS.startWorkflow(ThrowingRunnable<Exception> { block() }, options)
-}
-
-@JvmSynthetic
-@Throws(Exception::class)
-fun <T> getResult(workflowId: String) = DBOS.getResult<T, Exception>(workflowId)
-
-@JvmSynthetic
-fun getWorkflowStatus(workflowId: String) = DBOS.getWorkflowStatus(workflowId)
-
-@JvmSynthetic
-fun send(destinationId: String, message: Any, topic: String, idempotencyKey: String? = null) {
-    DBOS.send(destinationId, message, topic, idempotencyKey)
-}
-
-@JvmSynthetic
-fun recv(topic: String, timeout: Duration) = DBOS.recv(topic, timeout)
-
-@JvmSynthetic
-fun setEvent(key: String, value: Any) = DBOS.setEvent(key, value)
-
-@JvmSynthetic
-fun getEvent(workflowId: String, key: String, timeout: Duration) = DBOS.getEvent(workflowId, key, timeout)
-
-@JvmSynthetic
-fun runStep(name: String, block: () -> Unit) = DBOS.runStep(ThrowingRunnable { block() }, StepOptions(name))
-
-@JvmSynthetic
-fun runStep(options: StepOptions, block: () -> Unit) = DBOS.runStep(ThrowingRunnable { block() }, options)
-
-@JvmSynthetic
-fun <T> runStep(name: String, block: () -> T) = DBOS.runStep(ThrowingSupplier<T, Exception> { block() }, StepOptions(name))
-
-@JvmSynthetic
-fun <T> runStep(options: StepOptions, block: () -> T) = DBOS.runStep(ThrowingSupplier<T, Exception> { block() }, options)
-
-@JvmSynthetic
-fun <T> resumeWorkflow(workflowId: String) = DBOS.resumeWorkflow<T, Exception>(workflowId)
-
-@JvmSynthetic
-fun cancelWorkflow(workflowId: String) = DBOS.cancelWorkflow(workflowId)
-
-@JvmSynthetic
-fun <T> forkWorkflow(
-    workflowId: String, 
-    startStep: Int, 
-    options: ForkOptions = ForkOptions()
-) = DBOS.forkWorkflow<T, Exception>(workflowId, startStep, options)
-
-@JvmSynthetic
-fun <T> retrieveWorkflow(workflowId: String) = DBOS.retrieveWorkflow<T, Exception>(workflowId)
-
-@JvmSynthetic
-fun listWorkflows(input: ListWorkflowsInput) = DBOS.listWorkflows(input)
-
-@JvmSynthetic
-fun listWorkflowSteps(workflowId: String) = DBOS.listWorkflowSteps(workflowId)
-
-@JvmSynthetic
-fun getRegisteredWorkflows() = DBOS.getRegisteredWorkflows()
-
-@JvmSynthetic
-fun getRegisteredWorkflowInstances() = DBOS.getRegisteredWorkflowInstances()
-
-@JvmSynthetic
-fun getExternalState(service: String, workflowName: String, key: String) = DBOS.getExternalState(service, workflowName, key)
-
-@JvmSynthetic
-fun upsertExternalState(state: ExternalState) = DBOS.upsertExternalState(state)
-
-@JvmSynthetic
-fun patch(name: String) = DBOS.patch(name)
-
-@JvmSynthetic
-fun deprecatePatch(name: String) = DBOS.deprecatePatch(name)

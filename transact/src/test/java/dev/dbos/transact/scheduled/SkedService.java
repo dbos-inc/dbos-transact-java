@@ -3,6 +3,7 @@ package dev.dbos.transact.scheduled;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.workflow.Scheduled;
 import dev.dbos.transact.workflow.Workflow;
 
@@ -31,6 +32,12 @@ class SkedServiceImpl implements SkedService {
 
   private static final Logger logger = LoggerFactory.getLogger(SkedServiceImpl.class);
 
+  private final DBOS dbos;
+
+  public SkedServiceImpl(DBOS dbos) {
+    this.dbos = dbos;
+  }
+
   public volatile int everySecondCounter = 0;
   public volatile int everyThirdCounter = 0;
   public volatile Instant scheduled;
@@ -43,7 +50,7 @@ class SkedServiceImpl implements SkedService {
   @Workflow
   @Scheduled(cron = "0/1 * * * * *")
   public void everySecond(Instant scheduled, Instant actual) {
-    assertTrue(DBOS.inWorkflow());
+    assertTrue(DBOSContext.inWorkflow());
     assert scheduled.equals(scheduled.truncatedTo(ChronoUnit.SECONDS));
     logger.info("Executing everySecond {} {} {}", everySecondCounter, scheduled, actual);
     ++everySecondCounter;
@@ -71,8 +78,8 @@ class SkedServiceImpl implements SkedService {
   @Scheduled(cron = "0/4 * * * * *")
   public void withSteps(Instant scheduled, Instant actual) {
     logger.info("Executing withSteps {} {}", scheduled, actual);
-    DBOS.runStep(() -> {}, "stepOne");
-    DBOS.runStep(() -> {}, "stepTwo");
+    dbos.runStep(() -> {}, "stepOne");
+    dbos.runStep(() -> {}, "stepTwo");
   }
 
   @Override

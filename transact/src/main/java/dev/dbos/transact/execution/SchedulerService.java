@@ -39,7 +39,7 @@ public class SchedulerService implements DBOSLifecycleListener {
   private static final Class<?>[] expectedParams = new Class<?>[] {Instant.class, Instant.class};
 
   private final String defaultSchedulerQueueName;
-  private final AtomicReference<DBOS.Instance> dbosRef = new AtomicReference<>();
+  private final AtomicReference<DBOS> dbosRef = new AtomicReference<>();
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
 
   public SchedulerService(String defaultSchedulerQueueName) {
@@ -62,8 +62,8 @@ public class SchedulerService implements DBOSLifecycleListener {
   }
 
   @Override
-  public void dbosLaunched(DBOS.Instance dbos) {
-    DBOS.Instance prev = this.dbosRef.getAndUpdate(existing -> existing == null ? dbos : existing);
+  public void dbosLaunched(DBOS dbos) {
+    DBOS prev = this.dbosRef.getAndUpdate(existing -> existing == null ? dbos : existing);
     if (prev == null) {
       startScheduledWorkflows(dbos);
     } else if (prev != dbos) {
@@ -74,14 +74,14 @@ public class SchedulerService implements DBOSLifecycleListener {
 
   @Override
   public void dbosShutDown() {
-    DBOS.Instance prev = this.dbosRef.getAndSet(null);
+    DBOS prev = this.dbosRef.getAndSet(null);
     if (prev != null) {
       List<Runnable> notRun = scheduler.shutdownNow();
       logger.debug("Shutting down scheduler service. Tasks not run {}", notRun.size());
     }
   }
 
-  private static ZonedDateTime getLastTime(DBOS.Instance dbos, ScheduledWorkflow swf) {
+  private static ZonedDateTime getLastTime(DBOS dbos, ScheduledWorkflow swf) {
     if (!swf.ignoreMissed()) {
       var state =
           dbos.getExternalState(
@@ -94,7 +94,7 @@ public class SchedulerService implements DBOSLifecycleListener {
   }
 
   private static ZonedDateTime setLastTime(
-      DBOS.Instance dbos, ScheduledWorkflow swf, ZonedDateTime lastTime) {
+      DBOS dbos, ScheduledWorkflow swf, ZonedDateTime lastTime) {
     if (swf.ignoreMissed()) {
       return ZonedDateTime.now(ZoneOffset.UTC).withNano(0);
     }
@@ -112,7 +112,7 @@ public class SchedulerService implements DBOSLifecycleListener {
   }
 
   private static List<ScheduledWorkflow> getScheduledWorkflows(
-      DBOS.Instance dbos, String defaultSchedulerQueueName) {
+      DBOS dbos, String defaultSchedulerQueueName) {
     var registeredWorkflows = dbos.getRegisteredWorkflows();
     var scheduledWorkflows = new ArrayList<ScheduledWorkflow>();
     for (var wf : registeredWorkflows) {
@@ -159,7 +159,7 @@ public class SchedulerService implements DBOSLifecycleListener {
     return scheduledWorkflows;
   }
 
-  private void startScheduledWorkflows(DBOS.Instance dbos) {
+  private void startScheduledWorkflows(DBOS dbos) {
     logger.debug("startScheduledWorkflows");
 
     var scheduledWorkflows = getScheduledWorkflows(dbos, defaultSchedulerQueueName);

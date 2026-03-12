@@ -6,35 +6,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.migrations.MigrationManager;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class ExternalStateTest {
-  private static SystemDatabase systemDatabase;
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
+  @AutoClose SystemDatabase systemDatabase;
+  DBOSConfig dbosConfig;
 
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-
-    DBUtils.recreateDB(dbosConfig);
+  @BeforeEach
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
-    systemDatabase = SystemDatabase.create(dbosConfig);
-  }
 
-  @AfterAll
-  static void onetimeTearDown() throws Exception {
-    systemDatabase.close();
+    systemDatabase = SystemDatabase.create(dbosConfig);
   }
 
   @Test

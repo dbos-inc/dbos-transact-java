@@ -3,14 +3,12 @@ package dev.dbos.transact.notifications;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.*;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -20,8 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -50,48 +47,57 @@ interface NotService {
 
 class NotServiceImpl implements NotService {
 
+  private final DBOS dbos;
+
+  NotServiceImpl(DBOS dbos) {
+    this.dbos = dbos;
+  }
+
   final CountDownLatch recvReadyLatch = new CountDownLatch(1);
   final CountDownLatch recvTwoLatch = new CountDownLatch(1);
 
   @Workflow
+  @Override
   public void sendWorkflow(String target, String topic, String msg) {
     try {
       // Wait for recv to signal that it's ready
       recvReadyLatch.await();
       // Now proceed with sending
-      DBOS.send(target, msg, topic);
+      dbos.send(target, msg, topic);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new RuntimeException("Interrupted while waiting for recv signal", e);
     }
-    // DBOS.send(target, msg, topic);
   }
 
   @Workflow
+  @Override
   public String recvWorkflow(String topic, Duration timeout) {
     recvReadyLatch.countDown();
-    String msg = (String) DBOS.recv(topic, timeout);
+    String msg = (String) dbos.recv(topic, timeout);
     return msg;
   }
 
   @Workflow
+  @Override
   public String recvMultiple(String topic) {
     recvReadyLatch.countDown();
-    String msg1 = (String) DBOS.recv(topic, Duration.ofSeconds(5));
-    String msg2 = (String) DBOS.recv(topic, Duration.ofSeconds(5));
-    String msg3 = (String) DBOS.recv(topic, Duration.ofSeconds(5));
+    String msg1 = (String) dbos.recv(topic, Duration.ofSeconds(5));
+    String msg2 = (String) dbos.recv(topic, Duration.ofSeconds(5));
+    String msg3 = (String) dbos.recv(topic, Duration.ofSeconds(5));
     return msg1 + msg2 + msg3;
   }
 
   @Workflow
+  @Override
   public int recvCount(String topic) {
     try {
       recvReadyLatch.await();
     } catch (InterruptedException e) {
     }
-    String msg1 = (String) DBOS.recv(topic, Duration.ofSeconds(0));
-    String msg2 = (String) DBOS.recv(topic, Duration.ofSeconds(0));
-    String msg3 = (String) DBOS.recv(topic, Duration.ofSeconds(0));
+    String msg1 = (String) dbos.recv(topic, Duration.ofSeconds(0));
+    String msg2 = (String) dbos.recv(topic, Duration.ofSeconds(0));
+    String msg3 = (String) dbos.recv(topic, Duration.ofSeconds(0));
     int rc = 0;
     if (msg1 != null) ++rc;
     if (msg2 != null) ++rc;
@@ -100,86 +106,83 @@ class NotServiceImpl implements NotService {
   }
 
   @Workflow
+  @Override
   public String concWorkflow(String topic) {
     recvReadyLatch.countDown();
-    String message = (String) DBOS.recv(topic, Duration.ofSeconds(5));
+    String message = (String) dbos.recv(topic, Duration.ofSeconds(5));
     return message;
   }
 
   @Workflow
+  @Override
   public String disallowedRecvInStep() {
-    DBOS.runStep(() -> DBOS.recv("a", Duration.ofSeconds(0)), "recv");
+    dbos.runStep(() -> dbos.recv("a", Duration.ofSeconds(0)), "recv");
     return "Done";
   }
 
   @Workflow
+  @Override
   public String recvTwoMessages() {
-    String msg1 = (String) DBOS.recv(null, Duration.ofSeconds(10));
+    String msg1 = (String) dbos.recv(null, Duration.ofSeconds(10));
     recvTwoLatch.countDown();
-    String msg2 = (String) DBOS.recv(null, Duration.ofSeconds(2));
+    String msg2 = (String) dbos.recv(null, Duration.ofSeconds(2));
     return "%s-%s".formatted(msg1, msg2);
   }
 
   @Workflow
+  @Override
   public String recvOneMessage() {
-    String msg1 = (String) DBOS.recv(null, Duration.ofSeconds(10));
+    String msg1 = (String) dbos.recv(null, Duration.ofSeconds(10));
     return msg1;
   }
 
   @Workflow
+  @Override
   public void sendFromWF(String destination, String msg, String idempotencyKey) {
-    DBOS.send(destination, msg, null, idempotencyKey);
+    dbos.send(destination, msg, null, idempotencyKey);
   }
 
   @Workflow
+  @Override
   public void sendFromStep(String destination, String msg, String idempotencyKey) {
-    DBOS.runStep(() -> DBOS.send(destination, msg, null, idempotencyKey), "send");
+    dbos.runStep(() -> dbos.send(destination, msg, null, idempotencyKey), "send");
   }
 }
 
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class NotificationServiceTest {
 
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    NotificationServiceTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+  private DBOSConfig dbosConfig;
+  @AutoClose private DBOS dbos;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    DBOS.shutdown();
+  void setup() {
+    this.dbosConfig = pgContainer.dbosConfig();
+    this.dbos = new DBOS(dbosConfig);
   }
 
   @Test
   public void basic_send_recv() throws Exception {
 
-    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
+    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
 
-    DBOS.launch();
+    dbos.launch();
 
     String wfid1 = "recvwf1";
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.recvWorkflow("topic1", Duration.ofSeconds(10)),
         new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "HelloDBOS"),
         new StartWorkflowOptions(wfid2));
 
-    var handle1 = DBOS.retrieveWorkflow(wfid1);
-    var handle2 = DBOS.retrieveWorkflow(wfid2);
+    var handle1 = dbos.retrieveWorkflow(wfid1);
+    var handle2 = dbos.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
@@ -187,12 +190,12 @@ class NotificationServiceTest {
     assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
     assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
 
-    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wfid1);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
 
     // assertEquals(1, stepInfos.size()) ; cannot do this because sleep is a maybe
     assertEquals("DBOS.recv", stepInfos.get(0).functionName());
 
-    stepInfos = DBOS.listWorkflowSteps(wfid2);
+    stepInfos = dbos.listWorkflowSteps(wfid2);
     assertEquals(1, stepInfos.size());
     assertEquals("DBOS.send", stepInfos.get(0).functionName());
   }
@@ -200,28 +203,28 @@ class NotificationServiceTest {
   @Test
   public void multiple_send_recv() throws Exception {
 
-    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
-    DBOS.launch();
+    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    dbos.launch();
 
     String wfid1 = "recvwf1";
-    DBOS.startWorkflow(() -> notService.recvMultiple("topic1"), new StartWorkflowOptions(wfid1));
+    dbos.startWorkflow(() -> notService.recvMultiple("topic1"), new StartWorkflowOptions(wfid1));
 
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "Hello1"),
         new StartWorkflowOptions("send1"));
-    DBOS.retrieveWorkflow("send1").getResult();
+    dbos.retrieveWorkflow("send1").getResult();
 
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "Hello2"),
         new StartWorkflowOptions("send2"));
-    DBOS.retrieveWorkflow("send2").getResult();
+    dbos.retrieveWorkflow("send2").getResult();
 
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "Hello3"),
         new StartWorkflowOptions("send3"));
-    DBOS.retrieveWorkflow("send3").getResult();
+    dbos.retrieveWorkflow("send3").getResult();
 
-    var handle1 = DBOS.retrieveWorkflow(wfid1);
+    var handle1 = dbos.retrieveWorkflow(wfid1);
 
     String result = (String) handle1.getResult();
     assertEquals("Hello1Hello2Hello3", result);
@@ -231,17 +234,17 @@ class NotificationServiceTest {
 
   @Test
   public void send_oaoo() throws Exception {
-    var simpl = new NotServiceImpl();
-    NotService notService = DBOS.registerWorkflows(NotService.class, simpl);
-    DBOS.launch();
+    var simpl = new NotServiceImpl(dbos);
+    NotService notService = dbos.registerWorkflows(NotService.class, simpl);
+    dbos.launch();
 
     String wfid1 = "recvwfc";
     var handle1 =
-        DBOS.startWorkflow(() -> notService.recvCount("topic1"), new StartWorkflowOptions(wfid1));
+        dbos.startWorkflow(() -> notService.recvCount("topic1"), new StartWorkflowOptions(wfid1));
 
-    DBOS.send(wfid1, "hi", "topic1", "dothisonce");
-    DBOS.send(wfid1, "hi", "topic1", "dothisonce");
-    DBOS.send(wfid1, "hi", "topic1", "dothisonce");
+    dbos.send(wfid1, "hi", "topic1", "dothisonce");
+    dbos.send(wfid1, "hi", "topic1", "dothisonce");
+    dbos.send(wfid1, "hi", "topic1", "dothisonce");
     simpl.recvReadyLatch.countDown();
 
     assertEquals(1, handle1.getResult());
@@ -250,20 +253,20 @@ class NotificationServiceTest {
   @Test
   public void notopic() throws Exception {
 
-    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
-    DBOS.launch();
+    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    dbos.launch();
 
     String wfid1 = "recvwf1";
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.recvWorkflow(null, Duration.ofSeconds(5)),
         new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.sendWorkflow(wfid1, null, "HelloDBOS"), new StartWorkflowOptions(wfid2));
 
-    var handle1 = DBOS.retrieveWorkflow(wfid1);
-    var handle2 = DBOS.retrieveWorkflow(wfid2);
+    var handle1 = dbos.retrieveWorkflow(wfid1);
+    var handle2 = dbos.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
@@ -274,13 +277,13 @@ class NotificationServiceTest {
 
   @Test
   public void noWorkflowRecv() {
-    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
-    DBOS.launch();
+    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    dbos.launch();
     var e1 =
         assertThrows(
             IllegalStateException.class,
             () -> {
-              DBOS.recv("someTopic", Duration.ofSeconds(5));
+              dbos.recv("someTopic", Duration.ofSeconds(5));
             });
     assertEquals("DBOS.recv() must be called from a workflow.", e1.getMessage());
     var e2 =
@@ -295,8 +298,8 @@ class NotificationServiceTest {
   @Test
   public void sendNotexistingID() throws Exception {
 
-    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
-    DBOS.launch();
+    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    dbos.launch();
 
     // just to open the latch
     try (var id = new WorkflowOptions("abc").setContext()) {
@@ -312,20 +315,20 @@ class NotificationServiceTest {
   @Test
   public void sendNull() throws Exception {
 
-    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
-    DBOS.launch();
+    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    dbos.launch();
 
     String wfid1 = "recvwf1";
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)),
         new StartWorkflowOptions(wfid1));
 
     String wfid2 = "sendf1";
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", null), new StartWorkflowOptions(wfid2));
 
-    var handle1 = DBOS.retrieveWorkflow(wfid1);
-    var handle2 = DBOS.retrieveWorkflow(wfid2);
+    var handle1 = dbos.retrieveWorkflow(wfid1);
+    var handle2 = dbos.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertNull(result);
@@ -337,8 +340,8 @@ class NotificationServiceTest {
   @Test
   public void timeout() {
 
-    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
-    DBOS.launch();
+    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    dbos.launch();
 
     String wfid1 = "recvwf1";
 
@@ -360,8 +363,8 @@ class NotificationServiceTest {
     String wfuuid = UUID.randomUUID().toString();
     String topic = "test_topic";
 
-    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
-    DBOS.launch();
+    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    dbos.launch();
 
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {
@@ -396,11 +399,11 @@ class NotificationServiceTest {
   @Test
   public void recvSleep() throws Exception {
 
-    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
-    DBOS.launch();
+    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    dbos.launch();
 
     String wfid1 = "recvwf1";
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)),
         new StartWorkflowOptions(wfid1));
 
@@ -409,12 +412,12 @@ class NotificationServiceTest {
     // forcing the recv to wait on condition
     Thread.sleep(2000);
 
-    DBOS.startWorkflow(
+    dbos.startWorkflow(
         () -> notService.sendWorkflow(wfid1, "topic1", "HelloDBOS"),
         new StartWorkflowOptions(wfid2));
 
-    var handle1 = DBOS.retrieveWorkflow(wfid1);
-    var handle2 = DBOS.retrieveWorkflow(wfid2);
+    var handle1 = dbos.retrieveWorkflow(wfid1);
+    var handle2 = dbos.retrieveWorkflow(wfid2);
 
     String result = (String) handle1.getResult();
     assertEquals("HelloDBOS", result);
@@ -422,13 +425,13 @@ class NotificationServiceTest {
     assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
     assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
 
-    List<StepInfo> stepInfos = DBOS.listWorkflowSteps(wfid1);
+    List<StepInfo> stepInfos = dbos.listWorkflowSteps(wfid1);
 
     assertEquals(2, stepInfos.size());
     assertEquals("DBOS.recv", stepInfos.get(0).functionName());
     assertEquals("DBOS.sleep", stepInfos.get(1).functionName());
 
-    stepInfos = DBOS.listWorkflowSteps(wfid2);
+    stepInfos = dbos.listWorkflowSteps(wfid2);
     assertEquals(1, stepInfos.size());
     assertEquals("DBOS.send", stepInfos.get(0).functionName());
   }
@@ -436,24 +439,24 @@ class NotificationServiceTest {
   @Test
   public void sendOutsideWFTest() throws Exception {
 
-    NotService notService = DBOS.registerWorkflows(NotService.class, new NotServiceImpl());
-    DBOS.launch();
+    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    dbos.launch();
 
     String wfid1 = "recvwf1";
 
     var options = new StartWorkflowOptions(wfid1);
     WorkflowHandle<String, ?> handle =
-        DBOS.startWorkflow(() -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)), options);
+        dbos.startWorkflow(() -> notService.recvWorkflow("topic1", Duration.ofSeconds(5)), options);
 
     Thread.sleep(1000);
 
     assertEquals(WorkflowState.PENDING.name(), handle.getStatus().status());
-    DBOS.send(wfid1, "hello", "topic1");
+    dbos.send(wfid1, "hello", "topic1");
 
     assertEquals("hello", handle.getResult());
     assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
 
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(null);
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
   }
 
@@ -461,18 +464,18 @@ class NotificationServiceTest {
   public void sendSameIdempotencyKeyTest() throws Exception {
     // Sending with the same idempotency key twice delivers only one message.
 
-    var impl = new NotServiceImpl();
-    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
-    DBOS.launch();
+    var impl = new NotServiceImpl(dbos);
+    NotService notService = dbos.registerWorkflows(NotService.class, impl);
+    dbos.launch();
 
-    var handle = DBOS.startWorkflow(() -> notService.recvTwoMessages());
+    var handle = dbos.startWorkflow(() -> notService.recvTwoMessages());
 
     String idempotencyKey = UUID.randomUUID().toString();
 
-    DBOS.send(handle.workflowId(), "hello", null, idempotencyKey);
+    dbos.send(handle.workflowId(), "hello", null, idempotencyKey);
     impl.recvTwoLatch.await();
     // reusing the same idempotency key should not result in a duplicate message
-    DBOS.send(handle.workflowId(), "hello again", null, idempotencyKey);
+    dbos.send(handle.workflowId(), "hello again", null, idempotencyKey);
 
     // The second recv times out (returns null), proving only one message was delivered.
     assertEquals("hello-null", handle.getResult());
@@ -482,15 +485,15 @@ class NotificationServiceTest {
   public void sendDifferentIdempotencyKeyTest() throws Exception {
     // Different idempotency keys deliver separate messages.
 
-    var impl = new NotServiceImpl();
-    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
-    DBOS.launch();
+    var impl = new NotServiceImpl(dbos);
+    NotService notService = dbos.registerWorkflows(NotService.class, impl);
+    dbos.launch();
 
-    var handle = DBOS.startWorkflow(() -> notService.recvTwoMessages());
+    var handle = dbos.startWorkflow(() -> notService.recvTwoMessages());
 
-    DBOS.send(handle.workflowId(), "a", null, UUID.randomUUID().toString());
+    dbos.send(handle.workflowId(), "a", null, UUID.randomUUID().toString());
     impl.recvTwoLatch.await();
-    DBOS.send(handle.workflowId(), "b", null, UUID.randomUUID().toString());
+    dbos.send(handle.workflowId(), "b", null, UUID.randomUUID().toString());
 
     assertEquals("a-b", handle.getResult());
   }
@@ -499,11 +502,11 @@ class NotificationServiceTest {
   public void sendSameIdempotencyKeyFromWorkflowTest() throws Exception {
     // Send from a workflow with same idempotency key twice delivers only one message.
 
-    var impl = new NotServiceImpl();
-    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
-    DBOS.launch();
+    var impl = new NotServiceImpl(dbos);
+    NotService notService = dbos.registerWorkflows(NotService.class, impl);
+    dbos.launch();
 
-    var handle = DBOS.startWorkflow(() -> notService.recvTwoMessages());
+    var handle = dbos.startWorkflow(() -> notService.recvTwoMessages());
 
     String idempotencyKey = UUID.randomUUID().toString();
     notService.sendFromWF(handle.workflowId(), "hello", idempotencyKey);
@@ -518,11 +521,11 @@ class NotificationServiceTest {
   public void sendFromStep() throws Exception {
     // Send from a step (without idempotency key).
 
-    var impl = new NotServiceImpl();
-    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
-    DBOS.launch();
+    var impl = new NotServiceImpl(dbos);
+    NotService notService = dbos.registerWorkflows(NotService.class, impl);
+    dbos.launch();
 
-    var handle = DBOS.startWorkflow(() -> notService.recvOneMessage());
+    var handle = dbos.startWorkflow(() -> notService.recvOneMessage());
     notService.sendFromStep(handle.workflowId(), "hello", null);
 
     assertEquals("hello", handle.getResult());
@@ -532,11 +535,11 @@ class NotificationServiceTest {
   public void sendFromStepWithIdempotencyKey() throws Exception {
     // Send from a step with same idempotency key twice delivers only one message.
 
-    var impl = new NotServiceImpl();
-    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
-    DBOS.launch();
+    var impl = new NotServiceImpl(dbos);
+    NotService notService = dbos.registerWorkflows(NotService.class, impl);
+    dbos.launch();
 
-    var handle = DBOS.startWorkflow(() -> notService.recvTwoMessages());
+    var handle = dbos.startWorkflow(() -> notService.recvTwoMessages());
 
     String idempotencyKey = UUID.randomUUID().toString();
     notService.sendFromStep(handle.workflowId(), "hello", idempotencyKey);
