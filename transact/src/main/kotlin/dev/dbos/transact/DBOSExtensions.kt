@@ -9,168 +9,103 @@ import dev.dbos.transact.workflow.WorkflowHandle
 import dev.dbos.transact.workflow.StepOptions
 import dev.dbos.transact.StartWorkflowOptions
 
-/**
- * Kotlin extension methods for DBOS.startWorkflow that put lambda parameters last
- * for better Kotlin ergonomics with trailing lambda syntax.
- */
+// Note: there is no Kotlin extension for startWorkflow with just a lambda parameter.
+// Kotlin prefers members over extensions, and automatically SAM-converts lambdas to functional
+// interfaces (like ThrowingSupplier), so such an extension would be unreachable — the Java member
+// wins before the extension is considered. This does not affect overloads that also take a
+// StartWorkflowOptions parameter, since those signatures are distinct from any Java member.
+// For the no-options case, we provide beginWorkflow as a uniquely-named alternative.
 
 /**
- * Start workflow with options, lambda parameter last for trailing lambda syntax
+ * Starts a workflow using trailing lambda syntax, with the given [options].
+ *
+ * This is a Kotlin-friendly alternative to [DBOS.startWorkflow] that places the lambda last,
+ * enabling trailing lambda call syntax. The exception type is fixed to [Exception].
+ *
+ * @param T the return type of the workflow
+ * @param options workflow options such as workflow ID
+ * @param block the workflow body to execute
+ * @return a [WorkflowHandle] for retrieving the workflow result
  */
 @JvmSynthetic
-fun <T, E : Exception> DBOS.startWorkflow(
+fun <T> DBOS.startWorkflow(
     options: StartWorkflowOptions,
-    supplier: ThrowingSupplier<T, E>
-): WorkflowHandle<T, E> {
-    return startWorkflow(supplier, options)
-}
-
-/**
- * Start workflow with runnable and options, lambda parameter last for trailing lambda syntax
- */
-@JvmSynthetic
-fun <E : Exception> DBOS.startWorkflow(
-    options: StartWorkflowOptions,
-    runnable: ThrowingRunnable<E>
-): WorkflowHandle<Void, E> {
-    return startWorkflow(runnable, options)
-}
-
-/**
- * Convenient Kotlin extension for starting workflow with options and Kotlin lambda
- */
-@JvmSynthetic
-inline fun <T> DBOS.startWorkflow(
-    options: StartWorkflowOptions,
-    crossinline block: () -> T
+    block: () -> T
 ): WorkflowHandle<T, Exception> {
-    return startWorkflow(options, ThrowingSupplier<T, Exception> { block() })
+    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() }, options)
 }
 
 /**
- * Convenient Kotlin extension for starting workflow with Kotlin lambda (default options)
+ * Starts a workflow using trailing lambda syntax, with default options.
+ *
+ * Named `beginWorkflow` rather than `startWorkflow` to avoid an unresolvable collision with the
+ * Java member `startWorkflow(ThrowingSupplier)`: Kotlin SAM-converts lambdas to functional
+ * interfaces and prefers members over extensions, making a same-named extension unreachable.
+ *
+ * @param T the return type of the workflow
+ * @param block the workflow body to execute
+ * @return a [WorkflowHandle] for retrieving the workflow result
  */
 @JvmSynthetic
-inline fun <T> DBOS.startWorkflow(
-    crossinline block: () -> T
+fun <T> DBOS.beginWorkflow(
+    block: () -> T
 ): WorkflowHandle<T, Exception> {
-    return startWorkflow(ThrowingSupplier<T, Exception> { block() })
+    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() })
 }
 
 /**
- * Convenient Kotlin extension for starting workflow with options and Unit-returning Kotlin lambda
+ * Starts a workflow using trailing lambda syntax, with the given [options].
+ *
+ * This overload mirrors [beginWorkflow] but accepts [StartWorkflowOptions], provided as a
+ * convenience so callers can use either name consistently.
+ *
+ * @param T the return type of the workflow
+ * @param options workflow options such as workflow ID
+ * @param block the workflow body to execute
+ * @return a [WorkflowHandle] for retrieving the workflow result
  */
 @JvmSynthetic
-@JvmName("startWorkflowUnit")
-inline fun DBOS.startWorkflow(
+fun <T> DBOS.beginWorkflow(
     options: StartWorkflowOptions,
-    crossinline block: () -> Unit
-): WorkflowHandle<Void, Exception> {
-    return startWorkflow(options, ThrowingRunnable<Exception> { block() })
+    block: () -> T
+): WorkflowHandle<T, Exception> {
+    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() }, options)
 }
 
 /**
- * Convenient Kotlin extension for starting workflow with Unit-returning Kotlin lambda (default options)  
+ * Runs a step using trailing lambda syntax, with the given [options].
+ *
+ * This is a Kotlin-friendly alternative to [DBOS.runStep] that places the lambda last,
+ * enabling trailing lambda call syntax. The exception type is fixed to [Exception].
+ *
+ * @param T the return type of the step
+ * @param options step options such as step name and retry policy
+ * @param block the step body to execute
+ * @return the result of the step
  */
 @JvmSynthetic
-@JvmName("startWorkflowUnit")
-inline fun DBOS.startWorkflow(
-    crossinline block: () -> Unit
-): WorkflowHandle<Void, Exception> {
-    return startWorkflow(ThrowingRunnable<Exception> { block() })
-}
-
-/**
- * Kotlin extension methods for DBOS.runStep that put lambda parameters last
- * for better Kotlin ergonomics with trailing lambda syntax.
- */
-
-/**
- * Run step with options, lambda parameter last for trailing lambda syntax
- */
-@JvmSynthetic
-fun <T, E : Exception> DBOS.runStep(
-    opts: StepOptions,
-    stepfunc: ThrowingSupplier<T, E>
+fun <T> DBOS.runStep(
+    options: StepOptions,
+    block: () -> T
 ): T {
-    return runStep(stepfunc, opts)
+    return this.runStep(ThrowingSupplier<T, Exception> { block() }, options)
 }
 
 /**
- * Run step with name, lambda parameter last for trailing lambda syntax
+ * Runs a step using trailing lambda syntax, with the given [name].
+ *
+ * This is a Kotlin-friendly alternative to [DBOS.runStep] that places the lambda last,
+ * enabling trailing lambda call syntax. The exception type is fixed to [Exception].
+ *
+ * @param T the return type of the step
+ * @param name the name of the step
+ * @param block the step body to execute
+ * @return the result of the step
  */
 @JvmSynthetic
-fun <T, E : Exception> DBOS.runStep(
+fun <T> DBOS.runStep(
     name: String,
-    stepfunc: ThrowingSupplier<T, E>
+    block: () -> T
 ): T {
-    return runStep(stepfunc, name)
-}
-
-/**
- * Run step with options and runnable, lambda parameter last for trailing lambda syntax
- */
-@JvmSynthetic
-fun <E : Exception> DBOS.runStep(
-    opts: StepOptions,
-    stepfunc: ThrowingRunnable<E>
-) {
-    return runStep(stepfunc, opts)
-}
-
-/**
- * Run step with name and runnable, lambda parameter last for trailing lambda syntax
- */
-@JvmSynthetic
-fun <E : Exception> DBOS.runStep(
-    name: String,
-    stepfunc: ThrowingRunnable<E>
-) {
-    return runStep(stepfunc, name)
-}
-
-/**
- * Convenient Kotlin extension for running step with options and Kotlin lambda
- */
-@JvmSynthetic
-inline fun <T> DBOS.runStep(
-    opts: StepOptions,
-    crossinline block: () -> T
-): T {
-    return runStep(opts, ThrowingSupplier<T, Exception> { block() })
-}
-
-/**
- * Convenient Kotlin extension for running step with name and Kotlin lambda
- */
-@JvmSynthetic
-inline fun <T> DBOS.runStep(
-    name: String,
-    crossinline block: () -> T
-): T {
-    return runStep(name, ThrowingSupplier<T, Exception> { block() })
-}
-
-/**
- * Convenient Kotlin extension for running step with options and Unit-returning Kotlin lambda
- */
-@JvmSynthetic
-@JvmName("runStepUnit")
-inline fun DBOS.runStep(
-    opts: StepOptions,
-    crossinline block: () -> Unit
-) {
-    return runStep(opts, ThrowingRunnable<Exception> { block() })
-}
-
-/**
- * Convenient Kotlin extension for running step with name and Unit-returning Kotlin lambda
- */
-@JvmSynthetic
-@JvmName("runStepUnit")
-inline fun DBOS.runStep(
-    name: String,
-    crossinline block: () -> Unit
-) {
-    return runStep(name, ThrowingRunnable<Exception> { block() })
+    return this.runStep(ThrowingSupplier<T, Exception> { block() }, name)
 }
