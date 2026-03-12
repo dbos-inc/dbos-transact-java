@@ -54,7 +54,7 @@ public class ScaleTest {
   @Test
   @EnabledIfEnvironmentVariable(named = "SCALE_TEST", matches = "^true$")
   public void scaleTest() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var service = dbos.registerWorkflows(ScaleService.class, new ScaleServiceImpl());
       dbos.launch();
 

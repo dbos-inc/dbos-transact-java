@@ -31,7 +31,7 @@ interface ForkTestService {
 
 class ForkTestServiceImpl implements ForkTestService {
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
   private ForkTestService proxy;
 
   public int step1Count;
@@ -42,7 +42,7 @@ class ForkTestServiceImpl implements ForkTestService {
   public int child1Count;
   public int child2Count;
 
-  public ForkTestServiceImpl(DBOS.Instance dbos) {
+  public ForkTestServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 

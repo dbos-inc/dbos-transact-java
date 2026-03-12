@@ -39,13 +39,13 @@ public class QueuesTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   DBOSConfig dbosConfig;
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
   @AutoClose HikariDataSource dataSource;
 
   @BeforeEach
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
     dataSource = pgContainer.dataSource();
   }
 
@@ -645,7 +645,7 @@ public class QueuesTest {
   @Test
   public void testListenQueue() throws Exception {
     var config = dbosConfig.withListenQueue("queueOne");
-    try (var dbos = new DBOS.Instance(config)) {
+    try (var dbos = new DBOS(config)) {
 
       Queue queueOne = new Queue("queueOne");
       Queue queueTwo = new Queue("queueTwo");

@@ -17,9 +17,9 @@ interface ClientService {
 @WorkflowClassName("ClientServiceImpl")
 class ClientServiceImpl implements ClientService {
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  public ClientServiceImpl(DBOS.Instance dbos) {
+  public ClientServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 

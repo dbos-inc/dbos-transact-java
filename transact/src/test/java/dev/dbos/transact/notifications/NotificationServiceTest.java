@@ -47,9 +47,9 @@ interface NotService {
 
 class NotServiceImpl implements NotService {
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  NotServiceImpl(DBOS.Instance dbos) {
+  NotServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -156,12 +156,12 @@ class NotificationServiceTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   private DBOSConfig dbosConfig;
-  @AutoClose private DBOS.Instance dbos;
+  @AutoClose private DBOS dbos;
 
   @BeforeEach
   void setup() {
     this.dbosConfig = pgContainer.dbosConfig();
-    this.dbos = new DBOS.Instance(dbosConfig);
+    this.dbos = new DBOS(dbosConfig);
   }
 
   @Test

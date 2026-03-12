@@ -24,14 +24,14 @@ import org.junit.jupiter.api.Test;
 @org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class StartWorkflowTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
   private HawkService proxy;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
 
   @BeforeEach
   void beforeEachTest() {
     var dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
     var impl = new HawkServiceImpl(dbos);
     proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);

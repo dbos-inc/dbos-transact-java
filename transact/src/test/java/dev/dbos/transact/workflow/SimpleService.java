@@ -58,13 +58,13 @@ class SimpleServiceImpl implements SimpleService {
 
   private static final Logger logger = LoggerFactory.getLogger(SimpleServiceImpl.class);
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
   private SimpleService self;
 
   public int executionCount = 0;
 
-  public SimpleServiceImpl(DBOS.Instance dbos) {
+  public SimpleServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 

@@ -8,7 +8,7 @@ import dev.dbos.transact.DBOS;
  */
 public interface DBOSLifecycleListener {
   /** Called from within DBOS.launch, after workflow processing is allowed */
-  void dbosLaunched(DBOS.Instance dbos);
+  void dbosLaunched(DBOS dbos);
 
   /** Called from within DBOS.shutdown, before workflow processing is stopped */
   void dbosShutDown();

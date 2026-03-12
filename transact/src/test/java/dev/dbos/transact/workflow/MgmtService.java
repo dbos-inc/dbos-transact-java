@@ -15,12 +15,12 @@ interface MgmtService {
 
 class MgmtServiceImpl implements MgmtService {
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
   private int stepsExecuted;
   public CountDownLatch mainLatch = new CountDownLatch(1);
   public CountDownLatch workLatch = new CountDownLatch(1);
 
-  public MgmtServiceImpl(DBOS.Instance dbos) {
+  public MgmtServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 

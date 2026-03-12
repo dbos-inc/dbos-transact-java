@@ -21,7 +21,7 @@ public class GarbageCollectionTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   DBOSConfig dbosConfig;
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
 
   private GCTestServiceImpl impl;
   private GCTestService proxy;
@@ -29,7 +29,7 @@ public class GarbageCollectionTest {
   @BeforeEach
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
 
     impl = new GCTestServiceImpl(dbos);
     proxy = dbos.registerWorkflows(GCTestService.class, impl);

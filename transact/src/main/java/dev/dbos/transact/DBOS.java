@@ -48,11 +48,33 @@ import org.slf4j.LoggerFactory;
  * launching, and shutting down DBOS Starting, enqueuing, and managing workflows Interacting with
  * workflows - getting status, results, events, and messages Accessing the workflow context Etc.
  */
-public class DBOS {
-  private DBOS() {}
-
+public class DBOS implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(DBOS.class);
   private static final String version = loadVersionFromResources();
+
+  private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
+  private final QueueRegistry queueRegistry = new QueueRegistry();
+  private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
+  private final DBOSConfig config;
+  private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
+
+  private AlertHandler alertHandler;
+
+  public DBOS(@NonNull DBOSConfig config) {
+    Objects.requireNonNull(config.appName(), "DBOSConfig.appName must not be null");
+    if (config.dataSource() == null) {
+      Objects.requireNonNull(config.databaseUrl(), "DBOSConfig.databaseUrl must not be null");
+      Objects.requireNonNull(config.dbUser(), "DBOSConfig.dbUser must not be null");
+      Objects.requireNonNull(config.dbPassword(), "DBOSConfig.dbPassword must not be null");
+    }
+
+    this.config = config;
+  }
+
+  @Override
+  public void close() throws Exception {
+    shutdown();
+  }
 
   private static @Nullable String loadVersionFromResources() {
     final String PROPERTIES_FILE = "/dev/dbos/transact/app.properties";
@@ -79,710 +101,674 @@ public class DBOS {
     return version;
   }
 
-  public static class Instance implements AutoCloseable {
-    private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
-    private final QueueRegistry queueRegistry = new QueueRegistry();
-    private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
-    private final DBOSConfig config;
-    private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
+  /**
+   * Register a lifecycle listener that receives callbacks when DBOS is launched or shut down
+   *
+   * @param listener
+   */
+  public void registerLifecycleListener(@NonNull DBOSLifecycleListener listener) {
+    if (dbosExecutor.get() != null) {
+      throw new IllegalStateException("Cannot register lifecycle listener after DBOS is launched");
+    }
 
-    private AlertHandler alertHandler;
+    lifecycleRegistry.add(listener);
+  }
 
-    public Instance(@NonNull DBOSConfig config) {
-      Objects.requireNonNull(config.appName(), "DBOSConfig.appName must not be null");
-      if (config.dataSource() == null) {
-        Objects.requireNonNull(config.databaseUrl(), "DBOSConfig.databaseUrl must not be null");
-        Objects.requireNonNull(config.dbUser(), "DBOSConfig.dbUser must not be null");
-        Objects.requireNonNull(config.dbPassword(), "DBOSConfig.dbPassword must not be null");
+  /**
+   * Register a DBOS queue. This must be called on each queue prior to launch, so that recovery has
+   * the queue options available.
+   *
+   * @param queue `Queue` to register
+   */
+  public void registerQueue(@NonNull Queue queue) {
+    if (dbosExecutor.get() != null) {
+      throw new IllegalStateException("Cannot build a queue after DBOS is launched");
+    }
+
+    queueRegistry.register(queue);
+  }
+
+  /**
+   * Register a set of DBOS queues. Each queue must be registered prior to launch, so that recovery
+   * has the queue options available.
+   *
+   * @param queues collection of `Queue` instances to register
+   */
+  public void registerQueues(@NonNull Queue... queues) {
+    for (Queue queue : queues) {
+      registerQueue(queue);
+    }
+  }
+
+  /**
+   * Register all workflows and steps in the provided class instance
+   *
+   * @param <T> The interface type for the instance
+   * @param interfaceClass The interface class for the workflows
+   * @param implementation An implementation instance providing the workflow and step function code
+   * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
+   *     functions
+   */
+  public <T> @NonNull T registerWorkflows(
+      @NonNull Class<T> interfaceClass, @NonNull T implementation) {
+    return registerWorkflows(interfaceClass, implementation, "");
+  }
+
+  /**
+   * Register all workflows and steps in the provided class instance
+   *
+   * @param <T> The interface type for the instance
+   * @param interfaceClass The interface class for the workflows
+   * @param implementation An implementation instance providing the workflow and step function code
+   * @param instanceName Name of the instance, allowing multiple instances of the same class to be
+   *     registered
+   * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
+   *     functions
+   */
+  public <T> @NonNull T registerWorkflows(
+      @NonNull Class<T> interfaceClass, @NonNull T implementation, @NonNull String instanceName) {
+    registerClassWorkflows(interfaceClass, implementation, instanceName);
+
+    return DBOSInvocationHandler.createProxy(
+        interfaceClass, implementation, instanceName, () -> this.dbosExecutor.get());
+  }
+
+  private void registerClassWorkflows(
+      @NonNull Class<?> interfaceClass,
+      @NonNull Object implementation,
+      @Nullable String instanceName) {
+    Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
+    Objects.requireNonNull(implementation, "implementation must not be null");
+    instanceName = Objects.requireNonNullElse(instanceName, "");
+    if (!interfaceClass.isInterface()) {
+      throw new IllegalArgumentException("interfaceClass must be an interface");
+    }
+    if (dbosExecutor.get() != null) {
+      throw new IllegalStateException("Cannot register workflow after DBOS is launched");
+    }
+
+    // Use @WorkflowClassName annotation if present, otherwise use the Java class name
+    WorkflowClassName classNameAnnotation =
+        implementation.getClass().getAnnotation(WorkflowClassName.class);
+    String className =
+        (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
+            ? classNameAnnotation.value()
+            : implementation.getClass().getName();
+    workflowRegistry.register(interfaceClass, implementation, className, instanceName);
+
+    Method[] methods = implementation.getClass().getDeclaredMethods();
+    for (Method method : methods) {
+      Workflow wfAnnotation = method.getAnnotation(Workflow.class);
+      if (wfAnnotation != null) {
+        method.setAccessible(true); // In case it's not public
+        registerWorkflowMethod(wfAnnotation, implementation, className, instanceName, method);
       }
+    }
+  }
 
-      this.config = config;
+  private void registerWorkflowMethod(
+      @NonNull Workflow wfTag,
+      @NonNull Object target,
+      @NonNull String className,
+      @NonNull String instanceName,
+      @NonNull Method method) {
+    if (dbosExecutor.get() != null) {
+      throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
 
-    @Override
-    public void close() throws Exception {
-      shutdown();
+    String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
+    workflowRegistry.register(
+        className,
+        name,
+        target,
+        instanceName,
+        method,
+        wfTag.maxRecoveryAttempts(),
+        wfTag.serializationStrategy());
+  }
+
+  /**
+   * Registers an {@link AlertHandler} to handle alerts generated by DBOS. This method must be
+   * called before DBOS is launched; attempting to register an alert handler after launch will
+   * result in an {@link IllegalStateException}.
+   *
+   * @param handler the {@link AlertHandler} instance to register; must not be null
+   * @throws IllegalStateException if called after DBOS has been launched
+   */
+  public void registerAlertHandler(AlertHandler handler) {
+    if (dbosExecutor.get() != null) {
+      throw new IllegalStateException("Cannot set alert handler after DBOS is launched");
     }
 
-    public String version() {
-      return DBOS.version();
-    }
+    this.alertHandler = handler;
+  }
 
-    /**
-     * Register a lifecycle listener that receives callbacks when DBOS is launched or shut down
-     *
-     * @param listener
-     */
-    public void registerLifecycleListener(@NonNull DBOSLifecycleListener listener) {
-      if (dbosExecutor.get() != null) {
-        throw new IllegalStateException(
-            "Cannot register lifecycle listener after DBOS is launched");
-      }
+  // package private method for test purposes
+  @Nullable DBOSExecutor getDbosExecutor() {
+    return dbosExecutor.get();
+  }
 
-      lifecycleRegistry.add(listener);
-    }
+  /**
+   * Launch DBOS, and start recovery. All workflows, queues, and other objects should be registered
+   * before launch
+   */
+  public void launch() {
+    logger.info("Launching DBOS v{}", DBOS.version());
 
-    /**
-     * Register a DBOS queue. This must be called on each queue prior to launch, so that recovery
-     * has the queue options available.
-     *
-     * @param queue `Queue` to register
-     */
-    public void registerQueue(@NonNull Queue queue) {
-      if (dbosExecutor.get() != null) {
-        throw new IllegalStateException("Cannot build a queue after DBOS is launched");
-      }
+    if (dbosExecutor.get() == null) {
+      var executor = new DBOSExecutor(config);
 
-      queueRegistry.register(queue);
-    }
-
-    /**
-     * Register a set of DBOS queues. Each queue must be registered prior to launch, so that
-     * recovery has the queue options available.
-     *
-     * @param queues collection of `Queue` instances to register
-     */
-    public void registerQueues(@NonNull Queue... queues) {
-      for (Queue queue : queues) {
-        registerQueue(queue);
-      }
-    }
-
-    /**
-     * Register all workflows and steps in the provided class instance
-     *
-     * @param <T> The interface type for the instance
-     * @param interfaceClass The interface class for the workflows
-     * @param implementation An implementation instance providing the workflow and step function
-     *     code
-     * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
-     *     functions
-     */
-    public <T> @NonNull T registerWorkflows(
-        @NonNull Class<T> interfaceClass, @NonNull T implementation) {
-      return registerWorkflows(interfaceClass, implementation, "");
-    }
-
-    /**
-     * Register all workflows and steps in the provided class instance
-     *
-     * @param <T> The interface type for the instance
-     * @param interfaceClass The interface class for the workflows
-     * @param implementation An implementation instance providing the workflow and step function
-     *     code
-     * @param instanceName Name of the instance, allowing multiple instances of the same class to be
-     *     registered
-     * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
-     *     functions
-     */
-    public <T> @NonNull T registerWorkflows(
-        @NonNull Class<T> interfaceClass, @NonNull T implementation, @NonNull String instanceName) {
-      registerClassWorkflows(interfaceClass, implementation, instanceName);
-
-      return DBOSInvocationHandler.createProxy(
-          interfaceClass, implementation, instanceName, () -> this.dbosExecutor.get());
-    }
-
-    private void registerClassWorkflows(
-        @NonNull Class<?> interfaceClass,
-        @NonNull Object implementation,
-        @Nullable String instanceName) {
-      Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
-      Objects.requireNonNull(implementation, "implementation must not be null");
-      instanceName = Objects.requireNonNullElse(instanceName, "");
-      if (!interfaceClass.isInterface()) {
-        throw new IllegalArgumentException("interfaceClass must be an interface");
-      }
-      if (dbosExecutor.get() != null) {
-        throw new IllegalStateException("Cannot register workflow after DBOS is launched");
-      }
-
-      // Use @WorkflowClassName annotation if present, otherwise use the Java class name
-      WorkflowClassName classNameAnnotation =
-          implementation.getClass().getAnnotation(WorkflowClassName.class);
-      String className =
-          (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
-              ? classNameAnnotation.value()
-              : implementation.getClass().getName();
-      workflowRegistry.register(interfaceClass, implementation, className, instanceName);
-
-      Method[] methods = implementation.getClass().getDeclaredMethods();
-      for (Method method : methods) {
-        Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-        if (wfAnnotation != null) {
-          method.setAccessible(true); // In case it's not public
-          registerWorkflowMethod(wfAnnotation, implementation, className, instanceName, method);
+      if (dbosExecutor.compareAndSet(null, executor)) {
+        if (config.migrate()) {
+          MigrationManager.runMigrations(config);
         }
+
+        executor.start(
+            this,
+            new HashSet<>(this.lifecycleRegistry),
+            workflowRegistry.getWorkflowSnapshot(),
+            workflowRegistry.getInstanceSnapshot(),
+            queueRegistry.getSnapshot(),
+            alertHandler);
       }
     }
+  }
 
-    private void registerWorkflowMethod(
-        @NonNull Workflow wfTag,
-        @NonNull Object target,
-        @NonNull String className,
-        @NonNull String instanceName,
-        @NonNull Method method) {
-      if (dbosExecutor.get() != null) {
-        throw new IllegalStateException("Cannot register workflow after DBOS is launched");
-      }
-
-      String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
-      workflowRegistry.register(
-          className,
-          name,
-          target,
-          instanceName,
-          method,
-          wfTag.maxRecoveryAttempts(),
-          wfTag.serializationStrategy());
-    }
-
-    /**
-     * Registers an {@link AlertHandler} to handle alerts generated by DBOS. This method must be
-     * called before DBOS is launched; attempting to register an alert handler after launch will
-     * result in an {@link IllegalStateException}.
-     *
-     * @param handler the {@link AlertHandler} instance to register; must not be null
-     * @throws IllegalStateException if called after DBOS has been launched
-     */
-    public void registerAlertHandler(AlertHandler handler) {
-      if (dbosExecutor.get() != null) {
-        throw new IllegalStateException("Cannot set alert handler after DBOS is launched");
-      }
-
-      this.alertHandler = handler;
-    }
-
-    // package private method for test purposes
-    @Nullable DBOSExecutor getDbosExecutor() {
-      return dbosExecutor.get();
-    }
-
-    /**
-     * Launch DBOS, and start recovery. All workflows, queues, and other objects should be
-     * registered before launch
-     */
-    public void launch() {
-      logger.info("Launching DBOS v{}", DBOS.version());
-
-      if (dbosExecutor.get() == null) {
-        var executor = new DBOSExecutor(config);
-
-        if (dbosExecutor.compareAndSet(null, executor)) {
-          if (config.migrate()) {
-            MigrationManager.runMigrations(config);
-          }
-
-          executor.start(
-              this,
-              new HashSet<>(this.lifecycleRegistry),
-              workflowRegistry.getWorkflowSnapshot(),
-              workflowRegistry.getInstanceSnapshot(),
-              queueRegistry.getSnapshot(),
-              alertHandler);
-        }
+  /**
+   * Shut down DBOS. This method should only be used in test environments, where DBOS is used
+   * multiple times in the same JVM.
+   */
+  public void shutdown() {
+    var current = dbosExecutor.get();
+    if (current != null) {
+      current.close();
+      if (!dbosExecutor.compareAndSet(current, null)) {
+        logger.error("failed to set DBOS executor to null on shut down");
       }
     }
+    logger.info("DBOS shut down");
+  }
 
-    /**
-     * Shut down DBOS. This method should only be used in test environments, where DBOS is used
-     * multiple times in the same JVM.
-     */
-    public void shutdown() {
-      var current = dbosExecutor.get();
-      if (current != null) {
-        current.close();
-        if (!dbosExecutor.compareAndSet(current, null)) {
-          logger.error("failed to set DBOS executor to null on shut down");
-        }
+  // helper for methods that can only be called after launch
+  private DBOSExecutor ensureLaunched(String caller) {
+    var exec = dbosExecutor.get();
+    if (exec == null) {
+      throw new IllegalStateException(
+          String.format("Cannot call %s before DBOS is launched", caller));
+    }
+    return exec;
+  }
+
+  /**
+   * Retrieve a queue definition
+   *
+   * @param queueName Name of the queue
+   * @return Queue definition for given `queueName`
+   */
+  public @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
+    return ensureLaunched("getQueue").getQueue(queueName);
+  }
+
+  /**
+   * Durable sleep. Use this instead of Thread.sleep, especially in workflows. On restart or during
+   * recovery the original expected wakeup time is honoured as opposed to sleeping all over again.
+   *
+   * @param duration amount of time to sleep
+   */
+  public void sleep(@NonNull Duration duration) {
+    if (!DBOSContext.inWorkflow()) {
+      try {
+        Thread.sleep(duration.toMillis());
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
       }
-      logger.info("DBOS shut down");
-    }
-
-    // helper for methods that can only be called after launch
-    private DBOSExecutor ensureLaunched(String caller) {
-      var exec = dbosExecutor.get();
-      if (exec == null) {
-        throw new IllegalStateException(
-            String.format("Cannot call %s before DBOS is launched", caller));
+    } else if (DBOSContext.inStep()) {
+      try {
+        Thread.sleep(duration.toMillis());
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
       }
-      return exec;
+    } else {
+      ensureLaunched("sleep").sleep(duration);
     }
+  }
 
-    /**
-     * Retrieve a queue definition
-     *
-     * @param queueName Name of the queue
-     * @return Queue definition for given `queueName`
-     */
-    public @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
-      return ensureLaunched("getQueue").getQueue(queueName);
+  /**
+   * Start or enqueue a workflow with a return value
+   *
+   * @param <T> Return type of the workflow
+   * @param <E> Type of checked exception thrown by the workflow, if any
+   * @param supplier A lambda that calls exactly one workflow function
+   * @param options Start workflow options
+   * @return A handle to the enqueued or running workflow
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
+      @NonNull ThrowingSupplier<T, E> supplier, @NonNull StartWorkflowOptions options) {
+    return ensureLaunched("startWorkflow").startWorkflow(supplier, options);
+  }
+
+  /**
+   * Start or enqueue a workflow with default options
+   *
+   * @param <T> Return type of the workflow
+   * @param <E> Type of checked exception thrown by the workflow, if any
+   * @param supplier A lambda that calls exactly one workflow function
+   * @return A handle to the enqueued or running workflow
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
+      @NonNull ThrowingSupplier<T, E> supplier) {
+    return startWorkflow(supplier, new StartWorkflowOptions());
+  }
+
+  /**
+   * Start or enqueue a workflow with no return value
+   *
+   * @param <E> Type of checked exception thrown by the workflow, if any
+   * @param runnable A lambda that calls exactly one workflow function
+   * @param options Start workflow options
+   * @return A handle to the enqueued or running workflow
+   */
+  public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
+      @NonNull ThrowingRunnable<E> runnable, @NonNull StartWorkflowOptions options) {
+    return startWorkflow(
+        () -> {
+          runnable.execute();
+          return null;
+        },
+        options);
+  }
+
+  /**
+   * Start or enqueue a workflow with no return value, using default options
+   *
+   * @param <E> Type of checked exception thrown by the workflow, if any
+   * @param runnable A lambda that calls exactly one workflow function
+   * @return A handle to the enqueued or running workflow
+   */
+  public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
+      @NonNull ThrowingRunnable<E> runnable) {
+    return startWorkflow(runnable, new StartWorkflowOptions());
+  }
+
+  /**
+   * Execute a workflow based on registration and arguments. This is expected to be used by event
+   * listeners, not app code.
+   *
+   * @param regWorkflow Registration of the workflow. @see getRegisteredWorkflows
+   * @param args Workflow function arguments
+   * @param options Execution options, such as ID, queue, and timeout/deadline
+   * @return WorkflowHandle to the executed workflow
+   */
+  public WorkflowHandle<?, ?> startWorkflow(
+      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
+    return ensureLaunched("startWorkflow").startWorkflow(regWorkflow, args, options);
+  }
+
+  /**
+   * Get the result of a workflow, or rethrow the exception thrown by the workflow
+   *
+   * @param <T> Return type of the workflow
+   * @param <E> Checked exception type, if any, thrown by the workflow
+   * @param workflowId ID of the workflow to retrieve
+   * @return Return value of the workflow
+   * @throws E if the workflow threw an exception
+   */
+  public <T, E extends Exception> T getResult(@NonNull String workflowId) throws E {
+    return ensureLaunched("getResult").<T, E>getResult(workflowId);
+  }
+
+  /**
+   * Get the status of a workflow
+   *
+   * @param workflowId ID of the workflow to query
+   * @return Current workflow status for the provided workflowId, or null.
+   */
+  public @Nullable WorkflowStatus getWorkflowStatus(@NonNull String workflowId) {
+    return ensureLaunched("getWorkflowStatus").getWorkflowStatus(workflowId);
+  }
+
+  /**
+   * Send a message to a workflow
+   *
+   * @param destinationId recipient of the message
+   * @param message message to be sent
+   * @param topic topic to which the message is send
+   * @param idempotencyKey optional idempotency key for exactly-once send
+   */
+  public void send(
+      @NonNull String destinationId,
+      @NonNull Object message,
+      @Nullable String topic,
+      @Nullable String idempotencyKey) {
+    send(destinationId, message, topic, idempotencyKey, null);
+  }
+
+  /**
+   * Send a message to a workflow
+   *
+   * @param destinationId recipient of the message
+   * @param message message to be sent
+   * @param topic topic to which the message is send
+   */
+  public void send(@NonNull String destinationId, @NonNull Object message, @Nullable String topic) {
+    send(destinationId, message, topic, null, null);
+  }
+
+  /**
+   * Send a message to a workflow with serialization strategy
+   *
+   * @param destinationId recipient of the message
+   * @param message message to be sent
+   * @param topic topic to which the message is send
+   * @param idempotencyKey optional idempotency key for exactly-once send
+   * @param serialization serialization strategy to use (null for default)
+   */
+  public void send(
+      @NonNull String destinationId,
+      @NonNull Object message,
+      @Nullable String topic,
+      @Nullable String idempotencyKey,
+      @Nullable SerializationStrategy serialization) {
+    if (serialization == null) serialization = SerializationStrategy.DEFAULT;
+    ensureLaunched("send").send(destinationId, message, topic, idempotencyKey, serialization);
+  }
+
+  /**
+   * Get a message sent to a particular topic
+   *
+   * @param topic the topic whose message to get
+   * @param timeout duration after which the call times out
+   * @return the message if there is one or else null
+   */
+  public @Nullable Object recv(@Nullable String topic, @NonNull Duration timeout) {
+    return ensureLaunched("recv").recv(topic, timeout);
+  }
+
+  /**
+   * Call within a workflow to publish a key value pair. Uses the workflow's serialization format.
+   *
+   * @param key identifier for published data
+   * @param value data that is published
+   */
+  public void setEvent(@NonNull String key, @NonNull Object value) {
+    setEvent(key, value, null);
+  }
+
+  /**
+   * Call within a workflow to publish a key value pair with a specific serialization strategy.
+   *
+   * @param key identifier for published data
+   * @param value data that is published
+   * @param serialization serialization strategy to use (null to use workflow's default)
+   */
+  public void setEvent(
+      @NonNull String key, @NonNull Object value, @Nullable SerializationStrategy serialization) {
+    // If no explicit serialization specified, use the workflow context's serialization
+    if (serialization == null) {
+      serialization = serializationStrategy();
     }
+    ensureLaunched("setEvent").setEvent(key, value, serialization);
+  }
 
-    /**
-     * Durable sleep. Use this instead of Thread.sleep, especially in workflows. On restart or
-     * during recovery the original expected wakeup time is honoured as opposed to sleeping all over
-     * again.
-     *
-     * @param duration amount of time to sleep
-     */
-    public void sleep(@NonNull Duration duration) {
-      if (!DBOSContext.inWorkflow()) {
-        try {
-          Thread.sleep(duration.toMillis());
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-        }
-      } else if (DBOSContext.inStep()) {
-        try {
-          Thread.sleep(duration.toMillis());
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-        }
-      } else {
-        ensureLaunched("sleep").sleep(duration);
-      }
-    }
+  /**
+   * Get the data published by a workflow
+   *
+   * @param workflowId id of the workflow who data is to be retrieved
+   * @param key identifies the data
+   * @param timeout time to wait for data before timing out
+   * @return the published value or null
+   */
+  public @Nullable Object getEvent(
+      @NonNull String workflowId, @NonNull String key, @NonNull Duration timeout) {
+    logger.debug("Received getEvent for {} {}", workflowId, key);
 
-    /**
-     * Start or enqueue a workflow with a return value
-     *
-     * @param <T> Return type of the workflow
-     * @param <E> Type of checked exception thrown by the workflow, if any
-     * @param supplier A lambda that calls exactly one workflow function
-     * @param options Start workflow options
-     * @return A handle to the enqueued or running workflow
-     */
-    public <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
-        @NonNull ThrowingSupplier<T, E> supplier, @NonNull StartWorkflowOptions options) {
-      return ensureLaunched("startWorkflow").startWorkflow(supplier, options);
-    }
+    return ensureLaunched("getEvent").getEvent(workflowId, key, timeout);
+  }
 
-    /**
-     * Start or enqueue a workflow with default options
-     *
-     * @param <T> Return type of the workflow
-     * @param <E> Type of checked exception thrown by the workflow, if any
-     * @param supplier A lambda that calls exactly one workflow function
-     * @return A handle to the enqueued or running workflow
-     */
-    public <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
-        @NonNull ThrowingSupplier<T, E> supplier) {
-      return startWorkflow(supplier, new StartWorkflowOptions());
-    }
+  /**
+   * Run the provided function as a step; this variant is for functions with a return value
+   *
+   * @param <E> Checked exception thrown by the step, if any
+   * @param stepfunc function or lambda to run
+   * @param opts step name, and retry options for running the step
+   * @throws E
+   */
+  public <T, E extends Exception> T runStep(
+      @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull StepOptions opts) throws E {
 
-    /**
-     * Start or enqueue a workflow with no return value
-     *
-     * @param <E> Type of checked exception thrown by the workflow, if any
-     * @param runnable A lambda that calls exactly one workflow function
-     * @param options Start workflow options
-     * @return A handle to the enqueued or running workflow
-     */
-    public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
-        @NonNull ThrowingRunnable<E> runnable, @NonNull StartWorkflowOptions options) {
-      return startWorkflow(
-          () -> {
-            runnable.execute();
-            return null;
-          },
-          options);
-    }
+    return ensureLaunched("runStep").runStepInternal(stepfunc, opts, null);
+  }
 
-    /**
-     * Start or enqueue a workflow with no return value, using default options
-     *
-     * @param <E> Type of checked exception thrown by the workflow, if any
-     * @param runnable A lambda that calls exactly one workflow function
-     * @return A handle to the enqueued or running workflow
-     */
-    public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
-        @NonNull ThrowingRunnable<E> runnable) {
-      return startWorkflow(runnable, new StartWorkflowOptions());
-    }
+  /**
+   * Run the provided function as a step; this variant is for functions with a return value
+   *
+   * @param <E> Checked exception thrown by the step, if any
+   * @param stepfunc function or lambda to run
+   * @param name name of the step, for tracing and to record in the system database
+   * @throws E
+   */
+  public <T, E extends Exception> T runStep(
+      @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull String name) throws E {
+    return runStep(stepfunc, new StepOptions(name));
+  }
 
-    /**
-     * Execute a workflow based on registration and arguments. This is expected to be used by event
-     * listeners, not app code.
-     *
-     * @param regWorkflow Registration of the workflow. @see getRegisteredWorkflows
-     * @param args Workflow function arguments
-     * @param options Execution options, such as ID, queue, and timeout/deadline
-     * @return WorkflowHandle to the executed workflow
-     */
-    public WorkflowHandle<?, ?> startWorkflow(
-        RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
-      return ensureLaunched("startWorkflow").startWorkflow(regWorkflow, args, options);
-    }
+  /**
+   * Run the provided function as a step; this variant is for functions with no return value
+   *
+   * @param <E> Checked exception thrown by the step, if any
+   * @param stepfunc function or lambda to run
+   * @param opts step name, and retry options for running the step
+   * @throws E
+   */
+  public <E extends Exception> void runStep(
+      @NonNull ThrowingRunnable<E> stepfunc, @NonNull StepOptions opts) throws E {
+    runStep(
+        () -> {
+          stepfunc.execute();
+          return null;
+        },
+        opts);
+  }
 
-    /**
-     * Get the result of a workflow, or rethrow the exception thrown by the workflow
-     *
-     * @param <T> Return type of the workflow
-     * @param <E> Checked exception type, if any, thrown by the workflow
-     * @param workflowId ID of the workflow to retrieve
-     * @return Return value of the workflow
-     * @throws E if the workflow threw an exception
-     */
-    public <T, E extends Exception> T getResult(@NonNull String workflowId) throws E {
-      return ensureLaunched("getResult").<T, E>getResult(workflowId);
-    }
+  /**
+   * Run the provided function as a step; this variant is for functions with no return value
+   *
+   * @param <E> Checked exception thrown by the step, if any
+   * @param stepfunc function or lambda to run
+   * @param name Name of the step, for tracing and recording in the system database
+   * @throws E
+   */
+  public <E extends Exception> void runStep(
+      @NonNull ThrowingRunnable<E> stepfunc, @NonNull String name) throws E {
+    runStep(stepfunc, new StepOptions(name));
+  }
 
-    /**
-     * Get the status of a workflow
-     *
-     * @param workflowId ID of the workflow to query
-     * @return Current workflow status for the provided workflowId, or null.
-     */
-    public @Nullable WorkflowStatus getWorkflowStatus(@NonNull String workflowId) {
-      return ensureLaunched("getWorkflowStatus").getWorkflowStatus(workflowId);
-    }
+  /**
+   * Resume a workflow starting from the step after the last complete step
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Checked exception thrown by the workflow function, if any
+   * @param workflowId id of the workflow
+   * @return A handle to the workflow
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
+      @NonNull String workflowId) {
+    return ensureLaunched("resumeWorkflow").resumeWorkflow(workflowId);
+  }
 
-    /**
-     * Send a message to a workflow
-     *
-     * @param destinationId recipient of the message
-     * @param message message to be sent
-     * @param topic topic to which the message is send
-     * @param idempotencyKey optional idempotency key for exactly-once send
-     */
-    public void send(
-        @NonNull String destinationId,
-        @NonNull Object message,
-        @Nullable String topic,
-        @Nullable String idempotencyKey) {
-      send(destinationId, message, topic, idempotencyKey, null);
-    }
+  /***
+   *
+   * Cancel the workflow. After this function is called, the next step (not the
+   * current one) will not execute
+   *
+   * @param workflowId ID of the workflow to cancel
+   */
+  public void cancelWorkflow(@NonNull String workflowId) {
+    ensureLaunched("cancelWorkflow").cancelWorkflow(workflowId);
+  }
 
-    /**
-     * Send a message to a workflow
-     *
-     * @param destinationId recipient of the message
-     * @param message message to be sent
-     * @param topic topic to which the message is send
-     */
-    public void send(
-        @NonNull String destinationId, @NonNull Object message, @Nullable String topic) {
-      send(destinationId, message, topic, null, null);
-    }
+  /**
+   * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
+   * provided step are copied over
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Checked exception thrown by the workflow function, if any
+   * @param workflowId Original workflow Id
+   * @param startStep Start execution from this step. Prior steps copied over
+   * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
+   * @return handle to the workflow
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
+      @NonNull String workflowId, int startStep, @NonNull ForkOptions options) {
+    return ensureLaunched("forkWorkflow").forkWorkflow(workflowId, startStep, options);
+  }
 
-    /**
-     * Send a message to a workflow with serialization strategy
-     *
-     * @param destinationId recipient of the message
-     * @param message message to be sent
-     * @param topic topic to which the message is send
-     * @param idempotencyKey optional idempotency key for exactly-once send
-     * @param serialization serialization strategy to use (null for default)
-     */
-    public void send(
-        @NonNull String destinationId,
-        @NonNull Object message,
-        @Nullable String topic,
-        @Nullable String idempotencyKey,
-        @Nullable SerializationStrategy serialization) {
-      if (serialization == null) serialization = SerializationStrategy.DEFAULT;
-      ensureLaunched("send").send(destinationId, message, topic, idempotencyKey, serialization);
-    }
+  /**
+   * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
+   * provided step are copied over
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Checked exception thrown by the workflow function, if any
+   * @param workflowId Original workflow Id
+   * @param startStep Start execution from this step. Prior steps copied over
+   * @return handle to the workflow
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
+      @NonNull String workflowId, int startStep) {
+    return forkWorkflow(workflowId, startStep, new ForkOptions());
+  }
 
-    /**
-     * Get a message sent to a particular topic
-     *
-     * @param topic the topic whose message to get
-     * @param timeout duration after which the call times out
-     * @return the message if there is one or else null
-     */
-    public @Nullable Object recv(@Nullable String topic, @NonNull Duration timeout) {
-      return ensureLaunched("recv").recv(topic, timeout);
-    }
+  /**
+   * Deletes a workflow from the system. Does not delete child workflows.
+   *
+   * @param workflowId the unique identifier of the workflow to delete. Must not be null.
+   * @throws IllegalArgumentException if workflowId is null
+   */
+  public void deleteWorkflow(@NonNull String workflowId) {
+    deleteWorkflow(workflowId, false);
+  }
 
-    /**
-     * Call within a workflow to publish a key value pair. Uses the workflow's serialization format.
-     *
-     * @param key identifier for published data
-     * @param value data that is published
-     */
-    public void setEvent(@NonNull String key, @NonNull Object value) {
-      setEvent(key, value, null);
-    }
+  /**
+   * Deletes a workflow and optionally its child workflows from the system.
+   *
+   * @param workflowId the unique identifier of the workflow to delete. Must not be null.
+   * @param deleteChildren if true, also deletes all child workflows associated with the specified
+   *     workflow; if false, only deletes the specified workflow
+   * @throws IllegalArgumentException if workflowId is null
+   */
+  public void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
+    ensureLaunched("deleteWorkflow").deleteWorkflow(workflowId, deleteChildren);
+  }
 
-    /**
-     * Call within a workflow to publish a key value pair with a specific serialization strategy.
-     *
-     * @param key identifier for published data
-     * @param value data that is published
-     * @param serialization serialization strategy to use (null to use workflow's default)
-     */
-    public void setEvent(
-        @NonNull String key, @NonNull Object value, @Nullable SerializationStrategy serialization) {
-      // If no explicit serialization specified, use the workflow context's serialization
-      if (serialization == null) {
-        serialization = serializationStrategy();
-      }
-      ensureLaunched("setEvent").setEvent(key, value, serialization);
-    }
+  /**
+   * Retrieve a handle to a workflow, given its ID. Note that a handle is always returned, whether
+   * the workflow exists or not; getStatus() can be used to tell the difference
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Checked exception thrown by the workflow function, if any
+   * @param workflowId ID of the workflow to retrieve
+   * @return Workflow handle for the provided workflow ID
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> retrieveWorkflow(
+      @NonNull String workflowId) {
+    return ensureLaunched("retrieveWorkflow").retrieveWorkflow(workflowId);
+  }
 
-    /**
-     * Get the data published by a workflow
-     *
-     * @param workflowId id of the workflow who data is to be retrieved
-     * @param key identifies the data
-     * @param timeout time to wait for data before timing out
-     * @return the published value or null
-     */
-    public @Nullable Object getEvent(
-        @NonNull String workflowId, @NonNull String key, @NonNull Duration timeout) {
-      logger.debug("Received getEvent for {} {}", workflowId, key);
+  /**
+   * List all workflows
+   *
+   * @param input {@link ListWorkflowsInput} parameters to query workflows
+   * @return a list of workflow status {@link WorkflowStatus}
+   */
+  public @NonNull List<WorkflowStatus> listWorkflows(@NonNull ListWorkflowsInput input) {
+    return ensureLaunched("listWorkflows").listWorkflows(input);
+  }
 
-      return ensureLaunched("getEvent").getEvent(workflowId, key, timeout);
-    }
+  /**
+   * List the steps in the workflow
+   *
+   * @param workflowId Id of the workflow whose steps to return
+   * @return list of step information {@link StepInfo}
+   */
+  public @NonNull List<StepInfo> listWorkflowSteps(@NonNull String workflowId) {
+    return ensureLaunched("listWorkflowSteps").listWorkflowSteps(workflowId);
+  }
 
-    /**
-     * Run the provided function as a step; this variant is for functions with a return value
-     *
-     * @param <E> Checked exception thrown by the step, if any
-     * @param stepfunc function or lambda to run
-     * @param opts step name, and retry options for running the step
-     * @throws E
-     */
-    public <T, E extends Exception> T runStep(
-        @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull StepOptions opts) throws E {
+  /**
+   * Get all workflows registered with DBOS.
+   *
+   * @return list of all registered workflow methods
+   */
+  public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
+    return ensureLaunched("getRegisteredWorkflows").getWorkflows();
+  }
 
-      return ensureLaunched("runStep").runStepInternal(stepfunc, opts, null);
-    }
+  /**
+   * Get all workflow classes registered with DBOS.
+   *
+   * @return list of all class instances containing registered workflow methods
+   */
+  public @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
+    return ensureLaunched("getRegisteredWorkflowInstances").getInstances();
+  }
 
-    /**
-     * Run the provided function as a step; this variant is for functions with a return value
-     *
-     * @param <E> Checked exception thrown by the step, if any
-     * @param stepfunc function or lambda to run
-     * @param name name of the step, for tracing and to record in the system database
-     * @throws E
-     */
-    public <T, E extends Exception> T runStep(
-        @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull String name) throws E {
-      return runStep(stepfunc, new StepOptions(name));
-    }
+  /**
+   * Get a system database record stored by an external service A unique value is stored per
+   * combination of service, workflowName, and key
+   *
+   * @param service Identity of the service maintaining the record
+   * @param workflowName Fully qualified name of the workflow
+   * @param key Key assigned within the service+workflow
+   * @return Value associated with the service+workflow+key combination
+   */
+  public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
+    return ensureLaunched("getExternalState").getExternalState(service, workflowName, key);
+  }
 
-    /**
-     * Run the provided function as a step; this variant is for functions with no return value
-     *
-     * @param <E> Checked exception thrown by the step, if any
-     * @param stepfunc function or lambda to run
-     * @param opts step name, and retry options for running the step
-     * @throws E
-     */
-    public <E extends Exception> void runStep(
-        @NonNull ThrowingRunnable<E> stepfunc, @NonNull StepOptions opts) throws E {
-      runStep(
-          () -> {
-            stepfunc.execute();
-            return null;
-          },
-          opts);
-    }
+  /**
+   * Insert or update a system database record stored by an external service A timestamped unique
+   * value is stored per combination of service, workflowName, and key
+   *
+   * @param state ExternalState containing the service, workflow, key, and value to store
+   * @return Value associated with the service+workflow+key combination, in case the stored value
+   *     already had a higher version or timestamp
+   */
+  public ExternalState upsertExternalState(ExternalState state) {
+    return ensureLaunched("upsertExternalState").upsertExternalState(state);
+  }
 
-    /**
-     * Run the provided function as a step; this variant is for functions with no return value
-     *
-     * @param <E> Checked exception thrown by the step, if any
-     * @param stepfunc function or lambda to run
-     * @param name Name of the step, for tracing and recording in the system database
-     * @throws E
-     */
-    public <E extends Exception> void runStep(
-        @NonNull ThrowingRunnable<E> stepfunc, @NonNull String name) throws E {
-      runStep(stepfunc, new StepOptions(name));
-    }
+  /**
+   * Marks a breaking change within a workflow. Returns true for new workflows (i.e. workflow sthat
+   * reach this point in the workflow after the breaking change was created) and false for old
+   * worklows (i.e. workflows that reached this point in the workflow before the breaking change was
+   * created). The workflow should execute the new code if this method returns true, otherwise
+   * execute the old code. Note, patching must be enabled in DBOS configuration and this method must
+   * be called from within a workflow context.
+   *
+   * @param patchName the name of the patch to apply
+   * @return true for workflows started after the breaking change, false for workflows started
+   *     before the breaking change
+   * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
+   *     workflow
+   */
+  public boolean patch(@NonNull String patchName) {
+    return ensureLaunched("patch").patch(patchName);
+  }
 
-    /**
-     * Resume a workflow starting from the step after the last complete step
-     *
-     * @param <T> Return type of the workflow function
-     * @param <E> Checked exception thrown by the workflow function, if any
-     * @param workflowId id of the workflow
-     * @return A handle to the workflow
-     */
-    public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
-        @NonNull String workflowId) {
-      return ensureLaunched("resumeWorkflow").resumeWorkflow(workflowId);
-    }
-
-    /***
-     *
-     * Cancel the workflow. After this function is called, the next step (not the
-     * current one) will not execute
-     *
-     * @param workflowId ID of the workflow to cancel
-     */
-    public void cancelWorkflow(@NonNull String workflowId) {
-      ensureLaunched("cancelWorkflow").cancelWorkflow(workflowId);
-    }
-
-    /**
-     * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
-     * provided step are copied over
-     *
-     * @param <T> Return type of the workflow function
-     * @param <E> Checked exception thrown by the workflow function, if any
-     * @param workflowId Original workflow Id
-     * @param startStep Start execution from this step. Prior steps copied over
-     * @param options {@link ForkOptions} containing forkedWorkflowId, applicationVersion, timeout
-     * @return handle to the workflow
-     */
-    public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
-        @NonNull String workflowId, int startStep, @NonNull ForkOptions options) {
-      return ensureLaunched("forkWorkflow").forkWorkflow(workflowId, startStep, options);
-    }
-
-    /**
-     * Fork the workflow. Re-execute with another Id from the step provided. Steps prior to the
-     * provided step are copied over
-     *
-     * @param <T> Return type of the workflow function
-     * @param <E> Checked exception thrown by the workflow function, if any
-     * @param workflowId Original workflow Id
-     * @param startStep Start execution from this step. Prior steps copied over
-     * @return handle to the workflow
-     */
-    public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
-        @NonNull String workflowId, int startStep) {
-      return forkWorkflow(workflowId, startStep, new ForkOptions());
-    }
-
-    /**
-     * Deletes a workflow from the system. Does not delete child workflows.
-     *
-     * @param workflowId the unique identifier of the workflow to delete. Must not be null.
-     * @throws IllegalArgumentException if workflowId is null
-     */
-    public void deleteWorkflow(@NonNull String workflowId) {
-      deleteWorkflow(workflowId, false);
-    }
-
-    /**
-     * Deletes a workflow and optionally its child workflows from the system.
-     *
-     * @param workflowId the unique identifier of the workflow to delete. Must not be null.
-     * @param deleteChildren if true, also deletes all child workflows associated with the specified
-     *     workflow; if false, only deletes the specified workflow
-     * @throws IllegalArgumentException if workflowId is null
-     */
-    public void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
-      ensureLaunched("deleteWorkflow").deleteWorkflow(workflowId, deleteChildren);
-    }
-
-    /**
-     * Retrieve a handle to a workflow, given its ID. Note that a handle is always returned, whether
-     * the workflow exists or not; getStatus() can be used to tell the difference
-     *
-     * @param <T> Return type of the workflow function
-     * @param <E> Checked exception thrown by the workflow function, if any
-     * @param workflowId ID of the workflow to retrieve
-     * @return Workflow handle for the provided workflow ID
-     */
-    public <T, E extends Exception> @NonNull WorkflowHandle<T, E> retrieveWorkflow(
-        @NonNull String workflowId) {
-      return ensureLaunched("retrieveWorkflow").retrieveWorkflow(workflowId);
-    }
-
-    /**
-     * List all workflows
-     *
-     * @param input {@link ListWorkflowsInput} parameters to query workflows
-     * @return a list of workflow status {@link WorkflowStatus}
-     */
-    public @NonNull List<WorkflowStatus> listWorkflows(@NonNull ListWorkflowsInput input) {
-      return ensureLaunched("listWorkflows").listWorkflows(input);
-    }
-
-    /**
-     * List the steps in the workflow
-     *
-     * @param workflowId Id of the workflow whose steps to return
-     * @return list of step information {@link StepInfo}
-     */
-    public @NonNull List<StepInfo> listWorkflowSteps(@NonNull String workflowId) {
-      return ensureLaunched("listWorkflowSteps").listWorkflowSteps(workflowId);
-    }
-
-    /**
-     * Get all workflows registered with DBOS.
-     *
-     * @return list of all registered workflow methods
-     */
-    public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
-      return ensureLaunched("getRegisteredWorkflows").getWorkflows();
-    }
-
-    /**
-     * Get all workflow classes registered with DBOS.
-     *
-     * @return list of all class instances containing registered workflow methods
-     */
-    public @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
-      return ensureLaunched("getRegisteredWorkflowInstances").getInstances();
-    }
-
-    /**
-     * Get a system database record stored by an external service A unique value is stored per
-     * combination of service, workflowName, and key
-     *
-     * @param service Identity of the service maintaining the record
-     * @param workflowName Fully qualified name of the workflow
-     * @param key Key assigned within the service+workflow
-     * @return Value associated with the service+workflow+key combination
-     */
-    public Optional<ExternalState> getExternalState(
-        String service, String workflowName, String key) {
-      return ensureLaunched("getExternalState").getExternalState(service, workflowName, key);
-    }
-
-    /**
-     * Insert or update a system database record stored by an external service A timestamped unique
-     * value is stored per combination of service, workflowName, and key
-     *
-     * @param state ExternalState containing the service, workflow, key, and value to store
-     * @return Value associated with the service+workflow+key combination, in case the stored value
-     *     already had a higher version or timestamp
-     */
-    public ExternalState upsertExternalState(ExternalState state) {
-      return ensureLaunched("upsertExternalState").upsertExternalState(state);
-    }
-
-    /**
-     * Marks a breaking change within a workflow. Returns true for new workflows (i.e. workflow
-     * sthat reach this point in the workflow after the breaking change was created) and false for
-     * old worklows (i.e. workflows that reached this point in the workflow before the breaking
-     * change was created). The workflow should execute the new code if this method returns true,
-     * otherwise execute the old code. Note, patching must be enabled in DBOS configuration and this
-     * method must be called from within a workflow context.
-     *
-     * @param patchName the name of the patch to apply
-     * @return true for workflows started after the breaking change, false for workflows started
-     *     before the breaking change
-     * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
-     *     workflow
-     */
-    public boolean patch(@NonNull String patchName) {
-      return ensureLaunched("patch").patch(patchName);
-    }
-
-    /**
-     * Deprecates a previously applied breaking change patch within a workflow. Safely executes
-     * workflows containing the patch marker, but does not insert the patch marker into new
-     * workflows. Always returns true (boolean return gives deprecatePatch the same signature as
-     * {@link #patch}). Like {@link #patch}, patching must be enabled in DBOS configuration and this
-     * method must be called from within a workflow context.
-     *
-     * @param patchName the name of the patch to deprecate
-     * @return true (always returns true or throws)
-     * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
-     *     workflow
-     */
-    public boolean deprecatePatch(@NonNull String patchName) {
-      return ensureLaunched("deprecatePatch").deprecatePatch(patchName);
-    }
+  /**
+   * Deprecates a previously applied breaking change patch within a workflow. Safely executes
+   * workflows containing the patch marker, but does not insert the patch marker into new workflows.
+   * Always returns true (boolean return gives deprecatePatch the same signature as {@link #patch}).
+   * Like {@link #patch}, patching must be enabled in DBOS configuration and this method must be
+   * called from within a workflow context.
+   *
+   * @param patchName the name of the patch to deprecate
+   * @return true (always returns true or throws)
+   * @throws RuntimeException if patching is not enabled in DBOS config or if called outside a
+   *     workflow
+   */
+  public boolean deprecatePatch(@NonNull String patchName) {
+    return ensureLaunched("deprecatePatch").deprecatePatch(patchName);
   }
 
   /**

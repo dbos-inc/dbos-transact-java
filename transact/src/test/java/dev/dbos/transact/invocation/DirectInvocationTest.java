@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 @org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class DirectInvocationTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
   private HawkService proxy;
   @AutoClose HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
@@ -36,7 +36,7 @@ public class DirectInvocationTest {
   @BeforeEach
   void beforeEachTest() {
     var dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
     var impl = new HawkServiceImpl(dbos);
     proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);

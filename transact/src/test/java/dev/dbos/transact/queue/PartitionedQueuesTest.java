@@ -84,13 +84,13 @@ public class PartitionedQueuesTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   private DBOSConfig dbosConfig;
-  @AutoClose private DBOS.Instance dbos;
+  @AutoClose private DBOS dbos;
   @AutoClose private HikariDataSource dataSource;
 
   @BeforeEach
   void setup() {
     this.dbosConfig = pgContainer.dbosConfig();
-    this.dbos = new DBOS.Instance(dbosConfig);
+    this.dbos = new DBOS(dbosConfig);
     this.dataSource = pgContainer.dataSource();
   }
 

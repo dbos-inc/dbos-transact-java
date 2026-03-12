@@ -43,7 +43,7 @@ class DBOSExecutorTest {
     dataSource = pgContainer.dataSource();
   }
 
-  private ExecutingService register(DBOS.Instance dbos) {
+  private ExecutingService register(DBOS dbos) {
     var impl = new ExecutingServiceImpl(dbos);
     var service = dbos.registerWorkflows(ExecutingService.class, impl);
     impl.setSelf(service);
@@ -53,7 +53,7 @@ class DBOSExecutorTest {
   @Test
   @EnabledForJreRange(min = JRE.JAVA_21)
   public void virtualThreadPoolJava21() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       dbos.launch();
       assertFalse(DBOSTestAccess.getDbosExecutor(dbos).usingThreadPoolExecutor());
     }
@@ -62,7 +62,7 @@ class DBOSExecutorTest {
   @Test
   @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "21|25")
   public void virtualThreadPoolJDK21And25() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       dbos.launch();
       assertFalse(DBOSTestAccess.getDbosExecutor(dbos).usingThreadPoolExecutor());
     }
@@ -71,7 +71,7 @@ class DBOSExecutorTest {
   @Test
   @DisabledForJreRange(min = JRE.JAVA_21)
   public void threadPoolJava17() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       dbos.launch();
       assertTrue(DBOSTestAccess.getDbosExecutor(dbos).usingThreadPoolExecutor());
     }
@@ -80,7 +80,7 @@ class DBOSExecutorTest {
   @Test
   @EnabledIfEnvironmentVariable(named = "JDKVERSION", matches = "17|17\\..*")
   public void threadPoolJDK17() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       dbos.launch();
       assertTrue(DBOSTestAccess.getDbosExecutor(dbos).usingThreadPoolExecutor());
     }
@@ -88,7 +88,7 @@ class DBOSExecutorTest {
 
   @Test
   void executeWorkflowById() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       ExecutingService executingService = register(dbos);
       dbos.launch();
 
@@ -121,7 +121,7 @@ class DBOSExecutorTest {
 
   @Test
   void executeWorkflowByIdNonExistent() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       register(dbos);
       dbos.launch();
 
@@ -145,7 +145,7 @@ class DBOSExecutorTest {
   void workflowFunctionNotfound() throws Exception {
     String wfid = "wf-123";
 
-    try (var dbos1 = new DBOS.Instance(dbosConfig)) {
+    try (var dbos1 = new DBOS(dbosConfig)) {
       ExecutingService executingService = register(dbos1);
       dbos1.launch();
 
@@ -160,7 +160,7 @@ class DBOSExecutorTest {
     }
 
     // Re-launch without registering workflows
-    try (var dbos2 = new DBOS.Instance(dbosConfig)) {
+    try (var dbos2 = new DBOS(dbosConfig)) {
       dbos2.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos2);
 
@@ -179,7 +179,7 @@ class DBOSExecutorTest {
 
   @Test
   public void executeWithStep() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       ExecutingService executingService = register(dbos);
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -219,7 +219,7 @@ class DBOSExecutorTest {
 
   @Test
   public void ReExecuteWithStepTwoOnly() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var impl = new ExecutingServiceImpl(dbos);
       var proxy = dbos.registerWorkflows(ExecutingService.class, impl);
       impl.setSelf(proxy);
@@ -267,7 +267,7 @@ class DBOSExecutorTest {
 
   @Test
   public void sleep() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       ExecutingService executingService = register(dbos);
       dbos.launch();
 
@@ -290,7 +290,7 @@ class DBOSExecutorTest {
 
   @Test
   public void sleepRecovery() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       ExecutingService executingService = register(dbos);
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);

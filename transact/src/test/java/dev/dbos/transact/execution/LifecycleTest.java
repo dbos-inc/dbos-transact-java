@@ -62,7 +62,7 @@ class LifecycleTestWorkflowsImpl implements LifecycleTestWorkflows {
 }
 
 class TestLifecycleService implements DBOSLifecycleListener {
-  private DBOS.Instance dbos;
+  private DBOS dbos;
   public int launchCount = 0;
   public int shutdownCount = 0;
   public int nInstances = 0;
@@ -72,7 +72,7 @@ class TestLifecycleService implements DBOSLifecycleListener {
   public ArrayList<RegisteredWorkflow> wfs = new ArrayList<>();
 
   @Override
-  public void dbosLaunched(DBOS.Instance dbos) {
+  public void dbosLaunched(DBOS dbos) {
     this.dbos = dbos;
     var expectedParams = new Class<?>[] {int.class, int.class};
 
@@ -128,8 +128,7 @@ public class LifecycleTest {
     dbosConfig = pgContainer.dbosConfig();
   }
 
-  private void setup(
-      DBOS.Instance dbos, LifecycleTestWorkflowsImpl impl, TestLifecycleService svc) {
+  private void setup(DBOS dbos, LifecycleTestWorkflowsImpl impl, TestLifecycleService svc) {
     dbos.registerWorkflows(LifecycleTestWorkflows.class, impl, "inst1");
     dbos.registerLifecycleListener(svc);
     dbos.registerWorkflows(LifecycleTestWorkflows.class, new LifecycleTestWorkflowsImpl(), "instA");
@@ -141,7 +140,7 @@ public class LifecycleTest {
 
   @Test
   void checkThatItAllHappened() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var impl = new LifecycleTestWorkflowsImpl();
       var svc = new TestLifecycleService();
       setup(dbos, impl, svc);
@@ -161,7 +160,7 @@ public class LifecycleTest {
 
   @Test
   void deactivateLifecycleListeners() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var impl = new LifecycleTestWorkflowsImpl();
       var svc = new TestLifecycleService();
       setup(dbos, impl, svc);

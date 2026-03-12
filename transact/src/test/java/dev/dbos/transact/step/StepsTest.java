@@ -133,11 +133,11 @@ interface ServiceWFAndStep {
 
 class ServiceWFAndStepImpl implements ServiceWFAndStep {
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
   private ServiceWFAndStep self;
 
-  public ServiceWFAndStepImpl(DBOS.Instance dbos) {
+  public ServiceWFAndStepImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -318,12 +318,12 @@ public class StepsTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   DBOSConfig dbosConfig;
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
 
   @BeforeEach
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
   }
 
   @Test

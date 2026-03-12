@@ -8,11 +8,11 @@ import dev.dbos.transact.workflow.Workflow;
 import java.time.Instant;
 
 public class BearServiceImpl implements BearService {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
   public int nWfCalls = 0;
   private BearService proxy;
 
-  public BearServiceImpl(DBOS.Instance dbos) {
+  public BearServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 

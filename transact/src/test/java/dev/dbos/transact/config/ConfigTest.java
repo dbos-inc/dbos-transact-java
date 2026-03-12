@@ -38,9 +38,9 @@ interface ExecutorTestService {
 
 class ExecutorTestServiceImpl implements ExecutorTestService {
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  public ExecutorTestServiceImpl(DBOS.Instance dbos) {
+  public ExecutorTestServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -75,7 +75,7 @@ public class ConfigTest {
                   .dbosConfig()
                   .withAppVersion("test-app-version")
                   .withExecutorId("test-executor-id");
-          var dbos = new DBOS.Instance(config);
+          var dbos = new DBOS(config);
 
           try {
             dbos.launch();
@@ -100,7 +100,7 @@ public class ConfigTest {
     envVars.execute(
         () -> {
           var config = pgContainer.dbosConfig();
-          var dbos = new DBOS.Instance(config);
+          var dbos = new DBOS(config);
 
           try {
             dbos.launch();
@@ -130,7 +130,7 @@ public class ConfigTest {
                   .dbosConfig()
                   .withAppVersion("test-app-version")
                   .withExecutorId("test-executor-id");
-          var dbos = new DBOS.Instance(config);
+          var dbos = new DBOS(config);
 
           try {
             dbos.launch();
@@ -147,7 +147,7 @@ public class ConfigTest {
   @Test
   public void localExecutorId() throws Exception {
     var config = pgContainer.dbosConfig();
-    var dbos = new DBOS.Instance(config);
+    var dbos = new DBOS(config);
 
     try {
       dbos.launch();
@@ -162,7 +162,7 @@ public class ConfigTest {
   @Test
   public void conductorExecutorId() throws Exception {
     var config = pgContainer.dbosConfig().withConductorKey("test-conductor-key");
-    var dbos = new DBOS.Instance(config);
+    var dbos = new DBOS(config);
 
     try {
       dbos.launch();
@@ -183,7 +183,7 @@ public class ConfigTest {
             .withConductorKey("test-conductor-key")
             .withExecutorId("test-executor-id");
 
-    try (var dbos = new DBOS.Instance(config)) {
+    try (var dbos = new DBOS(config)) {
       assertThrows(IllegalArgumentException.class, () -> dbos.launch());
     }
   }
@@ -210,7 +210,7 @@ public class ConfigTest {
   @Test
   public void calcAppVersion() throws Exception {
     var config = pgContainer.dbosConfig();
-    var dbos = new DBOS.Instance(config);
+    var dbos = new DBOS(config);
     try {
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -250,7 +250,7 @@ public class ConfigTest {
             .withDatabaseUrl("completely-invalid-url")
             .withDbUser("invalid-user")
             .withDbPassword("invalid-password");
-    var dbos = new DBOS.Instance(config);
+    var dbos = new DBOS(config);
 
     try {
       var proxy =
@@ -287,7 +287,7 @@ public class ConfigTest {
               .withDatabaseUrl("completely-invalid-url")
               .withDbUser("invalid-user")
               .withDbPassword("invalid-password");
-      var dbos = new DBOS.Instance(config);
+      var dbos = new DBOS(config);
 
       try {
         var proxy =
@@ -331,7 +331,7 @@ public class ConfigTest {
     envVars.execute(
         () -> {
           var dbosConfig = pgContainer.dbosConfig();
-          var dbos = new DBOS.Instance(dbosConfig);
+          var dbos = new DBOS(dbosConfig);
 
           try {
             var proxy =

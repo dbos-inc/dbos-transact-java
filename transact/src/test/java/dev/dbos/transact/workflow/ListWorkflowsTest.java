@@ -50,7 +50,7 @@ public class ListWorkflowsTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose HikariDataSource dataSource;
   DBOSConfig dbosConfig;
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
   final long baseTime = System.currentTimeMillis();
 
   /**
@@ -60,7 +60,7 @@ public class ListWorkflowsTest {
   @BeforeEach
   void beforeEach() throws Exception {
     dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
     dbos.launch();
     dataSource = pgContainer.dataSource();
     populateWorkflows(dataSource, baseTime);

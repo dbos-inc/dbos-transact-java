@@ -16,12 +16,12 @@ interface GCTestService {
 
 class GCTestServiceImpl implements GCTestService {
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
   public CountDownLatch gcLatch = new CountDownLatch(1);
   public CountDownLatch timeoutLatch = new CountDownLatch(1);
 
-  public GCTestServiceImpl(DBOS.Instance dbos) {
+  public GCTestServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 

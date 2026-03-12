@@ -38,12 +38,12 @@ class ExecutingServiceImpl implements ExecutingService {
 
   private static final Logger logger = LoggerFactory.getLogger(ExecutingServiceImpl.class);
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
   private ExecutingService self;
   public int step1Count = 0;
   public int step2Count = 0;
 
-  public ExecutingServiceImpl(DBOS.Instance dbos) {
+  public ExecutingServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 

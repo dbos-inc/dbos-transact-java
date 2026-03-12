@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
 public class CustomSchemaTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
   private static final String schema = "F8nny_sCHem@-n@m3";
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
   private HawkService proxy;
   @AutoClose HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
@@ -32,7 +32,7 @@ public class CustomSchemaTest {
   @BeforeEach
   void beforeEachTest() throws SQLException {
     var dbosConfig = pgContainer.dbosConfig().withDatabaseSchema(schema);
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
     var impl = new HawkServiceImpl(dbos);
     proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);

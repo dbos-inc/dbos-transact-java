@@ -27,10 +27,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class HawkServiceInstanceImpl implements HawkService {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
   private HawkService proxy;
 
-  public HawkServiceInstanceImpl(DBOS.Instance dbos) {
+  public HawkServiceInstanceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -112,7 +112,7 @@ class HawkServiceInstanceImpl implements HawkService {
 @org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class InstanceTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
   private HawkService proxy;
   @AutoClose HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
@@ -124,7 +124,7 @@ public class InstanceTest {
     // Note, manually injecting the DBOS instance here is a poor developer experience
     // Opened https://github.com/dbos-inc/dbos-transact-java/issues/296 to track improving this
 
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
     var impl = new HawkServiceInstanceImpl(dbos);
     proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);

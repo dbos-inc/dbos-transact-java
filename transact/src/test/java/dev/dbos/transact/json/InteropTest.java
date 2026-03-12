@@ -51,7 +51,7 @@ public class InteropTest {
   private static final ObjectMapper mapper = new ObjectMapper();
 
   private DBOSConfig dbosConfig;
-  @AutoClose private DBOS.Instance dbos;
+  @AutoClose private DBOS dbos;
   @AutoClose private HikariDataSource dataSource;
 
   // ============================================================================
@@ -105,7 +105,7 @@ public class InteropTest {
   @BeforeEach
   void setup() {
     this.dbosConfig = pgContainer.dbosConfig();
-    this.dbos = new DBOS.Instance(dbosConfig);
+    this.dbos = new DBOS(dbosConfig);
     this.dataSource = pgContainer.dataSource();
   }
 
@@ -128,9 +128,9 @@ public class InteropTest {
   /** Implementation of the canonical interop workflow. */
   @WorkflowClassName("interop")
   public static class InteropServiceImpl implements InteropService {
-    private final DBOS.Instance dbos;
+    private final DBOS dbos;
 
-    public InteropServiceImpl(DBOS.Instance dbos) {
+    public InteropServiceImpl(DBOS dbos) {
       this.dbos = dbos;
     }
 

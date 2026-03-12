@@ -44,13 +44,13 @@ public class PortableSerializationTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   private DBOSConfig dbosConfig;
-  @AutoClose private DBOS.Instance dbos;
+  @AutoClose private DBOS dbos;
   @AutoClose private HikariDataSource dataSource;
 
   @BeforeEach
   void setup() {
     this.dbosConfig = pgContainer.dbosConfig();
-    this.dbos = new DBOS.Instance(dbosConfig);
+    this.dbos = new DBOS(dbosConfig);
     this.dataSource = pgContainer.dataSource();
   }
 
@@ -62,9 +62,9 @@ public class PortableSerializationTest {
   /** Implementation of the portable test workflow. */
   @WorkflowClassName("PortableTestService")
   public static class PortableTestServiceImpl implements PortableTestService {
-    private final DBOS.Instance dbos;
+    private final DBOS dbos;
 
-    public PortableTestServiceImpl(DBOS.Instance dbos) {
+    public PortableTestServiceImpl(DBOS dbos) {
       this.dbos = dbos;
     }
 
@@ -279,9 +279,9 @@ public class PortableSerializationTest {
   /** Implementation that sets events with different serialization types. */
   @WorkflowClassName("ExplicitSerService")
   public static class ExplicitSerServiceImpl implements ExplicitSerService {
-    private final DBOS.Instance dbos;
+    private final DBOS dbos;
 
-    public ExplicitSerServiceImpl(DBOS.Instance dbos) {
+    public ExplicitSerServiceImpl(DBOS dbos) {
       this.dbos = dbos;
     }
 
@@ -308,9 +308,9 @@ public class PortableSerializationTest {
   /** Implementation that sets events with different serialization types. */
   @WorkflowClassName("ExplicitSerServicePortable")
   public static class ExplicitSerServicePortableImpl implements ExplicitSerService {
-    private final DBOS.Instance dbos;
+    private final DBOS dbos;
 
-    public ExplicitSerServicePortableImpl(DBOS.Instance dbos) {
+    public ExplicitSerServicePortableImpl(DBOS dbos) {
       this.dbos = dbos;
     }
 
@@ -531,9 +531,9 @@ public class PortableSerializationTest {
 
   @WorkflowClassName("EventSetterService")
   public static class EventSetterServiceImpl implements EventSetterService {
-    private final DBOS.Instance dbos;
+    private final DBOS dbos;
 
-    public EventSetterServiceImpl(DBOS.Instance dbos) {
+    public EventSetterServiceImpl(DBOS dbos) {
       this.dbos = dbos;
     }
 
@@ -794,9 +794,9 @@ public class PortableSerializationTest {
 
   @WorkflowClassName("CustomSerService")
   public static class CustomSerServiceImpl implements CustomSerService {
-    private final DBOS.Instance dbos;
+    private final DBOS dbos;
 
-    public CustomSerServiceImpl(DBOS.Instance dbos) {
+    public CustomSerServiceImpl(DBOS dbos) {
       this.dbos = dbos;
     }
 
@@ -817,7 +817,7 @@ public class PortableSerializationTest {
     // Reinitialize with custom serializer
     var customConfig = dbosConfig.withSerializer(new TestBase64Serializer());
 
-    try (var localDbos = new DBOS.Instance(customConfig)) {
+    try (var localDbos = new DBOS(customConfig)) {
       Queue testQueue = new Queue("testq");
       localDbos.registerQueue(testQueue);
       localDbos.registerWorkflows(CustomSerService.class, new CustomSerServiceImpl(localDbos));
@@ -888,7 +888,7 @@ public class PortableSerializationTest {
 
     // Phase 2: Relaunch with custom serializer
     var customConfig = dbosConfig.withSerializer(new TestBase64Serializer());
-    try (var localDbos = new DBOS.Instance(customConfig)) {
+    try (var localDbos = new DBOS(customConfig)) {
       localDbos.registerQueue(testQueue);
       localDbos.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl(localDbos));
       localDbos.launch();
@@ -917,7 +917,7 @@ public class PortableSerializationTest {
     }
 
     // Phase 3: Relaunch with custom serializer again, verify Phase 2 data still readable
-    try (var localDbos = new DBOS.Instance(customConfig)) {
+    try (var localDbos = new DBOS(customConfig)) {
       localDbos.registerQueue(testQueue);
       localDbos.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl(localDbos));
       localDbos.launch();
@@ -942,7 +942,7 @@ public class PortableSerializationTest {
     String wfId;
     Queue testQueue = new Queue("testq");
 
-    try (var localDbos = new DBOS.Instance(customConfig)) {
+    try (var localDbos = new DBOS(customConfig)) {
       localDbos.registerQueue(testQueue);
       localDbos.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl(localDbos));
       localDbos.launch();
@@ -963,7 +963,7 @@ public class PortableSerializationTest {
     }
 
     // Relaunch WITHOUT custom serializer
-    try (var localDbos = new DBOS.Instance(dbosConfig)) {
+    try (var localDbos = new DBOS(dbosConfig)) {
       localDbos.registerQueue(testQueue);
       localDbos.registerWorkflows(EventSetterService.class, new EventSetterServiceImpl(localDbos));
       localDbos.launch();

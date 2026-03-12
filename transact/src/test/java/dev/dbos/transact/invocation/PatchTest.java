@@ -25,9 +25,9 @@ interface PatchService2 {
 
 @WorkflowClassName("PatchService")
 class PatchServiceImplOne implements PatchService {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  PatchServiceImplOne(DBOS.Instance dbos) {
+  PatchServiceImplOne(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -42,9 +42,9 @@ class PatchServiceImplOne implements PatchService {
 
 @WorkflowClassName("PatchService")
 class PatchServiceImplTwo implements PatchService {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  PatchServiceImplTwo(DBOS.Instance dbos) {
+  PatchServiceImplTwo(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -60,9 +60,9 @@ class PatchServiceImplTwo implements PatchService {
 
 @WorkflowClassName("PatchService")
 class PatchServiceImplThree implements PatchService {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  PatchServiceImplThree(DBOS.Instance dbos) {
+  PatchServiceImplThree(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -82,9 +82,9 @@ class PatchServiceImplThree implements PatchService {
 
 @WorkflowClassName("PatchService")
 class PatchServiceImplFour implements PatchService {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  PatchServiceImplFour(DBOS.Instance dbos) {
+  PatchServiceImplFour(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -100,9 +100,9 @@ class PatchServiceImplFour implements PatchService {
 
 @WorkflowClassName("PatchService")
 class PatchServiceImplFive implements PatchService {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  PatchServiceImplFive(DBOS.Instance dbos) {
+  PatchServiceImplFive(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -117,9 +117,9 @@ class PatchServiceImplFive implements PatchService {
 
 @WorkflowClassName("PatchService")
 class PatchServiceImplFiveB implements PatchService2 {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  PatchServiceImplFiveB(DBOS.Instance dbos) {
+  PatchServiceImplFiveB(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -149,7 +149,7 @@ public class PatchTest {
 
     var dbosConfig = pgContainer.dbosConfig().withEnablePatching().withAppVersion("test-version");
 
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var proxy1 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplOne(dbos));
       dbos.launch();
 
@@ -163,7 +163,7 @@ public class PatchTest {
     }
 
     // Recreate DBOS with a new (patched) version of a workflow
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var proxy2 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplTwo(dbos));
       dbos.launch();
 
@@ -192,7 +192,7 @@ public class PatchTest {
     }
 
     // Recreate DBOS with another new (patched) version of a workflow
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var proxy3 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplThree(dbos));
       dbos.launch();
 
@@ -227,7 +227,7 @@ public class PatchTest {
     }
 
     // Now, let's deprecate the patch
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var proxy4 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplFour(dbos));
       dbos.launch();
 
@@ -262,7 +262,7 @@ public class PatchTest {
     }
 
     // Now, let's deprecate the patch
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var proxy5 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplFive(dbos));
       dbos.launch();
 
@@ -299,7 +299,7 @@ public class PatchTest {
   public void patchThrowsNotConfigured() throws Exception {
     var dbosConfig = pgContainer.dbosConfig().withAppVersion("test-version");
 
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var proxy2 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplTwo(dbos));
       dbos.launch();
 
@@ -311,7 +311,7 @@ public class PatchTest {
   public void deprecatePatchThrowsNotConfigured() throws Exception {
     var dbosConfig = pgContainer.dbosConfig().withAppVersion("test-version");
 
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var proxy4 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplFour(dbos));
       dbos.launch();
 
@@ -323,7 +323,7 @@ public class PatchTest {
   public void mulipleDefinitions() throws Exception {
     var dbosConfig = pgContainer.dbosConfig().withAppVersion("test-version");
 
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       @SuppressWarnings("unused")
       var proxy5 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplFive(dbos));
       assertThrows(

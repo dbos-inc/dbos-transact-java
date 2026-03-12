@@ -18,12 +18,12 @@ public class SyncWorkflowTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   DBOSConfig dbosConfig;
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
 
   @BeforeEach
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
   }
 
   @Test

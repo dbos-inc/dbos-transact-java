@@ -29,14 +29,14 @@ public class ClientTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   DBOSConfig dbosConfig;
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
   @AutoClose HikariDataSource dataSource;
   ClientService service;
 
   @BeforeEach
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
     dataSource = pgContainer.dataSource();
 
     dbos.registerQueue(new Queue("testQueue"));

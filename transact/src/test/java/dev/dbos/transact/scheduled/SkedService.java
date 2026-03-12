@@ -32,9 +32,9 @@ class SkedServiceImpl implements SkedService {
 
   private static final Logger logger = LoggerFactory.getLogger(SkedServiceImpl.class);
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  public SkedServiceImpl(DBOS.Instance dbos) {
+  public SkedServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 

@@ -47,7 +47,7 @@ class RecoveryServiceTest {
     testQueue = new Queue("q1");
   }
 
-  private ExecutingService register(DBOS.Instance dbos) {
+  private ExecutingService register(DBOS dbos) {
     var impl = new ExecutingServiceImpl(dbos);
     var service = dbos.registerWorkflows(ExecutingService.class, impl);
     impl.setSelf(service);
@@ -57,7 +57,7 @@ class RecoveryServiceTest {
 
   @Test
   void recoverWorkflows() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var executingService = register(dbos);
       dbos.launch();
 
@@ -106,7 +106,7 @@ class RecoveryServiceTest {
 
   @Test
   void recoverPendingWorkflows() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var executingService = register(dbos);
       dbos.launch();
 
@@ -147,7 +147,7 @@ class RecoveryServiceTest {
     String wfid1 = "wf-123";
     String wfid2 = "wf-124";
 
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var service = register(dbos);
       dbos.launch();
 
@@ -162,7 +162,7 @@ class RecoveryServiceTest {
     setWorkflowStateToPending(dataSource);
 
     // Re-launch and check recovery
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
 
       var wfRow = DBUtils.getWorkflowRow(dataSource, wfid1);
       assertNotNull(wfRow);
@@ -183,7 +183,7 @@ class RecoveryServiceTest {
 
   @Test
   public void testRecoverNoOutputSteps() throws Exception {
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var executingService = register(dbos);
       dbos.launch();
 

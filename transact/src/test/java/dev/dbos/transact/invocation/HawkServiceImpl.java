@@ -12,10 +12,10 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 public class HawkServiceImpl implements HawkService {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
   private HawkService proxy;
 
-  public HawkServiceImpl(DBOS.Instance dbos) {
+  public HawkServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 

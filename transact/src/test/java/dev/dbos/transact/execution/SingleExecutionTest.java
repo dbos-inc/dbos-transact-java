@@ -268,7 +268,7 @@ public class SingleExecutionTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   DBOSConfig dbosConfig;
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
   @AutoClose HikariDataSource dataSource;
 
   TryConcExecIfc execIfc;
@@ -284,7 +284,7 @@ public class SingleExecutionTest {
   @BeforeEach
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
     dataSource = pgContainer.dataSource();
 
     execImpl = new TryConcExec();

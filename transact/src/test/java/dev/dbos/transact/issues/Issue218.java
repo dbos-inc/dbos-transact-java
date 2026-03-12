@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOS.Instance;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.DBUtils;
@@ -37,11 +36,11 @@ class Issue218ServiceImpl implements Issue218Service {
 
   private static final Logger logger = LoggerFactory.getLogger(Issue218ServiceImpl.class);
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
   private final Queue queue;
   private Issue218Service proxy;
 
-  public Issue218ServiceImpl(DBOS.Instance dbos, Queue queue) {
+  public Issue218ServiceImpl(DBOS dbos, Queue queue) {
     this.dbos = dbos;
     this.queue = queue;
   }
@@ -102,7 +101,7 @@ public class Issue218 {
   void issue218() throws Exception {
 
     String wfid;
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
 
       var proxy = register(dbos);
       dbos.launch();
@@ -124,7 +123,7 @@ public class Issue218 {
       assertTrue(step.childWorkflowId().startsWith(wfid));
     }
 
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       register(dbos);
       dbos.launch();
 
@@ -156,7 +155,7 @@ public class Issue218 {
     }
   }
 
-  private Issue218Service register(Instance dbos) {
+  private Issue218Service register(DBOS dbos) {
     dbos.registerQueue(queue);
     var impl = new Issue218ServiceImpl(dbos, queue);
     var proxy = dbos.registerWorkflows(Issue218Service.class, impl);

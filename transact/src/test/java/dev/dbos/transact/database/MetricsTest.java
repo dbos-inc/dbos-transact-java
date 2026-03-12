@@ -21,9 +21,9 @@ interface MetricsService {
 
 class MetricsServiceImpl implements MetricsService {
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  public MetricsServiceImpl(DBOS.Instance dbos) {
+  public MetricsServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -52,7 +52,7 @@ public class MetricsTest {
   @Test
   public void testGetMetrics() throws Exception {
     var dbosConfig = pgContainer.dbosConfig();
-    try (var dbos = new DBOS.Instance(dbosConfig)) {
+    try (var dbos = new DBOS(dbosConfig)) {
       var proxy = dbos.registerWorkflows(MetricsService.class, new MetricsServiceImpl(dbos));
       dbos.launch();
 

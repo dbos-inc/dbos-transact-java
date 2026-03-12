@@ -29,7 +29,7 @@ public class SystemDatabaseTest {
   DBOSConfig dbosConfig;
   @AutoClose SystemDatabase sysdb;
 
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
   @AutoClose HikariDataSource dataSource;
 
   @BeforeEach

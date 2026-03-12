@@ -24,9 +24,9 @@ interface TestService {
 }
 
 class TestServiceImpl implements TestService {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  public TestServiceImpl(DBOS.Instance instance) {
+  public TestServiceImpl(DBOS instance) {
     this.dbos = instance;
   }
 
@@ -42,14 +42,14 @@ class TestServiceImpl implements TestService {
 public class MultiDbosInstanceTest {
 
   @AutoClose final PgContainer pgContainerA = new PgContainer();
-  @AutoClose DBOS.Instance dbosA;
+  @AutoClose DBOS dbosA;
   @AutoClose HikariDataSource dataSourceA;
   private TestService proxyA;
   private TestServiceImpl implA;
   private Queue queueA;
 
   @AutoClose final PgContainer pgContainerB = new PgContainer();
-  @AutoClose DBOS.Instance dbosB;
+  @AutoClose DBOS dbosB;
   @AutoClose HikariDataSource dataSourceB;
   private TestServiceImpl implB;
   private TestService proxyB;
@@ -58,7 +58,7 @@ public class MultiDbosInstanceTest {
   @BeforeEach
   void beforeEachTest() throws Exception {
     var dbosConfigA = pgContainerA.dbosConfig("MultiDbosInstanceTestA");
-    dbosA = new DBOS.Instance(dbosConfigA);
+    dbosA = new DBOS(dbosConfigA);
     dataSourceA = pgContainerA.dataSource();
     implA = new TestServiceImpl(dbosA);
     proxyA = dbosA.registerWorkflows(TestService.class, implA);
@@ -67,7 +67,7 @@ public class MultiDbosInstanceTest {
     dbosA.launch();
 
     var dbosConfigB = pgContainerB.dbosConfig("MultiDbosInstanceTestB");
-    dbosB = new DBOS.Instance(dbosConfigB);
+    dbosB = new DBOS(dbosConfigB);
     dataSourceB = pgContainerB.dataSource();
     implB = new TestServiceImpl(dbosB);
     proxyB = dbosB.registerWorkflows(TestService.class, implB);

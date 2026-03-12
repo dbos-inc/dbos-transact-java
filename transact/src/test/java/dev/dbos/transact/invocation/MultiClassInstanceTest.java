@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
 @org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class MultiClassInstanceTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
   @AutoClose HikariDataSource dataSource;
   HawkServiceImpl himpl;
   BearServiceImpl bimpla;
@@ -37,7 +37,7 @@ public class MultiClassInstanceTest {
   @BeforeEach
   void beforeEachTest() {
     var dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
     dataSource = pgContainer.dataSource();
 
     himpl = new HawkServiceImpl(dbos);

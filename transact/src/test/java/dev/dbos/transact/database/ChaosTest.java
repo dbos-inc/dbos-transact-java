@@ -30,12 +30,12 @@ interface ChaosService {
 
 class ChaosServiceImpl implements ChaosService {
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
   private final DataSource dataSource;
 
   private ChaosService self;
 
-  public ChaosServiceImpl(DBOS.Instance dbos, DataSource dataSource) {
+  public ChaosServiceImpl(DBOS dbos, DataSource dataSource) {
     this.dbos = dbos;
     this.dataSource = dataSource;
   }
@@ -114,7 +114,7 @@ public class ChaosTest {
   public void chaosTest() throws Exception {
     var dbosConfig = pgContainer.dbosConfig();
     try (var dataSource = pgContainer.dataSource();
-        var dbos = new DBOS.Instance(dbosConfig)) {
+        var dbos = new DBOS(dbosConfig)) {
 
       var impl = new ChaosServiceImpl(dbos, dataSource);
       var proxy = dbos.registerWorkflows(ChaosService.class, impl);

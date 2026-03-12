@@ -52,7 +52,7 @@ interface EventsService {
 
 class EventsServiceImpl implements EventsService {
 
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
   CountDownLatch getReadyLatch = new CountDownLatch(1);
   CountDownLatch advanceSetLatch = new CountDownLatch(1);
@@ -62,7 +62,7 @@ class EventsServiceImpl implements EventsService {
   CountDownLatch doneSetLatch2 = new CountDownLatch(1);
   CountDownLatch doneGetLatch1 = new CountDownLatch(1);
 
-  EventsServiceImpl(DBOS.Instance dbos) {
+  EventsServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 
@@ -172,7 +172,7 @@ public class EventsTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   private DBOSConfig dbosConfig;
-  @AutoClose private DBOS.Instance dbos;
+  @AutoClose private DBOS dbos;
   @AutoClose private HikariDataSource dataSource;
 
   private EventsService proxy;
@@ -181,7 +181,7 @@ public class EventsTest {
   @BeforeEach
   void setup() {
     this.dbosConfig = pgContainer.dbosConfig();
-    this.dbos = new DBOS.Instance(dbosConfig);
+    this.dbos = new DBOS(dbosConfig);
     this.dataSource = pgContainer.dataSource();
     this.impl = new EventsServiceImpl(dbos);
     this.proxy = dbos.registerWorkflows(EventsService.class, impl);

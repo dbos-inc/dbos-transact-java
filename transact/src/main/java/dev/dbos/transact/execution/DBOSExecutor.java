@@ -131,7 +131,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void start(
-      DBOS.Instance dbos,
+      DBOS dbos,
       Set<DBOSLifecycleListener> listenerSet,
       Map<String, RegisteredWorkflow> workflowMap,
       Map<String, RegisteredWorkflowInstance> instanceMap,

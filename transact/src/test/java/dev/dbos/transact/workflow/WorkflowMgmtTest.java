@@ -28,7 +28,7 @@ public class WorkflowMgmtTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   DBOSConfig dbosConfig;
-  @AutoClose DBOS.Instance dbos;
+  @AutoClose DBOS dbos;
 
   private MgmtService proxy;
   private MgmtServiceImpl impl;
@@ -37,7 +37,7 @@ public class WorkflowMgmtTest {
   @BeforeEach
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig();
-    dbos = new DBOS.Instance(dbosConfig);
+    dbos = new DBOS(dbosConfig);
 
     impl = new MgmtServiceImpl(dbos);
     proxy = dbos.registerWorkflows(MgmtService.class, impl);
