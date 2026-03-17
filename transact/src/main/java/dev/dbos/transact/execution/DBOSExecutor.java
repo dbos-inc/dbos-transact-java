@@ -176,7 +176,7 @@ public class DBOSExecutor implements AutoCloseable {
                   | IllegalAccessException
                   | InvocationTargetException e) {
                 // fall back to fixed thread pool executor if virtual thread executor unavailable
-                logger.debug("using newFixedThreadPool", e);
+                logger.debug("using newFixedThreadPool");
                 int threadCount = Runtime.getRuntime().availableProcessors() * 50;
                 return Executors.newFixedThreadPool(threadCount);
               }
