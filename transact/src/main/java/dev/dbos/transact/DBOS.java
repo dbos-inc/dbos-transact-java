@@ -174,64 +174,58 @@ public class DBOS implements AutoCloseable {
         interfaceClass, implementation, instanceName, () -> this.dbosExecutor.get());
   }
 
-  private void registerClassWorkflows(Class<?> interfaceClass, Object target, String instanceName) {
-    if (dbosExecutor.get() != null) {
-      throw new IllegalStateException("Cannot register workflow after DBOS is launched");
-    }
+  private void registerClassWorkflows(
+      @NonNull Class<?> interfaceClass,
+      @NonNull Object implementation,
+      @Nullable String instanceName) {
     Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
+    Objects.requireNonNull(implementation, "implementation must not be null");
     instanceName = Objects.requireNonNullElse(instanceName, "");
     if (!interfaceClass.isInterface()) {
       throw new IllegalArgumentException("interfaceClass must be an interface");
     }
-    Objects.requireNonNull(target, "implementation must not be null");
-
-    // Use @WorkflowClassName annotation if present, otherwise use the Java class name
-    WorkflowClassName classNameAnnotation =
-        target.getClass().getAnnotation(WorkflowClassName.class);
-    String className =
-        (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
-            ? classNameAnnotation.value()
-            : target.getClass().getName();
-    workflowRegistry.register(interfaceClass, target, className, instanceName);
-
-    Method[] methods = target.getClass().getDeclaredMethods();
-    for (Method method : methods) {
-      Workflow wfTag = method.getAnnotation(Workflow.class);
-      if (wfTag != null) {
-        method.setAccessible(true); // In case it's not public
-        var workflowName = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
-        registerWorkflow(
-            workflowName,
-            className,
-            instanceName,
-            target,
-            method,
-            wfTag.maxRecoveryAttempts(),
-            wfTag.serializationStrategy());
-      }
-    }
-  }
-
-  private void registerWorkflow(
-      @NonNull String workflowName,
-      @NonNull String className,
-      @Nullable String instanceName,
-      @NonNull Object target,
-      @NonNull Method method,
-      int maxRecoveryAttempts,
-      @Nullable SerializationStrategy serializationStrategy) {
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
 
+    // Use @WorkflowClassName annotation if present, otherwise use the Java class name
+    WorkflowClassName classNameAnnotation =
+        implementation.getClass().getAnnotation(WorkflowClassName.class);
+    String className =
+        (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
+            ? classNameAnnotation.value()
+            : implementation.getClass().getName();
+    workflowRegistry.register(interfaceClass, implementation, className, instanceName);
+
+    Method[] methods = implementation.getClass().getDeclaredMethods();
+    for (Method method : methods) {
+      Workflow wfAnnotation = method.getAnnotation(Workflow.class);
+      if (wfAnnotation != null) {
+        method.setAccessible(true); // In case it's not public
+        registerWorkflowMethod(wfAnnotation, implementation, className, instanceName, method);
+      }
+    }
+  }
+
+  private void registerWorkflowMethod(
+      @NonNull Workflow wfTag,
+      @NonNull Object target,
+      @NonNull String className,
+      @NonNull String instanceName,
+      @NonNull Method method) {
+    if (dbosExecutor.get() != null) {
+      throw new IllegalStateException("Cannot register workflow after DBOS is launched");
+    }
+
+    String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
     workflowRegistry.register(
-        Objects.requireNonNull(className, "className must not be null"),
-        Objects.requireNonNull(workflowName, "workflowName must not be null"),
-        Objects.requireNonNull(target, "target must not be null"),
-        Objects.requireNonNullElse(instanceName, ""),
-        Objects.requireNonNull(method, "method must not be null"),
-        maxRecoveryAttempts,
-        Objects.requireNonNullElse(serializationStrategy, SerializationStrategy.DEFAULT));
+        className,
+        name,
+        target,
+        instanceName,
+        method,
+        wfTag.maxRecoveryAttempts(),
+        wfTag.serializationStrategy());
   }
 
   /**
