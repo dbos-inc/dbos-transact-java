@@ -44,8 +44,18 @@ class KotlinExtensionsTest {
 
     @Test
     fun testStartWorkflowWithTrailingLambda() {
-        // Test beginWorkflow with trailing lambda (default options)
-        val handle1 = dbos.beginWorkflow(StartWorkflowOptions()) {
+        val handle1 = dbos.startWorkflow(StartWorkflowOptions()) {
+            proxy.simpleWorkflow("test")
+        }
+        
+        val result1 = handle1.result
+        assertEquals("testtest", result1)
+        assertEquals(1, impl.stepCount)
+    }
+
+    @Test
+    fun testStartWorkflowWithTrailingLambdaAndNullOptions() {
+        val handle1 = dbos.startWorkflow(null) {
             proxy.simpleWorkflow("test")
         }
         
@@ -56,11 +66,10 @@ class KotlinExtensionsTest {
 
     @Test 
     fun testStartWorkflowWithOptionsAndTrailingLambda() {
-        // Test beginWorkflow with options and trailing lambda
         val workflowId = "kotlin-test-${System.currentTimeMillis()}"
         val options = StartWorkflowOptions(workflowId)
         
-        val handle = dbos.beginWorkflow(options) {
+        val handle = dbos.startWorkflow(options) {
             proxy.workflowWithSteps("hello")
         }
         
@@ -72,8 +81,8 @@ class KotlinExtensionsTest {
 
     @Test
     fun testStartWorkflowUnitWithTrailingLambda() {
-        // Test beginWorkflow for Unit-returning workflow
-        val handle: WorkflowHandle<Unit, Exception> = dbos.beginWorkflow(StartWorkflowOptions()) {
+        // Test startWorkflow for Unit-returning workflow
+        val handle: WorkflowHandle<Unit, Exception> = dbos.startWorkflow(StartWorkflowOptions()) {
             proxy.unitWorkflow()
         }
         
@@ -85,7 +94,7 @@ class KotlinExtensionsTest {
     @Test
     fun testRunStepWithTrailingLambda() {
         // This test demonstrates runStep usage within a workflow
-        val handle = dbos.beginWorkflow(StartWorkflowOptions()) {
+        val handle = dbos.startWorkflow(StartWorkflowOptions()) {
             proxy.workflowWithDirectSteps("kotlin")
         }
         
@@ -145,7 +154,7 @@ class KotlinTestServiceImpl(private val dbos: DBOS) : KotlinTestService {
 
     @Workflow  
     override fun workflowWithDirectSteps(input: String): String {
-        // Demonstrate nested beginWorkflows using extension methods
+        // Demonstrate nested workflows using extension methods
         val result1 = dbos.runStep("directStep1") {
             stepCount++
             input + "_step1"

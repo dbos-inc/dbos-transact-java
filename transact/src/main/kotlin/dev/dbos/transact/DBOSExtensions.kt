@@ -23,53 +23,16 @@ import dev.dbos.transact.StartWorkflowOptions
  * enabling trailing lambda call syntax. The exception type is fixed to [Exception].
  *
  * @param T the return type of the workflow
- * @param options workflow options such as workflow ID
+ * @param options (nullable) workflow options such as workflow ID
  * @param block the workflow body to execute
  * @return a [WorkflowHandle] for retrieving the workflow result
  */
 @JvmSynthetic
 fun <T> DBOS.startWorkflow(
-    options: StartWorkflowOptions,
+    options: StartWorkflowOptions?,
     block: () -> T
 ): WorkflowHandle<T, Exception> {
-    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() }, options)
-}
-
-/**
- * Starts a workflow using trailing lambda syntax, with default options.
- *
- * Named `beginWorkflow` rather than `startWorkflow` to avoid an unresolvable collision with the
- * Java member `startWorkflow(ThrowingSupplier)`: Kotlin SAM-converts lambdas to functional
- * interfaces and prefers members over extensions, making a same-named extension unreachable.
- *
- * @param T the return type of the workflow
- * @param block the workflow body to execute
- * @return a [WorkflowHandle] for retrieving the workflow result
- */
-@JvmSynthetic
-fun <T> DBOS.beginWorkflow(
-    block: () -> T
-): WorkflowHandle<T, Exception> {
-    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() })
-}
-
-/**
- * Starts a workflow using trailing lambda syntax, with the given [options].
- *
- * This overload mirrors [beginWorkflow] but accepts [StartWorkflowOptions], provided as a
- * convenience so callers can use either name consistently.
- *
- * @param T the return type of the workflow
- * @param options workflow options such as workflow ID
- * @param block the workflow body to execute
- * @return a [WorkflowHandle] for retrieving the workflow result
- */
-@JvmSynthetic
-fun <T> DBOS.beginWorkflow(
-    options: StartWorkflowOptions,
-    block: () -> T
-): WorkflowHandle<T, Exception> {
-    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() }, options)
+    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() }, options ?: StartWorkflowOptions())
 }
 
 /**
