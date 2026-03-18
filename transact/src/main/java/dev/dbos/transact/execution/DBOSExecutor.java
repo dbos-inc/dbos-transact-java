@@ -22,8 +22,8 @@ import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.internal.AppVersionComputer;
-import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.Invocation;
+import dev.dbos.transact.internal.StartWorkflowHook;
 import dev.dbos.transact.json.ArgumentCoercion;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
@@ -923,7 +923,7 @@ public class DBOSExecutor implements AutoCloseable {
   private static <T, E extends Exception> Invocation captureInvocation(
       ThrowingSupplier<T, E> supplier) {
     AtomicReference<Invocation> capturedInvocation = new AtomicReference<>();
-    DBOSInvocationHandler.hookHolder.set(
+    DBOSExecutor.hookHolder.set(
         (invocation) -> {
           if (!capturedInvocation.compareAndSet(null, invocation)) {
             throw new RuntimeException(
@@ -936,7 +936,7 @@ public class DBOSExecutor implements AutoCloseable {
     } catch (Exception e) {
       throw new RuntimeException(e);
     } finally {
-      DBOSInvocationHandler.hookHolder.remove();
+      DBOSExecutor.hookHolder.remove();
     }
 
     return Objects.requireNonNull(
@@ -957,11 +957,11 @@ public class DBOSExecutor implements AutoCloseable {
     return null;
   }
 
-  private RegisteredWorkflow getWorkflow(Invocation inv) {
-    return getWorkflow(inv.className(), inv.instanceName(), inv.workflowName());
+  private RegisteredWorkflow getRegisteredWorkflow(Invocation inv) {
+    return getRegisteredWorkflow(inv.className(), inv.instanceName(), inv.workflowName());
   }
 
-  private RegisteredWorkflow getWorkflow(
+  private RegisteredWorkflow getRegisteredWorkflow(
       String className, String instanceName, String workflowName) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
     var workflow = workflowMap.get(fqName);
@@ -969,6 +969,46 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalStateException("%s workflow not registered".formatted(fqName));
     }
     return workflow;
+  }
+
+  static final ThreadLocal<StartWorkflowHook> hookHolder = new ThreadLocal<>();
+
+  public Object dispatchProxiedWorkflow(
+      String workflowName,
+      String className,
+      String instanceName,
+      Object[] args,
+      Class<?> returnType)
+      throws Exception {
+
+    var hook = hookHolder.get();
+    if (hook != null) {
+      var invocation = new Invocation(this, className, instanceName, workflowName, args);
+      hook.invoke(invocation);
+
+      if (returnType.isPrimitive()) {
+        if (returnType == void.class) return null;
+        if (returnType == boolean.class) return false;
+        if (returnType == byte.class) return (byte) 0;
+        if (returnType == short.class) return (short) 0;
+        if (returnType == int.class) return 0;
+        if (returnType == long.class) return 0L;
+        if (returnType == float.class) return 0f;
+        if (returnType == double.class) return 0d;
+        if (returnType == char.class) return '\0';
+      }
+
+      return null;
+    }
+
+    var handle = this.invokeWorkflow(className, instanceName, workflowName, args);
+    var ctx = DBOSContextHolder.get();
+    try {
+      DBOSContextHolder.clear();
+      return handle.getResult();
+    } finally {
+      DBOSContextHolder.set(ctx);
+    }
   }
 
   public record ExecutionOptions(
@@ -1096,7 +1136,7 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalStateException(
           "The @Workflow method must be called on the DBOS instance passed to the startWorkflow lambda");
     }
-    var workflow = getWorkflow(invocation);
+    var workflow = getRegisteredWorkflow(invocation);
 
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
@@ -1148,7 +1188,7 @@ public class DBOSExecutor implements AutoCloseable {
     var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
     logger.debug("invokeWorkflow {}({})", fqName, args);
 
-    var workflow = getWorkflow(className, instanceName, workflowName);
+    var workflow = getRegisteredWorkflow(className, instanceName, workflowName);
 
     var ctx = DBOSContextHolder.get();
 
