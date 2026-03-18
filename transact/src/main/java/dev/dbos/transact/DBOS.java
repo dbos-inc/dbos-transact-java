@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory;
  */
 public class DBOS implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(DBOS.class);
-  private static final String version = loadVersionFromResources();
+  private static final String DBOS_VERSION = loadVersionFromResources();
 
   private final WorkflowRegistry workflowRegistry = new WorkflowRegistry();
   private final QueueRegistry queueRegistry = new QueueRegistry();
@@ -61,6 +61,7 @@ public class DBOS implements AutoCloseable {
   private AlertHandler alertHandler;
 
   public DBOS(@NonNull DBOSConfig config) {
+    Objects.requireNonNull(config, "DBOSConfig must not be null");
     Objects.requireNonNull(config.appName(), "DBOSConfig.appName must not be null");
     if (config.dataSource() == null) {
       Objects.requireNonNull(config.databaseUrl(), "DBOSConfig.databaseUrl must not be null");
@@ -98,7 +99,7 @@ public class DBOS implements AutoCloseable {
   }
 
   public static String version() {
-    return version;
+    return DBOS_VERSION;
   }
 
   /**
@@ -212,25 +213,25 @@ public class DBOS implements AutoCloseable {
   }
 
   private void registerWorkflow(
-      String workflowName,
-      String className,
-      String instanceName,
-      Object target,
-      Method method,
+      @NonNull String workflowName,
+      @NonNull String className,
+      @Nullable String instanceName,
+      @NonNull Object target,
+      @NonNull Method method,
       int maxRecoveryAttempts,
-      SerializationStrategy serializationStrategy) {
+      @Nullable SerializationStrategy serializationStrategy) {
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
 
     workflowRegistry.register(
-        className,
-        workflowName,
-        target,
-        instanceName,
-        method,
+        Objects.requireNonNull(className, "className must not be null"),
+        Objects.requireNonNull(workflowName, "workflowName must not be null"),
+        Objects.requireNonNull(target, "target must not be null"),
+        Objects.requireNonNullElse(instanceName, ""),
+        Objects.requireNonNull(method, "method must not be null"),
         maxRecoveryAttempts,
-        serializationStrategy);
+        Objects.requireNonNullElse(serializationStrategy, SerializationStrategy.DEFAULT));
   }
 
   /**
