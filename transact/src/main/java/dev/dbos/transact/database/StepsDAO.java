@@ -308,6 +308,10 @@ class StepsDAO {
       Object deserialized =
           SerializationUtil.deserializeValue(
               recordedOutput.output(), recordedOutput.serialization(), serializer);
+      if (!(deserialized instanceof Number)) {
+        throw new IllegalStateException(
+            "Recorded sleep timeout is not a number: " + deserialized);
+      }
       endTime = ((Number) deserialized).longValue();
     } else {
       logger.debug(
