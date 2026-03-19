@@ -506,7 +506,7 @@ class NotificationsDAO {
         if (nowTime > targetTime) break;
 
         // Consult DB - part of timeout may have expired if sleep is durable.
-        if (callerCtx != null & !checkedDBForSleep) {
+        if (callerCtx != null && !checkedDBForSleep) {
           actualTimeout =
               StepsDAO.durableSleepDuration(
                       dataSource,

@@ -56,8 +56,8 @@ public class SystemDatabase implements AutoCloseable {
   private SystemDatabase(
       DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
     schema = sanitizeSchema(schema);
-    if (schema.contains("'") || schema.contains("\"")) {
-      throw new IllegalArgumentException("Schema name must not contain single or double quotes");
+    if (schema.contains("\"")) {
+      throw new IllegalArgumentException("Schema name must not contain double quotes");
     }
 
     this.schema = schema;
@@ -694,26 +694,24 @@ public class SystemDatabase implements AutoCloseable {
         """
             .formatted(this.schema);
 
-    try (var conn = dataSource.getConnection()) {
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
       while (!toProcess.isEmpty()) {
         var wfid = toProcess.poll();
+        stmt.setString(1, wfid);
 
-        try (var stmt = conn.prepareStatement(sql)) {
-          stmt.setString(1, wfid);
-
-          try (var rs = stmt.executeQuery()) {
-            while (rs.next()) {
-              var childWorkflowId = rs.getString(1);
-              if (!children.contains(childWorkflowId)) {
-                children.add(childWorkflowId);
-                toProcess.add(childWorkflowId);
-              }
+        try (var rs = stmt.executeQuery()) {
+          while (rs.next()) {
+            var childWorkflowId = rs.getString(1);
+            if (!children.contains(childWorkflowId)) {
+              children.add(childWorkflowId);
+              toProcess.add(childWorkflowId);
             }
           }
         }
       }
     }
-    return new ArrayList<String>(children);
+    return new ArrayList<>(children);
   }
 
   List<WorkflowEvent> listWorkflowEvents(Connection conn, String workflowId) throws SQLException {
