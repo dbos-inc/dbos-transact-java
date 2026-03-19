@@ -1,9 +1,10 @@
 package dev.dbos.transact.database;
 
-import dev.dbos.transact.workflow.Queue;
-import dev.dbos.transact.workflow.WorkflowState;
-
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,6 +16,9 @@ import javax.sql.DataSource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.WorkflowState;
 
 class QueuesDAO {
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
@@ -259,7 +263,7 @@ class QueuesDAO {
       }
 
       // Commit only if workflows were dequeued. Avoids WAL bloat and XID advancement.
-      if (updatedWorkflowIds.size() > 0) {
+      if (!updatedWorkflowIds.isEmpty()) {
         connection.commit();
       } else {
         connection.rollback();

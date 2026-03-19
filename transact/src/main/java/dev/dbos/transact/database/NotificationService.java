@@ -108,13 +108,13 @@ public class NotificationService {
 
               logger.debug("Received notification on channel: {}, payload: {}", channel, payload);
 
-              if ("dbos_notifications_channel".equals(channel)) {
-                handleNotification(payload, "notifications");
-              } else if ("dbos_workflow_events_channel".equals(channel)) {
-                handleNotification(payload, "workflow_events");
-              } else {
-                logger.error("Unknown NOTIFY channel: {}", channel);
-              }
+              if (null == channel) {
+                  logger.error("Unknown NOTIFY channel: {}", channel);
+              } else switch (channel) {
+                    case "dbos_notifications_channel" -> handleNotification(payload, "notifications");
+                    case "dbos_workflow_events_channel" -> handleNotification(payload, "workflow_events");
+                    default -> logger.error("Unknown NOTIFY channel: {}", channel);
+                }
             }
           }
         }

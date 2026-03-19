@@ -110,10 +110,6 @@ public class SystemDatabase implements AutoCloseable {
     return Optional.empty();
   }
 
-  Connection getSysDBConnection() throws SQLException {
-    return dataSource.getConnection();
-  }
-
   public static HikariDataSource createDataSource(DBOSConfig config) {
     return createDataSource(config.databaseUrl(), config.dbUser(), config.dbPassword());
   }
@@ -889,7 +885,7 @@ public class SystemDatabase implements AutoCloseable {
                 var status = workflow.status();
                 try (var stmt = conn.prepareStatement(wfSQL)) {
                   stmt.setString(1, status.workflowId());
-                  stmt.setString(2, status.status().toString());
+                  stmt.setString(2, status.status());
                   stmt.setString(3, status.name());
                   stmt.setString(4, status.className());
                   stmt.setString(5, status.instanceName());

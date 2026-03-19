@@ -1,7 +1,29 @@
 package dev.dbos.transact.database;
 
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.StringJoiner;
+import java.util.UUID;
+
+import javax.sql.DataSource;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.exceptions.*;
+import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.exceptions.DBOSConflictingWorkflowException;
+import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
+import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
+import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JSONUtil;
@@ -15,15 +37,6 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
-
-import java.sql.*;
-import java.time.Instant;
-import java.util.*;
-
-import javax.sql.DataSource;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 class WorkflowDAO {
 
@@ -206,7 +219,7 @@ class WorkflowDAO {
 
       var now = Instant.now().toEpochMilli();
       var recoveryAttempts = status.status() == WorkflowState.ENQUEUED ? 0 : 1;
-      int priority = status.priority() == null ? 0 : status.priority();
+      int priority = Objects.requireNonNullElse(status.priority(), 0);
 
       stmt.setString(1, status.workflowId());
       stmt.setString(2, status.status().toString());
@@ -497,22 +510,20 @@ class WorkflowDAO {
 
     // --- ORDER BY Clause ---
     sqlBuilder.append(" ORDER BY created_at ");
-    if (input != null && input.sortDesc() != null && input.sortDesc()) {
+    if (input.sortDesc() != null && input.sortDesc()) {
       sqlBuilder.append("DESC");
     } else {
       sqlBuilder.append("ASC");
     }
 
     // --- LIMIT and OFFSET Clauses ---
-    if (input != null) {
-      if (input.limit() != null) {
-        sqlBuilder.append(" LIMIT ?");
-        parameters.add(input.limit());
-      }
-      if (input.offset() != null) {
-        sqlBuilder.append(" OFFSET ?");
-        parameters.add(input.offset());
-      }
+    if (input.limit() != null) {
+      sqlBuilder.append(" LIMIT ?");
+      parameters.add(input.limit());
+    }
+    if (input.offset() != null) {
+      sqlBuilder.append(" OFFSET ?");
+      parameters.add(input.offset());
     }
 
     try (Connection connection = dataSource.getConnection();
@@ -654,24 +665,24 @@ class WorkflowDAO {
             String serialization = rs.getString("serialization");
 
             switch (WorkflowState.valueOf(status.toUpperCase())) {
-              case SUCCESS:
+              case SUCCESS -> {
                 String output = rs.getString("output");
                 Object outputValue =
                     SerializationUtil.deserializeValue(output, serialization, this.serializer);
                 return Result.success((T) outputValue);
+              }
 
-              case ERROR:
+              case ERROR -> {
                 String error = rs.getString("error");
                 Throwable t =
                     SerializationUtil.deserializeError(error, serialization, this.serializer);
                 return Result.failure(t);
-              case CANCELLED:
-                throw new DBOSAwaitedWorkflowCancelledException(workflowId);
+              }
+              case CANCELLED -> throw new DBOSAwaitedWorkflowCancelledException(workflowId);
 
-              default:
-                // Status is PENDING or other - continue polling
-                break;
+              default -> {}
             }
+            // Status is PENDING or other - continue polling
           }
           // Row not found - workflow hasn't appeared yet, continue polling
         }

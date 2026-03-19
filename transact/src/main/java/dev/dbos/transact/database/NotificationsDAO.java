@@ -28,7 +28,7 @@ class NotificationsDAO {
   private final DataSource dataSource;
   private final String schema;
   private final DBOSSerializer serializer;
-  private NotificationService notificationService;
+  private final NotificationService notificationService;
   private long dbPollingIntervalEventMs = 10000;
 
   NotificationsDAO(
@@ -169,7 +169,7 @@ class NotificationsDAO {
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
 
     // First, check for previous executions
-    StepResult recordedOutput = null;
+    StepResult recordedOutput;
     try (Connection c = dataSource.getConnection()) {
       recordedOutput =
           StepsDAO.checkStepExecutionTxn(workflowId, stepId, functionName, c, this.schema);
@@ -207,7 +207,7 @@ class NotificationsDAO {
       while (true) {
         // Check if the key is already in the database. If not, wait for the
         // notification
-        boolean hasExistingNotification = false;
+        boolean hasExistingNotification;
         try (Connection conn = dataSource.getConnection()) {
           final String sql =
               """
@@ -437,8 +437,7 @@ class NotificationsDAO {
     // Check for previous executions only if it's in a workflow
     if (callerCtx != null) {
 
-      StepResult recordedOutput = null;
-
+      StepResult recordedOutput;
       try (Connection conn = dataSource.getConnection()) {
         recordedOutput =
             StepsDAO.checkStepExecutionTxn(
