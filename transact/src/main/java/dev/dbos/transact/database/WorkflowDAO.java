@@ -346,7 +346,7 @@ class WorkflowDAO {
 
   String getWorkflowSerialization(String workflowId) throws SQLException {
     var sql =
-        "SELECT serialization FROM %s.workflow_status WHERE workflow_uuid = ?"
+        "SELECT serialization FROM \"%s\".workflow_status WHERE workflow_uuid = ?"
             .formatted(this.schema);
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
