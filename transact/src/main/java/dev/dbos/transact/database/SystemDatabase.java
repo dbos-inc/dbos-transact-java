@@ -867,7 +867,7 @@ public class SystemDatabase implements AutoCloseable {
     var streamsSQL =
         """
         INSERT INTO "%s".streams (
-          workflow_uuid, key, value, function_id, offset, serialization
+          workflow_uuid, key, value, function_id, "offset", serialization
         ) VALUES (
           ?, ?, ?, ?, ?, ?
         )
