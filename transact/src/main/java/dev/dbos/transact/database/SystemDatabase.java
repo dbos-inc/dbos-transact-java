@@ -912,9 +912,7 @@ public class SystemDatabase implements AutoCloseable {
                     status.error() == null
                         ? null
                         : SerializationUtil.serializeError(
-                                status.error().throwable(),
-                                status.serialization(),
-                                this.serializer)
+                                status.error().throwable(), status.serialization(), this.serializer)
                             .serializedValue());
                 wfStmt.setString(
                     11,
