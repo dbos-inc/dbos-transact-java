@@ -510,7 +510,7 @@ class WorkflowDAO {
 
     // --- ORDER BY Clause ---
     sqlBuilder.append(" ORDER BY created_at ");
-    if (input.sortDesc() != null && input.sortDesc()) {
+    if (Objects.requireNonNullElse(input.sortDesc(), false)) {
       sqlBuilder.append("DESC");
     } else {
       sqlBuilder.append("ASC");
