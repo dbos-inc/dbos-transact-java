@@ -879,124 +879,122 @@ public class SystemDatabase implements AutoCloseable {
           try (var conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
 
-            try {
+            try (var wfStmt = conn.prepareStatement(wfSQL);
+                var stepStmt = conn.prepareStatement(stepSQL);
+                var eventStmt = conn.prepareStatement(eventSQL);
+                var eventHistoryStmt = conn.prepareStatement(eventHistorySQL);
+                var streamsStmt = conn.prepareStatement(streamsSQL)) {
+
               for (var workflow : workflows) {
-
                 var status = workflow.status();
-                try (var stmt = conn.prepareStatement(wfSQL)) {
-                  stmt.setString(1, status.workflowId());
-                  stmt.setString(2, status.status());
-                  stmt.setString(3, status.name());
-                  stmt.setString(4, status.className());
-                  stmt.setString(5, status.instanceName());
-                  stmt.setString(6, status.authenticatedUser());
-                  stmt.setString(7, status.assumedRole());
-                  stmt.setString(
-                      8,
-                      status.authenticatedRoles() == null
-                          ? null
-                          : JSONUtil.serializeArray(status.authenticatedRoles()));
-                  stmt.setString(
-                      9,
-                      status.output() == null
-                          ? null
-                          : SerializationUtil.serializeValue(
-                                  status.output(), status.serialization(), this.serializer)
-                              .serializedValue());
-                  stmt.setString(
-                      10,
-                      status.error() == null
-                          ? null
-                          : SerializationUtil.serializeError(
-                                  status.error().throwable(),
-                                  status.serialization(),
-                                  this.serializer)
-                              .serializedValue());
-                  stmt.setString(
-                      11,
-                      status.input() == null
-                          ? null
-                          : SerializationUtil.serializeArgs(
-                                  status.input(), null, status.serialization(), this.serializer)
-                              .serializedValue());
-                  stmt.setString(12, status.executorId());
-                  stmt.setString(13, status.appVersion());
-                  stmt.setString(14, status.appId());
-                  stmt.setObject(15, status.createdAt());
-                  stmt.setObject(16, status.updatedAt());
-                  stmt.setObject(17, status.startedAtEpochMs());
-                  stmt.setString(18, status.queueName());
-                  stmt.setString(19, status.deduplicationId());
-                  stmt.setObject(20, status.priority());
-                  stmt.setString(21, status.queuePartitionKey());
-                  stmt.setObject(22, status.timeoutMs());
-                  stmt.setObject(23, status.deadlineEpochMs());
-                  stmt.setObject(24, status.recoveryAttempts());
-                  stmt.setString(25, status.forkedFrom());
-                  stmt.setString(26, status.parentWorkflowId());
-                  stmt.setString(27, status.serialization());
 
-                  stmt.executeUpdate();
-                }
+                wfStmt.setString(1, status.workflowId());
+                wfStmt.setString(2, status.status());
+                wfStmt.setString(3, status.name());
+                wfStmt.setString(4, status.className());
+                wfStmt.setString(5, status.instanceName());
+                wfStmt.setString(6, status.authenticatedUser());
+                wfStmt.setString(7, status.assumedRole());
+                wfStmt.setString(
+                    8,
+                    status.authenticatedRoles() == null
+                        ? null
+                        : JSONUtil.serializeArray(status.authenticatedRoles()));
+                wfStmt.setString(
+                    9,
+                    status.output() == null
+                        ? null
+                        : SerializationUtil.serializeValue(
+                                status.output(), status.serialization(), this.serializer)
+                            .serializedValue());
+                wfStmt.setString(
+                    10,
+                    status.error() == null
+                        ? null
+                        : SerializationUtil.serializeError(
+                                status.error().throwable(),
+                                status.serialization(),
+                                this.serializer)
+                            .serializedValue());
+                wfStmt.setString(
+                    11,
+                    status.input() == null
+                        ? null
+                        : SerializationUtil.serializeArgs(
+                                status.input(), null, status.serialization(), this.serializer)
+                            .serializedValue());
+                wfStmt.setString(12, status.executorId());
+                wfStmt.setString(13, status.appVersion());
+                wfStmt.setString(14, status.appId());
+                wfStmt.setObject(15, status.createdAt());
+                wfStmt.setObject(16, status.updatedAt());
+                wfStmt.setObject(17, status.startedAtEpochMs());
+                wfStmt.setString(18, status.queueName());
+                wfStmt.setString(19, status.deduplicationId());
+                wfStmt.setObject(20, status.priority());
+                wfStmt.setString(21, status.queuePartitionKey());
+                wfStmt.setObject(22, status.timeoutMs());
+                wfStmt.setObject(23, status.deadlineEpochMs());
+                wfStmt.setObject(24, status.recoveryAttempts());
+                wfStmt.setString(25, status.forkedFrom());
+                wfStmt.setString(26, status.parentWorkflowId());
+                wfStmt.setString(27, status.serialization());
+                wfStmt.addBatch();
 
                 for (var step : workflow.steps()) {
-                  try (var stmt = conn.prepareStatement(stepSQL)) {
-                    stmt.setString(1, status.workflowId());
-                    stmt.setInt(2, step.functionId());
-                    stmt.setString(3, step.functionName());
-                    stmt.setString(
-                        4,
-                        step.output() == null
-                            ? null
-                            : SerializationUtil.serializeValue(
-                                    step.output(), step.serialization(), this.serializer)
-                                .serializedValue());
-                    stmt.setString(5, step.error() == null ? null : step.error().serializedError());
-                    stmt.setString(6, step.childWorkflowId());
-                    stmt.setObject(7, step.startedAtEpochMs());
-                    stmt.setObject(8, step.completedAtEpochMs());
-                    stmt.setString(9, step.serialization());
-
-                    stmt.executeUpdate();
-                  }
+                  stepStmt.setString(1, status.workflowId());
+                  stepStmt.setInt(2, step.functionId());
+                  stepStmt.setString(3, step.functionName());
+                  stepStmt.setString(
+                      4,
+                      step.output() == null
+                          ? null
+                          : SerializationUtil.serializeValue(
+                                  step.output(), step.serialization(), this.serializer)
+                              .serializedValue());
+                  stepStmt.setString(
+                      5, step.error() == null ? null : step.error().serializedError());
+                  stepStmt.setString(6, step.childWorkflowId());
+                  stepStmt.setObject(7, step.startedAtEpochMs());
+                  stepStmt.setObject(8, step.completedAtEpochMs());
+                  stepStmt.setString(9, step.serialization());
+                  stepStmt.addBatch();
                 }
 
                 for (var event : workflow.events()) {
-                  try (var stmt = conn.prepareStatement(eventSQL)) {
-                    stmt.setString(1, status.workflowId());
-                    stmt.setString(2, event.key());
-                    stmt.setString(3, event.value());
-                    stmt.setString(4, event.serialization());
-
-                    stmt.executeUpdate();
-                  }
+                  eventStmt.setString(1, status.workflowId());
+                  eventStmt.setString(2, event.key());
+                  eventStmt.setString(3, event.value());
+                  eventStmt.setString(4, event.serialization());
+                  eventStmt.addBatch();
                 }
 
                 for (var history : workflow.eventHistory()) {
-                  try (var stmt = conn.prepareStatement(eventHistorySQL)) {
-                    stmt.setString(1, status.workflowId());
-                    stmt.setString(2, history.key());
-                    stmt.setString(3, history.value());
-                    stmt.setInt(4, history.stepId());
-                    stmt.setString(5, history.serialization());
-
-                    stmt.executeUpdate();
-                  }
+                  eventHistoryStmt.setString(1, status.workflowId());
+                  eventHistoryStmt.setString(2, history.key());
+                  eventHistoryStmt.setString(3, history.value());
+                  eventHistoryStmt.setInt(4, history.stepId());
+                  eventHistoryStmt.setString(5, history.serialization());
+                  eventHistoryStmt.addBatch();
                 }
 
                 for (var stream : workflow.streams()) {
-                  try (var stmt = conn.prepareStatement(streamsSQL)) {
-                    stmt.setString(1, status.workflowId());
-                    stmt.setString(2, stream.key());
-                    stmt.setString(3, stream.value());
-                    stmt.setInt(4, stream.stepId());
-                    stmt.setInt(5, stream.offset());
-                    stmt.setString(6, stream.serialization());
-
-                    stmt.executeUpdate();
-                  }
+                  streamsStmt.setString(1, status.workflowId());
+                  streamsStmt.setString(2, stream.key());
+                  streamsStmt.setString(3, stream.value());
+                  streamsStmt.setInt(4, stream.stepId());
+                  streamsStmt.setInt(5, stream.offset());
+                  streamsStmt.setString(6, stream.serialization());
+                  streamsStmt.addBatch();
                 }
               }
+
+              wfStmt.executeBatch();
+              stepStmt.executeBatch();
+              eventStmt.executeBatch();
+              eventHistoryStmt.executeBatch();
+              streamsStmt.executeBatch();
+
               conn.commit();
             } catch (SQLException e) {
               conn.rollback();
