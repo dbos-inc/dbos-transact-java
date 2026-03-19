@@ -1,5 +1,8 @@
 package dev.dbos.transact.database;
 
+import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.WorkflowState;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -16,9 +19,6 @@ import javax.sql.DataSource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import dev.dbos.transact.workflow.Queue;
-import dev.dbos.transact.workflow.WorkflowState;
 
 class QueuesDAO {
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
