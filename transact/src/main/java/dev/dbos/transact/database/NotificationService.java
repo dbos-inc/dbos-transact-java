@@ -103,7 +103,7 @@ public class NotificationService {
               logger.debug("Received notification on channel: {}, payload: {}", channel, payload);
 
               if (null == channel) {
-                logger.error("Unknown NOTIFY channel: {}", channel);
+                logger.error("Received notification with null channel. Payload: {}", payload);
               } else
                 switch (channel) {
                   case "dbos_notifications_channel" -> handleNotification(payload, "notifications");
