@@ -6,10 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
-import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -17,45 +15,31 @@ import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class CustomSchemaTest {
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
   private static final String schema = "F8nny_sCHem@-n@m3";
+  @AutoClose DBOS dbos;
   private HawkService proxy;
-  private HikariDataSource dataSource;
+  @AutoClose HikariDataSource dataSource;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys")
-            .withDatabaseSchema(schema);
-  }
 
   @BeforeEach
   void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-    var impl = new HawkServiceImpl();
-    proxy = DBOS.registerWorkflows(HawkService.class, impl);
+    var dbosConfig = pgContainer.dbosConfig().withDatabaseSchema(schema);
+    dbos = new DBOS(dbosConfig);
+    var impl = new HawkServiceImpl(dbos);
+    proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    DBOS.launch();
+    dbos.launch();
 
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    dataSource.close();
-    DBOS.shutdown();
+    dataSource = pgContainer.dataSource();
   }
 
   @Test
@@ -69,7 +53,7 @@ public class CustomSchemaTest {
   @Test
   void startWorkflow() throws Exception {
     var handle =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> {
               return proxy.simpleWorkflow();
             });

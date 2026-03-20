@@ -3,9 +3,8 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -15,6 +14,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
+import javax.sql.DataSource;
+
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 
 /**
@@ -42,218 +44,200 @@ import org.junit.jupiter.api.*;
  * Status totals: SUCCESS=7, ERROR=2, CANCELLED=1
  */
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class ListWorkflowsTest {
 
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose HikariDataSource dataSource;
+  DBOSConfig dbosConfig;
+  @AutoClose DBOS dbos;
+  final long baseTime = System.currentTimeMillis();
 
   /**
    * Fixed base epoch-ms. All {@code created_at} values are {@code baseTime + offset}, guaranteeing
    * stable ascending order regardless of when the test runs.
    */
-  private static long baseTime;
-
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    ListWorkflowsTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-    DBOS.launch();
-    baseTime = System.currentTimeMillis();
-    populateWorkflowsStatic();
-  }
-
-  @AfterAll
-  static void onetimeTeardown() throws Exception {
-    DBOS.shutdown();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helper: direct DB insertion
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Insert one row into {@code "dbos".workflow_status} using a direct JDBC connection. Any
-   * parameter can be {@code null}; required non-null columns ({@code created_at}, {@code
-   * updated_at}) use the supplied {@code createdAtMs}.
-   */
-  private static void insertWorkflow(
-      String uuid,
-      String status,
-      String name,
-      String className,
-      String configName,
-      String queueName,
-      String executorId,
-      String appVersion,
-      String authUser,
-      String parentWorkflowId,
-      String forkedFrom,
-      long createdAtMs)
-      throws SQLException {
-    final String sql =
-        """
-          INSERT INTO "dbos".workflow_status
-            (workflow_uuid, status, name, class_name, config_name,
-             queue_name, executor_id, application_version, authenticated_user,
-             parent_workflow_id, forked_from, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """;
-    try (Connection conn = DBUtils.getConnection(dbosConfig);
-        PreparedStatement ps = conn.prepareStatement(sql)) {
-      ps.setString(1, uuid);
-      ps.setString(2, status);
-      ps.setString(3, name);
-      ps.setString(4, className);
-      ps.setString(5, configName);
-      ps.setString(6, queueName); // nullable
-      ps.setString(7, executorId);
-      ps.setString(8, appVersion);
-      ps.setString(9, authUser); // nullable
-      ps.setString(10, parentWorkflowId); // nullable
-      ps.setString(11, forkedFrom); // nullable
-      ps.setLong(12, createdAtMs);
-      ps.setLong(13, createdAtMs);
-      ps.executeUpdate();
-    }
+  @BeforeEach
+  void beforeEach() throws Exception {
+    dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS(dbosConfig);
+    dbos.launch();
+    dataSource = pgContainer.dataSource();
+    populateWorkflows(dataSource, baseTime);
   }
 
   /** Inserts the 10 standard test rows described in the class-level javadoc. */
-  private static void populateWorkflowsStatic() throws SQLException {
-    long b = baseTime;
-    // @formatter:off
-    insertWorkflow(
-        "wf-alpha-1",
-        "SUCCESS",
-        "alpha",
-        "ClassA",
-        "instA",
-        null,
-        "exec-1",
-        "v1.0",
-        "user-a",
-        null,
-        null,
-        b + 100);
-    insertWorkflow(
-        "wf-child-1",
-        "SUCCESS",
-        "child",
-        "ClassA",
-        "instA",
-        null,
-        "exec-1",
-        "v1.0",
-        "user-a",
-        "wf-alpha-1",
-        null,
-        b + 150);
-    insertWorkflow(
-        "wf-alpha-2",
-        "SUCCESS",
-        "alpha",
-        "ClassA",
-        "instA",
-        null,
-        "exec-1",
-        "v1.0",
-        "user-a",
-        null,
-        null,
-        b + 200);
-    insertWorkflow(
-        "wf-alpha-3",
-        "ERROR",
-        "alpha",
-        "ClassA",
-        "instB",
-        null,
-        "exec-2",
-        "v1.0",
-        "user-b",
-        null,
-        null,
-        b + 300);
-    insertWorkflow(
-        "wf-beta-1",
-        "SUCCESS",
-        "beta",
-        "ClassB",
-        "instB",
-        "q1",
-        "exec-2",
-        "v1.0",
-        "user-a",
-        null,
-        null,
-        b + 400);
-    insertWorkflow(
-        "wf-queue-3",
-        "SUCCESS",
-        "queueWf",
-        "ClassD",
-        "instC",
-        "q3",
-        "exec-2",
-        "v1.0",
-        "user-b",
-        null,
-        null,
-        b + 450);
-    insertWorkflow(
-        "wf-beta-2",
-        "CANCELLED",
-        "beta",
-        "ClassB",
-        "instB",
-        null,
-        "exec-1",
-        "v2.0",
-        "user-b",
-        null,
-        null,
-        b + 500);
-    insertWorkflow(
-        "wf-gamma-1",
-        "SUCCESS",
-        "gamma",
-        "ClassC",
-        "instA",
-        null,
-        "exec-1",
-        "v2.0",
-        "user-a",
-        null,
-        null,
-        b + 600);
-    insertWorkflow(
-        "wf-forked-1",
-        "SUCCESS",
-        "gamma",
-        "ClassC",
-        "instA",
-        null,
-        "exec-1",
-        "v2.0",
-        "user-a",
-        null,
-        "wf-alpha-1",
-        b + 650);
-    insertWorkflow(
-        "wf-gamma-2",
-        "ERROR",
-        "gamma",
-        "ClassC",
-        "instA",
-        "q2",
-        "exec-2",
-        "v2.0",
-        "user-b",
-        null,
-        null,
-        b + 700);
-    // @formatter:on
+  private static void populateWorkflows(DataSource dataSource, long baseTime) throws SQLException {
+    final String sql =
+        """
+            INSERT INTO "dbos".workflow_status
+                (workflow_uuid, status, name, class_name, config_name,
+                 queue_name, executor_id, application_version, authenticated_user,
+                 parent_workflow_id, forked_from, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+    try (Connection conn = dataSource.getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql)) {
+      // @formatter:off
+      Object[][] workflows = {
+        {
+          "wf-alpha-1",
+          "SUCCESS",
+          "alpha",
+          "ClassA",
+          "instA",
+          null,
+          "exec-1",
+          "v1.0",
+          "user-a",
+          null,
+          null,
+          baseTime + 100
+        },
+        {
+          "wf-child-1",
+          "SUCCESS",
+          "child",
+          "ClassA",
+          "instA",
+          null,
+          "exec-1",
+          "v1.0",
+          "user-a",
+          "wf-alpha-1",
+          null,
+          baseTime + 150
+        },
+        {
+          "wf-alpha-2",
+          "SUCCESS",
+          "alpha",
+          "ClassA",
+          "instA",
+          null,
+          "exec-1",
+          "v1.0",
+          "user-a",
+          null,
+          null,
+          baseTime + 200
+        },
+        {
+          "wf-alpha-3",
+          "ERROR",
+          "alpha",
+          "ClassA",
+          "instB",
+          null,
+          "exec-2",
+          "v1.0",
+          "user-b",
+          null,
+          null,
+          baseTime + 300
+        },
+        {
+          "wf-beta-1",
+          "SUCCESS",
+          "beta",
+          "ClassB",
+          "instB",
+          "q1",
+          "exec-2",
+          "v1.0",
+          "user-a",
+          null,
+          null,
+          baseTime + 400
+        },
+        {
+          "wf-queue-3",
+          "SUCCESS",
+          "queueWf",
+          "ClassD",
+          "instC",
+          "q3",
+          "exec-2",
+          "v1.0",
+          "user-b",
+          null,
+          null,
+          baseTime + 450
+        },
+        {
+          "wf-beta-2",
+          "CANCELLED",
+          "beta",
+          "ClassB",
+          "instB",
+          null,
+          "exec-1",
+          "v2.0",
+          "user-b",
+          null,
+          null,
+          baseTime + 500
+        },
+        {
+          "wf-gamma-1",
+          "SUCCESS",
+          "gamma",
+          "ClassC",
+          "instA",
+          null,
+          "exec-1",
+          "v2.0",
+          "user-a",
+          null,
+          null,
+          baseTime + 600
+        },
+        {
+          "wf-forked-1",
+          "SUCCESS",
+          "gamma",
+          "ClassC",
+          "instA",
+          null,
+          "exec-1",
+          "v2.0",
+          "user-a",
+          null,
+          "wf-alpha-1",
+          baseTime + 650
+        },
+        {
+          "wf-gamma-2",
+          "ERROR",
+          "gamma",
+          "ClassC",
+          "instA",
+          "q2",
+          "exec-2",
+          "v2.0",
+          "user-b",
+          null,
+          null,
+          baseTime + 700
+        }
+      };
+      // @formatter:on
+      for (Object[] wf : workflows) {
+        for (int i = 0; i < wf.length; i++) {
+          if (wf[i] == null) {
+            ps.setObject(i + 1, null);
+          } else if (wf[i] instanceof Long) {
+            ps.setLong(i + 1, (Long) wf[i]);
+          } else {
+            ps.setString(i + 1, wf[i].toString());
+          }
+        }
+        // updated_at = created_at
+        ps.setLong(13, (Long) wf[11]);
+        ps.addBatch();
+      }
+      ps.executeBatch();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -263,7 +247,7 @@ public class ListWorkflowsTest {
   @Test
   public void testListAll() throws Exception {
 
-    List<WorkflowStatus> all = DBOS.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> all = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(10, all.size());
   }
 
@@ -272,22 +256,22 @@ public class ListWorkflowsTest {
 
     // alpha: wf-alpha-1, wf-alpha-2, wf-alpha-3 = 3
     List<WorkflowStatus> alpha =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("alpha"));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("alpha"));
     assertEquals(3, alpha.size());
     alpha.forEach(wf -> assertEquals("alpha", wf.name()));
 
     // beta: wf-beta-1, wf-beta-2 = 2
     List<WorkflowStatus> beta =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("beta"));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("beta"));
     assertEquals(2, beta.size());
 
     // gamma: wf-gamma-1, wf-forked-1, wf-gamma-2 = 3
     List<WorkflowStatus> gamma =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("gamma"));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("gamma"));
     assertEquals(3, gamma.size());
 
     List<WorkflowStatus> none =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("nonexistent"));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("nonexistent"));
     assertEquals(0, none.size());
   }
 
@@ -297,25 +281,25 @@ public class ListWorkflowsTest {
     // SUCCESS: wf-alpha-1, wf-child-1, wf-alpha-2, wf-beta-1, wf-queue-3, wf-gamma-1, wf-forked-1 =
     // 7
     List<WorkflowStatus> success =
-        DBOS.listWorkflows(new ListWorkflowsInput().withStatus(WorkflowState.SUCCESS));
+        dbos.listWorkflows(new ListWorkflowsInput().withStatus(WorkflowState.SUCCESS));
     assertEquals(7, success.size());
     success.forEach(wf -> assertEquals("SUCCESS", wf.status()));
 
     // ERROR: wf-alpha-3, wf-gamma-2 = 2
     List<WorkflowStatus> error =
-        DBOS.listWorkflows(new ListWorkflowsInput().withStatus(WorkflowState.ERROR));
+        dbos.listWorkflows(new ListWorkflowsInput().withStatus(WorkflowState.ERROR));
     assertEquals(2, error.size());
     error.forEach(wf -> assertEquals("ERROR", wf.status()));
 
     // CANCELLED: wf-beta-2 = 1
     List<WorkflowStatus> cancelled =
-        DBOS.listWorkflows(new ListWorkflowsInput().withStatus(WorkflowState.CANCELLED));
+        dbos.listWorkflows(new ListWorkflowsInput().withStatus(WorkflowState.CANCELLED));
     assertEquals(1, cancelled.size());
     assertEquals("wf-beta-2", cancelled.get(0).workflowId());
 
     // Multiple statuses in one filter
     List<WorkflowStatus> errorOrCancelled =
-        DBOS.listWorkflows(
+        dbos.listWorkflows(
             new ListWorkflowsInput()
                 .withAddedStatus(WorkflowState.ERROR)
                 .withAddedStatus(WorkflowState.CANCELLED));
@@ -327,25 +311,25 @@ public class ListWorkflowsTest {
 
     // Single ID via withWorkflowId
     List<WorkflowStatus> single =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowId("wf-alpha-1"));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowId("wf-alpha-1"));
     assertEquals(1, single.size());
     assertEquals("wf-alpha-1", single.get(0).workflowId());
 
     // Multiple IDs via withWorkflowIds
     List<WorkflowStatus> multi =
-        DBOS.listWorkflows(
+        dbos.listWorkflows(
             new ListWorkflowsInput()
                 .withWorkflowIds(List.of("wf-alpha-1", "wf-beta-1", "wf-gamma-2")));
     assertEquals(3, multi.size());
 
     // Empty list → no results
     List<WorkflowStatus> empty =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowIds(List.of()));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIds(List.of()));
     assertEquals(0, empty.size());
 
     // Incremental withAddedWorkflowId
     List<WorkflowStatus> added =
-        DBOS.listWorkflows(
+        dbos.listWorkflows(
             new ListWorkflowsInput()
                 .withAddedWorkflowId("wf-alpha-1")
                 .withAddedWorkflowId("wf-alpha-2"));
@@ -357,17 +341,17 @@ public class ListWorkflowsTest {
 
     // wf-alpha- prefix: wf-alpha-1, wf-alpha-2, wf-alpha-3 = 3
     List<WorkflowStatus> alpha =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("wf-alpha-"));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("wf-alpha-"));
     assertEquals(3, alpha.size());
     alpha.forEach(wf -> assertTrue(wf.workflowId().startsWith("wf-alpha-")));
 
     // wf- prefix: all 10
     List<WorkflowStatus> all =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("wf-"));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("wf-"));
     assertEquals(10, all.size());
 
     List<WorkflowStatus> noMatch =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("no-match-"));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("no-match-"));
     assertEquals(0, noMatch.size());
   }
 
@@ -376,18 +360,18 @@ public class ListWorkflowsTest {
 
     // ClassA: wf-alpha-1, wf-child-1, wf-alpha-2, wf-alpha-3 = 4
     List<WorkflowStatus> classA =
-        DBOS.listWorkflows(new ListWorkflowsInput().withClassName("ClassA"));
+        dbos.listWorkflows(new ListWorkflowsInput().withClassName("ClassA"));
     assertEquals(4, classA.size());
     classA.forEach(wf -> assertEquals("ClassA", wf.className()));
 
     // ClassB: wf-beta-1, wf-beta-2 = 2
     List<WorkflowStatus> classB =
-        DBOS.listWorkflows(new ListWorkflowsInput().withClassName("ClassB"));
+        dbos.listWorkflows(new ListWorkflowsInput().withClassName("ClassB"));
     assertEquals(2, classB.size());
 
     // ClassC: wf-gamma-1, wf-forked-1, wf-gamma-2 = 3
     List<WorkflowStatus> classC =
-        DBOS.listWorkflows(new ListWorkflowsInput().withClassName("ClassC"));
+        dbos.listWorkflows(new ListWorkflowsInput().withClassName("ClassC"));
     assertEquals(3, classC.size());
   }
 
@@ -396,13 +380,13 @@ public class ListWorkflowsTest {
 
     // instA: wf-alpha-1, wf-child-1, wf-alpha-2, wf-gamma-1, wf-forked-1, wf-gamma-2 = 6
     List<WorkflowStatus> instA =
-        DBOS.listWorkflows(new ListWorkflowsInput().withInstanceName("instA"));
+        dbos.listWorkflows(new ListWorkflowsInput().withInstanceName("instA"));
     assertEquals(6, instA.size());
     instA.forEach(wf -> assertEquals("instA", wf.instanceName()));
 
     // instB: wf-alpha-3, wf-beta-1, wf-beta-2 = 3
     List<WorkflowStatus> instB =
-        DBOS.listWorkflows(new ListWorkflowsInput().withInstanceName("instB"));
+        dbos.listWorkflows(new ListWorkflowsInput().withInstanceName("instB"));
     assertEquals(3, instB.size());
   }
 
@@ -411,13 +395,13 @@ public class ListWorkflowsTest {
 
     // user-a: wf-alpha-1, wf-child-1, wf-alpha-2, wf-beta-1, wf-gamma-1, wf-forked-1 = 6
     List<WorkflowStatus> userA =
-        DBOS.listWorkflows(new ListWorkflowsInput().withAuthenticatedUser("user-a"));
+        dbos.listWorkflows(new ListWorkflowsInput().withAuthenticatedUser("user-a"));
     assertEquals(6, userA.size());
     userA.forEach(wf -> assertEquals("user-a", wf.authenticatedUser()));
 
     // user-b: wf-alpha-3, wf-queue-3, wf-beta-2, wf-gamma-2 = 4
     List<WorkflowStatus> userB =
-        DBOS.listWorkflows(new ListWorkflowsInput().withAuthenticatedUser("user-b"));
+        dbos.listWorkflows(new ListWorkflowsInput().withAuthenticatedUser("user-b"));
     assertEquals(4, userB.size());
   }
 
@@ -426,13 +410,13 @@ public class ListWorkflowsTest {
 
     // v1.0: wf-alpha-1, wf-child-1, wf-alpha-2, wf-alpha-3, wf-beta-1, wf-queue-3 = 6
     List<WorkflowStatus> v1 =
-        DBOS.listWorkflows(new ListWorkflowsInput().withApplicationVersion("v1.0"));
+        dbos.listWorkflows(new ListWorkflowsInput().withApplicationVersion("v1.0"));
     assertEquals(6, v1.size());
     v1.forEach(wf -> assertEquals("v1.0", wf.appVersion()));
 
     // v2.0: wf-beta-2, wf-gamma-1, wf-forked-1, wf-gamma-2 = 4
     List<WorkflowStatus> v2 =
-        DBOS.listWorkflows(new ListWorkflowsInput().withApplicationVersion("v2.0"));
+        dbos.listWorkflows(new ListWorkflowsInput().withApplicationVersion("v2.0"));
     assertEquals(4, v2.size());
   }
 
@@ -441,18 +425,18 @@ public class ListWorkflowsTest {
 
     // exec-1: wf-alpha-1, wf-child-1, wf-alpha-2, wf-beta-2, wf-gamma-1, wf-forked-1 = 6
     List<WorkflowStatus> exec1 =
-        DBOS.listWorkflows(new ListWorkflowsInput().withExecutorIds(List.of("exec-1")));
+        dbos.listWorkflows(new ListWorkflowsInput().withExecutorIds(List.of("exec-1")));
     assertEquals(6, exec1.size());
     exec1.forEach(wf -> assertEquals("exec-1", wf.executorId()));
 
     // exec-2: wf-alpha-3, wf-beta-1, wf-queue-3, wf-gamma-2 = 4
     List<WorkflowStatus> exec2 =
-        DBOS.listWorkflows(new ListWorkflowsInput().withExecutorIds(List.of("exec-2")));
+        dbos.listWorkflows(new ListWorkflowsInput().withExecutorIds(List.of("exec-2")));
     assertEquals(4, exec2.size());
 
     // Both executor IDs = all 10
     List<WorkflowStatus> both =
-        DBOS.listWorkflows(
+        dbos.listWorkflows(
             new ListWorkflowsInput().withAddedExecutorId("exec-1").withAddedExecutorId("exec-2"));
     assertEquals(10, both.size());
   }
@@ -461,24 +445,24 @@ public class ListWorkflowsTest {
   public void testFilterByQueueName() throws Exception {
 
     // q1: wf-beta-1 = 1
-    List<WorkflowStatus> q1 = DBOS.listWorkflows(new ListWorkflowsInput().withQueueName("q1"));
+    List<WorkflowStatus> q1 = dbos.listWorkflows(new ListWorkflowsInput().withQueueName("q1"));
     assertEquals(1, q1.size());
     assertEquals("wf-beta-1", q1.get(0).workflowId());
     assertEquals("q1", q1.get(0).queueName());
 
     // q2: wf-gamma-2 = 1
-    List<WorkflowStatus> q2 = DBOS.listWorkflows(new ListWorkflowsInput().withQueueName("q2"));
+    List<WorkflowStatus> q2 = dbos.listWorkflows(new ListWorkflowsInput().withQueueName("q2"));
     assertEquals(1, q2.size());
     assertEquals("wf-gamma-2", q2.get(0).workflowId());
 
     // queuesOnly=true: wf-beta-1, wf-queue-3, wf-gamma-2 = 3
-    List<WorkflowStatus> queuesOnly = DBOS.listWorkflows(new ListWorkflowsInput().withQueuesOnly());
+    List<WorkflowStatus> queuesOnly = dbos.listWorkflows(new ListWorkflowsInput().withQueuesOnly());
     assertEquals(3, queuesOnly.size());
     queuesOnly.forEach(wf -> assertNotNull(wf.queueName()));
 
     // Non-queued workflows have null queueName
     List<WorkflowStatus> noQueue =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("wf-alpha-"));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("wf-alpha-"));
     assertEquals(3, noQueue.size());
     noQueue.forEach(wf -> assertNull(wf.queueName()));
   }
@@ -488,14 +472,14 @@ public class ListWorkflowsTest {
 
     // wf-child-1 has parentWorkflowId = wf-alpha-1
     List<WorkflowStatus> children =
-        DBOS.listWorkflows(new ListWorkflowsInput().withParentWorkflowId("wf-alpha-1"));
+        dbos.listWorkflows(new ListWorkflowsInput().withParentWorkflowId("wf-alpha-1"));
     assertEquals(1, children.size());
     assertEquals("wf-child-1", children.get(0).workflowId());
     assertEquals("wf-alpha-1", children.get(0).parentWorkflowId());
 
     // No children for wf-gamma-1
     List<WorkflowStatus> noChildren =
-        DBOS.listWorkflows(new ListWorkflowsInput().withParentWorkflowId("wf-gamma-1"));
+        dbos.listWorkflows(new ListWorkflowsInput().withParentWorkflowId("wf-gamma-1"));
     assertEquals(0, noChildren.size());
   }
 
@@ -504,13 +488,13 @@ public class ListWorkflowsTest {
 
     // wf-forked-1 was forked from wf-alpha-1
     List<WorkflowStatus> forked =
-        DBOS.listWorkflows(new ListWorkflowsInput().withForkedFrom("wf-alpha-1"));
+        dbos.listWorkflows(new ListWorkflowsInput().withForkedFrom("wf-alpha-1"));
     assertEquals(1, forked.size());
     assertEquals("wf-forked-1", forked.get(0).workflowId());
     assertEquals("wf-alpha-1", forked.get(0).forkedFrom());
 
     List<WorkflowStatus> notForked =
-        DBOS.listWorkflows(new ListWorkflowsInput().withForkedFrom("wf-beta-1"));
+        dbos.listWorkflows(new ListWorkflowsInput().withForkedFrom("wf-beta-1"));
     assertEquals(0, notForked.size());
   }
 
@@ -518,12 +502,12 @@ public class ListWorkflowsTest {
   public void testLimitAndOffset() throws Exception {
 
     // Default sort is ASC by created_at; wf-alpha-1 (+100 ms) is first
-    List<WorkflowStatus> firstThree = DBOS.listWorkflows(new ListWorkflowsInput().withLimit(3));
+    List<WorkflowStatus> firstThree = dbos.listWorkflows(new ListWorkflowsInput().withLimit(3));
     assertEquals(3, firstThree.size());
     assertEquals("wf-alpha-1", firstThree.get(0).workflowId());
 
     List<WorkflowStatus> nextThree =
-        DBOS.listWorkflows(new ListWorkflowsInput().withLimit(3).withOffset(3));
+        dbos.listWorkflows(new ListWorkflowsInput().withLimit(3).withOffset(3));
     assertEquals(3, nextThree.size());
 
     // Pages must not overlap
@@ -532,7 +516,7 @@ public class ListWorkflowsTest {
 
     // Offset past end of results returns empty
     List<WorkflowStatus> pastEnd =
-        DBOS.listWorkflows(new ListWorkflowsInput().withLimit(10).withOffset(100));
+        dbos.listWorkflows(new ListWorkflowsInput().withLimit(10).withOffset(100));
     assertEquals(0, pastEnd.size());
   }
 
@@ -540,13 +524,13 @@ public class ListWorkflowsTest {
   public void testSortOrder() throws Exception {
 
     // Ascending: wf-alpha-1 (b+100) first, wf-gamma-2 (b+700) last
-    List<WorkflowStatus> asc = DBOS.listWorkflows(new ListWorkflowsInput().withSortDesc(false));
+    List<WorkflowStatus> asc = dbos.listWorkflows(new ListWorkflowsInput().withSortDesc(false));
     assertEquals(10, asc.size());
     assertEquals("wf-alpha-1", asc.get(0).workflowId());
     assertEquals("wf-gamma-2", asc.get(9).workflowId());
 
     // Descending: wf-gamma-2 first, wf-alpha-1 last
-    List<WorkflowStatus> desc = DBOS.listWorkflows(new ListWorkflowsInput().withSortDesc(true));
+    List<WorkflowStatus> desc = dbos.listWorkflows(new ListWorkflowsInput().withSortDesc(true));
     assertEquals(10, desc.size());
     assertEquals("wf-gamma-2", desc.get(0).workflowId());
     assertEquals("wf-alpha-1", desc.get(9).workflowId());
@@ -565,14 +549,14 @@ public class ListWorkflowsTest {
     OffsetDateTime mid = OffsetDateTime.ofInstant(Instant.ofEpochMilli(midMs), ZoneOffset.UTC);
 
     // Rows with created_at <= mid (+500): +100,+150,+200,+300,+400,+450,+500 = 7
-    List<WorkflowStatus> before = DBOS.listWorkflows(new ListWorkflowsInput().withEndTime(mid));
+    List<WorkflowStatus> before = dbos.listWorkflows(new ListWorkflowsInput().withEndTime(mid));
     assertEquals(7, before.size());
 
     // Rows with created_at >= mid+1 (+501): +600,+650,+700 = 3
     OffsetDateTime afterMid =
         OffsetDateTime.ofInstant(Instant.ofEpochMilli(midMs + 1), ZoneOffset.UTC);
     List<WorkflowStatus> after =
-        DBOS.listWorkflows(new ListWorkflowsInput().withStartTime(afterMid));
+        dbos.listWorkflows(new ListWorkflowsInput().withStartTime(afterMid));
     assertEquals(3, after.size());
 
     // All 10 within [baseTime, baseTime+800]
@@ -580,21 +564,21 @@ public class ListWorkflowsTest {
     OffsetDateTime end =
         OffsetDateTime.ofInstant(Instant.ofEpochMilli(baseTime + 800), ZoneOffset.UTC);
     List<WorkflowStatus> all =
-        DBOS.listWorkflows(new ListWorkflowsInput().withStartTime(start).withEndTime(end));
+        dbos.listWorkflows(new ListWorkflowsInput().withStartTime(start).withEndTime(end));
     assertEquals(10, all.size());
 
     // Nothing before baseTime
     OffsetDateTime beforeBase =
         OffsetDateTime.ofInstant(Instant.ofEpochMilli(baseTime - 1), ZoneOffset.UTC);
     List<WorkflowStatus> none =
-        DBOS.listWorkflows(new ListWorkflowsInput().withEndTime(beforeBase));
+        dbos.listWorkflows(new ListWorkflowsInput().withEndTime(beforeBase));
     assertEquals(0, none.size());
   }
 
   @Test
   public void testLoadInputFalse() throws Exception {
 
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput().withLoadInput(false));
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput().withLoadInput(false));
     assertEquals(10, wfs.size());
 
     // inputs column is not fetched; input is null
@@ -616,7 +600,7 @@ public class ListWorkflowsTest {
   @Test
   public void testLoadOutputFalse() throws Exception {
 
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput().withLoadOutput(false));
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput().withLoadOutput(false));
     assertEquals(10, wfs.size());
 
     // output and error columns are not fetched
@@ -647,7 +631,7 @@ public class ListWorkflowsTest {
   public void testLoadInputAndOutputBothFalse() throws Exception {
 
     List<WorkflowStatus> wfs =
-        DBOS.listWorkflows(new ListWorkflowsInput().withLoadInput(false).withLoadOutput(false));
+        dbos.listWorkflows(new ListWorkflowsInput().withLoadInput(false).withLoadOutput(false));
 
     assertEquals(10, wfs.size());
 
@@ -697,7 +681,7 @@ public class ListWorkflowsTest {
     // Since we inserted NULL for inputs/output/error, deserialized values will
     // be null — but the call must not throw and must return all 10 rows.
 
-    List<WorkflowStatus> wfs = DBOS.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(10, wfs.size());
     wfs.forEach(wf -> assertNotNull(wf.workflowId()));
   }
@@ -707,7 +691,7 @@ public class ListWorkflowsTest {
 
     // name=alpha + status=SUCCESS → wf-alpha-1, wf-alpha-2 = 2
     List<WorkflowStatus> alphaSuccess =
-        DBOS.listWorkflows(
+        dbos.listWorkflows(
             new ListWorkflowsInput().withWorkflowName("alpha").withStatus(WorkflowState.SUCCESS));
     assertEquals(2, alphaSuccess.size());
     alphaSuccess.forEach(
@@ -718,13 +702,13 @@ public class ListWorkflowsTest {
 
     // className=ClassC + appVersion=v2.0 → wf-gamma-1, wf-forked-1, wf-gamma-2 = 3
     List<WorkflowStatus> classCv2 =
-        DBOS.listWorkflows(
+        dbos.listWorkflows(
             new ListWorkflowsInput().withClassName("ClassC").withApplicationVersion("v2.0"));
     assertEquals(3, classCv2.size());
 
     // prefix=wf-alpha- + loadInput=false + loadOutput=false exercises the bug path with a filter
     List<WorkflowStatus> alphaNoPayload =
-        DBOS.listWorkflows(
+        dbos.listWorkflows(
             new ListWorkflowsInput()
                 .withWorkflowIdPrefix("wf-alpha-")
                 .withLoadInput(false)
@@ -740,7 +724,7 @@ public class ListWorkflowsTest {
 
     // queuesOnly + status=SUCCESS → wf-beta-1, wf-queue-3 = 2
     List<WorkflowStatus> queuedSuccess =
-        DBOS.listWorkflows(
+        dbos.listWorkflows(
             new ListWorkflowsInput().withQueuesOnly().withStatus(WorkflowState.SUCCESS));
     assertEquals(2, queuedSuccess.size());
     queuedSuccess.forEach(
@@ -751,7 +735,7 @@ public class ListWorkflowsTest {
 
     // limit=2 on a sorted result
     List<WorkflowStatus> limited =
-        DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("wf-").withLimit(2));
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix("wf-").withLimit(2));
     assertEquals(2, limited.size());
   }
 }

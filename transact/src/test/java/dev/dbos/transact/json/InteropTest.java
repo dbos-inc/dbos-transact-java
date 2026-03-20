@@ -4,10 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSClient;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
@@ -21,8 +20,7 @@ import java.util.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -44,13 +42,17 @@ import org.junit.jupiter.api.Test;
  *   <li>TypeScript: dbos-transact-ts/tests/interop.test.ts
  * </ul>
  */
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class InteropTest {
 
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+
   private static final ObjectMapper mapper = new ObjectMapper();
 
-  private static DBOSConfig dbosConfig;
-  private HikariDataSource dataSource;
+  private DBOSConfig dbosConfig;
+  @AutoClose private DBOS dbos;
+  @AutoClose private HikariDataSource dataSource;
 
   // ============================================================================
   // Golden canonical values (identical across Java, Python, TypeScript tests)
@@ -100,24 +102,11 @@ public class InteropTest {
   // Golden event value JSON
   static final String GOLDEN_EVENT_JSON = "{\"flag\":true,\"num\":42,\"text\":\"hello-interop\"}";
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    InteropTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("interoptest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
-
   @BeforeEach
-  void beforeEachTest() throws Exception {
-    DBUtils.recreateDB(dbosConfig);
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    dataSource.close();
-    DBOS.shutdown();
+  void setup() {
+    this.dbosConfig = pgContainer.dbosConfig();
+    this.dbos = new DBOS(dbosConfig);
+    this.dataSource = pgContainer.dataSource();
   }
 
   // ============================================================================
@@ -139,6 +128,12 @@ public class InteropTest {
   /** Implementation of the canonical interop workflow. */
   @WorkflowClassName("interop")
   public static class InteropServiceImpl implements InteropService {
+    private final DBOS dbos;
+
+    public InteropServiceImpl(DBOS dbos) {
+      this.dbos = dbos;
+    }
+
     @Workflow(name = "canonicalWorkflow", serializationStrategy = SerializationStrategy.PORTABLE)
     @Override
     public Map<String, Object> canonicalWorkflow(
@@ -155,12 +150,12 @@ public class InteropTest {
       eventValue.put("text", text);
       eventValue.put("num", num);
       eventValue.put("flag", flag);
-      DBOS.setEvent("interop_status", eventValue);
+      dbos.setEvent("interop_status", eventValue);
 
       // No writeStream in Java (streams not supported)
 
       // Receive message
-      Object msg = DBOS.recv("interop_topic", Duration.ofSeconds(30));
+      Object msg = dbos.recv("interop_topic", Duration.ofSeconds(30));
 
       // Build deterministic result
       Map<String, Object> result = new LinkedHashMap<>();
@@ -261,9 +256,9 @@ public class InteropTest {
   @Test
   public void testInteropCanonical() throws Exception {
     Queue testQueue = new Queue("interopq");
-    DBOS.registerQueue(testQueue);
-    DBOS.registerWorkflows(InteropService.class, new InteropServiceImpl());
-    DBOS.launch();
+    dbos.registerQueue(testQueue);
+    dbos.registerWorkflows(InteropService.class, new InteropServiceImpl(dbos));
+    dbos.launch();
 
     try (DBOSClient client = new DBOSClient(dataSource)) {
       String workflowId = UUID.randomUUID().toString();
@@ -338,9 +333,9 @@ public class InteropTest {
   @Test
   public void testInteropDirectInsert() throws Exception {
     Queue testQueue = new Queue("interopq");
-    DBOS.registerQueue(testQueue);
-    DBOS.registerWorkflows(InteropService.class, new InteropServiceImpl());
-    DBOS.launch();
+    dbos.registerQueue(testQueue);
+    dbos.registerWorkflows(InteropService.class, new InteropServiceImpl(dbos));
+    dbos.launch();
 
     String workflowId = UUID.randomUUID().toString();
 
@@ -352,7 +347,7 @@ public class InteropTest {
     insertPortableNotification(workflowId, "interop_topic", GOLDEN_MESSAGE_JSON);
 
     // Retrieve and verify the workflow executes correctly
-    WorkflowHandle<String, ?> handle = DBOS.retrieveWorkflow(workflowId);
+    WorkflowHandle<String, ?> handle = dbos.retrieveWorkflow(workflowId);
     Object result = handle.getResult();
     assertResultMatchesExpected(result);
 
@@ -384,9 +379,9 @@ public class InteropTest {
   @Test
   public void testInteropNamedArgs() throws Exception {
     Queue testQueue = new Queue("interopq");
-    DBOS.registerQueue(testQueue);
-    DBOS.registerWorkflows(NamedArgsService.class, new NamedArgsServiceImpl());
-    DBOS.launch();
+    dbos.registerQueue(testQueue);
+    dbos.registerWorkflows(NamedArgsService.class, new NamedArgsServiceImpl());
+    dbos.launch();
 
     try (DBOSClient client = new DBOSClient(dataSource)) {
       String workflowId = UUID.randomUUID().toString();
