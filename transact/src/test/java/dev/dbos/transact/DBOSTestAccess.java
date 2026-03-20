@@ -40,5 +40,4 @@ public class DBOSTestAccess {
     var exec = getDbosExecutor();
     return DBOSExecutorTestAccess.getSchedulerService(exec);
   }
-
 }
