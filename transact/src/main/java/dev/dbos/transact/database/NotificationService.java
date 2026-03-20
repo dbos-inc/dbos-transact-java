@@ -89,12 +89,6 @@ public class NotificationService {
 
         logger.debug("Listening for PostgreSQL notifications");
 
-        // Signal all waiters so they re-check the DB after a reconnect. Any
-        // notification that fired during the connection outage would have been
-        // missed; waking waiters lets them poll the DB directly rather than
-        // sleeping out their full timeout.
-        signalAll();
-
         while (running) {
           // Check for notifications with a timeout
           PGNotification[] notifications = pgConnection.getNotifications(1000); // 1
@@ -144,17 +138,6 @@ public class NotificationService {
       }
     }
     logger.debug("Notification listener thread exiting");
-  }
-
-  private void signalAll() {
-    for (LockConditionPair pair : notificationsMap.values()) {
-      pair.lock.lock();
-      try {
-        pair.condition.signalAll();
-      } finally {
-        pair.lock.unlock();
-      }
-    }
   }
 
   private void handleNotification(String payload, String mapType) {
