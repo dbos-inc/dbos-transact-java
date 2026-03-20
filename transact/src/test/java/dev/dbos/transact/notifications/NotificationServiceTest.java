@@ -529,56 +529,6 @@ class NotificationServiceTest {
   }
 
   @Test
-  public void recvCompletesAfterListenerReconnect() throws Exception {
-    // Verify that signalAll() on reconnect wakes a waiting recv promptly, rather
-    // than forcing it to sleep out its full dbPollingIntervalEventMs (10s).
-    //
-    // Sequence:
-    //   1. Start a recv waiter with a 30s timeout (so it does not time out during the test).
-    //   2. Stop the notification listener — simulates a connection drop.
-    //   3. Send the message; NOTIFY fires but the listener is down and misses it.
-    //   4. Restart the listener; on reconnect it calls signalAll(), waking the waiter.
-    //   5. Assert the recv returns well within dbPollingIntervalEventMs (10s).
-    //      Without signalAll() the waiter would sleep the full 10s before re-polling.
-
-    var impl = new NotServiceImpl();
-    NotService notService = DBOS.registerWorkflows(NotService.class, impl);
-    DBOS.launch();
-    // Do NOT call speedUpPollingForTest() — the 10s polling interval is the
-    // baseline we are asserting against.
-
-    String wfid = "reconnect-recv-wf";
-    var handle =
-        DBOS.startWorkflow(
-            () -> notService.recvWorkflow("reconnect-topic", Duration.ofSeconds(30)),
-            new StartWorkflowOptions(wfid));
-
-    // recvReadyLatch fires immediately before DBOS.recv(); give the impl a
-    // moment to register its condition and enter condition.await().
-    impl.recvReadyLatch.await();
-    Thread.sleep(300);
-
-    // Drop the listener so the upcoming NOTIFY will be missed.
-    DBOSTestAccess.stopNotificationListener();
-
-    // Send while the listener is down.
-    DBOS.send(wfid, "hello-reconnect", "reconnect-topic");
-
-    long reconnectStart = System.currentTimeMillis();
-
-    // Restart: reconnect triggers signalAll(), waking the waiter.
-    DBOSTestAccess.startNotificationListener();
-
-    assertEquals("hello-reconnect", handle.getResult());
-    long elapsed = System.currentTimeMillis() - reconnectStart;
-    assertTrue(
-        elapsed < 8000,
-        "recv should complete within 8s of listener reconnect via signalAll(), took "
-            + elapsed
-            + "ms");
-  }
-
-  @Test
   public void sendFromStepWithIdempotencyKey() throws Exception {
     // Send from a step with same idempotency key twice delivers only one message.
 

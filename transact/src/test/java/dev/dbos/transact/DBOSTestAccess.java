@@ -41,11 +41,4 @@ public class DBOSTestAccess {
     return DBOSExecutorTestAccess.getSchedulerService(exec);
   }
 
-  public static void stopNotificationListener() {
-    getSystemDatabase().stopNotificationListenerForTest();
-  }
-
-  public static void startNotificationListener() {
-    getSystemDatabase().startNotificationListenerForTest();
-  }
 }

@@ -153,14 +153,6 @@ public class SystemDatabase implements AutoCloseable {
     notificationsDAO.speedUpPollingForTest();
   }
 
-  public void stopNotificationListenerForTest() {
-    notificationService.stop();
-  }
-
-  public void startNotificationListenerForTest() {
-    notificationService.start();
-  }
-
   @FunctionalInterface
   interface SqlSupplier<T> {
     T get() throws SQLException;
