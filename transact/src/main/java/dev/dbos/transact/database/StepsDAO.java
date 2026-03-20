@@ -308,10 +308,11 @@ class StepsDAO {
       Object deserialized =
           SerializationUtil.deserializeValue(
               recordedOutput.output(), recordedOutput.serialization(), serializer);
-      if (!(deserialized instanceof Number)) {
+      if (deserialized instanceof Long durationLong) {
+        endTime = durationLong;
+      } else {
         throw new IllegalStateException("Recorded sleep timeout is not a number: " + deserialized);
       }
-      endTime = ((Number) deserialized).longValue();
     } else {
       logger.debug(
           "Running sleep, workflow {}, id: {}, duration: {}", workflowUuid, functionId, duration);
