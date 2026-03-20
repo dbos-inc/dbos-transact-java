@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -25,8 +26,7 @@ public class NotificationService {
   private static final Logger logger = LoggerFactory.getLogger(NotificationService.class);
 
   private final Map<String, LockConditionPair> notificationsMap = new ConcurrentHashMap<>();
-  private volatile boolean running = false;
-  private Thread notificationListenerThread;
+  private final AtomicReference<Thread> notificationListenerThread = new AtomicReference<>(null);
   private final DataSource dataSource;
 
   public NotificationService(DataSource dataSource) {
@@ -46,21 +46,20 @@ public class NotificationService {
   }
 
   public void start() {
-    if (!running) {
-      running = true;
-      notificationListenerThread = new Thread(this::notificationListener, "NotificationListener");
-      notificationListenerThread.setDaemon(true);
-      notificationListenerThread.start();
+    Thread t = new Thread(this::notificationListener, "NotificationListener");
+    t.setDaemon(true);
+    if (notificationListenerThread.compareAndSet(null, t)) {
+      t.start();
       logger.debug("Notification listener started");
     }
   }
 
   public void stop() {
-    running = false;
-    if (notificationListenerThread != null) {
-      notificationListenerThread.interrupt();
+    Thread t = notificationListenerThread.getAndSet(null);
+    if (t != null) {
+      t.interrupt();
       try {
-        notificationListenerThread.join(5000); // Wait up to 5 seconds
+        t.join(5000); // Wait up to 5 seconds
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
@@ -71,7 +70,7 @@ public class NotificationService {
   }
 
   private void notificationListener() {
-    while (running) {
+    while (notificationListenerThread.get() == Thread.currentThread()) {
       Connection notificationConnection = null;
 
       try {
@@ -89,11 +88,9 @@ public class NotificationService {
 
         logger.debug("Listening for PostgreSQL notifications");
 
-        while (running) {
-          // Check for notifications with a timeout
-          PGNotification[] notifications = pgConnection.getNotifications(1000); // 1
-          // second
-          // timeout
+        while (notificationListenerThread.get() == Thread.currentThread()) {
+          // Check for notifications with a one second timeout
+          PGNotification[] notifications = pgConnection.getNotifications(1000);
 
           if (notifications != null) {
             for (PGNotification notification : notifications) {
@@ -116,7 +113,7 @@ public class NotificationService {
         }
 
       } catch (Exception e) {
-        if (running) {
+        if (notificationListenerThread.get() == Thread.currentThread()) {
           logger.warn("Notification listener error: {}", e.getMessage());
           try {
             Thread.sleep(1000); // Wait before retrying
