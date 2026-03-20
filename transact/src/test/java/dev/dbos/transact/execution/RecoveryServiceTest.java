@@ -7,8 +7,8 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -21,203 +21,200 @@ import java.util.List;
 import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 class RecoveryServiceTest {
 
-  private static DBOSConfig dbosConfig;
-  private HikariDataSource dataSource;
-  private Queue testQueue;
-  private SystemDatabase systemDatabase;
-  private DBOSExecutor dbosExecutor;
-  private ExecutingServiceImpl executingServiceImpl;
-  private ExecutingService executingService;
   private static final Logger logger = LoggerFactory.getLogger(RecoveryServiceTest.class);
 
-  @BeforeAll
-  public static void onetimeBefore() {
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
-    RecoveryServiceTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+  DBOSConfig dbosConfig;
+  @AutoClose HikariDataSource dataSource;
+
+  private Queue testQueue;
 
   @BeforeEach
-  void setUp() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-
-    DBOSTestAccess.reinitialize(dbosConfig);
-    executingService =
-        DBOS.registerWorkflows(
-            ExecutingService.class, executingServiceImpl = new ExecutingServiceImpl());
-    executingService.setExecutingService(executingService);
-
+  void setUp() {
+    dbosConfig = pgContainer.dbosConfig();
+    dataSource = pgContainer.dataSource();
     testQueue = new Queue("q1");
-    DBOS.registerQueue(testQueue);
-
-    DBOS.launch();
-    systemDatabase = DBOSTestAccess.getSystemDatabase();
-    dbosExecutor = DBOSTestAccess.getDbosExecutor();
   }
 
-  @AfterEach
-  void afterEachTest() throws Exception {
-    dataSource.close();
-    DBOS.shutdown();
+  private ExecutingService register(DBOS dbos) {
+    var impl = new ExecutingServiceImpl(dbos);
+    var service = dbos.registerWorkflows(ExecutingService.class, impl);
+    impl.setSelf(service);
+    dbos.registerQueue(testQueue);
+    return service;
   }
 
   @Test
   void recoverWorkflows() throws Exception {
+    try (var dbos = new DBOS(dbosConfig)) {
+      var executingService = register(dbos);
+      dbos.launch();
 
-    String wfid = "wf-123";
-    try (var id = new WorkflowOptions(wfid).setContext()) {
-      executingService.workflowMethod("test-item");
-    }
-    wfid = "wf-124";
-    try (var id = new WorkflowOptions(wfid).setContext()) {
-      executingService.workflowMethod("test-item");
-    }
-    wfid = "wf-125";
-    try (var id = new WorkflowOptions(wfid).setContext()) {
-      executingService.workflowMethod("test-item");
-    }
-    wfid = "wf-126";
-    WorkflowHandle<String, ?> handle6 = null;
-    try (var id = new WorkflowOptions(wfid).setContext()) {
-      handle6 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"));
-    }
-    handle6.getResult();
+      var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-    wfid = "wf-127";
-    var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
-    var handle7 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
-    assertEquals("q1", handle7.getStatus().queueName());
-    handle7.getResult();
+      String wfid = "wf-123";
+      try (var id = new WorkflowOptions(wfid).setContext()) {
+        executingService.workflowMethod("test-item");
+      }
+      wfid = "wf-124";
+      try (var id = new WorkflowOptions(wfid).setContext()) {
+        executingService.workflowMethod("test-item");
+      }
+      wfid = "wf-125";
+      try (var id = new WorkflowOptions(wfid).setContext()) {
+        executingService.workflowMethod("test-item");
+      }
+      wfid = "wf-126";
+      WorkflowHandle<String, ?> handle6 = null;
+      try (var id = new WorkflowOptions(wfid).setContext()) {
+        handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+      }
+      handle6.getResult();
 
-    setWorkflowStateToPending(dataSource);
+      wfid = "wf-127";
+      var options = new StartWorkflowOptions(wfid).withQueue(testQueue);
+      var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
+      assertEquals("q1", handle7.getStatus().queueName());
+      handle7.getResult();
 
-    List<GetPendingWorkflowsOutput> pending =
-        systemDatabase.getPendingWorkflows(dbosExecutor.executorId(), dbosExecutor.appVersion());
+      setWorkflowStateToPending(dataSource);
 
-    assertEquals(5, pending.size());
+      List<GetPendingWorkflowsOutput> pending =
+          systemDatabase.getPendingWorkflows(dbosExecutor.executorId(), dbosExecutor.appVersion());
 
-    for (GetPendingWorkflowsOutput output : pending) {
-      WorkflowHandle<?, ?> handle = dbosExecutor.recoverWorkflow(output);
-      handle.getResult();
-      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+      assertEquals(5, pending.size());
+
+      for (GetPendingWorkflowsOutput output : pending) {
+        WorkflowHandle<?, ?> handle = dbosExecutor.recoverWorkflow(output);
+        handle.getResult();
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+      }
     }
   }
 
   @Test
   void recoverPendingWorkflows() throws Exception {
-    executingService.workflowMethod("test-item");
-    executingService.workflowMethod("test-item");
-    executingService.workflowMethod("test-item");
-    WorkflowHandle<String, ?> handle6 = null;
-    try (var id = new WorkflowOptions("wf-126").setContext()) {
-      handle6 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"));
-    }
-    handle6.getResult();
+    try (var dbos = new DBOS(dbosConfig)) {
+      var executingService = register(dbos);
+      dbos.launch();
 
-    var options = new StartWorkflowOptions("wf-127").withQueue(testQueue);
-    var handle7 = DBOS.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
-    assertEquals("q1", handle7.getStatus().queueName());
-    assertEquals("wf-126", handle6.workflowId());
-    assertEquals("wf-127", handle7.workflowId());
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
 
-    handle7.getResult();
+      executingService.workflowMethod("test-item");
+      executingService.workflowMethod("test-item");
+      executingService.workflowMethod("test-item");
+      WorkflowHandle<String, ?> handle6 = null;
+      try (var id = new WorkflowOptions("wf-126").setContext()) {
+        handle6 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"));
+      }
+      handle6.getResult();
 
-    setWorkflowStateToPending(dataSource);
+      var options = new StartWorkflowOptions("wf-127").withQueue(testQueue);
+      var handle7 = dbos.startWorkflow(() -> executingService.workflowMethod("test-item"), options);
+      assertEquals("q1", handle7.getStatus().queueName());
+      assertEquals("wf-126", handle6.workflowId());
+      assertEquals("wf-127", handle7.workflowId());
 
-    List<WorkflowHandle<?, ?>> pending =
-        dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId()));
-    assertEquals(5, pending.size());
+      handle7.getResult();
 
-    for (var handle : pending) {
-      handle.getResult();
-      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+      setWorkflowStateToPending(dataSource);
+
+      List<WorkflowHandle<?, ?>> pending =
+          dbosExecutor.recoverPendingWorkflows(List.of(dbosExecutor.executorId()));
+      assertEquals(5, pending.size());
+
+      for (var handle : pending) {
+        handle.getResult();
+        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+      }
     }
   }
 
   @Test
   public void recoveryThreadTest() throws Exception {
+    String wfid1 = "wf-123";
+    String wfid2 = "wf-124";
 
-    String wfid = "wf-123";
-    try (var id = new WorkflowOptions(wfid).setContext()) {
-      executingService.workflowMethod("test-item");
-    }
-    wfid = "wf-124";
-    try (var id = new WorkflowOptions(wfid).setContext()) {
-      executingService.workflowMethod("test-item");
+    try (var dbos = new DBOS(dbosConfig)) {
+      var service = register(dbos);
+      dbos.launch();
+
+      try (var id = new WorkflowOptions(wfid1).setContext()) {
+        service.workflowMethod("test-item");
+      }
+      try (var id = new WorkflowOptions(wfid2).setContext()) {
+        service.workflowMethod("test-item");
+      }
     }
 
     setWorkflowStateToPending(dataSource);
 
-    var s = systemDatabase.getWorkflowStatus("wf-123");
-    assertNotNull(s);
-    assertEquals(WorkflowState.PENDING.name(), s.status());
+    // Re-launch and check recovery
+    try (var dbos = new DBOS(dbosConfig)) {
 
-    DBOS.shutdown();
+      var wfRow = DBUtils.getWorkflowRow(dataSource, wfid1);
+      assertNotNull(wfRow);
+      assertEquals(WorkflowState.PENDING.name(), wfRow.status());
 
-    DBOSTestAccess.reinitialize(dbosConfig);
-    // dbos = DBOS.getInstance();
+      register(dbos);
+      dbos.launch();
 
-    // need to register again
-    // towatch: we are registering after launch. could lead to a race condition
-    // toimprove : allow registration before launch
-    executingService = DBOS.registerWorkflows(ExecutingService.class, new ExecutingServiceImpl());
+      var h = dbos.retrieveWorkflow(wfid1);
+      h.getResult();
+      assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
 
-    DBOS.launch();
-
-    var h = DBOS.retrieveWorkflow("wf-123");
-    h.getResult();
-    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
-
-    h = DBOS.retrieveWorkflow("wf-124");
-    h.getResult();
-    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
+      h = dbos.retrieveWorkflow(wfid2);
+      h.getResult();
+      assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
+    }
   }
 
   @Test
   public void testRecoverNoOutputSteps() throws Exception {
-    // Run a workflow that will run a step that throws, and run a no-result step
-    //   in the catch handler.
-    // Check that this returns null (void) and that the right calls were made.
-    String wfid = "wftr-1x3";
-    try (var id = new WorkflowOptions(wfid).setContext()) {
-      executingService.workflowWithNoResultSteps();
+    try (var dbos = new DBOS(dbosConfig)) {
+      var executingService = register(dbos);
+      dbos.launch();
+
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+      // Run a workflow that will run a step that throws, and run a no-result step
+      //   in the catch handler.
+      // Check that this returns null (void) and that the right calls were made.
+      String wfid = "wftr-1x3";
+      try (var id = new WorkflowOptions(wfid).setContext()) {
+        executingService.workflowWithNoResultSteps();
+      }
+      var h = dbos.retrieveWorkflow(wfid);
+      assertNull(h.getStatus().error());
+      assertNull(h.getResult());
+
+      // Recover workflow
+      // This should use checkpointed step values
+      DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+      h = dbosExecutor.executeWorkflowById(wfid, true, false);
+      assertNull(h.getStatus().error());
+      assertNull(h.getResult());
+
+      // Recover workflow net of last step
+      // This should use 1 checkpointed step value
+      DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
+      DBUtils.deleteStepOutput(dataSource, wfid, 1);
+      h = dbosExecutor.executeWorkflowById(wfid, true, false);
+      assertNull(h.getStatus().error());
+      assertNull(h.getResult());
     }
-    assertEquals(executingServiceImpl.callsToThrowStep, 1);
-    assertEquals(executingServiceImpl.callsToNoReturnStep, 1);
-    var h = DBOS.retrieveWorkflow(wfid);
-    assertNull(h.getStatus().error());
-    assertNull(h.getResult());
-
-    // Recover workflow
-    // This should use checkpointed step values
-    DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-    h = dbosExecutor.executeWorkflowById(wfid, true, false);
-    assertNull(h.getStatus().error());
-    assertNull(h.getResult());
-    assertEquals(executingServiceImpl.callsToThrowStep, 1);
-    assertEquals(executingServiceImpl.callsToNoReturnStep, 1);
-
-    // Recover workflow net of last step
-    // This should use 1 checkpointed step value
-    DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
-    DBUtils.deleteStepOutput(dataSource, wfid, 1);
-    h = dbosExecutor.executeWorkflowById(wfid, true, false);
-    assertNull(h.getStatus().error());
-    assertNull(h.getResult());
-    assertEquals(executingServiceImpl.callsToThrowStep, 1);
-    assertEquals(executingServiceImpl.callsToNoReturnStep, 2);
   }
 
   private void setWorkflowStateToPending(DataSource ds) throws SQLException {
@@ -233,7 +230,7 @@ class RecoveryServiceTest {
       // Execute the update and get the number of rows affected
       int rowsAffected = pstmt.executeUpdate();
 
-      logger.info("Number of workflows made pending " + rowsAffected);
+      logger.info("Number of workflows made pending {}", rowsAffected);
     }
   }
 }

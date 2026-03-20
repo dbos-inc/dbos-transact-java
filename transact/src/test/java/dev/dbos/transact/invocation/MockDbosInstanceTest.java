@@ -21,9 +21,9 @@ interface MockTestService {
 }
 
 class MockTestServiceImpl implements MockTestService {
-  private final DBOS.Instance dbos;
+  private final DBOS dbos;
 
-  public MockTestServiceImpl(DBOS.Instance instance) {
+  public MockTestServiceImpl(DBOS instance) {
     this.dbos = instance;
   }
 
@@ -38,10 +38,11 @@ class MockTestServiceImpl implements MockTestService {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class MockDbosInstanceTest {
   @Test
   public void testMockInstance() throws Exception {
-    var mockDBOS = mock(DBOS.Instance.class);
+    var mockDBOS = mock(DBOS.class);
     var impl = new MockTestServiceImpl(mockDBOS);
 
     var date = LocalDate.of(2024, 1, 1);

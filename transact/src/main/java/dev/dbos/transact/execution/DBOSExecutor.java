@@ -131,7 +131,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void start(
-      DBOS.Instance dbos,
+      DBOS dbos,
       Set<DBOSLifecycleListener> listenerSet,
       Map<String, RegisteredWorkflow> workflowMap,
       Map<String, RegisteredWorkflowInstance> instanceMap,
@@ -171,12 +171,15 @@ public class DBOSExecutor implements AutoCloseable {
               try {
                 // use virtual thread executor when available (i.e. Java 21+)
                 var method = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
-                return (ExecutorService) method.invoke(null);
+                var svc = (ExecutorService) method.invoke(null);
+                logger.debug("using newVirtualThreadPerTaskExecutor");
+                return svc;
+
               } catch (NoSuchMethodException
                   | IllegalAccessException
                   | InvocationTargetException e) {
                 // fall back to fixed thread pool executor if virtual thread executor unavailable
-                logger.debug("using newFixedThreadPool", e);
+                logger.debug("using newFixedThreadPool");
                 int threadCount = Runtime.getRuntime().availableProcessors() * 50;
                 return Executors.newFixedThreadPool(threadCount);
               }

@@ -4,19 +4,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.dbos.transact.migrations.MigrationManager;
-
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Objects;
+import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
@@ -27,32 +27,19 @@ import picocli.CommandLine;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class ResetCommandTest {
 
-  static String db_url = "jdbc:postgresql://localhost:5432/reset_cmd_test";
-  static String db_user = Objects.requireNonNullElse(System.getenv("PGUSER"), "postgres");
-  static String db_password = Objects.requireNonNullElse(System.getenv("PGPASSWORD"), "dbos");
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  @BeforeAll
-  static void setup() throws Exception {
-
-    var pair = MigrationManager.extractDbAndPostgresUrl(db_url);
-    var dropDbSql = String.format("DROP DATABASE IF EXISTS %s WITH (FORCE)", pair.database());
-    var createDbSql = String.format("CREATE DATABASE %s", pair.database());
-    try (var conn = DriverManager.getConnection(pair.url(), db_user, db_password);
+  @BeforeEach
+  public void setup() throws SQLException {
+    var sql = "CREATE TABLE dummy_table (id SERIAL PRIMARY KEY, name VARCHAR(100));";
+    try (var conn = pgContainer.connection();
         var stmt = conn.createStatement()) {
-      stmt.execute(dropDbSql);
-      stmt.execute(createDbSql);
-    }
-
-    var createDummyTableSql =
-        "CREATE TABLE dummy_table (id SERIAL PRIMARY KEY, name VARCHAR(100));";
-    try (var conn = DriverManager.getConnection(db_url, db_user, db_password);
-        var stmt = conn.createStatement()) {
-      stmt.execute(createDummyTableSql);
+      stmt.execute(sql);
     }
   }
 
-  static boolean dummyTableExists(String url, String user, String password) throws SQLException {
-    try (Connection conn = DriverManager.getConnection(url, user, password)) {
+  boolean dummyTableExists() throws SQLException {
+    try (Connection conn = pgContainer.connection()) {
       DatabaseMetaData metaData = conn.getMetaData();
       try (ResultSet rs = metaData.getTables(null, null, "dummy_table", new String[] {"TABLE"})) {
         return rs.next();
@@ -63,15 +50,19 @@ public class ResetCommandTest {
   @Test
   public void reset() throws Exception {
 
-    assertTrue(dummyTableExists(db_url, db_user, db_password));
+    assertTrue(dummyTableExists());
 
     var cmd = new CommandLine(new DBOSCommand());
     var sw = new StringWriter();
     cmd.setOut(new PrintWriter(sw));
 
-    var exitCode = cmd.execute("reset", "-D=" + db_url, "-U=" + db_user, "-y");
+    var args =
+        Stream.of(List.of("reset"), pgContainer.options(), List.of("-y"))
+            .flatMap(Collection::stream)
+            .toArray(String[]::new);
+    var exitCode = cmd.execute(args);
     assertEquals(0, exitCode);
 
-    assertFalse(dummyTableExists(db_url, db_user, db_password));
+    assertFalse(dummyTableExists());
   }
 }

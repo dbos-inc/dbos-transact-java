@@ -6,20 +6,18 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -30,17 +28,18 @@ import org.junit.jupiter.api.Test;
 }
 
 interface LifecycleTestWorkflows {
-  public int runWf1(int nClasses, int nWfs);
+  int runWf1(int nClasses, int nWfs);
 
-  public int runWf2(int nClasses, int nWfs);
+  int runWf2(int nClasses, int nWfs);
 
-  public int doNotRunWF(int nClasses, int nWfs);
+  int doNotRunWF(int nClasses, int nWfs);
 }
 
 class LifecycleTestWorkflowsImpl implements LifecycleTestWorkflows {
   int nWfs = 0, nInstances = 0;
 
-  @Workflow()
+  @Override
+  @Workflow
   @TestLifecycleAnnotation(count = 3)
   public int runWf1(int nInstances, int nWfs) {
     this.nInstances = nInstances;
@@ -48,20 +47,22 @@ class LifecycleTestWorkflowsImpl implements LifecycleTestWorkflows {
     return 8;
   }
 
-  @Workflow()
+  @Override
+  @Workflow
   @TestLifecycleAnnotation(count = 4)
   public int runWf2(int nInstances, int nWfs) {
     return 7;
   }
 
-  @Workflow()
+  @Override
+  @Workflow
   public int doNotRunWF(int nInstances, int nWfs) {
     throw new IllegalStateException();
   }
 }
 
 class TestLifecycleService implements DBOSLifecycleListener {
-  private DBOS.Instance dbos;
+  private DBOS dbos;
   public int launchCount = 0;
   public int shutdownCount = 0;
   public int nInstances = 0;
@@ -71,7 +72,7 @@ class TestLifecycleService implements DBOSLifecycleListener {
   public ArrayList<RegisteredWorkflow> wfs = new ArrayList<>();
 
   @Override
-  public void dbosLaunched(DBOS.Instance dbos) {
+  public void dbosLaunched(DBOS dbos) {
     this.dbos = dbos;
     var expectedParams = new Class<?>[] {int.class, int.class};
 
@@ -115,66 +116,67 @@ class TestLifecycleService implements DBOSLifecycleListener {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class LifecycleTest {
-  private static DBOSConfig dbosConfig;
-  private static LifecycleTestWorkflowsImpl impl;
-  private static TestLifecycleService svc;
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("lifecycletest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+
+  DBOSConfig dbosConfig;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-
-    impl = new LifecycleTestWorkflowsImpl();
-    DBOS.registerWorkflows(LifecycleTestWorkflows.class, impl, "inst1");
-    svc = new TestLifecycleService();
-    DBOS.registerLifecycleListener(svc);
-    DBOS.registerWorkflows(LifecycleTestWorkflows.class, new LifecycleTestWorkflowsImpl(), "instA");
-
-    assertEquals(0, svc.launchCount);
-    DBOS.launch();
-    assertEquals(1, svc.launchCount);
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
   }
 
-  @AfterEach
-  void afterEachTest() throws Exception {
-    DBOS.shutdown();
+  private void setup(DBOS dbos, LifecycleTestWorkflowsImpl impl, TestLifecycleService svc) {
+    dbos.registerWorkflows(LifecycleTestWorkflows.class, impl, "inst1");
+    dbos.registerLifecycleListener(svc);
+    dbos.registerWorkflows(LifecycleTestWorkflows.class, new LifecycleTestWorkflowsImpl(), "instA");
+
+    assertEquals(0, svc.launchCount);
+    dbos.launch();
+    assertEquals(1, svc.launchCount);
   }
 
   @Test
   void checkThatItAllHappened() throws Exception {
-    // Pretend this is an external event
-    var total = svc.runThemAll();
-    assertEquals(2, impl.nInstances);
-    assertEquals(4, impl.nWfs);
-    assertEquals(14, svc.annotationCount);
-    assertEquals(30, total);
+    try (var dbos = new DBOS(dbosConfig)) {
+      var impl = new LifecycleTestWorkflowsImpl();
+      var svc = new TestLifecycleService();
+      setup(dbos, impl, svc);
 
-    assertEquals(0, svc.shutdownCount);
-    DBOS.shutdown();
-    assertEquals(1, svc.shutdownCount);
+      // Pretend this is an external event
+      var total = svc.runThemAll();
+      assertEquals(2, impl.nInstances);
+      assertEquals(4, impl.nWfs);
+      assertEquals(14, svc.annotationCount);
+      assertEquals(30, total);
+
+      assertEquals(0, svc.shutdownCount);
+      dbos.shutdown();
+      assertEquals(1, svc.shutdownCount);
+    }
   }
 
   @Test
   void deactivateLifecycleListeners() throws Exception {
-    // Pretend this is an external event
-    var total = svc.runThemAll();
-    assertEquals(2, impl.nInstances);
-    assertEquals(4, impl.nWfs);
-    assertEquals(14, svc.annotationCount);
-    assertEquals(30, total);
+    try (var dbos = new DBOS(dbosConfig)) {
+      var impl = new LifecycleTestWorkflowsImpl();
+      var svc = new TestLifecycleService();
+      setup(dbos, impl, svc);
 
-    assertEquals(0, svc.shutdownCount);
-    DBOSTestAccess.getDbosExecutor().deactivateLifecycleListeners();
-    assertEquals(1, svc.shutdownCount);
-    DBOS.shutdown();
-    assertEquals(2, svc.shutdownCount);
+      // Pretend this is an external event
+      var total = svc.runThemAll();
+      assertEquals(2, impl.nInstances);
+      assertEquals(4, impl.nWfs);
+      assertEquals(14, svc.annotationCount);
+      assertEquals(30, total);
+
+      assertEquals(0, svc.shutdownCount);
+      DBOSTestAccess.getDbosExecutor(dbos).deactivateLifecycleListeners();
+      assertEquals(1, svc.shutdownCount);
+      dbos.shutdown();
+      assertEquals(2, svc.shutdownCount);
+    }
   }
 }

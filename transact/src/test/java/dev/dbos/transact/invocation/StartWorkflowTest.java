@@ -6,54 +6,40 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class StartWorkflowTest {
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose DBOS dbos;
   private HawkService proxy;
   private String localDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
-
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-    var impl = new HawkServiceImpl();
-    proxy = DBOS.registerWorkflows(HawkService.class, impl);
+  void beforeEachTest() {
+    var dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS(dbosConfig);
+    var impl = new HawkServiceImpl(dbos);
+    proxy = dbos.registerWorkflows(HawkService.class, impl);
     impl.setProxy(proxy);
 
-    DBOS.registerQueues(
+    dbos.registerQueues(
         new Queue("queue"), new Queue("partitioned-queue").withPartitionedEnabled(true));
 
-    DBOS.launch();
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    DBOS.shutdown();
+    dbos.launch();
   }
 
   @Test
@@ -79,14 +65,14 @@ public class StartWorkflowTest {
   @Test
   void startWorkflow() throws Exception {
     var handle =
-        DBOS.startWorkflow(
+        dbos.startWorkflow(
             () -> {
               return proxy.simpleWorkflow();
             });
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var rows = DBOS.listWorkflows(null);
+    var rows = dbos.listWorkflows(null);
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(handle.workflowId(), row.workflowId());
@@ -98,7 +84,7 @@ public class StartWorkflowTest {
 
     String workflowId = "startWorkflowWithWorkflowId";
     var options = new StartWorkflowOptions(workflowId);
-    var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
     assertEquals(workflowId, handle.workflowId());
     var result = handle.getResult();
     assertEquals(localDate, result);
@@ -116,12 +102,12 @@ public class StartWorkflowTest {
 
     String workflowId = "startWorkflowWithTimeout";
     var options = new StartWorkflowOptions(workflowId).withTimeout(1, TimeUnit.SECONDS);
-    var handle = DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options);
+    var handle = dbos.startWorkflow(() -> proxy.simpleWorkflow(), options);
     assertEquals(workflowId, handle.workflowId());
     var result = handle.getResult();
     assertEquals(localDate, result);
 
-    var row = DBOS.retrieveWorkflow(workflowId);
+    var row = dbos.retrieveWorkflow(workflowId);
     assertNotNull(row);
     assertEquals(workflowId, row.workflowId());
     assertEquals("SUCCESS", row.getStatus().status());
@@ -134,7 +120,7 @@ public class StartWorkflowTest {
     var options = new StartWorkflowOptions().withQueue("invalid-queue-name");
     assertThrows(
         IllegalArgumentException.class,
-        () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
+        () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
   }
 
   @Test
@@ -142,7 +128,7 @@ public class StartWorkflowTest {
     var options = new StartWorkflowOptions().withQueue("partitioned-queue");
     assertThrows(
         IllegalArgumentException.class,
-        () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
+        () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
   }
 
   @Test
@@ -151,6 +137,6 @@ public class StartWorkflowTest {
         new StartWorkflowOptions().withQueue("queue").withQueuePartitionKey("partition-key");
     assertThrows(
         IllegalArgumentException.class,
-        () -> DBOS.startWorkflow(() -> proxy.simpleWorkflow(), options));
+        () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
   }
 }

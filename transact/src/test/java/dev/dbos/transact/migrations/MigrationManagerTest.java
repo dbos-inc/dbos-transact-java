@@ -7,9 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
-import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -17,14 +16,15 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 class MigrationManagerTest {
 
   // Expected tables after migrations
@@ -45,28 +45,18 @@ class MigrationManagerTest {
     "notifications_function", "workflow_events_function", "enqueue_workflow", "send_message"
   };
 
-  private HikariDataSource dataSource;
-  private DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
+  @AutoClose HikariDataSource dataSource;
 
   @BeforeEach
   void setup() throws Exception {
-
-    dbosConfig =
-        DBOSConfig.defaultsFromEnv("migrationtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys_mm_test");
-
-    DBUtils.recreateDB(dbosConfig);
-    dataSource = SystemDatabase.createDataSource(dbosConfig);
-  }
-
-  @AfterEach
-  void cleanup() throws Exception {
-    dataSource.close();
+    dataSource = pgContainer.dataSource();
   }
 
   @Test
   void testRunMigrations_CreatesTables() throws Exception {
 
+    var dbosConfig = pgContainer.dbosConfig();
     MigrationManager.runMigrations(dbosConfig);
 
     // Assert
@@ -88,60 +78,17 @@ class MigrationManagerTest {
     }
   }
 
-  public static void assertTableExists(DatabaseMetaData metaData, String tableName)
-      throws Exception {
-    assertTableExists(metaData, tableName, Constants.DB_SCHEMA);
-  }
-
-  public static void assertTableExists(
-      DatabaseMetaData metaData, String tableName, String schemaName) throws Exception {
-    schemaName = SystemDatabase.sanitizeSchema(schemaName);
-    try (ResultSet rs = metaData.getTables(null, schemaName, tableName, null)) {
-      assertTrue(rs.next(), "Table %s should exist in schema %s".formatted(tableName, schemaName));
-    }
-  }
-
-  public static void assertFunctionExists(DatabaseMetaData metaData, String functionName)
-      throws Exception {
-    assertFunctionExists(metaData, functionName, Constants.DB_SCHEMA);
-  }
-
-  public static void assertFunctionExists(
-      DatabaseMetaData metaData, String functionName, String schemaName) throws Exception {
-    schemaName = SystemDatabase.sanitizeSchema(schemaName);
-    try (ResultSet rs = metaData.getFunctions(null, schemaName, functionName)) {
-      assertTrue(
-          rs.next(), "Function %s should exist in schema %s".formatted(functionName, schemaName));
-    }
-  }
-
-  public static int getVersion(Connection conn) throws Exception {
-    return getVersion(conn, Constants.DB_SCHEMA);
-  }
-
-  public static int getVersion(Connection conn, String schema) throws Exception {
-    schema = SystemDatabase.sanitizeSchema(schema);
-    String sql = "SELECT version FROM \"%s\".dbos_migrations".formatted(schema);
-    try (var stmt = conn.createStatement();
-        var rs = stmt.executeQuery(sql)) {
-      assertTrue(rs.next());
-      var value = rs.getInt("version");
-      assertFalse(rs.next());
-      return value;
-    }
-  }
-
   @ParameterizedTest
   @ValueSource(strings = {"invalid\"schema", "invalid'schema"})
   void testRunMigrations_fails_invalid_schema(String invalidSchema) throws Exception {
-    dbosConfig = dbosConfig.withDatabaseSchema(invalidSchema);
+    var dbosConfig = pgContainer.dbosConfig().withDatabaseSchema(invalidSchema);
     assertThrows(IllegalArgumentException.class, () -> MigrationManager.runMigrations(dbosConfig));
   }
 
   @ParameterizedTest
   @ValueSource(strings = {"F8nny_sCHem@-n@m3", "embedded\0null"})
   void testRunMigrations_customSchema(String schema) throws Exception {
-    dbosConfig = dbosConfig.withDatabaseSchema(schema);
+    var dbosConfig = pgContainer.dbosConfig().withDatabaseSchema(schema);
     MigrationManager.runMigrations(dbosConfig);
 
     // Assert
@@ -168,6 +115,7 @@ class MigrationManagerTest {
 
     testRunMigrations_CreatesTables();
 
+    var dbosConfig = pgContainer.dbosConfig();
     // Running migrations again
     assertDoesNotThrow(
         () -> {
@@ -203,6 +151,7 @@ class MigrationManagerTest {
       stmt.executeUpdate("UPDATE \"dbos\".\"dbos_migrations\" SET \"version\" = 10000;");
     }
 
+    var dbosConfig = pgContainer.dbosConfig();
     assertDoesNotThrow(
         () -> {
           MigrationManager.runMigrations(dbosConfig);
@@ -257,7 +206,49 @@ class MigrationManagerTest {
     }
   }
 
-  private static void assertNotificationTableHasPrimaryKey(
+  static void assertTableExists(DatabaseMetaData metaData, String tableName) throws Exception {
+    assertTableExists(metaData, tableName, Constants.DB_SCHEMA);
+  }
+
+  static void assertTableExists(DatabaseMetaData metaData, String tableName, String schemaName)
+      throws Exception {
+    schemaName = SystemDatabase.sanitizeSchema(schemaName);
+    try (ResultSet rs = metaData.getTables(null, schemaName, tableName, null)) {
+      assertTrue(rs.next(), "Table %s should exist in schema %s".formatted(tableName, schemaName));
+    }
+  }
+
+  static void assertFunctionExists(DatabaseMetaData metaData, String functionName)
+      throws Exception {
+    assertFunctionExists(metaData, functionName, Constants.DB_SCHEMA);
+  }
+
+  static void assertFunctionExists(
+      DatabaseMetaData metaData, String functionName, String schemaName) throws Exception {
+    schemaName = SystemDatabase.sanitizeSchema(schemaName);
+    try (ResultSet rs = metaData.getFunctions(null, schemaName, functionName)) {
+      assertTrue(
+          rs.next(), "Function %s should exist in schema %s".formatted(functionName, schemaName));
+    }
+  }
+
+  static int getVersion(Connection conn) throws Exception {
+    return getVersion(conn, Constants.DB_SCHEMA);
+  }
+
+  static int getVersion(Connection conn, String schema) throws Exception {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    String sql = "SELECT version FROM \"%s\".dbos_migrations".formatted(schema);
+    try (var stmt = conn.createStatement();
+        var rs = stmt.executeQuery(sql)) {
+      assertTrue(rs.next());
+      var value = rs.getInt("version");
+      assertFalse(rs.next());
+      return value;
+    }
+  }
+
+  static void assertNotificationTableHasPrimaryKey(
       DatabaseMetaData metaData, String tableName, String schemaName) throws Exception {
     try (ResultSet rs = metaData.getPrimaryKeys(null, schemaName, tableName)) {
       assertTrue(

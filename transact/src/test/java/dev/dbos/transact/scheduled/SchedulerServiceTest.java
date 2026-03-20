@@ -6,53 +6,44 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 
-import java.sql.SQLException;
 import java.time.Duration;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
+@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 class SchedulerServiceTest {
 
-  private static DBOSConfig dbosConfig;
+  @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  @BeforeAll
-  static void onetimeSetup() throws Exception {
-    SchedulerServiceTest.dbosConfig =
-        DBOSConfig.defaultsFromEnv("systemdbtest")
-            .withDatabaseUrl("jdbc:postgresql://localhost:5432/dbos_java_sys");
-  }
+  DBOSConfig dbosConfig;
+  @AutoClose DBOS dbos;
+  @AutoClose HikariDataSource dataSource;
 
   @BeforeEach
-  void beforeEachTest() throws SQLException {
-    DBUtils.recreateDB(dbosConfig);
-    DBOSTestAccess.reinitialize(dbosConfig);
-  }
-
-  @AfterEach
-  void afterEachTest() throws Exception {
-    // let scheduled workflows drain
-    Thread.sleep(1000);
-    DBOS.shutdown();
+  void beforeEach() {
+    dbosConfig = pgContainer.dbosConfig();
+    dbos = new DBOS(dbosConfig);
+    dataSource = pgContainer.dataSource();
   }
 
   @Test
   public void simpleScheduledWorkflow() throws Exception {
 
-    var impl = new SkedServiceImpl();
+    var impl = new SkedServiceImpl(dbos);
     var q = new Queue("q2").withConcurrency(1);
-    DBOS.registerQueue(q);
-    DBOS.registerWorkflows(SkedService.class, impl);
+    dbos.registerQueue(q);
+    dbos.registerWorkflows(SkedService.class, impl);
 
-    DBOS.launch();
-    var schedulerService = DBOSTestAccess.getSchedulerService();
+    dbos.launch();
+    var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
 
     // Run all sched WFs for 5 seconds(ish)
     Thread.sleep(5000);
@@ -86,23 +77,23 @@ class SchedulerServiceTest {
     Duration delta = Duration.between(impl.scheduled, impl.actual).abs();
     assertTrue(delta.toMillis() < 1000);
 
-    var workflows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("withSteps"));
+    var workflows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("withSteps"));
     assertTrue(workflows.size() <= 2);
     assertEquals(Constants.DBOS_INTERNAL_QUEUE, workflows.get(0).queueName());
 
-    var steps = DBOS.listWorkflowSteps(workflows.get(0).workflowId());
+    var steps = dbos.listWorkflowSteps(workflows.get(0).workflowId());
     assertEquals(2, steps.size());
 
-    var q2workflows = DBOS.listWorkflows(new ListWorkflowsInput().withWorkflowName("everyThird"));
+    var q2workflows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("everyThird"));
     assertTrue(q2workflows.size() >= 1);
     assertEquals("q2", q2workflows.get(0).queueName());
 
-    DBOS.shutdown();
+    dbos.shutdown();
 
     // See about makeup work (ignore missed)
     var timeToSleep = 5000 - (System.currentTimeMillis() - timeAsOfShutdown);
     Thread.sleep(timeToSleep < 0 ? 0 : timeToSleep);
-    DBOS.launch();
+    dbos.launch();
     Thread.sleep(2000);
 
     int count1imb = impl.everySecondCounterIgnoreMissed;
@@ -121,7 +112,7 @@ class SchedulerServiceTest {
     var e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> DBOS.registerWorkflows(InvalidSig.class, new InvalidSigImpl()));
+            () -> dbos.registerWorkflows(InvalidSig.class, new InvalidSigImpl()));
     assertEquals(
         "Invalid signature for Scheduled workflow dev.dbos.transact.scheduled.InvalidSigImpl//scheduledWF. Signature must be (Instant, Instant)",
         e.getMessage());
@@ -132,7 +123,7 @@ class SchedulerServiceTest {
     var e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> DBOS.registerWorkflows(InvalidCron.class, new InvalidCronImpl()));
+            () -> dbos.registerWorkflows(InvalidCron.class, new InvalidCronImpl()));
     assertEquals("Cron expression contains 5 parts but we expect one of [6]", e.getMessage());
   }
 }
