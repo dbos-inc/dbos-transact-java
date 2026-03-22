@@ -25,10 +25,10 @@ public class WorkflowRegistry {
   }
 
   public void register(
-      String className,
       String workflowName,
-      Object target,
+      String className,
       String instanceName,
+      Object target,
       Method method,
       int maxRecoveryAttempts,
       SerializationStrategy serializationStrategy) {

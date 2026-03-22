@@ -175,11 +175,9 @@ public class DBOS implements AutoCloseable {
   }
 
   private void registerClassWorkflows(
-      @NonNull Class<?> interfaceClass,
-      @NonNull Object implementation,
-      @Nullable String instanceName) {
+      @NonNull Class<?> interfaceClass, @NonNull Object target, @Nullable String instanceName) {
     Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
-    Objects.requireNonNull(implementation, "implementation must not be null");
+    Objects.requireNonNull(target, "target must not be null");
     instanceName = Objects.requireNonNullElse(instanceName, "");
     if (!interfaceClass.isInterface()) {
       throw new IllegalArgumentException("interfaceClass must be an interface");
@@ -190,42 +188,51 @@ public class DBOS implements AutoCloseable {
 
     // Use @WorkflowClassName annotation if present, otherwise use the Java class name
     WorkflowClassName classNameAnnotation =
-        implementation.getClass().getAnnotation(WorkflowClassName.class);
+        target.getClass().getAnnotation(WorkflowClassName.class);
     String className =
         (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
             ? classNameAnnotation.value()
-            : implementation.getClass().getName();
-    workflowRegistry.register(interfaceClass, implementation, className, instanceName);
+            : target.getClass().getName();
+    workflowRegistry.register(interfaceClass, target, className, instanceName);
 
-    Method[] methods = implementation.getClass().getDeclaredMethods();
+    Method[] methods = target.getClass().getDeclaredMethods();
     for (Method method : methods) {
-      Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-      if (wfAnnotation != null) {
+      Workflow wfTag = method.getAnnotation(Workflow.class);
+      if (wfTag != null) {
         method.setAccessible(true); // In case it's not public
-        registerWorkflowMethod(wfAnnotation, implementation, className, instanceName, method);
+        String wfName = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
+        registerWorkflowMethod(
+            wfName,
+            className,
+            instanceName,
+            target,
+            method,
+            wfTag.maxRecoveryAttempts(),
+            wfTag.serializationStrategy());
       }
     }
   }
 
-  private void registerWorkflowMethod(
-      @NonNull Workflow wfTag,
-      @NonNull Object target,
-      @NonNull String className,
-      @NonNull String instanceName,
-      @NonNull Method method) {
+  public void registerWorkflowMethod(
+      String workflowName,
+      String className,
+      String instanceName,
+      Object target,
+      Method method,
+      int maxRecoveryAttempts,
+      SerializationStrategy serializationStrategy) {
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
 
-    String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
     workflowRegistry.register(
+        workflowName,
         className,
-        name,
-        target,
         instanceName,
+        target,
         method,
-        wfTag.maxRecoveryAttempts(),
-        wfTag.serializationStrategy());
+        maxRecoveryAttempts,
+        serializationStrategy);
   }
 
   /**
@@ -298,6 +305,17 @@ public class DBOS implements AutoCloseable {
           String.format("Cannot call %s before DBOS is launched", caller));
     }
     return exec;
+  }
+
+  public Object dispatchWorkflow(
+      String workflowName,
+      String className,
+      String instanceName,
+      Object[] args,
+      Class<?> returnType)
+      throws Exception {
+    return ensureLaunched("dispatchWorkflow")
+        .handleWorkflow(workflowName, className, instanceName, args, returnType);
   }
 
   /**

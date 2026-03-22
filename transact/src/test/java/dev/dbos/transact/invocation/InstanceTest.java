@@ -121,9 +121,6 @@ public class InstanceTest {
   void beforeEachTest() {
     var dbosConfig = pgContainer.dbosConfig();
 
-    // Note, manually injecting the DBOS instance here is a poor developer experience
-    // Opened https://github.com/dbos-inc/dbos-transact-java/issues/296 to track improving this
-
     dbos = new DBOS(dbosConfig);
     var impl = new HawkServiceInstanceImpl(dbos);
     proxy = dbos.registerWorkflows(HawkService.class, impl);
