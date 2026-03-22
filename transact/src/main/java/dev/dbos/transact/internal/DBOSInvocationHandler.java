@@ -45,6 +45,10 @@ public class DBOSInvocationHandler implements InvocationHandler {
             new DBOSInvocationHandler(implementation, instanceName, executor));
   }
 
+  private DBOSExecutor executor() {
+    return Objects.requireNonNull(executorSupplier.get(), "executorSupplier returned null");
+  }
+
   @Override
   public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
 
@@ -53,16 +57,12 @@ public class DBOSInvocationHandler implements InvocationHandler {
 
     var wfTag = implMethod.getAnnotation(Workflow.class);
     if (wfTag != null) {
-      var executor =
-          Objects.requireNonNull(executorSupplier.get(), "executorSupplier returned null");
-      return handleWorkflow(executor, implMethod, args, wfTag);
+      return handleWorkflow(executor(), implMethod, args, wfTag);
     }
 
     var stepTag = implMethod.getAnnotation(Step.class);
     if (stepTag != null) {
-      var executor =
-          Objects.requireNonNull(executorSupplier.get(), "executorSupplier returned null");
-      return handleStep(executor, implMethod, args, stepTag);
+      return handleStep(executor(), implMethod, args, stepTag);
     }
 
     return method.invoke(target, args);
