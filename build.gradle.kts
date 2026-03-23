@@ -89,6 +89,16 @@ allprojects {
     }
 }
 
+spotless {
+  kotlinGradle {
+    target("*.gradle.kts")
+    ktfmt("0.61").googleStyle()
+    trimTrailingWhitespace()
+    endWithNewline()
+  }
+}
+
+
 subprojects {
     apply(plugin = "java")
     apply(plugin = "pmd")
@@ -112,6 +122,21 @@ subprojects {
             trimTrailingWhitespace()
             endWithNewline()
         }
+            kotlin {
+      target("**/*.kt")
+      targetExclude("build/**/*.kt")
+      ktfmt("0.61").googleStyle()
+      trimTrailingWhitespace()
+      endWithNewline()
+    }
+    kotlinGradle {
+      target("*.gradle.kts")
+      target("**/*.gradle.kts")
+      ktfmt("0.61").googleStyle()
+      trimTrailingWhitespace()
+      endWithNewline()
+    }
+
     }
 
     tasks.withType<com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask> {
