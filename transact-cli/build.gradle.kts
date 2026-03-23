@@ -8,6 +8,7 @@ application { mainClass.set("dev.dbos.transact.cli.Main") }
 dependencies {
   implementation(project(":transact"))
   implementation("com.fasterxml.jackson.core:jackson-databind:2.21.1")
+  implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.1")
   implementation("info.picocli:picocli:4.7.7")
   runtimeOnly("org.slf4j:slf4j-simple:2.0.17")
 

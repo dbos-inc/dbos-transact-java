@@ -37,6 +37,7 @@ dependencies {
   implementation("com.cronutils:cron-utils:9.2.1") // cron for scheduled wf
   implementation("io.netty:netty-codec-http") // HTTP and WebSocket codecs
   implementation("io.netty:netty-handler") // SSL and channel handlers
+  implementation("io.netty:netty-codec-json") // JSON codec for JsonObjectDecoder
 
   testImplementation(platform("org.junit:junit-bom:6.0.3"))
   testImplementation("org.junit.jupiter:junit-jupiter")
