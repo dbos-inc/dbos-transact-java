@@ -120,7 +120,6 @@ subprojects {
       endWithNewline()
     }
     kotlinGradle {
-      target("*.gradle.kts")
       target("**/*.gradle.kts")
       ktfmt("0.61").googleStyle()
       trimTrailingWhitespace()
