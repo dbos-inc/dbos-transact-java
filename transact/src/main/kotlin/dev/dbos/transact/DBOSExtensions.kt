@@ -3,11 +3,9 @@
 
 package dev.dbos.transact
 
-import dev.dbos.transact.execution.ThrowingRunnable
 import dev.dbos.transact.execution.ThrowingSupplier
-import dev.dbos.transact.workflow.WorkflowHandle
 import dev.dbos.transact.workflow.StepOptions
-import dev.dbos.transact.StartWorkflowOptions
+import dev.dbos.transact.workflow.WorkflowHandle
 
 // Note: there is no Kotlin extension for startWorkflow with just a lambda parameter.
 // Kotlin prefers members over extensions, and automatically SAM-converts lambdas to functional
@@ -29,17 +27,20 @@ import dev.dbos.transact.StartWorkflowOptions
  */
 @JvmSynthetic
 fun <T> DBOS.startWorkflow(
-    options: StartWorkflowOptions?,
-    block: () -> T
+  options: StartWorkflowOptions?,
+  block: () -> T,
 ): WorkflowHandle<T, Exception> {
-    return this.startWorkflow(ThrowingSupplier<T, Exception> { block() }, options ?: StartWorkflowOptions())
+  return this.startWorkflow(
+    ThrowingSupplier<T, Exception> { block() },
+    options ?: StartWorkflowOptions(),
+  )
 }
 
 /**
  * Runs a step using trailing lambda syntax, with the given [options].
  *
- * This is a Kotlin-friendly alternative to [DBOS.runStep] that places the lambda last,
- * enabling trailing lambda call syntax. The exception type is fixed to [Exception].
+ * This is a Kotlin-friendly alternative to [DBOS.runStep] that places the lambda last, enabling
+ * trailing lambda call syntax. The exception type is fixed to [Exception].
  *
  * @param T the return type of the step
  * @param options step options such as step name and retry policy
@@ -47,18 +48,15 @@ fun <T> DBOS.startWorkflow(
  * @return the result of the step
  */
 @JvmSynthetic
-fun <T> DBOS.runStep(
-    options: StepOptions,
-    block: () -> T
-): T {
-    return this.runStep(ThrowingSupplier<T, Exception> { block() }, options)
+fun <T> DBOS.runStep(options: StepOptions, block: () -> T): T {
+  return this.runStep(ThrowingSupplier<T, Exception> { block() }, options)
 }
 
 /**
  * Runs a step using trailing lambda syntax, with the given [name].
  *
- * This is a Kotlin-friendly alternative to [DBOS.runStep] that places the lambda last,
- * enabling trailing lambda call syntax. The exception type is fixed to [Exception].
+ * This is a Kotlin-friendly alternative to [DBOS.runStep] that places the lambda last, enabling
+ * trailing lambda call syntax. The exception type is fixed to [Exception].
  *
  * @param T the return type of the step
  * @param name the name of the step
@@ -66,9 +64,6 @@ fun <T> DBOS.runStep(
  * @return the result of the step
  */
 @JvmSynthetic
-fun <T> DBOS.runStep(
-    name: String,
-    block: () -> T
-): T {
-    return this.runStep(ThrowingSupplier<T, Exception> { block() }, name)
+fun <T> DBOS.runStep(name: String, block: () -> T): T {
+  return this.runStep(ThrowingSupplier<T, Exception> { block() }, name)
 }
