@@ -41,7 +41,6 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -201,7 +200,7 @@ public class Conductor implements AutoCloseable {
             "Processing conductor request: type={}, id={}", request.type, request.request_id);
 
         final BaseMessage finalRequest = request;
-        getResponseAsync(request)
+        getResponseAsync(request, ws)
             .whenComplete(
                 (response, throwable) -> {
                   try {
@@ -219,7 +218,8 @@ public class Conductor implements AutoCloseable {
                           new BaseResponse(
                               finalRequest.type, finalRequest.request_id, throwable.getMessage());
                       writeFragmentedResponse(ws, errorResponse);
-                    } else {
+                    } else if (response != null) {
+                      // null response means the handler already sent the response directly
                       logger.info(
                           "Completed processing request: type={}, id={}, duration={}ms",
                           finalRequest.type,
@@ -587,7 +587,7 @@ public class Conductor implements AutoCloseable {
     }
   }
 
-  CompletableFuture<BaseResponse> getResponseAsync(BaseMessage message) {
+  CompletableFuture<BaseResponse> getResponseAsync(BaseMessage message, WebSocket ws) {
     logger.debug("getResponseAsync {}", message.type);
     MessageType messageType = MessageType.fromValue(message.type);
     if (messageType == null) {
@@ -601,7 +601,7 @@ public class Conductor implements AutoCloseable {
       case DELETE -> handleDelete(this, message);
       case EXECUTOR_INFO -> handleExecutorInfo(this, message);
       case EXIST_PENDING_WORKFLOWS -> handleExistPendingWorkflows(this, message);
-      case EXPORT_WORKFLOW -> handleExportWorkflow(this, message);
+      case EXPORT_WORKFLOW -> handleExportWorkflow(this, message, ws);
       case FORK_WORKFLOW -> handleFork(this, message);
       case GET_METRICS -> handleGetMetrics(this, message);
       case GET_WORKFLOW -> handleGetWorkflow(this, message);
@@ -890,7 +890,7 @@ public class Conductor implements AutoCloseable {
   }
 
   static CompletableFuture<BaseResponse> handleExportWorkflow(
-      Conductor conductor, BaseMessage message) {
+      Conductor conductor, BaseMessage message, WebSocket ws) {
     return CompletableFuture.supplyAsync(
         () -> {
           ExportWorkflowRequest request = (ExportWorkflowRequest) message;
@@ -910,18 +910,17 @@ public class Conductor implements AutoCloseable {
                 request.workflow_id,
                 workflows.size());
 
-            var serializedWorkflow = serializeExportedWorkflows(workflows);
+            streamExportResponse(ws, message, workflows);
 
             long duration = System.currentTimeMillis() - startTime;
             logger.info(
-                "Export workflow completed: id={}, workflows={}, serialized_size={} bytes,"
-                    + " duration={}ms",
+                "Export workflow streamed: id={}, workflows={}, duration={}ms",
                 request.workflow_id,
                 workflows.size(),
-                serializedWorkflow.length(),
                 duration);
 
-            return new ExportWorkflowResponse(message, serializedWorkflow);
+            // null signals to whenComplete that the response was already sent
+            return null;
           } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             var children = request.export_children ? "with children" : "";
@@ -942,6 +941,66 @@ public class Conductor implements AutoCloseable {
         });
   }
 
+  /**
+   * Streams an export response directly to the WebSocket without buffering the full payload. The
+   * JSON envelope is written manually so the base64+gzip content can be piped straight from Jackson
+   * through GZIPOutputStream and Base64 encoding into 128 KB WebSocket frames.
+   */
+  private static void streamExportResponse(
+      WebSocket ws, BaseMessage message, List<ExportedWorkflow> workflows) throws IOException {
+    int fragmentSize = 128 * 1024; // 128k
+    logger.debug(
+        "Starting to stream export response: type={}, id={}", message.type, message.request_id);
+
+    // Build the JSON prefix manually. JSONUtil.toJson(String) produces a properly
+    // escaped, double-quoted JSON string value for the request_id field.
+    String prefix =
+        "{\"type\":\"export_workflow\",\"request_id\":"
+            + JSONUtil.toJson(message.request_id)
+            + ",\"serialized_workflow\":\"";
+    String suffix = "\"}";
+
+    JdkFragmentingOutputStream fragOut = new JdkFragmentingOutputStream(ws, fragmentSize);
+    fragOut.write(prefix.getBytes(StandardCharsets.UTF_8));
+
+    // Wrap fragOut with a non-closing delegate so that base64Out.close() flushes its padding
+    // bytes into fragOut without also closing fragOut — we need fragOut open to write the suffix.
+    OutputStream nonClosingFragOut =
+        new OutputStream() {
+          @Override
+          public void write(int b) throws IOException {
+            fragOut.write(b);
+          }
+
+          @Override
+          public void write(byte[] b, int off, int len) throws IOException {
+            fragOut.write(b, off, len);
+          }
+
+          @Override
+          public void flush() throws IOException {
+            fragOut.flush();
+          }
+          // close() intentionally does nothing
+        };
+
+    // Chain: Jackson -> GZIPOutputStream -> Base64 -> nonClosingFragOut -> fragOut
+    OutputStream base64Out = Base64.getEncoder().wrap(nonClosingFragOut);
+    try (GZIPOutputStream gzipOut = new GZIPOutputStream(base64Out)) {
+      JSONUtil.toJson(gzipOut, workflows);
+    }
+    // Closing the base64 wrapper flushes padding into nonClosingFragOut (and into fragOut),
+    // but does NOT close fragOut because of the non-closing delegate.
+    base64Out.close();
+
+    // Write the closing JSON characters and send the final WebSocket frame.
+    fragOut.write(suffix.getBytes(StandardCharsets.UTF_8));
+    fragOut.close();
+
+    logger.debug(
+        "Completed streaming export response: type={}, id={}", message.type, message.request_id);
+  }
+
   static List<ExportedWorkflow> deserializeExportedWorkflows(String serializedWorkflow)
       throws IOException {
     var compressed = Base64.getDecoder().decode(serializedWorkflow);
@@ -951,12 +1010,12 @@ public class Conductor implements AutoCloseable {
     }
   }
 
+  // Used by tests to create import payloads and verify export output
   static String serializeExportedWorkflows(List<ExportedWorkflow> workflows) throws IOException {
-    var out = new ByteArrayOutputStream();
+    var out = new java.io.ByteArrayOutputStream();
     try (var gOut = new GZIPOutputStream(out)) {
       JSONUtil.toJson(gOut, workflows);
     }
-
     return Base64.getEncoder().encodeToString(out.toByteArray());
   }
 
