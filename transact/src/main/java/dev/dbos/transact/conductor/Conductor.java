@@ -44,6 +44,9 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PipedReader;
+import java.io.PipedWriter;
+import java.io.Reader;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -72,6 +75,8 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -160,6 +165,18 @@ public class Conductor implements AutoCloseable {
 
   private class WebSocketListener implements WebSocket.Listener {
     private final StringBuilder messageBuffer = new StringBuilder();
+    private PipedWriter importPipeWriter = null;
+
+    private void closePipe() {
+      if (importPipeWriter != null) {
+        try {
+          importPipeWriter.close();
+        } catch (IOException e) {
+          logger.debug("Error closing import pipe writer", e);
+        }
+        importPipeWriter = null;
+      }
+    }
 
     @Override
     public void onOpen(WebSocket ws) {
@@ -171,6 +188,40 @@ public class Conductor implements AutoCloseable {
 
     @Override
     public CompletableFuture<?> onText(WebSocket ws, CharSequence data, boolean last) {
+      // Streaming import path: pipe each frame directly to the worker thread
+      if (importPipeWriter != null) {
+        try {
+          importPipeWriter.append(data);
+        } catch (IOException e) {
+          logger.error("Error writing frame to import pipe; streaming import aborted", e);
+          closePipe();
+        }
+        if (last) {
+          closePipe();
+        }
+        ws.request(1);
+        return null;
+      }
+
+      // Detect import_workflow on the first frame of a new message
+      if (messageBuffer.length() == 0 && isImportMessage(data)) {
+        try {
+          PipedReader pipeReader = new PipedReader(8 * 1024);
+          importPipeWriter = new PipedWriter(pipeReader);
+          importPipeWriter.append(data);
+          if (last) {
+            closePipe();
+          }
+          streamImportAsync(Conductor.this, ws, pipeReader);
+          ws.request(1);
+          return null;
+        } catch (IOException e) {
+          logger.error("Failed to start streaming import; falling back to buffered path", e);
+          closePipe();
+          // fall through to buffered path
+        }
+      }
+
       messageBuffer.append(data);
       if (!last) {
         ws.request(1);
@@ -299,7 +350,7 @@ public class Conductor implements AutoCloseable {
         "Starting to write fragmented response: type={}, id={}",
         response.type,
         response.request_id);
-    try (OutputStream out = new JdkFragmentingOutputStream(ws, fragmentSize)) {
+    try (OutputStream out = new FragmentingOutputStream(ws, fragmentSize)) {
       JSONUtil.toJsonStream(response, out);
     }
     logger.debug(
@@ -308,14 +359,14 @@ public class Conductor implements AutoCloseable {
         response.request_id);
   }
 
-  private static class JdkFragmentingOutputStream extends OutputStream {
+  private static class FragmentingOutputStream extends OutputStream {
     private final WebSocket ws;
     private final int fragmentSize;
     private final byte[] buffer;
     private int bufferPos = 0;
     private boolean closed = false;
 
-    JdkFragmentingOutputStream(WebSocket ws, int fragmentSize) {
+    FragmentingOutputStream(WebSocket ws, int fragmentSize) {
       this.ws = ws;
       this.fragmentSize = fragmentSize;
       this.buffer = new byte[fragmentSize];
@@ -864,6 +915,72 @@ public class Conductor implements AutoCloseable {
         });
   }
 
+  private static boolean isImportMessage(CharSequence data) {
+    int checkLen = Math.min(data.length(), 200);
+    return data.subSequence(0, checkLen).toString().contains("\"import_workflow\"");
+  }
+
+  static void streamImportAsync(Conductor conductor, WebSocket ws, Reader pipeReader) {
+    CompletableFuture.runAsync(
+        () -> {
+          long startTime = System.currentTimeMillis();
+          logger.info("Starting streaming import workflow");
+          String requestId = null;
+          try (JsonParser parser = JSONUtil.createParser(pipeReader)) {
+            if (parser.nextToken() != JsonToken.START_OBJECT) {
+              throw new IOException("Expected JSON object at start of import message");
+            }
+            List<ExportedWorkflow> workflows = null;
+            TypeReference<List<ExportedWorkflow>> typeRef = new TypeReference<>() {};
+            JsonToken token;
+            while ((token = parser.nextToken()) != null && token != JsonToken.END_OBJECT) {
+              if (token != JsonToken.FIELD_NAME) {
+                continue;
+              }
+              String fieldName = parser.currentName();
+              parser.nextToken();
+              switch (fieldName) {
+                case "request_id":
+                  requestId = parser.getValueAsString();
+                  break;
+                case "serialized_workflow":
+                  byte[] decoded = parser.getBinaryValue();
+                  try (GZIPInputStream gzip =
+                      new GZIPInputStream(new ByteArrayInputStream(decoded))) {
+                    workflows = JSONUtil.fromJson(gzip, typeRef);
+                  }
+                  break;
+                default:
+                  parser.skipChildren();
+                  break;
+              }
+            }
+            if (workflows == null) {
+              throw new IOException("Missing serialized_workflow in import message");
+            }
+            logger.info("Deserialization completed: {} workflows", workflows.size());
+            conductor.systemDatabase.importWorkflow(workflows);
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info(
+                "Streaming import completed: {} workflows, duration={}ms",
+                workflows.size(),
+                duration);
+            var req = new ImportWorkflowRequest(requestId, null);
+            writeFragmentedResponse(ws, new SuccessResponse(req, true));
+          } catch (Exception e) {
+            logger.error("Exception during streaming import workflow", e);
+            if (requestId != null) {
+              try {
+                var req = new ImportWorkflowRequest(requestId, null);
+                writeFragmentedResponse(ws, new SuccessResponse(req, e));
+              } catch (Exception ex) {
+                logger.error("Failed to send error response for streaming import", ex);
+              }
+            }
+          }
+        });
+  }
+
   static CompletableFuture<BaseResponse> handleImportWorkflow(
       Conductor conductor, BaseMessage message) {
     return CompletableFuture.supplyAsync(
@@ -960,42 +1077,44 @@ public class Conductor implements AutoCloseable {
             + ",\"serialized_workflow\":\"";
     String suffix = "\"}";
 
-    JdkFragmentingOutputStream fragOut = new JdkFragmentingOutputStream(ws, fragmentSize);
-    fragOut.write(prefix.getBytes(StandardCharsets.UTF_8));
-
     // Wrap fragOut with a non-closing delegate so that base64Out.close() flushes its padding
     // bytes into fragOut without also closing fragOut — we need fragOut open to write the suffix.
-    OutputStream nonClosingFragOut =
-        new OutputStream() {
-          @Override
-          public void write(int b) throws IOException {
-            fragOut.write(b);
-          }
+    try (FragmentingOutputStream fragOut = new FragmentingOutputStream(ws, fragmentSize)) {
+      fragOut.write(prefix.getBytes(StandardCharsets.UTF_8));
 
-          @Override
-          public void write(byte[] b, int off, int len) throws IOException {
-            fragOut.write(b, off, len);
-          }
+      OutputStream nonClosingFragOut =
+          new OutputStream() {
+            @Override
+            public void write(int b) throws IOException {
+              fragOut.write(b);
+            }
 
-          @Override
-          public void flush() throws IOException {
-            fragOut.flush();
-          }
-          // close() intentionally does nothing
-        };
+            @Override
+            public void write(byte[] b, int off, int len) throws IOException {
+              fragOut.write(b, off, len);
+            }
 
-    // Chain: Jackson -> GZIPOutputStream -> Base64 -> nonClosingFragOut -> fragOut
-    OutputStream base64Out = Base64.getEncoder().wrap(nonClosingFragOut);
-    try (GZIPOutputStream gzipOut = new GZIPOutputStream(base64Out)) {
-      JSONUtil.toJson(gzipOut, workflows);
+            @Override
+            public void flush() throws IOException {
+              fragOut.flush();
+            }
+
+            // close() intentionally does nothing
+          };
+
+      // Chain: Jackson -> GZIPOutputStream -> Base64 -> nonClosingFragOut -> fragOut
+
+      try (OutputStream base64Out = Base64.getEncoder().wrap(nonClosingFragOut);
+          GZIPOutputStream gzipOut = new GZIPOutputStream(base64Out)) {
+        // Note: When the base64Out wrapper closes at the end of the try block, it flushes padding
+        // into nonClosingFragOut (and into fragOut), but does NOT close fragOut because of the
+        // non-closing delegate.
+        JSONUtil.toJson(gzipOut, workflows);
+      }
+
+      // Write the closing JSON characters; fragOut.close() sends the final WebSocket frame.
+      fragOut.write(suffix.getBytes(StandardCharsets.UTF_8));
     }
-    // Closing the base64 wrapper flushes padding into nonClosingFragOut (and into fragOut),
-    // but does NOT close fragOut because of the non-closing delegate.
-    base64Out.close();
-
-    // Write the closing JSON characters and send the final WebSocket frame.
-    fragOut.write(suffix.getBytes(StandardCharsets.UTF_8));
-    fragOut.close();
 
     logger.debug(
         "Completed streaming export response: type={}, id={}", message.type, message.request_id);
