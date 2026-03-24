@@ -44,8 +44,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PipedReader;
-import java.io.PipedWriter;
 import java.io.Reader;
 import java.net.InetAddress;
 import java.net.URI;
@@ -62,6 +60,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -165,16 +164,12 @@ public class Conductor implements AutoCloseable {
 
   private class WebSocketListener implements WebSocket.Listener {
     private final StringBuilder messageBuffer = new StringBuilder();
-    private PipedWriter importPipeWriter = null;
+    private ImportFrameQueue importFrameQueue = null;
 
     private void closePipe() {
-      if (importPipeWriter != null) {
-        try {
-          importPipeWriter.close();
-        } catch (IOException e) {
-          logger.debug("Error closing import pipe writer", e);
-        }
-        importPipeWriter = null;
+      if (importFrameQueue != null) {
+        importFrameQueue.finish();
+        importFrameQueue = null;
       }
     }
 
@@ -188,12 +183,14 @@ public class Conductor implements AutoCloseable {
 
     @Override
     public CompletableFuture<?> onText(WebSocket ws, CharSequence data, boolean last) {
-      // Streaming import path: pipe each frame directly to the worker thread
-      if (importPipeWriter != null) {
+      logger.debug("onText data size {} last {}", data.length(), last);
+
+      // Streaming import path: queue each frame for the worker thread (non-blocking)
+      if (importFrameQueue != null) {
         try {
-          importPipeWriter.append(data);
-        } catch (IOException e) {
-          logger.error("Error writing frame to import pipe; streaming import aborted", e);
+          importFrameQueue.addFrame(data);
+        } catch (Exception e) {
+          logger.error("Error queuing frame for import; streaming import aborted", e);
           closePipe();
         }
         if (last) {
@@ -205,21 +202,18 @@ public class Conductor implements AutoCloseable {
 
       // Detect import_workflow on the first frame of a new message
       if (messageBuffer.length() == 0 && isImportMessage(data)) {
-        try {
-          PipedReader pipeReader = new PipedReader(8 * 1024);
-          importPipeWriter = new PipedWriter(pipeReader);
-          importPipeWriter.append(data);
-          if (last) {
-            closePipe();
-          }
-          streamImportAsync(Conductor.this, ws, pipeReader);
-          ws.request(1);
-          return null;
-        } catch (IOException e) {
-          logger.error("Failed to start streaming import; falling back to buffered path", e);
+        logger.debug("import message detected");
+
+        importFrameQueue = new ImportFrameQueue();
+        importFrameQueue.addFrame(data);
+        streamImportAsync(Conductor.this, ws, importFrameQueue);
+        logger.debug("streamImportAsync started");
+        if (last) {
           closePipe();
-          // fall through to buffered path
         }
+
+        ws.request(1);
+        return null;
       }
 
       messageBuffer.append(data);
@@ -343,6 +337,62 @@ public class Conductor implements AutoCloseable {
     }
   }
 
+  /**
+   * A Reader backed by an unbounded queue of CharSequence frames. The producer side (onText) calls
+   * addFrame/finish which never block. The consumer side (streamImportAsync) reads data normally,
+   * blocking only when waiting for more frames to arrive. This avoids blocking the WebSocket I/O
+   * thread, which would prevent the TCP receive buffer from draining and cause the conductor's pong
+   * writes to time out.
+   */
+  private static class ImportFrameQueue extends Reader {
+    private final LinkedBlockingQueue<CharSequence> frames = new LinkedBlockingQueue<>();
+    private final AtomicBoolean done = new AtomicBoolean(false);
+    private CharSequence current = null;
+    private int pos = 0;
+
+    void addFrame(CharSequence data) {
+      frames.add(data);
+    }
+
+    void finish() {
+      if (done.compareAndSet(false, true)) {
+        frames.add(""); // wake up a blocked reader
+      }
+    }
+
+    @Override
+    public int read(char[] cbuf, int off, int len) throws IOException {
+      while (true) {
+        if (current != null && pos < current.length()) {
+          int n = Math.min(len, current.length() - pos);
+          for (int i = 0; i < n; i++) {
+            cbuf[off + i] = current.charAt(pos + i);
+          }
+          pos += n;
+          return n;
+        }
+        try {
+          CharSequence next = frames.poll(100, TimeUnit.MILLISECONDS);
+          if (next == null) {
+            if (done.get() && frames.isEmpty()) return -1;
+            continue;
+          }
+          if (next.length() == 0 && done.get()) return -1;
+          current = next;
+          pos = 0;
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new IOException("Interrupted reading import stream", e);
+        }
+      }
+    }
+
+    @Override
+    public void close() {
+      finish();
+    }
+  }
+
   private static void writeFragmentedResponse(WebSocket ws, BaseResponse response)
       throws Exception {
     int fragmentSize = 128 * 1024; // 128k
@@ -372,7 +422,7 @@ public class Conductor implements AutoCloseable {
       this.ws = ws;
       this.fragmentSize = fragmentSize;
       this.buffer = new byte[fragmentSize];
-      logger.debug("Created JdkFragmentingOutputStream with fragment size: {}", fragmentSize);
+      logger.debug("Created FragmentingOutputStream with fragment size: {}", fragmentSize);
     }
 
     @Override
