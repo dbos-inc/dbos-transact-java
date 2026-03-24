@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -1560,6 +1561,80 @@ public class ConductorTest {
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertEquals("import_workflow", jsonNode.get("type").asText());
       assertEquals("large-import-1", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  // Regression test for: when a large import is being processed, the WebSocket I/O thread must
+  // remain free to deliver pong frames. The old PipedWriter implementation blocked onText() when
+  // the 8KB pipe buffer filled up, stalling the I/O thread and preventing pong delivery, which
+  // caused the server's pong write to time out and the connection to be reset.
+  //
+  // This test verifies the connection stays alive during a long-running import by requiring a
+  // ping/pong cycle to complete while importWorkflow() is blocked. If the I/O thread were stuck,
+  // the pong would not be delivered, the ping would time out, the connection would reset, and
+  // messageLatch would never fire.
+  @RetryingTest(3)
+  public void pingsSucceedDuringLargeImport() throws Exception {
+    class Listener extends MessageListener {
+      final CountDownLatch pingLatch = new CountDownLatch(1);
+      volatile boolean connectionReset = false;
+
+      @Override
+      public void onPing(WebSocket conn, Framedata frame) {
+        super.onPing(conn, frame); // sends pong back to the conductor
+        pingLatch.countDown();
+      }
+
+      @Override
+      public void onClose(WebSocket conn, int code, String reason, boolean remote) {
+        connectionReset = true;
+      }
+    }
+
+    // Block importWorkflow until the test confirms a ping was received (and pong sent back).
+    // At least one full ping/pong cycle must complete before the import finishes.
+    CountDownLatch importMayProceed = new CountDownLatch(1);
+    doAnswer(
+            invocation -> {
+              assertTrue(importMayProceed.await(10, TimeUnit.SECONDS), "import was not released");
+              return null;
+            })
+        .when(mockDB)
+        .importWorkflow(any());
+
+    var workflows = createLargeTestExportedWorkflows();
+    var serialized = Conductor.serializeExportedWorkflows(workflows);
+
+    Listener listener = new Listener();
+    testServer.setListener(listener);
+
+    // Ping fires frequently; timeout is long enough for normal test overhead but short enough
+    // that a missed pong would reset the connection before importMayProceed is released.
+    builder.pingPeriodMs(300).pingTimeoutMs(2000);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.IMPORT_WORKFLOW,
+          "ping-during-import",
+          Map.of("serialized_workflow", serialized));
+
+      // Wait for a ping to arrive at the server (and pong to be sent) while import is blocked.
+      assertTrue(listener.pingLatch.await(5, TimeUnit.SECONDS), "no ping received during import");
+      assertFalse(listener.connectionReset, "connection was reset during import");
+
+      // Release importWorkflow and verify the import completes cleanly.
+      importMayProceed.countDown();
+      assertTrue(listener.messageLatch.await(15, TimeUnit.SECONDS), "import did not complete");
+      assertFalse(listener.connectionReset, "connection was reset after import");
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertEquals("import_workflow", jsonNode.get("type").asText());
+      assertEquals("ping-during-import", jsonNode.get("request_id").asText());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
