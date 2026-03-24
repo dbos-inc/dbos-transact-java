@@ -1752,6 +1752,57 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void concurrentRequestsAllReceiveResponses() throws Exception {
+    int requestCount = 5;
+
+    class MultiMessageListener extends MessageListener {
+      List<String> responses = new ArrayList<>();
+      CountDownLatch allLatch = new CountDownLatch(requestCount);
+
+      @Override
+      public void onMessage(WebSocket conn, String message) {
+        synchronized (this) {
+          responses.add(message);
+        }
+        allLatch.countDown();
+      }
+    }
+
+    MultiMessageListener listener = new MultiMessageListener();
+    testServer.setListener(listener);
+
+    // Delay each response so all N requests are in-flight before any completes,
+    // forcing their whenComplete callbacks to fire concurrently and stress the sendText path.
+    when(mockExec.appVersion())
+        .thenAnswer(
+            inv -> {
+              Thread.sleep(50);
+              return "test-app-version";
+            });
+    when(mockExec.executorId()).thenReturn("test-executor-id");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      // Send all requests without waiting for responses between them.
+      for (int i = 0; i < requestCount; i++) {
+        listener.send(MessageType.EXECUTOR_INFO, "req-" + i, Map.of());
+      }
+
+      // Without synchronized(ws) in writeFragmentedResponse, concurrent sendText calls
+      // throw "Send pending" and responses are silently dropped, causing a timeout here.
+      assertTrue(listener.allLatch.await(10, TimeUnit.SECONDS), "not all responses received");
+      assertEquals(requestCount, listener.responses.size());
+      for (String msg : listener.responses) {
+        JsonNode json = mapper.readTree(msg);
+        assertEquals("executor_info", json.get("type").asText());
+        assertNull(json.get("error_message"));
+      }
+    }
+  }
+
+  @RetryingTest(3)
   public void canAlertThrows() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);

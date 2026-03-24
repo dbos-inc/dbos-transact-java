@@ -350,8 +350,10 @@ public class Conductor implements AutoCloseable {
         "Starting to write fragmented response: type={}, id={}",
         response.type,
         response.request_id);
-    try (OutputStream out = new FragmentingOutputStream(ws, fragmentSize)) {
-      JSONUtil.toJsonStream(response, out);
+    synchronized (ws) {
+      try (OutputStream out = new FragmentingOutputStream(ws, fragmentSize)) {
+        JSONUtil.toJsonStream(response, out);
+      }
     }
     logger.debug(
         "Completed writing fragmented response: type={}, id={}",
