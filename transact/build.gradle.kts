@@ -28,15 +28,12 @@ tasks.named("build") { dependsOn("javadoc") }
 dependencies {
   api("org.slf4j:slf4j-api:2.0.17") // logging api
   api("org.jspecify:jspecify:1.0.0")
-  api(platform("io.netty:netty-bom:4.2.10.Final")) // export Netty version constraints to consumers
 
   implementation("org.postgresql:postgresql:42.7.10")
   implementation("com.zaxxer:HikariCP:7.0.2") // Connection pool
   implementation("com.fasterxml.jackson.core:jackson-databind:2.21.1") // json
   implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.1")
   implementation("com.cronutils:cron-utils:9.2.1") // cron for scheduled wf
-  implementation("io.netty:netty-codec-http") // HTTP and WebSocket codecs
-  implementation("io.netty:netty-handler") // SSL and channel handlers
 
   testImplementation(platform("org.junit:junit-bom:6.0.3"))
   testImplementation("org.junit.jupiter:junit-jupiter")
