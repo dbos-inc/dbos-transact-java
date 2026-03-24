@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.Reader;
 import java.io.StreamCorruptedException;
 import java.io.UncheckedIOException;
 import java.util.Arrays;
@@ -16,6 +17,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -156,6 +158,10 @@ public class JSONUtil {
     } catch (JsonProcessingException e) {
       throw new JsonRuntimeException(e);
     }
+  }
+
+  public static JsonParser createParser(Reader reader) throws IOException {
+    return mapper.createParser(reader);
   }
 
   public static void toJsonStream(Object obj, OutputStream out) {

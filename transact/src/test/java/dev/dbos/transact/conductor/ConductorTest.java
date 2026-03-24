@@ -1533,6 +1533,83 @@ public class ConductorTest {
     }
   }
 
+  @RetryingTest(3)
+  public void canImportLargePayload() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    var workflows = createLargeTestExportedWorkflows();
+    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    assertTrue(
+        serialized.length() > 256 * 1024,
+        "Expected serialized payload >256KB for meaningful streaming test, got "
+            + serialized.length());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.IMPORT_WORKFLOW, "large-import-1", Map.of("serialized_workflow", serialized));
+
+      assertTrue(listener.messageLatch.await(30, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).importWorkflow(workflowListCaptor.capture());
+      assertEquals(workflows.size(), workflowListCaptor.getValue().size());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertEquals("import_workflow", jsonNode.get("type").asText());
+      assertEquals("large-import-1", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canExportLargePayload() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    var workflows = createLargeTestExportedWorkflows();
+    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    assertTrue(
+        serialized.length() > 256 * 1024,
+        "Expected serialized payload >256KB for meaningful streaming test, got "
+            + serialized.length());
+
+    when(mockDB.exportWorkflow(anyString(), anyBoolean())).thenReturn(workflows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.EXPORT_WORKFLOW,
+          "large-export-1",
+          Map.of("workflow_id", "large-wf-1", "export_children", true));
+
+      assertTrue(listener.messageLatch.await(30, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).exportWorkflow("large-wf-1", true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertEquals("export_workflow", jsonNode.get("type").asText());
+      assertEquals("large-export-1", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertEquals(serialized, jsonNode.get("serialized_workflow").asText());
+    }
+  }
+
+  // Creates enough workflows to produce a large serialized payload (many 128KB WebSocket frames).
+  private static List<ExportedWorkflow> createLargeTestExportedWorkflows() {
+    int count = 5000;
+    List<ExportedWorkflow> workflows = new ArrayList<>(count);
+    for (int i = 0; i < count; i++) {
+      workflows.add(createTestExportedWorkflow(i));
+    }
+    return workflows;
+  }
+
   private static ExportedWorkflow createTestExportedWorkflow(int index) {
     String suffix = index > 0 ? "-" + index : "";
     WorkflowStatus status =
@@ -1671,6 +1748,57 @@ public class ConductorTest {
       assertEquals("12345", jsonNode.get("request_id").asText());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void concurrentRequestsAllReceiveResponses() throws Exception {
+    int requestCount = 5;
+
+    class MultiMessageListener extends MessageListener {
+      List<String> responses = new ArrayList<>();
+      CountDownLatch allLatch = new CountDownLatch(requestCount);
+
+      @Override
+      public void onMessage(WebSocket conn, String message) {
+        synchronized (this) {
+          responses.add(message);
+        }
+        allLatch.countDown();
+      }
+    }
+
+    MultiMessageListener listener = new MultiMessageListener();
+    testServer.setListener(listener);
+
+    // Delay each response so all N requests are in-flight before any completes,
+    // forcing their whenComplete callbacks to fire concurrently and stress the sendText path.
+    when(mockExec.appVersion())
+        .thenAnswer(
+            inv -> {
+              Thread.sleep(50);
+              return "test-app-version";
+            });
+    when(mockExec.executorId()).thenReturn("test-executor-id");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      // Send all requests without waiting for responses between them.
+      for (int i = 0; i < requestCount; i++) {
+        listener.send(MessageType.EXECUTOR_INFO, "req-" + i, Map.of());
+      }
+
+      // Without synchronized(ws) in writeFragmentedResponse, concurrent sendText calls
+      // throw "Send pending" and responses are silently dropped, causing a timeout here.
+      assertTrue(listener.allLatch.await(10, TimeUnit.SECONDS), "not all responses received");
+      assertEquals(requestCount, listener.responses.size());
+      for (String msg : listener.responses) {
+        JsonNode json = mapper.readTree(msg);
+        assertEquals("executor_info", json.get("type").asText());
+        assertNull(json.get("error_message"));
+      }
     }
   }
 
