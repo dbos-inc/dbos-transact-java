@@ -63,6 +63,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -90,9 +91,9 @@ public class Conductor implements AutoCloseable {
   private final AtomicBoolean isShutdown = new AtomicBoolean(false);
   private final HttpClient httpClient;
 
-  private volatile WebSocket webSocket;
-  private volatile CompletableFuture<WebSocket> connectFuture;
-  private final AtomicBoolean isConnecting = new AtomicBoolean(false);
+  private final AtomicReference<WebSocket> webSocket = new AtomicReference<>();
+  private final AtomicReference<CompletableFuture<WebSocket>> connectFuture =
+      new AtomicReference<>();
   private ScheduledFuture<?> pingInterval;
   private ScheduledFuture<?> pingTimeout;
   private ScheduledFuture<?> reconnectTimeout;
@@ -130,6 +131,7 @@ public class Conductor implements AutoCloseable {
     this.httpClient = buildHttpClient();
   }
 
+  // TODO: do we need the insecure connection?
   private static HttpClient buildHttpClient() {
     try {
       // Intentionally insecure: matches previous Netty InsecureTrustManagerFactory behavior
@@ -156,14 +158,13 @@ public class Conductor implements AutoCloseable {
     }
   }
 
-  private class JdkWebSocketListener implements WebSocket.Listener {
+  private class WebSocketListener implements WebSocket.Listener {
     private final StringBuilder messageBuffer = new StringBuilder();
 
     @Override
     public void onOpen(WebSocket ws) {
       logger.info("Successfully established websocket connection to DBOS conductor at {}", url);
-      webSocket = ws;
-      isConnecting.set(false);
+      webSocket.set(ws);
       ws.request(1);
       setPingInterval(ws);
     }
@@ -433,15 +434,13 @@ public class Conductor implements AutoCloseable {
 
       scheduler.shutdownNow();
 
-      CompletableFuture<WebSocket> cf = connectFuture;
+      CompletableFuture<WebSocket> cf = connectFuture.getAndSet(null);
       if (cf != null) {
         cf.cancel(true);
-        connectFuture = null;
       }
 
-      WebSocket ws = webSocket;
+      WebSocket ws = webSocket.getAndSet(null);
       if (ws != null) {
-        webSocket = null;
         ws.abort();
       }
     }
@@ -499,7 +498,8 @@ public class Conductor implements AutoCloseable {
 
   void resetWebSocket() {
     logger.info(
-        "Resetting websocket connection. WebSocket: {}", webSocket != null ? "connected" : "null");
+        "Resetting websocket connection. WebSocket: {}",
+        webSocket.get() != null ? "connected" : "null");
 
     if (pingInterval != null) {
       pingInterval.cancel(false);
@@ -511,19 +511,15 @@ public class Conductor implements AutoCloseable {
       pingTimeout = null;
     }
 
-    CompletableFuture<WebSocket> cf = connectFuture;
+    CompletableFuture<WebSocket> cf = connectFuture.getAndSet(null);
     if (cf != null) {
       cf.cancel(true);
-      connectFuture = null;
     }
 
-    WebSocket ws = webSocket;
+    WebSocket ws = webSocket.getAndSet(null);
     if (ws != null) {
-      webSocket = null;
       ws.abort();
     }
-
-    isConnecting.set(false);
 
     if (isShutdown.get()) {
       logger.debug("Not scheduling reconnection - conductor is shutting down");
@@ -547,19 +543,13 @@ public class Conductor implements AutoCloseable {
   }
 
   void connectWebSocket() {
-    if (webSocket != null) {
+    if (webSocket.get() != null) {
       logger.warn("Conductor websocket already exists");
-      return;
-    }
-
-    if (!isConnecting.compareAndSet(false, true)) {
-      logger.debug("Already connecting to conductor");
       return;
     }
 
     if (isShutdown.get()) {
       logger.debug("Not connecting web socket as conductor is shutting down");
-      isConnecting.set(false);
       return;
     }
 
@@ -567,22 +557,32 @@ public class Conductor implements AutoCloseable {
       logger.debug("Connecting to conductor at {}", url);
       URI uri = new URI(url);
 
-      connectFuture = httpClient.newWebSocketBuilder().buildAsync(uri, new JdkWebSocketListener());
+      if (connectFuture.get() != null) {
+        logger.debug("Already connecting to conductor");
+        return;
+      }
 
-      connectFuture.whenComplete(
+      var future = httpClient.newWebSocketBuilder().buildAsync(uri, new WebSocketListener());
+
+      if (!connectFuture.compareAndSet(null, future)) {
+        // Lost the race — another connection attempt started between the check and the CAS.
+        logger.debug("Already connecting to conductor");
+        future.cancel(true);
+        return;
+      }
+
+      future.whenComplete(
           (ws, e) -> {
-            connectFuture = null;
+            connectFuture.set(null);
             if (e != null) {
               logger.warn("Failed to connect to conductor at {}. Reconnecting", url, e);
-              isConnecting.set(false);
               resetWebSocket();
             }
-            // On success: onOpen has already been called and set webSocket and isConnecting
+            // On success: onOpen has already been called and set webSocket
           });
 
     } catch (Exception e) {
       logger.warn("Error in conductor loop. Reconnecting", e);
-      isConnecting.set(false);
       resetWebSocket();
     }
   }
