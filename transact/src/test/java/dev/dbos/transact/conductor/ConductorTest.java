@@ -678,6 +678,84 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void canCancelBulk() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> workflowIds = List.of("wf-id-1", "wf-id-2", "wf-id-3");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_ids", workflowIds);
+      listener.send(MessageType.CANCEL, "bulk-cancel-1", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).cancelWorkflows(workflowIds);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("cancel", jsonNode.get("type").asText());
+      assertEquals("bulk-cancel-1", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canDeleteBulk() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> workflowIds = List.of("wf-id-1", "wf-id-2", "wf-id-3");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_ids", workflowIds, "delete_children", true);
+      listener.send(MessageType.DELETE, "bulk-delete-1", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockDB).deleteWorkflows(workflowIds, true);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("delete", jsonNode.get("type").asText());
+      assertEquals("bulk-delete-1", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canResumeBulk() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    List<String> workflowIds = List.of("wf-id-1", "wf-id-2", "wf-id-3");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("workflow_ids", workflowIds);
+      listener.send(MessageType.RESUME, "bulk-resume-1", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).resumeWorkflows(workflowIds);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("resume", jsonNode.get("type").asText());
+      assertEquals("bulk-resume-1", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
   public void canRestart() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
