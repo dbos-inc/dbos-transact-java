@@ -432,18 +432,26 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void cancelWorkflow(String workflowId) {
+  public void cancelWorkflows(List<String> workflowIds) {
     dbRetry(
         () -> {
-          workflowDAO.cancelWorkflow(workflowId);
+          workflowDAO.cancelWorkflows(workflowIds);
           return null;
         });
   }
 
-  public void resumeWorkflow(String workflowId) {
+  public void resumeWorkflows(List<String> workflowIds) {
     dbRetry(
         () -> {
-          workflowDAO.resumeWorkflow(workflowId);
+          workflowDAO.resumeWorkflows(workflowIds);
+          return null;
+        });
+  }
+
+  public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
+    dbRetry(
+        () -> {
+          workflowDAO.deleteWorkflows(workflowIds, deleteChildren);
           return null;
         });
   }
@@ -743,65 +751,8 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void deleteWorkflows(String... workflowIds) {
-    if (workflowIds == null || workflowIds.length == 0) {
-      return;
-    }
-
-    var sql =
-        """
-          DELETE FROM "%s".workflow_status
-          WHERE workflow_uuid = ANY(?);
-        """
-            .formatted(this.schema);
-
-    dbRetry(
-        () -> {
-          try (var conn = dataSource.getConnection();
-              var stmt = conn.prepareStatement(sql)) {
-            var array = conn.createArrayOf("text", workflowIds);
-            stmt.setArray(1, array);
-            stmt.executeUpdate();
-          }
-          return null;
-        });
-  }
-
-  public List<String> getWorkflowChildren(String workflowId) {
-    return dbRetry(() -> getWorkflowChildrenInternal(workflowId));
-  }
-
-  List<String> getWorkflowChildrenInternal(String workflowId) throws SQLException {
-    var children = new HashSet<String>();
-    var toProcess = new ArrayDeque<String>();
-    toProcess.add(workflowId);
-
-    var sql =
-        """
-          SELECT child_workflow_id
-          FROM "%s".operation_outputs
-          WHERE workflow_uuid = ? AND child_workflow_id IS NOT NULL
-        """
-            .formatted(this.schema);
-
-    try (var conn = dataSource.getConnection();
-        var stmt = conn.prepareStatement(sql)) {
-      while (!toProcess.isEmpty()) {
-        var wfid = toProcess.poll();
-        stmt.setString(1, wfid);
-
-        try (var rs = stmt.executeQuery()) {
-          while (rs.next()) {
-            var childWorkflowId = rs.getString(1);
-            if (!children.contains(childWorkflowId)) {
-              children.add(childWorkflowId);
-              toProcess.add(childWorkflowId);
-            }
-          }
-        }
-      }
-    }
-    return new ArrayList<>(children);
+  public Set<String> getWorkflowChildren(String workflowId) {
+    return dbRetry(() -> workflowDAO.getWorkflowChildren(workflowId));
   }
 
   List<WorkflowEvent> listWorkflowEvents(Connection conn, String workflowId) throws SQLException {
@@ -886,7 +837,7 @@ public class SystemDatabase implements AutoCloseable {
           var workflowIds =
               exportChildren
                   ? Stream.concat(
-                          getWorkflowChildrenInternal(workflowId).stream(),
+                          workflowDAO.getWorkflowChildren(workflowId).stream(),
                           List.of(workflowId).stream())
                       .toList()
                   : List.of(workflowId);

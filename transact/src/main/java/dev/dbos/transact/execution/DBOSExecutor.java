@@ -70,7 +70,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -667,47 +666,45 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
   }
 
-  public <T, E extends Exception> WorkflowHandle<T, E> resumeWorkflow(String workflowId) {
+  public List<WorkflowHandle<Object, Exception>> resumeWorkflows(List<String> workflowIds) {
+    Objects.requireNonNull(workflowIds);
+
     // Execute the resume operation as a workflow step
     this.callFunctionAsStep(
         () -> {
-          logger.info("Resuming workflow {}", workflowId);
-          systemDatabase.resumeWorkflow(workflowId);
+          logger.info("Resuming workflow(s) {}", workflowIds);
+          systemDatabase.resumeWorkflows(workflowIds);
           return null; // void
         },
         "DBOS.resumeWorkflow",
         null);
-    return retrieveWorkflow(workflowId);
+
+    return workflowIds.stream().map(this::retrieveWorkflow).toList();
   }
 
-  public void cancelWorkflow(String workflowId) {
+  public void cancelWorkflows(List<String> workflowIds) {
+    Objects.requireNonNull(workflowIds);
 
     // Execute the cancel operation as a workflow step
     this.callFunctionAsStep(
         () -> {
-          logger.info("Cancelling workflow {}", workflowId);
-          systemDatabase.cancelWorkflow(workflowId);
+          logger.info("Cancelling workflow(s) {}", workflowIds);
+          systemDatabase.cancelWorkflows(workflowIds);
           return null; // void
         },
         "DBOS.cancelWorkflow",
         null);
   }
 
-  public void deleteWorkflow(String workflowId, boolean deleteChildren) {
-    Objects.requireNonNull(workflowId);
+  public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
+    Objects.requireNonNull(workflowIds);
     this.callFunctionAsStep(
         () -> {
           logger.info(
-              "Deleting workflow {}{}", workflowId, deleteChildren ? "" : " and its children");
-          if (deleteChildren) {
-            var children = systemDatabase.getWorkflowChildren(workflowId);
-            var array =
-                Stream.concat(Stream.of(workflowId), children.stream()).toArray(String[]::new);
-            systemDatabase.deleteWorkflows(array);
-          } else {
-            systemDatabase.deleteWorkflows(workflowId);
-          }
-
+              "Deleting workflow(s) {}{}",
+              workflowIds,
+              deleteChildren ? " and their children" : "");
+          systemDatabase.deleteWorkflows(workflowIds, deleteChildren);
           return null;
         },
         "DBOS.deleteWorkflow",
@@ -738,13 +735,13 @@ public class DBOSExecutor implements AutoCloseable {
     ListWorkflowsInput pendingInput =
         new ListWorkflowsInput().withStatus(WorkflowState.PENDING).withEndTime(endTime);
     for (WorkflowStatus status : systemDatabase.listWorkflows(pendingInput)) {
-      cancelWorkflow(status.workflowId());
+      cancelWorkflows(List.of(status.workflowId()));
     }
 
     ListWorkflowsInput enqueuedInput =
         new ListWorkflowsInput().withStatus(WorkflowState.ENQUEUED).withEndTime(endTime);
     for (WorkflowStatus status : systemDatabase.listWorkflows(enqueuedInput)) {
-      cancelWorkflow(status.workflowId());
+      cancelWorkflows(List.of(status.workflowId()));
     }
   }
 
@@ -1418,7 +1415,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     long newTimeout = initResult.deadlineEpochMS() - System.currentTimeMillis();
     if (initResult.deadlineEpochMS() > 0 && newTimeout < 0) {
-      systemDatabase.cancelWorkflow(workflowId);
+      systemDatabase.cancelWorkflows(List.of(workflowId));
       return retrieveWorkflow(workflowId);
     }
 
@@ -1427,7 +1424,7 @@ public class DBOSExecutor implements AutoCloseable {
       timeoutScheduler.schedule(
           () -> {
             if (!future.isDone()) {
-              systemDatabase.cancelWorkflow(workflowId);
+              systemDatabase.cancelWorkflows(List.of(workflowId));
               future.cancel(true);
             }
           },
@@ -1435,7 +1432,7 @@ public class DBOSExecutor implements AutoCloseable {
           TimeUnit.MILLISECONDS);
     }
 
-    return new WorkflowHandleFuture<T, E>(this, workflowId, future);
+    return new WorkflowHandleFuture<>(this, workflowId, future);
   }
 
   public static String enqueueWorkflow(
