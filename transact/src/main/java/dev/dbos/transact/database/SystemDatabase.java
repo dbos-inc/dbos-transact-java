@@ -9,6 +9,7 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowEvent;
@@ -451,6 +452,99 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(
         () -> {
           return workflowDAO.forkWorkflow(originalWorkflowId, startStep, options);
+        });
+  }
+
+  public void createApplicationVersion(String versionName) {
+    dbRetry(
+        () -> {
+          String sql =
+              """
+                INSERT INTO "%s".application_versions (version_id, version_name)
+                VALUES (?, ?)
+                ON CONFLICT (version_name) DO NOTHING
+              """
+                  .formatted(this.schema);
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, UUID.randomUUID().toString());
+            stmt.setString(2, versionName);
+            stmt.executeUpdate();
+          }
+          return null;
+        });
+  }
+
+  public void updateApplicationVersionTimestamp(String versionName, long newTimestamp) {
+    dbRetry(
+        () -> {
+          String sql =
+              """
+                UPDATE "%s".application_versions
+                SET version_timestamp = ?
+                WHERE version_name = ?
+              """
+                  .formatted(this.schema);
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareStatement(sql)) {
+            stmt.setLong(1, newTimestamp);
+            stmt.setString(2, versionName);
+            stmt.executeUpdate();
+          }
+          return null;
+        });
+  }
+
+  public List<VersionInfo> listApplicationVersions() {
+    return dbRetry(
+        () -> {
+          String sql =
+              """
+                SELECT version_id, version_name, version_timestamp, created_at
+                FROM "%s".application_versions
+                ORDER BY version_timestamp DESC
+              """
+                  .formatted(this.schema);
+          List<VersionInfo> results = new ArrayList<>();
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareStatement(sql);
+              var rs = stmt.executeQuery()) {
+            while (rs.next()) {
+              results.add(
+                  new VersionInfo(
+                      rs.getString("version_id"),
+                      rs.getString("version_name"),
+                      rs.getLong("version_timestamp"),
+                      rs.getLong("created_at")));
+            }
+          }
+          return results;
+        });
+  }
+
+  public VersionInfo getLatestApplicationVersion() {
+    return dbRetry(
+        () -> {
+          String sql =
+              """
+                SELECT version_id, version_name, version_timestamp, created_at
+                FROM "%s".application_versions
+                ORDER BY version_timestamp DESC
+                LIMIT 1
+              """
+                  .formatted(this.schema);
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareStatement(sql);
+              var rs = stmt.executeQuery()) {
+            if (rs.next()) {
+              return new VersionInfo(
+                  rs.getString("version_id"),
+                  rs.getString("version_name"),
+                  rs.getLong("version_timestamp"),
+                  rs.getLong("created_at"));
+            }
+          }
+          throw new RuntimeException("No application versions found");
         });
   }
 
