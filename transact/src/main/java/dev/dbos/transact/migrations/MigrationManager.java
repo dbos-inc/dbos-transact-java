@@ -229,7 +229,12 @@ public class MigrationManager {
             migration11,
             migration12,
             migration13,
-            migration14);
+            migration14,
+            migration15,
+            migration16,
+            migration17,
+            migration18,
+            migration19);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
@@ -558,5 +563,33 @@ public class MigrationManager {
                       ERRCODE = 'foreign_key_violation';
       END;
       $$ LANGUAGE plpgsql;
+      """;
+
+  static final String migration15 = 
+      """
+      ALTER TABLE "%1$s".workflow_schedules ADD COLUMN "last_fired_at" TEXT DEFAULT NULL;
+      ALTER TABLE "%1$s".workflow_schedules ADD COLUMN "automatic_backfill" BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE "%1$s".workflow_schedules ADD COLUMN "cron_timezone" TEXT DEFAULT NULL;
+      """;
+
+  static final String migration16 = 
+      """
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "delay_until_epoch_ms" BIGINT DEFAULT NULL;
+      CREATE INDEX "idx_workflow_status_delayed" ON "%1$s"."workflow_status" ("delay_until_epoch_ms") WHERE status = 'DELAYED';
+      """;
+
+  static final String migration17 = 
+      """
+      ALTER TABLE "%1$s".workflow_schedules ADD COLUMN "queue_name" TEXT DEFAULT NULL;
+      """;
+
+  static final String migration18 = 
+      """
+      ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "was_forked_from" BOOLEAN NOT NULL DEFAULT FALSE;
+      """;
+
+  static final String migration19 = 
+      """
+      CREATE INDEX "idx_operation_outputs_completed_at_function_name" ON "%1$s"."operation_outputs" ("completed_at_epoch_ms", "function_name");
       """;
 }
