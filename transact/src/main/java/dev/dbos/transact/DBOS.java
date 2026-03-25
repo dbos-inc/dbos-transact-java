@@ -19,6 +19,7 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
+import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -659,6 +660,34 @@ public class DBOS implements AutoCloseable {
    */
   public void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
     ensureLaunched("deleteWorkflow").deleteWorkflow(workflowId, deleteChildren);
+  }
+
+  /**
+   * List all registered application versions, ordered by timestamp descending.
+   *
+   * @return list of {@link VersionInfo} records
+   */
+  public @NonNull List<VersionInfo> listApplicationVersions() {
+    return ensureLaunched("listApplicationVersions").listApplicationVersions();
+  }
+
+  /**
+   * Get the most recently promoted application version.
+   *
+   * @return the latest {@link VersionInfo}
+   */
+  public @NonNull VersionInfo getLatestApplicationVersion() {
+    return ensureLaunched("getLatestApplicationVersion").getLatestApplicationVersion();
+  }
+
+  /**
+   * Promote a version to be the latest application version. Creates the version entry if it does
+   * not already exist.
+   *
+   * @param versionName the version to promote
+   */
+  public void setLatestApplicationVersion(@NonNull String versionName) {
+    ensureLaunched("setLatestApplicationVersion").setLatestApplicationVersion(versionName);
   }
 
   /**

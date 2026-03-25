@@ -5,8 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.dbos.transact.workflow.VersionInfo;
-
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
@@ -17,12 +15,14 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.time.Instant;
 import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -82,8 +82,8 @@ public class SystemDatabaseTest {
     assertEquals(1, versions.size());
     assertEquals("v1.0.0", versions.get(0).versionName());
     assertNotNull(versions.get(0).versionId());
-    assertTrue(versions.get(0).versionTimestamp() > 0);
-    assertTrue(versions.get(0).createdAt() > 0);
+    assertNotNull(versions.get(0).versionTimestamp());
+    assertNotNull(versions.get(0).createdAt());
   }
 
   @Test
@@ -96,15 +96,15 @@ public class SystemDatabaseTest {
 
   @Test
   public void testListApplicationVersionsOrderedByTimestamp() throws Exception {
-    long t1 = System.currentTimeMillis();
+    Instant t1 = Instant.now();
     sysdb.createApplicationVersion("v1.0.0");
     sysdb.updateApplicationVersionTimestamp("v1.0.0", t1);
 
-    long t2 = t1 + 1000;
+    Instant t2 = t1.plusSeconds(1);
     sysdb.createApplicationVersion("v2.0.0");
     sysdb.updateApplicationVersionTimestamp("v2.0.0", t2);
 
-    long t3 = t1 + 2000;
+    Instant t3 = t1.plusSeconds(2);
     sysdb.createApplicationVersion("v3.0.0");
     sysdb.updateApplicationVersionTimestamp("v3.0.0", t3);
 
@@ -117,12 +117,12 @@ public class SystemDatabaseTest {
 
   @Test
   public void testGetLatestApplicationVersion() throws Exception {
-    long t1 = System.currentTimeMillis();
+    Instant t1 = Instant.now();
     sysdb.createApplicationVersion("v1.0.0");
     sysdb.updateApplicationVersionTimestamp("v1.0.0", t1);
 
     sysdb.createApplicationVersion("v2.0.0");
-    sysdb.updateApplicationVersionTimestamp("v2.0.0", t1 + 1000);
+    sysdb.updateApplicationVersionTimestamp("v2.0.0", t1.plusSeconds(1));
 
     VersionInfo latest = sysdb.getLatestApplicationVersion();
     assertEquals("v2.0.0", latest.versionName());

@@ -1,6 +1,7 @@
 package dev.dbos.transact.conductor;
 
 import dev.dbos.transact.conductor.protocol.AlertRequest;
+import dev.dbos.transact.conductor.protocol.ApplicationVersionOutput;
 import dev.dbos.transact.conductor.protocol.BaseMessage;
 import dev.dbos.transact.conductor.protocol.BaseResponse;
 import dev.dbos.transact.conductor.protocol.CancelRequest;
@@ -17,6 +18,7 @@ import dev.dbos.transact.conductor.protocol.GetMetricsResponse;
 import dev.dbos.transact.conductor.protocol.GetWorkflowRequest;
 import dev.dbos.transact.conductor.protocol.GetWorkflowResponse;
 import dev.dbos.transact.conductor.protocol.ImportWorkflowRequest;
+import dev.dbos.transact.conductor.protocol.ListApplicationVersionsResponse;
 import dev.dbos.transact.conductor.protocol.ListQueuedWorkflowsRequest;
 import dev.dbos.transact.conductor.protocol.ListStepsRequest;
 import dev.dbos.transact.conductor.protocol.ListStepsResponse;
@@ -26,6 +28,7 @@ import dev.dbos.transact.conductor.protocol.RecoveryRequest;
 import dev.dbos.transact.conductor.protocol.RestartRequest;
 import dev.dbos.transact.conductor.protocol.ResumeRequest;
 import dev.dbos.transact.conductor.protocol.RetentionRequest;
+import dev.dbos.transact.conductor.protocol.SetLatestApplicationVersionRequest;
 import dev.dbos.transact.conductor.protocol.SuccessResponse;
 import dev.dbos.transact.conductor.protocol.WorkflowOutputsResponse;
 import dev.dbos.transact.conductor.protocol.WorkflowsOutput;
@@ -709,6 +712,7 @@ public class Conductor implements AutoCloseable {
       case GET_METRICS -> handleGetMetrics(this, message);
       case GET_WORKFLOW -> handleGetWorkflow(this, message);
       case IMPORT_WORKFLOW -> handleImportWorkflow(this, message);
+      case LIST_APPLICATION_VERSIONS -> handleListApplicationVersions(this, message);
       case LIST_QUEUED_WORKFLOWS -> handleListQueuedWorkflows(this, message);
       case LIST_STEPS -> handleListSteps(this, message);
       case LIST_WORKFLOWS -> handleListWorkflows(this, message);
@@ -716,6 +720,7 @@ public class Conductor implements AutoCloseable {
       case RESTART -> handleRestart(this, message);
       case RESUME -> handleResume(this, message);
       case RETENTION -> handleRetention(this, message);
+      case SET_LATEST_APPLICATION_VERSION -> handleSetLatestApplicationVersion(this, message);
     };
   }
 
@@ -863,6 +868,41 @@ public class Conductor implements AutoCloseable {
           } catch (Exception e) {
             logger.error("Exception encountered when listing workflows", e);
             return new WorkflowOutputsResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleListApplicationVersions(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          try {
+            List<ApplicationVersionOutput> output =
+                conductor.dbosExecutor.listApplicationVersions().stream()
+                    .map(ApplicationVersionOutput::new)
+                    .collect(Collectors.toList());
+            return new ListApplicationVersionsResponse(message, output);
+          } catch (Exception e) {
+            logger.error("Exception encountered when listing application versions", e);
+            return new ListApplicationVersionsResponse(message, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleSetLatestApplicationVersion(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          SetLatestApplicationVersionRequest request = (SetLatestApplicationVersionRequest) message;
+          try {
+            conductor.dbosExecutor.setLatestApplicationVersion(request.version_name);
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when setting latest application version to {}",
+                request.version_name,
+                e);
+            return new SuccessResponse(request, e);
           }
         });
   }

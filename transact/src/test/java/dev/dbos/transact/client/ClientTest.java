@@ -149,4 +149,45 @@ public class ClientTest {
       assertTrue(ex.getMessage().contains(invalidWorkflowId));
     }
   }
+
+  @Test
+  public void clientListApplicationVersions() throws Exception {
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v2.0.0");
+
+    try (var client = pgContainer.dbosClient()) {
+      var versions = client.listApplicationVersions();
+      assertEquals(2, versions.size());
+      var names = versions.stream().map(v -> v.versionName()).toList();
+      assertTrue(names.contains("v1.0.0"));
+      assertTrue(names.contains("v2.0.0"));
+    }
+  }
+
+  @Test
+  public void clientGetLatestApplicationVersion() throws Exception {
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v2.0.0");
+    sysdb.updateApplicationVersionTimestamp("v1.0.0", java.time.Instant.now().plusSeconds(60));
+
+    try (var client = pgContainer.dbosClient()) {
+      var latest = client.getLatestApplicationVersion();
+      assertEquals("v1.0.0", latest.versionName());
+    }
+  }
+
+  @Test
+  public void clientSetLatestApplicationVersion() throws Exception {
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v2.0.0");
+
+    try (var client = pgContainer.dbosClient()) {
+      client.setLatestApplicationVersion("v1.0.0");
+      var latest = client.getLatestApplicationVersion();
+      assertEquals("v1.0.0", latest.versionName());
+    }
+  }
 }

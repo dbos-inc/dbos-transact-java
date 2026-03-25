@@ -34,6 +34,7 @@ import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -847,6 +848,18 @@ public class DBOSExecutor implements AutoCloseable {
         },
         "DBOS.listWorkflowSteps",
         null);
+  }
+
+  public List<VersionInfo> listApplicationVersions() {
+    return systemDatabase.listApplicationVersions();
+  }
+
+  public VersionInfo getLatestApplicationVersion() {
+    return systemDatabase.getLatestApplicationVersion();
+  }
+
+  public void setLatestApplicationVersion(String versionName) {
+    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
   }
 
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {

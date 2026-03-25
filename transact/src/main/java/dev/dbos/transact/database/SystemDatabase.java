@@ -9,9 +9,9 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
-import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -475,7 +475,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void updateApplicationVersionTimestamp(String versionName, long newTimestamp) {
+  public void updateApplicationVersionTimestamp(String versionName, Instant newTimestamp) {
     dbRetry(
         () -> {
           String sql =
@@ -487,7 +487,7 @@ public class SystemDatabase implements AutoCloseable {
                   .formatted(this.schema);
           try (var conn = dataSource.getConnection();
               var stmt = conn.prepareStatement(sql)) {
-            stmt.setLong(1, newTimestamp);
+            stmt.setLong(1, newTimestamp.toEpochMilli());
             stmt.setString(2, versionName);
             stmt.executeUpdate();
           }
@@ -514,8 +514,8 @@ public class SystemDatabase implements AutoCloseable {
                   new VersionInfo(
                       rs.getString("version_id"),
                       rs.getString("version_name"),
-                      rs.getLong("version_timestamp"),
-                      rs.getLong("created_at")));
+                      Instant.ofEpochMilli(rs.getLong("version_timestamp")),
+                      Instant.ofEpochMilli(rs.getLong("created_at"))));
             }
           }
           return results;
@@ -540,8 +540,8 @@ public class SystemDatabase implements AutoCloseable {
               return new VersionInfo(
                   rs.getString("version_id"),
                   rs.getString("version_name"),
-                  rs.getLong("version_timestamp"),
-                  rs.getLong("created_at"));
+                  Instant.ofEpochMilli(rs.getLong("version_timestamp")),
+                  Instant.ofEpochMilli(rs.getLong("created_at")));
             }
           }
           throw new RuntimeException("No application versions found");
