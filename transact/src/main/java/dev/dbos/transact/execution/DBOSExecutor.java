@@ -192,6 +192,15 @@ public class DBOSExecutor implements AutoCloseable {
       systemDatabase = SystemDatabase.create(config);
       systemDatabase.start();
 
+      systemDatabase.createApplicationVersion(this.appVersion);
+      var latest = systemDatabase.getLatestApplicationVersion();
+      if (!latest.versionName().equals(this.appVersion)) {
+        logger.warn(
+            "Current version {} is not the latest version. Latest version is {}",
+            this.appVersion,
+            latest.versionName());
+      }
+
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queues, config.listenQueues());
 
