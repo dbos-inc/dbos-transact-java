@@ -660,7 +660,7 @@ public class DBOSClient implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> retrieveWorkflow(
       @NonNull String workflowId) {
-    return new WorkflowHandleClient<T, E>(workflowId);
+    return new WorkflowHandleClient<>(workflowId);
   }
 
   /**
@@ -669,7 +669,17 @@ public class DBOSClient implements AutoCloseable {
    * @param workflowId ID of the workflow to cancel
    */
   public void cancelWorkflow(@NonNull String workflowId) {
-    systemDatabase.cancelWorkflow(workflowId);
+    systemDatabase.cancelWorkflows(List.of(workflowId));
+  }
+
+  /**
+   * Cancel multiple workflows. After this function is called, the next step (not the current one)
+   * of each specified workflow will not execute.
+   *
+   * @param workflowIds a list of workflow IDs to cancel; must not be null
+   */
+  public void cancelWorkflows(@NonNull List<String> workflowIds) {
+    systemDatabase.cancelWorkflows(workflowIds);
   }
 
   /**
@@ -682,8 +692,66 @@ public class DBOSClient implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
       @NonNull String workflowId) {
-    systemDatabase.resumeWorkflow(workflowId);
+    systemDatabase.resumeWorkflows(List.of(workflowId));
     return retrieveWorkflow(workflowId);
+  }
+
+  /**
+   * Resume multiple workflows starting from the step after the last complete step for each
+   * workflow. This method allows bulk resumption of workflows that were previously interrupted or
+   * failed.
+   *
+   * @param workflowIds a list of workflow IDs to resume; must not be null
+   * @return A list of handles to the resumed workflows
+   */
+  public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      @NonNull List<String> workflowIds) {
+    systemDatabase.resumeWorkflows(workflowIds);
+    return workflowIds.stream().map(this::retrieveWorkflow).toList();
+  }
+
+  /**
+   * Delete a workflow from the system. This permanently removes the workflow and its associated
+   * data from the database. Child workflows are preserved by default.
+   *
+   * @param workflowId ID of the workflow to delete; must not be null
+   */
+  public void deleteWorkflow(@NonNull String workflowId) {
+    deleteWorkflows(List.of(workflowId), false);
+  }
+
+  /**
+   * Delete a workflow from the system. This permanently removes the workflow and its associated
+   * data from the database.
+   *
+   * @param workflowId ID of the workflow to delete; must not be null
+   * @param deleteChildren if true, also delete any child workflows; if false, preserve child
+   *     workflows
+   */
+  public void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
+    deleteWorkflows(List.of(workflowId), deleteChildren);
+  }
+
+  /**
+   * Delete multiple workflows from the system. This permanently removes the workflows and their
+   * associated data from the database. Child workflows are preserved by default.
+   *
+   * @param workflowIds a list of workflow IDs to delete; must not be null
+   */
+  public void deleteWorkflows(@NonNull List<String> workflowIds) {
+    deleteWorkflows(workflowIds, false);
+  }
+
+  /**
+   * Delete multiple workflows from the system. This permanently removes the workflows and their
+   * associated data from the database.
+   *
+   * @param workflowIds a list of workflow IDs to delete; must not be null
+   * @param deleteChildren if true, also delete any child workflows; if false, preserve child
+   *     workflows
+   */
+  public void deleteWorkflows(@NonNull List<String> workflowIds, boolean deleteChildren) {
+    systemDatabase.deleteWorkflows(workflowIds, deleteChildren);
   }
 
   /**

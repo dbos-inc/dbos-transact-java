@@ -1,7 +1,10 @@
 package dev.dbos.transact.conductor.protocol;
 
+import java.util.List;
+
 public class DeleteRequest extends BaseMessage {
   public String workflow_id;
+  public List<String> workflow_ids;
   public boolean delete_children;
 
   public DeleteRequest() {}
