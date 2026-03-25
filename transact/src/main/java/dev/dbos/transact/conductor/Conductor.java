@@ -1,7 +1,6 @@
 package dev.dbos.transact.conductor;
 
 import dev.dbos.transact.conductor.protocol.AlertRequest;
-import dev.dbos.transact.conductor.protocol.ApplicationVersionOutput;
 import dev.dbos.transact.conductor.protocol.BaseMessage;
 import dev.dbos.transact.conductor.protocol.BaseResponse;
 import dev.dbos.transact.conductor.protocol.CancelRequest;
@@ -888,10 +887,7 @@ public class Conductor implements AutoCloseable {
     return CompletableFuture.supplyAsync(
         () -> {
           try {
-            List<ApplicationVersionOutput> output =
-                conductor.dbosExecutor.listApplicationVersions().stream()
-                    .map(ApplicationVersionOutput::new)
-                    .collect(Collectors.toList());
+            var output = conductor.systemDatabase.listApplicationVersions();
             return new ListApplicationVersionsResponse(message, output);
           } catch (Exception e) {
             logger.error("Exception encountered when listing application versions", e);
