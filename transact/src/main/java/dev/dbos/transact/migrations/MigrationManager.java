@@ -216,29 +216,29 @@ public class MigrationManager {
     Objects.requireNonNull(schema);
     var migrations =
         List.of(
-            migration1,
-            migration2,
-            migration3,
-            migration4,
-            migration5,
-            migration6,
-            migration7,
-            migration8,
-            migration9,
-            migration10,
-            migration11,
-            migration12,
-            migration13,
-            migration14,
-            migration15,
-            migration16,
-            migration17,
-            migration18,
-            migration19);
+            MIGRATION_1,
+            MIGRATION_2,
+            MIGRATION_3,
+            MIGRATION_4,
+            MIGRATION_5,
+            MIGRATION_6,
+            MIGRATION_7,
+            MIGRATION_8,
+            MIGRATION_9,
+            MIGRATION_10,
+            MIGRATION_11,
+            MIGRATION_12,
+            MIGRATION_13,
+            MIGRATION_14,
+            MIGRATION_15,
+            MIGRATION_16,
+            MIGRATION_17,
+            MIGRATION_18,
+            MIGRATION_19);
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
-  static final String migration1 =
+  static final String MIGRATION_1 =
       """
       CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -360,28 +360,28 @@ public class MigrationManager {
       );
       """;
 
-  static final String migration2 =
+  static final String MIGRATION_2 =
       """
       ALTER TABLE "%1$s".workflow_status ADD COLUMN queue_partition_key TEXT;
       """;
 
-  static final String migration3 =
+  static final String MIGRATION_3 =
       """
       create index "idx_workflow_status_queue_status_started" on "%1$s"."workflow_status" ("queue_name", "status", "started_at_epoch_ms")
       """;
 
-  static final String migration4 =
+  static final String MIGRATION_4 =
       """
       ALTER TABLE "%1$s".workflow_status ADD COLUMN forked_from TEXT;
       CREATE INDEX "idx_workflow_status_forked_from" ON "%1$s"."workflow_status" ("forked_from");
       """;
 
-  static final String migration5 =
+  static final String MIGRATION_5 =
       """
       ALTER TABLE "%1$s".operation_outputs ADD COLUMN started_at_epoch_ms BIGINT, ADD COLUMN completed_at_epoch_ms BIGINT;
       """;
 
-  static final String migration6 =
+  static final String MIGRATION_6 =
       """
       CREATE TABLE "%1$s".workflow_events_history (
           workflow_uuid TEXT NOT NULL,
@@ -395,18 +395,18 @@ public class MigrationManager {
       ALTER TABLE "%1$s".streams ADD COLUMN function_id INT4 NOT NULL DEFAULT 0;
       """;
 
-  static final String migration7 =
+  static final String MIGRATION_7 =
       """
       ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "owner_xid" VARCHAR(40) DEFAULT NULL
       """;
 
-  static final String migration8 =
+  static final String MIGRATION_8 =
       """
       ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "parent_workflow_id" TEXT DEFAULT NULL;
       CREATE INDEX "idx_workflow_status_parent_workflow_id" ON "%1$s"."workflow_status" ("parent_workflow_id");
       """;
 
-  static final String migration9 =
+  static final String MIGRATION_9 =
       """
       CREATE TABLE "%1$s".workflow_schedules (
           schedule_id TEXT PRIMARY KEY,
@@ -419,7 +419,7 @@ public class MigrationManager {
       );
       """;
 
-  static final String migration10 =
+  static final String MIGRATION_10 =
       """
       DO $$
       BEGIN
@@ -434,7 +434,7 @@ public class MigrationManager {
       END $$;
       """;
 
-  static final String migration11 =
+  static final String MIGRATION_11 =
       """
       ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "serialization" TEXT DEFAULT NULL;
       ALTER TABLE "%1$s"."notifications" ADD COLUMN "serialization" TEXT DEFAULT NULL;
@@ -444,13 +444,13 @@ public class MigrationManager {
       ALTER TABLE "%1$s"."streams" ADD COLUMN "serialization" TEXT DEFAULT NULL;
       """;
 
-  static final String migration12 =
+  static final String MIGRATION_12 =
       """
       ALTER TABLE "%1$s"."notifications" ADD COLUMN "consumed" BOOLEAN NOT NULL DEFAULT FALSE;
       CREATE INDEX "idx_notifications" ON "%1$s"."notifications" ("destination_uuid", "topic");
       """;
 
-  static final String migration13 =
+  static final String MIGRATION_13 =
       """
       CREATE TABLE "%1$s".application_versions (
         version_id TEXT NOT NULL PRIMARY KEY,
@@ -460,7 +460,7 @@ public class MigrationManager {
       );
       """;
 
-  static final String migration14 =
+  static final String MIGRATION_14 =
       """
       CREATE FUNCTION "%1$s".enqueue_workflow(
           workflow_name TEXT,
@@ -565,30 +565,30 @@ public class MigrationManager {
       $$ LANGUAGE plpgsql;
       """;
 
-  static final String migration15 = 
+  static final String MIGRATION_15 =
       """
       ALTER TABLE "%1$s".workflow_schedules ADD COLUMN "last_fired_at" TEXT DEFAULT NULL;
       ALTER TABLE "%1$s".workflow_schedules ADD COLUMN "automatic_backfill" BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE "%1$s".workflow_schedules ADD COLUMN "cron_timezone" TEXT DEFAULT NULL;
       """;
 
-  static final String migration16 = 
+  static final String MIGRATION_16 =
       """
       ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "delay_until_epoch_ms" BIGINT DEFAULT NULL;
       CREATE INDEX "idx_workflow_status_delayed" ON "%1$s"."workflow_status" ("delay_until_epoch_ms") WHERE status = 'DELAYED';
       """;
 
-  static final String migration17 = 
+  static final String MIGRATION_17 =
       """
       ALTER TABLE "%1$s".workflow_schedules ADD COLUMN "queue_name" TEXT DEFAULT NULL;
       """;
 
-  static final String migration18 = 
+  static final String MIGRATION_18 =
       """
       ALTER TABLE "%1$s"."workflow_status" ADD COLUMN "was_forked_from" BOOLEAN NOT NULL DEFAULT FALSE;
       """;
 
-  static final String migration19 = 
+  static final String MIGRATION_19 =
       """
       CREATE INDEX "idx_operation_outputs_completed_at_function_name" ON "%1$s"."operation_outputs" ("completed_at_epoch_ms", "function_name");
       """;
