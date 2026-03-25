@@ -60,6 +60,12 @@ public class DBOS implements AutoCloseable {
 
   private AlertHandler alertHandler;
 
+  /**
+   * Construct a new DBOS instance with the provided configuration.
+   *
+   * @param config the DBOS configuration; must not be null
+   * @throws NullPointerException if config or required config fields are null
+   */
   public DBOS(@NonNull DBOSConfig config) {
     Objects.requireNonNull(config, "DBOSConfig must not be null");
     Objects.requireNonNull(config.appName(), "DBOSConfig.appName must not be null");
@@ -72,6 +78,10 @@ public class DBOS implements AutoCloseable {
     this.config = config;
   }
 
+  /**
+   * Close this DBOS instance and shut down all associated resources.
+   * This method delegates to {@link #shutdown()}.
+   */
   @Override
   public void close() throws Exception {
     shutdown();
@@ -98,6 +108,11 @@ public class DBOS implements AutoCloseable {
     }
   }
 
+  /**
+   * Get the current DBOS version.
+   *
+   * @return the DBOS version string
+   */
   public static String version() {
     return DBOS_VERSION;
   }
@@ -592,9 +607,26 @@ public class DBOS implements AutoCloseable {
    * @param workflowId id of the workflow
    * @return A handle to the workflow
    */
+  @SuppressWarnings("unchecked")
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
       @NonNull String workflowId) {
-    return ensureLaunched("resumeWorkflow").resumeWorkflow(workflowId);
+    var handles = resumeWorkflows(List.of(workflowId));
+    assert (handles.size() == 1);
+    return (WorkflowHandle<T, E>) handles.get(0);
+  }
+
+  /**
+   * Resume multiple workflows starting from the step after the last complete step for each
+   * workflow. This method allows bulk resumption of workflows that were previously interrupted or
+   * failed.
+   *
+   * @param workflowIds a list of workflow IDs to resume; must not be null
+   * @return A list of handles to the resumed workflows
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      @NonNull List<String> workflowIds) {
+    return ensureLaunched("resumeWorkflow").resumeWorkflows(workflowIds);
   }
 
   /***
@@ -603,9 +635,69 @@ public class DBOS implements AutoCloseable {
    * current one) will not execute
    *
    * @param workflowId ID of the workflow to cancel
+   * @throws IllegalStateException if called before DBOS is launched
    */
   public void cancelWorkflow(@NonNull String workflowId) {
-    ensureLaunched("cancelWorkflow").cancelWorkflow(workflowId);
+    cancelWorkflows(List.of(workflowId));
+  }
+
+  /**
+   * Cancels multiple workflows. After this function is called, the next step (not the current one)
+   * of each specified workflow will not execute.
+   *
+   * @param workflowIds a list of workflow IDs to cancel; must not be null
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public void cancelWorkflows(@NonNull List<String> workflowIds) {
+    ensureLaunched("cancelWorkflow").cancelWorkflows(workflowIds);
+  }
+
+  /**
+   * Delete a workflow from the system. This permanently removes the workflow and its associated
+   * data from the database. Child workflows are preserved by default.
+   *
+   * @param workflowId ID of the workflow to delete; must not be null
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public void deleteWorkflow(@NonNull String workflowId) {
+    deleteWorkflows(List.of(workflowId), false);
+  }
+
+  /**
+   * Delete a workflow from the system. This permanently removes the workflow and its associated
+   * data from the database.
+   *
+   * @param workflowId ID of the workflow to delete; must not be null
+   * @param deleteChildren if true, also delete any child workflows; if false, preserve child
+   *     workflows
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
+    deleteWorkflows(List.of(workflowId), deleteChildren);
+  }
+
+  /**
+   * Delete multiple workflows from the system. This permanently removes the workflows and their
+   * associated data from the database. Child workflows are preserved by default.
+   *
+   * @param workflowIds a list of workflow IDs to delete; must not be null
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public void deleteWorkflows(@NonNull List<String> workflowIds) {
+    deleteWorkflows(workflowIds, false);
+  }
+
+  /**
+   * Delete multiple workflows from the system. This permanently removes the workflows and their
+   * associated data from the database.
+   *
+   * @param workflowIds a list of workflow IDs to delete; must not be null
+   * @param deleteChildren if true, also delete any child workflows; if false, preserve child
+   *     workflows
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public void deleteWorkflows(@NonNull List<String> workflowIds, boolean deleteChildren) {
+    ensureLaunched("deleteWorkflows").deleteWorkflows(workflowIds, deleteChildren);
   }
 
   /**
@@ -637,28 +729,6 @@ public class DBOS implements AutoCloseable {
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> forkWorkflow(
       @NonNull String workflowId, int startStep) {
     return forkWorkflow(workflowId, startStep, new ForkOptions());
-  }
-
-  /**
-   * Deletes a workflow from the system. Does not delete child workflows.
-   *
-   * @param workflowId the unique identifier of the workflow to delete. Must not be null.
-   * @throws IllegalArgumentException if workflowId is null
-   */
-  public void deleteWorkflow(@NonNull String workflowId) {
-    deleteWorkflow(workflowId, false);
-  }
-
-  /**
-   * Deletes a workflow and optionally its child workflows from the system.
-   *
-   * @param workflowId the unique identifier of the workflow to delete. Must not be null.
-   * @param deleteChildren if true, also deletes all child workflows associated with the specified
-   *     workflow; if false, only deletes the specified workflow
-   * @throws IllegalArgumentException if workflowId is null
-   */
-  public void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
-    ensureLaunched("deleteWorkflow").deleteWorkflow(workflowId, deleteChildren);
   }
 
   /**

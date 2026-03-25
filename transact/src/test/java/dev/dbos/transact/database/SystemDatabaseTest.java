@@ -59,7 +59,7 @@ public class SystemDatabaseTest {
     var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(5, rows.size());
 
-    sysdb.deleteWorkflows("wfid-1", "wfid-3");
+    sysdb.deleteWorkflows(List.of("wfid-1", "wfid-3"), false);
 
     rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(3, rows.size());
@@ -70,6 +70,91 @@ public class SystemDatabaseTest {
     assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-0")));
     assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-2")));
     assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-4")));
+  }
+
+  @Test
+  public void testDeleteWorkflowsList() throws Exception {
+    for (var i = 0; i < 5; i++) {
+      var wfid = "wfid-%d".formatted(i);
+      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      sysdb.initWorkflowStatus(status, 5, false, false);
+    }
+
+    sysdb.deleteWorkflows(List.of("wfid-0", "wfid-2", "wfid-4"), false);
+
+    var rows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(2, rows.size());
+    assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-1")));
+    assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-3")));
+  }
+
+  @Test
+  public void testCancelWorkflows() throws Exception {
+    // Create workflows in different states
+    for (var wfid : List.of("wf-pending-1", "wf-pending-2", "wf-pending-3")) {
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build(), 5, false, false);
+    }
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternal.builder("wf-success", WorkflowState.PENDING).build(),
+        5,
+        false,
+        false);
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternal.builder("wf-error", WorkflowState.PENDING).build(), 5, false, false);
+    DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
+    DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
+
+    // Cancel all five IDs in one call
+    sysdb.cancelWorkflows(
+        List.of("wf-pending-1", "wf-pending-2", "wf-pending-3", "wf-success", "wf-error"));
+
+    // PENDING ones become CANCELLED
+    for (var wfid : List.of("wf-pending-1", "wf-pending-2", "wf-pending-3")) {
+      var row = DBUtils.getWorkflowRow(dataSource, wfid);
+      assertEquals(WorkflowState.CANCELLED.name(), row.status());
+      assertNotNull(row);
+    }
+
+    // SUCCESS and ERROR are left untouched
+    assertEquals(
+        WorkflowState.SUCCESS.name(), DBUtils.getWorkflowRow(dataSource, "wf-success").status());
+    assertEquals(
+        WorkflowState.ERROR.name(), DBUtils.getWorkflowRow(dataSource, "wf-error").status());
+  }
+
+  @Test
+  public void testResumeWorkflows() throws Exception {
+    // Create workflows in different states
+    for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build(), 5, false, false);
+      DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.CANCELLED.name());
+    }
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternal.builder("wf-success", WorkflowState.PENDING).build(),
+        5,
+        false,
+        false);
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternal.builder("wf-error", WorkflowState.PENDING).build(), 5, false, false);
+    DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
+    DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
+
+    // Resume all four IDs in one call
+    sysdb.resumeWorkflows(List.of("wf-cancelled-1", "wf-cancelled-2", "wf-success", "wf-error"));
+
+    // CANCELLED ones become ENQUEUED
+    for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
+      var row = DBUtils.getWorkflowRow(dataSource, wfid);
+      assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+    }
+
+    // SUCCESS and ERROR are left untouched
+    assertEquals(
+        WorkflowState.SUCCESS.name(), DBUtils.getWorkflowRow(dataSource, "wf-success").status());
+    assertEquals(
+        WorkflowState.ERROR.name(), DBUtils.getWorkflowRow(dataSource, "wf-error").status());
   }
 
   @Test
@@ -98,7 +183,7 @@ public class SystemDatabaseTest {
           parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
     }
 
-    var children = sysdb.getWorkflowChildrenInternal("wfid-2");
+    var children = sysdb.getWorkflowChildren("wfid-2");
     assertEquals(10, children.size());
 
     for (var i = 0; i < 5; i++) {
@@ -340,7 +425,7 @@ public class SystemDatabaseTest {
     assertEquals(1, exported.size());
 
     // Delete the original and reimport from the exported data
-    sysdb.deleteWorkflows(wfId);
+    sysdb.deleteWorkflows(List.of(wfId), false);
     assertEquals(0, DBUtils.getWorkflowRows(dataSource).size());
 
     sysdb.importWorkflow(exported);

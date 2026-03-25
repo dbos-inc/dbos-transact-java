@@ -183,7 +183,7 @@ public class Conductor implements AutoCloseable {
 
     @Override
     public CompletableFuture<?> onText(WebSocket ws, CharSequence data, boolean last) {
-      logger.debug("onText data size {} last {}", data.length(), last);
+      logger.trace("onText data size {} last {}", data.length(), last);
 
       // Streaming import path: queue each frame for the worker thread (non-blocking)
       if (importFrameQueue != null) {
@@ -755,7 +755,7 @@ public class Conductor implements AutoCloseable {
         () -> {
           CancelRequest request = (CancelRequest) message;
           try {
-            conductor.dbosExecutor.cancelWorkflow(request.workflow_id);
+            conductor.dbosExecutor.cancelWorkflows(List.of(request.workflow_id));
             return new SuccessResponse(request, true);
           } catch (Exception e) {
             logger.error(
@@ -770,7 +770,8 @@ public class Conductor implements AutoCloseable {
         () -> {
           DeleteRequest request = (DeleteRequest) message;
           try {
-            conductor.dbosExecutor.deleteWorkflow(request.workflow_id, request.delete_children);
+            conductor.systemDatabase.deleteWorkflows(
+                List.of(request.workflow_id), request.delete_children);
             return new SuccessResponse(request, true);
           } catch (Exception e) {
             logger.error("Exception encountered when deleting workflow {}", request.workflow_id, e);
@@ -784,7 +785,7 @@ public class Conductor implements AutoCloseable {
         () -> {
           ResumeRequest request = (ResumeRequest) message;
           try {
-            conductor.dbosExecutor.resumeWorkflow(request.workflow_id);
+            conductor.dbosExecutor.resumeWorkflows(List.of(request.workflow_id));
             return new SuccessResponse(request, true);
           } catch (Exception e) {
             logger.error("Exception encountered when resuming workflow {}", request.workflow_id, e);
