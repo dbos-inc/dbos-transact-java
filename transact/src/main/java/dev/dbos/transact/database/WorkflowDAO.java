@@ -26,10 +26,13 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.StringJoiner;
 import java.util.UUID;
 
@@ -737,87 +740,144 @@ class WorkflowDAO {
     }
   }
 
-  void cancelWorkflow(String workflowId) throws SQLException {
+  private List<String> filterNullsAndBlanks(List<String> workflowIds) {
+    if (workflowIds == null) {
+      return List.of();
+    }
+    return workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
+  }
 
-    try (Connection conn = dataSource.getConnection()) {
+  void cancelWorkflows(List<String> workflowIds) throws SQLException {
+    List<String> filtered = filterNullsAndBlanks(workflowIds);
+    if (filtered.isEmpty()) {
+      return;
+    }
+    String sql =
+        """
+          UPDATE "%s".workflow_status
+          SET status = ?,
+              queue_name = NULL,
+              deduplication_id = NULL,
+              started_at_epoch_ms = NULL
+          WHERE workflow_uuid = ANY(?)
+            AND status NOT IN (?, ?)
+        """
+            .formatted(this.schema);
 
-      // Check the status of the workflow. If it is complete, do nothing.
-      String checkStatusSql =
-          """
-            SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
-          """
-              .formatted(this.schema);
-
-      String currentStatus = null;
-      try (PreparedStatement stmt = conn.prepareStatement(checkStatusSql)) {
-        stmt.setString(1, workflowId);
-        try (ResultSet rs = stmt.executeQuery()) {
-          if (rs.next()) {
-            currentStatus = rs.getString("status");
-          }
-        }
-      }
-
-      // If workflow doesn't exist or is already complete, do nothing
-      if (currentStatus == null
-          || WorkflowState.SUCCESS.name().equals(currentStatus)
-          || WorkflowState.ERROR.name().equals(currentStatus)) {
-        logger.debug("Workflow {} already complete, aborting cancelWorkflow", workflowId);
-        return;
-      }
-
-      // Set the workflow's status to CANCELLED and remove it from any queue it is
-      // on
-      String updateSql =
-          """
-            UPDATE "%s".workflow_status
-            SET status = ?,
-                queue_name = NULL,
-                deduplication_id = NULL,
-                started_at_epoch_ms = NULL
-            WHERE workflow_uuid = ?
-          """
-              .formatted(this.schema);
-
-      try (PreparedStatement stmt = conn.prepareStatement(updateSql)) {
+    try (Connection conn = dataSource.getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql)) {
+      Array array = conn.createArrayOf("text", filtered.toArray());
+      try {
         stmt.setString(1, WorkflowState.CANCELLED.name());
-        stmt.setString(2, workflowId);
+        stmt.setArray(2, array);
+        stmt.setString(3, WorkflowState.SUCCESS.name());
+        stmt.setString(4, WorkflowState.ERROR.name());
         stmt.executeUpdate();
+      } finally {
+        array.free();
       }
     }
   }
 
-  void resumeWorkflow(String workflowId) throws SQLException {
+  void resumeWorkflows(List<String> workflowIds) throws SQLException {
+    List<String> filtered = filterNullsAndBlanks(workflowIds);
+    if (filtered.isEmpty()) {
+      return;
+    }
+    String sql =
+        """
+          UPDATE "%s".workflow_status
+          SET status = ?,
+              queue_name = ?,
+              recovery_attempts = 0,
+              workflow_deadline_epoch_ms = 0,
+              deduplication_id = NULL,
+              started_at_epoch_ms = NULL
+          WHERE workflow_uuid = ANY(?)
+            AND status NOT IN (?, ?)
+        """
+            .formatted(this.schema);
 
-    try (Connection connection = dataSource.getConnection()) {
-      connection.setAutoCommit(false);
-      connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
-
+    try (Connection conn = dataSource.getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql)) {
+      Array array = conn.createArrayOf("text", filtered.toArray());
       try {
-        String currentStatus = getWorkflowStatus(connection, workflowId, this.schema);
-
-        if (currentStatus == null) {
-          connection.rollback();
-          throw new DBOSNonExistentWorkflowException(workflowId);
-        }
-
-        // If workflow is already complete, do nothing
-        if (WorkflowState.SUCCESS.name().equals(currentStatus)
-            || WorkflowState.ERROR.name().equals(currentStatus)) {
-          connection.rollback();
-          return;
-        }
-
-        // Set the workflow's status to ENQUEUED and clear recovery fields
-        updateWorkflowToEnqueued(connection, workflowId, this.schema);
-
-        connection.commit();
-
-      } catch (SQLException e) {
-        connection.rollback();
-        throw e;
+        stmt.setString(1, WorkflowState.ENQUEUED.name());
+        stmt.setString(2, Constants.DBOS_INTERNAL_QUEUE);
+        stmt.setArray(3, array);
+        stmt.setString(4, WorkflowState.SUCCESS.name());
+        stmt.setString(5, WorkflowState.ERROR.name());
+        stmt.executeUpdate();
+      } finally {
+        array.free();
       }
     }
+  }
+
+  void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) throws SQLException {
+    List<String> filtered = filterNullsAndBlanks(workflowIds);
+    if (filtered.isEmpty()) {
+      return;
+    }
+
+    var wfIdSet = new HashSet<String>(filtered);
+    if (deleteChildren) {
+      for (var wfid : filtered) {
+        var children = getWorkflowChildren(wfid);
+        wfIdSet.addAll(children);
+      }
+    }
+
+    var sql =
+        """
+          DELETE FROM "%s".workflow_status
+          WHERE workflow_uuid = ANY(?);
+        """
+            .formatted(this.schema);
+
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      var array = conn.createArrayOf("text", wfIdSet.toArray());
+      try {
+        stmt.setArray(1, array);
+        stmt.executeUpdate();
+      } finally {
+        array.free();
+      }
+    }
+  }
+
+  Set<String> getWorkflowChildren(String workflowId) throws SQLException {
+    var children = new HashSet<String>();
+    var toProcess = new ArrayDeque<String>();
+    toProcess.add(workflowId);
+
+    var sql =
+        """
+          SELECT child_workflow_id
+          FROM "%s".operation_outputs
+          WHERE workflow_uuid = ? AND child_workflow_id IS NOT NULL
+        """
+            .formatted(this.schema);
+
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      while (!toProcess.isEmpty()) {
+        var wfid = toProcess.poll();
+        stmt.setString(1, wfid);
+
+        try (var rs = stmt.executeQuery()) {
+          while (rs.next()) {
+            var childWorkflowId = rs.getString(1);
+            if (!children.contains(childWorkflowId)) {
+              children.add(childWorkflowId);
+              toProcess.add(childWorkflowId);
+            }
+          }
+        }
+      }
+    }
+    return children;
   }
 
   String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options)
@@ -997,46 +1057,6 @@ class WorkflowDAO {
 
       int rowsCopied = stmt.executeUpdate();
       logger.debug("Copied " + rowsCopied + " workflow_events to forked workflow");
-    }
-  }
-
-  private static String getWorkflowStatus(Connection connection, String workflowId, String schema)
-      throws SQLException {
-    String sql =
-        """
-          SELECT status FROM "%s".workflow_status WHERE workflow_uuid = ?
-        """
-            .formatted(schema);
-
-    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-
-      try (ResultSet rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          return rs.getString("status");
-        }
-        return null;
-      }
-    }
-  }
-
-  private static void updateWorkflowToEnqueued(
-      Connection connection, String workflowId, String schema) throws SQLException {
-    String sql =
-        """
-          UPDATE "%s".workflow_status
-          SET status = ?, queue_name = ?, recovery_attempts = ?, workflow_deadline_epoch_ms = 0, deduplication_id = NULL,  started_at_epoch_ms = NULL
-          WHERE workflow_uuid = ?
-        """
-            .formatted(schema);
-
-    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-      stmt.setString(1, WorkflowState.ENQUEUED.name());
-      stmt.setString(2, Constants.DBOS_INTERNAL_QUEUE);
-      stmt.setInt(3, 0); // recovery_attempts = 0
-      stmt.setString(4, workflowId);
-
-      stmt.executeUpdate();
     }
   }
 

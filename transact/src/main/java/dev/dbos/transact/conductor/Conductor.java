@@ -183,7 +183,7 @@ public class Conductor implements AutoCloseable {
 
     @Override
     public CompletableFuture<?> onText(WebSocket ws, CharSequence data, boolean last) {
-      logger.debug("onText data size {} last {}", data.length(), last);
+      logger.trace("onText data size {} last {}", data.length(), last);
 
       // Streaming import path: queue each frame for the worker thread (non-blocking)
       if (importFrameQueue != null) {
@@ -754,12 +754,15 @@ public class Conductor implements AutoCloseable {
     return CompletableFuture.supplyAsync(
         () -> {
           CancelRequest request = (CancelRequest) message;
+          List<String> ids =
+              (request.workflow_ids != null && !request.workflow_ids.isEmpty())
+                  ? request.workflow_ids
+                  : List.of(request.workflow_id);
           try {
-            conductor.dbosExecutor.cancelWorkflow(request.workflow_id);
+            conductor.dbosExecutor.cancelWorkflows(ids);
             return new SuccessResponse(request, true);
           } catch (Exception e) {
-            logger.error(
-                "Exception encountered when cancelling workflow {}", request.workflow_id, e);
+            logger.error("Exception encountered when cancelling workflow(s) {}", ids, e);
             return new SuccessResponse(request, e);
           }
         });
@@ -769,11 +772,15 @@ public class Conductor implements AutoCloseable {
     return CompletableFuture.supplyAsync(
         () -> {
           DeleteRequest request = (DeleteRequest) message;
+          List<String> ids =
+              (request.workflow_ids != null && !request.workflow_ids.isEmpty())
+                  ? request.workflow_ids
+                  : List.of(request.workflow_id);
           try {
-            conductor.dbosExecutor.deleteWorkflow(request.workflow_id, request.delete_children);
+            conductor.systemDatabase.deleteWorkflows(ids, request.delete_children);
             return new SuccessResponse(request, true);
           } catch (Exception e) {
-            logger.error("Exception encountered when deleting workflow {}", request.workflow_id, e);
+            logger.error("Exception encountered when deleting workflow(s) {}", ids, e);
             return new SuccessResponse(request, e);
           }
         });
@@ -783,11 +790,15 @@ public class Conductor implements AutoCloseable {
     return CompletableFuture.supplyAsync(
         () -> {
           ResumeRequest request = (ResumeRequest) message;
+          List<String> ids =
+              (request.workflow_ids != null && !request.workflow_ids.isEmpty())
+                  ? request.workflow_ids
+                  : List.of(request.workflow_id);
           try {
-            conductor.dbosExecutor.resumeWorkflow(request.workflow_id);
+            conductor.dbosExecutor.resumeWorkflows(ids);
             return new SuccessResponse(request, true);
           } catch (Exception e) {
-            logger.error("Exception encountered when resuming workflow {}", request.workflow_id, e);
+            logger.error("Exception encountered when resuming workflow(s) {}", ids, e);
             return new SuccessResponse(request, e);
           }
         });
