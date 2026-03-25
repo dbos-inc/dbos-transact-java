@@ -740,11 +740,15 @@ class WorkflowDAO {
     }
   }
 
-  void cancelWorkflows(List<String> workflowIds) throws SQLException {
+  private List<String> filterNullsAndBlanks(List<String> workflowIds) {
     if (workflowIds == null) {
-      return;
+      return List.of();
     }
-    List<String> filtered = workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
+    return workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
+  }
+
+  void cancelWorkflows(List<String> workflowIds) throws SQLException {
+    List<String> filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
     }
@@ -776,10 +780,7 @@ class WorkflowDAO {
   }
 
   void resumeWorkflows(List<String> workflowIds) throws SQLException {
-    if (workflowIds == null) {
-      return;
-    }
-    List<String> filtered = workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
+    List<String> filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
     }
@@ -814,10 +815,7 @@ class WorkflowDAO {
   }
 
   void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) throws SQLException {
-    if (workflowIds == null) {
-      return;
-    }
-    List<String> filtered = workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
+    List<String> filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
     }

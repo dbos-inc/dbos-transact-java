@@ -702,7 +702,7 @@ public class DBOSExecutor implements AutoCloseable {
           logger.info(
               "Deleting workflow(s) {}{}",
               workflowIds,
-              deleteChildren ? "" : " and their children");
+              deleteChildren ? " and their children" : "");
           systemDatabase.deleteWorkflows(workflowIds, deleteChildren);
           return null;
         },

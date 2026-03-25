@@ -114,8 +114,8 @@ public class SystemDatabaseTest {
     // PENDING ones become CANCELLED
     for (var wfid : List.of("wf-pending-1", "wf-pending-2", "wf-pending-3")) {
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
-      assertEquals(WorkflowState.CANCELLED.name(), row.status());
       assertNotNull(row);
+      assertEquals(WorkflowState.CANCELLED.name(), row.status());
     }
 
     // SUCCESS and ERROR are left untouched
