@@ -753,10 +753,9 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Promote a version to be the latest application version. Creates the version entry if it does
-   * not already exist.
+   * Promote an existing version to be the latest application version by updating its timestamp.
    *
-   * @param versionName the version to promote
+   * @param versionName the version to promote; it must already exist
    */
   public void setLatestApplicationVersion(@NonNull String versionName) {
     systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());

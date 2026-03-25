@@ -681,8 +681,7 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Promote a version to be the latest application version. Creates the version entry if it does
-   * not already exist.
+   * Promote a version to be the latest application version.
    *
    * @param versionName the version to promote
    */
