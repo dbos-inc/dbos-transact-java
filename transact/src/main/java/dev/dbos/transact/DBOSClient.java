@@ -697,8 +697,9 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Resume multiple workflows starting from the step after the last complete step for each workflow.
-   * This method allows bulk resumption of workflows that were previously interrupted or failed.
+   * Resume multiple workflows starting from the step after the last complete step for each
+   * workflow. This method allows bulk resumption of workflows that were previously interrupted or
+   * failed.
    *
    * @param workflowIds a list of workflow IDs to resume; must not be null
    * @return A list of handles to the resumed workflows
@@ -724,7 +725,8 @@ public class DBOSClient implements AutoCloseable {
    * data from the database.
    *
    * @param workflowId ID of the workflow to delete; must not be null
-   * @param deleteChildren if true, also delete any child workflows; if false, preserve child workflows
+   * @param deleteChildren if true, also delete any child workflows; if false, preserve child
+   *     workflows
    */
   public void deleteWorkflow(@NonNull String workflowId, boolean deleteChildren) {
     deleteWorkflows(List.of(workflowId), deleteChildren);
@@ -745,7 +747,8 @@ public class DBOSClient implements AutoCloseable {
    * associated data from the database.
    *
    * @param workflowIds a list of workflow IDs to delete; must not be null
-   * @param deleteChildren if true, also delete any child workflows; if false, preserve child workflows
+   * @param deleteChildren if true, also delete any child workflows; if false, preserve child
+   *     workflows
    */
   public void deleteWorkflows(@NonNull List<String> workflowIds, boolean deleteChildren) {
     systemDatabase.deleteWorkflows(workflowIds, deleteChildren);

@@ -2,6 +2,7 @@ package dev.dbos.transact.database;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -21,6 +22,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.util.Arrays;
 import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -155,6 +157,39 @@ public class SystemDatabaseTest {
         WorkflowState.SUCCESS.name(), DBUtils.getWorkflowRow(dataSource, "wf-success").status());
     assertEquals(
         WorkflowState.ERROR.name(), DBUtils.getWorkflowRow(dataSource, "wf-error").status());
+  }
+
+  @Test
+  public void testCancelWorkflowsNullInList() throws Exception {
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternal.builder("wf-id", WorkflowState.PENDING).build(), 5, false, false);
+
+    sysdb.cancelWorkflows(Arrays.asList("wf-id", null));
+
+    assertEquals(
+        WorkflowState.CANCELLED.name(), DBUtils.getWorkflowRow(dataSource, "wf-id").status());
+  }
+
+  @Test
+  public void testResumeWorkflowsNullInList() throws Exception {
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternal.builder("wf-id", WorkflowState.PENDING).build(), 5, false, false);
+    DBUtils.setWorkflowState(dataSource, "wf-id", WorkflowState.CANCELLED.name());
+
+    sysdb.resumeWorkflows(Arrays.asList("wf-id", null));
+
+    assertEquals(
+        WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, "wf-id").status());
+  }
+
+  @Test
+  public void testDeleteWorkflowsNullInList() throws Exception {
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternal.builder("wf-id", WorkflowState.PENDING).build(), 5, false, false);
+
+    sysdb.deleteWorkflows(Arrays.asList("wf-id", null), false);
+
+    assertNull(DBUtils.getWorkflowRow(dataSource, "wf-id"));
   }
 
   @Test

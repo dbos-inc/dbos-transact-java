@@ -79,8 +79,8 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Close this DBOS instance and shut down all associated resources.
-   * This method delegates to {@link #shutdown()}.
+   * Close this DBOS instance and shut down all associated resources. This method delegates to
+   * {@link #shutdown()}.
    */
   @Override
   public void close() throws Exception {

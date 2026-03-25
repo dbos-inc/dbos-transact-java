@@ -741,7 +741,11 @@ class WorkflowDAO {
   }
 
   void cancelWorkflows(List<String> workflowIds) throws SQLException {
-    if (workflowIds == null || workflowIds.isEmpty()) {
+    if (workflowIds == null) {
+      return;
+    }
+    List<String> filtered = workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
+    if (filtered.isEmpty()) {
       return;
     }
     String sql =
@@ -758,7 +762,7 @@ class WorkflowDAO {
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
-      Array array = conn.createArrayOf("text", workflowIds.toArray());
+      Array array = conn.createArrayOf("text", filtered.toArray());
       try {
         stmt.setString(1, WorkflowState.CANCELLED.name());
         stmt.setArray(2, array);
@@ -772,7 +776,11 @@ class WorkflowDAO {
   }
 
   void resumeWorkflows(List<String> workflowIds) throws SQLException {
-    if (workflowIds == null || workflowIds.isEmpty()) {
+    if (workflowIds == null) {
+      return;
+    }
+    List<String> filtered = workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
+    if (filtered.isEmpty()) {
       return;
     }
     String sql =
@@ -791,7 +799,7 @@ class WorkflowDAO {
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
-      Array array = conn.createArrayOf("text", workflowIds.toArray());
+      Array array = conn.createArrayOf("text", filtered.toArray());
       try {
         stmt.setString(1, WorkflowState.ENQUEUED.name());
         stmt.setString(2, Constants.DBOS_INTERNAL_QUEUE);
@@ -806,13 +814,17 @@ class WorkflowDAO {
   }
 
   void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) throws SQLException {
-    if (workflowIds == null || workflowIds.isEmpty()) {
+    if (workflowIds == null) {
+      return;
+    }
+    List<String> filtered = workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
+    if (filtered.isEmpty()) {
       return;
     }
 
-    var wfIdSet = new HashSet<String>(workflowIds);
+    var wfIdSet = new HashSet<String>(filtered);
     if (deleteChildren) {
-      for (var wfid : workflowIds) {
+      for (var wfid : filtered) {
         var children = getWorkflowChildren(wfid);
         wfIdSet.addAll(children);
       }
