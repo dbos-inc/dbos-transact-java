@@ -36,7 +36,8 @@ public record StartWorkflowOptions(
     @Nullable String queueName,
     @Nullable String deduplicationId,
     @Nullable Integer priority,
-    @Nullable String queuePartitionKey) {
+    @Nullable String queuePartitionKey,
+    @Nullable String appVersion) {
 
   public StartWorkflowOptions {
     if (timeout instanceof Timeout.Explicit explicit) {
@@ -64,17 +65,17 @@ public record StartWorkflowOptions(
 
   /** Construct with default options */
   public StartWorkflowOptions() {
-    this(null, null, null, null, null, null, null);
+    this(null, null, null, null, null, null, null, null);
   }
 
   /** Construct with a specified workflow ID */
   public StartWorkflowOptions(String workflowId) {
-    this(workflowId, null, null, null, null, null, null);
+    this(workflowId, null, null, null, null, null, null, null);
   }
 
   /** Construct with a specified queue */
   public StartWorkflowOptions(@NonNull Queue queue) {
-    this(null, null, null, queue.name(), null, null, null);
+    this(null, null, null, queue.name(), null, null, null, null);
   }
 
   /** Produces a new StartWorkflowOptions that overrides the ID assigned to the started workflow */
@@ -86,7 +87,8 @@ public record StartWorkflowOptions(
         this.queueName,
         this.deduplicationId,
         this.priority,
-        this.queuePartitionKey);
+        this.queuePartitionKey,
+        this.appVersion);
   }
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
@@ -98,7 +100,8 @@ public record StartWorkflowOptions(
         this.queueName,
         this.deduplicationId,
         this.priority,
-        this.queuePartitionKey);
+        this.queuePartitionKey,
+        this.appVersion);
   }
 
   /** Produces a new StartWorkflowOptions that overrides timeout value for the started workflow */
@@ -125,7 +128,8 @@ public record StartWorkflowOptions(
         this.queueName,
         this.deduplicationId,
         this.priority,
-        this.queuePartitionKey);
+        this.queuePartitionKey,
+        this.appVersion);
   }
 
   /** Produces a new StartWorkflowOptions that assigns the started workflow to a queue */
@@ -137,7 +141,8 @@ public record StartWorkflowOptions(
         queue,
         this.deduplicationId,
         this.priority,
-        this.queuePartitionKey);
+        this.queuePartitionKey,
+        this.appVersion);
   }
 
   /** Produces a new StartWorkflowOptions that assigns the started workflow to a queue */
@@ -157,7 +162,8 @@ public record StartWorkflowOptions(
         this.queueName,
         deduplicationId,
         this.priority,
-        this.queuePartitionKey);
+        this.queuePartitionKey,
+        this.appVersion);
   }
 
   /**
@@ -172,7 +178,8 @@ public record StartWorkflowOptions(
         this.queueName,
         this.deduplicationId,
         priority,
-        this.queuePartitionKey);
+        this.queuePartitionKey,
+        this.appVersion);
   }
 
   /** Produces a new StartWorkflowOptions that assigns a queue partition key */
@@ -184,7 +191,21 @@ public record StartWorkflowOptions(
         this.queueName,
         this.deduplicationId,
         this.priority,
-        queuePartitionKey);
+        queuePartitionKey,
+        this.appVersion);
+  }
+
+  /** Produces a new StartWorkflowOptions that assigns an app version */
+  public @NonNull StartWorkflowOptions withAppVersion(@Nullable String appVersion) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        appVersion);
   }
 
   /** Get the assigned workflow ID, replacing empty with null */

@@ -16,12 +16,14 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 
@@ -71,6 +73,65 @@ public class SystemDatabaseTest {
     assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-0")));
     assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-2")));
     assertTrue(rows.stream().anyMatch(r -> r.workflowId().equals("wfid-4")));
+  }
+
+  @Test
+  public void testCreateApplicationVersion() throws Exception {
+    sysdb.createApplicationVersion("v1.0.0");
+
+    List<VersionInfo> versions = sysdb.listApplicationVersions();
+    assertEquals(1, versions.size());
+    assertEquals("v1.0.0", versions.get(0).versionName());
+    assertNotNull(versions.get(0).versionId());
+    assertNotNull(versions.get(0).versionTimestamp());
+    assertNotNull(versions.get(0).createdAt());
+  }
+
+  @Test
+  public void testCreateApplicationVersionIdempotent() throws Exception {
+    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v1.0.0");
+
+    assertEquals(1, sysdb.listApplicationVersions().size());
+  }
+
+  @Test
+  public void testListApplicationVersionsOrderedByTimestamp() throws Exception {
+    Instant t1 = Instant.now();
+    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.updateApplicationVersionTimestamp("v1.0.0", t1);
+
+    Instant t2 = t1.plusSeconds(1);
+    sysdb.createApplicationVersion("v2.0.0");
+    sysdb.updateApplicationVersionTimestamp("v2.0.0", t2);
+
+    Instant t3 = t1.plusSeconds(2);
+    sysdb.createApplicationVersion("v3.0.0");
+    sysdb.updateApplicationVersionTimestamp("v3.0.0", t3);
+
+    List<VersionInfo> versions = sysdb.listApplicationVersions();
+    assertEquals(3, versions.size());
+    assertEquals("v3.0.0", versions.get(0).versionName());
+    assertEquals("v2.0.0", versions.get(1).versionName());
+    assertEquals("v1.0.0", versions.get(2).versionName());
+  }
+
+  @Test
+  public void testGetLatestApplicationVersion() throws Exception {
+    Instant t1 = Instant.now();
+    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.updateApplicationVersionTimestamp("v1.0.0", t1);
+
+    sysdb.createApplicationVersion("v2.0.0");
+    sysdb.updateApplicationVersionTimestamp("v2.0.0", t1.plusSeconds(1));
+
+    VersionInfo latest = sysdb.getLatestApplicationVersion();
+    assertEquals("v2.0.0", latest.versionName());
+  }
+
+  @Test
+  public void testGetLatestApplicationVersionThrowsWhenEmpty() {
+    assertThrows(RuntimeException.class, () -> sysdb.getLatestApplicationVersion());
   }
 
   @Test

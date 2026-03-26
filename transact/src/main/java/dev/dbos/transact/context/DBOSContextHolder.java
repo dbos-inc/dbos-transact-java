@@ -1,10 +1,14 @@
 package dev.dbos.transact.context;
 
+import java.util.Objects;
+
+import org.jspecify.annotations.NonNull;
+
 public class DBOSContextHolder {
   private static final ThreadLocal<DBOSContext> contextHolder =
       ThreadLocal.withInitial(DBOSContext::new);
 
-  public static DBOSContext get() {
+  public static @NonNull DBOSContext get() {
     return contextHolder.get();
   }
 
@@ -12,7 +16,7 @@ public class DBOSContextHolder {
     contextHolder.remove();
   }
 
-  public static void set(DBOSContext context) {
-    contextHolder.set(context);
+  public static void set(@NonNull DBOSContext context) {
+    contextHolder.set(Objects.requireNonNull(context));
   }
 }
