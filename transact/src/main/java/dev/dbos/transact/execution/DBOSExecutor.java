@@ -120,7 +120,6 @@ public class DBOSExecutor implements AutoCloseable {
       if (config.enablePatching()) {
         appVersion = "PATCHING_ENABLED";
       }
-
       if (config.appVersion() != null) {
         appVersion = config.appVersion();
       }
@@ -165,9 +164,8 @@ public class DBOSExecutor implements AutoCloseable {
       logger.info("Application Version: {}", this.appVersion);
 
       var executorServiceSupplier =
-          new Supplier<ExecutorService>() {
-            @Override
-            public ExecutorService get() {
+          (Supplier<ExecutorService>)
+              () -> {
               try {
                 // use virtual thread executor when available (i.e. Java 21+)
                 var method = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
@@ -182,7 +180,6 @@ public class DBOSExecutor implements AutoCloseable {
                 logger.debug("using newFixedThreadPool");
                 int threadCount = Runtime.getRuntime().availableProcessors() * 50;
                 return Executors.newFixedThreadPool(threadCount);
-              }
             }
           };
 
@@ -212,14 +209,12 @@ public class DBOSExecutor implements AutoCloseable {
       }
 
       var recoveryTask =
-          new Runnable() {
-            @Override
-            public void run() {
+          (Runnable)
+              () -> {
               try {
                 recoverPendingWorkflows(List.of(executorId()));
               } catch (Throwable t) {
                 logger.error("Recovery task failed", t);
-              }
             }
           };
 
@@ -392,26 +387,25 @@ public class DBOSExecutor implements AutoCloseable {
 
   public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
     Objects.requireNonNull(executorIds);
-    String appVersion = appVersion();
 
     List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
-    for (String executorId : executorIds) {
+    for (String _executorId : executorIds) {
       List<GetPendingWorkflowsOutput> pendingWorkflows;
       try {
-        pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion());
+        pendingWorkflows = systemDatabase.getPendingWorkflows(_executorId, appVersion());
       } catch (Exception e) {
         logger.error(
             "getPendingWorkflows failed:  executor {}, application version {}",
-            executorId,
-            appVersion,
+            _executorId,
+            appVersion(),
             e);
         return new ArrayList<>();
       }
       logger.info(
           "Recovering {} workflows for executor {} app version {}",
           pendingWorkflows.size(),
-          executorId,
-          appVersion);
+          _executorId,
+          appVersion());
       for (var output : pendingWorkflows) {
         try {
           handles.add(recoverWorkflow(output));
@@ -443,8 +437,8 @@ public class DBOSExecutor implements AutoCloseable {
       ThrowingSupplier<T, E> fn, String functionName, String childWfId) throws E {
     DBOSContext ctx = DBOSContextHolder.get();
 
-    int nextFuncId = 0;
-    boolean inWorkflow = ctx != null && ctx.isInWorkflow();
+    int nextFuncId;
+    boolean inWorkflow = ctx.isInWorkflow();
     boolean inStep = ctx.isInStep();
     var startTime = System.currentTimeMillis();
 
