@@ -4,10 +4,13 @@ import dev.dbos.transact.database.MetricData;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class GetMetricsResponse extends BaseResponse {
-  public static record MetricsDataOutput(String metric_type, String metric_name, long value) {}
+  public static record MetricsDataOutput(String metric_type, String metric_name, long value) {
+    public static MetricsDataOutput fromMetricData(MetricData m) {
+      return new MetricsDataOutput(m.metricType(), m.metricName(), m.value());
+    }
+  }
 
   public List<MetricsDataOutput> metrics;
 
@@ -15,10 +18,7 @@ public class GetMetricsResponse extends BaseResponse {
 
   public GetMetricsResponse(BaseMessage message, List<MetricData> metrics) {
     super(message.type, message.request_id);
-    this.metrics =
-        metrics.stream()
-            .map(m -> new MetricsDataOutput(m.metricType(), m.metricName(), m.value()))
-            .collect(Collectors.toList());
+    this.metrics = metrics.stream().map(MetricsDataOutput::fromMetricData).toList();
   }
 
   public GetMetricsResponse(BaseMessage message, Exception ex) {

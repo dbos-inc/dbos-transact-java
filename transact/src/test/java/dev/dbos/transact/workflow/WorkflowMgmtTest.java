@@ -3,6 +3,7 @@ package dev.dbos.transact.workflow;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
@@ -35,7 +36,7 @@ public class WorkflowMgmtTest {
 
   @BeforeEach
   void beforeEach() {
-    dbosConfig = pgContainer.dbosConfig();
+    dbosConfig = pgContainer.dbosConfig().withAppVersion("v1.0.0");
     dbos = new DBOS(dbosConfig);
 
     impl = new MgmtServiceImpl(dbos);
@@ -191,6 +192,79 @@ public class WorkflowMgmtTest {
     assertNull(workflow.output());
     assertNull(workflow.error());
     assertNull(workflow.serialization());
+  }
+
+  @Test
+  public void testListApplicationVersions() throws Exception {
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v2.0.0");
+    sysdb.createApplicationVersion("v3.0.0");
+
+    var versions = dbos.listApplicationVersions();
+    assertEquals(3, versions.size());
+
+    // createApplicationVersion defaults version_timestamp to insertion order, so all three
+    // exist; just verify all names are present
+    var names = versions.stream().map(v -> v.versionName()).toList();
+    assertTrue(names.contains("v1.0.0"));
+    assertTrue(names.contains("v2.0.0"));
+    assertTrue(names.contains("v3.0.0"));
+
+    // createdAt should be set and positive on all versions
+    for (var v : versions) {
+      assertNotNull(v.createdAt());
+      assertTrue(v.createdAt().toEpochMilli() > 0);
+    }
+  }
+
+  @Test
+  public void testGetLatestApplicationVersion() throws Exception {
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v2.0.0");
+
+    // Promote v1.0.0 to be the latest by updating its timestamp to now
+    sysdb.updateApplicationVersionTimestamp("v1.0.0", java.time.Instant.now().plusSeconds(60));
+
+    var latest = dbos.getLatestApplicationVersion();
+    assertEquals("v1.0.0", latest.versionName());
+    assertNotNull(latest.createdAt());
+    assertTrue(latest.createdAt().toEpochMilli() > 0);
+  }
+
+  @Test
+  @org.junit.jupiter.api.parallel.Execution(
+      org.junit.jupiter.api.parallel.ExecutionMode.SAME_THREAD)
+  public void testSetLatestApplicationVersion() throws Exception {
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    sysdb.createApplicationVersion("v1.0.0");
+    sysdb.createApplicationVersion("v2.0.0");
+
+    // introduce a slight delay to ensure the v1.0.0 timestamp we're about the set is later than the
+    // v2.0.0 we just created
+    Thread.sleep(100);
+
+    // Record v1.0.0's createdAt before promoting it
+    var v1CreatedAt =
+        dbos.listApplicationVersions().stream()
+            .filter(v -> v.versionName().equals("v1.0.0"))
+            .findFirst()
+            .orElseThrow()
+            .createdAt();
+
+    // v2.0.0 was inserted last so it should be the current latest; promote v1.0.0
+    dbos.setLatestApplicationVersion("v1.0.0");
+
+    var latest = dbos.getLatestApplicationVersion();
+    assertEquals("v1.0.0", latest.versionName());
+
+    // setLatestApplicationVersion updates the timestamp but must not change createdAt
+    assertEquals(v1CreatedAt, latest.createdAt());
+
+    // v1.0.0 should now sort first in the list (highest timestamp)
+    var versions = dbos.listApplicationVersions();
+    assertEquals("v1.0.0", versions.get(0).versionName());
   }
 
   @Test

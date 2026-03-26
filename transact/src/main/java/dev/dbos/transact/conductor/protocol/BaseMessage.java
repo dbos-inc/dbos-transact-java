@@ -20,6 +20,9 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
   @JsonSubTypes.Type(value = GetMetricsRequest.class, name = "get_metrics"),
   @JsonSubTypes.Type(value = GetWorkflowRequest.class, name = "get_workflow"),
   @JsonSubTypes.Type(value = ImportWorkflowRequest.class, name = "import_workflow"),
+  @JsonSubTypes.Type(
+      value = ListApplicationVersionsRequest.class,
+      name = "list_application_versions"),
   @JsonSubTypes.Type(value = ListQueuedWorkflowsRequest.class, name = "list_queued_workflows"),
   @JsonSubTypes.Type(value = ListStepsRequest.class, name = "list_steps"),
   @JsonSubTypes.Type(value = ListWorkflowsRequest.class, name = "list_workflows"),
@@ -27,6 +30,9 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
   @JsonSubTypes.Type(value = RestartRequest.class, name = "restart"),
   @JsonSubTypes.Type(value = ResumeRequest.class, name = "resume"),
   @JsonSubTypes.Type(value = RetentionRequest.class, name = "retention"),
+  @JsonSubTypes.Type(
+      value = SetLatestApplicationVersionRequest.class,
+      name = "set_latest_application_version"),
 })
 @JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class BaseMessage {

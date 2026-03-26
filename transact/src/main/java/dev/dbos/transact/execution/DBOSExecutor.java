@@ -34,6 +34,7 @@ import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -119,7 +120,6 @@ public class DBOSExecutor implements AutoCloseable {
       if (config.enablePatching()) {
         appVersion = "PATCHING_ENABLED";
       }
-
       if (config.appVersion() != null) {
         appVersion = config.appVersion();
       }
@@ -164,32 +164,39 @@ public class DBOSExecutor implements AutoCloseable {
       logger.info("Application Version: {}", this.appVersion);
 
       var executorServiceSupplier =
-          new Supplier<ExecutorService>() {
-            @Override
-            public ExecutorService get() {
-              try {
-                // use virtual thread executor when available (i.e. Java 21+)
-                var method = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
-                var svc = (ExecutorService) method.invoke(null);
-                logger.debug("using newVirtualThreadPerTaskExecutor");
-                return svc;
+          (Supplier<ExecutorService>)
+              () -> {
+                try {
+                  // use virtual thread executor when available (i.e. Java 21+)
+                  var method = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
+                  var svc = (ExecutorService) method.invoke(null);
+                  logger.debug("using newVirtualThreadPerTaskExecutor");
+                  return svc;
 
-              } catch (NoSuchMethodException
-                  | IllegalAccessException
-                  | InvocationTargetException e) {
-                // fall back to fixed thread pool executor if virtual thread executor unavailable
-                logger.debug("using newFixedThreadPool");
-                int threadCount = Runtime.getRuntime().availableProcessors() * 50;
-                return Executors.newFixedThreadPool(threadCount);
-              }
-            }
-          };
+                } catch (NoSuchMethodException
+                    | IllegalAccessException
+                    | InvocationTargetException e) {
+                  // fall back to fixed thread pool executor if virtual thread executor unavailable
+                  logger.debug("using newFixedThreadPool");
+                  int threadCount = Runtime.getRuntime().availableProcessors() * 50;
+                  return Executors.newFixedThreadPool(threadCount);
+                }
+              };
 
       executorService = executorServiceSupplier.get();
       timeoutScheduler = Executors.newScheduledThreadPool(2);
 
       systemDatabase = SystemDatabase.create(config);
       systemDatabase.start();
+
+      systemDatabase.createApplicationVersion(this.appVersion);
+      var latest = systemDatabase.getLatestApplicationVersion();
+      if (!latest.versionName().equals(this.appVersion)) {
+        logger.warn(
+            "Current version {} is not the latest version. Latest version is {}",
+            this.appVersion,
+            latest.versionName());
+      }
 
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queues, config.listenQueues());
@@ -202,16 +209,14 @@ public class DBOSExecutor implements AutoCloseable {
       }
 
       var recoveryTask =
-          new Runnable() {
-            @Override
-            public void run() {
-              try {
-                recoverPendingWorkflows(List.of(executorId()));
-              } catch (Throwable t) {
-                logger.error("Recovery task failed", t);
-              }
-            }
-          };
+          (Runnable)
+              () -> {
+                try {
+                  recoverPendingWorkflows(List.of(executorId()));
+                } catch (Throwable t) {
+                  logger.error("Recovery task failed", t);
+                }
+              };
 
       executorService.submit(recoveryTask);
 
@@ -382,26 +387,25 @@ public class DBOSExecutor implements AutoCloseable {
 
   public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
     Objects.requireNonNull(executorIds);
-    String appVersion = appVersion();
 
     List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
-    for (String executorId : executorIds) {
+    for (String _executorId : executorIds) {
       List<GetPendingWorkflowsOutput> pendingWorkflows;
       try {
-        pendingWorkflows = systemDatabase.getPendingWorkflows(executorId, appVersion());
+        pendingWorkflows = systemDatabase.getPendingWorkflows(_executorId, appVersion());
       } catch (Exception e) {
         logger.error(
             "getPendingWorkflows failed:  executor {}, application version {}",
-            executorId,
-            appVersion,
+            _executorId,
+            appVersion(),
             e);
         return new ArrayList<>();
       }
       logger.info(
           "Recovering {} workflows for executor {} app version {}",
           pendingWorkflows.size(),
-          executorId,
-          appVersion);
+          _executorId,
+          appVersion());
       for (var output : pendingWorkflows) {
         try {
           handles.add(recoverWorkflow(output));
@@ -433,8 +437,8 @@ public class DBOSExecutor implements AutoCloseable {
       ThrowingSupplier<T, E> fn, String functionName, String childWfId) throws E {
     DBOSContext ctx = DBOSContextHolder.get();
 
-    int nextFuncId = 0;
-    boolean inWorkflow = ctx != null && ctx.isInWorkflow();
+    int nextFuncId;
+    boolean inWorkflow = ctx.isInWorkflow();
     boolean inStep = ctx.isInStep();
     var startTime = System.currentTimeMillis();
 
@@ -846,6 +850,18 @@ public class DBOSExecutor implements AutoCloseable {
         null);
   }
 
+  public List<VersionInfo> listApplicationVersions() {
+    return systemDatabase.listApplicationVersions();
+  }
+
+  public VersionInfo getLatestApplicationVersion() {
+    return systemDatabase.getLatestApplicationVersion();
+  }
+
+  public void setLatestApplicationVersion(String versionName) {
+    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
+  }
+
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return systemDatabase.getExternalState(service, workflowName, key);
   }
@@ -976,6 +992,7 @@ public class DBOSExecutor implements AutoCloseable {
       String deduplicationId,
       Integer priority,
       String queuePartitionKey,
+      String appVersion,
       boolean isRecoveryRequest,
       boolean isDequeuedRequest,
       String serialization) {
@@ -1008,7 +1025,18 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
-      this(workflowId, Timeout.of(timeout), deadline, null, null, null, null, false, false, null);
+      this(
+          workflowId,
+          Timeout.of(timeout),
+          deadline,
+          null,
+          null,
+          null,
+          null,
+          null,
+          false,
+          false,
+          null);
     }
 
     public ExecutionOptions asRecoveryRequest() {
@@ -1020,6 +1048,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.appVersion,
           true,
           false,
           this.serialization);
@@ -1034,6 +1063,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.appVersion,
           false,
           true,
           this.serialization);
@@ -1048,6 +1078,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.appVersion,
           this.isRecoveryRequest,
           this.isDequeuedRequest,
           serialization);
@@ -1077,6 +1108,7 @@ public class DBOSExecutor implements AutoCloseable {
             options.deduplicationId(),
             options.priority(),
             options.queuePartitionKey(),
+            options.appVersion(),
             false,
             false,
             null);
@@ -1124,6 +1156,7 @@ public class DBOSExecutor implements AutoCloseable {
             () ->
                 Objects.requireNonNullElseGet(
                     ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
+
     var execOptions =
         new ExecutionOptions(
             workflowId,
@@ -1133,6 +1166,7 @@ public class DBOSExecutor implements AutoCloseable {
             options.deduplicationId(),
             options.priority(),
             options.queuePartitionKey(),
+            options.appVersion(),
             false,
             false,
             null);
@@ -1260,11 +1294,10 @@ public class DBOSExecutor implements AutoCloseable {
 
     Integer maxRetries = workflow.maxRecoveryAttempts() > 0 ? workflow.maxRecoveryAttempts() : null;
 
-    final var foptions = options;
-
     if (options.queueName() != null) {
 
-      var queue = queues.stream().filter(q -> q.name().equals(foptions.queueName())).findFirst();
+      final var queueName = options.queueName();
+      var queue = queues.stream().filter(q -> q.name().equals(queueName)).findFirst();
       if (queue.isPresent()) {
         if (queue.get().partitionedEnabled() && options.queuePartitionKey() == null) {
           throw new IllegalArgumentException(
@@ -1319,6 +1352,8 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             executorId(),
+            // executed workflows always use the current app version.
+            // Option.appVersion is only used for enqueue
             appVersion(),
             appId(),
             parent,
@@ -1339,6 +1374,7 @@ public class DBOSExecutor implements AutoCloseable {
       logger.warn("Idempotency check not impl for cancelled");
     }
 
+    final var finalOptions = options;
     Supplier<T> task =
         () -> {
           DBOSContextHolder.clear();
@@ -1346,14 +1382,17 @@ public class DBOSExecutor implements AutoCloseable {
           if (res != null) throw new DBOSWorkflowExecutionConflictException(workflowId);
           try {
             logger.debug(
-                "executeWorkflow task {}({}) {}", workflow.fullyQualifiedName(), args, foptions);
+                "executeWorkflow task {}({}) {}",
+                workflow.fullyQualifiedName(),
+                args,
+                finalOptions);
 
             DBOSContextHolder.set(
                 new DBOSContext(
                     workflowId,
                     parent,
-                    foptions.timeoutDuration(),
-                    foptions.deadline(),
+                    finalOptions.timeoutDuration(),
+                    finalOptions.deadline(),
                     SerializationUtil.PORTABLE.equals(initResult.serialization())
                         ? SerializationStrategy.PORTABLE
                         : SerializationStrategy.DEFAULT));
@@ -1449,6 +1488,13 @@ public class DBOSExecutor implements AutoCloseable {
     var queueName = Objects.requireNonNull(options.queueName(), "queueName must not be null");
     if (queueName.isEmpty()) {
       throw new IllegalArgumentException("queueName cannot be empty");
+    }
+
+    // Note, options.appVesion specifies the appVersion the workflow starter may have set
+    // app version parameter specifies the current running code app version, if known.
+    // options.appVersion takes presidence if specified
+    if (options.appVersion() != null) {
+      appVersion = options.appVersion();
     }
 
     try {

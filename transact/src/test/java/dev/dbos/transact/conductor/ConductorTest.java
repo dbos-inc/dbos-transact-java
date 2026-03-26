@@ -31,6 +31,7 @@ import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
+import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -908,6 +909,111 @@ public class ConductorTest {
       assertEquals("12345", jsonNode.get("request_id").asText());
       assertNull(jsonNode.get("new_workflow_id"));
       assertEquals(errorMessage, jsonNode.get("error_message").asText());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListApplicationVersions() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    Instant t1 = Instant.ofEpochMilli(1000L);
+    Instant t2 = Instant.ofEpochMilli(2000L);
+    List<VersionInfo> versions =
+        List.of(
+            new VersionInfo("id-2", "v2.0.0", t2, t1), new VersionInfo("id-1", "v1.0.0", t1, t1));
+    when(mockDB.listApplicationVersions()).thenReturn(versions);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(MessageType.LIST_APPLICATION_VERSIONS, "req-avl", Map.of());
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).listApplicationVersions();
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("list_application_versions", json.get("type").asText());
+      assertEquals("req-avl", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+
+      JsonNode av = json.get("output");
+      assertNotNull(av);
+      assertTrue(av.isArray());
+      assertEquals(2, av.size());
+      assertEquals("v2.0.0", av.get(0).get("version_name").asText());
+      assertEquals("v1.0.0", av.get(1).get("version_name").asText());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListApplicationVersionsThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canListApplicationVersionsThrows error";
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).listApplicationVersions();
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(MessageType.LIST_APPLICATION_VERSIONS, "req-avl-err", Map.of());
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("list_application_versions", json.get("type").asText());
+      assertEquals(errorMessage, json.get("error_message").asText());
+      assertEquals(0, json.get("output").size());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canSetLatestApplicationVersion() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("version_name", "v3.0.0");
+      listener.send(MessageType.SET_LATEST_APPLICATION_VERSION, "req-slav", message);
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockExec).setLatestApplicationVersion("v3.0.0");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("set_latest_application_version", json.get("type").asText());
+      assertEquals("req-slav", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+      assertTrue(json.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canSetLatestApplicationVersionThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canSetLatestApplicationVersionThrows error";
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockExec)
+        .setLatestApplicationVersion(anyString());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("version_name", "v3.0.0");
+      listener.send(MessageType.SET_LATEST_APPLICATION_VERSION, "req-slav-err", message);
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("set_latest_application_version", json.get("type").asText());
+      assertEquals(errorMessage, json.get("error_message").asText());
+      assertFalse(json.get("success").asBoolean());
     }
   }
 

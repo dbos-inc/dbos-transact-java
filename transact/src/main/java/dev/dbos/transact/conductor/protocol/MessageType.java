@@ -11,13 +11,15 @@ public enum MessageType {
   GET_METRICS("get_metrics"),
   GET_WORKFLOW("get_workflow"),
   IMPORT_WORKFLOW("import_workflow"),
+  LIST_APPLICATION_VERSIONS("list_application_versions"),
   LIST_QUEUED_WORKFLOWS("list_queued_workflows"),
   LIST_STEPS("list_steps"),
   LIST_WORKFLOWS("list_workflows"),
   RECOVERY("recovery"),
   RESTART("restart"),
   RESUME("resume"),
-  RETENTION("retention");
+  RETENTION("retention"),
+  SET_LATEST_APPLICATION_VERSION("set_latest_application_version");
 
   private final String value;
 

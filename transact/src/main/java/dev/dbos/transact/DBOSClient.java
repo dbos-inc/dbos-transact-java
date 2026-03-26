@@ -11,6 +11,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -516,13 +517,14 @@ public class DBOSClient implements AutoCloseable {
                 options.deduplicationId,
                 options.priority,
                 options.queuePartitionKey,
+                options.appVersion,
                 false,
                 false,
                 serializationFormat),
             null,
             null,
             null,
-            options.appVersion,
+            null,
             systemDatabase,
             this.serializer);
 
@@ -799,5 +801,32 @@ public class DBOSClient implements AutoCloseable {
    */
   public @NonNull List<StepInfo> listWorkflowSteps(@NonNull String workflowId) {
     return systemDatabase.listWorkflowSteps(workflowId);
+  }
+
+  /**
+   * List all registered application versions, ordered by timestamp descending.
+   *
+   * @return list of {@link VersionInfo} records
+   */
+  public @NonNull List<VersionInfo> listApplicationVersions() {
+    return systemDatabase.listApplicationVersions();
+  }
+
+  /**
+   * Get the most recently promoted application version.
+   *
+   * @return the latest {@link VersionInfo}
+   */
+  public @NonNull VersionInfo getLatestApplicationVersion() {
+    return systemDatabase.getLatestApplicationVersion();
+  }
+
+  /**
+   * Promote an existing version to be the latest application version by updating its timestamp.
+   *
+   * @param versionName the version to promote; it must already exist
+   */
+  public void setLatestApplicationVersion(@NonNull String versionName) {
+    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
   }
 }
