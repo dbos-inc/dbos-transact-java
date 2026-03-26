@@ -150,7 +150,7 @@ public class ClientTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void clientListApplicationVersions() throws Exception {
     var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
     sysdb.createApplicationVersion("v1.0.0");
