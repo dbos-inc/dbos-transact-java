@@ -37,7 +37,7 @@ public class WorkflowMgmtTest {
 
   @BeforeEach
   void beforeEach() {
-    dbosConfig = pgContainer.dbosConfig();
+    dbosConfig = pgContainer.dbosConfig().withAppVersion("v1.0.0");
     dbos = new DBOS(dbosConfig);
 
     impl = new MgmtServiceImpl(dbos);
@@ -204,6 +204,7 @@ public class WorkflowMgmtTest {
 
     var versions = dbos.listApplicationVersions();
     assertEquals(3, versions.size());
+
     // createApplicationVersion defaults version_timestamp to insertion order, so all three
     // exist; just verify all names are present
     var names = versions.stream().map(v -> v.versionName()).toList();
@@ -226,10 +227,16 @@ public class WorkflowMgmtTest {
   }
 
   @Test
+  @org.junit.jupiter.api.parallel.Execution(
+      org.junit.jupiter.api.parallel.ExecutionMode.SAME_THREAD)
   public void testSetLatestApplicationVersion() throws Exception {
     var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
     sysdb.createApplicationVersion("v1.0.0");
     sysdb.createApplicationVersion("v2.0.0");
+
+    // introduce a slight delay to ensure the v1.0.0 timestamp we're about the set is later than the
+    // v2.0.0 we just created
+    Thread.sleep(100);
 
     // v2.0.0 was inserted last so it should be the current latest; promote v1.0.0
     dbos.setLatestApplicationVersion("v1.0.0");

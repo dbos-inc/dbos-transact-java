@@ -35,7 +35,7 @@ public class ClientTest {
 
   @BeforeEach
   void beforeEach() {
-    dbosConfig = pgContainer.dbosConfig();
+    dbosConfig = pgContainer.dbosConfig().withAppVersion("v1.0.0");
     dbos = new DBOS(dbosConfig);
     dataSource = pgContainer.dataSource();
 

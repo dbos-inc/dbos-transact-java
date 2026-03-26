@@ -923,7 +923,7 @@ public class ConductorTest {
     List<VersionInfo> versions =
         List.of(
             new VersionInfo("id-2", "v2.0.0", t2, t1), new VersionInfo("id-1", "v1.0.0", t1, t1));
-    when(mockExec.listApplicationVersions()).thenReturn(versions);
+    when(mockDB.listApplicationVersions()).thenReturn(versions);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -932,19 +932,19 @@ public class ConductorTest {
       listener.send(MessageType.LIST_APPLICATION_VERSIONS, "req-avl", Map.of());
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
-      verify(mockExec).listApplicationVersions();
+      verify(mockDB).listApplicationVersions();
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("list_application_versions", json.get("type").asText());
       assertEquals("req-avl", json.get("request_id").asText());
       assertNull(json.get("error_message"));
 
-      JsonNode av = json.get("application_versions");
+      JsonNode av = json.get("output");
       assertNotNull(av);
       assertTrue(av.isArray());
       assertEquals(2, av.size());
-      assertEquals("v2.0.0", av.get(0).get("versionName").asText());
-      assertEquals("v1.0.0", av.get(1).get("versionName").asText());
+      assertEquals("v2.0.0", av.get(0).get("version_name").asText());
+      assertEquals("v1.0.0", av.get(1).get("version_name").asText());
     }
   }
 
@@ -954,7 +954,7 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     String errorMessage = "canListApplicationVersionsThrows error";
-    doThrow(new RuntimeException(errorMessage)).when(mockExec).listApplicationVersions();
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).listApplicationVersions();
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -966,7 +966,7 @@ public class ConductorTest {
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("list_application_versions", json.get("type").asText());
       assertEquals(errorMessage, json.get("error_message").asText());
-      assertEquals(0, json.get("application_versions").size());
+      assertEquals(0, json.get("output").size());
     }
   }
 
