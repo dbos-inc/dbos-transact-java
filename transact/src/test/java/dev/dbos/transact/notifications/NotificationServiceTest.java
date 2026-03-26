@@ -149,7 +149,6 @@ class NotServiceImpl implements NotService {
   }
 }
 
-@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class NotificationServiceTest {
 

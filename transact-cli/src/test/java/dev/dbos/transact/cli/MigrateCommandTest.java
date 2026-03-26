@@ -20,7 +20,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class MigrateCommandTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

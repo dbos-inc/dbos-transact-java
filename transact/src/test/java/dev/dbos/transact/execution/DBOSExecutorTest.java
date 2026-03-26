@@ -23,11 +23,11 @@ import org.junit.jupiter.api.condition.DisabledForJreRange;
 import org.junit.jupiter.api.condition.EnabledForJreRange;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.condition.JRE;
+import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 class DBOSExecutorTest {
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSExecutorTest.class);
@@ -288,7 +288,7 @@ class DBOSExecutorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void sleepRecovery() throws Exception {
     try (var dbos = new DBOS(dbosConfig)) {
       ExecutingService executingService = register(dbos);

@@ -165,7 +165,6 @@ class EventsServiceImpl implements EventsService {
   }
 }
 
-@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class EventsTest {
 
