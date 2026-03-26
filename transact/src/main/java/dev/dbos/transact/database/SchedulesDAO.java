@@ -33,11 +33,13 @@ class SchedulesDAO {
              schedule, status, context, last_fired_at, automatic_backfill,
              cron_timezone, queue_name)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """.formatted(schema);
+        """
+            .formatted(schema);
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql)) {
-      ps.setString(1, schedule.scheduleId() != null ? schedule.scheduleId() : UUID.randomUUID().toString());
+      ps.setString(
+          1, schedule.scheduleId() != null ? schedule.scheduleId() : UUID.randomUUID().toString());
       ps.setString(2, schedule.scheduleName());
       ps.setString(3, schedule.workflowName());
       ps.setString(4, schedule.workflowClassName());
@@ -70,7 +72,8 @@ class SchedulesDAO {
                    cron_timezone, queue_name
             FROM "%s".workflow_schedules
             WHERE TRUE
-            """.formatted(schema));
+            """
+                .formatted(schema));
 
     List<Object> params = new ArrayList<>();
 
@@ -120,7 +123,8 @@ class SchedulesDAO {
                cron_timezone, queue_name
         FROM "%s".workflow_schedules
         WHERE schedule_name = ?
-        """.formatted(schema);
+        """
+            .formatted(schema);
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -146,7 +150,8 @@ class SchedulesDAO {
     String sql =
         """
         UPDATE "%s".workflow_schedules SET status = ? WHERE schedule_name = ?
-        """.formatted(schema);
+        """
+            .formatted(schema);
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -160,7 +165,8 @@ class SchedulesDAO {
     String sql =
         """
         UPDATE "%s".workflow_schedules SET last_fired_at = ? WHERE schedule_name = ?
-        """.formatted(schema);
+        """
+            .formatted(schema);
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -174,7 +180,8 @@ class SchedulesDAO {
     String sql =
         """
         DELETE FROM "%s".workflow_schedules WHERE schedule_name = ?
-        """.formatted(schema);
+        """
+            .formatted(schema);
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql)) {

@@ -541,8 +541,17 @@ public class SystemDatabaseTest {
 
   private static WorkflowSchedule makeSchedule(String name) {
     return new WorkflowSchedule(
-        null, name, "myWorkflow", "com.example.MyClass", "0 * * * *",
-        "ACTIVE", "{}", null, false, null, null);
+        null,
+        name,
+        "myWorkflow",
+        "com.example.MyClass",
+        "0 * * * *",
+        "ACTIVE",
+        "{}",
+        null,
+        false,
+        null,
+        null);
   }
 
   @Test
@@ -582,8 +591,18 @@ public class SystemDatabaseTest {
     sysdb.createSchedule(makeSchedule("alpha-1"));
     sysdb.createSchedule(makeSchedule("alpha-2"));
     sysdb.createSchedule(
-        new WorkflowSchedule(null, "beta-1", "otherWorkflow", null, "0 * * * *",
-            "ACTIVE", "{}", null, false, null, null));
+        new WorkflowSchedule(
+            null,
+            "beta-1",
+            "otherWorkflow",
+            null,
+            "0 * * * *",
+            "ACTIVE",
+            "{}",
+            null,
+            false,
+            null,
+            null));
     sysdb.pauseSchedule("beta-1");
 
     // list all
@@ -673,10 +692,19 @@ public class SystemDatabaseTest {
 
   @Test
   public void testCreateScheduleWithAllFields() {
-    var schedule = new WorkflowSchedule(
-        "my-id-123", "sched-full", "fullWorkflow", "com.example.Full",
-        "*/5 * * * *", "ACTIVE", "{\"key\":\"val\"}", "2026-03-01T00:00:00Z",
-        true, "America/New_York", "my-queue");
+    var schedule =
+        new WorkflowSchedule(
+            "my-id-123",
+            "sched-full",
+            "fullWorkflow",
+            "com.example.Full",
+            "*/5 * * * *",
+            "ACTIVE",
+            "{\"key\":\"val\"}",
+            "2026-03-01T00:00:00Z",
+            true,
+            "America/New_York",
+            "my-queue");
     sysdb.createSchedule(schedule);
 
     var s = sysdb.getSchedule("sched-full").get();
