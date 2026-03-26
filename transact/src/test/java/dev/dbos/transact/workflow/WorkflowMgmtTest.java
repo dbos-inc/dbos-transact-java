@@ -210,6 +210,12 @@ public class WorkflowMgmtTest {
     assertTrue(names.contains("v1.0.0"));
     assertTrue(names.contains("v2.0.0"));
     assertTrue(names.contains("v3.0.0"));
+
+    // createdAt should be set and positive on all versions
+    for (var v : versions) {
+      assertNotNull(v.createdAt());
+      assertTrue(v.createdAt().toEpochMilli() > 0);
+    }
   }
 
   @Test
@@ -223,6 +229,8 @@ public class WorkflowMgmtTest {
 
     var latest = dbos.getLatestApplicationVersion();
     assertEquals("v1.0.0", latest.versionName());
+    assertNotNull(latest.createdAt());
+    assertTrue(latest.createdAt().toEpochMilli() > 0);
   }
 
   @Test
@@ -237,11 +245,26 @@ public class WorkflowMgmtTest {
     // v2.0.0 we just created
     Thread.sleep(100);
 
+    // Record v1.0.0's createdAt before promoting it
+    var v1CreatedAt =
+        dbos.listApplicationVersions().stream()
+            .filter(v -> v.versionName().equals("v1.0.0"))
+            .findFirst()
+            .orElseThrow()
+            .createdAt();
+
     // v2.0.0 was inserted last so it should be the current latest; promote v1.0.0
     dbos.setLatestApplicationVersion("v1.0.0");
 
     var latest = dbos.getLatestApplicationVersion();
     assertEquals("v1.0.0", latest.versionName());
+
+    // setLatestApplicationVersion updates the timestamp but must not change createdAt
+    assertEquals(v1CreatedAt, latest.createdAt());
+
+    // v1.0.0 should now sort first in the list (highest timestamp)
+    var versions = dbos.listApplicationVersions();
+    assertEquals("v1.0.0", versions.get(0).versionName());
   }
 
   @Test
