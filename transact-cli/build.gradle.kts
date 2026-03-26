@@ -18,34 +18,6 @@ dependencies {
   testImplementation("org.testcontainers:testcontainers-postgresql:2.0.3")
 }
 
-tasks.test {
-  useJUnitPlatform()
-  testLogging {
-    events("passed", "skipped", "failed")
-    showStandardStreams = true
-  }
-
-  addTestListener(
-    object : TestListener {
-      override fun beforeSuite(suite: TestDescriptor) {}
-
-      override fun beforeTest(testDescriptor: TestDescriptor) {}
-
-      override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {}
-
-      override fun afterSuite(suite: TestDescriptor, result: TestResult) {
-        if (suite.parent == null) {
-          println("\nTest Results:")
-          println("  Tests run: ${result.testCount}")
-          println("  Passed: ${result.successfulTestCount}")
-          println("  Failed: ${result.failedTestCount}")
-          println("  Skipped: ${result.skippedTestCount}")
-        }
-      }
-    }
-  )
-}
-
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
   archiveBaseName.set("dbos")
   archiveVersion.set("")

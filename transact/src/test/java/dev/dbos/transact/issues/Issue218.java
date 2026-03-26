@@ -82,7 +82,6 @@ class Issue218ServiceImpl implements Issue218Service {
 }
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class Issue218 {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

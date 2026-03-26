@@ -38,7 +38,6 @@ class ScaleServiceImpl implements ScaleService {
 }
 
 @org.junit.jupiter.api.Timeout(value = 5, unit = java.util.concurrent.TimeUnit.MINUTES)
-@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class ScaleTest {
   private static final Logger logger = LoggerFactory.getLogger(ScaleTest.class);
 

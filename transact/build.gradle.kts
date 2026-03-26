@@ -57,34 +57,6 @@ tasks.processResources {
   filesMatching("**/app.properties") { expand(mapOf("projectVersion" to projectVersion)) }
 }
 
-tasks.test {
-  useJUnitPlatform()
-  testLogging {
-    events("passed", "skipped", "failed")
-    showStandardStreams = true
-  }
-
-  addTestListener(
-    object : TestListener {
-      override fun beforeSuite(suite: TestDescriptor) {}
-
-      override fun beforeTest(testDescriptor: TestDescriptor) {}
-
-      override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {}
-
-      override fun afterSuite(suite: TestDescriptor, result: TestResult) {
-        if (suite.parent == null) {
-          println("\nTest Results:")
-          println("  Tests run: ${result.testCount}")
-          println("  Passed: ${result.successfulTestCount}")
-          println("  Failed: ${result.failedTestCount}")
-          println("  Skipped: ${result.skippedTestCount}")
-        }
-      }
-    }
-  )
-}
-
 tasks.withType<KotlinCompile>().configureEach {
   compilerOptions {
     // jvmTarget now uses the JvmTarget enum instead of a String

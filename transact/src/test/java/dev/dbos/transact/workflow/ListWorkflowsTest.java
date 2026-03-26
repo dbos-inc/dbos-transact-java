@@ -44,7 +44,6 @@ import org.junit.jupiter.api.*;
  * Status totals: SUCCESS=7, ERROR=2, CANCELLED=1
  */
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class ListWorkflowsTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
