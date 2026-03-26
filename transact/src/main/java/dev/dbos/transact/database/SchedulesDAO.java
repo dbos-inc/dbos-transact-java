@@ -1,0 +1,200 @@
+package dev.dbos.transact.database;
+
+import dev.dbos.transact.workflow.WorkflowSchedule;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.StringJoiner;
+import java.util.UUID;
+
+import javax.sql.DataSource;
+
+class SchedulesDAO {
+
+  private final DataSource dataSource;
+  private final String schema;
+
+  SchedulesDAO(DataSource dataSource, String schema) {
+    this.dataSource = dataSource;
+    this.schema = Objects.requireNonNull(schema);
+  }
+
+  void createSchedule(WorkflowSchedule schedule) throws SQLException {
+    String sql =
+        """
+        INSERT INTO "%s".workflow_schedules
+            (schedule_id, schedule_name, workflow_name, workflow_class_name,
+             schedule, status, context, last_fired_at, automatic_backfill,
+             cron_timezone, queue_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """.formatted(schema);
+
+    try (Connection conn = dataSource.getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, schedule.scheduleId() != null ? schedule.scheduleId() : UUID.randomUUID().toString());
+      ps.setString(2, schedule.scheduleName());
+      ps.setString(3, schedule.workflowName());
+      ps.setString(4, schedule.workflowClassName());
+      ps.setString(5, schedule.schedule());
+      ps.setString(6, schedule.status() != null ? schedule.status() : "ACTIVE");
+      ps.setString(7, schedule.context() != null ? schedule.context() : "{}");
+      ps.setString(8, schedule.lastFiredAt());
+      ps.setBoolean(9, schedule.automaticBackfill());
+      ps.setString(10, schedule.cronTimezone());
+      ps.setString(11, schedule.queueName());
+      ps.executeUpdate();
+    } catch (SQLException e) {
+      if ("23505".equals(e.getSQLState())) {
+        throw new RuntimeException(
+            "Schedule '%s' already exists".formatted(schedule.scheduleName()), e);
+      }
+      throw e;
+    }
+  }
+
+  List<WorkflowSchedule> listSchedules(
+      List<String> status, List<String> workflowName, List<String> scheduleNamePrefixes)
+      throws SQLException {
+
+    StringBuilder sql =
+        new StringBuilder(
+            """
+            SELECT schedule_id, schedule_name, workflow_name, workflow_class_name,
+                   schedule, status, context, last_fired_at, automatic_backfill,
+                   cron_timezone, queue_name
+            FROM "%s".workflow_schedules
+            WHERE TRUE
+            """.formatted(schema));
+
+    List<Object> params = new ArrayList<>();
+
+    if (status != null && !status.isEmpty()) {
+      sql.append(" AND status = ANY(?)");
+      params.add(status.toArray(new String[0]));
+    }
+    if (workflowName != null && !workflowName.isEmpty()) {
+      sql.append(" AND workflow_name = ANY(?)");
+      params.add(workflowName.toArray(new String[0]));
+    }
+    if (scheduleNamePrefixes != null && !scheduleNamePrefixes.isEmpty()) {
+      sql.append(" AND (");
+      StringJoiner orClauses = new StringJoiner(" OR ");
+      for (int i = 0; i < scheduleNamePrefixes.size(); i++) {
+        orClauses.add("schedule_name LIKE ?");
+        params.add(scheduleNamePrefixes.get(i).replace("%", "\\%").replace("_", "\\_") + "%");
+      }
+      sql.append(orClauses).append(")");
+    }
+
+    try (Connection conn = dataSource.getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+      int idx = 1;
+      for (Object param : params) {
+        if (param instanceof String[] arr) {
+          ps.setArray(idx++, conn.createArrayOf("text", arr));
+        } else {
+          ps.setString(idx++, (String) param);
+        }
+      }
+      try (ResultSet rs = ps.executeQuery()) {
+        List<WorkflowSchedule> results = new ArrayList<>();
+        while (rs.next()) {
+          results.add(rowToSchedule(rs));
+        }
+        return results;
+      }
+    }
+  }
+
+  Optional<WorkflowSchedule> getSchedule(String name) throws SQLException {
+    String sql =
+        """
+        SELECT schedule_id, schedule_name, workflow_name, workflow_class_name,
+               schedule, status, context, last_fired_at, automatic_backfill,
+               cron_timezone, queue_name
+        FROM "%s".workflow_schedules
+        WHERE schedule_name = ?
+        """.formatted(schema);
+
+    try (Connection conn = dataSource.getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, name);
+      try (ResultSet rs = ps.executeQuery()) {
+        if (rs.next()) {
+          return Optional.of(rowToSchedule(rs));
+        }
+        return Optional.empty();
+      }
+    }
+  }
+
+  void pauseSchedule(String name) throws SQLException {
+    setScheduleStatus(name, "PAUSED");
+  }
+
+  void resumeSchedule(String name) throws SQLException {
+    setScheduleStatus(name, "ACTIVE");
+  }
+
+  private void setScheduleStatus(String name, String status) throws SQLException {
+    String sql =
+        """
+        UPDATE "%s".workflow_schedules SET status = ? WHERE schedule_name = ?
+        """.formatted(schema);
+
+    try (Connection conn = dataSource.getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, status);
+      ps.setString(2, name);
+      ps.executeUpdate();
+    }
+  }
+
+  void updateScheduleLastFiredAt(String name, String lastFiredAt) throws SQLException {
+    String sql =
+        """
+        UPDATE "%s".workflow_schedules SET last_fired_at = ? WHERE schedule_name = ?
+        """.formatted(schema);
+
+    try (Connection conn = dataSource.getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, lastFiredAt);
+      ps.setString(2, name);
+      ps.executeUpdate();
+    }
+  }
+
+  void deleteSchedule(String name) throws SQLException {
+    String sql =
+        """
+        DELETE FROM "%s".workflow_schedules WHERE schedule_name = ?
+        """.formatted(schema);
+
+    try (Connection conn = dataSource.getConnection();
+        PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, name);
+      ps.executeUpdate();
+    }
+  }
+
+  private static WorkflowSchedule rowToSchedule(ResultSet rs) throws SQLException {
+    return new WorkflowSchedule(
+        rs.getString(1),
+        rs.getString(2),
+        rs.getString(3),
+        rs.getString(4),
+        rs.getString(5),
+        rs.getString(6),
+        rs.getString(7),
+        rs.getString(8),
+        rs.getBoolean(9),
+        rs.getString(10),
+        rs.getString(11));
+  }
+}

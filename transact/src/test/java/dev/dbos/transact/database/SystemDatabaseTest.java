@@ -1,6 +1,7 @@
 package dev.dbos.transact.database;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -18,6 +19,7 @@ import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
@@ -472,5 +474,160 @@ public class SystemDatabaseTest {
     assertEquals(2, wf.events().size());
     assertEquals(2, wf.eventHistory().size());
     assertEquals(2, wf.streams().size());
+  }
+
+  // ── Schedule CRUD ──────────────────────────────────────────────────────────
+
+  private static WorkflowSchedule makeSchedule(String name) {
+    return new WorkflowSchedule(
+        null, name, "myWorkflow", "com.example.MyClass", "0 * * * *",
+        "ACTIVE", "{}", null, false, null, null);
+  }
+
+  @Test
+  public void testCreateAndGetSchedule() {
+    sysdb.createSchedule(makeSchedule("sched-1"));
+
+    var result = sysdb.getSchedule("sched-1");
+    assertTrue(result.isPresent());
+    var s = result.get();
+    assertEquals("sched-1", s.scheduleName());
+    assertEquals("myWorkflow", s.workflowName());
+    assertEquals("com.example.MyClass", s.workflowClassName());
+    assertEquals("0 * * * *", s.schedule());
+    assertEquals("ACTIVE", s.status());
+    assertEquals("{}", s.context());
+    assertNull(s.lastFiredAt());
+    assertFalse(s.automaticBackfill());
+    assertNull(s.cronTimezone());
+    assertNull(s.queueName());
+    assertNotNull(s.scheduleId());
+  }
+
+  @Test
+  public void testGetScheduleNotFound() {
+    var result = sysdb.getSchedule("nonexistent");
+    assertFalse(result.isPresent());
+  }
+
+  @Test
+  public void testCreateScheduleDuplicate() {
+    sysdb.createSchedule(makeSchedule("sched-dup"));
+    assertThrows(RuntimeException.class, () -> sysdb.createSchedule(makeSchedule("sched-dup")));
+  }
+
+  @Test
+  public void testListSchedules() {
+    sysdb.createSchedule(makeSchedule("alpha-1"));
+    sysdb.createSchedule(makeSchedule("alpha-2"));
+    sysdb.createSchedule(
+        new WorkflowSchedule(null, "beta-1", "otherWorkflow", null, "0 * * * *",
+            "ACTIVE", "{}", null, false, null, null));
+    sysdb.pauseSchedule("beta-1");
+
+    // list all
+    var all = sysdb.listSchedules(null, null, null);
+    assertEquals(3, all.size());
+
+    // filter by single status
+    var active = sysdb.listSchedules(List.of("ACTIVE"), null, null);
+    assertEquals(2, active.size());
+
+    var paused = sysdb.listSchedules(List.of("PAUSED"), null, null);
+    assertEquals(1, paused.size());
+    assertEquals("beta-1", paused.get(0).scheduleName());
+
+    // filter by multiple statuses
+    var both = sysdb.listSchedules(List.of("ACTIVE", "PAUSED"), null, null);
+    assertEquals(3, both.size());
+
+    var nonexistent = sysdb.listSchedules(List.of("NONEXISTENT"), null, null);
+    assertEquals(0, nonexistent.size());
+
+    // filter by single workflow name
+    var byOne = sysdb.listSchedules(null, List.of("myWorkflow"), null);
+    assertEquals(2, byOne.size());
+
+    var byOther = sysdb.listSchedules(null, List.of("otherWorkflow"), null);
+    assertEquals(1, byOther.size());
+
+    // filter by multiple workflow names
+    var byBoth = sysdb.listSchedules(null, List.of("myWorkflow", "otherWorkflow"), null);
+    assertEquals(3, byBoth.size());
+
+    // filter by single prefix
+    var byPrefix = sysdb.listSchedules(null, null, List.of("alpha-"));
+    assertEquals(2, byPrefix.size());
+    assertTrue(byPrefix.stream().allMatch(s -> s.scheduleName().startsWith("alpha-")));
+
+    // filter by multiple prefixes
+    var byBothPrefixes = sysdb.listSchedules(null, null, List.of("alpha-", "beta-"));
+    assertEquals(3, byBothPrefixes.size());
+
+    var byNone = sysdb.listSchedules(null, null, List.of("nonexistent-"));
+    assertEquals(0, byNone.size());
+
+    // combined status + prefix
+    var activeAlpha = sysdb.listSchedules(List.of("ACTIVE"), null, List.of("alpha-"));
+    assertEquals(2, activeAlpha.size());
+
+    var pausedAlpha = sysdb.listSchedules(List.of("PAUSED"), null, List.of("alpha-"));
+    assertEquals(0, pausedAlpha.size());
+  }
+
+  @Test
+  public void testPauseAndResumeSchedule() {
+    sysdb.createSchedule(makeSchedule("sched-pause"));
+
+    sysdb.pauseSchedule("sched-pause");
+    assertEquals("PAUSED", sysdb.getSchedule("sched-pause").get().status());
+
+    sysdb.resumeSchedule("sched-pause");
+    assertEquals("ACTIVE", sysdb.getSchedule("sched-pause").get().status());
+  }
+
+  @Test
+  public void testUpdateLastFiredAt() {
+    sysdb.createSchedule(makeSchedule("sched-fired"));
+    assertNull(sysdb.getSchedule("sched-fired").get().lastFiredAt());
+
+    sysdb.updateScheduleLastFiredAt("sched-fired", "2026-03-26T10:00:00Z");
+    assertEquals("2026-03-26T10:00:00Z", sysdb.getSchedule("sched-fired").get().lastFiredAt());
+  }
+
+  @Test
+  public void testDeleteSchedule() {
+    sysdb.createSchedule(makeSchedule("sched-del-1"));
+    sysdb.createSchedule(makeSchedule("sched-del-2"));
+    assertEquals(2, sysdb.listSchedules(null, null, null).size());
+
+    sysdb.deleteSchedule("sched-del-1");
+    assertFalse(sysdb.getSchedule("sched-del-1").isPresent());
+    assertEquals(1, sysdb.listSchedules(null, null, null).size());
+
+    sysdb.deleteSchedule("sched-del-2");
+    assertFalse(sysdb.getSchedule("sched-del-2").isPresent());
+    assertEquals(0, sysdb.listSchedules(null, null, null).size());
+  }
+
+  @Test
+  public void testCreateScheduleWithAllFields() {
+    var schedule = new WorkflowSchedule(
+        "my-id-123", "sched-full", "fullWorkflow", "com.example.Full",
+        "*/5 * * * *", "ACTIVE", "{\"key\":\"val\"}", "2026-03-01T00:00:00Z",
+        true, "America/New_York", "my-queue");
+    sysdb.createSchedule(schedule);
+
+    var s = sysdb.getSchedule("sched-full").get();
+    assertEquals("my-id-123", s.scheduleId());
+    assertEquals("sched-full", s.scheduleName());
+    assertEquals("fullWorkflow", s.workflowName());
+    assertEquals("com.example.Full", s.workflowClassName());
+    assertEquals("*/5 * * * *", s.schedule());
+    assertEquals("{\"key\":\"val\"}", s.context());
+    assertEquals("2026-03-01T00:00:00Z", s.lastFiredAt());
+    assertTrue(s.automaticBackfill());
+    assertEquals("America/New_York", s.cronTimezone());
+    assertEquals("my-queue", s.queueName());
   }
 }
