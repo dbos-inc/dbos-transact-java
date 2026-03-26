@@ -184,6 +184,10 @@ public class ClientTest {
     sysdb.createApplicationVersion("v1.0.0");
     sysdb.createApplicationVersion("v2.0.0");
 
+    // introduce a slight delay to ensure the v1.0.0 timestamp we're about the set is later than the
+    // v2.0.0 we just created
+    Thread.sleep(100);
+
     try (var client = pgContainer.dbosClient()) {
       client.setLatestApplicationVersion("v1.0.0");
       var latest = client.getLatestApplicationVersion();
