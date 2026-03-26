@@ -144,6 +144,7 @@ public class ConfigTest {
   }
 
   @Test
+  @Execution(ExecutionMode.SAME_THREAD)
   public void localExecutorId() throws Exception {
     var config = pgContainer.dbosConfig();
     var dbos = new DBOS(config);
@@ -159,6 +160,7 @@ public class ConfigTest {
   }
 
   @Test
+  @Execution(ExecutionMode.SAME_THREAD)
   public void conductorExecutorId() throws Exception {
     var config = pgContainer.dbosConfig().withConductorKey("test-conductor-key");
     var dbos = new DBOS(config);

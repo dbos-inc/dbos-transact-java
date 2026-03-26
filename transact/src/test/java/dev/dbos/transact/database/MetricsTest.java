@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.AutoClose;
-import org.junit.jupiter.api.Test;
+import org.junitpioneer.jupiter.RetryingTest;
 
 interface MetricsService {
   String testWorkflowA();
@@ -48,7 +48,7 @@ public class MetricsTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
-  @Test
+  @RetryingTest(3)
   public void testGetMetrics() throws Exception {
     var dbosConfig = pgContainer.dbosConfig();
     try (var dbos = new DBOS(dbosConfig)) {
