@@ -62,15 +62,26 @@ tasks.test {
   testLogging {
     events("passed", "skipped", "failed")
     showStandardStreams = true
+    showExceptions = true
+    showCauses = true
+    showStackTraces = true
+    exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    displayGranularity = 0
   }
 
   addTestListener(
     object : TestListener {
+      private val failedTests = mutableListOf<String>()
+
       override fun beforeSuite(suite: TestDescriptor) {}
 
       override fun beforeTest(testDescriptor: TestDescriptor) {}
 
-      override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {}
+      override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {
+        if (result.resultType == TestResult.ResultType.FAILURE) {
+          failedTests.add("${testDescriptor.className}.${testDescriptor.name}")
+        }
+      }
 
       override fun afterSuite(suite: TestDescriptor, result: TestResult) {
         if (suite.parent == null) {
@@ -79,6 +90,11 @@ tasks.test {
           println("  Passed: ${result.successfulTestCount}")
           println("  Failed: ${result.failedTestCount}")
           println("  Skipped: ${result.skippedTestCount}")
+
+          if (failedTests.isNotEmpty()) {
+            println("\nFailed Tests:")
+            failedTests.forEach { println("  - $it") }
+          }
         }
       }
     }
