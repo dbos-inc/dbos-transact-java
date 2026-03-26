@@ -1385,7 +1385,7 @@ public class DBOSExecutor implements AutoCloseable {
               }
             }
 
-            logger.error("executeWorkflow {}", actual);
+            logger.error("executeWorkflow {}", workflowId, actual);
 
             if (actual instanceof InterruptedException
                 || actual instanceof DBOSWorkflowCancelledException) {
