@@ -233,6 +233,7 @@ public class ConfigTest {
   }
 
   @Test
+  @Execution(ExecutionMode.SAME_THREAD)
   public void calcAppVersion() throws Exception {
     var config = pgContainer.dbosConfig();
     var dbos = new DBOS(config);
