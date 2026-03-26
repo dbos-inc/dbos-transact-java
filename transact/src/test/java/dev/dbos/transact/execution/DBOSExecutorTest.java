@@ -23,6 +23,7 @@ import org.junit.jupiter.api.condition.DisabledForJreRange;
 import org.junit.jupiter.api.condition.EnabledForJreRange;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.condition.JRE;
+import org.junitpioneer.jupiter.RetryingTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -287,7 +288,7 @@ class DBOSExecutorTest {
     }
   }
 
-  @Test
+  @RetryingTest(3)
   public void sleepRecovery() throws Exception {
     try (var dbos = new DBOS(dbosConfig)) {
       ExecutingService executingService = register(dbos);

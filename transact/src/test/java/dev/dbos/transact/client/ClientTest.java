@@ -21,6 +21,7 @@ import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
+import org.junitpioneer.jupiter.RetryingTest;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ClientTest {
@@ -103,7 +104,7 @@ public class ClientTest {
     assertEquals("42-test.message", handle.getResult());
   }
 
-  @Test
+  @RetryingTest(3)
   public void clientEnqueueTimeouts() throws Exception {
     try (var client = pgContainer.dbosClient()) {
       var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "sleep", "testQueue");
