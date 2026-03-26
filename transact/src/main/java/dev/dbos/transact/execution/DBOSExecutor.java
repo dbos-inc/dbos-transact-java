@@ -1354,7 +1354,7 @@ public class DBOSExecutor implements AutoCloseable {
             executorId(),
             // executed workflows always use the current app version.
             // Option.appVersion is only used for enqueue
-            appVersion(), 
+            appVersion(),
             appId(),
             parent,
             options.timeoutDuration(),
