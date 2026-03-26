@@ -517,13 +517,14 @@ public class DBOSClient implements AutoCloseable {
                 options.deduplicationId,
                 options.priority,
                 options.queuePartitionKey,
+                options.appVersion,
                 false,
                 false,
                 serializationFormat),
             null,
             null,
             null,
-            options.appVersion,
+            null,
             systemDatabase,
             this.serializer);
 
