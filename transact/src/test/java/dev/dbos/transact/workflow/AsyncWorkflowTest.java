@@ -15,7 +15,6 @@ import java.util.List;
 import org.junit.jupiter.api.*;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-@org.junit.jupiter.api.parallel.Execution(org.junit.jupiter.api.parallel.ExecutionMode.CONCURRENT)
 public class AsyncWorkflowTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
