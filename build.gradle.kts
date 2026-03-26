@@ -157,6 +157,33 @@ subprojects {
     // use the environment's JDK instead of the toolchain's JDK for tests
     tasks.withType<Test> { javaLauncher.set(null as JavaLauncher?) }
 
+    tasks.withType<Test> {
+      useJUnitPlatform()
+      testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = true
+      }
+      addTestListener(
+        object : TestListener {
+          override fun beforeSuite(suite: TestDescriptor) {}
+
+          override fun beforeTest(testDescriptor: TestDescriptor) {}
+
+          override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {}
+
+          override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+            if (suite.parent == null) {
+              println("\nTest Results:")
+              println("  Tests run: ${result.testCount}")
+              println("  Passed: ${result.successfulTestCount}")
+              println("  Failed: ${result.failedTestCount}")
+              println("  Skipped: ${result.skippedTestCount}")
+            }
+          }
+        }
+      )
+    }
+
     tasks.named<Jar>("jar") {
       manifest {
         attributes["Implementation-Version"] = project.version
