@@ -209,8 +209,11 @@ public class SchedulerService implements DBOSLifecycleListener {
 
                 String workflowId =
                     String.format("sched-%s-%s", workflowName, scheduledTime.toString());
+                var latestAppVersion = dbos.getLatestApplicationVersion();
                 var options =
-                    new StartWorkflowOptions(workflowId).withQueue(scheduledWorkflow.queue());
+                    new StartWorkflowOptions(workflowId)
+                        .withQueue(scheduledWorkflow.queue())
+                        .withAppVersion(latestAppVersion.versionName());
                 dbos.startWorkflow(scheduledWorkflow.workflow(), args, options);
                 nextTime = setLastTime(dbos, scheduledWorkflow, scheduledTime);
               } catch (Exception e) {
