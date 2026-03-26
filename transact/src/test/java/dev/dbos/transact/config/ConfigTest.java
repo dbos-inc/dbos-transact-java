@@ -401,10 +401,7 @@ public class ConfigTest {
     {
       var d =
           new DBOS(
-              pgContainer
-                  .dbosConfig()
-                  .withAppVersion(versionFour)
-                  .withExecutorId(testExecutorId));
+              pgContainer.dbosConfig().withAppVersion(versionFour).withExecutorId(testExecutorId));
       var proxy = d.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
       d.launch();
       assertEquals(versionFour, DBOSTestAccess.getDbosExecutor(d).appVersion());
@@ -423,8 +420,7 @@ public class ConfigTest {
     d.launch();
 
     try {
-      var createdVersions =
-          Set.of(versionOne, versionTwo, versionThree, versionFour, versionFive);
+      var createdVersions = Set.of(versionOne, versionTwo, versionThree, versionFour, versionFive);
 
       // ── Test version CRUD via DBOS API ────────────────────────────────────
 
