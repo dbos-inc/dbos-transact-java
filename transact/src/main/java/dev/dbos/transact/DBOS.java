@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Collection;
 import java.util.HashSet;
@@ -862,10 +863,10 @@ public class DBOS implements AutoCloseable {
   //  * @param end end of the backfill window (exclusive)
   //  * @return handles to the enqueued executions
   //  */
-  // public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
-  //     @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
-  //   return ensureLaunched("backfillSchedule").backfillSchedule(scheduleName, start, end);
-  // }
+  public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
+      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
+    return ensureLaunched("backfillSchedule").backfillSchedule(scheduleName, start, end);
+  }
 
   // /**
   //  * Immediately enqueue the scheduled workflow at the current time.

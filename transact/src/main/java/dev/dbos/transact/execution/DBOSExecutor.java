@@ -75,6 +75,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import com.cronutils.model.time.ExecutionTime;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -1041,24 +1042,49 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  public static List<WorkflowHandle<Object, Exception>> backfillSchedule(
+  public static List<String> backfillSchedule(
       @NonNull String scheduleName,
       @NonNull Instant start,
       @NonNull Instant end,
-      @NonNull SystemDatabase systemDatabase) {
+      @NonNull SystemDatabase systemDatabase,
+      @Nullable DBOSSerializer serializer) {
 
     var schedule =
-        Objects.requireNonNull(systemDatabase)
+        Objects.requireNonNull(systemDatabase, "systemDatabase cannot be null")
             .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
             .orElseThrow(
                 () ->
                     new IllegalStateException(
                         "Schedule %s does not exist".formatted(scheduleName)));
 
-    var timeZone = Objects.requireNonNullElseGet(schedule.cronTimezone(), () -> ZoneId.of("UTC"));
-    var zonedStart = start.atZone(timeZone);
+    var timeZone = Objects.requireNonNullElse(schedule.cronTimezone(), ZoneOffset.UTC);
+    var cron = SchedulerService.CRON_PARSER.parse(schedule.schedule());
+    var executionTime = ExecutionTime.forCron(cron);
 
-    throw new RuntimeException();
+    var next = Objects.requireNonNull(start, "start cannot be null").atZone(timeZone);
+    var zonedEnd = Objects.requireNonNull(end, "end cannot be null").atZone(timeZone);
+    var workflowIds = new ArrayList<String>();
+
+    while (true) {
+      next = executionTime.nextExecution(next).orElse(null);
+      if (next == null || next.isAfter(zonedEnd)) {
+        break;
+      }
+
+      var workflowId = "sched-%s-%s".formatted(schedule, next);
+      enqueueScheduledWorkflow(
+          schedule.workflowName(),
+          schedule.workflowClassName(),
+          workflowId,
+          schedule.context(),
+          schedule.queueName(),
+          next.toInstant(),
+          systemDatabase,
+          serializer);
+
+      workflowIds.add(workflowId);
+    }
+    return workflowIds;
   }
 
   public List<WorkflowHandle<Object, Exception>> backfillSchedule(
@@ -1069,7 +1095,44 @@ public class DBOSExecutor implements AutoCloseable {
           "DBOS.backfillSchedule cannot be called from within a workflow");
     }
 
-    return DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase);
+    var workflowIds =
+        DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase, serializer);
+    return workflowIds.stream().map(this::retrieveWorkflow).toList();
+  }
+
+  public static String triggerSchedule(
+      @NonNull String scheduleName, SystemDatabase systemDatabase, DBOSSerializer serializer) {
+    var schedule =
+        Objects.requireNonNull(systemDatabase)
+            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "Schedule %s does not exist".formatted(scheduleName)));
+
+    var now = Instant.now();
+    var workflowId = "sched-%s-trigger-%s".formatted(schedule, now);
+    enqueueScheduledWorkflow(
+        schedule.workflowName(),
+        schedule.workflowClassName(),
+        workflowId,
+        schedule.context(),
+        schedule.queueName(),
+        now,
+        systemDatabase,
+        serializer);
+    return workflowId;
+  }
+
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(
+      @NonNull String scheduleName) {
+    if (DBOSContextHolder.get().isInWorkflow()) {
+      throw new IllegalStateException(
+          "DBOS.triggerSchedule cannot be called from within a workflow");
+    }
+
+    var workflowId = triggerSchedule(scheduleName, systemDatabase, serializer);
+    return retrieveWorkflow(workflowId);
   }
 
   private static void enqueueScheduledWorkflow(
@@ -1111,175 +1174,6 @@ public class DBOSExecutor implements AutoCloseable {
         systemDatabase,
         serializer);
   }
-
-  public static String triggerSchedule(
-      @NonNull String scheduleName, SystemDatabase systemDatabase, DBOSSerializer serializer) {
-    var schedule =
-        Objects.requireNonNull(systemDatabase)
-            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
-            .orElseThrow(
-                () ->
-                    new IllegalStateException(
-                        "Schedule %s does not exist".formatted(scheduleName)));
-
-    var now = Instant.now();
-    var workflowId = "sched-%s-trigger-%s".formatted(schedule, now);
-    enqueueScheduledWorkflow(
-        schedule.workflowName(),
-        schedule.workflowClassName(),
-        workflowId,
-        schedule.context(),
-        schedule.queueName(),
-        now,
-        systemDatabase,
-        serializer);
-    return workflowId;
-  }
-
-  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(
-      @NonNull String scheduleName) {
-    if (DBOSContextHolder.get().isInWorkflow()) {
-      throw new IllegalStateException(
-          "DBOS.triggerSchedule cannot be called from within a workflow");
-    }
-
-    var workflowId = triggerSchedule(scheduleName, systemDatabase, serializer);
-    return retrieveWorkflow(workflowId);
-  }
-
-  // // TODO
-  // public static List<String> backfillScheduleToIds(
-  //     SystemDatabase systemDatabase,
-  //     DBOSSerializer serializer,
-  //     String scheduleName,
-  //     Instant start,
-  //     Instant end) {
-  //   var schedule =
-  //       systemDatabase
-  //           .getSchedule(scheduleName)
-  //           .orElseThrow(
-  //               () ->
-  //                   new IllegalArgumentException(
-  //                       "Schedule '%s' does not exist".formatted(scheduleName)));
-
-  //   ZoneId tz = ZoneOffset.UTC;
-  //   if (schedule.cronTimezone() != null && !schedule.cronTimezone().isEmpty()) {
-  //     tz = ZoneId.of(schedule.cronTimezone());
-  //   }
-
-  //   var cron = SCHEDULE_CRON_PARSER.parse(schedule.schedule());
-  //   var executionTime = ExecutionTime.forCron(cron);
-  //   var latestVersion = systemDatabase.getLatestApplicationVersion();
-  //   Object context = deserializeScheduleContext(schedule.context());
-  //   String queueName =
-  //       schedule.queueName() != null ? schedule.queueName() : Constants.DBOS_INTERNAL_QUEUE;
-
-  //   List<String> ids = new ArrayList<>();
-  //   // Subtract 1 ns so nextExecution includes start itself if it's a cron fire time
-  //   ZonedDateTime current = start.minusNanos(1).atZone(tz);
-
-  //   while (true) {
-  //     var nextOpt = executionTime.nextExecution(current);
-  //     if (nextOpt.isEmpty()) break;
-  //     ZonedDateTime next = nextOpt.get();
-  //     if (!next.toInstant().isBefore(end)) break;
-
-  //     String workflowId =
-  //         "sched-%s-%s"
-  //             .formatted(scheduleName, next.toOffsetDateTime().format(SCHEDULE_ID_FORMATTER));
-
-  //     if (systemDatabase.getWorkflowStatus(workflowId) == null) {
-  //       enqueueScheduledWorkflow(
-  //           systemDatabase,
-  //           serializer,
-  //           schedule,
-  //           workflowId,
-  //           next.toInstant(),
-  //           context,
-  //           queueName,
-  //           latestVersion.versionName());
-  //     }
-
-  //     ids.add(workflowId);
-  //     current = next;
-  //   }
-
-  //   return ids;
-  // }
-
-  // // TODO
-  // public static String triggerScheduleToId(
-  //     SystemDatabase systemDatabase, DBOSSerializer serializer, String scheduleName) {
-  //   var schedule =
-  //       systemDatabase
-  //           .getSchedule(scheduleName)
-  //           .orElseThrow(
-  //               () ->
-  //                   new IllegalArgumentException(
-  //                       "Schedule '%s' does not exist".formatted(scheduleName)));
-
-  //   var latestVersion = systemDatabase.getLatestApplicationVersion();
-  //   Object context = deserializeScheduleContext(schedule.context());
-  //   String queueName =
-  //       schedule.queueName() != null ? schedule.queueName() : Constants.DBOS_INTERNAL_QUEUE;
-
-  //   Instant now = Instant.now();
-  //   String workflowId =
-  //       "sched-%s-trigger-%s"
-  //           .formatted(
-  //               scheduleName,
-  //               OffsetDateTime.ofInstant(now, ZoneOffset.UTC).format(SCHEDULE_ID_FORMATTER));
-
-  //   enqueueScheduledWorkflow(
-  //       systemDatabase,
-  //       serializer,
-  //       schedule,
-  //       workflowId,
-  //       now,
-  //       context,
-  //       queueName,
-  //       latestVersion.versionName());
-
-  //   return workflowId;
-  // }
-
-  // private static void enqueueScheduledWorkflow(
-  //     SystemDatabase systemDatabase,
-  //     DBOSSerializer serializer,
-  //     WorkflowSchedule schedule,
-  //     String workflowId,
-  //     Instant scheduledAt,
-  //     Object context,
-  //     String queueName,
-  //     String appVersion) {
-  //   Object[] args = new Object[] {scheduledAt, context};
-  //   var options =
-  //       new ExecutionOptions(
-  //           workflowId,
-  //           Timeout.none(),
-  //           null,
-  //           queueName,
-  //           null,
-  //           null,
-  //           null,
-  //           appVersion,
-  //           false,
-  //           false,
-  //           null);
-  //   enqueueWorkflow(
-  //       schedule.workflowName(),
-  //       schedule.workflowClassName() != null ? schedule.workflowClassName() : "",
-  //       "",
-  //       null,
-  //       args,
-  //       options,
-  //       null,
-  //       null,
-  //       appVersion,
-  //       null,
-  //       systemDatabase,
-  //       serializer);
-  // }
 
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return systemDatabase.getExternalState(service, workflowName, key);

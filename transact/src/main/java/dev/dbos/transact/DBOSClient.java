@@ -930,12 +930,11 @@ public class DBOSClient implements AutoCloseable {
   //  * @param end end of the backfill window (exclusive)
   //  * @return handles to the enqueued executions
   //  */
-  // public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
-  //     @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
-  //   var ids =
-  //       DBOSExecutor.backfillScheduleToIds(systemDatabase, serializer, scheduleName, start, end);
-  //   return ids.stream().<WorkflowHandle<Object, Exception>>map(this::retrieveWorkflow).toList();
-  // }
+  public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
+      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
+    var ids = DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase, serializer);
+    return ids.stream().<WorkflowHandle<Object, Exception>>map(this::retrieveWorkflow).toList();
+  }
 
   // /**
   //  * Immediately enqueue the scheduled workflow at the current time.
