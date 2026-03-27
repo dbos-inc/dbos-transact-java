@@ -591,8 +591,17 @@ public class SystemDatabaseTest {
   public void testCreateScheduleNullStatusThrows() {
     var schedule =
         new WorkflowSchedule(
-            null, "sched-null-status", "myWorkflow", "com.example.MyClass", "0 * * * *",
-            null, "{}", null, false, null, null);
+            null,
+            "sched-null-status",
+            "myWorkflow",
+            "com.example.MyClass",
+            "0 * * * *",
+            null,
+            "{}",
+            null,
+            false,
+            null,
+            null);
     assertThrows(NullPointerException.class, () -> sysdb.createSchedule(schedule));
   }
 

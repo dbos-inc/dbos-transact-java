@@ -54,8 +54,7 @@ class SchedulesDAO {
       ps.setString(5, schedule.schedule());
       ps.setString(6, Objects.requireNonNull(schedule.status()).name());
       ps.setString(7, schedule.context()); // TODO: context needs to be serialized
-      ps.setString(
-          8, schedule.lastFiredAt() != null ? schedule.lastFiredAt().toString() : null);
+      ps.setString(8, schedule.lastFiredAt() != null ? schedule.lastFiredAt().toString() : null);
       ps.setBoolean(9, schedule.automaticBackfill());
       ps.setString(10, schedule.cronTimezone());
       ps.setString(11, schedule.queueName());
