@@ -10,6 +10,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -55,6 +56,7 @@ class SchedulesDAO {
     var serializedContext =
         SerializationUtil.serializeValue(schedule.context(), serializer.name(), serializer);
 
+    var timeZone = schedule.cronTimezone() == null ? null : schedule.cronTimezone().getId();
     try (PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(
           1, schedule.scheduleId() != null ? schedule.scheduleId() : UUID.randomUUID().toString());
@@ -66,7 +68,7 @@ class SchedulesDAO {
       ps.setString(7, serializedContext.serializedValue());
       ps.setString(8, schedule.lastFiredAt() != null ? schedule.lastFiredAt().toString() : null);
       ps.setBoolean(9, schedule.automaticBackfill());
-      ps.setString(10, schedule.cronTimezone());
+      ps.setString(10, timeZone);
       ps.setString(11, schedule.queueName());
       ps.executeUpdate();
     } catch (SQLException e) {
@@ -238,6 +240,7 @@ class SchedulesDAO {
     Object context =
         SerializationUtil.deserializeValue(rs.getString(7), serializer.name(), serializer);
     String lastFiredAtStr = rs.getString(8);
+    String timeZoneStr = rs.getString(10);
 
     return new WorkflowSchedule(
         rs.getString(1),
@@ -249,7 +252,7 @@ class SchedulesDAO {
         context,
         lastFiredAtStr != null ? Instant.parse(lastFiredAtStr) : null,
         rs.getBoolean(9),
-        rs.getString(10),
+        timeZoneStr != null ? ZoneId.of(timeZoneStr) : null,
         rs.getString(11));
   }
 }

@@ -21,6 +21,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -844,7 +845,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull String schedule,
       @Nullable Object context,
       boolean backfill,
-      @Nullable String timezone,
+      @Nullable ZoneId cronTimeZone,
       @Nullable String queueName) {
     DBOSExecutor.createSchedule(
         scheduleName,
@@ -853,7 +854,7 @@ public class DBOSClient implements AutoCloseable {
         schedule,
         context,
         backfill,
-        timezone,
+        cronTimeZone,
         queueName,
         wfSchedule -> systemDatabase.createSchedule(wfSchedule));
   }

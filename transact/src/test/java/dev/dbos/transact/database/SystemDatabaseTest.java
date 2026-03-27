@@ -27,6 +27,7 @@ import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 
@@ -722,7 +723,7 @@ public class SystemDatabaseTest {
             "{\"key\":\"val\"}",
             Instant.parse("2026-03-01T00:00:00Z"),
             true,
-            "America/New_York",
+            ZoneId.of("America/New_York"),
             "my-queue");
     sysdb.createSchedule(schedule);
 

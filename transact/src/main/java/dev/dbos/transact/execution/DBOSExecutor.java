@@ -877,8 +877,8 @@ public class DBOSExecutor implements AutoCloseable {
       @NonNull String className,
       @NonNull String schedule,
       @Nullable Object context,
-      boolean backfill,
-      @Nullable String timezone,
+      boolean automaticBackfill,
+      @Nullable ZoneId cronTimeZone,
       @Nullable String queueName,
       @NonNull Consumer<WorkflowSchedule> scheduleConsumer) {
     Objects.requireNonNull(scheduleName, "scheduleName cannot be null");
@@ -886,11 +886,6 @@ public class DBOSExecutor implements AutoCloseable {
     Objects.requireNonNull(className, "className cannot be null");
     // validate schedule CRON
     SchedulerService.CRON_PARSER.parse(Objects.requireNonNull(schedule, "schedule cannot be null"));
-
-    if (timezone != null) {
-      // validate time zone
-      ZoneId.of(timezone);
-    }
 
     final var wfSchedule =
         new WorkflowSchedule(
@@ -902,8 +897,8 @@ public class DBOSExecutor implements AutoCloseable {
             ScheduleStatus.ACTIVE,
             context,
             null,
-            backfill,
-            timezone,
+            automaticBackfill,
+            cronTimeZone,
             queueName);
 
     scheduleConsumer.accept(wfSchedule);
@@ -916,7 +911,7 @@ public class DBOSExecutor implements AutoCloseable {
       @NonNull String schedule,
       @Nullable Object context,
       boolean automaticBackfill,
-      @Nullable String timezone,
+      @Nullable ZoneId cronTimeZone,
       @Nullable String queueName) {
 
     validateQueue(queueName);
@@ -929,7 +924,7 @@ public class DBOSExecutor implements AutoCloseable {
         schedule,
         context,
         automaticBackfill,
-        timezone,
+        cronTimeZone,
         queueName,
         wfSchedule -> {
           this.callFunctionAsStep(
@@ -1014,8 +1009,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void applySchedules(List<WorkflowSchedule> schedules) {
 
-    DBOSContext ctx = DBOSContextHolder.get();
-    if (ctx.isInWorkflow()) {
+    if (DBOSContextHolder.get().isInWorkflow()) {
       throw new IllegalStateException(
           "DBOS.applySchedules cannot be called from within a workflow");
     }
@@ -1047,12 +1041,33 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  // // TODO
-  // public List<WorkflowHandle<Object, Exception>> backfillSchedule(
-  //     String scheduleName, Instant start, Instant end) {
-  //   var ids = backfillScheduleToIds(systemDatabase, serializer, scheduleName, start, end);
-  //   return ids.stream().<WorkflowHandle<Object, Exception>>map(this::retrieveWorkflow).toList();
-  // }
+  public static List<WorkflowHandle<Object, Exception>> backfillSchedule(
+      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end, @NonNull SystemDatabase systemDatabase) {
+
+    // var schedule =
+    //     Objects.requireNonNull(systemDatabase)
+    //         .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+    //         .orElseThrow(
+    //             () ->
+    //                 new IllegalStateException(
+    //                     "Schedule %s does not exist".formatted(scheduleName)));
+
+    // var timeZone = Objects.requireNonNullElseGet(schedule.cronTimezone(), () -> ZoneOffset.UTC.getId());
+
+    throw new RuntimeException();
+  }
+
+  public List<WorkflowHandle<Object, Exception>> backfillSchedule(
+      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
+
+    if (DBOSContextHolder.get().isInWorkflow()) {
+      throw new IllegalStateException(
+          "DBOS.backfillSchedule cannot be called from within a workflow");
+    }
+
+    return DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase);
+  }
+
   // // TODO
   // public WorkflowHandle<Object, Exception> triggerSchedule(String scheduleName) {
   //   var id = triggerScheduleToId(systemDatabase, serializer, scheduleName);

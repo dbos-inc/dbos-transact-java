@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -774,7 +775,7 @@ public class DBOS implements AutoCloseable {
       @NonNull String schedule,
       @Nullable Object context,
       boolean backfill,
-      @Nullable String timezone,
+      @Nullable ZoneId cronTimeZone,
       @Nullable String queueName) {
     ensureLaunched("createSchedule")
         .createSchedule(
@@ -784,7 +785,7 @@ public class DBOS implements AutoCloseable {
             schedule,
             context,
             backfill,
-            timezone,
+            cronTimeZone,
             queueName);
   }
 
