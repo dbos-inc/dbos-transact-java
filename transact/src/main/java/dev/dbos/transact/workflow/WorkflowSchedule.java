@@ -6,9 +6,25 @@ public record WorkflowSchedule(
     String workflowName,
     String workflowClassName,
     String schedule,
-    String status,
+    ScheduleStatus status,
     String context,
     String lastFiredAt,
     boolean automaticBackfill,
     String cronTimezone,
-    String queueName) {}
+    String queueName) {
+
+  public WorkflowSchedule withScheduleId(String id) {
+    return new WorkflowSchedule(
+        id,
+        scheduleName,
+        workflowName,
+        workflowClassName,
+        schedule,
+        status,
+        context,
+        lastFiredAt,
+        automaticBackfill,
+        cronTimezone,
+        queueName);
+  }
+}

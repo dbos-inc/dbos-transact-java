@@ -1,5 +1,6 @@
 package dev.dbos.transact.database;
 
+import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 
 import java.sql.Connection;
@@ -26,6 +27,13 @@ class SchedulesDAO {
   }
 
   void createSchedule(WorkflowSchedule schedule) throws SQLException {
+    try (Connection conn = dataSource.getConnection()) {
+      createSchedule(conn, schema, schedule);
+    }
+  }
+
+  static void createSchedule(Connection conn, String schema, WorkflowSchedule schedule)
+      throws SQLException {
     String sql =
         """
         INSERT INTO "%s".workflow_schedules
@@ -36,15 +44,15 @@ class SchedulesDAO {
         """
             .formatted(schema);
 
-    try (Connection conn = dataSource.getConnection();
-        PreparedStatement ps = conn.prepareStatement(sql)) {
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(
           1, schedule.scheduleId() != null ? schedule.scheduleId() : UUID.randomUUID().toString());
       ps.setString(2, schedule.scheduleName());
       ps.setString(3, schedule.workflowName());
       ps.setString(4, schedule.workflowClassName());
       ps.setString(5, schedule.schedule());
-      ps.setString(6, schedule.status() != null ? schedule.status() : "ACTIVE");
+      ps.setString(
+          6, schedule.status() != null ? schedule.status().name() : ScheduleStatus.ACTIVE.name());
       ps.setString(7, schedule.context() != null ? schedule.context() : "{}");
       ps.setString(8, schedule.lastFiredAt());
       ps.setBoolean(9, schedule.automaticBackfill());
@@ -61,7 +69,7 @@ class SchedulesDAO {
   }
 
   List<WorkflowSchedule> listSchedules(
-      List<String> status, List<String> workflowName, List<String> scheduleNamePrefixes)
+      List<ScheduleStatus> status, List<String> workflowName, List<String> scheduleNamePrefixes)
       throws SQLException {
 
     StringBuilder sql =
@@ -79,7 +87,7 @@ class SchedulesDAO {
 
     if (status != null && !status.isEmpty()) {
       sql.append(" AND status = ANY(?)");
-      params.add(status.toArray(new String[0]));
+      params.add(status.stream().map(ScheduleStatus::name).toArray(String[]::new));
     }
     if (workflowName != null && !workflowName.isEmpty()) {
       sql.append(" AND workflow_name = ANY(?)");
@@ -139,14 +147,14 @@ class SchedulesDAO {
   }
 
   void pauseSchedule(String name) throws SQLException {
-    setScheduleStatus(name, "PAUSED");
+    setScheduleStatus(name, ScheduleStatus.PAUSED);
   }
 
   void resumeSchedule(String name) throws SQLException {
-    setScheduleStatus(name, "ACTIVE");
+    setScheduleStatus(name, ScheduleStatus.ACTIVE);
   }
 
-  private void setScheduleStatus(String name, String status) throws SQLException {
+  private void setScheduleStatus(String name, ScheduleStatus status) throws SQLException {
     String sql =
         """
         UPDATE "%s".workflow_schedules SET status = ? WHERE schedule_name = ?
@@ -155,7 +163,7 @@ class SchedulesDAO {
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql)) {
-      ps.setString(1, status);
+      ps.setString(1, status.name());
       ps.setString(2, name);
       ps.executeUpdate();
     }
@@ -177,16 +185,39 @@ class SchedulesDAO {
   }
 
   void deleteSchedule(String name) throws SQLException {
+    try (Connection conn = dataSource.getConnection()) {
+      deleteSchedule(conn, schema, name);
+    }
+  }
+
+  static void deleteSchedule(Connection conn, String schema, String name) throws SQLException {
     String sql =
         """
         DELETE FROM "%s".workflow_schedules WHERE schedule_name = ?
         """
             .formatted(schema);
 
-    try (Connection conn = dataSource.getConnection();
-        PreparedStatement ps = conn.prepareStatement(sql)) {
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(1, name);
       ps.executeUpdate();
+    }
+  }
+
+  void applySchedules(List<WorkflowSchedule> schedules) throws SQLException {
+    try (Connection conn = dataSource.getConnection()) {
+      conn.setAutoCommit(false);
+      try {
+        for (WorkflowSchedule schedule : schedules) {
+          deleteSchedule(conn, schema, schedule.scheduleName());
+          createSchedule(conn, schema, schedule);
+        }
+        conn.commit();
+      } catch (SQLException e) {
+        conn.rollback();
+        throw e;
+      } finally {
+        conn.setAutoCommit(true);
+      }
     }
   }
 
@@ -197,7 +228,7 @@ class SchedulesDAO {
         rs.getString(3),
         rs.getString(4),
         rs.getString(5),
-        rs.getString(6),
+        ScheduleStatus.valueOf(rs.getString(6)),
         rs.getString(7),
         rs.getString(8),
         rs.getBoolean(9),

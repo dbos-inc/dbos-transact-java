@@ -26,6 +26,7 @@ import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.Invocation;
 import dev.dbos.transact.json.ArgumentCoercion;
 import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -36,6 +37,8 @@ import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.ScheduleStatus;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
@@ -49,7 +52,10 @@ import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -71,12 +77,21 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import com.cronutils.model.CronType;
+import com.cronutils.model.definition.CronDefinitionBuilder;
+import com.cronutils.model.time.ExecutionTime;
+import com.cronutils.parser.CronParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class DBOSExecutor implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
+
+  private static final CronParser SCHEDULE_CRON_PARSER =
+      new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING53));
+  private static final DateTimeFormatter SCHEDULE_ID_FORMATTER =
+      DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ssXXX");
 
   private final DBOSConfig config;
   private final DBOSSerializer serializer;
@@ -860,6 +875,192 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void setLatestApplicationVersion(String versionName) {
     systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
+  }
+
+  public void createSchedule(WorkflowSchedule schedule) {
+    if (schedule.scheduleId() == null) {
+      schedule = schedule.withScheduleId(UUID.randomUUID().toString());
+    }
+    SCHEDULE_CRON_PARSER.parse(schedule.schedule());
+    systemDatabase.createSchedule(schedule);
+  }
+
+  public Optional<WorkflowSchedule> getSchedule(String name) {
+    return systemDatabase.getSchedule(name);
+  }
+
+  public List<WorkflowSchedule> listSchedules(
+      List<ScheduleStatus> status, List<String> workflowName, List<String> namePrefix) {
+    return systemDatabase.listSchedules(status, workflowName, namePrefix);
+  }
+
+  public void deleteSchedule(String name) {
+    systemDatabase.deleteSchedule(name);
+  }
+
+  public void pauseSchedule(String name) {
+    systemDatabase.pauseSchedule(name);
+  }
+
+  public void resumeSchedule(String name) {
+    systemDatabase.resumeSchedule(name);
+  }
+
+  public void applySchedules(List<WorkflowSchedule> schedules) {
+    for (WorkflowSchedule s : schedules) {
+      SCHEDULE_CRON_PARSER.parse(s.schedule());
+    }
+    systemDatabase.applySchedules(schedules);
+  }
+
+  public List<WorkflowHandle<Object, Exception>> backfillSchedule(
+      String scheduleName, Instant start, Instant end) {
+    var ids = backfillScheduleToIds(systemDatabase, serializer, scheduleName, start, end);
+    return ids.stream().<WorkflowHandle<Object, Exception>>map(this::retrieveWorkflow).toList();
+  }
+
+  public WorkflowHandle<Object, Exception> triggerSchedule(String scheduleName) {
+    var id = triggerScheduleToId(systemDatabase, serializer, scheduleName);
+    return retrieveWorkflow(id);
+  }
+
+  public static List<String> backfillScheduleToIds(
+      SystemDatabase systemDatabase,
+      DBOSSerializer serializer,
+      String scheduleName,
+      Instant start,
+      Instant end) {
+    var schedule =
+        systemDatabase
+            .getSchedule(scheduleName)
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        "Schedule '%s' does not exist".formatted(scheduleName)));
+
+    ZoneId tz = ZoneOffset.UTC;
+    if (schedule.cronTimezone() != null && !schedule.cronTimezone().isEmpty()) {
+      tz = ZoneId.of(schedule.cronTimezone());
+    }
+
+    var cron = SCHEDULE_CRON_PARSER.parse(schedule.schedule());
+    var executionTime = ExecutionTime.forCron(cron);
+    var latestVersion = systemDatabase.getLatestApplicationVersion();
+    Object context = deserializeScheduleContext(schedule.context());
+    String queueName =
+        schedule.queueName() != null ? schedule.queueName() : Constants.DBOS_INTERNAL_QUEUE;
+
+    List<String> ids = new ArrayList<>();
+    // Subtract 1 ns so nextExecution includes start itself if it's a cron fire time
+    ZonedDateTime current = start.minusNanos(1).atZone(tz);
+
+    while (true) {
+      var nextOpt = executionTime.nextExecution(current);
+      if (nextOpt.isEmpty()) break;
+      ZonedDateTime next = nextOpt.get();
+      if (!next.toInstant().isBefore(end)) break;
+
+      String workflowId =
+          "sched-%s-%s"
+              .formatted(scheduleName, next.toOffsetDateTime().format(SCHEDULE_ID_FORMATTER));
+
+      if (systemDatabase.getWorkflowStatus(workflowId) == null) {
+        enqueueScheduledWorkflow(
+            systemDatabase,
+            serializer,
+            schedule,
+            workflowId,
+            next.toInstant(),
+            context,
+            queueName,
+            latestVersion.versionName());
+      }
+
+      ids.add(workflowId);
+      current = next;
+    }
+
+    return ids;
+  }
+
+  public static String triggerScheduleToId(
+      SystemDatabase systemDatabase, DBOSSerializer serializer, String scheduleName) {
+    var schedule =
+        systemDatabase
+            .getSchedule(scheduleName)
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        "Schedule '%s' does not exist".formatted(scheduleName)));
+
+    var latestVersion = systemDatabase.getLatestApplicationVersion();
+    Object context = deserializeScheduleContext(schedule.context());
+    String queueName =
+        schedule.queueName() != null ? schedule.queueName() : Constants.DBOS_INTERNAL_QUEUE;
+
+    Instant now = Instant.now();
+    String workflowId =
+        "sched-%s-trigger-%s"
+            .formatted(
+                scheduleName,
+                OffsetDateTime.ofInstant(now, ZoneOffset.UTC).format(SCHEDULE_ID_FORMATTER));
+
+    enqueueScheduledWorkflow(
+        systemDatabase,
+        serializer,
+        schedule,
+        workflowId,
+        now,
+        context,
+        queueName,
+        latestVersion.versionName());
+
+    return workflowId;
+  }
+
+  private static Object deserializeScheduleContext(String contextJson) {
+    if (contextJson == null || contextJson.isEmpty() || "null".equals(contextJson)) {
+      return null;
+    }
+    return JSONUtil.fromJson(contextJson, Object.class);
+  }
+
+  private static void enqueueScheduledWorkflow(
+      SystemDatabase systemDatabase,
+      DBOSSerializer serializer,
+      WorkflowSchedule schedule,
+      String workflowId,
+      Instant scheduledAt,
+      Object context,
+      String queueName,
+      String appVersion) {
+    Object[] args = new Object[] {scheduledAt, context};
+    var options =
+        new ExecutionOptions(
+            workflowId,
+            Timeout.none(),
+            null,
+            queueName,
+            null,
+            null,
+            null,
+            appVersion,
+            false,
+            false,
+            null);
+    enqueueWorkflow(
+        schedule.workflowName(),
+        schedule.workflowClassName() != null ? schedule.workflowClassName() : "",
+        "",
+        null,
+        args,
+        options,
+        null,
+        null,
+        appVersion,
+        null,
+        systemDatabase,
+        serializer);
   }
 
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {

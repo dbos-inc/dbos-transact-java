@@ -23,12 +23,15 @@ import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.ScheduleStatus;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -757,6 +760,103 @@ public class DBOS implements AutoCloseable {
    */
   public void setLatestApplicationVersion(@NonNull String versionName) {
     ensureLaunched("setLatestApplicationVersion").setLatestApplicationVersion(versionName);
+  }
+
+  /**
+   * Create a cron schedule that periodically invokes a workflow. The scheduleId is generated if
+   * null.
+   *
+   * @param schedule the schedule configuration
+   */
+  public void createSchedule(@NonNull WorkflowSchedule schedule) {
+    ensureLaunched("createSchedule").createSchedule(schedule);
+  }
+
+  /**
+   * Get a schedule by name.
+   *
+   * @param name schedule name
+   * @return the schedule, or empty if not found
+   */
+  public @NonNull Optional<WorkflowSchedule> getSchedule(@NonNull String name) {
+    return ensureLaunched("getSchedule").getSchedule(name);
+  }
+
+  /**
+   * List schedules with optional filters.
+   *
+   * @param status filter by status (e.g. "ACTIVE", "PAUSED"); null means no filter
+   * @param workflowName filter by workflow name; null means no filter
+   * @param namePrefix filter by schedule name prefix; null means no filter
+   * @return matching schedules
+   */
+  public @NonNull List<WorkflowSchedule> listSchedules(
+      @Nullable List<ScheduleStatus> status,
+      @Nullable List<String> workflowName,
+      @Nullable List<String> namePrefix) {
+    return ensureLaunched("listSchedules").listSchedules(status, workflowName, namePrefix);
+  }
+
+  /**
+   * Delete a schedule by name. No-op if the schedule does not exist.
+   *
+   * @param name schedule name
+   */
+  public void deleteSchedule(@NonNull String name) {
+    ensureLaunched("deleteSchedule").deleteSchedule(name);
+  }
+
+  /**
+   * Pause a schedule. A paused schedule does not fire.
+   *
+   * @param name schedule name
+   */
+  public void pauseSchedule(@NonNull String name) {
+    ensureLaunched("pauseSchedule").pauseSchedule(name);
+  }
+
+  /**
+   * Resume a paused schedule so it begins firing again.
+   *
+   * @param name schedule name
+   */
+  public void resumeSchedule(@NonNull String name) {
+    ensureLaunched("resumeSchedule").resumeSchedule(name);
+  }
+
+  /**
+   * Atomically create or replace a set of schedules. Each schedule is deleted (if it exists) and
+   * re-created in a single transaction.
+   *
+   * @param schedules the schedules to apply
+   */
+  public void applySchedules(@NonNull List<WorkflowSchedule> schedules) {
+    ensureLaunched("applySchedules").applySchedules(schedules);
+  }
+
+  /**
+   * Enqueue all executions of a schedule that would have run between {@code start} (exclusive) and
+   * {@code end} (exclusive). Uses the same deterministic workflow IDs as the live scheduler, so
+   * already-executed times are skipped.
+   *
+   * @param scheduleName name of an existing schedule
+   * @param start start of the backfill window (exclusive)
+   * @param end end of the backfill window (exclusive)
+   * @return handles to the enqueued executions
+   */
+  public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
+      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
+    return ensureLaunched("backfillSchedule").backfillSchedule(scheduleName, start, end);
+  }
+
+  /**
+   * Immediately enqueue the scheduled workflow at the current time.
+   *
+   * @param scheduleName name of an existing schedule
+   * @return handle to the enqueued execution
+   */
+  public @NonNull WorkflowHandle<Object, Exception> triggerSchedule(@NonNull String scheduleName) {
+    return ensureLaunched("triggerSchedule").triggerSchedule(scheduleName);
   }
 
   /**

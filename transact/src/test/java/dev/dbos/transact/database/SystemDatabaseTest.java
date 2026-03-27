@@ -20,6 +20,7 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
+import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStream;
@@ -546,7 +547,7 @@ public class SystemDatabaseTest {
         "myWorkflow",
         "com.example.MyClass",
         "0 * * * *",
-        "ACTIVE",
+        ScheduleStatus.ACTIVE,
         "{}",
         null,
         false,
@@ -565,7 +566,7 @@ public class SystemDatabaseTest {
     assertEquals("myWorkflow", s.workflowName());
     assertEquals("com.example.MyClass", s.workflowClassName());
     assertEquals("0 * * * *", s.schedule());
-    assertEquals("ACTIVE", s.status());
+    assertEquals(ScheduleStatus.ACTIVE, s.status());
     assertEquals("{}", s.context());
     assertNull(s.lastFiredAt());
     assertFalse(s.automaticBackfill());
@@ -597,7 +598,7 @@ public class SystemDatabaseTest {
             "otherWorkflow",
             null,
             "0 * * * *",
-            "ACTIVE",
+            ScheduleStatus.ACTIVE,
             "{}",
             null,
             false,
@@ -610,19 +611,16 @@ public class SystemDatabaseTest {
     assertEquals(3, all.size());
 
     // filter by single status
-    var active = sysdb.listSchedules(List.of("ACTIVE"), null, null);
+    var active = sysdb.listSchedules(List.of(ScheduleStatus.ACTIVE), null, null);
     assertEquals(2, active.size());
 
-    var paused = sysdb.listSchedules(List.of("PAUSED"), null, null);
+    var paused = sysdb.listSchedules(List.of(ScheduleStatus.PAUSED), null, null);
     assertEquals(1, paused.size());
     assertEquals("beta-1", paused.get(0).scheduleName());
 
     // filter by multiple statuses
-    var both = sysdb.listSchedules(List.of("ACTIVE", "PAUSED"), null, null);
+    var both = sysdb.listSchedules(List.of(ScheduleStatus.ACTIVE, ScheduleStatus.PAUSED), null, null);
     assertEquals(3, both.size());
-
-    var nonexistent = sysdb.listSchedules(List.of("NONEXISTENT"), null, null);
-    assertEquals(0, nonexistent.size());
 
     // filter by single workflow name
     var byOne = sysdb.listSchedules(null, List.of("myWorkflow"), null);
@@ -648,10 +646,10 @@ public class SystemDatabaseTest {
     assertEquals(0, byNone.size());
 
     // combined status + prefix
-    var activeAlpha = sysdb.listSchedules(List.of("ACTIVE"), null, List.of("alpha-"));
+    var activeAlpha = sysdb.listSchedules(List.of(ScheduleStatus.ACTIVE), null, List.of("alpha-"));
     assertEquals(2, activeAlpha.size());
 
-    var pausedAlpha = sysdb.listSchedules(List.of("PAUSED"), null, List.of("alpha-"));
+    var pausedAlpha = sysdb.listSchedules(List.of(ScheduleStatus.PAUSED), null, List.of("alpha-"));
     assertEquals(0, pausedAlpha.size());
   }
 
@@ -660,10 +658,10 @@ public class SystemDatabaseTest {
     sysdb.createSchedule(makeSchedule("sched-pause"));
 
     sysdb.pauseSchedule("sched-pause");
-    assertEquals("PAUSED", sysdb.getSchedule("sched-pause").get().status());
+    assertEquals(ScheduleStatus.PAUSED, sysdb.getSchedule("sched-pause").get().status());
 
     sysdb.resumeSchedule("sched-pause");
-    assertEquals("ACTIVE", sysdb.getSchedule("sched-pause").get().status());
+    assertEquals(ScheduleStatus.ACTIVE, sysdb.getSchedule("sched-pause").get().status());
   }
 
   @Test
@@ -699,7 +697,7 @@ public class SystemDatabaseTest {
             "fullWorkflow",
             "com.example.Full",
             "*/5 * * * *",
-            "ACTIVE",
+            ScheduleStatus.ACTIVE,
             "{\"key\":\"val\"}",
             "2026-03-01T00:00:00Z",
             true,

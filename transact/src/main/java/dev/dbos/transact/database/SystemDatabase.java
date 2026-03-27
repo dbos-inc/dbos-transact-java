@@ -7,6 +7,7 @@ import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
@@ -580,7 +581,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public List<WorkflowSchedule> listSchedules(
-      List<String> status, List<String> workflowName, List<String> scheduleNamePrefixes) {
+      List<ScheduleStatus> status, List<String> workflowName, List<String> scheduleNamePrefixes) {
     return dbRetry(() -> schedulesDAO.listSchedules(status, workflowName, scheduleNamePrefixes));
   }
 
@@ -612,6 +613,14 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(
         () -> {
           schedulesDAO.deleteSchedule(name);
+          return null;
+        });
+  }
+
+  public void applySchedules(List<WorkflowSchedule> schedules) {
+    dbRetry(
+        () -> {
+          schedulesDAO.applySchedules(schedules);
           return null;
         });
   }
