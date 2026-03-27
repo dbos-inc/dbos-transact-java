@@ -31,7 +31,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -768,8 +767,25 @@ public class DBOS implements AutoCloseable {
    *
    * @param schedule the schedule configuration
    */
-  public void createSchedule(@NonNull WorkflowSchedule schedule) {
-    ensureLaunched("createSchedule").createSchedule(schedule);
+  public void createSchedule(
+      @NonNull String scheduleName,
+      @NonNull String workflowName,
+      @NonNull String className,
+      @NonNull String schedule,
+      @Nullable Object context,
+      boolean backfill,
+      @Nullable String timezone,
+      @Nullable String queueName) {
+    ensureLaunched("createSchedule")
+        .createSchedule(
+            scheduleName,
+            workflowName,
+            className,
+            schedule,
+            context,
+            backfill,
+            timezone,
+            queueName);
   }
 
   /**
@@ -834,30 +850,32 @@ public class DBOS implements AutoCloseable {
     ensureLaunched("applySchedules").applySchedules(schedules);
   }
 
-  /**
-   * Enqueue all executions of a schedule that would have run between {@code start} (exclusive) and
-   * {@code end} (exclusive). Uses the same deterministic workflow IDs as the live scheduler, so
-   * already-executed times are skipped.
-   *
-   * @param scheduleName name of an existing schedule
-   * @param start start of the backfill window (exclusive)
-   * @param end end of the backfill window (exclusive)
-   * @return handles to the enqueued executions
-   */
-  public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
-      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
-    return ensureLaunched("backfillSchedule").backfillSchedule(scheduleName, start, end);
-  }
+  // /**
+  //  * Enqueue all executions of a schedule that would have run between {@code start} (exclusive)
+  // and
+  //  * {@code end} (exclusive). Uses the same deterministic workflow IDs as the live scheduler, so
+  //  * already-executed times are skipped.
+  //  *
+  //  * @param scheduleName name of an existing schedule
+  //  * @param start start of the backfill window (exclusive)
+  //  * @param end end of the backfill window (exclusive)
+  //  * @return handles to the enqueued executions
+  //  */
+  // public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
+  //     @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
+  //   return ensureLaunched("backfillSchedule").backfillSchedule(scheduleName, start, end);
+  // }
 
-  /**
-   * Immediately enqueue the scheduled workflow at the current time.
-   *
-   * @param scheduleName name of an existing schedule
-   * @return handle to the enqueued execution
-   */
-  public @NonNull WorkflowHandle<Object, Exception> triggerSchedule(@NonNull String scheduleName) {
-    return ensureLaunched("triggerSchedule").triggerSchedule(scheduleName);
-  }
+  // /**
+  //  * Immediately enqueue the scheduled workflow at the current time.
+  //  *
+  //  * @param scheduleName name of an existing schedule
+  //  * @return handle to the enqueued execution
+  //  */
+  // public @NonNull WorkflowHandle<Object, Exception> triggerSchedule(@NonNull String scheduleName)
+  // {
+  //   return ensureLaunched("triggerSchedule").triggerSchedule(scheduleName);
+  // }
 
   /**
    * Retrieve a handle to a workflow, given its ID. Note that a handle is always returned, whether

@@ -33,9 +33,10 @@ public class SchedulerService implements DBOSLifecycleListener {
   record ScheduledWorkflow(
       RegisteredWorkflow workflow, Cron cron, String queue, boolean ignoreMissed) {}
 
-  private static final Logger logger = LoggerFactory.getLogger(SchedulerService.class);
-  private static final CronParser cronParser =
+  public static final CronParser CRON_PARSER =
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING53));
+
+  private static final Logger logger = LoggerFactory.getLogger(SchedulerService.class);
   private static final Class<?>[] expectedParams = new Class<?>[] {Instant.class, Instant.class};
 
   private final String defaultSchedulerQueueName;
@@ -57,7 +58,7 @@ public class SchedulerService implements DBOSLifecycleListener {
                 .formatted(workflow.fullyQualifiedName()));
       }
 
-      cronParser.parse(skedTag.cron());
+      CRON_PARSER.parse(skedTag.cron());
     }
   }
 
@@ -145,7 +146,7 @@ public class SchedulerService implements DBOSLifecycleListener {
       }
 
       try {
-        var cron = cronParser.parse(skedTag.cron());
+        var cron = CRON_PARSER.parse(skedTag.cron());
         scheduledWorkflows.add(
             new ScheduledWorkflow(
                 wf, Objects.requireNonNull(cron), queueName, skedTag.ignoreMissed()));

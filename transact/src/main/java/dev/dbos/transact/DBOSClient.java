@@ -837,11 +837,25 @@ public class DBOSClient implements AutoCloseable {
    *
    * @param schedule the schedule configuration
    */
-  public void createSchedule(@NonNull WorkflowSchedule schedule) {
-    if (schedule.scheduleId() == null) {
-      schedule = schedule.withScheduleId(UUID.randomUUID().toString());
-    }
-    systemDatabase.createSchedule(schedule);
+  public void createSchedule(
+      @NonNull String scheduleName,
+      @NonNull String workflowName,
+      @NonNull String className,
+      @NonNull String schedule,
+      @Nullable Object context,
+      boolean backfill,
+      @Nullable String timezone,
+      @Nullable String queueName) {
+    DBOSExecutor.createSchedule(
+        scheduleName,
+        workflowName,
+        className,
+        schedule,
+        context,
+        backfill,
+        timezone,
+        queueName,
+        wfSchedule -> systemDatabase.createSchedule(wfSchedule));
   }
 
   /**
@@ -905,30 +919,32 @@ public class DBOSClient implements AutoCloseable {
     systemDatabase.applySchedules(schedules);
   }
 
-  /**
-   * Enqueue all executions of a schedule that would have run between {@code start} (exclusive) and
-   * {@code end} (exclusive).
-   *
-   * @param scheduleName name of an existing schedule
-   * @param start start of the backfill window (exclusive)
-   * @param end end of the backfill window (exclusive)
-   * @return handles to the enqueued executions
-   */
-  public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
-      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
-    var ids =
-        DBOSExecutor.backfillScheduleToIds(systemDatabase, serializer, scheduleName, start, end);
-    return ids.stream().<WorkflowHandle<Object, Exception>>map(this::retrieveWorkflow).toList();
-  }
+  // /**
+  //  * Enqueue all executions of a schedule that would have run between {@code start} (exclusive)
+  // and
+  //  * {@code end} (exclusive).
+  //  *
+  //  * @param scheduleName name of an existing schedule
+  //  * @param start start of the backfill window (exclusive)
+  //  * @param end end of the backfill window (exclusive)
+  //  * @return handles to the enqueued executions
+  //  */
+  // public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
+  //     @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
+  //   var ids =
+  //       DBOSExecutor.backfillScheduleToIds(systemDatabase, serializer, scheduleName, start, end);
+  //   return ids.stream().<WorkflowHandle<Object, Exception>>map(this::retrieveWorkflow).toList();
+  // }
 
-  /**
-   * Immediately enqueue the scheduled workflow at the current time.
-   *
-   * @param scheduleName name of an existing schedule
-   * @return handle to the enqueued execution
-   */
-  public @NonNull WorkflowHandle<Object, Exception> triggerSchedule(@NonNull String scheduleName) {
-    var id = DBOSExecutor.triggerScheduleToId(systemDatabase, serializer, scheduleName);
-    return retrieveWorkflow(id);
-  }
+  // /**
+  //  * Immediately enqueue the scheduled workflow at the current time.
+  //  *
+  //  * @param scheduleName name of an existing schedule
+  //  * @return handle to the enqueued execution
+  //  */
+  // public @NonNull WorkflowHandle<Object, Exception> triggerSchedule(@NonNull String scheduleName)
+  // {
+  //   var id = DBOSExecutor.triggerScheduleToId(systemDatabase, serializer, scheduleName);
+  //   return retrieveWorkflow(id);
+  // }
 }
