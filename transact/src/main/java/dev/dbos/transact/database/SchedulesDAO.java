@@ -50,7 +50,8 @@ class SchedulesDAO {
         """
             .formatted(schema);
 
-    // https://github.com/dbos-inc/dbos-transact-java/issues/330 tracking portable serialization support
+    // https://github.com/dbos-inc/dbos-transact-java/issues/330
+    // tracking portable serialization support
     var serializedContext =
         SerializationUtil.serializeValue(schedule.context(), serializer.name(), serializer);
 
@@ -232,7 +233,8 @@ class SchedulesDAO {
 
   private static WorkflowSchedule rowToSchedule(ResultSet rs, DBOSSerializer serializer)
       throws SQLException {
-    // https://github.com/dbos-inc/dbos-transact-java/issues/330 tracking portable serialization support
+    // https://github.com/dbos-inc/dbos-transact-java/issues/330
+    // tracking portable serialization support
     Object context =
         SerializationUtil.deserializeValue(rs.getString(7), serializer.name(), serializer);
     String lastFiredAtStr = rs.getString(8);
