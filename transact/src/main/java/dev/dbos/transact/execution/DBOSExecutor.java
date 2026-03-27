@@ -1136,7 +1136,8 @@ public class DBOSExecutor implements AutoCloseable {
     return workflowId;
   }
 
-  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(@NonNull String scheduleName) {
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(
+      @NonNull String scheduleName) {
     if (DBOSContextHolder.get().isInWorkflow()) {
       throw new IllegalStateException(
           "DBOS.triggerSchedule cannot be called from within a workflow");
