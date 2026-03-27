@@ -1,17 +1,19 @@
 package dev.dbos.transact.workflow;
 
+import java.time.Instant;
+
 public record WorkflowSchedule(
     String scheduleId,
     String scheduleName,
     String workflowName,
-    String workflowClassName,
+    String workflowClassName, // nullable
     String schedule,
     ScheduleStatus status,
-    String context,
-    String lastFiredAt,
+    String context, // TODO: context needs to be object like WF inputs
+    Instant lastFiredAt, // nullable
     boolean automaticBackfill,
-    String cronTimezone,
-    String queueName) {
+    String cronTimezone, // nullable, IANA timezone name, stored as string in DB
+    String queueName) { // nullable
 
   public WorkflowSchedule withScheduleId(String id) {
     return new WorkflowSchedule(

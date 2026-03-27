@@ -7,6 +7,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -51,10 +52,10 @@ class SchedulesDAO {
       ps.setString(3, schedule.workflowName());
       ps.setString(4, schedule.workflowClassName());
       ps.setString(5, schedule.schedule());
+      ps.setString(6, Objects.requireNonNull(schedule.status()).name());
+      ps.setString(7, schedule.context()); // TODO: context needs to be serialized
       ps.setString(
-          6, schedule.status() != null ? schedule.status().name() : ScheduleStatus.ACTIVE.name());
-      ps.setString(7, schedule.context() != null ? schedule.context() : "{}");
-      ps.setString(8, schedule.lastFiredAt());
+          8, schedule.lastFiredAt() != null ? schedule.lastFiredAt().toString() : null);
       ps.setBoolean(9, schedule.automaticBackfill());
       ps.setString(10, schedule.cronTimezone());
       ps.setString(11, schedule.queueName());
@@ -169,7 +170,7 @@ class SchedulesDAO {
     }
   }
 
-  void updateScheduleLastFiredAt(String name, String lastFiredAt) throws SQLException {
+  void updateScheduleLastFiredAt(String name, Instant lastFiredAt) throws SQLException {
     String sql =
         """
         UPDATE "%s".workflow_schedules SET last_fired_at = ? WHERE schedule_name = ?
@@ -178,7 +179,7 @@ class SchedulesDAO {
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql)) {
-      ps.setString(1, lastFiredAt);
+      ps.setString(1, lastFiredAt != null ? lastFiredAt.toString() : null);
       ps.setString(2, name);
       ps.executeUpdate();
     }
@@ -222,6 +223,7 @@ class SchedulesDAO {
   }
 
   private static WorkflowSchedule rowToSchedule(ResultSet rs) throws SQLException {
+    String lastFiredAtStr = rs.getString(8);
     return new WorkflowSchedule(
         rs.getString(1),
         rs.getString(2),
@@ -230,7 +232,7 @@ class SchedulesDAO {
         rs.getString(5),
         ScheduleStatus.valueOf(rs.getString(6)),
         rs.getString(7),
-        rs.getString(8),
+        lastFiredAtStr != null ? Instant.parse(lastFiredAtStr) : null,
         rs.getBoolean(9),
         rs.getString(10),
         rs.getString(11));

@@ -601,7 +601,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void updateScheduleLastFiredAt(String name, String lastFiredAt) {
+  public void updateScheduleLastFiredAt(String name, Instant lastFiredAt) {
     dbRetry(
         () -> {
           schedulesDAO.updateScheduleLastFiredAt(name, lastFiredAt);

@@ -588,6 +588,15 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void testCreateScheduleNullStatusThrows() {
+    var schedule =
+        new WorkflowSchedule(
+            null, "sched-null-status", "myWorkflow", "com.example.MyClass", "0 * * * *",
+            null, "{}", null, false, null, null);
+    assertThrows(NullPointerException.class, () -> sysdb.createSchedule(schedule));
+  }
+
+  @Test
   public void testListSchedules() {
     sysdb.createSchedule(makeSchedule("alpha-1"));
     sysdb.createSchedule(makeSchedule("alpha-2"));
@@ -670,8 +679,10 @@ public class SystemDatabaseTest {
     sysdb.createSchedule(makeSchedule("sched-fired"));
     assertNull(sysdb.getSchedule("sched-fired").get().lastFiredAt());
 
-    sysdb.updateScheduleLastFiredAt("sched-fired", "2026-03-26T10:00:00Z");
-    assertEquals("2026-03-26T10:00:00Z", sysdb.getSchedule("sched-fired").get().lastFiredAt());
+    sysdb.updateScheduleLastFiredAt("sched-fired", Instant.parse("2026-03-26T10:00:00Z"));
+    assertEquals(
+        Instant.parse("2026-03-26T10:00:00Z"),
+        sysdb.getSchedule("sched-fired").get().lastFiredAt());
   }
 
   @Test
@@ -700,7 +711,7 @@ public class SystemDatabaseTest {
             "*/5 * * * *",
             ScheduleStatus.ACTIVE,
             "{\"key\":\"val\"}",
-            "2026-03-01T00:00:00Z",
+            Instant.parse("2026-03-01T00:00:00Z"),
             true,
             "America/New_York",
             "my-queue");
@@ -713,7 +724,7 @@ public class SystemDatabaseTest {
     assertEquals("com.example.Full", s.workflowClassName());
     assertEquals("*/5 * * * *", s.schedule());
     assertEquals("{\"key\":\"val\"}", s.context());
-    assertEquals("2026-03-01T00:00:00Z", s.lastFiredAt());
+    assertEquals(Instant.parse("2026-03-01T00:00:00Z"), s.lastFiredAt());
     assertTrue(s.automaticBackfill());
     assertEquals("America/New_York", s.cronTimezone());
     assertEquals("my-queue", s.queueName());
