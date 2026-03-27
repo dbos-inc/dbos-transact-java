@@ -1,5 +1,7 @@
 package dev.dbos.transact.database;
 
+import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 
@@ -21,19 +23,22 @@ class SchedulesDAO {
 
   private final DataSource dataSource;
   private final String schema;
+  private final DBOSSerializer serializer;
 
-  SchedulesDAO(DataSource dataSource, String schema) {
-    this.dataSource = dataSource;
+  SchedulesDAO(DataSource dataSource, String schema, DBOSSerializer serializer) {
+    this.dataSource = Objects.requireNonNull(dataSource);
     this.schema = Objects.requireNonNull(schema);
+    this.serializer = Objects.requireNonNull(serializer);
   }
 
   void createSchedule(WorkflowSchedule schedule) throws SQLException {
     try (Connection conn = dataSource.getConnection()) {
-      createSchedule(conn, schema, schedule);
+      createSchedule(conn, schema, serializer, schedule);
     }
   }
 
-  static void createSchedule(Connection conn, String schema, WorkflowSchedule schedule)
+  static void createSchedule(
+      Connection conn, String schema, DBOSSerializer serializer, WorkflowSchedule schedule)
       throws SQLException {
     String sql =
         """
@@ -45,6 +50,10 @@ class SchedulesDAO {
         """
             .formatted(schema);
 
+    // https://github.com/dbos-inc/dbos-transact-java/issues/330 tracking portable serialization support
+    var serializedContext =
+        SerializationUtil.serializeValue(schedule.context(), serializer.name(), serializer);
+
     try (PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(
           1, schedule.scheduleId() != null ? schedule.scheduleId() : UUID.randomUUID().toString());
@@ -53,7 +62,7 @@ class SchedulesDAO {
       ps.setString(4, schedule.workflowClassName());
       ps.setString(5, schedule.schedule());
       ps.setString(6, Objects.requireNonNull(schedule.status()).name());
-      ps.setString(7, schedule.context()); // TODO: context needs to be serialized
+      ps.setString(7, serializedContext.serializedValue());
       ps.setString(8, schedule.lastFiredAt() != null ? schedule.lastFiredAt().toString() : null);
       ps.setBoolean(9, schedule.automaticBackfill());
       ps.setString(10, schedule.cronTimezone());
@@ -69,7 +78,7 @@ class SchedulesDAO {
   }
 
   List<WorkflowSchedule> listSchedules(
-      List<ScheduleStatus> status, List<String> workflowName, List<String> scheduleNamePrefixes)
+      List<ScheduleStatus> statuses, List<String> workflowNames, List<String> scheduleNamePrefixes)
       throws SQLException {
 
     StringBuilder sql =
@@ -85,13 +94,13 @@ class SchedulesDAO {
 
     List<Object> params = new ArrayList<>();
 
-    if (status != null && !status.isEmpty()) {
+    if (statuses != null && !statuses.isEmpty()) {
       sql.append(" AND status = ANY(?)");
-      params.add(status.stream().map(ScheduleStatus::name).toArray(String[]::new));
+      params.add(statuses.stream().map(ScheduleStatus::name).toArray(String[]::new));
     }
-    if (workflowName != null && !workflowName.isEmpty()) {
+    if (workflowNames != null && !workflowNames.isEmpty()) {
       sql.append(" AND workflow_name = ANY(?)");
-      params.add(workflowName.toArray(new String[0]));
+      params.add(workflowNames.toArray(new String[0]));
     }
     if (scheduleNamePrefixes != null && !scheduleNamePrefixes.isEmpty()) {
       sql.append(" AND (");
@@ -116,7 +125,7 @@ class SchedulesDAO {
       try (ResultSet rs = ps.executeQuery()) {
         List<WorkflowSchedule> results = new ArrayList<>();
         while (rs.next()) {
-          results.add(rowToSchedule(rs));
+          results.add(rowToSchedule(rs, serializer));
         }
         return results;
       }
@@ -139,7 +148,7 @@ class SchedulesDAO {
       ps.setString(1, name);
       try (ResultSet rs = ps.executeQuery()) {
         if (rs.next()) {
-          return Optional.of(rowToSchedule(rs));
+          return Optional.of(rowToSchedule(rs, serializer));
         }
         return Optional.empty();
       }
@@ -209,7 +218,7 @@ class SchedulesDAO {
       try {
         for (WorkflowSchedule schedule : schedules) {
           deleteSchedule(conn, schema, schedule.scheduleName());
-          createSchedule(conn, schema, schedule);
+          createSchedule(conn, schema, serializer, schedule);
         }
         conn.commit();
       } catch (SQLException e) {
@@ -221,8 +230,13 @@ class SchedulesDAO {
     }
   }
 
-  private static WorkflowSchedule rowToSchedule(ResultSet rs) throws SQLException {
+  private static WorkflowSchedule rowToSchedule(ResultSet rs, DBOSSerializer serializer)
+      throws SQLException {
+    // https://github.com/dbos-inc/dbos-transact-java/issues/330 tracking portable serialization support
+    Object context =
+        SerializationUtil.deserializeValue(rs.getString(7), serializer.name(), serializer);
     String lastFiredAtStr = rs.getString(8);
+
     return new WorkflowSchedule(
         rs.getString(1),
         rs.getString(2),
@@ -230,7 +244,7 @@ class SchedulesDAO {
         rs.getString(4),
         rs.getString(5),
         ScheduleStatus.valueOf(rs.getString(6)),
-        rs.getString(7),
+        context,
         lastFiredAtStr != null ? Instant.parse(lastFiredAtStr) : null,
         rs.getBoolean(9),
         rs.getString(10),
