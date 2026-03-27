@@ -943,9 +943,9 @@ public class DBOSClient implements AutoCloseable {
   //  * @param scheduleName name of an existing schedule
   //  * @return handle to the enqueued execution
   //  */
-  // public @NonNull WorkflowHandle<Object, Exception> triggerSchedule(@NonNull String scheduleName)
-  // {
-  //   var id = DBOSExecutor.triggerScheduleToId(systemDatabase, serializer, scheduleName);
-  //   return retrieveWorkflow(id);
-  // }
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(@NonNull String scheduleName)
+  {
+    var id = DBOSExecutor.triggerSchedule(scheduleName, systemDatabase, serializer);
+    return retrieveWorkflow(id);
+  }
 }

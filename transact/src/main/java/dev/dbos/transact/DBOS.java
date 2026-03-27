@@ -873,10 +873,10 @@ public class DBOS implements AutoCloseable {
   //  * @param scheduleName name of an existing schedule
   //  * @return handle to the enqueued execution
   //  */
-  // public @NonNull WorkflowHandle<Object, Exception> triggerSchedule(@NonNull String scheduleName)
-  // {
-  //   return ensureLaunched("triggerSchedule").triggerSchedule(scheduleName);
-  // }
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(@NonNull String scheduleName)
+  {
+    return ensureLaunched("triggerSchedule").triggerSchedule(scheduleName);
+  }
 
   /**
    * Retrieve a handle to a workflow, given its ID. Note that a handle is always returned, whether

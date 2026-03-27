@@ -1047,16 +1047,16 @@ public class DBOSExecutor implements AutoCloseable {
       @NonNull Instant end,
       @NonNull SystemDatabase systemDatabase) {
 
-    // var schedule =
-    //     Objects.requireNonNull(systemDatabase)
-    //         .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
-    //         .orElseThrow(
-    //             () ->
-    //                 new IllegalStateException(
-    //                     "Schedule %s does not exist".formatted(scheduleName)));
+    var schedule =
+        Objects.requireNonNull(systemDatabase)
+            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "Schedule %s does not exist".formatted(scheduleName)));
 
-    // var timeZone = Objects.requireNonNullElseGet(schedule.cronTimezone(), () ->
-    // ZoneOffset.UTC.getId());
+    var timeZone = Objects.requireNonNullElseGet(schedule.cronTimezone(), () -> ZoneId.of("UTC"));
+    var zonedStart = start.atZone(timeZone);
 
     throw new RuntimeException();
   }
@@ -1072,11 +1072,79 @@ public class DBOSExecutor implements AutoCloseable {
     return DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase);
   }
 
-  // // TODO
-  // public WorkflowHandle<Object, Exception> triggerSchedule(String scheduleName) {
-  //   var id = triggerScheduleToId(systemDatabase, serializer, scheduleName);
-  //   return retrieveWorkflow(id);
-  // }
+  private static void enqueueScheduledWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @NonNull String workflowId,
+      Object context,
+      String queueName,
+      @NonNull Instant scheduledAt,
+      SystemDatabase systemDatabase,
+      DBOSSerializer serializer) {
+    var latestAppVersion = systemDatabase.getLatestApplicationVersion().versionName();
+    queueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
+    var args = new Object[] {Objects.requireNonNull(scheduledAt), context};
+    var options =
+        new ExecutionOptions(
+            workflowId,
+            null,
+            null,
+            queueName,
+            null,
+            null,
+            null,
+            latestAppVersion,
+            false,
+            false,
+            null);
+    enqueueWorkflow(
+        workflowName,
+        className,
+        "",
+        null,
+        args,
+        options,
+        null,
+        null,
+        null,
+        null,
+        systemDatabase,
+        serializer);
+  }
+
+  public static String triggerSchedule(
+      @NonNull String scheduleName, SystemDatabase systemDatabase, DBOSSerializer serializer) {
+    var schedule =
+        Objects.requireNonNull(systemDatabase)
+            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "Schedule %s does not exist".formatted(scheduleName)));
+
+    var now = Instant.now();
+    var workflowId = "sched-%s-trigger-%s".formatted(schedule, now);
+    enqueueScheduledWorkflow(
+        schedule.workflowName(),
+        schedule.workflowClassName(),
+        workflowId,
+        schedule.context(),
+        schedule.queueName(),
+        now,
+        systemDatabase,
+        serializer);
+    return workflowId;
+  }
+
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(@NonNull String scheduleName) {
+    if (DBOSContextHolder.get().isInWorkflow()) {
+      throw new IllegalStateException(
+          "DBOS.triggerSchedule cannot be called from within a workflow");
+    }
+
+    var workflowId = triggerSchedule(scheduleName, systemDatabase, serializer);
+    return retrieveWorkflow(workflowId);
+  }
 
   // // TODO
   // public static List<String> backfillScheduleToIds(
@@ -1372,6 +1440,10 @@ public class DBOSExecutor implements AutoCloseable {
         throw new IllegalArgumentException(
             "ExecutionOptions partition key and deduplication ID cannot both be set");
       }
+    }
+
+    public ExecutionOptions(String workflowId) {
+      this(workflowId, null, null, null, null, null, null, null, false, false, null);
     }
 
     public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
