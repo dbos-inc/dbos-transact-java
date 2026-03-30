@@ -18,15 +18,15 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class QueueService {
+public class QueueService implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(QueueService.class);
 
   private final AtomicReference<ScheduledExecutorService> scheduler = new AtomicReference<>();
   private final AtomicBoolean paused = new AtomicBoolean(false);
 
-  private SystemDatabase systemDatabase;
-  private DBOSExecutor dbosExecutor;
+  private final SystemDatabase systemDatabase;
+  private final DBOSExecutor dbosExecutor;
   private double speedup = 1.0;
 
   public QueueService(DBOSExecutor dbosExecutor, SystemDatabase systemDatabase) {
@@ -55,7 +55,8 @@ public class QueueService {
     }
   }
 
-  public void stop() {
+  @Override
+  public void close() {
     var scheduler = this.scheduler.getAndSet(null);
     if (scheduler != null) {
       var notRun = scheduler.shutdownNow();

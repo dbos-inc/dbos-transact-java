@@ -396,7 +396,7 @@ public class QueuesTest {
     String executorId = dbosExecutor.executorId();
     String appVersion = dbosExecutor.appVersion();
 
-    queueService.stop();
+    queueService.close();
     while (!queueService.isStopped()) {
       Thread.sleep(2000);
       logger.info("Waiting for queueService to stop");
@@ -476,7 +476,7 @@ public class QueuesTest {
     String executorId = dbosExecutor.executorId();
     String appVersion = dbosExecutor.appVersion();
 
-    queueService.stop();
+    queueService.close();
     while (!queueService.isStopped()) {
       Thread.sleep(2000);
       logger.info("Waiting for queueService to stop");

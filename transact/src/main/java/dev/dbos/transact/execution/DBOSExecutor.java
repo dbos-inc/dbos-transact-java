@@ -277,7 +277,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       shutdownLifecycleListeners();
 
-      queueService.stop();
+      queueService.close();
       queueService = null;
       systemDatabase.close();
       systemDatabase = null;
