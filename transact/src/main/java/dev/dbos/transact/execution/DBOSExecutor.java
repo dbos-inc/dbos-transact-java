@@ -211,6 +211,9 @@ public class DBOSExecutor implements AutoCloseable {
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queues, config.listenQueues());
 
+      var schedulerPollingInterval =
+          Objects.requireNonNullElse(config.schedulerPollingInterval(), Duration.ofSeconds(30));
+
       schedulerService = new SchedulerService(Constants.DBOS_INTERNAL_QUEUE);
       listeners.add(schedulerService);
 
@@ -1147,6 +1150,7 @@ public class DBOSExecutor implements AutoCloseable {
     var latestAppVersion = systemDatabase.getLatestApplicationVersion().versionName();
     queueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
     var args = new Object[] {Objects.requireNonNull(scheduledAt), context};
+
     var options =
         new ExecutionOptions(
             workflowId,
