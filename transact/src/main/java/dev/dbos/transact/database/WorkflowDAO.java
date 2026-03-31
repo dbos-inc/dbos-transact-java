@@ -552,7 +552,8 @@ class WorkflowDAO {
 
         try (ResultSet rs = pstmt.executeQuery()) {
           while (rs.next()) {
-            WorkflowStatus info = resultsToWorkflowStatus(rs, loadInput, loadOutput, this.serializer);
+            WorkflowStatus info =
+                resultsToWorkflowStatus(rs, loadInput, loadOutput, this.serializer);
             workflows.add(info);
           }
         }
