@@ -2120,13 +2120,32 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    List<dev.dbos.transact.workflow.WorkflowSchedule> schedules = List.of(
-        new dev.dbos.transact.workflow.WorkflowSchedule(
-            "sched-1", "schedule-1", "TestWorkflow", "TestClass", "0 0 0 * * *",
-            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, null, Instant.now(), false, null, null),
-        new dev.dbos.transact.workflow.WorkflowSchedule(
-            "sched-2", "schedule-2", "TestWorkflow2", "TestClass2", "0 0 0 * * *",
-            dev.dbos.transact.workflow.ScheduleStatus.PAUSED, null, null, true, null, "queue-1"));
+    List<dev.dbos.transact.workflow.WorkflowSchedule> schedules =
+        List.of(
+            new dev.dbos.transact.workflow.WorkflowSchedule(
+                "sched-1",
+                "schedule-1",
+                "TestWorkflow",
+                "TestClass",
+                "0 0 0 * * *",
+                dev.dbos.transact.workflow.ScheduleStatus.ACTIVE,
+                null,
+                Instant.now(),
+                false,
+                null,
+                null),
+            new dev.dbos.transact.workflow.WorkflowSchedule(
+                "sched-2",
+                "schedule-2",
+                "TestWorkflow2",
+                "TestClass2",
+                "0 0 0 * * *",
+                dev.dbos.transact.workflow.ScheduleStatus.PAUSED,
+                null,
+                null,
+                true,
+                null,
+                "queue-1"));
     when(mockDB.listSchedules(any(), any(), any())).thenReturn(schedules);
 
     try (Conductor conductor = builder.build()) {
@@ -2163,30 +2182,42 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    List<dev.dbos.transact.workflow.WorkflowSchedule> schedules = List.of(
-        new dev.dbos.transact.workflow.WorkflowSchedule(
-            "sched-1", "schedule-1", "TestWorkflow", "TestClass", "0 0 0 * * *",
-            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, null, Instant.now(), false, null, null));
+    List<dev.dbos.transact.workflow.WorkflowSchedule> schedules =
+        List.of(
+            new dev.dbos.transact.workflow.WorkflowSchedule(
+                "sched-1",
+                "schedule-1",
+                "TestWorkflow",
+                "TestClass",
+                "0 0 0 * * *",
+                dev.dbos.transact.workflow.ScheduleStatus.ACTIVE,
+                null,
+                Instant.now(),
+                false,
+                null,
+                null));
     when(mockDB.listSchedules(any(), any(), any())).thenReturn(schedules);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      Map<String, Object> body = Map.of(
-          "status", "ACTIVE",
-          "workflow_name", "TestWorkflow",
-          "schedule_name_prefix", "schedule",
-          "load_context", true);
+      Map<String, Object> body =
+          Map.of(
+              "status", "ACTIVE",
+              "workflow_name", "TestWorkflow",
+              "schedule_name_prefix", "schedule",
+              "load_context", true);
       Map<String, Object> message = Map.of("body", body);
       listener.send(MessageType.LIST_SCHEDULES, "req-list-sched-filter", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
-      verify(mockDB).listSchedules(
-          eq(List.of(dev.dbos.transact.workflow.ScheduleStatus.ACTIVE)),
-          eq(List.of("TestWorkflow")),
-          eq(List.of("schedule")));
+      verify(mockDB)
+          .listSchedules(
+              eq(List.of(dev.dbos.transact.workflow.ScheduleStatus.ACTIVE)),
+              eq(List.of("TestWorkflow")),
+              eq(List.of("schedule")));
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("list_schedules", json.get("type").asText());
@@ -2212,10 +2243,14 @@ public class ConductorTest {
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
-      verify(mockDB).listSchedules(
-          eq(List.of(dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, dev.dbos.transact.workflow.ScheduleStatus.PAUSED)),
-          eq(null),
-          eq(null));
+      verify(mockDB)
+          .listSchedules(
+              eq(
+                  List.of(
+                      dev.dbos.transact.workflow.ScheduleStatus.ACTIVE,
+                      dev.dbos.transact.workflow.ScheduleStatus.PAUSED)),
+              eq(null),
+              eq(null));
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("list_schedules", json.get("type").asText());
@@ -2230,8 +2265,17 @@ public class ConductorTest {
 
     dev.dbos.transact.workflow.WorkflowSchedule schedule =
         new dev.dbos.transact.workflow.WorkflowSchedule(
-            "sched-1", "schedule-1", "TestWorkflow", "TestClass", "0 0 0 * * *",
-            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, null, Instant.now(), false, null, null);
+            "sched-1",
+            "schedule-1",
+            "TestWorkflow",
+            "TestClass",
+            "0 0 0 * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE,
+            null,
+            Instant.now(),
+            false,
+            null,
+            null);
     when(mockDB.getSchedule("schedule-1")).thenReturn(java.util.Optional.of(schedule));
 
     try (Conductor conductor = builder.build()) {
@@ -2385,19 +2429,30 @@ public class ConductorTest {
 
     dev.dbos.transact.workflow.WorkflowSchedule schedule =
         new dev.dbos.transact.workflow.WorkflowSchedule(
-            "sched-1", "schedule-to-backfill", "TestWorkflow", "TestClass", "0 0 0 * * *",
-            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, null, Instant.now(), false, null, null);
+            "sched-1",
+            "schedule-to-backfill",
+            "TestWorkflow",
+            "TestClass",
+            "0 0 0 * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE,
+            null,
+            Instant.now(),
+            false,
+            null,
+            null);
     when(mockDB.getSchedule("schedule-to-backfill")).thenReturn(java.util.Optional.of(schedule));
-    when(mockDB.getLatestApplicationVersion()).thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
+    when(mockDB.getLatestApplicationVersion())
+        .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      Map<String, Object> message = Map.of(
-          "schedule_name", "schedule-to-backfill",
-          "start", "2024-01-01T00:00:00Z",
-          "end", "2024-01-02T00:00:00Z");
+      Map<String, Object> message =
+          Map.of(
+              "schedule_name", "schedule-to-backfill",
+              "start", "2024-01-01T00:00:00Z",
+              "end", "2024-01-02T00:00:00Z");
       listener.send(MessageType.BACKFILL_SCHEDULE, "req-backfill-sched", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
@@ -2421,10 +2476,11 @@ public class ConductorTest {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      Map<String, Object> message = Map.of(
-          "schedule_name", "nonexistent",
-          "start", "2024-01-01T00:00:00Z",
-          "end", "2024-01-02T00:00:00Z");
+      Map<String, Object> message =
+          Map.of(
+              "schedule_name", "nonexistent",
+              "start", "2024-01-01T00:00:00Z",
+              "end", "2024-01-02T00:00:00Z");
       listener.send(MessageType.BACKFILL_SCHEDULE, "req-backfill-sched-err", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
@@ -2443,10 +2499,20 @@ public class ConductorTest {
 
     dev.dbos.transact.workflow.WorkflowSchedule schedule =
         new dev.dbos.transact.workflow.WorkflowSchedule(
-            "sched-1", "schedule-to-trigger", "TestWorkflow", "TestClass", "0 0 0 * * *",
-            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, null, Instant.now(), false, null, null);
+            "sched-1",
+            "schedule-to-trigger",
+            "TestWorkflow",
+            "TestClass",
+            "0 0 0 * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE,
+            null,
+            Instant.now(),
+            false,
+            null,
+            null);
     when(mockDB.getSchedule("schedule-to-trigger")).thenReturn(java.util.Optional.of(schedule));
-    when(mockDB.getLatestApplicationVersion()).thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
+    when(mockDB.getLatestApplicationVersion())
+        .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
