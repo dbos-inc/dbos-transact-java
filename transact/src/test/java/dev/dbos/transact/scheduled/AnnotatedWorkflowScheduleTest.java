@@ -18,7 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
-class SchedulerServiceTest {
+class AnnotatedWorkflowScheduleTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
@@ -36,10 +36,10 @@ class SchedulerServiceTest {
   @Test
   public void simpleScheduledWorkflow() throws Exception {
 
-    var impl = new SkedServiceImpl(dbos);
+    var impl = new AnnotatedScheduledServiceImpl(dbos);
     var q = new Queue("q2").withConcurrency(1);
     dbos.registerQueue(q);
-    dbos.registerWorkflows(SkedService.class, impl);
+    dbos.registerWorkflows(AnnotatedScheduledService.class, impl);
 
     dbos.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
@@ -113,7 +113,7 @@ class SchedulerServiceTest {
             IllegalArgumentException.class,
             () -> dbos.registerWorkflows(InvalidSig.class, new InvalidSigImpl()));
     assertEquals(
-        "Invalid signature for Scheduled workflow dev.dbos.transact.scheduled.InvalidSigImpl//scheduledWF. Signature must be (Instant, Instant)",
+        "Invalid signature for annotated workflow schedule dev.dbos.transact.scheduled.InvalidSigImpl//scheduledWF. Signature must be (Instant, Instant)",
         e.getMessage());
   }
 
