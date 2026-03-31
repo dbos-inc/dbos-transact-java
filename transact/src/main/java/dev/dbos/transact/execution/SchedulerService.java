@@ -115,15 +115,12 @@ public class SchedulerService implements AutoCloseable {
     }
 
     for (var schedule : schedules) {
-      if (workflowScheduleFutures.containsKey(schedule.id())) {
-        if (!schedule.isActive()) {
+
+      if (!schedule.isActive()) {
+        if (workflowScheduleFutures.containsKey(schedule.id())) {
           cancelWorkflowSchedule(schedule.id());
         }
       } else {
-        if (!schedule.isActive()) {
-          continue;
-        }
-
         var optRegWf = dbosExecutor.getWorkflow(schedule.workflowName(), schedule.className());
         if (optRegWf.isEmpty()) {
           logger.error(
