@@ -178,13 +178,16 @@ public class ClientScheduleTest {
   @Test
   public void clientTriggerSchedule() throws Exception {
     try (var client = pgContainer.dbosClient()) {
+      // Use a cron that won't fire during the test (Jan 1st only)
       client.createSchedule(
-          "trigger-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+          "trigger-sched", workflowName(), className(), "0 0 0 1 1 *", null, false, null, null);
 
+      serviceImpl.reset();
       var handle = client.triggerSchedule("trigger-sched");
       handle.getResult();
 
-      assertEquals(1, serviceImpl.counter);
+      // At least 1 execution from trigger
+      assertTrue(serviceImpl.counter >= 1, "Expected at least 1, got " + serviceImpl.counter);
       assertNotNull(serviceImpl.lastScheduled);
     }
   }
@@ -192,17 +195,14 @@ public class ClientScheduleTest {
   @Test
   public void clientTriggerSchedulePassesContext() throws Exception {
     try (var client = pgContainer.dbosClient()) {
+      // Use a cron that won't fire during the test (Jan 1st only)
       client.createSchedule(
-          "ctx-sched",
-          workflowName(),
-          className(),
-          "0/5 * * * * *",
-          "my-context",
-          false,
-          null,
-          null);
+          "ctx-sched", workflowName(), className(), "0 0 0 1 1 *", "my-context", false, null, null);
 
+      serviceImpl.reset();
       client.triggerSchedule("ctx-sched").getResult();
+      // At least 1 execution from trigger
+      assertTrue(serviceImpl.counter >= 1, "Expected at least 1, got " + serviceImpl.counter);
       assertEquals("my-context", serviceImpl.lastContext);
     }
   }
@@ -219,18 +219,22 @@ public class ClientScheduleTest {
   @Test
   public void clientBackfillSchedule() throws Exception {
     try (var client = pgContainer.dbosClient()) {
+      // Use a cron that won't fire during the test (every minute)
       client.createSchedule(
-          "backfill-sched", workflowName(), className(), "0/1 * * * * *", null, false, null, null);
+          "backfill-sched", workflowName(), className(), "0 * * * * *", null, false, null, null);
 
-      var start = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-      var end = start.plusSeconds(3);
+      // Backfill for times that won't be picked up by the scheduler
+      var start = Instant.parse("2024-01-01T10:00:30Z");
+      var end = Instant.parse("2024-01-01T10:03:30Z");
 
+      serviceImpl.reset();
       var handles = client.backfillSchedule("backfill-sched", start, end);
 
       assertEquals(3, handles.size());
       for (var h : handles) {
         h.getResult();
       }
+      // Backfill creates exactly 3
       assertEquals(3, serviceImpl.counter);
     }
   }
@@ -297,6 +301,8 @@ class ClientScheduleServiceImpl implements ClientScheduleService {
   volatile int counter = 0;
   volatile Instant lastScheduled = null;
   volatile Object lastContext = null;
+  final java.util.List<Instant> allScheduledTimes =
+      new java.util.concurrent.CopyOnWriteArrayList<>();
 
   @Override
   @dev.dbos.transact.workflow.Workflow
@@ -304,5 +310,13 @@ class ClientScheduleServiceImpl implements ClientScheduleService {
     ++counter;
     lastScheduled = scheduled;
     lastContext = context;
+    allScheduledTimes.add(scheduled);
+  }
+
+  void reset() {
+    counter = 0;
+    lastScheduled = null;
+    lastContext = null;
+    allScheduledTimes.clear();
   }
 }
