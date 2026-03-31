@@ -46,7 +46,7 @@ class SchedulerServiceTest {
 
     // Run all sched WFs for 5 seconds(ish)
     Thread.sleep(5000);
-    schedulerService.dbosShutDown();
+    schedulerService.close();
     var timeAsOfShutdown = System.currentTimeMillis();
     Thread.sleep(1000);
 

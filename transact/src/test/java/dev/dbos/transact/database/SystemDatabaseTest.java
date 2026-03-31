@@ -563,9 +563,9 @@ public class SystemDatabaseTest {
     var result = sysdb.getSchedule("sched-1");
     assertTrue(result.isPresent());
     var s = result.get();
-    assertEquals("sched-1", s.scheduleName());
+    assertEquals("sched-1", s.name());
     assertEquals("myWorkflow", s.workflowName());
-    assertEquals("com.example.MyClass", s.workflowClassName());
+    assertEquals("com.example.MyClass", s.className());
     assertEquals("0 * * * *", s.schedule());
     assertEquals(ScheduleStatus.ACTIVE, s.status());
     assertEquals("{}", s.context());
@@ -635,7 +635,7 @@ public class SystemDatabaseTest {
 
     var paused = sysdb.listSchedules(List.of(ScheduleStatus.PAUSED), null, null);
     assertEquals(1, paused.size());
-    assertEquals("beta-1", paused.get(0).scheduleName());
+    assertEquals("beta-1", paused.get(0).name());
 
     // filter by multiple statuses
     var both =
@@ -656,7 +656,7 @@ public class SystemDatabaseTest {
     // filter by single prefix
     var byPrefix = sysdb.listSchedules(null, null, List.of("alpha-"));
     assertEquals(2, byPrefix.size());
-    assertTrue(byPrefix.stream().allMatch(s -> s.scheduleName().startsWith("alpha-")));
+    assertTrue(byPrefix.stream().allMatch(s -> s.name().startsWith("alpha-")));
 
     // filter by multiple prefixes
     var byBothPrefixes = sysdb.listSchedules(null, null, List.of("alpha-", "beta-"));
@@ -729,9 +729,9 @@ public class SystemDatabaseTest {
 
     var s = sysdb.getSchedule("sched-full").get();
     assertEquals("my-id-123", s.scheduleId());
-    assertEquals("sched-full", s.scheduleName());
+    assertEquals("sched-full", s.name());
     assertEquals("fullWorkflow", s.workflowName());
-    assertEquals("com.example.Full", s.workflowClassName());
+    assertEquals("com.example.Full", s.className());
     assertEquals("*/5 * * * *", s.schedule());
     assertEquals("{\"key\":\"val\"}", s.context());
     assertEquals(Instant.parse("2026-03-01T00:00:00Z"), s.lastFiredAt());

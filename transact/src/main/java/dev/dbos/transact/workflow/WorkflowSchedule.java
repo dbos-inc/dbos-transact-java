@@ -8,9 +8,9 @@ import org.jspecify.annotations.NonNull;
 
 public record WorkflowSchedule(
     String scheduleId,
-    String scheduleName,
+    String name,
     String workflowName,
-    String workflowClassName,
+    String className,
     String schedule,
     ScheduleStatus status,
     Object context,
@@ -19,12 +19,16 @@ public record WorkflowSchedule(
     ZoneId cronTimezone,
     String queueName) {
 
+  public boolean isActive() {
+    return status == ScheduleStatus.ACTIVE;
+  }
+
   public WorkflowSchedule withScheduleId(@NonNull String value) {
     return new WorkflowSchedule(
         Objects.requireNonNull(value),
-        scheduleName,
+        name,
         workflowName,
-        workflowClassName,
+        className,
         schedule,
         status,
         context,
@@ -37,9 +41,9 @@ public record WorkflowSchedule(
   public WorkflowSchedule withLastFiredAt(Instant value) {
     return new WorkflowSchedule(
         scheduleId,
-        scheduleName,
+        name,
         workflowName,
-        workflowClassName,
+        className,
         schedule,
         status,
         context,
@@ -52,9 +56,9 @@ public record WorkflowSchedule(
   public WorkflowSchedule withStatus(ScheduleStatus value) {
     return new WorkflowSchedule(
         scheduleId,
-        scheduleName,
+        name,
         workflowName,
-        workflowClassName,
+        className,
         schedule,
         value,
         context,

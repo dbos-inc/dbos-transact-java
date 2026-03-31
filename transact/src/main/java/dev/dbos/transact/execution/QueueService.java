@@ -22,7 +22,7 @@ public class QueueService implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(QueueService.class);
 
-  private final AtomicReference<ScheduledExecutorService> scheduler = new AtomicReference<>();
+  private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
   private final AtomicBoolean paused = new AtomicBoolean(false);
 
   private final SystemDatabase systemDatabase;
@@ -47,9 +47,10 @@ public class QueueService implements AutoCloseable {
   }
 
   public void start(List<Queue> queues, Set<String> listenQueues) {
-    if (this.scheduler.get() == null) {
-      var scheduler = Executors.newScheduledThreadPool(4);
-      if (this.scheduler.compareAndSet(null, scheduler)) {
+    if (this.execServiceRef.get() == null) {
+      var procCount = Runtime.getRuntime().availableProcessors();
+      var scheduler = Executors.newScheduledThreadPool(procCount);
+      if (this.execServiceRef.compareAndSet(null, scheduler)) {
         startQueueListeners(queues, listenQueues);
       }
     }
@@ -57,15 +58,15 @@ public class QueueService implements AutoCloseable {
 
   @Override
   public void close() {
-    var scheduler = this.scheduler.getAndSet(null);
+    var scheduler = this.execServiceRef.getAndSet(null);
     if (scheduler != null) {
       var notRun = scheduler.shutdownNow();
-      logger.debug("Shutting down queue service. Tasks not run {}", notRun.size());
+      logger.debug("Shutting down queue service. {} task(s) not run.", notRun.size());
     }
   }
 
   public boolean isStopped() {
-    return this.scheduler.get() == null;
+    return this.execServiceRef.get() == null;
   }
 
   private void startQueueListeners(List<Queue> queues, Set<String> listenQueues) {
@@ -94,9 +95,9 @@ public class QueueService implements AutoCloseable {
             public void schedule() {
               var randomSleepFactor = 0.95 + ThreadLocalRandom.current().nextDouble(0.1);
               var delayMs = (long) (randomSleepFactor * pollingInterval.toMillis() * speedup);
-              var localScheduler = scheduler.get();
-              if (localScheduler != null) {
-                localScheduler.schedule(this, delayMs, TimeUnit.MILLISECONDS);
+              var execService = execServiceRef.get();
+              if (execService != null) {
+                execService.schedule(this, delayMs, TimeUnit.MILLISECONDS);
               }
             }
 
@@ -128,7 +129,7 @@ public class QueueService implements AutoCloseable {
             public void run() {
               // if scheduler service isn't running, the queue service was stopped so don't start
               // the workflow or schedule the next execution
-              if (scheduler.get() == null) {
+              if (execServiceRef.get() == null) {
                 return;
               }
 

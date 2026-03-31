@@ -213,9 +213,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       var schedulerPollingInterval =
           Objects.requireNonNullElse(config.schedulerPollingInterval(), Duration.ofSeconds(30));
-
-      schedulerService = new SchedulerService(Constants.DBOS_INTERNAL_QUEUE);
-      listeners.add(schedulerService);
+      schedulerService = new SchedulerService(this, systemDatabase, schedulerPollingInterval);
 
       for (var listener : listeners) {
         listener.dbosLaunched(dbos);
@@ -277,9 +275,13 @@ public class DBOSExecutor implements AutoCloseable {
 
       shutdownLifecycleListeners();
 
-      queueService.close();
+      if (queueService != null) {
+        queueService.close();
+      }
       queueService = null;
-      systemDatabase.close();
+      if (systemDatabase != null) {
+        systemDatabase.close();
+      }
       systemDatabase = null;
 
       timeoutScheduler.shutdownNow();
@@ -348,6 +350,11 @@ public class DBOSExecutor implements AutoCloseable {
 
   public Collection<RegisteredWorkflowInstance> getInstances() {
     return this.instanceMap.values();
+  }
+
+  public Optional<RegisteredWorkflow> getWorkflow(String workflowName, String className) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(className, workflowName);
+    return Optional.ofNullable(this.workflowMap.get(fqName));
   }
 
   public List<Queue> getQueues() {
@@ -997,9 +1004,9 @@ public class DBOSExecutor implements AutoCloseable {
         schedules.stream()
             .map(
                 s -> {
-                  Objects.requireNonNull(s.scheduleName(), "scheduleName cannot be null");
+                  Objects.requireNonNull(s.name(), "scheduleName cannot be null");
                   Objects.requireNonNull(s.workflowName(), "workflowName cannot be null");
-                  Objects.requireNonNull(s.workflowClassName(), "workflowClassName cannot be null");
+                  Objects.requireNonNull(s.className(), "workflowClassName cannot be null");
                   SchedulerService.CRON_PARSER.parse(
                       Objects.requireNonNull(s.schedule(), "schedule cannot be null"));
 
@@ -1020,7 +1027,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     for (WorkflowSchedule s : schedules) {
       validateQueue(s.queueName());
-      validateWorkflow(s.workflowClassName(), s.workflowName());
+      validateWorkflow(s.className(), s.workflowName());
     }
 
     DBOSExecutor.applySchedules(schedules, systemDatabase);
@@ -1077,7 +1084,7 @@ public class DBOSExecutor implements AutoCloseable {
       var workflowId = "sched-%s-%s".formatted(schedule, next);
       enqueueScheduledWorkflow(
           schedule.workflowName(),
-          schedule.workflowClassName(),
+          schedule.className(),
           workflowId,
           schedule.context(),
           schedule.queueName(),
@@ -1117,7 +1124,7 @@ public class DBOSExecutor implements AutoCloseable {
     var workflowId = "sched-%s-trigger-%s".formatted(schedule, now);
     enqueueScheduledWorkflow(
         schedule.workflowName(),
-        schedule.workflowClassName(),
+        schedule.className(),
         workflowId,
         schedule.context(),
         schedule.queueName(),

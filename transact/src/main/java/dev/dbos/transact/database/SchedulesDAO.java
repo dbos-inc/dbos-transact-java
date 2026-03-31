@@ -29,7 +29,7 @@ class SchedulesDAO {
   SchedulesDAO(DataSource dataSource, String schema, DBOSSerializer serializer) {
     this.dataSource = Objects.requireNonNull(dataSource);
     this.schema = Objects.requireNonNull(schema);
-    this.serializer = Objects.requireNonNull(serializer);
+    this.serializer = serializer;
   }
 
   void createSchedule(WorkflowSchedule schedule) throws SQLException {
@@ -60,9 +60,9 @@ class SchedulesDAO {
     try (PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(
           1, schedule.scheduleId() != null ? schedule.scheduleId() : UUID.randomUUID().toString());
-      ps.setString(2, schedule.scheduleName());
+      ps.setString(2, schedule.name());
       ps.setString(3, schedule.workflowName());
-      ps.setString(4, schedule.workflowClassName());
+      ps.setString(4, schedule.className());
       ps.setString(5, schedule.schedule());
       ps.setString(6, Objects.requireNonNull(schedule.status()).name());
       ps.setString(7, serializedContext.serializedValue());
@@ -73,8 +73,7 @@ class SchedulesDAO {
       ps.executeUpdate();
     } catch (SQLException e) {
       if ("23505".equals(e.getSQLState())) {
-        throw new RuntimeException(
-            "Schedule '%s' already exists".formatted(schedule.scheduleName()), e);
+        throw new RuntimeException("Schedule '%s' already exists".formatted(schedule.name()), e);
       }
       throw e;
     }
@@ -220,7 +219,7 @@ class SchedulesDAO {
       conn.setAutoCommit(false);
       try {
         for (WorkflowSchedule schedule : schedules) {
-          deleteSchedule(conn, schema, schedule.scheduleName());
+          deleteSchedule(conn, schema, schedule.name());
           createSchedule(conn, schema, serializer, schedule);
         }
         conn.commit();
