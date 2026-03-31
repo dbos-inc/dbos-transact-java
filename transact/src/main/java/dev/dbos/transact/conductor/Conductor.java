@@ -14,6 +14,7 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -1208,7 +1209,7 @@ public class Conductor implements AutoCloseable {
 
   // Used by tests to create import payloads and verify export output
   static String serializeExportedWorkflows(List<ExportedWorkflow> workflows) throws IOException {
-    var out = new java.io.ByteArrayOutputStream();
+    var out = new ByteArrayOutputStream();
     try (var gOut = new GZIPOutputStream(out)) {
       JSONUtil.toJson(gOut, workflows);
     }

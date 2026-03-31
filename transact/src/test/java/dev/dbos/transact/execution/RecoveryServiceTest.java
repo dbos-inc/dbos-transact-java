@@ -41,7 +41,7 @@ class RecoveryServiceTest {
 
   @BeforeEach
   void setUp() {
-    dbosConfig = pgContainer.dbosConfig();
+    dbosConfig = pgContainer.dbosConfig().withExecutorId("recovery-test-executor");
     dataSource = pgContainer.dataSource();
     testQueue = new Queue("q1");
   }

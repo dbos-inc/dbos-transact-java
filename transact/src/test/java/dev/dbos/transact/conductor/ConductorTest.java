@@ -51,6 +51,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -2306,7 +2307,7 @@ public class ConductorTest {
             false,
             null,
             null);
-    when(mockDB.getSchedule("schedule-1")).thenReturn(java.util.Optional.of(schedule));
+    when(mockDB.getSchedule("schedule-1")).thenReturn(Optional.of(schedule));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2336,7 +2337,7 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    when(mockDB.getSchedule("nonexistent")).thenReturn(java.util.Optional.empty());
+    when(mockDB.getSchedule("nonexistent")).thenReturn(Optional.empty());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2470,7 +2471,7 @@ public class ConductorTest {
             false,
             null,
             null);
-    when(mockDB.getSchedule("schedule-to-backfill")).thenReturn(java.util.Optional.of(schedule));
+    when(mockDB.getSchedule("schedule-to-backfill")).thenReturn(Optional.of(schedule));
     when(mockDB.getLatestApplicationVersion())
         .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
 
@@ -2491,7 +2492,71 @@ public class ConductorTest {
       assertEquals("backfill_schedule", json.get("type").asText());
       assertEquals("req-backfill-sched", json.get("request_id").asText());
       assertNull(json.get("error_message"));
-      assertTrue(json.get("workflow_ids").isArray());
+      // The cron "0 0 0 * * *" fires daily at midnight. The window
+      // (2024-01-01T00:00Z, 2024-01-02T00:00Z] has exactly one firing: 2024-01-02T00:00Z.
+      assertEquals(1, json.get("workflow_ids").size());
+      String wfId = json.get("workflow_ids").get(0).asText();
+      assertTrue(
+          wfId.startsWith("sched-schedule-to-backfill-"),
+          "Unexpected workflow ID prefix: " + wfId);
+      assertTrue(
+          wfId.contains("2024-01-02T00:00"), "Expected ID to reference 2024-01-02T00:00: " + wfId);
+    }
+  }
+
+  @RetryingTest(3)
+  public void backfillScheduleGeneratesMultipleIds() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    // "0 0 * * * *" = top of every hour
+    dev.dbos.transact.workflow.WorkflowSchedule schedule =
+        new dev.dbos.transact.workflow.WorkflowSchedule(
+            "sched-hourly",
+            "hourly-sched",
+            "TestWorkflow",
+            "TestClass",
+            "0 0 * * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE,
+            null,
+            Instant.now(),
+            false,
+            null,
+            null);
+    when(mockDB.getSchedule("hourly-sched")).thenReturn(Optional.of(schedule));
+    when(mockDB.getLatestApplicationVersion())
+        .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      // Window 09:30→14:30 — fires at 10:00, 11:00, 12:00, 13:00, 14:00 (5 times)
+      Map<String, Object> message =
+          Map.of(
+              "schedule_name", "hourly-sched",
+              "start", "2024-01-01T09:30:00Z",
+              "end", "2024-01-01T14:30:00Z");
+      listener.send(MessageType.BACKFILL_SCHEDULE, "req-backfill-hourly", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("backfill_schedule", json.get("type").asText());
+      assertEquals("req-backfill-hourly", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+
+      // Verify count: 5 executions in a 5-hour window for an hourly cron
+      assertEquals(5, json.get("workflow_ids").size());
+
+      // Verify each ID encodes the correct scheduled hour
+      var ids = new java.util.ArrayList<String>();
+      json.get("workflow_ids").forEach(n -> ids.add(n.asText()));
+      assertTrue(ids.stream().anyMatch(id -> id.contains("T10:00")), "Missing 10:00 execution");
+      assertTrue(ids.stream().anyMatch(id -> id.contains("T11:00")), "Missing 11:00 execution");
+      assertTrue(ids.stream().anyMatch(id -> id.contains("T12:00")), "Missing 12:00 execution");
+      assertTrue(ids.stream().anyMatch(id -> id.contains("T13:00")), "Missing 13:00 execution");
+      assertTrue(ids.stream().anyMatch(id -> id.contains("T14:00")), "Missing 14:00 execution");
     }
   }
 
@@ -2500,7 +2565,7 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    when(mockDB.getSchedule(anyString())).thenReturn(java.util.Optional.empty());
+    when(mockDB.getSchedule(anyString())).thenReturn(Optional.empty());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2540,7 +2605,7 @@ public class ConductorTest {
             false,
             null,
             null);
-    when(mockDB.getSchedule("schedule-to-trigger")).thenReturn(java.util.Optional.of(schedule));
+    when(mockDB.getSchedule("schedule-to-trigger")).thenReturn(Optional.of(schedule));
     when(mockDB.getLatestApplicationVersion())
         .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
 
@@ -2566,7 +2631,7 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    when(mockDB.getSchedule(anyString())).thenReturn(java.util.Optional.empty());
+    when(mockDB.getSchedule(anyString())).thenReturn(Optional.empty());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
