@@ -978,7 +978,7 @@ public class DBOSExecutor implements AutoCloseable {
           systemDatabase.deleteSchedule(name);
           return null;
         },
-        "DBOS.getSchedule",
+        "DBOS.deleteSchedule",
         null);
   }
 
@@ -1086,7 +1086,7 @@ public class DBOSExecutor implements AutoCloseable {
         break;
       }
 
-      var workflowId = "sched-%s-%s".formatted(schedule, next);
+      var workflowId = "sched-%s-%s".formatted(schedule.scheduleName(), next);
       enqueueScheduledWorkflow(
           schedule.workflowName(),
           schedule.className(),
@@ -1126,7 +1126,7 @@ public class DBOSExecutor implements AutoCloseable {
                         "Schedule %s does not exist".formatted(scheduleName)));
 
     var now = Instant.now();
-    var workflowId = "sched-%s-trigger-%s".formatted(schedule, now);
+    var workflowId = "sched-%s-trigger-%s".formatted(schedule.scheduleName(), now);
     enqueueScheduledWorkflow(
         schedule.workflowName(),
         schedule.className(),

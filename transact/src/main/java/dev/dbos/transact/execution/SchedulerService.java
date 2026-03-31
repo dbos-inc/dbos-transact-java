@@ -378,7 +378,7 @@ public class SchedulerService implements AutoCloseable {
                 return null;
               }
             })
-        .filter(swf -> swf != null)
+        .filter(Objects::nonNull)
         .toList();
   }
 }
