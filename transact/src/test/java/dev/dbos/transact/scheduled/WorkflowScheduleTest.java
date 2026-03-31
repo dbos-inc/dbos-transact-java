@@ -30,8 +30,7 @@ class WorkflowScheduleTest {
 
   @BeforeEach
   void beforeEach() {
-    dbosConfig =
-        pgContainer.dbosConfig().withSchedulerPollingInterval(Duration.ofSeconds(1));
+    dbosConfig = pgContainer.dbosConfig().withSchedulerPollingInterval(Duration.ofSeconds(1));
     dataSource = pgContainer.dataSource();
   }
 
@@ -108,7 +107,14 @@ class WorkflowScheduleTest {
         RuntimeException.class,
         () ->
             dbos.createSchedule(
-                "dup-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null));
+                "dup-sched",
+                workflowName(),
+                className(),
+                "0/5 * * * * *",
+                null,
+                false,
+                null,
+                null));
   }
 
   @Test
@@ -247,11 +253,29 @@ class WorkflowScheduleTest {
     dbos.applySchedules(
         List.of(
             new WorkflowSchedule(
-                null, "apply-1", workflowName(), className(), "0/10 * * * * *",
-                ScheduleStatus.ACTIVE, null, null, false, null, null),
+                null,
+                "apply-1",
+                workflowName(),
+                className(),
+                "0/10 * * * * *",
+                ScheduleStatus.ACTIVE,
+                null,
+                null,
+                false,
+                null,
+                null),
             new WorkflowSchedule(
-                null, "apply-2", workflowName(), className(), "0/5 * * * * *",
-                ScheduleStatus.ACTIVE, null, null, false, null, null)));
+                null,
+                "apply-2",
+                workflowName(),
+                className(),
+                "0/5 * * * * *",
+                ScheduleStatus.ACTIVE,
+                null,
+                null,
+                false,
+                null,
+                null)));
 
     assertEquals(2, dbos.listSchedules(null, null, null).size());
     assertEquals("0/10 * * * * *", dbos.getSchedule("apply-1").orElseThrow().cron());
@@ -266,11 +290,19 @@ class WorkflowScheduleTest {
     dbos.applySchedules(
         List.of(
             new WorkflowSchedule(
-                null, "apply-paused", workflowName(), className(), "0/5 * * * * *",
-                ScheduleStatus.PAUSED, null, null, false, null, null)));
+                null,
+                "apply-paused",
+                workflowName(),
+                className(),
+                "0/5 * * * * *",
+                ScheduleStatus.PAUSED,
+                null,
+                null,
+                false,
+                null,
+                null)));
 
-    assertEquals(
-        ScheduleStatus.ACTIVE, dbos.getSchedule("apply-paused").orElseThrow().status());
+    assertEquals(ScheduleStatus.ACTIVE, dbos.getSchedule("apply-paused").orElseThrow().status());
   }
 
   // ── triggerSchedule ───────────────────────────────────────────────────────
@@ -303,8 +335,7 @@ class WorkflowScheduleTest {
   @Test
   public void triggerScheduleNotFound() {
     registerAndLaunch();
-    assertThrows(
-        IllegalStateException.class, () -> dbos.triggerSchedule("no-such-sched"));
+    assertThrows(IllegalStateException.class, () -> dbos.triggerSchedule("no-such-sched"));
   }
 
   // ── backfillSchedule ──────────────────────────────────────────────────────
