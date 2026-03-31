@@ -2259,6 +2259,37 @@ public class ConductorTest {
   }
 
   @RetryingTest(3)
+  public void canListSchedulesWithListFilters() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    when(mockDB.listSchedules(any(), any(), any())).thenReturn(List.of());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = Map.of(
+          "workflow_name", List.of("WorkflowA", "WorkflowB"),
+          "schedule_name_prefix", List.of("prefix1-", "prefix2-"));
+      Map<String, Object> message = Map.of("body", body);
+      listener.send(MessageType.LIST_SCHEDULES, "req-list-sched-list-filter", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB)
+          .listSchedules(
+              eq(null),
+              eq(List.of("WorkflowA", "WorkflowB")),
+              eq(List.of("prefix1-", "prefix2-")));
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("list_schedules", json.get("type").asText());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
   public void canGetSchedule() throws Exception {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
