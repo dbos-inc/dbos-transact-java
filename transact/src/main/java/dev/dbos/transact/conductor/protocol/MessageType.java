@@ -2,6 +2,7 @@ package dev.dbos.transact.conductor.protocol;
 
 public enum MessageType {
   ALERT("alert"),
+  BACKFILL_SCHEDULE("backfill_schedule"),
   CANCEL("cancel"),
   DELETE("delete"),
   EXECUTOR_INFO("executor_info"),
@@ -9,17 +10,22 @@ public enum MessageType {
   EXPORT_WORKFLOW("export_workflow"),
   FORK_WORKFLOW("fork_workflow"),
   GET_METRICS("get_metrics"),
+  GET_SCHEDULE("get_schedule"),
   GET_WORKFLOW("get_workflow"),
   IMPORT_WORKFLOW("import_workflow"),
   LIST_APPLICATION_VERSIONS("list_application_versions"),
   LIST_QUEUED_WORKFLOWS("list_queued_workflows"),
+  LIST_SCHEDULES("list_schedules"),
   LIST_STEPS("list_steps"),
   LIST_WORKFLOWS("list_workflows"),
+  PAUSE_SCHEDULE("pause_schedule"),
   RECOVERY("recovery"),
   RESTART("restart"),
   RESUME("resume"),
+  RESUME_SCHEDULE("resume_schedule"),
   RETENTION("retention"),
-  SET_LATEST_APPLICATION_VERSION("set_latest_application_version");
+  SET_LATEST_APPLICATION_VERSION("set_latest_application_version"),
+  TRIGGER_SCHEDULE("trigger_schedule");
 
   private final String value;
 

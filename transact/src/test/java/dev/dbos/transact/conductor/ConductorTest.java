@@ -2112,4 +2112,379 @@ public class ConductorTest {
       assertFalse(jsonNode.get("success").asBoolean());
     }
   }
+
+  // Schedule management tests
+
+  @RetryingTest(3)
+  public void canListSchedules() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<dev.dbos.transact.workflow.WorkflowSchedule> schedules = List.of(
+        new dev.dbos.transact.workflow.WorkflowSchedule(
+            "sched-1", "schedule-1", "TestWorkflow", "TestClass", "0 0 0 * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, null, Instant.now(), false, null, null),
+        new dev.dbos.transact.workflow.WorkflowSchedule(
+            "sched-2", "schedule-2", "TestWorkflow2", "TestClass2", "0 0 0 * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.PAUSED, null, null, true, null, "queue-1"));
+    when(mockDB.listSchedules(any(), any(), any())).thenReturn(schedules);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = Map.of("load_context", false);
+      Map<String, Object> message = Map.of("body", body);
+      listener.send(MessageType.LIST_SCHEDULES, "req-list-sched", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).listSchedules(null, null, null);
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("list_schedules", json.get("type").asText());
+      assertEquals("req-list-sched", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+
+      JsonNode output = json.get("output");
+      assertNotNull(output);
+      assertTrue(output.isArray());
+      assertEquals(2, output.size());
+      assertEquals("sched-1", output.get(0).get("schedule_id").asText());
+      assertEquals("schedule-1", output.get(0).get("schedule_name").asText());
+      assertEquals("ACTIVE", output.get(0).get("status").asText());
+      assertEquals("sched-2", output.get(1).get("schedule_id").asText());
+      assertEquals("PAUSED", output.get(1).get("status").asText());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListSchedulesWithFilters() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<dev.dbos.transact.workflow.WorkflowSchedule> schedules = List.of(
+        new dev.dbos.transact.workflow.WorkflowSchedule(
+            "sched-1", "schedule-1", "TestWorkflow", "TestClass", "0 0 0 * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, null, Instant.now(), false, null, null));
+    when(mockDB.listSchedules(any(), any(), any())).thenReturn(schedules);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = Map.of(
+          "status", "ACTIVE",
+          "workflow_name", "TestWorkflow",
+          "schedule_name_prefix", "schedule",
+          "load_context", true);
+      Map<String, Object> message = Map.of("body", body);
+      listener.send(MessageType.LIST_SCHEDULES, "req-list-sched-filter", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).listSchedules(
+          eq(List.of(dev.dbos.transact.workflow.ScheduleStatus.ACTIVE)),
+          eq(List.of("TestWorkflow")),
+          eq(List.of("schedule")));
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("list_schedules", json.get("type").asText());
+      assertNull(json.get("error_message"));
+      assertEquals(1, json.get("output").size());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListSchedulesWithStatusList() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    when(mockDB.listSchedules(any(), any(), any())).thenReturn(List.of());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = Map.of("status", List.of("ACTIVE", "PAUSED"));
+      Map<String, Object> message = Map.of("body", body);
+      listener.send(MessageType.LIST_SCHEDULES, "req-list-sched-list", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).listSchedules(
+          eq(List.of(dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, dev.dbos.transact.workflow.ScheduleStatus.PAUSED)),
+          eq(null),
+          eq(null));
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("list_schedules", json.get("type").asText());
+      assertNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetSchedule() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    dev.dbos.transact.workflow.WorkflowSchedule schedule =
+        new dev.dbos.transact.workflow.WorkflowSchedule(
+            "sched-1", "schedule-1", "TestWorkflow", "TestClass", "0 0 0 * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, null, Instant.now(), false, null, null);
+    when(mockDB.getSchedule("schedule-1")).thenReturn(java.util.Optional.of(schedule));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("schedule_name", "schedule-1");
+      listener.send(MessageType.GET_SCHEDULE, "req-get-sched", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).getSchedule("schedule-1");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_schedule", json.get("type").asText());
+      assertEquals("req-get-sched", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+
+      JsonNode output = json.get("output");
+      assertNotNull(output);
+      assertEquals("sched-1", output.get("schedule_id").asText());
+      assertEquals("schedule-1", output.get("schedule_name").asText());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetScheduleNotFound() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    when(mockDB.getSchedule("nonexistent")).thenReturn(java.util.Optional.empty());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("schedule_name", "nonexistent");
+      listener.send(MessageType.GET_SCHEDULE, "req-get-sched-404", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_schedule", json.get("type").asText());
+      assertEquals("req-get-sched-404", json.get("request_id").asText());
+      assertTrue(!json.has("output") || json.get("output").isNull());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canPauseSchedule() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("schedule_name", "schedule-to-pause");
+      listener.send(MessageType.PAUSE_SCHEDULE, "req-pause-sched", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).pauseSchedule("schedule-to-pause");
+
+      SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
+      assertEquals("pause_schedule", resp.type);
+      assertEquals("req-pause-sched", resp.request_id);
+      assertTrue(resp.success);
+      assertNull(resp.error_message);
+    }
+  }
+
+  @RetryingTest(3)
+  public void canPauseScheduleThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "database error";
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).pauseSchedule(anyString());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("schedule_name", "schedule-to-pause");
+      listener.send(MessageType.PAUSE_SCHEDULE, "req-pause-sched-err", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
+      assertEquals("pause_schedule", resp.type);
+      assertEquals("req-pause-sched-err", resp.request_id);
+      assertFalse(resp.success);
+      assertEquals(errorMessage, resp.error_message);
+    }
+  }
+
+  @RetryingTest(3)
+  public void canResumeSchedule() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("schedule_name", "schedule-to-resume");
+      listener.send(MessageType.RESUME_SCHEDULE, "req-resume-sched", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).resumeSchedule("schedule-to-resume");
+
+      SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
+      assertEquals("resume_schedule", resp.type);
+      assertEquals("req-resume-sched", resp.request_id);
+      assertTrue(resp.success);
+      assertNull(resp.error_message);
+    }
+  }
+
+  @RetryingTest(3)
+  public void canResumeScheduleThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "database error";
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).resumeSchedule(anyString());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("schedule_name", "schedule-to-resume");
+      listener.send(MessageType.RESUME_SCHEDULE, "req-resume-sched-err", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
+      assertEquals("resume_schedule", resp.type);
+      assertEquals("req-resume-sched-err", resp.request_id);
+      assertFalse(resp.success);
+      assertEquals(errorMessage, resp.error_message);
+    }
+  }
+
+  @RetryingTest(3)
+  public void canBackfillSchedule() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    dev.dbos.transact.workflow.WorkflowSchedule schedule =
+        new dev.dbos.transact.workflow.WorkflowSchedule(
+            "sched-1", "schedule-to-backfill", "TestWorkflow", "TestClass", "0 0 0 * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, null, Instant.now(), false, null, null);
+    when(mockDB.getSchedule("schedule-to-backfill")).thenReturn(java.util.Optional.of(schedule));
+    when(mockDB.getLatestApplicationVersion()).thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of(
+          "schedule_name", "schedule-to-backfill",
+          "start", "2024-01-01T00:00:00Z",
+          "end", "2024-01-02T00:00:00Z");
+      listener.send(MessageType.BACKFILL_SCHEDULE, "req-backfill-sched", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("backfill_schedule", json.get("type").asText());
+      assertEquals("req-backfill-sched", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+      assertTrue(json.get("workflow_ids").isArray());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canBackfillScheduleThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    when(mockDB.getSchedule(anyString())).thenReturn(java.util.Optional.empty());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of(
+          "schedule_name", "nonexistent",
+          "start", "2024-01-01T00:00:00Z",
+          "end", "2024-01-02T00:00:00Z");
+      listener.send(MessageType.BACKFILL_SCHEDULE, "req-backfill-sched-err", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("backfill_schedule", json.get("type").asText());
+      assertEquals("req-backfill-sched-err", json.get("request_id").asText());
+      assertNotNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canTriggerSchedule() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    dev.dbos.transact.workflow.WorkflowSchedule schedule =
+        new dev.dbos.transact.workflow.WorkflowSchedule(
+            "sched-1", "schedule-to-trigger", "TestWorkflow", "TestClass", "0 0 0 * * *",
+            dev.dbos.transact.workflow.ScheduleStatus.ACTIVE, null, Instant.now(), false, null, null);
+    when(mockDB.getSchedule("schedule-to-trigger")).thenReturn(java.util.Optional.of(schedule));
+    when(mockDB.getLatestApplicationVersion()).thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("schedule_name", "schedule-to-trigger");
+      listener.send(MessageType.TRIGGER_SCHEDULE, "req-trigger-sched", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("trigger_schedule", json.get("type").asText());
+      assertEquals("req-trigger-sched", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+      assertNotNull(json.get("workflow_id").asText());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canTriggerScheduleThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    when(mockDB.getSchedule(anyString())).thenReturn(java.util.Optional.empty());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("schedule_name", "nonexistent");
+      listener.send(MessageType.TRIGGER_SCHEDULE, "req-trigger-sched-err", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("trigger_schedule", json.get("type").asText());
+      assertEquals("req-trigger-sched-err", json.get("request_id").asText());
+      assertNotNull(json.get("error_message"));
+    }
+  }
 }
