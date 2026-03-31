@@ -674,6 +674,30 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void testListSchedulesWithSqlLikeWildcards() {
+    // Test that SQL LIKE wildcards in prefixes are escaped correctly
+    sysdb.createSchedule(makeSchedule("test%s Sched"));
+    sysdb.createSchedule(makeSchedule("test%sother"));
+    sysdb.createSchedule(makeSchedule("test_schedule"));
+    sysdb.createSchedule(makeSchedule("test_sched"));
+    sysdb.createSchedule(makeSchedule("testA_schedB"));
+
+    // "test%s" should only match "test%s Sched" and "test%sother" (literal %)
+    var byPercent = sysdb.listSchedules(null, null, List.of("test%s"));
+    assertEquals(2, byPercent.size());
+    assertTrue(byPercent.stream().allMatch(s -> s.scheduleName().startsWith("test%s")));
+
+    // "test_" should only match "test_schedule" and "test_sched" (literal _, not matching "testA_")
+    var byUnderscore = sysdb.listSchedules(null, null, List.of("test_"));
+    assertEquals(2, byUnderscore.size());
+    assertTrue(byUnderscore.stream().allMatch(s -> s.scheduleName().startsWith("test_")));
+
+    // "test" without wildcard matches all (since all start with "test")
+    var byExact = sysdb.listSchedules(null, null, List.of("test"));
+    assertEquals(5, byExact.size());
+  }
+
+  @Test
   public void testPauseAndResumeSchedule() {
     sysdb.createSchedule(makeSchedule("sched-pause"));
 
