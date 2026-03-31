@@ -90,7 +90,7 @@ public class SchedulerService implements AutoCloseable {
   }
 
   @Override
-  public void close() throws Exception {
+  public void close() {
     var scheduler = this.execServiceRef.getAndSet(null);
     if (scheduler != null) {
       var notRun = scheduler.shutdownNow();
@@ -184,7 +184,7 @@ public class SchedulerService implements AutoCloseable {
                     .nextExecution(nextTime)
                     .ifPresent(
                         cronTime -> {
-                          this.nextTime = cronTime;
+                          this.nextTime = cronTime.truncatedTo(ChronoUnit.SECONDS);
                           // prevFuture should be null or a scheduled task that already fired.
                           // but we still cancel it just to be sure
                           var prevFuture =
@@ -249,7 +249,7 @@ public class SchedulerService implements AutoCloseable {
                   .nextExecution(nextTime)
                   .ifPresent(
                       cronTime -> {
-                        this.nextTime = cronTime;
+                        this.nextTime = cronTime.truncatedTo(ChronoUnit.SECONDS);
                         scheduleTask(this.nextTime, this);
                       });
             }

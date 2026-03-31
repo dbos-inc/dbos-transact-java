@@ -54,7 +54,8 @@ class SchedulesDAO {
     // https://github.com/dbos-inc/dbos-transact-java/issues/330
     // tracking portable serialization support
     var serializedContext =
-        SerializationUtil.serializeValue(schedule.context(), serializer.name(), serializer);
+        SerializationUtil.serializeValue(
+            schedule.context(), serializer != null ? serializer.name() : null, serializer);
 
     var timeZone = schedule.cronTimezone() == null ? null : schedule.cronTimezone().getId();
     try (PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -237,7 +238,8 @@ class SchedulesDAO {
     // https://github.com/dbos-inc/dbos-transact-java/issues/330
     // tracking portable serialization support
     Object context =
-        SerializationUtil.deserializeValue(rs.getString(7), serializer.name(), serializer);
+        SerializationUtil.deserializeValue(
+            rs.getString(7), serializer != null ? serializer.name() : null, serializer);
     String lastFiredAtStr = rs.getString(8);
     String timeZoneStr = rs.getString(10);
 

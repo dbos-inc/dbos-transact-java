@@ -736,7 +736,7 @@ public class SystemDatabaseTest {
     assertEquals("{\"key\":\"val\"}", s.context());
     assertEquals(Instant.parse("2026-03-01T00:00:00Z"), s.lastFiredAt());
     assertTrue(s.automaticBackfill());
-    assertEquals("America/New_York", s.cronTimezone());
+    assertEquals(ZoneId.of("America/New_York"), s.cronTimezone());
     assertEquals("my-queue", s.queueName());
   }
 }
