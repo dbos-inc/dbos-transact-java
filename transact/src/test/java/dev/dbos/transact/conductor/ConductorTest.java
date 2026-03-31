@@ -2269,9 +2269,10 @@ public class ConductorTest {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      Map<String, Object> body = Map.of(
-          "workflow_name", List.of("WorkflowA", "WorkflowB"),
-          "schedule_name_prefix", List.of("prefix1-", "prefix2-"));
+      Map<String, Object> body =
+          Map.of(
+              "workflow_name", List.of("WorkflowA", "WorkflowB"),
+              "schedule_name_prefix", List.of("prefix1-", "prefix2-"));
       Map<String, Object> message = Map.of("body", body);
       listener.send(MessageType.LIST_SCHEDULES, "req-list-sched-list-filter", message);
 
@@ -2279,9 +2280,7 @@ public class ConductorTest {
 
       verify(mockDB)
           .listSchedules(
-              eq(null),
-              eq(List.of("WorkflowA", "WorkflowB")),
-              eq(List.of("prefix1-", "prefix2-")));
+              eq(null), eq(List.of("WorkflowA", "WorkflowB")), eq(List.of("prefix1-", "prefix2-")));
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("list_schedules", json.get("type").asText());
