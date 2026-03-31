@@ -2497,8 +2497,7 @@ public class ConductorTest {
       assertEquals(1, json.get("workflow_ids").size());
       String wfId = json.get("workflow_ids").get(0).asText();
       assertTrue(
-          wfId.startsWith("sched-schedule-to-backfill-"),
-          "Unexpected workflow ID prefix: " + wfId);
+          wfId.startsWith("sched-schedule-to-backfill-"), "Unexpected workflow ID prefix: " + wfId);
       assertTrue(
           wfId.contains("2024-01-02T00:00"), "Expected ID to reference 2024-01-02T00:00: " + wfId);
     }
