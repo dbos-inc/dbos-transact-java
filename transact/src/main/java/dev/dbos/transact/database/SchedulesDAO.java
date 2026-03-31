@@ -5,6 +5,7 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -117,20 +118,29 @@ class SchedulesDAO {
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement ps = conn.prepareStatement(sql.toString())) {
-      int idx = 1;
-      for (Object param : params) {
-        if (param instanceof String[] arr) {
-          ps.setArray(idx++, conn.createArrayOf("text", arr));
-        } else {
-          ps.setString(idx++, (String) param);
+      List<Array> arrays = new ArrayList<>();
+      try {
+        int idx = 1;
+        for (Object param : params) {
+          if (param instanceof String[] arr) {
+            Array sqlArray = conn.createArrayOf("text", arr);
+            arrays.add(sqlArray);
+            ps.setArray(idx++, sqlArray);
+          } else {
+            ps.setString(idx++, (String) param);
+          }
         }
-      }
-      try (ResultSet rs = ps.executeQuery()) {
-        List<WorkflowSchedule> results = new ArrayList<>();
-        while (rs.next()) {
-          results.add(rowToSchedule(rs, serializer));
+        try (ResultSet rs = ps.executeQuery()) {
+          List<WorkflowSchedule> results = new ArrayList<>();
+          while (rs.next()) {
+            results.add(rowToSchedule(rs, serializer));
+          }
+          return results;
         }
-        return results;
+      } finally {
+        for (Array array : arrays) {
+          array.free();
+        }
       }
     }
   }
