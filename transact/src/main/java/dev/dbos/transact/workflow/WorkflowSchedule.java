@@ -7,11 +7,11 @@ import java.util.Objects;
 import org.jspecify.annotations.NonNull;
 
 public record WorkflowSchedule(
-    String scheduleId,
-    String name,
+    String id,
+    String scheduleName,
     String workflowName,
     String className,
-    String schedule,
+    String cron,
     ScheduleStatus status,
     Object context,
     Instant lastFiredAt,
@@ -26,10 +26,10 @@ public record WorkflowSchedule(
   public WorkflowSchedule withScheduleId(@NonNull String value) {
     return new WorkflowSchedule(
         Objects.requireNonNull(value),
-        name,
+        scheduleName,
         workflowName,
         className,
-        schedule,
+        cron,
         status,
         context,
         lastFiredAt,
@@ -40,11 +40,11 @@ public record WorkflowSchedule(
 
   public WorkflowSchedule withLastFiredAt(Instant value) {
     return new WorkflowSchedule(
-        scheduleId,
-        name,
+        id,
+        scheduleName,
         workflowName,
         className,
-        schedule,
+        cron,
         status,
         context,
         value,
@@ -55,11 +55,11 @@ public record WorkflowSchedule(
 
   public WorkflowSchedule withStatus(ScheduleStatus value) {
     return new WorkflowSchedule(
-        scheduleId,
-        name,
+        id,
+        scheduleName,
         workflowName,
         className,
-        schedule,
+        cron,
         value,
         context,
         lastFiredAt,

@@ -1004,11 +1004,11 @@ public class DBOSExecutor implements AutoCloseable {
         schedules.stream()
             .map(
                 s -> {
-                  Objects.requireNonNull(s.name(), "scheduleName cannot be null");
+                  Objects.requireNonNull(s.scheduleName(), "scheduleName cannot be null");
                   Objects.requireNonNull(s.workflowName(), "workflowName cannot be null");
-                  Objects.requireNonNull(s.className(), "workflowClassName cannot be null");
+                  Objects.requireNonNull(s.className(), "className cannot be null");
                   SchedulerService.CRON_PARSER.parse(
-                      Objects.requireNonNull(s.schedule(), "schedule cannot be null"));
+                      Objects.requireNonNull(s.cron(), "cron cannot be null"));
 
                   return s.withScheduleId(UUID.randomUUID().toString())
                       .withStatus(ScheduleStatus.ACTIVE)
@@ -1068,7 +1068,7 @@ public class DBOSExecutor implements AutoCloseable {
                         "Schedule %s does not exist".formatted(scheduleName)));
 
     var timeZone = Objects.requireNonNullElse(schedule.cronTimezone(), ZoneOffset.UTC);
-    var cron = SchedulerService.CRON_PARSER.parse(schedule.schedule());
+    var cron = SchedulerService.CRON_PARSER.parse(schedule.cron());
     var executionTime = ExecutionTime.forCron(cron);
 
     var next = Objects.requireNonNull(start, "start cannot be null").atZone(timeZone);

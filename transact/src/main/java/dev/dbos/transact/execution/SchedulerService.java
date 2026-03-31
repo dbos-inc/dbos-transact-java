@@ -53,7 +53,7 @@ public class SchedulerService implements AutoCloseable {
     var skedTag = method.getAnnotation(Scheduled.class);
     if (skedTag != null) {
       var paramTypes = method.getParameterTypes();
-      if (!Arrays.equals(paramTypes, EXPECTED_PARAMETERS)) {
+      if (!Arrays.equals(paramTypes, ANNOTATED_EXPECTED_PARAMETERS)) {
         throw new IllegalArgumentException(
             "Invalid signature for annotated workflow schedule %s. Signature must be (Instant, Instant)"
                 .formatted(workflow.fullyQualifiedName()));
@@ -107,7 +107,7 @@ public class SchedulerService implements AutoCloseable {
     var schedules = dbosExecutor.listSchedules(null, null, null);
 
     // shut down any scheduled future that isn't in the list of current schedules
-    var scheduleIds = schedules.stream().map(s -> s.scheduleId()).collect(Collectors.toSet());
+    var scheduleIds = schedules.stream().map(s -> s.id()).collect(Collectors.toSet());
     for (var key : workflowScheduleFutures.keySet()) {
       if (!scheduleIds.contains(key)) {
         cancelWorkflowSchedule(key);
@@ -115,16 +115,20 @@ public class SchedulerService implements AutoCloseable {
     }
 
     for (var schedule : schedules) {
-      if (workflowScheduleFutures.contains(schedule.scheduleId())) {
+      if (workflowScheduleFutures.containsKey(schedule.id())) {
         if (!schedule.isActive()) {
-          cancelWorkflowSchedule(schedule.scheduleId());
+          cancelWorkflowSchedule(schedule.id());
         }
       } else {
+        if (!schedule.isActive()) {
+          continue;
+        }
+
         var optRegWf = dbosExecutor.getWorkflow(schedule.workflowName(), schedule.className());
         if (optRegWf.isEmpty()) {
           logger.error(
               "Workflow schedule {} has missing workflow function {}",
-              schedule.name(),
+              schedule.scheduleName(),
               RegisteredWorkflow.fullyQualifiedName(schedule.className(), schedule.workflowName()));
           continue;
         }
@@ -133,7 +137,7 @@ public class SchedulerService implements AutoCloseable {
         if (!Arrays.equals(regWorkflow.workflowMethod().getParameterTypes(), EXPECTED_PARAMETERS)) {
           logger.error(
               "Workflow schedule {} workflow {} has invalid signature, signature must be (Instant, Object)",
-              schedule.name(),
+              schedule.scheduleName(),
               regWorkflow.fullyQualifiedName());
           continue;
         }
@@ -141,18 +145,19 @@ public class SchedulerService implements AutoCloseable {
         final String queueName =
             Objects.requireNonNullElse(schedule.queueName(), Constants.DBOS_INTERNAL_QUEUE);
         if (dbosExecutor.getQueue(queueName).isEmpty()) {
-          logger.error("Workflow schedule {} has invalid queue {}", schedule.name(), queueName);
+          logger.error(
+              "Workflow schedule {} has invalid queue {}", schedule.scheduleName(), queueName);
           continue;
         }
 
         Cron cron;
         try {
-          cron = CRON_PARSER.parse(schedule.schedule()).validate();
+          cron = CRON_PARSER.parse(schedule.cron()).validate();
         } catch (Exception e) {
           logger.error(
               "Workflow schedule {} has invalid cron expression {}",
-              schedule.name(),
-              schedule.schedule(),
+              schedule.scheduleName(),
+              schedule.cron(),
               e);
           continue;
         }
@@ -160,7 +165,8 @@ public class SchedulerService implements AutoCloseable {
         if (schedule.automaticBackfill()
             && schedule.lastFiredAt() != null
             && schedule.lastFiredAt().isBefore(Instant.now())) {
-          dbosExecutor.backfillSchedule(schedule.name(), schedule.lastFiredAt(), Instant.now());
+          dbosExecutor.backfillSchedule(
+              schedule.scheduleName(), schedule.lastFiredAt(), Instant.now());
         }
 
         var task =
@@ -183,7 +189,7 @@ public class SchedulerService implements AutoCloseable {
                           // but we still cancel it just to be sure
                           var prevFuture =
                               workflowScheduleFutures.put(
-                                  wfSchedule.name(), scheduleTask(this.nextTime, this));
+                                  wfSchedule.id(), scheduleTask(this.nextTime, this));
                           if (prevFuture != null) {
                             prevFuture.cancel(false);
                           }
@@ -204,16 +210,17 @@ public class SchedulerService implements AutoCloseable {
                       "starting scheduled workflow {} at {}",
                       regWorkflow.fullyQualifiedName(),
                       nextTime);
-                  var workflowId = "sched-%s-%s".formatted(wfSchedule.name(), nextTime);
+                  var workflowId = "sched-%s-%s".formatted(wfSchedule.scheduleName(), nextTime);
                   var appVersion = dbosExecutor.getLatestApplicationVersion().versionName();
                   var options =
                       new StartWorkflowOptions(workflowId)
                           .withQueue(queueName)
                           .withAppVersion(appVersion);
                   dbosExecutor.startWorkflow(regWorkflow, args, options);
-                  systemDatabase.updateScheduleLastFiredAt(wfSchedule.name(), nextTime.toInstant());
+                  systemDatabase.updateScheduleLastFiredAt(
+                      wfSchedule.scheduleName(), nextTime.toInstant());
                 } catch (Exception e) {
-                  logger.error("Scheduled task {} exception", schedule.name(), e);
+                  logger.error("Scheduled task {} exception", schedule.scheduleName(), e);
                 } finally {
                   schedule();
                 }
@@ -278,21 +285,22 @@ public class SchedulerService implements AutoCloseable {
     }
   }
 
-  private ScheduledFuture<?> scheduleTask(ZonedDateTime lastTime, Runnable task) {
+  private ScheduledFuture<?> scheduleTask(ZonedDateTime nextTime, Runnable task) {
     // to prevent the "thundering herd" problem in a distributed setting,
-    // apply a jitter of up to 10% of the delay time, capped at 10 seconds
-    var rng = ThreadLocalRandom.current();
-    var delay = Duration.between(Instant.now(), Objects.requireNonNull(lastTime));
-    delay = delay.isNegative() ? Duration.ZERO : delay;
-    var maxJitter = delay.compareTo(MAX_JITTER) > 0 ? MAX_JITTER : delay;
-    var jitterNanos = rng.nextLong(maxJitter.toNanos());
-    delay = delay.plus(Duration.ofNanos(jitterNanos));
+    // apply a jitter of up to 10% of the sleep time, capped at 10 seconds
+    var sleepTime = Duration.between(ZonedDateTime.now(), Objects.requireNonNull(nextTime));
+    sleepTime = sleepTime.isNegative() ? Duration.ZERO : sleepTime;
+    var tenPctSleepTime = sleepTime.dividedBy(10);
+    var maxJitter = tenPctSleepTime.compareTo(MAX_JITTER) > 0 ? MAX_JITTER : tenPctSleepTime;
+    if (!maxJitter.isZero()) {
+      var jitterNanos = ThreadLocalRandom.current().nextLong(maxJitter.toNanos());
+      sleepTime = sleepTime.plus(Duration.ofNanos(jitterNanos));
+    }
 
     var execService = execServiceRef.get();
-    if (execService != null) {
-      return execService.schedule(task, delay.toMillis(), TimeUnit.MILLISECONDS);
-    }
-    return null;
+    return execService == null
+        ? null
+        : execService.schedule(task, sleepTime.toMillis(), TimeUnit.MILLISECONDS);
   }
 
   private void cancelWorkflowSchedule(String scheduleId) {
