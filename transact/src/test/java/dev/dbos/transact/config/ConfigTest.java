@@ -32,6 +32,7 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.junit.jupiter.api.parallel.Isolated;
 import org.postgresql.ds.PGSimpleDataSource;
 import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
 
@@ -78,13 +79,21 @@ class ExecutorTestServiceImpl implements ExecutorTestService {
   }
 }
 
+// @Isolated + @Execution(SAME_THREAD) together fully serialize this class:
+//   - SAME_THREAD: all methods within ConfigTest run sequentially on one thread
+//   - @Isolated: no other test class runs concurrently while ConfigTest executes
+// This is required because several tests temporarily mutate JVM-global environment variables
+// (DBOS__APPVERSION, DBOS__VMID, etc.) via EnvironmentVariables.execute(). That mutation is
+// visible to all threads — not just the thread running the lambda — so without isolation,
+// concurrent tests can pick up spurious values and fail.
+@Isolated
+@Execution(ExecutionMode.SAME_THREAD)
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ConfigTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
   @Test
-  @Execution(ExecutionMode.SAME_THREAD)
   public void configOverridesEnvAppVerAndExecutor() throws Exception {
     var envVars =
         new EnvironmentVariables("DBOS__VMID", "test-env-executor-id")
@@ -113,7 +122,6 @@ public class ConfigTest {
   }
 
   @Test
-  @Execution(ExecutionMode.SAME_THREAD)
   public void envAppVerAndExecutor() throws Exception {
     var envVars =
         new EnvironmentVariables("DBOS__VMID", "test-env-executor-id")
@@ -138,7 +146,6 @@ public class ConfigTest {
   }
 
   @Test
-  @Execution(ExecutionMode.SAME_THREAD)
   public void dbosCloudEnvOverridesConfigAppVerAndExecutor() throws Exception {
     var envVars =
         new EnvironmentVariables("DBOS__CLOUD", "true")
@@ -168,7 +175,6 @@ public class ConfigTest {
   }
 
   @Test
-  @Execution(ExecutionMode.SAME_THREAD)
   public void localExecutorId() throws Exception {
     var config = pgContainer.dbosConfig();
     var dbos = new DBOS(config);
@@ -184,7 +190,6 @@ public class ConfigTest {
   }
 
   @Test
-  @Execution(ExecutionMode.SAME_THREAD)
   public void conductorExecutorId() throws Exception {
     var config = pgContainer.dbosConfig().withConductorKey("test-conductor-key");
     var dbos = new DBOS(config);
@@ -233,7 +238,6 @@ public class ConfigTest {
   }
 
   @Test
-  @Execution(ExecutionMode.SAME_THREAD)
   public void calcAppVersion() throws Exception {
     var config = pgContainer.dbosConfig();
     var dbos = new DBOS(config);
@@ -350,7 +354,6 @@ public class ConfigTest {
   }
 
   @Test
-  @Execution(ExecutionMode.SAME_THREAD)
   public void testAppVersion() throws Exception {
     // versionOne: auto-computed from registered workflow classes; verify it is a hex string
     String versionOne;
@@ -506,7 +509,6 @@ public class ConfigTest {
   }
 
   @Test
-  @Execution(ExecutionMode.SAME_THREAD)
   public void appVersion() throws Exception {
     var envVars = new EnvironmentVariables("DBOS__APPID", "test-env-app-id");
 
