@@ -99,6 +99,16 @@ public class SchedulerService implements AutoCloseable {
   }
 
   private void pollWorkflowSchedules() {
+    try {
+      pollWorkflowSchedulesImpl();
+    } catch (Exception e) {
+      // Catch all exceptions to prevent scheduleAtFixedRate from permanently suppressing future
+      // poll invocations. A transient DB failure should not permanently disable the scheduler.
+      logger.error("pollWorkflowSchedules failed", e);
+    }
+  }
+
+  private void pollWorkflowSchedulesImpl() {
     // if execServiceRef is null, the scheduler service was shut down so don't poll schedules
     if (execServiceRef.get() == null) {
       return;
