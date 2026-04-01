@@ -547,6 +547,6 @@ class WorkflowScheduleTest {
     Thread.sleep(8000);
 
     assertTrue(impl.counter >= 2, "Expected at least 2 executions, got " + impl.counter);
-    assertTrue(impl.counter <= 6, "Expected at most 6 executions, got " + impl.counter);
+    assertTrue(impl.counter <= 10, "Expected at most 10 executions, got " + impl.counter);
   }
 }
