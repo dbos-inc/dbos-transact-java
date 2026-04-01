@@ -586,7 +586,7 @@ class WorkflowDAO {
             rs.getString("authenticated_user"),
             rs.getString("assumed_role"),
             (authenticatedRolesJson != null)
-                ? (String[]) JSONUtil.deserializeToArray(authenticatedRolesJson)
+                ? deserializeAuthenticatedRoles(authenticatedRolesJson)
                 : null,
             loadInput
                 ? SerializationUtil.deserializePositionalArgs(
@@ -613,6 +613,14 @@ class WorkflowDAO {
             rs.getString("parent_workflow_id"),
             serialization);
     return info;
+  }
+
+  private static String[] deserializeAuthenticatedRoles(String json) {
+    try {
+      return JSONUtil.fromJson(json, String[].class);
+    } catch (Exception e) {
+      return (String[]) JSONUtil.deserializeToArray(json);
+    }
   }
 
   List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
