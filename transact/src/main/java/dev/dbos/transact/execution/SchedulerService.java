@@ -115,7 +115,13 @@ public class SchedulerService implements AutoCloseable {
     }
 
     var schedules = dbosExecutor.listSchedules(null, null, null);
-    logger.debug("pollWorkflowSchedules found {} schedules", schedules.size());
+    if (logger.isDebugEnabled()) {
+      logger.debug("pollWorkflowSchedules found {} schedules", schedules.size());
+      for (var s : schedules) {
+        logger.debug(
+            "  schedule: {} workflow: {} cron: {}", s.scheduleName(), s.workflowName(), s.cron());
+      }
+    }
 
     // shut down any scheduled future that isn't in the list of current schedules
     var scheduleIds = schedules.stream().map(s -> s.id()).collect(Collectors.toSet());

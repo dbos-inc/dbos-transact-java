@@ -542,8 +542,9 @@ class WorkflowScheduleTest {
     assertTrue(schedule.isPresent(), "Schedule should be created");
     assertEquals(ScheduleStatus.ACTIVE, schedule.get().status());
 
-    // Allow time for at least 2 scheduler polls + a few workflow executions
-    Thread.sleep(5000);
+    // Allow time for scheduler polls + workflow executions
+    // Schedule triggers at second boundary, so wait long enough for multiple executions
+    Thread.sleep(8000);
 
     assertTrue(impl.counter >= 2, "Expected at least 2 executions, got " + impl.counter);
     assertTrue(impl.counter <= 6, "Expected at most 6 executions, got " + impl.counter);
