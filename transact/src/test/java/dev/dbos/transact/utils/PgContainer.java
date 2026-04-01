@@ -18,8 +18,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 public class PgContainer implements AutoCloseable {
 
-  // SIZE should match junit.jupiter.execution.parallel.config.fixed.parallelism value
-  private static final int SIZE = 4;
+  private static final int SIZE = Runtime.getRuntime().availableProcessors();
   private static final BlockingQueue<PostgreSQLContainer> POOL = new ArrayBlockingQueue<>(SIZE);
   private static final Semaphore PERMITS = new Semaphore(SIZE);
 
