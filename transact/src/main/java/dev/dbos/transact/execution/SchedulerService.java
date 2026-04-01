@@ -115,6 +115,7 @@ public class SchedulerService implements AutoCloseable {
     }
 
     var schedules = dbosExecutor.listSchedules(null, null, null);
+    logger.debug("pollWorkflowSchedules found {} schedules", schedules.size());
 
     // shut down any scheduled future that isn't in the list of current schedules
     var scheduleIds = schedules.stream().map(s -> s.id()).collect(Collectors.toSet());
@@ -213,11 +214,12 @@ public class SchedulerService implements AutoCloseable {
 
                 try {
                   var args = new Object[] {nextTime.toInstant(), wfSchedule.context()};
-                  logger.debug(
-                      "starting scheduled workflow {} at {}",
-                      regWorkflow.fullyQualifiedName(),
-                      nextTime);
                   var workflowId = "sched-%s-%s".formatted(wfSchedule.scheduleName(), nextTime);
+                  logger.debug(
+                      "Queuing scheduled workflow {} schedule {} workflowId {}",
+                      regWorkflow.fullyQualifiedName(),
+                      wfSchedule.scheduleName(),
+                      workflowId);
                   var appVersion = dbosExecutor.getLatestApplicationVersion().versionName();
                   var options =
                       new StartWorkflowOptions(workflowId)
@@ -240,9 +242,14 @@ public class SchedulerService implements AutoCloseable {
   }
 
   private void startAnnotatedSchedules() {
-    logger.debug("startAnnotatedSchedules");
+    var annotatedSchedules = getAnnotatedWorkflowSchedules();
+    logger.debug("startAnnotatedSchedules found {} annotated schedules", annotatedSchedules.size());
 
-    for (var swf : getAnnotatedWorkflowSchedules()) {
+    for (var swf : annotatedSchedules) {
+      logger.debug(
+          "Registering annotated schedule {} with cron {}",
+          swf.workflow().fullyQualifiedName(),
+          swf.cron());
       var task =
           new Runnable() {
 
@@ -272,8 +279,12 @@ public class SchedulerService implements AutoCloseable {
               var scheduledTime = nextTime;
               try {
                 var args = new Object[] {scheduledTime.toInstant(), Instant.now()};
-                logger.debug("starting scheduled workflow {} at {}", workflowName, args[1]);
                 var workflowId = "sched-%s-%s".formatted(workflowName, scheduledTime);
+                logger.debug(
+                    "Triggering annotated workflow {} at {} workflowId {}",
+                    workflowName,
+                    args[1],
+                    workflowId);
                 var appVersion = dbosExecutor.getLatestApplicationVersion().versionName();
                 var options =
                     new StartWorkflowOptions(workflowId)

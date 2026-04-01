@@ -534,9 +534,13 @@ class WorkflowScheduleTest {
   public void scheduleRunsAfterPolling() throws Exception {
     var impl = registerAndLaunch();
 
-    // With 1s polling, the scheduler will pick this up within ~1 second of creation.
     dbos.createSchedule(
         "run-sched", workflowName(), className(), "0/1 * * * * *", null, false, null, null);
+
+    // Verify schedule was created and is active
+    var schedule = dbos.getSchedule("run-sched");
+    assertTrue(schedule.isPresent(), "Schedule should be created");
+    assertEquals(ScheduleStatus.ACTIVE, schedule.get().status());
 
     // Allow time for at least 2 scheduler polls + a few workflow executions
     Thread.sleep(5000);
