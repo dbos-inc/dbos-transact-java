@@ -14,7 +14,7 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-interface SkedService {
+interface AnnotatedScheduledService {
   void everySecond(Instant schedule, Instant actual);
 
   void everyThird(Instant schedule, Instant actual);
@@ -28,13 +28,13 @@ interface SkedService {
   void everySecondDontIgnoreMissed(Instant schedule, Instant actual);
 }
 
-class SkedServiceImpl implements SkedService {
+class AnnotatedScheduledServiceImpl implements AnnotatedScheduledService {
 
-  private static final Logger logger = LoggerFactory.getLogger(SkedServiceImpl.class);
+  private static final Logger logger = LoggerFactory.getLogger(AnnotatedScheduledServiceImpl.class);
 
   private final DBOS dbos;
 
-  public SkedServiceImpl(DBOS dbos) {
+  public AnnotatedScheduledServiceImpl(DBOS dbos) {
     this.dbos = dbos;
   }
 

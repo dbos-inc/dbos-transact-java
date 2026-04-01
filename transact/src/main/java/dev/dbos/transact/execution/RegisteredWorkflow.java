@@ -6,6 +6,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Objects;
 
+import org.jspecify.annotations.NonNull;
+
 public record RegisteredWorkflow(
     String name,
     String className,
@@ -23,9 +25,17 @@ public record RegisteredWorkflow(
     Objects.requireNonNull(workflowMethod, "workflow method must not be null");
   }
 
+  public static String fullyQualifiedName(@NonNull String className, @NonNull String workflowName) {
+    return fullyQualifiedName(className, "", workflowName);
+  }
+
   public static String fullyQualifiedName(
-      String className, String instanceName, String workflowName) {
-    return String.format("%s/%s/%s", className, instanceName, workflowName);
+      @NonNull String className, @NonNull String instanceName, @NonNull String workflowName) {
+    return String.format(
+        "%s/%s/%s",
+        Objects.requireNonNull(className, "className cannot be null"),
+        Objects.requireNonNull(instanceName, "instanceName cannot be null"),
+        Objects.requireNonNull(workflowName, "workflowName cannot be null"));
   }
 
   public String fullyQualifiedName() {

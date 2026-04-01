@@ -4,6 +4,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.workflow.Queue;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.Set;
@@ -31,7 +32,8 @@ public record DBOSConfig(
     @Nullable String databaseSchema,
     boolean enablePatching,
     @NonNull Set<String> listenQueues,
-    @Nullable DBOSSerializer serializer) {
+    @Nullable DBOSSerializer serializer,
+    @Nullable Duration schedulerPollingInterval) {
 
   public DBOSConfig {
     if (appName == null || appName.isEmpty()) {
@@ -59,7 +61,7 @@ public record DBOSConfig(
         appName, null, null, null, null, false, // adminServer
         3001, // adminServerPort
         true, // migrate
-        null, null, null, null, null, false, null, null);
+        null, null, null, null, null, false, null, null, null);
   }
 
   public static @NonNull DBOSConfig defaultsFromEnv(@NonNull String appName) {
@@ -90,7 +92,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withDatabaseUrl(@Nullable String v) {
@@ -110,7 +113,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withDbUser(@Nullable String v) {
@@ -130,7 +134,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withDbPassword(@Nullable String v) {
@@ -150,7 +155,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withDataSource(@Nullable DataSource v) {
@@ -170,7 +176,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withAdminServer(boolean v) {
@@ -190,7 +197,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withAdminServerPort(int v) {
@@ -210,7 +218,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withMigrate(boolean v) {
@@ -230,7 +239,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withConductorKey(@Nullable String v) {
@@ -250,7 +260,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withConductorDomain(@Nullable String v) {
@@ -270,7 +281,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withAppVersion(@Nullable String v) {
@@ -290,7 +302,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withExecutorId(@Nullable String v) {
@@ -310,7 +323,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withDatabaseSchema(@Nullable String v) {
@@ -330,7 +344,8 @@ public record DBOSConfig(
         v,
         enablePatching,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withEnablePatching() {
@@ -358,7 +373,8 @@ public record DBOSConfig(
         databaseSchema,
         v,
         listenQueues,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig enableAdminServer() {
@@ -406,7 +422,8 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         v,
-        serializer);
+        serializer,
+        schedulerPollingInterval);
   }
 
   public @NonNull DBOSConfig withSerializer(@Nullable DBOSSerializer v) {
@@ -426,17 +443,41 @@ public record DBOSConfig(
         databaseSchema,
         enablePatching,
         listenQueues,
+        v,
+        schedulerPollingInterval);
+  }
+
+  public @NonNull DBOSConfig withSchedulerPollingInterval(@Nullable Duration v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
+        serializer,
         v);
   }
 
   // Override toString to mask the DB password
   @Override
   public String toString() {
-    return ("DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, "
-            + "dataSource=%s, dbSchema=%s, adminServer=%s, adminServerPort=%d, "
-            + "migrate=%s, conductorKey=%s, conductorDomain=%s, "
-            + "appVersion=%s, executorId=%s, enablePatching=%s, listenQueues=%s, "
-            + "serializer=%s]")
+    return """
+        DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, \
+        dataSource=%s, databaseSchema=%s, adminServer=%s, adminServerPort=%d, \
+        migrate=%s, conductorKey=%s, conductorDomain=%s, \
+        appVersion=%s, executorId=%s, enablePatching=%s, listenQueues=%s, \
+        serializer=%s, schedulerPollingInterval=%s]
+        """
         .formatted(
             appName,
             databaseUrl,
@@ -452,6 +493,7 @@ public record DBOSConfig(
             executorId,
             enablePatching,
             listenQueues,
-            serializer != null ? serializer.name() : null);
+            serializer != null ? serializer.name() : null,
+            schedulerPollingInterval);
   }
 }

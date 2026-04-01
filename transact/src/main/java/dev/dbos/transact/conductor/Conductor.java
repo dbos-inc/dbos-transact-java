@@ -1,36 +1,6 @@
 package dev.dbos.transact.conductor;
 
-import dev.dbos.transact.conductor.protocol.AlertRequest;
-import dev.dbos.transact.conductor.protocol.BaseMessage;
-import dev.dbos.transact.conductor.protocol.BaseResponse;
-import dev.dbos.transact.conductor.protocol.CancelRequest;
-import dev.dbos.transact.conductor.protocol.DeleteRequest;
-import dev.dbos.transact.conductor.protocol.ExecutorInfoResponse;
-import dev.dbos.transact.conductor.protocol.ExistPendingWorkflowsRequest;
-import dev.dbos.transact.conductor.protocol.ExistPendingWorkflowsResponse;
-import dev.dbos.transact.conductor.protocol.ExportWorkflowRequest;
-import dev.dbos.transact.conductor.protocol.ExportWorkflowResponse;
-import dev.dbos.transact.conductor.protocol.ForkWorkflowRequest;
-import dev.dbos.transact.conductor.protocol.ForkWorkflowResponse;
-import dev.dbos.transact.conductor.protocol.GetMetricsRequest;
-import dev.dbos.transact.conductor.protocol.GetMetricsResponse;
-import dev.dbos.transact.conductor.protocol.GetWorkflowRequest;
-import dev.dbos.transact.conductor.protocol.GetWorkflowResponse;
-import dev.dbos.transact.conductor.protocol.ImportWorkflowRequest;
-import dev.dbos.transact.conductor.protocol.ListApplicationVersionsResponse;
-import dev.dbos.transact.conductor.protocol.ListQueuedWorkflowsRequest;
-import dev.dbos.transact.conductor.protocol.ListStepsRequest;
-import dev.dbos.transact.conductor.protocol.ListStepsResponse;
-import dev.dbos.transact.conductor.protocol.ListWorkflowsRequest;
-import dev.dbos.transact.conductor.protocol.MessageType;
-import dev.dbos.transact.conductor.protocol.RecoveryRequest;
-import dev.dbos.transact.conductor.protocol.RestartRequest;
-import dev.dbos.transact.conductor.protocol.ResumeRequest;
-import dev.dbos.transact.conductor.protocol.RetentionRequest;
-import dev.dbos.transact.conductor.protocol.SetLatestApplicationVersionRequest;
-import dev.dbos.transact.conductor.protocol.SuccessResponse;
-import dev.dbos.transact.conductor.protocol.WorkflowOutputsResponse;
-import dev.dbos.transact.conductor.protocol.WorkflowsOutput;
+import dev.dbos.transact.conductor.protocol.*;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.JSONUtil;
@@ -39,10 +9,12 @@ import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -57,6 +29,7 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
@@ -702,6 +675,7 @@ public class Conductor implements AutoCloseable {
     }
     return switch (messageType) {
       case ALERT -> handleAlert(this, message);
+      case BACKFILL_SCHEDULE -> handleBackfillSchedule(this, message);
       case CANCEL -> handleCancel(this, message);
       case DELETE -> handleDelete(this, message);
       case EXECUTOR_INFO -> handleExecutorInfo(this, message);
@@ -709,17 +683,22 @@ public class Conductor implements AutoCloseable {
       case EXPORT_WORKFLOW -> handleExportWorkflow(this, message, ws);
       case FORK_WORKFLOW -> handleFork(this, message);
       case GET_METRICS -> handleGetMetrics(this, message);
+      case GET_SCHEDULE -> handleGetSchedule(this, message);
       case GET_WORKFLOW -> handleGetWorkflow(this, message);
       case IMPORT_WORKFLOW -> handleImportWorkflow(this, message);
       case LIST_APPLICATION_VERSIONS -> handleListApplicationVersions(this, message);
       case LIST_QUEUED_WORKFLOWS -> handleListQueuedWorkflows(this, message);
+      case LIST_SCHEDULES -> handleListSchedules(this, message);
       case LIST_STEPS -> handleListSteps(this, message);
       case LIST_WORKFLOWS -> handleListWorkflows(this, message);
+      case PAUSE_SCHEDULE -> handlePauseSchedule(this, message);
       case RECOVERY -> handleRecovery(this, message);
       case RESTART -> handleRestart(this, message);
       case RESUME -> handleResume(this, message);
+      case RESUME_SCHEDULE -> handleResumeSchedule(this, message);
       case RETENTION -> handleRetention(this, message);
       case SET_LATEST_APPLICATION_VERSION -> handleSetLatestApplicationVersion(this, message);
+      case TRIGGER_SCHEDULE -> handleTriggerSchedule(this, message);
     };
   }
 
@@ -1230,7 +1209,7 @@ public class Conductor implements AutoCloseable {
 
   // Used by tests to create import payloads and verify export output
   static String serializeExportedWorkflows(List<ExportedWorkflow> workflows) throws IOException {
-    var out = new java.io.ByteArrayOutputStream();
+    var out = new ByteArrayOutputStream();
     try (var gOut = new GZIPOutputStream(out)) {
       JSONUtil.toJson(gOut, workflows);
     }
@@ -1247,6 +1226,116 @@ public class Conductor implements AutoCloseable {
             return new SuccessResponse(request, true);
           } catch (Exception e) {
             return new SuccessResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleListSchedules(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ListSchedulesRequest request = (ListSchedulesRequest) message;
+          try {
+            List<WorkflowSchedule> schedules =
+                conductor.systemDatabase.listSchedules(
+                    request.statuses(), request.workflowNames(), request.scheduleNamePrefixes());
+            boolean loadContext = request.loadContext();
+            List<ScheduleOutput> output =
+                schedules.stream().map(s -> ScheduleOutput.from(s, loadContext)).toList();
+            return new ListSchedulesResponse(request, output);
+          } catch (Exception e) {
+            logger.error("Exception encountered when listing schedules", e);
+            return new ListSchedulesResponse(request, e.getMessage());
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetSchedule(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetScheduleRequest request = (GetScheduleRequest) message;
+          try {
+            var schedule = conductor.systemDatabase.getSchedule(request.schedule_name);
+            if (schedule.isPresent()) {
+              ScheduleOutput output = ScheduleOutput.from(schedule.get(), request.loadContext());
+              return new GetScheduleResponse(request, output);
+            } else {
+              return new GetScheduleResponse(request, (String) null);
+            }
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when getting schedule {}", request.schedule_name, e);
+            return new GetScheduleResponse(request, e.getMessage());
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handlePauseSchedule(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          PauseScheduleRequest request = (PauseScheduleRequest) message;
+          try {
+            conductor.systemDatabase.pauseSchedule(request.schedule_name);
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when pausing schedule {}", request.schedule_name, e);
+            return new SuccessResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleResumeSchedule(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          ResumeScheduleRequest request = (ResumeScheduleRequest) message;
+          try {
+            conductor.systemDatabase.resumeSchedule(request.schedule_name);
+            return new SuccessResponse(request, true);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when resuming schedule {}", request.schedule_name, e);
+            return new SuccessResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleBackfillSchedule(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          BackfillScheduleRequest request = (BackfillScheduleRequest) message;
+          try {
+            var start = Instant.parse(request.start);
+            var end = Instant.parse(request.end);
+            List<String> workflowIds =
+                DBOSExecutor.backfillSchedule(
+                    request.schedule_name, start, end, conductor.systemDatabase, null);
+            return new BackfillScheduleResponse(request, workflowIds);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when backfilling schedule {}", request.schedule_name, e);
+            return new BackfillScheduleResponse(request, e.getMessage());
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleTriggerSchedule(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          TriggerScheduleRequest request = (TriggerScheduleRequest) message;
+          try {
+            String workflowId =
+                DBOSExecutor.triggerSchedule(request.schedule_name, conductor.systemDatabase, null);
+            return new TriggerScheduleResponse(request, workflowId);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when triggering schedule {}", request.schedule_name, e);
+            return new TriggerScheduleResponse(request, e.getMessage(), true);
           }
         });
   }

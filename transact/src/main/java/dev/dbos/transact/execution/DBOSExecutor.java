@@ -30,12 +30,14 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
@@ -49,6 +51,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -68,15 +71,22 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import com.cronutils.model.time.ExecutionTime;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class DBOSExecutor implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
+
+  // private static final DateTimeFormatter SCHEDULE_ID_FORMATTER =
+  //     DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ssXXX");
 
   private final DBOSConfig config;
   private final DBOSSerializer serializer;
@@ -201,8 +211,10 @@ public class DBOSExecutor implements AutoCloseable {
       queueService = new QueueService(this, systemDatabase);
       queueService.start(queues, config.listenQueues());
 
-      schedulerService = new SchedulerService(Constants.DBOS_INTERNAL_QUEUE);
-      listeners.add(schedulerService);
+      var schedulerPollingInterval =
+          Objects.requireNonNullElse(config.schedulerPollingInterval(), Duration.ofSeconds(30));
+      schedulerService = new SchedulerService(this, systemDatabase, schedulerPollingInterval);
+      schedulerService.start();
 
       for (var listener : listeners) {
         listener.dbosLaunched(dbos);
@@ -264,9 +276,17 @@ public class DBOSExecutor implements AutoCloseable {
 
       shutdownLifecycleListeners();
 
-      queueService.stop();
+      if (schedulerService != null) {
+        schedulerService.close();
+      }
+      schedulerService = null;
+      if (queueService != null) {
+        queueService.close();
+      }
       queueService = null;
-      systemDatabase.close();
+      if (systemDatabase != null) {
+        systemDatabase.close();
+      }
       systemDatabase = null;
 
       timeoutScheduler.shutdownNow();
@@ -335,6 +355,11 @@ public class DBOSExecutor implements AutoCloseable {
 
   public Collection<RegisteredWorkflowInstance> getInstances() {
     return this.instanceMap.values();
+  }
+
+  public Optional<RegisteredWorkflow> getWorkflow(String workflowName, String className) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(className, workflowName);
+    return Optional.ofNullable(this.workflowMap.get(fqName));
   }
 
   public List<Queue> getQueues() {
@@ -862,6 +887,310 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
   }
 
+  public static void createSchedule(
+      @NonNull String scheduleName,
+      @NonNull String workflowName,
+      @NonNull String className,
+      @NonNull String schedule,
+      @Nullable Object context,
+      boolean automaticBackfill,
+      @Nullable ZoneId cronTimeZone,
+      @Nullable String queueName,
+      @NonNull Consumer<WorkflowSchedule> scheduleConsumer) {
+    Objects.requireNonNull(scheduleName, "scheduleName cannot be null");
+    Objects.requireNonNull(workflowName, "workflowName cannot be null");
+    Objects.requireNonNull(className, "className cannot be null");
+    // validate schedule CRON
+    SchedulerService.CRON_PARSER.parse(Objects.requireNonNull(schedule, "schedule cannot be null"));
+
+    final var wfSchedule =
+        new WorkflowSchedule(
+            UUID.randomUUID().toString(),
+            scheduleName,
+            workflowName,
+            className,
+            schedule,
+            ScheduleStatus.ACTIVE,
+            context,
+            null,
+            automaticBackfill,
+            cronTimeZone,
+            queueName);
+
+    scheduleConsumer.accept(wfSchedule);
+  }
+
+  public void createSchedule(
+      @NonNull String scheduleName,
+      @NonNull String workflowName,
+      @NonNull String className,
+      @NonNull String schedule,
+      @Nullable Object context,
+      boolean automaticBackfill,
+      @Nullable ZoneId cronTimeZone,
+      @Nullable String queueName) {
+
+    validateQueue(queueName);
+    validateWorkflow(className, workflowName);
+
+    DBOSExecutor.createSchedule(
+        scheduleName,
+        workflowName,
+        className,
+        schedule,
+        context,
+        automaticBackfill,
+        cronTimeZone,
+        queueName,
+        wfSchedule -> {
+          this.callFunctionAsStep(
+              () -> {
+                systemDatabase.createSchedule(wfSchedule);
+                return null;
+              },
+              "DBOS.createSchedule",
+              null);
+        });
+  }
+
+  public Optional<WorkflowSchedule> getSchedule(String name) {
+    return this.callFunctionAsStep(
+        () -> {
+          return systemDatabase.getSchedule(name);
+        },
+        "DBOS.getSchedule",
+        null);
+  }
+
+  public List<WorkflowSchedule> listSchedules(
+      List<ScheduleStatus> statuses, List<String> workflowNames, List<String> namePrefixes) {
+    return this.callFunctionAsStep(
+        () -> {
+          return systemDatabase.listSchedules(statuses, workflowNames, namePrefixes);
+        },
+        "DBOS.listSchedules",
+        null);
+  }
+
+  public void deleteSchedule(String name) {
+    this.callFunctionAsStep(
+        () -> {
+          systemDatabase.deleteSchedule(name);
+          return null;
+        },
+        "DBOS.deleteSchedule",
+        null);
+  }
+
+  public void pauseSchedule(String name) {
+    this.callFunctionAsStep(
+        () -> {
+          systemDatabase.pauseSchedule(name);
+          return null;
+        },
+        "DBOS.pauseSchedule",
+        null);
+  }
+
+  public void resumeSchedule(String name) {
+    this.callFunctionAsStep(
+        () -> {
+          systemDatabase.resumeSchedule(name);
+          return null;
+        },
+        "DBOS.resumeSchedule",
+        null);
+  }
+
+  public static void applySchedules(
+      List<WorkflowSchedule> schedules, SystemDatabase systemDatabase) {
+
+    schedules =
+        schedules.stream()
+            .map(
+                s -> {
+                  Objects.requireNonNull(s.scheduleName(), "scheduleName cannot be null");
+                  Objects.requireNonNull(s.workflowName(), "workflowName cannot be null");
+                  Objects.requireNonNull(s.className(), "className cannot be null");
+                  SchedulerService.CRON_PARSER.parse(
+                      Objects.requireNonNull(s.cron(), "cron cannot be null"));
+
+                  return s.withScheduleId(UUID.randomUUID().toString())
+                      .withStatus(ScheduleStatus.ACTIVE)
+                      .withLastFiredAt(null);
+                })
+            .toList();
+    systemDatabase.applySchedules(schedules);
+  }
+
+  public void applySchedules(List<WorkflowSchedule> schedules) {
+
+    if (DBOSContextHolder.get().isInWorkflow()) {
+      throw new IllegalStateException(
+          "DBOS.applySchedules cannot be called from within a workflow");
+    }
+
+    for (WorkflowSchedule s : schedules) {
+      validateQueue(s.queueName());
+      validateWorkflow(s.className(), s.workflowName());
+    }
+
+    DBOSExecutor.applySchedules(schedules, systemDatabase);
+  }
+
+  private void validateWorkflow(String className, String workflowName) {
+    validateWorkflow(className, "", workflowName);
+  }
+
+  private void validateWorkflow(String className, String instanceName, String workflowName) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
+    if (!workflowMap.containsKey(fqName)) {
+      throw new IllegalStateException("Workflow function %s is not registered".formatted(fqName));
+    }
+  }
+
+  private void validateQueue(String queueName) {
+    if (queueName != null) {
+      getQueue(queueName)
+          .orElseThrow(
+              () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
+    }
+  }
+
+  public static List<String> backfillSchedule(
+      @NonNull String scheduleName,
+      @NonNull Instant start,
+      @NonNull Instant end,
+      @NonNull SystemDatabase systemDatabase,
+      @Nullable DBOSSerializer serializer) {
+
+    var schedule =
+        Objects.requireNonNull(systemDatabase, "systemDatabase cannot be null")
+            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "Schedule %s does not exist".formatted(scheduleName)));
+
+    var timeZone = Objects.requireNonNullElse(schedule.cronTimezone(), ZoneOffset.UTC);
+    var cron = SchedulerService.CRON_PARSER.parse(schedule.cron());
+    var executionTime = ExecutionTime.forCron(cron);
+
+    var next = Objects.requireNonNull(start, "start cannot be null").atZone(timeZone);
+    var zonedEnd = Objects.requireNonNull(end, "end cannot be null").atZone(timeZone);
+    var workflowIds = new ArrayList<String>();
+
+    while (true) {
+      next = executionTime.nextExecution(next).orElse(null);
+      if (next == null || next.isAfter(zonedEnd)) {
+        break;
+      }
+
+      var workflowId = "sched-%s-%s".formatted(schedule.scheduleName(), next);
+      enqueueScheduledWorkflow(
+          schedule.workflowName(),
+          schedule.className(),
+          workflowId,
+          schedule.context(),
+          schedule.queueName(),
+          next.toInstant(),
+          systemDatabase,
+          serializer);
+
+      workflowIds.add(workflowId);
+    }
+    return workflowIds;
+  }
+
+  public List<WorkflowHandle<Object, Exception>> backfillSchedule(
+      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
+
+    if (DBOSContextHolder.get().isInWorkflow()) {
+      throw new IllegalStateException(
+          "DBOS.backfillSchedule cannot be called from within a workflow");
+    }
+
+    var workflowIds =
+        DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase, serializer);
+    return workflowIds.stream().map(this::retrieveWorkflow).toList();
+  }
+
+  public static String triggerSchedule(
+      @NonNull String scheduleName, SystemDatabase systemDatabase, DBOSSerializer serializer) {
+    var schedule =
+        Objects.requireNonNull(systemDatabase)
+            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "Schedule %s does not exist".formatted(scheduleName)));
+
+    var now = Instant.now();
+    var workflowId = "sched-%s-trigger-%s".formatted(schedule.scheduleName(), now);
+    enqueueScheduledWorkflow(
+        schedule.workflowName(),
+        schedule.className(),
+        workflowId,
+        schedule.context(),
+        schedule.queueName(),
+        now,
+        systemDatabase,
+        serializer);
+    return workflowId;
+  }
+
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(
+      @NonNull String scheduleName) {
+    if (DBOSContextHolder.get().isInWorkflow()) {
+      throw new IllegalStateException(
+          "DBOS.triggerSchedule cannot be called from within a workflow");
+    }
+
+    var workflowId = triggerSchedule(scheduleName, systemDatabase, serializer);
+    return retrieveWorkflow(workflowId);
+  }
+
+  private static void enqueueScheduledWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @NonNull String workflowId,
+      Object context,
+      String queueName,
+      @NonNull Instant scheduledAt,
+      SystemDatabase systemDatabase,
+      DBOSSerializer serializer) {
+    var latestAppVersion = systemDatabase.getLatestApplicationVersion().versionName();
+    queueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
+    var args = new Object[] {Objects.requireNonNull(scheduledAt), context};
+
+    var options =
+        new ExecutionOptions(
+            workflowId,
+            null,
+            null,
+            queueName,
+            null,
+            null,
+            null,
+            latestAppVersion,
+            false,
+            false,
+            null);
+    enqueueWorkflow(
+        workflowName,
+        className,
+        "",
+        null,
+        args,
+        options,
+        null,
+        null,
+        null,
+        null,
+        systemDatabase,
+        serializer);
+  }
+
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return systemDatabase.getExternalState(service, workflowName, key);
   }
@@ -1022,6 +1351,10 @@ public class DBOSExecutor implements AutoCloseable {
         throw new IllegalArgumentException(
             "ExecutionOptions partition key and deduplication ID cannot both be set");
       }
+    }
+
+    public ExecutionOptions(String workflowId) {
+      this(workflowId, null, null, null, null, null, null, null, false, false, null);
     }
 
     public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {

@@ -41,7 +41,14 @@ class RecoveryServiceTest {
 
   @BeforeEach
   void setUp() {
-    dbosConfig = pgContainer.dbosConfig();
+    // Pin executor ID and app version explicitly so both DBOS instances in recoveryThreadTest
+    // use the same values. This ensures getPendingWorkflows finds the right pending workflows
+    // when the second instance recovers them.
+    dbosConfig =
+        pgContainer
+            .dbosConfig()
+            .withExecutorId("recovery-test-executor")
+            .withAppVersion("recovery-test-version");
     dataSource = pgContainer.dataSource();
     testQueue = new Queue("q1");
   }

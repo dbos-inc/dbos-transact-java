@@ -43,7 +43,7 @@ public class WorkflowRegistry {
             method,
             maxRecoveryAttempts,
             serializationStrategy);
-    SchedulerService.validateScheduledWorkflow(regWorkflow);
+    SchedulerService.validateAnnotatedWorkflowSchedule(regWorkflow);
 
     var previous = wfRegistry.putIfAbsent(fqName, regWorkflow);
     if (previous != null) {

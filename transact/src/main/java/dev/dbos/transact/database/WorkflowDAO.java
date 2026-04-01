@@ -531,31 +531,35 @@ class WorkflowDAO {
 
     try (Connection connection = dataSource.getConnection();
         PreparedStatement pstmt = connection.prepareStatement(sqlBuilder.toString())) {
-
-      for (int i = 0; i < parameters.size(); i++) {
-
-        Object param = parameters.get(i);
-        if (param instanceof String v) {
-          pstmt.setString(i + 1, v);
-        } else if (param instanceof Long v) {
-          pstmt.setLong(i + 1, v);
-        } else if (param instanceof Integer v) {
-          pstmt.setInt(i + 1, v);
-        } else if (param instanceof Object[] v) {
-          Array sqlArray = connection.createArrayOf("text", v);
-          pstmt.setArray(i + 1, sqlArray);
-        } else {
-          // Fallback for other types, or if OffsetDateTime was directly added
-          // to
-          // parameters list
-          pstmt.setObject(i + 1, param);
+      List<Array> arrays = new ArrayList<>();
+      try {
+        for (int i = 0; i < parameters.size(); i++) {
+          Object param = parameters.get(i);
+          if (param instanceof String v) {
+            pstmt.setString(i + 1, v);
+          } else if (param instanceof Long v) {
+            pstmt.setLong(i + 1, v);
+          } else if (param instanceof Integer v) {
+            pstmt.setInt(i + 1, v);
+          } else if (param instanceof Object[] v) {
+            Array sqlArray = connection.createArrayOf("text", v);
+            arrays.add(sqlArray);
+            pstmt.setArray(i + 1, sqlArray);
+          } else {
+            pstmt.setObject(i + 1, param);
+          }
         }
-      }
 
-      try (ResultSet rs = pstmt.executeQuery()) {
-        while (rs.next()) {
-          WorkflowStatus info = resultsToWorkflowStatus(rs, loadInput, loadOutput, this.serializer);
-          workflows.add(info);
+        try (ResultSet rs = pstmt.executeQuery()) {
+          while (rs.next()) {
+            WorkflowStatus info =
+                resultsToWorkflowStatus(rs, loadInput, loadOutput, this.serializer);
+            workflows.add(info);
+          }
+        }
+      } finally {
+        for (Array array : arrays) {
+          array.free();
         }
       }
     }

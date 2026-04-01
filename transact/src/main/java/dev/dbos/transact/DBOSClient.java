@@ -8,17 +8,20 @@ import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -828,5 +831,120 @@ public class DBOSClient implements AutoCloseable {
    */
   public void setLatestApplicationVersion(@NonNull String versionName) {
     systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
+  }
+
+  /**
+   * Create a cron schedule. The scheduleId is generated if null.
+   *
+   * @param schedule the schedule configuration
+   */
+  public void createSchedule(
+      @NonNull String scheduleName,
+      @NonNull String workflowName,
+      @NonNull String className,
+      @NonNull String schedule,
+      @Nullable Object context,
+      boolean backfill,
+      @Nullable ZoneId cronTimeZone,
+      @Nullable String queueName) {
+    DBOSExecutor.createSchedule(
+        scheduleName,
+        workflowName,
+        className,
+        schedule,
+        context,
+        backfill,
+        cronTimeZone,
+        queueName,
+        wfSchedule -> systemDatabase.createSchedule(wfSchedule));
+  }
+
+  /**
+   * Get a schedule by name.
+   *
+   * @param name schedule name
+   * @return the schedule, or empty if not found
+   */
+  public @NonNull Optional<WorkflowSchedule> getSchedule(@NonNull String name) {
+    return systemDatabase.getSchedule(name);
+  }
+
+  /**
+   * List schedules with optional filters.
+   *
+   * @param status filter by status; null means no filter
+   * @param workflowName filter by workflow name; null means no filter
+   * @param namePrefix filter by schedule name prefix; null means no filter
+   * @return matching schedules
+   */
+  public @NonNull List<WorkflowSchedule> listSchedules(
+      @Nullable List<ScheduleStatus> status,
+      @Nullable List<String> workflowName,
+      @Nullable List<String> namePrefix) {
+    return systemDatabase.listSchedules(status, workflowName, namePrefix);
+  }
+
+  /**
+   * Delete a schedule by name. No-op if the schedule does not exist.
+   *
+   * @param name schedule name
+   */
+  public void deleteSchedule(@NonNull String name) {
+    systemDatabase.deleteSchedule(name);
+  }
+
+  /**
+   * Pause a schedule. A paused schedule does not fire.
+   *
+   * @param name schedule name
+   */
+  public void pauseSchedule(@NonNull String name) {
+    systemDatabase.pauseSchedule(name);
+  }
+
+  /**
+   * Resume a paused schedule so it begins firing again.
+   *
+   * @param name schedule name
+   */
+  public void resumeSchedule(@NonNull String name) {
+    systemDatabase.resumeSchedule(name);
+  }
+
+  /**
+   * Atomically create or replace a set of schedules.
+   *
+   * @param schedules the schedules to apply
+   */
+  public void applySchedules(@NonNull List<WorkflowSchedule> schedules) {
+    systemDatabase.applySchedules(schedules);
+  }
+
+  // /**
+  //  * Enqueue all executions of a schedule that would have run between {@code start} (exclusive)
+  // and
+  //  * {@code end} (exclusive).
+  //  *
+  //  * @param scheduleName name of an existing schedule
+  //  * @param start start of the backfill window (exclusive)
+  //  * @param end end of the backfill window (exclusive)
+  //  * @return handles to the enqueued executions
+  //  */
+  public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
+      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
+    var ids = DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase, serializer);
+    return ids.stream().<WorkflowHandle<Object, Exception>>map(this::retrieveWorkflow).toList();
+  }
+
+  // /**
+  //  * Immediately enqueue the scheduled workflow at the current time.
+  //  *
+  //  * @param scheduleName name of an existing schedule
+  //  * @return handle to the enqueued execution
+  //  */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(
+      @NonNull String scheduleName) {
+    var id = DBOSExecutor.triggerSchedule(scheduleName, systemDatabase, serializer);
+    return retrieveWorkflow(id);
   }
 }

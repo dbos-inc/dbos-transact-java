@@ -10,10 +10,12 @@ import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
@@ -53,6 +55,7 @@ public class SystemDatabase implements AutoCloseable {
   private final QueuesDAO queuesDAO;
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
+  private final SchedulesDAO schedulesDAO;
 
   private SystemDatabase(
       DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
@@ -69,6 +72,7 @@ public class SystemDatabase implements AutoCloseable {
     stepsDAO = new StepsDAO(dataSource, this.schema, serializer);
     workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
     queuesDAO = new QueuesDAO(dataSource, this.schema);
+    schedulesDAO = new SchedulesDAO(dataSource, this.schema, serializer);
     notificationService = new NotificationService(dataSource);
     notificationsDAO =
         new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
@@ -560,6 +564,65 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(
         () -> {
           workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold);
+          return null;
+        });
+  }
+
+  public void createSchedule(WorkflowSchedule schedule) {
+    dbRetry(
+        () -> {
+          schedulesDAO.createSchedule(schedule);
+          return null;
+        });
+  }
+
+  public Optional<WorkflowSchedule> getSchedule(String name) {
+    return dbRetry(() -> schedulesDAO.getSchedule(name));
+  }
+
+  public List<WorkflowSchedule> listSchedules(
+      List<ScheduleStatus> statuses,
+      List<String> workflowNames,
+      List<String> scheduleNamePrefixes) {
+    return dbRetry(() -> schedulesDAO.listSchedules(statuses, workflowNames, scheduleNamePrefixes));
+  }
+
+  public void pauseSchedule(String name) {
+    dbRetry(
+        () -> {
+          schedulesDAO.pauseSchedule(name);
+          return null;
+        });
+  }
+
+  public void resumeSchedule(String name) {
+    dbRetry(
+        () -> {
+          schedulesDAO.resumeSchedule(name);
+          return null;
+        });
+  }
+
+  public void updateScheduleLastFiredAt(String name, Instant lastFiredAt) {
+    dbRetry(
+        () -> {
+          schedulesDAO.updateScheduleLastFiredAt(name, lastFiredAt);
+          return null;
+        });
+  }
+
+  public void deleteSchedule(String name) {
+    dbRetry(
+        () -> {
+          schedulesDAO.deleteSchedule(name);
+          return null;
+        });
+  }
+
+  public void applySchedules(List<WorkflowSchedule> schedules) {
+    dbRetry(
+        () -> {
+          schedulesDAO.applySchedules(schedules);
           return null;
         });
   }
