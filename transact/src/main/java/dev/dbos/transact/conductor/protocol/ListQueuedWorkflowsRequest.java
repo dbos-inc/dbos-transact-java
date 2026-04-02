@@ -3,43 +3,111 @@ package dev.dbos.transact.conductor.protocol;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 public class ListQueuedWorkflowsRequest extends BaseMessage {
   public Body body;
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public static class Body {
-    public String workflow_name;
+    public List<String> workflow_uuids;
+
+    @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> workflow_name;
+
+    @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> authenticated_user;
+
     public String start_time;
     public String end_time;
-    public String status;
-    public String forked_from;
-    public String parent_workflow_id;
-    public String queue_name;
+
+    @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> status;
+
+    @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> application_version;
+
+    @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> forked_from;
+
+    @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> parent_workflow_id;
+
+    @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> queue_name;
+
     public Integer limit;
     public Integer offset;
     public Boolean sort_desc;
+
+    @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> workflow_id_prefix;
+
     public Boolean load_input;
+    public Boolean load_output;
+
+    @JsonDeserialize(using = StringOrListDeserializer.class)
+    public List<String> executor_id;
+
+    public Boolean was_forked_from;
   }
 
   public static class Builder {
-    private String workflow_name;
+    private List<String> workflow_uuids;
+    private List<String> workflow_name;
+    private List<String> authenticated_user;
     private String start_time;
     private String end_time;
-    private String status;
-    private String forked_from;
-    private String parent_workflow_id;
-    private String queue_name;
+    private List<String> status;
+    private List<String> application_version;
+    private List<String> forked_from;
+    private List<String> parent_workflow_id;
+    private List<String> queue_name;
     private Integer limit;
     private Integer offset;
     private Boolean sort_desc;
+    private List<String> workflow_id_prefix;
     private Boolean load_input;
+    private Boolean load_output;
+    private List<String> executor_id;
+    private Boolean was_forked_from;
+
+    public Builder workflowUuids(List<String> workflow_uuids) {
+      this.workflow_uuids = workflow_uuids;
+      return this;
+    }
 
     public Builder workflowName(String workflowName) {
+      workflow_name = workflowName == null ? null : List.of(workflowName);
+      return this;
+    }
+
+    public Builder workflowNames(List<String> workflowName) {
       workflow_name = workflowName;
+      return this;
+    }
+
+    public Builder authenticatedUser(String authenticated_user) {
+      this.authenticated_user = authenticated_user == null ? null : List.of(authenticated_user);
+      return this;
+    }
+
+    public Builder authenticatedUsers(List<String> authenticated_user) {
+      this.authenticated_user = authenticated_user;
+      return this;
+    }
+
+    public Builder applicationVersion(String application_version) {
+      this.application_version = application_version == null ? null : List.of(application_version);
+      return this;
+    }
+
+    public Builder applicationVersions(List<String> application_version) {
+      this.application_version = application_version;
       return this;
     }
 
@@ -54,21 +122,41 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
     }
 
     public Builder status(String status) {
+      this.status = status == null ? null : List.of(status);
+      return this;
+    }
+
+    public Builder statuses(List<String> status) {
       this.status = status;
       return this;
     }
 
     public Builder forkedFrom(String forkedFrom) {
+      this.forked_from = forkedFrom == null ? null : List.of(forkedFrom);
+      return this;
+    }
+
+    public Builder forkedFrom(List<String> forkedFrom) {
       this.forked_from = forkedFrom;
       return this;
     }
 
     public Builder parentWorkflowId(String parentWorkflowId) {
+      this.parent_workflow_id = parentWorkflowId == null ? null : List.of(parentWorkflowId);
+      return this;
+    }
+
+    public Builder parentWorkflowIds(List<String> parentWorkflowId) {
       this.parent_workflow_id = parentWorkflowId;
       return this;
     }
 
     public Builder queueName(String queueName) {
+      this.queue_name = queueName == null ? null : List.of(queueName);
+      return this;
+    }
+
+    public Builder queueNames(List<String> queueName) {
       this.queue_name = queueName;
       return this;
     }
@@ -93,23 +181,60 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
       return this;
     }
 
+    public Builder loadOutput(Boolean loadOutput) {
+      this.load_output = loadOutput;
+      return this;
+    }
+
+    public Builder workflowIdPrefix(String workflow_id_prefix) {
+      this.workflow_id_prefix = workflow_id_prefix == null ? null : List.of(workflow_id_prefix);
+      return this;
+    }
+
+    public Builder workflowIdPrefixes(List<String> workflow_id_prefix) {
+      this.workflow_id_prefix = workflow_id_prefix;
+      return this;
+    }
+
+    public Builder executorId(String executor_id) {
+      this.executor_id = executor_id == null ? null : List.of(executor_id);
+      return this;
+    }
+
+    public Builder executorIds(List<String> executor_id) {
+      this.executor_id = executor_id;
+      return this;
+    }
+
+    public Builder wasForkedFrom(Boolean was_forked_from) {
+      this.was_forked_from = was_forked_from;
+      return this;
+    }
+
     public ListQueuedWorkflowsRequest build(String requestId) {
       ListQueuedWorkflowsRequest request = new ListQueuedWorkflowsRequest();
       request.type = MessageType.LIST_QUEUED_WORKFLOWS.getValue();
       request.request_id = requestId;
 
       Body body = new Body();
+      body.workflow_uuids = this.workflow_uuids;
       body.workflow_name = this.workflow_name;
+      body.authenticated_user = this.authenticated_user;
       body.start_time = this.start_time;
       body.end_time = this.end_time;
       body.status = this.status;
+      body.application_version = this.application_version;
       body.forked_from = this.forked_from;
       body.parent_workflow_id = this.parent_workflow_id;
       body.queue_name = this.queue_name;
       body.limit = this.limit;
       body.offset = this.offset;
       body.sort_desc = this.sort_desc;
+      body.workflow_id_prefix = this.workflow_id_prefix;
       body.load_input = this.load_input;
+      body.load_output = this.load_output;
+      body.executor_id = this.executor_id;
+      body.was_forked_from = this.was_forked_from;
       request.body = body;
       return request;
     }
@@ -120,16 +245,26 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
 
     return new ListWorkflowsInput()
         .withQueuesOnly(true)
-        .withWorkflowName(body.workflow_name)
+        .withWorkflowIds(toArray(body.workflow_uuids))
+        .withWorkflowNames(toArray(body.workflow_name))
+        .withAuthenticatedUsers(toArray(body.authenticated_user))
         .withStartTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null)
         .withEndTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null)
-        .withStatus(body.status)
-        .withForkedFrom(body.forked_from)
-        .withParentWorkflowId(body.parent_workflow_id)
-        .withQueueName(body.queue_name)
+        .withStatuses(toArray(body.status))
+        .withApplicationVersions(toArray(body.application_version))
+        .withForkedFrom(toArray(body.forked_from))
+        .withParentWorkflowIds(toArray(body.parent_workflow_id))
+        .withQueueNames(toArray(body.queue_name))
         .withLimit(body.limit)
         .withOffset(body.offset)
         .withSortDesc(body.sort_desc)
-        .withLoadInput(body.load_input);
+        .withWorkflowIdPrefix(body.workflow_id_prefix != null && !body.workflow_id_prefix.isEmpty() ? body.workflow_id_prefix.get(0) : null)
+        .withLoadInput(body.load_input)
+        .withLoadOutput(body.load_output)
+        .withExecutorIds(toArray(body.executor_id));
+  }
+
+  private static String[] toArray(List<String> list) {
+    return list == null ? null : list.toArray(String[]::new);
   }
 }

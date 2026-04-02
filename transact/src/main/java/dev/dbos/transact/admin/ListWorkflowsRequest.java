@@ -24,15 +24,15 @@ public record ListWorkflowsRequest(
 
   public ListWorkflowsInput asInput() {
     return new ListWorkflowsInput(
-        workflow_uuids,
-        status != null ? List.of(status) : null,
+        workflow_uuids != null ? workflow_uuids.toArray(String[]::new) : null,
+        status != null ? new String[] {status} : null,
         start_time != null ? OffsetDateTime.parse(start_time) : null,
         end_time != null ? OffsetDateTime.parse(end_time) : null,
-        workflow_name,
+        workflow_name != null ? new String[] {workflow_name} : null,
         null, // class_name,
         null, // instance_name
-        application_version,
-        authenticated_user,
+        application_version != null ? new String[] {application_version} : null,
+        authenticated_user != null ? new String[] {authenticated_user} : null,
         limit,
         offset,
         sort_desc,
@@ -42,7 +42,7 @@ public record ListWorkflowsRequest(
         null, // queueName
         false, // queuesOnly
         null, // Executor IDs
-        fork_from,
-        parent_workflow_id);
+        fork_from != null ? new String[] {fork_from} : null,
+        parent_workflow_id != null ? new String[] {parent_workflow_id} : null);
   }
 }

@@ -3,7 +3,6 @@ package dev.dbos.transact.admin;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 
 public record ListQueuedWorkflowsRequest(
     String workflow_name,
@@ -21,10 +20,10 @@ public record ListQueuedWorkflowsRequest(
   public ListWorkflowsInput asInput() {
     return new ListWorkflowsInput(
         null, // workflow ids
-        status != null ? List.of(status) : null,
+        status != null ? new String[] {status} : null,
         start_time != null ? OffsetDateTime.parse(start_time) : null,
         end_time != null ? OffsetDateTime.parse(end_time) : null,
-        workflow_name,
+        workflow_name != null ? new String[] {workflow_name} : null,
         null, // class_name,
         null, // instance_name
         null, // app version
@@ -35,10 +34,10 @@ public record ListQueuedWorkflowsRequest(
         null, // wf id prefix
         load_input,
         false, // load output
-        queue_name,
+        queue_name != null ? new String[] {queue_name} : null,
         true, // queuesOnly: only list queued workflows
         null, // Executor IDs
-        fork_from,
-        parent_workflow_id); // parent workflow id
+        fork_from != null ? new String[] {fork_from} : null,
+        parent_workflow_id != null ? new String[] {parent_workflow_id} : null);
   }
 }

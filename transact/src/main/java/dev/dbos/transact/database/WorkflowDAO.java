@@ -446,7 +446,7 @@ class WorkflowDAO {
     StringJoiner whereConditions = new StringJoiner(" AND ");
 
     if (input.workflowName() != null) {
-      whereConditions.add("name = ?");
+      whereConditions.add("name = ANY(?)");
       parameters.add(input.workflowName());
     }
     if (input.className() != null) {
@@ -458,18 +458,18 @@ class WorkflowDAO {
       parameters.add(input.instanceName());
     }
     if (input.queueName() != null) {
-      whereConditions.add("queue_name = ?");
+      whereConditions.add("queue_name = ANY(?)");
       parameters.add(input.queueName());
     }
     if (input.queuesOnly() != null && input.queuesOnly()) {
       whereConditions.add("queue_name IS NOT NULL");
     }
     if (input.forkedFrom() != null) {
-      whereConditions.add("forked_from = ?");
+      whereConditions.add("forked_from = ANY(?)");
       parameters.add(input.forkedFrom());
     }
     if (input.parentWorkflowId() != null) {
-      whereConditions.add("parent_workflow_id = ?");
+      whereConditions.add("parent_workflow_id = ANY(?)");
       parameters.add(input.parentWorkflowId());
     }
     if (input.workflowIdPrefix() != null) {
@@ -479,10 +479,10 @@ class WorkflowDAO {
     }
     if (input.workflowIds() != null) {
       whereConditions.add("workflow_uuid = ANY(?)");
-      parameters.add(input.workflowIds().toArray());
+      parameters.add(input.workflowIds());
     }
     if (input.authenticatedUser() != null) {
-      whereConditions.add("authenticated_user = ?");
+      whereConditions.add("authenticated_user = ANY(?)");
       parameters.add(input.authenticatedUser());
     }
     if (input.startTime() != null) {
@@ -497,15 +497,15 @@ class WorkflowDAO {
     }
     if (input.status() != null) {
       whereConditions.add("status = ANY(?)");
-      parameters.add(input.status().toArray());
+      parameters.add(input.status());
     }
     if (input.applicationVersion() != null) {
-      whereConditions.add("application_version = ?");
+      whereConditions.add("application_version = ANY(?)");
       parameters.add(input.applicationVersion());
     }
     if (input.executorIds() != null) {
       whereConditions.add("executor_id = ANY(?)");
-      parameters.add(input.executorIds().toArray());
+      parameters.add(input.executorIds());
     }
 
     // Only append WHERE keyword if there are actual conditions
@@ -771,7 +771,7 @@ class WorkflowDAO {
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
-      Array array = conn.createArrayOf("text", filtered.toArray());
+      Array array = conn.createArrayOf("text", filtered.toArray(String[]::new));
       try {
         stmt.setString(1, WorkflowState.CANCELLED.name());
         stmt.setArray(2, array);
@@ -805,7 +805,7 @@ class WorkflowDAO {
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
-      Array array = conn.createArrayOf("text", filtered.toArray());
+      Array array = conn.createArrayOf("text", filtered.toArray(String[]::new));
       try {
         stmt.setString(1, WorkflowState.ENQUEUED.name());
         stmt.setString(2, Constants.DBOS_INTERNAL_QUEUE);
@@ -842,7 +842,7 @@ class WorkflowDAO {
 
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
-      var array = conn.createArrayOf("text", wfIdSet.toArray());
+      var array = conn.createArrayOf("text", wfIdSet.toArray(String[]::new));
       try {
         stmt.setArray(1, array);
         stmt.executeUpdate();
