@@ -1,16 +1,10 @@
 {
-  "name": "DBOS Transact Java",
-  "image": "mcr.microsoft.com/devcontainers/java:1-21-bullseye",
-
+  "name": "Java 21 Bare Minimum",
+  "image": "mcr.microsoft.com/devcontainers/java:21",
   "customizations": {
     "vscode": {
-      "extensions": [
-        "vscjava.vscode-java-pack",
-        "vscjava.vscode-gradle",
-        "fwcd.kotlin"
-      ]
+      "extensions": ["vscjava.vscode-java-pack"]
     }
   },
-
   "remoteUser": "vscode"
 }
