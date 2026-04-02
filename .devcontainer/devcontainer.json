@@ -1,13 +1,6 @@
 {
   "name": "DBOS Transact Java",
   "image": "mcr.microsoft.com/devcontainers/java:1-21-bullseye",
-  
-  "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "enableNonRootDocker": "true",
-      "moby": "true"
-    }
-  },
 
   "customizations": {
     "vscode": {
