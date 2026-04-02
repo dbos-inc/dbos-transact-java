@@ -1,5 +1,6 @@
 package dev.dbos.transact.queue;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -409,7 +410,7 @@ public class QueuesTest {
             .instanceName("prod-config")
             .authenticatedUser("user123@example.com")
             .assumedRole("admin")
-            .authenticatedRoles("admin,operator")
+            .authenticatedRoles(new String[] {"admin", "operator"})
             .output("{\"result\":\"success\"}")
             .createdAt(System.currentTimeMillis() - 3600000)
             .updatedAt(System.currentTimeMillis())
@@ -433,6 +434,12 @@ public class QueuesTest {
               .build();
       systemDatabase.initWorkflowStatus(status, null, false, false);
     }
+
+    var readBack =
+        systemDatabase
+            .listWorkflows(new ListWorkflowsInput().withWorkflowId("id0").withLoadInput(false))
+            .get(0);
+    assertArrayEquals(new String[] {"admin", "operator"}, readBack.authenticatedRoles());
 
     List<String> idsToRun =
         systemDatabase.getAndStartQueuedWorkflows(qwithWCLimit, executorId, appVersion, null);
@@ -489,7 +496,7 @@ public class QueuesTest {
             .instanceName("prod-config")
             .authenticatedUser("user123@example.com")
             .assumedRole("admin")
-            .authenticatedRoles("admin,operator")
+            .authenticatedRoles(new String[] {"admin", "operator"})
             .output("{\"result\":\"success\"}")
             .createdAt(System.currentTimeMillis() - 3600000)
             .updatedAt(System.currentTimeMillis())

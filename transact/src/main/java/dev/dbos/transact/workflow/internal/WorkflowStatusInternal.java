@@ -14,7 +14,7 @@ public record WorkflowStatusInternal(
     String queuePartitionKey,
     String authenticatedUser,
     String assumedRole,
-    String authenticatedRoles,
+    String[] authenticatedRoles,
     String inputs,
     String output,
     String error,
@@ -79,7 +79,7 @@ public record WorkflowStatusInternal(
     private String queuePartitionKey;
     private String authenticatedUser;
     private String assumedRole;
-    private String authenticatedRoles;
+    private String[] authenticatedRoles;
     private String inputs;
     private String output;
     private String error;
@@ -154,7 +154,7 @@ public record WorkflowStatusInternal(
       return this;
     }
 
-    public Builder authenticatedRoles(String authenticatedRoles) {
+    public Builder authenticatedRoles(String[] authenticatedRoles) {
       this.authenticatedRoles = authenticatedRoles;
       return this;
     }

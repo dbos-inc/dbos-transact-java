@@ -218,6 +218,8 @@ class WorkflowDAO {
         """
             .formatted(this.schema);
 
+    var authenticatedRolesJson =
+        status.authenticatedRoles() != null ? JSONUtil.toJson(status.authenticatedRoles()) : null;
     try (PreparedStatement stmt = connection.prepareStatement(insertSQL)) {
 
       var now = Instant.now().toEpochMilli();
@@ -239,7 +241,7 @@ class WorkflowDAO {
 
       stmt.setString(11, status.authenticatedUser());
       stmt.setString(12, status.assumedRole());
-      stmt.setString(13, status.authenticatedRoles());
+      stmt.setString(13, authenticatedRolesJson);
 
       stmt.setString(14, status.executorId());
       stmt.setString(15, status.appVersion());
@@ -570,7 +572,6 @@ class WorkflowDAO {
   private static WorkflowStatus resultsToWorkflowStatus(
       ResultSet rs, boolean loadInput, boolean loadOutput, DBOSSerializer serializer)
       throws SQLException {
-    var workflow_uuid = rs.getString("workflow_uuid");
     String authenticatedRolesJson = rs.getString("authenticated_roles");
     String serializedInput = loadInput ? rs.getString("inputs") : null;
     String serializedOutput = loadOutput ? rs.getString("output") : null;
@@ -578,7 +579,7 @@ class WorkflowDAO {
     String serialization = loadInput || loadOutput ? rs.getString("serialization") : null;
     WorkflowStatus info =
         new WorkflowStatus(
-            workflow_uuid,
+            rs.getString("workflow_uuid"),
             rs.getString("status"),
             rs.getString("name"),
             Objects.requireNonNullElse(rs.getString("class_name"), ""),
@@ -586,7 +587,7 @@ class WorkflowDAO {
             rs.getString("authenticated_user"),
             rs.getString("assumed_role"),
             (authenticatedRolesJson != null)
-                ? (String[]) JSONUtil.deserializeToArray(authenticatedRolesJson)
+                ? JSONUtil.fromJson(authenticatedRolesJson, String[].class)
                 : null,
             loadInput
                 ? SerializationUtil.deserializePositionalArgs(
@@ -976,7 +977,7 @@ class WorkflowDAO {
           9,
           originalStatus.authenticatedRoles() == null
               ? null
-              : JSONUtil.serializeArray(originalStatus.authenticatedRoles()));
+              : JSONUtil.toJson(originalStatus.authenticatedRoles()));
       stmt.setString(10, originalStatus.assumedRole());
       stmt.setString(11, Constants.DBOS_INTERNAL_QUEUE);
       stmt.setString(
