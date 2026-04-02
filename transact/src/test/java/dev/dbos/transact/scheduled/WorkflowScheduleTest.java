@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
@@ -544,22 +545,17 @@ class WorkflowScheduleTest {
   public void scheduleRunsAfterPolling() throws Exception {
     var impl = registerAndLaunch();
 
-    // allow some time for DBOS to start up cleanly
-    Thread.sleep(5000);
-
     dbos.createSchedule(
-        "run-sched", workflowName(), className(), "0/1 * * * * *", null, false, null, null);
+        "run-sched", "latchedRun", className(), "0/1 * * * * *", null, false, null, null);
 
     // Verify schedule was created and is active
     var schedule = dbos.getSchedule("run-sched");
     assertTrue(schedule.isPresent(), "Schedule should be created");
     assertEquals(ScheduleStatus.ACTIVE, schedule.get().status());
 
-    // Allow time for scheduler polls + workflow executions
-    // Schedule triggers at second boundary, so wait long enough for multiple executions
-    Thread.sleep(5000);
-
-    assertTrue(impl.counter >= 2, "Expected at least 2 executions, got " + impl.counter);
-    assertTrue(impl.counter <= 10, "Expected at most 10 executions, got " + impl.counter);
+    // latch initialized with 3 count, with each execution counting down once.
+    // Wait for all 3 counts to be released, which indicates the workflow ran at least 3 times
+    // (scheduler should run it every second).
+    impl.latch.await(5, TimeUnit.SECONDS);
   }
 }
