@@ -2,12 +2,12 @@ package dev.dbos.transact.database;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
@@ -44,7 +44,6 @@ public class SystemDatabaseTest {
   DBOSConfig dbosConfig;
   @AutoClose SystemDatabase sysdb;
 
-  @AutoClose DBOS dbos;
   @AutoClose HikariDataSource dataSource;
 
   @BeforeEach
@@ -762,5 +761,291 @@ public class SystemDatabaseTest {
     assertTrue(s.automaticBackfill());
     assertEquals(ZoneId.of("America/New_York"), s.cronTimezone());
     assertEquals("my-queue", s.queueName());
+  }
+
+  @Test
+  public void testWorkflowStatusAuthenticationFields() throws Exception {
+    var workflowId = "test-auth-workflow";
+    var authenticatedUser = "user@example.com";
+    var assumedRole = "admin";
+    var authenticatedRoles = List.of("admin", "operator", "viewer");
+
+    // Create workflow status with authentication fields
+    var status =
+        WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING)
+            .name("TestWorkflow")
+            .className("com.example.TestWorkflow")
+            .authenticatedUser(authenticatedUser)
+            .assumedRole(assumedRole)
+            .authenticatedRoles(authenticatedRoles)
+            .build();
+
+    // Insert into database
+    sysdb.initWorkflowStatus(status, null, false, false);
+
+    // Retrieve via SystemDatabase API and validate object mapping
+    var retrievedStatus = sysdb.getWorkflowStatus(workflowId);
+    assertNotNull(retrievedStatus);
+    assertEquals(authenticatedUser, retrievedStatus.authenticatedUser());
+    assertEquals(assumedRole, retrievedStatus.assumedRole());
+    assertEquals(authenticatedRoles, List.of(retrievedStatus.authenticatedRoles()));
+
+    // Validate raw database values using DBUtils
+    var rawRow = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertNotNull(rawRow);
+    assertEquals(authenticatedUser, rawRow.authenticatedUser());
+    assertEquals(assumedRole, rawRow.assumedRole());
+
+    // Verify the authenticated_roles are stored as JSON in the database
+    assertEquals("[\"admin\",\"operator\",\"viewer\"]", rawRow.authenticatedRoles());
+
+    // Verify other fields are correctly stored
+    assertEquals(workflowId, rawRow.workflowId());
+    assertEquals(WorkflowState.PENDING.name(), rawRow.status());
+    assertEquals("TestWorkflow", rawRow.name());
+    assertEquals("com.example.TestWorkflow", rawRow.className());
+  }
+
+  @Test
+  public void testWorkflowStatusAuthenticationFieldsWithNulls() throws Exception {
+    var workflowId = "test-auth-null-workflow";
+
+    // Create workflow status with null authentication fields
+    var status =
+        WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING)
+            .name("TestNullAuthWorkflow")
+            .className("com.example.TestNullAuthWorkflow")
+            .authenticatedUser(null)
+            .assumedRole(null)
+            .authenticatedRoles(null)
+            .build();
+
+    // Insert into database
+    sysdb.initWorkflowStatus(status, null, false, false);
+
+    // Retrieve via SystemDatabase API and validate null handling
+    var retrievedStatus = sysdb.getWorkflowStatus(workflowId);
+    assertNotNull(retrievedStatus);
+    assertNull(retrievedStatus.authenticatedUser());
+    assertNull(retrievedStatus.assumedRole());
+    assertNull(retrievedStatus.authenticatedRoles());
+
+    // Validate raw database values are null
+    var rawRow = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertNotNull(rawRow);
+    assertNull(rawRow.authenticatedUser());
+    assertNull(rawRow.assumedRole());
+    assertNull(rawRow.authenticatedRoles());
+  }
+
+  @Test
+  public void testWorkflowStatusEmptyAuthenticatedRoles() throws Exception {
+    var workflowId = "test-auth-empty-roles-workflow";
+    var authenticatedUser = "user@example.com";
+    var assumedRole = "basic";
+    var authenticatedRoles = List.<String>of(); // Empty list
+
+    // Create workflow status with empty authenticated roles
+    var status =
+        WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING)
+            .name("TestEmptyRolesWorkflow")
+            .className("com.example.TestEmptyRolesWorkflow")
+            .authenticatedUser(authenticatedUser)
+            .assumedRole(assumedRole)
+            .authenticatedRoles(authenticatedRoles)
+            .build();
+
+    // Insert into database
+    sysdb.initWorkflowStatus(status, null, false, false);
+
+    // Retrieve via SystemDatabase API and validate empty list handling
+    var retrievedStatus = sysdb.getWorkflowStatus(workflowId);
+    assertNotNull(retrievedStatus);
+    assertEquals(authenticatedUser, retrievedStatus.authenticatedUser());
+    assertEquals(assumedRole, retrievedStatus.assumedRole());
+    assertEquals(0, retrievedStatus.authenticatedRoles().length);
+
+    // Validate raw database values
+    var rawRow = DBUtils.getWorkflowRow(dataSource, workflowId);
+    assertNotNull(rawRow);
+    assertEquals(authenticatedUser, rawRow.authenticatedUser());
+    assertEquals(assumedRole, rawRow.assumedRole());
+    assertEquals("[]", rawRow.authenticatedRoles()); // Empty JSON array
+  }
+
+  @Test
+  public void testForkWorkflowWithAuthenticationFields() throws Exception {
+    var originalWorkflowId = "test-fork-original-workflow";
+    var authenticatedUser = "user@example.com";
+    var assumedRole = "admin";
+    var authenticatedRoles = List.of("admin", "operator", "viewer");
+
+    // Create original workflow status with authentication fields
+    var originalStatus =
+        WorkflowStatusInternal.builder(originalWorkflowId, WorkflowState.SUCCESS)
+            .name("OriginalTestWorkflow")
+            .className("com.example.OriginalTestWorkflow")
+            .authenticatedUser(authenticatedUser)
+            .assumedRole(assumedRole)
+            .authenticatedRoles(authenticatedRoles)
+            .build();
+
+    // Insert original workflow into database
+    sysdb.initWorkflowStatus(originalStatus, null, false, false);
+
+    // Verify original workflow has correct authentication fields
+    var originalRetrieved = sysdb.getWorkflowStatus(originalWorkflowId);
+    assertNotNull(originalRetrieved);
+    assertEquals(authenticatedUser, originalRetrieved.authenticatedUser());
+    assertEquals(assumedRole, originalRetrieved.assumedRole());
+    assertEquals(authenticatedRoles, List.of(originalRetrieved.authenticatedRoles()));
+
+    // Fork the workflow
+    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
+    assertNotNull(forkedWorkflowId);
+    assertNotEquals(originalWorkflowId, forkedWorkflowId);
+
+    // Retrieve forked workflow and validate authentication fields are copied
+    var forkedStatus = sysdb.getWorkflowStatus(forkedWorkflowId);
+    assertNotNull(forkedStatus);
+    assertEquals(authenticatedUser, forkedStatus.authenticatedUser());
+    assertEquals(assumedRole, forkedStatus.assumedRole());
+    assertEquals(authenticatedRoles, List.of(forkedStatus.authenticatedRoles()));
+
+    // Verify other forked workflow properties
+    assertEquals("OriginalTestWorkflow", forkedStatus.name());
+    assertEquals("com.example.OriginalTestWorkflow", forkedStatus.className());
+    assertEquals(
+        WorkflowState.ENQUEUED.name(), forkedStatus.status()); // Forked workflows start as ENQUEUED
+    assertEquals(originalWorkflowId, forkedStatus.forkedFrom());
+
+    // Validate raw database values for both workflows
+    var originalRawRow = DBUtils.getWorkflowRow(dataSource, originalWorkflowId);
+    var forkedRawRow = DBUtils.getWorkflowRow(dataSource, forkedWorkflowId);
+
+    assertNotNull(originalRawRow);
+    assertNotNull(forkedRawRow);
+
+    // Authentication fields should be identical in raw DB
+    assertEquals(originalRawRow.authenticatedUser(), forkedRawRow.authenticatedUser());
+    assertEquals(originalRawRow.assumedRole(), forkedRawRow.assumedRole());
+    assertEquals(originalRawRow.authenticatedRoles(), forkedRawRow.authenticatedRoles());
+    assertEquals("[\"admin\",\"operator\",\"viewer\"]", forkedRawRow.authenticatedRoles());
+
+    // Verify forked_from field is set correctly
+    assertNull(originalRawRow.forkedFrom());
+    assertEquals(originalWorkflowId, forkedRawRow.forkedFrom());
+  }
+
+  @Test
+  public void testForkWorkflowWithNullAuthenticationFields() throws Exception {
+    var originalWorkflowId = "test-fork-null-auth-workflow";
+
+    // Create original workflow status with null authentication fields
+    var originalStatus =
+        WorkflowStatusInternal.builder(originalWorkflowId, WorkflowState.SUCCESS)
+            .name("NullAuthTestWorkflow")
+            .className("com.example.NullAuthTestWorkflow")
+            .authenticatedUser(null)
+            .assumedRole(null)
+            .authenticatedRoles(null)
+            .build();
+
+    // Insert original workflow into database
+    sysdb.initWorkflowStatus(originalStatus, null, false, false);
+
+    // Fork the workflow
+    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
+    assertNotNull(forkedWorkflowId);
+
+    // Retrieve forked workflow and validate null authentication fields are preserved
+    var forkedStatus = sysdb.getWorkflowStatus(forkedWorkflowId);
+    assertNotNull(forkedStatus);
+    assertNull(forkedStatus.authenticatedUser());
+    assertNull(forkedStatus.assumedRole());
+    assertNull(forkedStatus.authenticatedRoles());
+
+    // Validate raw database values
+    var originalRawRow = DBUtils.getWorkflowRow(dataSource, originalWorkflowId);
+    var forkedRawRow = DBUtils.getWorkflowRow(dataSource, forkedWorkflowId);
+
+    assertNotNull(originalRawRow);
+    assertNotNull(forkedRawRow);
+
+    // Null authentication fields should be preserved
+    assertNull(originalRawRow.authenticatedUser());
+    assertNull(forkedRawRow.authenticatedUser());
+    assertNull(originalRawRow.assumedRole());
+    assertNull(forkedRawRow.assumedRole());
+    assertNull(originalRawRow.authenticatedRoles());
+    assertNull(forkedRawRow.authenticatedRoles());
+  }
+
+  @Test
+  public void testForkWorkflowWithEmptyAuthenticatedRoles() throws Exception {
+    var originalWorkflowId = "test-fork-empty-auth-roles-workflow";
+    var authenticatedUser = "user@example.com";
+    var assumedRole = "basic";
+    var authenticatedRoles = List.<String>of(); // Empty list
+
+    // Create original workflow status with empty authenticated roles
+    var originalStatus =
+        WorkflowStatusInternal.builder(originalWorkflowId, WorkflowState.SUCCESS)
+            .name("EmptyAuthRolesTestWorkflow")
+            .className("com.example.EmptyAuthRolesTestWorkflow")
+            .authenticatedUser(authenticatedUser)
+            .assumedRole(assumedRole)
+            .authenticatedRoles(authenticatedRoles)
+            .build();
+
+    // Insert original workflow into database
+    sysdb.initWorkflowStatus(originalStatus, null, false, false);
+
+    // Verify original workflow has correct authentication fields including empty roles
+    var originalRetrieved = sysdb.getWorkflowStatus(originalWorkflowId);
+    assertNotNull(originalRetrieved);
+    assertEquals(authenticatedUser, originalRetrieved.authenticatedUser());
+    assertEquals(assumedRole, originalRetrieved.assumedRole());
+    assertEquals(0, originalRetrieved.authenticatedRoles().length);
+
+    // Fork the workflow
+    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
+    assertNotNull(forkedWorkflowId);
+    assertNotEquals(originalWorkflowId, forkedWorkflowId);
+
+    // Retrieve forked workflow and validate empty authentication roles are preserved
+    var forkedStatus = sysdb.getWorkflowStatus(forkedWorkflowId);
+    assertNotNull(forkedStatus);
+    assertEquals(authenticatedUser, forkedStatus.authenticatedUser());
+    assertEquals(assumedRole, forkedStatus.assumedRole());
+    assertEquals(0, forkedStatus.authenticatedRoles().length);
+
+    // Verify other forked workflow properties
+    assertEquals("EmptyAuthRolesTestWorkflow", forkedStatus.name());
+    assertEquals("com.example.EmptyAuthRolesTestWorkflow", forkedStatus.className());
+    assertEquals(WorkflowState.ENQUEUED.name(), forkedStatus.status());
+    assertEquals(originalWorkflowId, forkedStatus.forkedFrom());
+
+    // Validate raw database values for both workflows
+    var originalRawRow = DBUtils.getWorkflowRow(dataSource, originalWorkflowId);
+    var forkedRawRow = DBUtils.getWorkflowRow(dataSource, forkedWorkflowId);
+
+    assertNotNull(originalRawRow);
+    assertNotNull(forkedRawRow);
+
+    // Empty authentication roles should be stored as empty JSON array and preserved in fork
+    assertEquals(authenticatedUser, originalRawRow.authenticatedUser());
+    assertEquals(authenticatedUser, forkedRawRow.authenticatedUser());
+    assertEquals(assumedRole, originalRawRow.assumedRole());
+    assertEquals(assumedRole, forkedRawRow.assumedRole());
+    assertEquals("[]", originalRawRow.authenticatedRoles()); // Empty JSON array
+    assertEquals("[]", forkedRawRow.authenticatedRoles()); // Empty JSON array preserved in fork
+
+    // Verify forked_from field is set correctly
+    assertNull(originalRawRow.forkedFrom());
+    assertEquals(originalWorkflowId, forkedRawRow.forkedFrom());
   }
 }
