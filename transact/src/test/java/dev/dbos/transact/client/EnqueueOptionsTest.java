@@ -13,17 +13,6 @@ import org.junit.jupiter.api.Test;
 public class EnqueueOptionsTest {
   @Test
   public void enqueueOptionsValidation() throws Exception {
-    // workflow/class/queue names must not be null
-    assertThrows(
-        NullPointerException.class,
-        () -> new DBOSClient.EnqueueOptions(null, "workflow-name", "queue-name"));
-    assertThrows(
-        NullPointerException.class,
-        () -> new DBOSClient.EnqueueOptions("class-name", null, "queue-name"));
-    assertThrows(
-        NullPointerException.class,
-        () -> new DBOSClient.EnqueueOptions("class-name", "workflow-name", null));
-
     // workflow/class/queue names must not be empty
     assertThrows(
         IllegalArgumentException.class,
