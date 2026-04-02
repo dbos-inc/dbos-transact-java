@@ -4,10 +4,10 @@ This directory contains the configuration for GitHub Codespaces and VS Code Dev 
 
 ## What's Included
 
-- **Java 17**: The required Java version for this project
+- **Java 21**: The required Java version for this project
 - **Gradle**: Build system (using the wrapper in the project)
 - **Docker-in-Docker**: For running testcontainers in tests
-- **PostgreSQL Client**: For connecting to databases
+
 - **VS Code Extensions**: Java development pack, Kotlin support, Gradle integration
 
 ## Quick Start
@@ -29,25 +29,9 @@ This directory contains the configuration for GitHub Codespaces and VS Code Dev 
 4. Wait for the container to build and set up
 5. Run `./gradlew build` to build the project
 
-## Available Services
+## Testing with PostgreSQL
 
-### Local PostgreSQL (Optional)
-
-A PostgreSQL database is available via docker-compose for local development:
-
-```bash
-# Start PostgreSQL
-docker-compose -f .devcontainer/docker-compose.yml up -d postgres
-
-# Connect to the database
-psql -h localhost -U postgres -d dbos_test
-# Password: dbos
-
-# Stop PostgreSQL
-docker-compose -f .devcontainer/docker-compose.yml down
-```
-
-**Note**: The tests use Testcontainers which automatically spin up PostgreSQL instances, so the local PostgreSQL 16 is optional and mainly for manual testing or debugging.
+The tests use **Testcontainers** which automatically spin up PostgreSQL instances as needed. No manual database setup required - just run `./gradlew test` and Testcontainers will handle the rest!
 
 ## Common Commands
 
@@ -86,21 +70,22 @@ If the Gradle wrapper isn't executable:
 chmod +x ./gradlew
 ```
 
-### Port Conflicts
-If port 5432 is already in use:
+### Testcontainer Issues
+If tests fail to start PostgreSQL containers:
 ```bash
-# Check what's using the port
-sudo lsof -i :5432
+# Check Docker is running
+docker ps
 
-# Stop the conflicting service or modify docker-compose.yml to use a different port
+# Check Docker permissions
+docker run hello-world
 ```
 
 ## Environment Variables
 
 You can set these environment variables for configuration:
 
-- `DBOS_POSTGRES_URL`: Custom PostgreSQL connection string
 - `GRADLE_OPTS`: Additional Gradle JVM options
+- `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`: Custom Docker socket path (if needed)
 
 ## Extensions Included
 

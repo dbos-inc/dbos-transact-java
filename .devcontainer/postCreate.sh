@@ -10,7 +10,6 @@ sudo apt-get update
 
 # Install additional packages that might be useful
 sudo apt-get install -y \
-    postgresql-client \
     curl \
     wget \
     unzip \

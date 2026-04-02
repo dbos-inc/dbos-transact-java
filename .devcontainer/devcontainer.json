@@ -43,11 +43,7 @@
     }
   },
 
-  "containerEnv": {
-    "PGPASSWORD": "dbos"
-  },
-
-  "forwardPorts": [5432, 8080],
+  "forwardPorts": [8080],
 
   "postCreateCommand": "bash .devcontainer/postCreate.sh",
 
