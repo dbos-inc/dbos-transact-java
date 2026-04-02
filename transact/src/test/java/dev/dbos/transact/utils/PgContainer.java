@@ -13,10 +13,16 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Semaphore;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.zaxxer.hikari.HikariDataSource;
+
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 public class PgContainer implements AutoCloseable {
+
+  private static final Logger logger = LoggerFactory.getLogger(PgContainer.class);
 
   private static final int SIZE = Runtime.getRuntime().availableProcessors();
   private static final BlockingQueue<PostgreSQLContainer> POOL = new ArrayBlockingQueue<>(SIZE);
@@ -74,12 +80,12 @@ public class PgContainer implements AutoCloseable {
 
   @Override
   public void close() throws Exception {
-    // drop a database we created and return the container too the pool
     var _jdbcUrl = pgContainer.getJdbcUrl();
     try (var conn = DriverManager.getConnection(_jdbcUrl, username(), password());
         var stmt = conn.createStatement()) {
-      var sql = "DROP DATABASE IF EXISTS %s WITH (FORCE)".formatted(dbName);
-      stmt.execute(sql);
+      stmt.execute("DROP DATABASE IF EXISTS " + dbName);
+    } catch (SQLException e) {
+      logger.warn("Failed to drop database {}, possibly still in use: {}", dbName, e.getMessage());
     }
     release(pgContainer);
   }
