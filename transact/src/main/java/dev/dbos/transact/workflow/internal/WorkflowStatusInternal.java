@@ -2,6 +2,8 @@ package dev.dbos.transact.workflow.internal;
 
 import dev.dbos.transact.workflow.WorkflowState;
 
+import java.util.List;
+
 public record WorkflowStatusInternal(
     String workflowId,
     WorkflowState status,
@@ -14,7 +16,7 @@ public record WorkflowStatusInternal(
     String queuePartitionKey,
     String authenticatedUser,
     String assumedRole,
-    String authenticatedRoles,
+    List<String> authenticatedRoles,
     String inputs,
     String output,
     String error,
@@ -79,7 +81,7 @@ public record WorkflowStatusInternal(
     private String queuePartitionKey;
     private String authenticatedUser;
     private String assumedRole;
-    private String authenticatedRoles;
+    private List<String> authenticatedRoles;
     private String inputs;
     private String output;
     private String error;
@@ -154,7 +156,7 @@ public record WorkflowStatusInternal(
       return this;
     }
 
-    public Builder authenticatedRoles(String authenticatedRoles) {
+    public Builder authenticatedRoles(List<String> authenticatedRoles) {
       this.authenticatedRoles = authenticatedRoles;
       return this;
     }
