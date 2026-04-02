@@ -22,6 +22,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -67,6 +68,7 @@ public class SchedulerService implements AutoCloseable {
   private final SystemDatabase systemDatabase;
   private final Duration pollingInterval;
   private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
+  private final AtomicBoolean paused = new AtomicBoolean(false);
   private final ConcurrentHashMap<String, ScheduledFuture<?>> workflowScheduleFutures =
       new ConcurrentHashMap<>();
 
@@ -96,6 +98,14 @@ public class SchedulerService implements AutoCloseable {
       var notRun = scheduler.shutdownNow();
       logger.debug("Shutting down scheduler service. {} task(s) not run.", notRun.size());
     }
+  }
+
+  public void pause() {
+    paused.set(true);
+  }
+
+  public void unpause() {
+    paused.set(false);
   }
 
   private void pollWorkflowSchedules() {
@@ -219,6 +229,13 @@ public class SchedulerService implements AutoCloseable {
                 }
 
                 try {
+                  if (paused.get()) {
+                    logger.debug(
+                        "Skipping scheduled workflow {} schedule {} because scheduler is paused",
+                        regWorkflow.fullyQualifiedName(),
+                        wfSchedule.scheduleName());
+                    return;
+                  }
                   var args = new Object[] {nextTime.toInstant(), wfSchedule.context()};
                   var workflowId = "sched-%s-%s".formatted(wfSchedule.scheduleName(), nextTime);
                   logger.debug(
@@ -284,6 +301,13 @@ public class SchedulerService implements AutoCloseable {
 
               var scheduledTime = nextTime;
               try {
+                if (paused.get()) {
+                  logger.debug(
+                      "Skipping annotated workflow {} schedule {} because scheduler is paused",
+                      workflowName,
+                      swf.cron());
+                  return;
+                }
                 var args = new Object[] {scheduledTime.toInstant(), Instant.now()};
                 var workflowId = "sched-%s-%s".formatted(workflowName, scheduledTime);
                 logger.debug(
