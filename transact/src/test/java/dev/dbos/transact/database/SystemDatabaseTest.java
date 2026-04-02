@@ -1,5 +1,6 @@
 package dev.dbos.transact.database;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -768,7 +769,7 @@ public class SystemDatabaseTest {
     var workflowId = "test-auth-workflow";
     var authenticatedUser = "user@example.com";
     var assumedRole = "admin";
-    var authenticatedRoles = List.of("admin", "operator", "viewer");
+    var authenticatedRoles = new String[] {"admin", "operator", "viewer"};
 
     // Create workflow status with authentication fields
     var status =
@@ -788,7 +789,7 @@ public class SystemDatabaseTest {
     assertNotNull(retrievedStatus);
     assertEquals(authenticatedUser, retrievedStatus.authenticatedUser());
     assertEquals(assumedRole, retrievedStatus.assumedRole());
-    assertEquals(authenticatedRoles, List.of(retrievedStatus.authenticatedRoles()));
+    assertArrayEquals(authenticatedRoles, retrievedStatus.authenticatedRoles());
 
     // Validate raw database values using DBUtils
     var rawRow = DBUtils.getWorkflowRow(dataSource, workflowId);
@@ -843,7 +844,7 @@ public class SystemDatabaseTest {
     var workflowId = "test-auth-empty-roles-workflow";
     var authenticatedUser = "user@example.com";
     var assumedRole = "basic";
-    var authenticatedRoles = List.<String>of(); // Empty list
+    var authenticatedRoles = new String[0]; // Empty array
 
     // Create workflow status with empty authenticated roles
     var status =
@@ -878,7 +879,7 @@ public class SystemDatabaseTest {
     var originalWorkflowId = "test-fork-original-workflow";
     var authenticatedUser = "user@example.com";
     var assumedRole = "admin";
-    var authenticatedRoles = List.of("admin", "operator", "viewer");
+    var authenticatedRoles = new String[] {"admin", "operator", "viewer"};
 
     // Create original workflow status with authentication fields
     var originalStatus =
@@ -898,7 +899,7 @@ public class SystemDatabaseTest {
     assertNotNull(originalRetrieved);
     assertEquals(authenticatedUser, originalRetrieved.authenticatedUser());
     assertEquals(assumedRole, originalRetrieved.assumedRole());
-    assertEquals(authenticatedRoles, List.of(originalRetrieved.authenticatedRoles()));
+    assertArrayEquals(authenticatedRoles, originalRetrieved.authenticatedRoles());
 
     // Fork the workflow
     var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
@@ -911,7 +912,7 @@ public class SystemDatabaseTest {
     assertNotNull(forkedStatus);
     assertEquals(authenticatedUser, forkedStatus.authenticatedUser());
     assertEquals(assumedRole, forkedStatus.assumedRole());
-    assertEquals(authenticatedRoles, List.of(forkedStatus.authenticatedRoles()));
+    assertArrayEquals(authenticatedRoles, forkedStatus.authenticatedRoles());
 
     // Verify other forked workflow properties
     assertEquals("OriginalTestWorkflow", forkedStatus.name());
@@ -988,7 +989,7 @@ public class SystemDatabaseTest {
     var originalWorkflowId = "test-fork-empty-auth-roles-workflow";
     var authenticatedUser = "user@example.com";
     var assumedRole = "basic";
-    var authenticatedRoles = List.<String>of(); // Empty list
+    var authenticatedRoles = new String[0]; // Empty array
 
     // Create original workflow status with empty authenticated roles
     var originalStatus =
