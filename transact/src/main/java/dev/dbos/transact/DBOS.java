@@ -421,8 +421,11 @@ public class DBOS implements AutoCloseable {
    * @return WorkflowHandle to the executed workflow
    */
   public WorkflowHandle<?, ?> startRegisteredWorkflow(
-      @NonNull RegisteredWorkflow regWorkflow, @NonNull Object[] args, @Nullable StartWorkflowOptions options) {
-    return ensureLaunched("startRegisteredWorkflow").startRegisteredWorkflow(regWorkflow, args, options);
+      @NonNull RegisteredWorkflow regWorkflow,
+      @NonNull Object[] args,
+      @Nullable StartWorkflowOptions options) {
+    return ensureLaunched("startRegisteredWorkflow")
+        .startRegisteredWorkflow(regWorkflow, args, options);
   }
 
   /**

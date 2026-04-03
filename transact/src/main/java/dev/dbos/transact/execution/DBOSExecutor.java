@@ -1501,7 +1501,8 @@ public class DBOSExecutor implements AutoCloseable {
             options != null ? options.deduplicationId() : null,
             options != null ? options.priority() : null,
             options != null ? options.queuePartitionKey() : null,
-            options != null ? options.appVersion() : null,            false,
+            options != null ? options.appVersion() : null,
+            false,
             false,
             null);
     return executeWorkflow(workflow, invocation.args(), execOptions, parent);
