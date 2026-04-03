@@ -16,7 +16,11 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.beans.factory.NoSuchBeanDefinitionException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
 
 /**
  * Spring AOP aspect that intercepts {@link Workflow @Workflow} and {@link Step @Step} annotated
@@ -56,12 +60,14 @@ public class DBOSAspect {
   private static final Logger logger = LoggerFactory.getLogger(DBOSAspect.class);
 
   private final DBOS dbos;
+  private final ApplicationContext applicationContext;
   private final ConcurrentHashMap<Method, RegisteredWorkflow> workflowCache =
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<Method, StepOptions> stepCache = new ConcurrentHashMap<>();
 
-  public DBOSAspect(DBOS dbos) {
+  public DBOSAspect(DBOS dbos, ApplicationContext applicationContext) {
     this.dbos = dbos;
+    this.applicationContext = applicationContext;
   }
 
   static Method getMethod(ProceedingJoinPoint pjp) {
@@ -73,7 +79,49 @@ public class DBOSAspect {
     return ((MethodSignature) pjp.getSignature()).getName();
   }
 
-  // TODO: handle named workflow instances
+  /**
+   * Returns the DBOS instance name for the given target bean. Mirrors the naming logic in {@link
+   * DBOSWorkflowRegistrar}: the sole bean of a class, or the {@code @Primary} one among several,
+   * gets an empty string; non-primary beans are identified by their Spring bean name.
+   */
+  private String resolveInstanceName(Class<?> klass, Object target) {
+    String[] beanNames = applicationContext.getBeanNamesForType(klass);
+    if (beanNames.length <= 1) {
+      return "";
+    }
+
+    // Multiple beans of the same class — find which one owns this target instance.
+    for (String beanName : beanNames) {
+      Object bean;
+      try {
+        bean = applicationContext.getBean(beanName);
+      } catch (Exception e) {
+        continue;
+      }
+      Object rawCandidate = AopProxyUtils.getSingletonTarget(bean);
+      if (rawCandidate == null) {
+        rawCandidate = bean;
+      }
+      if (rawCandidate != target) {
+        continue;
+      }
+
+      // Found the bean name for this target. Return "" if it is @Primary, the name otherwise.
+      if (applicationContext instanceof ConfigurableApplicationContext configurableCtx) {
+        try {
+          if (configurableCtx.getBeanFactory().getBeanDefinition(beanName).isPrimary()) {
+            return "";
+          }
+        } catch (NoSuchBeanDefinitionException e) {
+          // no definition means we cannot confirm it is primary — fall through to return the name
+        }
+      }
+      return beanName;
+    }
+
+    // Target not matched to any bean — fall back to the default empty name.
+    return "";
+  }
 
   /**
    * Intercepts {@link Workflow @Workflow} annotated methods and routes them through DBOS for
@@ -86,19 +134,22 @@ public class DBOSAspect {
         workflowCache.computeIfAbsent(
             getMethod(pjp),
             m -> {
-              var klass = pjp.getTarget().getClass();
+              var target = pjp.getTarget();
+              var klass = target.getClass();
               var classTag = klass.getAnnotation(WorkflowClassName.class);
               var className =
                   (classTag == null || classTag.value().isEmpty())
                       ? klass.getName()
                       : classTag.value();
+              var instanceName = resolveInstanceName(klass, target);
               var workflowName = workflow.name().isEmpty() ? getMethodName(pjp) : workflow.name();
-              return dbos.getRegisteredWorkflow(workflowName, className)
+              // TODO: pass instanceName to getRegisteredWorkflow once that API is updated
+              return dbos.getRegisteredWorkflow(workflowName, className, instanceName)
                   .orElseThrow(
                       () ->
                           new IllegalStateException(
-                              "No registered workflow found for %s.%s"
-                                  .formatted(className, workflowName)));
+                              "No registered workflow found for %s.%s (instance='%s')"
+                                  .formatted(className, workflowName, instanceName)));
             });
 
     logger.debug("Intercepting @Workflow {}", regWf.fullyQualifiedName());

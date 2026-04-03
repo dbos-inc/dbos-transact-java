@@ -923,8 +923,18 @@ public class DBOS implements AutoCloseable {
     return ensureLaunched("getRegisteredWorkflows").getWorkflows();
   }
 
-  public Optional<RegisteredWorkflow> getRegisteredWorkflow(String workflowName, String className) {
-    return ensureLaunched("getRegisteredWorkflow").getWorkflow(workflowName, className);
+  /**
+   * Retrieves a registered workflow by its workflow name, class name, and optional instance name.
+   *
+   * @param workflowName the name of the workflow to retrieve
+   * @param className the class name containing the workflow
+   * @param instanceName the instance name of the workflow (nullable)
+   * @return an {@link Optional} containing the {@link RegisteredWorkflow} if found, otherwise empty
+   */
+  public @NonNull Optional<RegisteredWorkflow> getRegisteredWorkflow(
+      @NonNull String workflowName, @NonNull String className, @Nullable String instanceName) {
+    return ensureLaunched("getRegisteredWorkflow")
+        .getWorkflow(workflowName, className, Objects.requireNonNullElse(instanceName, ""));
   }
 
   /**

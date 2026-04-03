@@ -4,13 +4,20 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.SmartInitializingSingleton;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
 
 /**
  * Scans all Spring beans after singleton initialization and registers those containing {@link
@@ -41,10 +48,12 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
     this.applicationContext = applicationContext;
   }
 
-  // TODO: handle named workflow instances
-
   @Override
   public void afterSingletonsInstantiated() {
+    // Collect beans with workflow methods, grouped by target class, preserving insertion order.
+    Map<Class<?>, List<String>> beanNamesByClass = new LinkedHashMap<>();
+    Map<String, Object> rawTargetByName = new LinkedHashMap<>();
+
     for (String beanName : applicationContext.getBeanDefinitionNames()) {
       Object bean;
       try {
@@ -68,11 +77,61 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
         rawTarget = bean;
       }
 
-      logger.debug(
-          "Registering DBOS workflows from bean '{}' ({})", beanName, targetClass.getName());
-
-      dbos.registerClassWorkflows(rawTarget, "");
+      beanNamesByClass.computeIfAbsent(targetClass, k -> new ArrayList<>()).add(beanName);
+      rawTargetByName.put(beanName, rawTarget);
     }
+
+    ConfigurableListableBeanFactory beanFactory = null;
+    if (applicationContext instanceof ConfigurableApplicationContext configurableCtx) {
+      beanFactory = configurableCtx.getBeanFactory();
+    }
+
+    for (Map.Entry<Class<?>, List<String>> entry : beanNamesByClass.entrySet()) {
+      Class<?> targetClass = entry.getKey();
+      List<String> beanNames = entry.getValue();
+
+      // The primary bean (sole instance, or explicitly @Primary) is registered with an empty name.
+      // Non-primary beans of the same class are registered under their Spring bean name.
+      String primaryBeanName = findPrimaryBeanName(beanNames, beanFactory);
+
+      for (String beanName : beanNames) {
+        Object rawTarget = rawTargetByName.get(beanName);
+        String registerName = beanName.equals(primaryBeanName) ? "" : beanName;
+
+        logger.debug(
+            "Registering DBOS workflows from bean '{}' ({}) as '{}'",
+            beanName,
+            targetClass.getName(),
+            registerName);
+
+        dbos.registerClassWorkflows(rawTarget, registerName);
+      }
+    }
+  }
+
+  /**
+   * Returns the bean name that should be treated as primary (registered with an empty instance
+   * name). If there is only one bean for the class it is always primary. Among multiple beans the
+   * one carrying {@code @Primary} wins; if none does, {@code null} is returned and every bean is
+   * registered under its own name.
+   */
+  private static String findPrimaryBeanName(
+      List<String> beanNames, ConfigurableListableBeanFactory beanFactory) {
+    if (beanNames.size() == 1) {
+      return beanNames.get(0);
+    }
+    if (beanFactory != null) {
+      for (String name : beanNames) {
+        try {
+          if (beanFactory.getBeanDefinition(name).isPrimary()) {
+            return name;
+          }
+        } catch (NoSuchBeanDefinitionException e) {
+          // bean may be registered without a definition (e.g. manually); skip
+        }
+      }
+    }
+    return null;
   }
 
   private static boolean hasWorkflowMethods(Class<?> targetClass) {

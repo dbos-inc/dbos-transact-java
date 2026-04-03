@@ -357,11 +357,6 @@ public class DBOSExecutor implements AutoCloseable {
     return this.instanceMap.values();
   }
 
-  public Optional<RegisteredWorkflow> getWorkflow(String workflowName, String className) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, workflowName);
-    return Optional.ofNullable(this.workflowMap.get(fqName));
-  }
-
   public List<Queue> getQueues() {
     return this.queues;
   }
@@ -1299,18 +1294,10 @@ public class DBOSExecutor implements AutoCloseable {
     return null;
   }
 
-  private RegisteredWorkflow getWorkflow(Invocation inv) {
-    return getWorkflow(inv.className(), inv.instanceName(), inv.workflowName());
-  }
-
-  private RegisteredWorkflow getWorkflow(
+  public Optional<RegisteredWorkflow> getWorkflow(
       String className, String instanceName, String workflowName) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
-    var workflow = workflowMap.get(fqName);
-    if (workflow == null) {
-      throw new IllegalStateException("%s workflow not registered".formatted(fqName));
-    }
-    return workflow;
+    return Optional.ofNullable(this.workflowMap.get(fqName));
   }
 
   public record ExecutionOptions(
@@ -1458,7 +1445,17 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalStateException(
           "The @Workflow method must be called on the DBOS instance passed to the startWorkflow lambda");
     }
-    var workflow = getWorkflow(invocation);
+    var workflow =
+        getWorkflow(invocation.className(), invocation.instanceName(), invocation.workflowName())
+            .orElseThrow(
+                () -> {
+                  var fqName =
+                      RegisteredWorkflow.fullyQualifiedName(
+                          invocation.className(),
+                          invocation.instanceName(),
+                          invocation.workflowName());
+                  return new IllegalStateException("%s workflow not registered".formatted(fqName));
+                });
 
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
@@ -1514,7 +1511,10 @@ public class DBOSExecutor implements AutoCloseable {
     var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
     logger.debug("invokeWorkflow {}({})", fqName, args);
 
-    var workflow = getWorkflow(className, instanceName, workflowName);
+    var workflow =
+        getWorkflow(className, instanceName, workflowName)
+            .orElseThrow(
+                () -> new IllegalStateException("%s workflow not registered".formatted(fqName)));
 
     var ctx = DBOSContextHolder.get();
 

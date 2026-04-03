@@ -9,7 +9,9 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.workflow.Workflow;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.context.ApplicationContext;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.context.ConfigurableApplicationContext;
 
 class DBOSWorkflowRegistrarTest {
 
@@ -26,13 +28,21 @@ class DBOSWorkflowRegistrarTest {
     }
   }
 
+  private static ConfigurableApplicationContext mockCtx(
+      ConfigurableListableBeanFactory beanFactory, String... beanNames) {
+    var mockCtx = mock(ConfigurableApplicationContext.class);
+    when(mockCtx.getBeanDefinitionNames()).thenReturn(beanNames);
+    when(mockCtx.getBeanFactory()).thenReturn(beanFactory);
+    return mockCtx;
+  }
+
   @Test
   void registersBeansWithWorkflowMethods() {
     var mockDbos = mock(DBOS.class);
-    var mockCtx = mock(ApplicationContext.class);
+    var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
+    var mockCtx = mockCtx(mockBeanFactory, "workflowBean");
     var bean = new BeanWithWorkflow();
 
-    when(mockCtx.getBeanDefinitionNames()).thenReturn(new String[] {"workflowBean"});
     when(mockCtx.getBean("workflowBean")).thenReturn(bean);
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
@@ -43,9 +53,9 @@ class DBOSWorkflowRegistrarTest {
   @Test
   void skipsBeansWithoutWorkflowMethods() {
     var mockDbos = mock(DBOS.class);
-    var mockCtx = mock(ApplicationContext.class);
+    var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
+    var mockCtx = mockCtx(mockBeanFactory, "plainBean");
 
-    when(mockCtx.getBeanDefinitionNames()).thenReturn(new String[] {"plainBean"});
     when(mockCtx.getBean("plainBean")).thenReturn(new BeanWithoutWorkflow());
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
@@ -58,9 +68,9 @@ class DBOSWorkflowRegistrarTest {
   @Test
   void skipsBeansThatThrowOnLookup() {
     var mockDbos = mock(DBOS.class);
-    var mockCtx = mock(ApplicationContext.class);
+    var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
+    var mockCtx = mockCtx(mockBeanFactory, "badBean");
 
-    when(mockCtx.getBeanDefinitionNames()).thenReturn(new String[] {"badBean"});
     when(mockCtx.getBean("badBean")).thenThrow(new RuntimeException("bean not available"));
 
     // should complete without throwing
@@ -74,11 +84,11 @@ class DBOSWorkflowRegistrarTest {
   @Test
   void processesMultipleBeans() {
     var mockDbos = mock(DBOS.class);
-    var mockCtx = mock(ApplicationContext.class);
+    var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
+    var mockCtx = mockCtx(mockBeanFactory, "wfBean", "plainBean");
     var wfBean = new BeanWithWorkflow();
     var plainBean = new BeanWithoutWorkflow();
 
-    when(mockCtx.getBeanDefinitionNames()).thenReturn(new String[] {"wfBean", "plainBean"});
     when(mockCtx.getBean("wfBean")).thenReturn(wfBean);
     when(mockCtx.getBean("plainBean")).thenReturn(plainBean);
 
@@ -86,5 +96,53 @@ class DBOSWorkflowRegistrarTest {
 
     verify(mockDbos).registerClassWorkflows(wfBean, "");
     verify(mockDbos, never()).registerClassWorkflows(plainBean, "");
+  }
+
+  @Test
+  void registersMultipleBeansOfSameClassUsingBeanNames() {
+    var mockDbos = mock(DBOS.class);
+    var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
+    var mockCtx = mockCtx(mockBeanFactory, "primaryBean", "secondaryBean");
+    var primaryBean = new BeanWithWorkflow();
+    var secondaryBean = new BeanWithWorkflow();
+
+    when(mockCtx.getBean("primaryBean")).thenReturn(primaryBean);
+    when(mockCtx.getBean("secondaryBean")).thenReturn(secondaryBean);
+
+    var primaryDef = mock(BeanDefinition.class);
+    var secondaryDef = mock(BeanDefinition.class);
+    when(mockBeanFactory.getBeanDefinition("primaryBean")).thenReturn(primaryDef);
+    when(mockBeanFactory.getBeanDefinition("secondaryBean")).thenReturn(secondaryDef);
+    when(primaryDef.isPrimary()).thenReturn(true);
+    when(secondaryDef.isPrimary()).thenReturn(false);
+
+    new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
+
+    verify(mockDbos).registerClassWorkflows(primaryBean, "");
+    verify(mockDbos).registerClassWorkflows(secondaryBean, "secondaryBean");
+  }
+
+  @Test
+  void registersMultipleBeansOfSameClassWithBeanNamesWhenNoneIsPrimary() {
+    var mockDbos = mock(DBOS.class);
+    var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
+    var mockCtx = mockCtx(mockBeanFactory, "beanA", "beanB");
+    var beanA = new BeanWithWorkflow();
+    var beanB = new BeanWithWorkflow();
+
+    when(mockCtx.getBean("beanA")).thenReturn(beanA);
+    when(mockCtx.getBean("beanB")).thenReturn(beanB);
+
+    var defA = mock(BeanDefinition.class);
+    var defB = mock(BeanDefinition.class);
+    when(mockBeanFactory.getBeanDefinition("beanA")).thenReturn(defA);
+    when(mockBeanFactory.getBeanDefinition("beanB")).thenReturn(defB);
+    when(defA.isPrimary()).thenReturn(false);
+    when(defB.isPrimary()).thenReturn(false);
+
+    new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
+
+    verify(mockDbos).registerClassWorkflows(beanA, "beanA");
+    verify(mockDbos).registerClassWorkflows(beanB, "beanB");
   }
 }

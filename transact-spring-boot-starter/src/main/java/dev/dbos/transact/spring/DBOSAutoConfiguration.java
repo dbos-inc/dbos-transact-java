@@ -70,8 +70,8 @@ public class DBOSAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean
-  public DBOSAspect dbosAspect(DBOS dbos) {
-    return new DBOSAspect(dbos);
+  public DBOSAspect dbosAspect(DBOS dbos, ApplicationContext applicationContext) {
+    return new DBOSAspect(dbos, applicationContext);
   }
 
   @Bean
