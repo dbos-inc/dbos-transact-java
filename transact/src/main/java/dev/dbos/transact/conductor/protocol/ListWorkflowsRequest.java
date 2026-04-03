@@ -3,7 +3,6 @@ package dev.dbos.transact.conductor.protocol;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -40,25 +39,23 @@ public class ListWorkflowsRequest extends BaseMessage {
     @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> queue_name;
 
-    public Integer limit;
-    public Integer offset;
-    public Boolean sort_desc;
-
     @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> workflow_id_prefix;
-
-    public Boolean load_input;
-    public Boolean load_output;
 
     @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> executor_id;
 
+    public Integer limit;
+    public Integer offset;
+    public Boolean sort_desc;
+    public Boolean load_input;
+    public Boolean load_output;
     public Boolean queues_only;
     public Boolean was_forked_from;
   }
 
   public static class Builder {
-    private List<String> workflow_uuids = new ArrayList<String>();
+    private List<String> workflow_uuids;
     private List<String> workflow_name;
     private List<String> authenticated_user;
     private String start_time;
@@ -78,13 +75,13 @@ public class ListWorkflowsRequest extends BaseMessage {
     private Boolean queues_only;
     private Boolean was_forked_from;
 
-    public Builder workflowUuids(List<String> workflow_uuids) {
-      this.workflow_uuids.addAll(workflow_uuids);
+    public Builder workflowIds(List<String> workflow_ids) {
+      this.workflow_uuids = workflow_ids;
       return this;
     }
 
     public Builder workflowId(String workflow_id) {
-      this.workflow_uuids.add(workflow_id);
+      this.workflow_uuids = workflow_id == null ? null : List.of(workflow_id);
       return this;
     }
 
@@ -258,7 +255,10 @@ public class ListWorkflowsRequest extends BaseMessage {
         .withLimit(body.limit)
         .withOffset(body.offset)
         .withSortDesc(body.sort_desc)
-        .withWorkflowIdPrefix(body.workflow_id_prefix != null && !body.workflow_id_prefix.isEmpty() ? body.workflow_id_prefix.get(0) : null)
+        .withWorkflowIdPrefix(
+            body.workflow_id_prefix != null && !body.workflow_id_prefix.isEmpty()
+                ? body.workflow_id_prefix.get(0)
+                : null)
         .withLoadInput(body.load_input)
         .withLoadOutput(body.load_output)
         .withExecutorIds(toArray(body.executor_id))

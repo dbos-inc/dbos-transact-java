@@ -40,19 +40,17 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
     @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> queue_name;
 
-    public Integer limit;
-    public Integer offset;
-    public Boolean sort_desc;
-
     @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> workflow_id_prefix;
-
-    public Boolean load_input;
-    public Boolean load_output;
 
     @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> executor_id;
 
+    public Integer limit;
+    public Integer offset;
+    public Boolean sort_desc;
+    public Boolean load_input;
+    public Boolean load_output;
     public Boolean was_forked_from;
   }
 
@@ -67,13 +65,13 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
     private List<String> forked_from;
     private List<String> parent_workflow_id;
     private List<String> queue_name;
+    private List<String> workflow_id_prefix;
+    private List<String> executor_id;
     private Integer limit;
     private Integer offset;
     private Boolean sort_desc;
-    private List<String> workflow_id_prefix;
     private Boolean load_input;
     private Boolean load_output;
-    private List<String> executor_id;
     private Boolean was_forked_from;
 
     public Builder workflowUuids(List<String> workflow_uuids) {
@@ -258,7 +256,10 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
         .withLimit(body.limit)
         .withOffset(body.offset)
         .withSortDesc(body.sort_desc)
-        .withWorkflowIdPrefix(body.workflow_id_prefix != null && !body.workflow_id_prefix.isEmpty() ? body.workflow_id_prefix.get(0) : null)
+        .withWorkflowIdPrefix(
+            body.workflow_id_prefix != null && !body.workflow_id_prefix.isEmpty()
+                ? body.workflow_id_prefix.get(0)
+                : null)
         .withLoadInput(body.load_input)
         .withLoadOutput(body.load_output)
         .withExecutorIds(toArray(body.executor_id));
