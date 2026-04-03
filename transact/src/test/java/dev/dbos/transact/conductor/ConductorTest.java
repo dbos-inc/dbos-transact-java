@@ -1075,7 +1075,7 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.startTime());
-      assertEquals("foobarbaz", input.workflowName());
+      assertEquals(List.of("foobarbaz"), input.workflowName());
       assertNull(input.limit());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
@@ -1149,7 +1149,7 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.startTime());
-      assertEquals("foobarbaz", input.workflowName());
+      assertEquals(List.of("foobarbaz"), input.workflowName());
       assertNull(input.limit());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
@@ -1163,6 +1163,128 @@ public class ConductorTest {
       assertTrue(outputNode.size() == 3);
 
       assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListWorkflowsWithArrayValues() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    when(mockExec.listWorkflows(any())).thenReturn(List.of());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body =
+          Map.of(
+              "workflow_name", List.of("alpha", "beta"),
+              "status", List.of("SUCCESS", "PENDING"),
+              "authenticated_user", List.of("user-a", "user-b"),
+              "application_version", List.of("v1.0", "v2.0"),
+              "executor_id", List.of("exec-1", "exec-2"));
+      listener.send(MessageType.LIST_WORKFLOWS, "12345", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockExec).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(List.of("alpha", "beta"), input.workflowName());
+      assertEquals(List.of("SUCCESS", "PENDING"), input.status());
+      assertEquals(List.of("user-a", "user-b"), input.authenticatedUser());
+      assertEquals(List.of("v1.0", "v2.0"), input.applicationVersion());
+      assertEquals(List.of("exec-1", "exec-2"), input.executorIds());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListWorkflowsWithSingleStringValues() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    when(mockExec.listWorkflows(any())).thenReturn(List.of());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body =
+          Map.of(
+              "workflow_name", "alpha",
+              "status", "SUCCESS",
+              "authenticated_user", "user-a",
+              "application_version", "v1.0",
+              "executor_id", "exec-1");
+      listener.send(MessageType.LIST_WORKFLOWS, "12345", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockExec).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(List.of("alpha"), input.workflowName());
+      assertEquals(List.of("SUCCESS"), input.status());
+      assertEquals(List.of("user-a"), input.authenticatedUser());
+      assertEquals(List.of("v1.0"), input.applicationVersion());
+      assertEquals(List.of("exec-1"), input.executorIds());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListQueuedWorkflowsWithArrayValues() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    when(mockExec.listWorkflows(any())).thenReturn(List.of());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body =
+          Map.of(
+              "workflow_name", List.of("alpha", "beta"),
+              "status", List.of("SUCCESS", "PENDING"),
+              "queue_name", List.of("q1", "q2"));
+      listener.send(MessageType.LIST_QUEUED_WORKFLOWS, "12345", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockExec).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(List.of("alpha", "beta"), input.workflowName());
+      assertEquals(List.of("SUCCESS", "PENDING"), input.status());
+      assertEquals(List.of("q1", "q2"), input.queueName());
+      assertTrue(input.queuesOnly());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListQueuedWorkflowsWithSingleStringValues() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    when(mockExec.listWorkflows(any())).thenReturn(List.of());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body =
+          Map.of(
+              "workflow_name", "alpha",
+              "status", "SUCCESS",
+              "queue_name", "q1");
+      listener.send(MessageType.LIST_QUEUED_WORKFLOWS, "12345", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockExec).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(List.of("alpha"), input.workflowName());
+      assertEquals(List.of("SUCCESS"), input.status());
+      assertEquals(List.of("q1"), input.queueName());
+      assertTrue(input.queuesOnly());
     }
   }
 

@@ -15,34 +15,34 @@ public class ListWorkflowsRequest extends BaseMessage {
   public static class Body {
     public List<String> workflow_uuids;
 
-    @JsonDeserialize(using = StringOrListDeserializer.class)
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     public List<String> workflow_name;
 
-    @JsonDeserialize(using = StringOrListDeserializer.class)
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     public List<String> authenticated_user;
 
     public String start_time;
     public String end_time;
 
-    @JsonDeserialize(using = StringOrListDeserializer.class)
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     public List<String> status;
 
-    @JsonDeserialize(using = StringOrListDeserializer.class)
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     public List<String> application_version;
 
-    @JsonDeserialize(using = StringOrListDeserializer.class)
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     public List<String> forked_from;
 
-    @JsonDeserialize(using = StringOrListDeserializer.class)
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     public List<String> parent_workflow_id;
 
-    @JsonDeserialize(using = StringOrListDeserializer.class)
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     public List<String> queue_name;
 
-    @JsonDeserialize(using = StringOrListDeserializer.class)
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     public List<String> workflow_id_prefix;
 
-    @JsonDeserialize(using = StringOrListDeserializer.class)
+    @JsonDeserialize(using = StringOrArrayDeserializer.class)
     public List<String> executor_id;
 
     public Integer limit;
@@ -242,16 +242,16 @@ public class ListWorkflowsRequest extends BaseMessage {
 
   public ListWorkflowsInput asInput() {
     return new ListWorkflowsInput()
-        .withWorkflowIds(toArray(body.workflow_uuids))
-        .withWorkflowNames(toArray(body.workflow_name))
-        .withAuthenticatedUsers(toArray(body.authenticated_user))
+        .withWorkflowIds(body.workflow_uuids)
+        .withWorkflowNames(body.workflow_name)
+        .withAuthenticatedUsers(body.authenticated_user)
         .withStartTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null)
         .withEndTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null)
-        .withStatuses(toArray(body.status))
-        .withApplicationVersions(toArray(body.application_version))
-        .withForkedFrom(toArray(body.forked_from))
-        .withParentWorkflowIds(toArray(body.parent_workflow_id))
-        .withQueueNames(toArray(body.queue_name))
+        .withStatuses(body.status)
+        .withApplicationVersions(body.application_version)
+        .withForkedFrom(body.forked_from)
+        .withParentWorkflowIds(body.parent_workflow_id)
+        .withQueueNames(body.queue_name)
         .withLimit(body.limit)
         .withOffset(body.offset)
         .withSortDesc(body.sort_desc)
@@ -261,11 +261,7 @@ public class ListWorkflowsRequest extends BaseMessage {
                 : null)
         .withLoadInput(body.load_input)
         .withLoadOutput(body.load_output)
-        .withExecutorIds(toArray(body.executor_id))
+        .withExecutorIds(body.executor_id)
         .withQueuesOnly(body.queues_only);
-  }
-
-  private static String[] toArray(java.util.List<String> list) {
-    return list == null ? null : list.toArray(String[]::new);
   }
 }

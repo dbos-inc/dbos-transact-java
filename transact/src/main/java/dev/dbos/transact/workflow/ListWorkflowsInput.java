@@ -1,7 +1,7 @@
 package dev.dbos.transact.workflow;
 
 import java.time.OffsetDateTime;
-import java.util.Arrays;
+import java.util.List;
 
 /**
  * Argument to `DBOS.listWorkflows`, specifying the set of filters that can be applied to the
@@ -9,26 +9,26 @@ import java.util.Arrays;
  * status, queues, etc. Also, this structure controls whether the input and output are returned.
  */
 public record ListWorkflowsInput(
-    String[] workflowIds,
-    String[] status,
+    List<String> workflowIds,
+    List<String> status,
     OffsetDateTime startTime,
     OffsetDateTime endTime,
-    String[] workflowName,
+    List<String> workflowName,
     String className,
     String instanceName,
-    String[] applicationVersion,
-    String[] authenticatedUser,
+    List<String> applicationVersion,
+    List<String> authenticatedUser,
     Integer limit,
     Integer offset,
     Boolean sortDesc,
     String workflowIdPrefix,
     Boolean loadInput,
     Boolean loadOutput,
-    String[] queueName,
+    List<String> queueName,
     Boolean queuesOnly,
-    String[] executorIds,
-    String[] forkedFrom,
-    String[] parentWorkflowId) {
+    List<String> executorIds,
+    List<String> forkedFrom,
+    List<String> parentWorkflowId) {
 
   public ListWorkflowsInput() {
     this(
@@ -37,7 +37,7 @@ public record ListWorkflowsInput(
   }
 
   /** Restrict the returned workflows to those on the specified `workflowIds` list */
-  public ListWorkflowsInput withWorkflowIds(String[] workflowIds) {
+  public ListWorkflowsInput withWorkflowIds(List<String> workflowIds) {
     return new ListWorkflowsInput(
         workflowIds,
         status,
@@ -69,11 +69,11 @@ public record ListWorkflowsInput(
    * @return a new ListWorkflowsInput record with the workflowId list set
    */
   public ListWorkflowsInput withWorkflowId(String workflowId) {
-    return withWorkflowIds(workflowId == null ? null : new String[] {workflowId});
+    return withWorkflowIds(workflowId == null ? null : List.of(workflowId));
   }
 
   /** Restrict the returned workflows to those with a status on the specified list */
-  public ListWorkflowsInput withStatuses(String[] status) {
+  public ListWorkflowsInput withStatuses(List<String> status) {
     return new ListWorkflowsInput(
         workflowIds,
         status,
@@ -99,12 +99,12 @@ public record ListWorkflowsInput(
 
   /** Restrict the returned workflows to those with a status of `status` */
   public ListWorkflowsInput withStatus(String stat) {
-    return withStatuses(stat == null ? null : new String[] {stat});
+    return withStatuses(stat == null ? null : List.of(stat));
   }
 
   /** Restrict the returned workflows to those with a status of `status` */
   public ListWorkflowsInput withStatus(WorkflowState stat) {
-    return withStatuses(stat == null ? null : new String[] {stat.name()});
+    return withStatuses(stat == null ? null : List.of(stat.name()));
   }
 
   /** Restrict the returned workflows to those initiated on or after `startTime` */
@@ -158,7 +158,7 @@ public record ListWorkflowsInput(
   }
 
   /** Restrict the returned workflows to those with a function name on the specified list */
-  public ListWorkflowsInput withWorkflowNames(String[] workflowName) {
+  public ListWorkflowsInput withWorkflowNames(List<String> workflowName) {
     return new ListWorkflowsInput(
         workflowIds,
         status,
@@ -184,7 +184,7 @@ public record ListWorkflowsInput(
 
   /** Restrict the returned workflows to those with the function name `workflowName` */
   public ListWorkflowsInput withWorkflowName(String workflowName) {
-    return withWorkflowNames(workflowName == null ? null : new String[] {workflowName});
+    return withWorkflowNames(workflowName == null ? null : List.of(workflowName));
   }
 
   /** Restrict the returned workflows to those within the class named `className` */
@@ -238,7 +238,7 @@ public record ListWorkflowsInput(
   }
 
   /** Restrict the returned workflows to those run on app versions on the specified list */
-  public ListWorkflowsInput withApplicationVersions(String[] applicationVersion) {
+  public ListWorkflowsInput withApplicationVersions(List<String> applicationVersion) {
     return new ListWorkflowsInput(
         workflowIds,
         status,
@@ -264,12 +264,11 @@ public record ListWorkflowsInput(
 
   /** Restrict the returned workflows to those run on app version `applicationVersion` */
   public ListWorkflowsInput withApplicationVersion(String applicationVersion) {
-    return withApplicationVersions(
-        applicationVersion == null ? null : new String[] {applicationVersion});
+    return withApplicationVersions(applicationVersion == null ? null : List.of(applicationVersion));
   }
 
   /** Restrict the returned workflows to those run by users on the specified list */
-  public ListWorkflowsInput withAuthenticatedUsers(String[] authenticatedUser) {
+  public ListWorkflowsInput withAuthenticatedUsers(List<String> authenticatedUser) {
     return new ListWorkflowsInput(
         workflowIds,
         status,
@@ -295,8 +294,7 @@ public record ListWorkflowsInput(
 
   /** Restrict the returned workflows to those run by user `authenticatedUser` */
   public ListWorkflowsInput withAuthenticatedUser(String authenticatedUser) {
-    return withAuthenticatedUsers(
-        authenticatedUser == null ? null : new String[] {authenticatedUser});
+    return withAuthenticatedUsers(authenticatedUser == null ? null : List.of(authenticatedUser));
   }
 
   /** Restrict the number of returned workflows to `limit` */
@@ -459,7 +457,7 @@ public record ListWorkflowsInput(
   }
 
   /** Restrict the returned workflows to those enqueued on queues on the specified list */
-  public ListWorkflowsInput withQueueNames(String[] queueName) {
+  public ListWorkflowsInput withQueueNames(List<String> queueName) {
     return new ListWorkflowsInput(
         workflowIds,
         status,
@@ -488,7 +486,7 @@ public record ListWorkflowsInput(
    * restriction is applied.
    */
   public ListWorkflowsInput withQueueName(String queueName) {
-    return withQueueNames(queueName == null ? null : new String[] {queueName});
+    return withQueueNames(queueName == null ? null : List.of(queueName));
   }
 
   /** Restrict the returned workflows to only those run on queues. */
@@ -524,7 +522,7 @@ public record ListWorkflowsInput(
    * Restrict the returned workflows to those enqueued for or run by an executor on the specified
    * list.
    */
-  public ListWorkflowsInput withExecutorIds(String[] executorIds) {
+  public ListWorkflowsInput withExecutorIds(List<String> executorIds) {
     return new ListWorkflowsInput(
         workflowIds,
         status,
@@ -556,11 +554,11 @@ public record ListWorkflowsInput(
    * @return a new ListWorkflowsInput record with the executorIds list set
    */
   public ListWorkflowsInput withExecutorId(String executorId) {
-    return withExecutorIds(executorId == null ? null : new String[] {executorId});
+    return withExecutorIds(executorId == null ? null : List.of(executorId));
   }
 
   /** Restrict the returned workflows to those forked from workflows on the specified list */
-  public ListWorkflowsInput withForkedFrom(String[] forkedFrom) {
+  public ListWorkflowsInput withForkedFrom(List<String> forkedFrom) {
     return new ListWorkflowsInput(
         workflowIds,
         status,
@@ -586,11 +584,11 @@ public record ListWorkflowsInput(
 
   /** Restrict the returned workflows to those forked from the specified workflow ID */
   public ListWorkflowsInput withForkedFrom(String forkedFrom) {
-    return withForkedFrom(forkedFrom == null ? null : new String[] {forkedFrom});
+    return withForkedFrom(forkedFrom == null ? null : List.of(forkedFrom));
   }
 
   /** Restrict the returned workflows to those with a parent workflow ID on the specified list */
-  public ListWorkflowsInput withParentWorkflowIds(String[] parentWorkflowId) {
+  public ListWorkflowsInput withParentWorkflowIds(List<String> parentWorkflowId) {
     return new ListWorkflowsInput(
         workflowIds,
         status,
@@ -616,22 +614,29 @@ public record ListWorkflowsInput(
 
   /** Restrict the returned workflows to those with the specified parent workflow ID */
   public ListWorkflowsInput withParentWorkflowId(String parentWorkflowId) {
-    return withParentWorkflowIds(parentWorkflowId == null ? null : new String[] {parentWorkflowId});
+    return withParentWorkflowIds(parentWorkflowId == null ? null : List.of(parentWorkflowId));
   }
 
   public ListWorkflowsInput withAddedWorkflowId(String workflowId) {
     if (workflowId == null) return this;
-    String[] existing = this.workflowIds;
-    String[] ids = existing == null ? new String[1] : Arrays.copyOf(existing, existing.length + 1);
-    ids[ids.length - 1] = workflowId;
+    List<String> existing = this.workflowIds;
+    List<String> ids =
+        existing == null
+            ? List.of(workflowId)
+            : java.util.stream.Stream.concat(
+                    existing.stream(), java.util.stream.Stream.of(workflowId))
+                .toList();
     return withWorkflowIds(ids);
   }
 
   public ListWorkflowsInput withAddedStatus(String status) {
     if (status == null) return this;
-    String[] existing = this.status;
-    String[] sts = existing == null ? new String[1] : Arrays.copyOf(existing, existing.length + 1);
-    sts[sts.length - 1] = status;
+    List<String> existing = this.status;
+    List<String> sts =
+        existing == null
+            ? List.of(status)
+            : java.util.stream.Stream.concat(existing.stream(), java.util.stream.Stream.of(status))
+                .toList();
     return withStatuses(sts);
   }
 
@@ -642,9 +647,13 @@ public record ListWorkflowsInput(
 
   public ListWorkflowsInput withAddedExecutorId(String executorId) {
     if (executorId == null) return this;
-    String[] existing = this.executorIds;
-    String[] ids = existing == null ? new String[1] : Arrays.copyOf(existing, existing.length + 1);
-    ids[ids.length - 1] = executorId;
+    List<String> existing = this.executorIds;
+    List<String> ids =
+        existing == null
+            ? List.of(executorId)
+            : java.util.stream.Stream.concat(
+                    existing.stream(), java.util.stream.Stream.of(executorId))
+                .toList();
     return withExecutorIds(ids);
   }
 }

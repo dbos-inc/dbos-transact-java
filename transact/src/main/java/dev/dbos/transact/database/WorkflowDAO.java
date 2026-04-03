@@ -543,8 +543,8 @@ class WorkflowDAO {
             pstmt.setLong(i + 1, v);
           } else if (param instanceof Integer v) {
             pstmt.setInt(i + 1, v);
-          } else if (param instanceof Object[] v) {
-            Array sqlArray = connection.createArrayOf("text", v);
+          } else if (param instanceof List<?> v) {
+            Array sqlArray = connection.createArrayOf("text", v.toArray());
             arrays.add(sqlArray);
             pstmt.setArray(i + 1, sqlArray);
           } else {
