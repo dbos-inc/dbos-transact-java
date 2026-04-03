@@ -188,22 +188,19 @@ public class DBOS implements AutoCloseable {
    */
   public <T> @NonNull T registerWorkflows(
       @NonNull Class<T> interfaceClass, @NonNull T implementation, @NonNull String instanceName) {
-    registerClassWorkflows(interfaceClass, implementation, instanceName);
+    if (!interfaceClass.isInterface()) {
+      throw new IllegalArgumentException("interfaceClass must be an interface");
+    }
+    registerClassWorkflows(implementation, instanceName);
 
     return DBOSInvocationHandler.createProxy(
         interfaceClass, implementation, instanceName, () -> this.dbosExecutor.get());
   }
 
-  private void registerClassWorkflows(
-      @NonNull Class<?> interfaceClass,
-      @NonNull Object implementation,
-      @Nullable String instanceName) {
-    Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
+  public void registerClassWorkflows(
+      @NonNull Object implementation, @Nullable String instanceName) {
     Objects.requireNonNull(implementation, "implementation must not be null");
     instanceName = Objects.requireNonNullElse(instanceName, "");
-    if (!interfaceClass.isInterface()) {
-      throw new IllegalArgumentException("interfaceClass must be an interface");
-    }
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
@@ -215,7 +212,7 @@ public class DBOS implements AutoCloseable {
         (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
             ? classNameAnnotation.value()
             : implementation.getClass().getName();
-    workflowRegistry.register(interfaceClass, implementation, className, instanceName);
+    workflowRegistry.register(implementation, className, instanceName);
 
     Method[] methods = implementation.getClass().getDeclaredMethods();
     for (Method method : methods) {

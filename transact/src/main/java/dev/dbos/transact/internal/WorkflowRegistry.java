@@ -15,9 +15,9 @@ public class WorkflowRegistry {
   private final ConcurrentHashMap<String, RegisteredWorkflow> wfRegistry =
       new ConcurrentHashMap<>();
 
-  public void register(Class<?> ifc, Object target, String className, String instanceName) {
+  public void register(Object target, String className, String instanceName) {
     var fqName = RegisteredWorkflowInstance.fullyQualifiedInstName(className, instanceName);
-    var regClass = new RegisteredWorkflowInstance(className, instanceName, ifc, target);
+    var regClass = new RegisteredWorkflowInstance(className, instanceName, target);
     var previous = wfInstRegistry.putIfAbsent(fqName, regClass);
     if (previous != null) {
       throw new IllegalStateException("Workflow class already registered with name: " + fqName);

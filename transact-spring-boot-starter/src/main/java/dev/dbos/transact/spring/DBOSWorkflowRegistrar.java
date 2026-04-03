@@ -69,9 +69,7 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
       logger.debug(
           "Registering DBOS workflows from bean '{}' ({})", beanName, targetClass.getName());
 
-      // TODO: requires DBOS.registerWorkflowsInstance(Object target) to be added as a public
-      //       method that registers a concrete class without requiring a matching interface.
-      // dbos.registerWorkflowsInstance(rawTarget);
+      dbos.registerClassWorkflows(rawTarget, "");
     }
   }
 
