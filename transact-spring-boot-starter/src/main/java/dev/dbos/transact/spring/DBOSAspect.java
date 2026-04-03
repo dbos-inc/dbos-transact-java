@@ -1,10 +1,14 @@
 package dev.dbos.transact.spring;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
+
+import java.lang.reflect.Method;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -12,6 +16,7 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.aop.support.AopUtils;
 
 /**
  * Spring AOP aspect that intercepts {@link Workflow @Workflow} and {@link Step @Step} annotated
@@ -51,9 +56,21 @@ public class DBOSAspect {
   private static final Logger logger = LoggerFactory.getLogger(DBOSAspect.class);
 
   private final DBOS dbos;
+  private final ConcurrentHashMap<Method, RegisteredWorkflow> workflowCache =
+      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Method, StepOptions> stepCache = new ConcurrentHashMap<>();
 
   public DBOSAspect(DBOS dbos) {
     this.dbos = dbos;
+  }
+
+  static Method getMethod(ProceedingJoinPoint pjp) {
+    return AopUtils.getMostSpecificMethod(
+        ((MethodSignature) pjp.getSignature()).getMethod(), pjp.getTarget().getClass());
+  }
+
+  static String getMethodName(ProceedingJoinPoint pjp) {
+    return ((MethodSignature) pjp.getSignature()).getName();
   }
 
   /**
@@ -63,24 +80,28 @@ public class DBOSAspect {
    */
   @Around("@annotation(workflow)")
   public Object aroundWorkflow(ProceedingJoinPoint pjp, Workflow workflow) throws Throwable {
-    Object target = pjp.getTarget();
-    MethodSignature sig = (MethodSignature) pjp.getSignature();
+    var regWf =
+        workflowCache.computeIfAbsent(
+            getMethod(pjp),
+            m -> {
+              var klass = pjp.getTarget().getClass();
+              var classTag = klass.getAnnotation(WorkflowClassName.class);
+              var className =
+                  (classTag == null || classTag.value().isEmpty())
+                      ? klass.getName()
+                      : classTag.value();
+              var workflowName = workflow.name().isEmpty() ? getMethodName(pjp) : workflow.name();
+              return dbos.getRegisteredWorkflow(workflowName, className)
+                  .orElseThrow(
+                      () ->
+                          new IllegalStateException(
+                              "No registered workflow found for %s.%s"
+                                  .formatted(className, workflowName)));
+            });
 
-    WorkflowClassName classNameAnn = target.getClass().getAnnotation(WorkflowClassName.class);
-    String className =
-        (classNameAnn != null && !classNameAnn.value().isEmpty())
-            ? classNameAnn.value()
-            : target.getClass().getName();
-
-    String workflowName = workflow.name().isEmpty() ? sig.getName() : workflow.name();
-
-    logger.debug("Intercepting @Workflow {}.{}", className, workflowName);
-
-    // TODO: requires DBOS.invokeWorkflow(String className, String instanceName,
-    //       String workflowName, Object[] args) to be added as a public method.
-    // var handle = dbos.invokeWorkflow(className, "", workflowName, pjp.getArgs());
-    // return handle.getResult();
-    throw new RuntimeException("not impl");
+    logger.debug("Intercepting @Workflow {}", regWf.fullyQualifiedName());
+    var handle = dbos.startWorkflow(regWf, pjp.getArgs(), null);
+    return handle.getResult();
   }
 
   /**
@@ -90,18 +111,18 @@ public class DBOSAspect {
    */
   @Around("@annotation(step)")
   public Object aroundStep(ProceedingJoinPoint pjp, Step step) throws Throwable {
-    MethodSignature sig = (MethodSignature) pjp.getSignature();
-    String stepName = step.name().isEmpty() ? sig.getName() : step.name();
-    StepOptions opts =
-        new StepOptions(
-            stepName,
-            step.retriesAllowed(),
-            step.maxAttempts(),
-            step.intervalSeconds(),
-            step.backOffRate());
+    var stepOptions =
+        stepCache.computeIfAbsent(
+            getMethod(pjp),
+            m ->
+                new StepOptions(
+                    step.name().isEmpty() ? getMethodName(pjp) : step.name(),
+                    step.retriesAllowed(),
+                    step.maxAttempts(),
+                    step.intervalSeconds(),
+                    step.backOffRate()));
 
-    logger.debug("Intercepting @Step {}", stepName);
-
+    logger.debug("Intercepting @Step {}", stepOptions.name());
     try {
       return dbos.runStep(
           () -> {
@@ -113,7 +134,7 @@ public class DBOSAspect {
               throw new WrappedThrowableException(t);
             }
           },
-          opts);
+          stepOptions);
     } catch (WrappedThrowableException e) {
       // Unwrap and rethrow the original non-Exception Throwable
       throw e.getWrappedThrowable();
