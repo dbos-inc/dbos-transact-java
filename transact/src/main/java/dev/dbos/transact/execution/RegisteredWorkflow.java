@@ -49,10 +49,13 @@ public record RegisteredWorkflow(
       return (T) workflowMethod.invoke(target, args);
     } catch (Exception e) {
       while (e instanceof InvocationTargetException ite) {
-        if (ite.getTargetException() instanceof Exception exception) {
+        var targetException = ite.getTargetException();
+        if (targetException instanceof Exception exception) {
           e = exception;
         } else {
-          throw new RuntimeException(e);
+          // Preserve existing behavior: reflective invocation can surface a non-Exception
+          // Throwable (for example, an Error), which cannot be rethrown as E here.
+          throw new RuntimeException(targetException);
         }
       }
       throw (E) e;
