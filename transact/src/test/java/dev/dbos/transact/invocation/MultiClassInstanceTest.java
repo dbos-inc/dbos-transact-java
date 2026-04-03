@@ -103,7 +103,7 @@ public class MultiClassInstanceTest {
     assertEquals(1, browsa.size());
     var browa = browsa.get(0);
     assertEquals(bhandlea.workflowId(), browa.workflowId());
-    assertEquals("stepWorkflow", browa.name());
+    assertEquals("stepWorkflow", browa.workflowName());
     assertEquals("A", browa.instanceName());
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", browa.className());
     assertEquals("SUCCESS", browa.status());
@@ -112,7 +112,7 @@ public class MultiClassInstanceTest {
     assertEquals(1, brows1.size());
     var brow1 = brows1.get(0);
     assertEquals(bhandle1.workflowId(), brow1.workflowId());
-    assertEquals("stepWorkflow", brow1.name());
+    assertEquals("stepWorkflow", brow1.workflowName());
     assertEquals("1", brow1.instanceName());
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", brow1.className());
     assertEquals("SUCCESS", brow1.status());
@@ -121,7 +121,7 @@ public class MultiClassInstanceTest {
     assertEquals(1, hrows.size());
     var hrow = hrows.get(0);
     assertEquals(hhandle.workflowId(), hrow.workflowId());
-    assertEquals("stepWorkflow", hrow.name());
+    assertEquals("stepWorkflow", hrow.workflowName());
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", hrow.className());
     assertEquals("", hrow.instanceName());
     assertEquals("SUCCESS", hrow.status());

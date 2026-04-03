@@ -67,7 +67,7 @@ public class CustomSchemaTest {
     var row = rows.get(0);
     assertDoesNotThrow(() -> UUID.fromString((String) row.workflowId()));
     assertEquals("SUCCESS", row.status());
-    assertEquals("simpleWorkflow", row.name());
+    assertEquals("simpleWorkflow", row.workflowName());
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", row.className());
     assertNotNull(row.output());
     assertNull(row.error());

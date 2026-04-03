@@ -104,7 +104,7 @@ class SchedulesDAO {
     }
     if (workflowNames != null && !workflowNames.isEmpty()) {
       sql.append(" AND workflow_name = ANY(?)");
-      params.add(workflowNames.toArray(new String[0]));
+      params.add(workflowNames.toArray(String[]::new));
     }
     if (scheduleNamePrefixes != null && !scheduleNamePrefixes.isEmpty()) {
       sql.append(" AND (");

@@ -5,7 +5,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 public record WorkflowStatusInternal(
     String workflowId,
     WorkflowState status,
-    String name,
+    String workflowName,
     String className,
     String instanceName,
     String queueName,
@@ -70,7 +70,7 @@ public record WorkflowStatusInternal(
     private String workflowId;
     private String parentWorkflowId;
     private WorkflowState status;
-    private String name;
+    private String workflowName;
     private String className;
     private String instanceName;
     private String queueName;
@@ -109,8 +109,8 @@ public record WorkflowStatusInternal(
       return this;
     }
 
-    public Builder name(String name) {
-      this.name = name;
+    public Builder workflowName(String workflowName) {
+      this.workflowName = workflowName;
       return this;
     }
 
@@ -228,7 +228,7 @@ public record WorkflowStatusInternal(
       return new WorkflowStatusInternal(
           workflowId,
           status,
-          name,
+          workflowName,
           className,
           instanceName,
           queueName,

@@ -157,7 +157,7 @@ public class SchedulerService implements AutoCloseable {
           logger.error(
               "Workflow schedule {} has missing workflow function {}",
               schedule.scheduleName(),
-              RegisteredWorkflow.fullyQualifiedName(schedule.className(), schedule.workflowName()));
+              RegisteredWorkflow.fullyQualifiedName(schedule.workflowName(), schedule.className()));
           continue;
         }
 

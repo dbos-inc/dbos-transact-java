@@ -7,8 +7,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record WorkflowStatus(
     String workflowId,
-    String status,
-    String name,
+    String status, // TODO consider changing this to an enum
+    String workflowName,
     String className,
     String instanceName,
     String authenticatedUser,
@@ -60,7 +60,7 @@ public record WorkflowStatus(
 
     return java.util.Objects.equals(workflowId, that.workflowId)
         && java.util.Objects.equals(status, that.status)
-        && java.util.Objects.equals(name, that.name)
+        && java.util.Objects.equals(workflowName, that.workflowName)
         && java.util.Objects.equals(className, that.className)
         && java.util.Objects.equals(instanceName, that.instanceName)
         && java.util.Objects.equals(authenticatedUser, that.authenticatedUser)
@@ -91,7 +91,7 @@ public record WorkflowStatus(
     return java.util.Objects.hash(
         workflowId,
         status,
-        name,
+        workflowName,
         className,
         instanceName,
         authenticatedUser,

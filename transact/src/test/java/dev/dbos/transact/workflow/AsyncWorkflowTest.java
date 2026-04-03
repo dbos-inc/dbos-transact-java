@@ -47,7 +47,7 @@ public class AsyncWorkflowTest {
 
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
-    assertEquals(wfs.get(0).name(), "workWithString");
+    assertEquals(wfs.get(0).workflowName(), "workWithString");
     assertEquals(wfid, wfs.get(0).workflowId());
 
     try (var id = new WorkflowOptions(wfid).setContext()) {
@@ -99,7 +99,7 @@ public class AsyncWorkflowTest {
 
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
-    assertEquals(wfs.get(0).name(), "workError");
+    assertEquals(wfs.get(0).workflowName(), "workError");
     assertNotNull(wfs.get(0).workflowId());
     assertEquals(wfs.get(0).workflowId(), handle.workflowId());
     assertEquals("java.lang.Exception", handle.getStatus().error().className());

@@ -6,7 +6,7 @@ import java.sql.SQLException;
 public record WorkflowStatusRow(
     String workflowId,
     String status,
-    String name,
+    String workflowName,
     String authenticatedUser,
     String assumedRole,
     String authenticatedRoles,

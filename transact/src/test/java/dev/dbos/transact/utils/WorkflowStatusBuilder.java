@@ -10,7 +10,7 @@ public class WorkflowStatusBuilder {
   private String workflowId;
   private String status;
 
-  private String name;
+  private String workflowName;
   private String className;
   private String instanceName;
 
@@ -46,7 +46,7 @@ public class WorkflowStatusBuilder {
     return new WorkflowStatus(
         workflowId,
         status,
-        name,
+        workflowName,
         className,
         instanceName,
         authenticatedUser,
@@ -87,8 +87,8 @@ public class WorkflowStatusBuilder {
     return this;
   }
 
-  public WorkflowStatusBuilder name(String name) {
-    this.name = name;
+  public WorkflowStatusBuilder workflowName(String workflowName) {
+    this.workflowName = workflowName;
     return this;
   }
 

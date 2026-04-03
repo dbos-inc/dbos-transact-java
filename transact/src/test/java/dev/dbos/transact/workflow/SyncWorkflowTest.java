@@ -37,7 +37,7 @@ public class SyncWorkflowTest {
 
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
-    assertEquals(wfs.get(0).name(), "workWithString");
+    assertEquals(wfs.get(0).workflowName(), "workWithString");
     assertNotNull(wfs.get(0).workflowId());
     assertEquals("test-item", wfs.get(0).input()[0]);
     assertEquals("Processed: test-item", wfs.get(0).output());
@@ -54,7 +54,7 @@ public class SyncWorkflowTest {
 
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
-    assertEquals(wfs.get(0).name(), "workError");
+    assertEquals(wfs.get(0).workflowName(), "workError");
     assertEquals("java.lang.Exception", wfs.get(0).error().className());
     assertEquals("DBOS Test error", wfs.get(0).error().message());
     assertNotNull(wfs.get(0).workflowId());
@@ -78,7 +78,7 @@ public class SyncWorkflowTest {
 
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
-    assertEquals(wfs.get(0).name(), "workWithString");
+    assertEquals(wfs.get(0).workflowName(), "workWithString");
     assertEquals(wfid, wfs.get(0).workflowId());
 
     WorkflowHandle<String, ?> handle = dbos.retrieveWorkflow(wfid);
@@ -104,7 +104,7 @@ public class SyncWorkflowTest {
 
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
-    assertEquals(wfs.get(0).name(), "workWithString");
+    assertEquals(wfs.get(0).workflowName(), "workWithString");
     assertEquals("wf-123", wfs.get(0).workflowId());
 
     assertEquals(1, impl.executionCount);

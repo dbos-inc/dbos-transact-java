@@ -257,7 +257,7 @@ public class ListWorkflowsTest {
     List<WorkflowStatus> alpha =
         dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("alpha"));
     assertEquals(3, alpha.size());
-    alpha.forEach(wf -> assertEquals("alpha", wf.name()));
+    alpha.forEach(wf -> assertEquals("alpha", wf.workflowName()));
 
     // beta: wf-beta-1, wf-beta-2 = 2
     List<WorkflowStatus> beta =
@@ -591,7 +591,7 @@ public class ListWorkflowsTest {
         wf -> {
           assertNotNull(wf.workflowId());
           assertNotNull(wf.status());
-          assertNotNull(wf.name());
+          assertNotNull(wf.workflowName());
           assertNotNull(wf.createdAt());
         });
   }
@@ -611,7 +611,7 @@ public class ListWorkflowsTest {
         wf -> {
           assertNotNull(wf.workflowId());
           assertNotNull(wf.status());
-          assertNotNull(wf.name());
+          assertNotNull(wf.workflowName());
         });
   }
 
@@ -647,7 +647,7 @@ public class ListWorkflowsTest {
         wf -> {
           assertNotNull(wf.workflowId());
           assertNotNull(wf.status());
-          assertNotNull(wf.name());
+          assertNotNull(wf.workflowName());
           assertNotNull(wf.className());
           assertNotNull(wf.createdAt());
         });
@@ -666,7 +666,7 @@ public class ListWorkflowsTest {
             .filter(wf -> "wf-alpha-1".equals(wf.workflowId()))
             .findFirst()
             .orElseThrow(() -> new AssertionError("wf-alpha-1 not found"));
-    assertEquals("alpha", alpha1.name());
+    assertEquals("alpha", alpha1.workflowName());
     assertEquals("ClassA", alpha1.className());
     assertEquals("SUCCESS", alpha1.status());
     assertTrue(alpha1.input() == null || alpha1.input().length == 0);
@@ -697,7 +697,8 @@ public class ListWorkflowsTest {
     List<WorkflowStatus> alphaOrBeta =
         dbos.listWorkflows(new ListWorkflowsInput().withWorkflowNames(List.of("alpha", "beta")));
     assertEquals(5, alphaOrBeta.size());
-    alphaOrBeta.forEach(wf -> assertTrue("alpha".equals(wf.name()) || "beta".equals(wf.name())));
+    alphaOrBeta.forEach(
+        wf -> assertTrue("alpha".equals(wf.workflowName()) || "beta".equals(wf.workflowName())));
 
     // alpha=3, beta=2, gamma=3 → 8
     List<WorkflowStatus> threenames =
@@ -773,7 +774,7 @@ public class ListWorkflowsTest {
     assertEquals(2, alphaSuccess.size());
     alphaSuccess.forEach(
         wf -> {
-          assertEquals("alpha", wf.name());
+          assertEquals("alpha", wf.workflowName());
           assertEquals("SUCCESS", wf.status());
         });
 

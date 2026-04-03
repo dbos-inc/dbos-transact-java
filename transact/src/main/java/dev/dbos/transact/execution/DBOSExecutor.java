@@ -358,7 +358,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public Optional<RegisteredWorkflow> getWorkflow(String workflowName, String className) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, workflowName);
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className);
     return Optional.ofNullable(this.workflowMap.get(fqName));
   }
 
@@ -931,7 +931,7 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable String queueName) {
 
     validateQueue(queueName);
-    validateWorkflow(className, workflowName);
+    validateWorkflow(workflowName, className);
 
     DBOSExecutor.createSchedule(
         scheduleName,
@@ -1032,18 +1032,18 @@ public class DBOSExecutor implements AutoCloseable {
 
     for (WorkflowSchedule s : schedules) {
       validateQueue(s.queueName());
-      validateWorkflow(s.className(), s.workflowName());
+      validateWorkflow(s.workflowName(), s.className());
     }
 
     DBOSExecutor.applySchedules(schedules, systemDatabase);
   }
 
-  private void validateWorkflow(String className, String workflowName) {
-    validateWorkflow(className, "", workflowName);
+  private void validateWorkflow(String workflowName, String className) {
+    validateWorkflow(workflowName, className, "");
   }
 
-  private void validateWorkflow(String className, String instanceName, String workflowName) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
+  private void validateWorkflow(String workflowName, String className, String instanceName) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     if (!workflowMap.containsKey(fqName)) {
       throw new IllegalStateException("Workflow function %s is not registered".formatted(fqName));
     }
@@ -1300,12 +1300,12 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   private RegisteredWorkflow getWorkflow(Invocation inv) {
-    return getWorkflow(inv.className(), inv.instanceName(), inv.workflowName());
+    return getWorkflow(inv.workflowName(), inv.className(), inv.instanceName());
   }
 
   private RegisteredWorkflow getWorkflow(
-      String className, String instanceName, String workflowName) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
+      String workflowName, String className, String instanceName) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     var workflow = workflowMap.get(fqName);
     if (workflow == null) {
       throw new IllegalStateException("%s workflow not registered".formatted(fqName));
@@ -1507,12 +1507,12 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
-      String className, String instanceName, String workflowName, Object[] args) {
+      String workflowName, String className, String instanceName, Object[] args) {
 
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     logger.debug("invokeWorkflow {}({})", fqName, args);
 
-    var workflow = getWorkflow(className, instanceName, workflowName);
+    var workflow = getWorkflow(workflowName, className, instanceName);
 
     var ctx = DBOSContextHolder.get();
 
@@ -1582,7 +1582,7 @@ public class DBOSExecutor implements AutoCloseable {
     Object[] inputs = status.input();
     var wfName =
         RegisteredWorkflow.fullyQualifiedName(
-            status.className(), status.instanceName(), status.name());
+            status.workflowName(), status.className(), status.instanceName());
     RegisteredWorkflow workflow = workflowMap.get(wfName);
 
     if (workflow == null) {
@@ -1650,7 +1650,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       var workflowId =
           enqueueWorkflow(
-              workflow.name(),
+              workflow.workflowName(),
               workflow.className(),
               workflow.instanceName(),
               maxRetries,
@@ -1674,7 +1674,7 @@ public class DBOSExecutor implements AutoCloseable {
     WorkflowInitResult initResult =
         preInvokeWorkflow(
             systemDatabase,
-            workflow.name(),
+            workflow.workflowName(),
             workflow.className(),
             workflow.instanceName(),
             maxRetries,
@@ -1795,7 +1795,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public static String enqueueWorkflow(
-      String name,
+      String workflowName,
       String className,
       String instanceName,
       Integer maxRetries,
@@ -1810,7 +1810,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     logger.debug(
         "enqueueWorkflow {}({}) {}",
-        RegisteredWorkflow.fullyQualifiedName(className, instanceName, name),
+        RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName),
         args,
         options);
 
@@ -1833,7 +1833,7 @@ public class DBOSExecutor implements AutoCloseable {
     try {
       preInvokeWorkflow(
           systemDatabase,
-          name,
+          workflowName,
           className,
           instanceName,
           maxRetries,

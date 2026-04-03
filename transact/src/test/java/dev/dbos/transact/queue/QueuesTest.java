@@ -405,7 +405,7 @@ public class QueuesTest {
 
     var builder =
         WorkflowStatusInternal.builder()
-            .name("OrderProcessingWorkflow")
+            .workflowName("OrderProcessingWorkflow")
             .className("com.example.workflows.OrderWorkflow")
             .instanceName("prod-config")
             .authenticatedUser("user123@example.com")
@@ -491,7 +491,7 @@ public class QueuesTest {
 
     var builder =
         WorkflowStatusInternal.builder()
-            .name("OrderProcessingWorkflow")
+            .workflowName("OrderProcessingWorkflow")
             .className("com.example.workflows.OrderWorkflow")
             .instanceName("prod-config")
             .authenticatedUser("user123@example.com")

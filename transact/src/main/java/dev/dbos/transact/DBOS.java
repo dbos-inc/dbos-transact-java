@@ -237,10 +237,10 @@ public class DBOS implements AutoCloseable {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
 
-    String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
+    String workflowName = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
     workflowRegistry.register(
+        workflowName,
         className,
-        name,
         target,
         instanceName,
         method,

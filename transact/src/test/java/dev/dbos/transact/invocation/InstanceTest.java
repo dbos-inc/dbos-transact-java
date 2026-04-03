@@ -144,7 +144,7 @@ public class InstanceTest {
     var row = rows.get(0);
     assertDoesNotThrow(() -> UUID.fromString((String) row.workflowId()));
     assertEquals("SUCCESS", row.status());
-    assertEquals("simpleWorkflow", row.name());
+    assertEquals("simpleWorkflow", row.workflowName());
     assertEquals("dev.dbos.transact.invocation.HawkServiceInstanceImpl", row.className());
     assertNotNull(row.output());
     assertNull(row.error());
@@ -282,8 +282,8 @@ public class InstanceTest {
     assertEquals(row0.workflowId() + "-0", row1.workflowId());
     assertEquals("SUCCESS", row0.status());
     assertEquals("SUCCESS", row1.status());
-    assertEquals("parentWorkflow", row0.name());
-    assertEquals("simpleWorkflow", row1.name());
+    assertEquals("parentWorkflow", row0.workflowName());
+    assertEquals("simpleWorkflow", row1.workflowName());
     assertEquals(row0.output(), row1.output());
     assertNull(row0.timeoutMs());
     assertNull(row1.timeoutMs());
@@ -316,8 +316,8 @@ public class InstanceTest {
     assertEquals(row0.workflowId() + "-0", row1.workflowId());
     assertEquals("SUCCESS", row0.status());
     assertEquals("SUCCESS", row1.status());
-    assertEquals("parentStartWorkflow", row0.name());
-    assertEquals("simpleWorkflow", row1.name());
+    assertEquals("parentStartWorkflow", row0.workflowName());
+    assertEquals("simpleWorkflow", row1.workflowName());
     assertEquals(row0.output(), row1.output());
     assertNull(row0.timeoutMs());
     assertNull(row1.timeoutMs());

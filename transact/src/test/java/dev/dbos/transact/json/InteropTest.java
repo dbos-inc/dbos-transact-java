@@ -297,7 +297,7 @@ public class InteropTest {
       assertNotNull(wsRow);
       assertEquals("portable_json", wsRow.serialization());
       assertEquals("SUCCESS", wsRow.status());
-      assertEquals("canonicalWorkflow", wsRow.name());
+      assertEquals("canonicalWorkflow", wsRow.workflowName());
       assertEquals("interop", wsRow.className());
 
       // Parse and verify inputs

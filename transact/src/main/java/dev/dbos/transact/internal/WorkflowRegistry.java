@@ -25,15 +25,15 @@ public class WorkflowRegistry {
   }
 
   public void register(
-      String className,
       String workflowName,
+      String className,
       Object target,
       String instanceName,
       Method method,
       int maxRecoveryAttempts,
       SerializationStrategy serializationStrategy) {
 
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     var regWorkflow =
         new RegisteredWorkflow(
             workflowName,

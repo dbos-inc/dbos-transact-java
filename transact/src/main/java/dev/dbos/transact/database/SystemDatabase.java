@@ -998,7 +998,7 @@ public class SystemDatabase implements AutoCloseable {
 
                 wfStmt.setString(1, status.workflowId());
                 wfStmt.setString(2, status.status());
-                wfStmt.setString(3, status.name());
+                wfStmt.setString(3, status.workflowName());
                 wfStmt.setString(4, status.className());
                 wfStmt.setString(5, status.instanceName());
                 wfStmt.setString(6, status.authenticatedUser());

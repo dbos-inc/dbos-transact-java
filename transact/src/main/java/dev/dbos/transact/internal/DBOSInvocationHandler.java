@@ -104,12 +104,12 @@ public class DBOSInvocationHandler implements InvocationHandler {
     }
 
     if (hook != null) {
-      var invocation = new Invocation(executor, className, instanceName, workflowName, args);
+      var invocation = new Invocation(executor, workflowName, className, instanceName, args);
       hook.invoke(invocation);
       return defaultReturn(method);
     }
 
-    var handle = executor.invokeWorkflow(className, instanceName, workflowName, args);
+    var handle = executor.invokeWorkflow(workflowName, className, instanceName, args);
 
     // This is not really a getResult call - it is part of invocation which will be written
     //  as its own step entry.
