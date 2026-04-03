@@ -7,6 +7,7 @@ import java.lang.reflect.Method;
 import java.util.Objects;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 public record RegisteredWorkflow(
     String workflowName,
@@ -30,12 +31,12 @@ public record RegisteredWorkflow(
   }
 
   public static String fullyQualifiedName(
-      @NonNull String workflowName, @NonNull String className, @NonNull String instanceName) {
+      @NonNull String workflowName, @NonNull String className, @Nullable String instanceName) {
     return String.format(
         "%s/%s/%s",
         Objects.requireNonNull(workflowName, "workflowName cannot be null"),
         Objects.requireNonNull(className, "className cannot be null"),
-        Objects.requireNonNull(instanceName, "instanceName cannot be null"));
+        Objects.requireNonNullElse(instanceName, ""));
   }
 
   public String fullyQualifiedName() {
