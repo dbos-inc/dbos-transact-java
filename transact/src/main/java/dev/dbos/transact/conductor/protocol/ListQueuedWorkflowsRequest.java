@@ -16,34 +16,34 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
   public static class Body {
     public List<String> workflow_uuids;
 
-    @JsonDeserialize(using = StringOrArrayDeserializer.class)
+    @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> workflow_name;
 
-    @JsonDeserialize(using = StringOrArrayDeserializer.class)
+    @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> authenticated_user;
 
     public String start_time;
     public String end_time;
 
-    @JsonDeserialize(using = StringOrArrayDeserializer.class)
+    @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> status;
 
-    @JsonDeserialize(using = StringOrArrayDeserializer.class)
+    @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> application_version;
 
-    @JsonDeserialize(using = StringOrArrayDeserializer.class)
+    @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> forked_from;
 
-    @JsonDeserialize(using = StringOrArrayDeserializer.class)
+    @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> parent_workflow_id;
 
-    @JsonDeserialize(using = StringOrArrayDeserializer.class)
+    @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> queue_name;
 
-    @JsonDeserialize(using = StringOrArrayDeserializer.class)
+    @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> workflow_id_prefix;
 
-    @JsonDeserialize(using = StringOrArrayDeserializer.class)
+    @JsonDeserialize(using = StringOrListDeserializer.class)
     public List<String> executor_id;
 
     public Integer limit;

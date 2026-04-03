@@ -13,9 +13,9 @@ public class ListSchedulesRequest extends BaseMessage {
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record Body(
-      @JsonDeserialize(using = StringOrArrayDeserializer.class) List<String> status,
-      @JsonDeserialize(using = StringOrArrayDeserializer.class) List<String> workflow_name,
-      @JsonDeserialize(using = StringOrArrayDeserializer.class) List<String> schedule_name_prefix,
+      @JsonDeserialize(using = StringOrListDeserializer.class) List<String> status,
+      @JsonDeserialize(using = StringOrListDeserializer.class) List<String> workflow_name,
+      @JsonDeserialize(using = StringOrListDeserializer.class) List<String> schedule_name_prefix,
       Boolean load_context) {}
 
   public ListSchedulesRequest() {}
