@@ -51,7 +51,7 @@ public class ExternalStateTest {
     assertNull(insState.updateSeq());
 
     // ensure upserted value can be retrieved
-    var getState = systemDatabase.getExternalState(service, workflow, key);
+    var getState = systemDatabase.findExternalState(service, workflow, key);
     assertTrue(getState.isPresent());
     assertEquals(service, getState.get().service());
     assertEquals(workflow, getState.get().workflowName());
@@ -112,7 +112,7 @@ public class ExternalStateTest {
     assertNull(state.updateTime());
 
     // ensure upserted value can be retrieved
-    var getState = systemDatabase.getExternalState(service, workflow, key);
+    var getState = systemDatabase.findExternalState(service, workflow, key);
     assertTrue(getState.isPresent());
     assertEquals(service, getState.get().service());
     assertEquals(workflow, getState.get().workflowName());

@@ -788,7 +788,7 @@ public class DBOSClient implements AutoCloseable {
    * @param workflowId ID of the workflow to query for status
    * @return WorkflowStatus of the workflow, or empty if the workflow does not exist
    */
-  public @NonNull Optional<WorkflowStatus> getWorkflowStatus(@NonNull String workflowId) {
+  public @NonNull Optional<WorkflowStatus> findWorkflowStatus(@NonNull String workflowId) {
     return Optional.ofNullable(systemDatabase.getWorkflowStatus(workflowId));
   }
 
@@ -871,8 +871,8 @@ public class DBOSClient implements AutoCloseable {
    * @param name schedule name
    * @return the schedule, or empty if not found
    */
-  public @NonNull Optional<WorkflowSchedule> getSchedule(@NonNull String name) {
-    return systemDatabase.getSchedule(name);
+  public @NonNull Optional<WorkflowSchedule> findSchedule(@NonNull String name) {
+    return systemDatabase.findSchedule(name);
   }
 
   /**

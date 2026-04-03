@@ -145,7 +145,7 @@ class SchedulesDAO {
     }
   }
 
-  Optional<WorkflowSchedule> getSchedule(String name) throws SQLException {
+  Optional<WorkflowSchedule> findSchedule(String name) throws SQLException {
     String sql =
         """
         SELECT schedule_id, schedule_name, workflow_name, workflow_class_name,

@@ -2429,7 +2429,7 @@ public class ConductorTest {
             false,
             null,
             null);
-    when(mockDB.getSchedule("schedule-1")).thenReturn(Optional.of(schedule));
+    when(mockDB.findSchedule("schedule-1")).thenReturn(Optional.of(schedule));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2459,7 +2459,7 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    when(mockDB.getSchedule("nonexistent")).thenReturn(Optional.empty());
+    when(mockDB.findSchedule("nonexistent")).thenReturn(Optional.empty());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2593,7 +2593,7 @@ public class ConductorTest {
             false,
             null,
             null);
-    when(mockDB.getSchedule("schedule-to-backfill")).thenReturn(Optional.of(schedule));
+    when(mockDB.findSchedule("schedule-to-backfill")).thenReturn(Optional.of(schedule));
     when(mockDB.getLatestApplicationVersion())
         .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
 
@@ -2644,7 +2644,7 @@ public class ConductorTest {
             false,
             null,
             null);
-    when(mockDB.getSchedule("hourly-sched")).thenReturn(Optional.of(schedule));
+    when(mockDB.findSchedule("hourly-sched")).thenReturn(Optional.of(schedule));
     when(mockDB.getLatestApplicationVersion())
         .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
 
@@ -2686,7 +2686,7 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    when(mockDB.getSchedule(anyString())).thenReturn(Optional.empty());
+    when(mockDB.findSchedule(anyString())).thenReturn(Optional.empty());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2726,7 +2726,7 @@ public class ConductorTest {
             false,
             null,
             null);
-    when(mockDB.getSchedule("schedule-to-trigger")).thenReturn(Optional.of(schedule));
+    when(mockDB.findSchedule("schedule-to-trigger")).thenReturn(Optional.of(schedule));
     when(mockDB.getLatestApplicationVersion())
         .thenReturn(new VersionInfo("v1", "v1.0.0", Instant.now(), Instant.now()));
 
@@ -2752,7 +2752,7 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    when(mockDB.getSchedule(anyString())).thenReturn(Optional.empty());
+    when(mockDB.findSchedule(anyString())).thenReturn(Optional.empty());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();

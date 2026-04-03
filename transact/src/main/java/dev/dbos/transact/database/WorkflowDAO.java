@@ -721,7 +721,7 @@ class WorkflowDAO {
     }
   }
 
-  Optional<String> checkChildWorkflow(String workflowUuid, int functionId) throws SQLException {
+  Optional<String> findChildWorkflow(String workflowUuid, int functionId) throws SQLException {
 
     final String sql =
         """

@@ -10,7 +10,7 @@ import java.util.Optional;
 import com.zaxxer.hikari.HikariConfig;
 
 public class DBTestAccess {
-  public static Optional<HikariConfig> getHikariConfig(SystemDatabase sysdb) {
-    return sysdb.getConfig();
+  public static Optional<HikariConfig> findHikariConfig(SystemDatabase sysdb) {
+    return sysdb.findConfig();
   }
 }

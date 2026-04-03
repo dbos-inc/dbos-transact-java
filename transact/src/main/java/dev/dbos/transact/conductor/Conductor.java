@@ -1256,7 +1256,7 @@ public class Conductor implements AutoCloseable {
         () -> {
           GetScheduleRequest request = (GetScheduleRequest) message;
           try {
-            var schedule = conductor.systemDatabase.getSchedule(request.schedule_name);
+            var schedule = conductor.systemDatabase.findSchedule(request.schedule_name);
             if (schedule.isPresent()) {
               ScheduleOutput output = ScheduleOutput.from(schedule.get(), request.loadContext());
               return new GetScheduleResponse(request, output);

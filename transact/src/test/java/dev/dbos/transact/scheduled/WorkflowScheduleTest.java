@@ -63,7 +63,7 @@ class WorkflowScheduleTest {
     dbos.createSchedule(
         "my-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
 
-    var s = dbos.getSchedule("my-sched").orElseThrow();
+    var s = dbos.findSchedule("my-sched").orElseThrow();
     assertEquals("my-sched", s.scheduleName());
     assertEquals(workflowName(), s.workflowName());
     assertEquals(className(), s.className());
@@ -93,7 +93,7 @@ class WorkflowScheduleTest {
         ZoneId.of("America/New_York"),
         "sched-q");
 
-    var s = dbos.getSchedule("full-sched").orElseThrow();
+    var s = dbos.findSchedule("full-sched").orElseThrow();
     assertEquals("{\"key\":\"val\"}", s.context());
     assertTrue(s.automaticBackfill());
     assertEquals(ZoneId.of("America/New_York"), s.cronTimezone());
@@ -161,7 +161,7 @@ class WorkflowScheduleTest {
   @Test
   public void getScheduleNotFound() {
     registerAndLaunch();
-    assertTrue(dbos.getSchedule("nonexistent").isEmpty());
+    assertTrue(dbos.findSchedule("nonexistent").isEmpty());
   }
 
   // ── deleteSchedule ────────────────────────────────────────────────────────
@@ -171,10 +171,10 @@ class WorkflowScheduleTest {
     registerAndLaunch();
     dbos.createSchedule(
         "del-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
-    assertTrue(dbos.getSchedule("del-sched").isPresent());
+    assertTrue(dbos.findSchedule("del-sched").isPresent());
 
     dbos.deleteSchedule("del-sched");
-    assertTrue(dbos.getSchedule("del-sched").isEmpty());
+    assertTrue(dbos.findSchedule("del-sched").isEmpty());
   }
 
   @Test
@@ -192,10 +192,10 @@ class WorkflowScheduleTest {
         "pause-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
 
     dbos.pauseSchedule("pause-sched");
-    assertEquals(ScheduleStatus.PAUSED, dbos.getSchedule("pause-sched").orElseThrow().status());
+    assertEquals(ScheduleStatus.PAUSED, dbos.findSchedule("pause-sched").orElseThrow().status());
 
     dbos.resumeSchedule("pause-sched");
-    assertEquals(ScheduleStatus.ACTIVE, dbos.getSchedule("pause-sched").orElseThrow().status());
+    assertEquals(ScheduleStatus.ACTIVE, dbos.findSchedule("pause-sched").orElseThrow().status());
   }
 
   // ── listSchedules ─────────────────────────────────────────────────────────
@@ -280,8 +280,8 @@ class WorkflowScheduleTest {
                 null)));
 
     assertEquals(2, dbos.listSchedules(null, null, null).size());
-    assertEquals("0/10 * * * * *", dbos.getSchedule("apply-1").orElseThrow().cron());
-    assertTrue(dbos.getSchedule("apply-2").isPresent());
+    assertEquals("0/10 * * * * *", dbos.findSchedule("apply-1").orElseThrow().cron());
+    assertTrue(dbos.findSchedule("apply-2").isPresent());
   }
 
   @Test
@@ -304,7 +304,7 @@ class WorkflowScheduleTest {
                 null,
                 null)));
 
-    assertEquals(ScheduleStatus.ACTIVE, dbos.getSchedule("apply-paused").orElseThrow().status());
+    assertEquals(ScheduleStatus.ACTIVE, dbos.findSchedule("apply-paused").orElseThrow().status());
   }
 
   // ── triggerSchedule ───────────────────────────────────────────────────────
@@ -549,7 +549,7 @@ class WorkflowScheduleTest {
         "run-sched", "latchedRun", className(), "0/1 * * * * *", null, false, null, null);
 
     // Verify schedule was created and is active
-    var schedule = dbos.getSchedule("run-sched");
+    var schedule = dbos.findSchedule("run-sched");
     assertTrue(schedule.isPresent(), "Schedule should be created");
     assertEquals(ScheduleStatus.ACTIVE, schedule.get().status());
 

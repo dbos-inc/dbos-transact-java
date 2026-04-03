@@ -108,7 +108,7 @@ public class SystemDatabase implements AutoCloseable {
     }
   }
 
-  Optional<HikariConfig> getConfig() {
+  Optional<HikariConfig> findConfig() {
     if (dataSource instanceof HikariDataSource hds) {
       return Optional.of(hds);
     }
@@ -364,10 +364,10 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
+  public Optional<String> findChildWorkflow(String workflowUuid, int functionId) {
     return dbRetry(
         () -> {
-          return workflowDAO.checkChildWorkflow(workflowUuid, functionId);
+          return workflowDAO.findChildWorkflow(workflowUuid, functionId);
         });
   }
 
@@ -576,8 +576,8 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public Optional<WorkflowSchedule> getSchedule(String name) {
-    return dbRetry(() -> schedulesDAO.getSchedule(name));
+  public Optional<WorkflowSchedule> findSchedule(String name) {
+    return dbRetry(() -> schedulesDAO.findSchedule(name));
   }
 
   public List<WorkflowSchedule> listSchedules(
@@ -627,7 +627,7 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
+  public Optional<ExternalState> findExternalState(String service, String workflowName, String key) {
     return dbRetry(
         () -> {
           final String sql =

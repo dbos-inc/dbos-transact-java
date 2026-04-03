@@ -357,8 +357,9 @@ public class DBOSExecutor implements AutoCloseable {
     return this.instanceMap.values();
   }
 
-  public Optional<RegisteredWorkflow> getWorkflow(String workflowName, String className) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className);
+  public Optional<RegisteredWorkflow> findWorkflow(
+      String workflowName, String className, String instanceName) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     return Optional.ofNullable(this.workflowMap.get(fqName));
   }
 
@@ -366,7 +367,7 @@ public class DBOSExecutor implements AutoCloseable {
     return this.queues;
   }
 
-  public Optional<Queue> getQueue(String queueName) {
+  public Optional<Queue> findQueue(String queueName) {
     if (queues == null) {
       throw new IllegalStateException(
           "attempted to retrieve workflow from executor when DBOS not launched");
@@ -953,10 +954,10 @@ public class DBOSExecutor implements AutoCloseable {
         });
   }
 
-  public Optional<WorkflowSchedule> getSchedule(String name) {
+  public Optional<WorkflowSchedule> findSchedule(String name) {
     return this.callFunctionAsStep(
         () -> {
-          return systemDatabase.getSchedule(name);
+          return systemDatabase.findSchedule(name);
         },
         "DBOS.getSchedule",
         null);
@@ -1051,7 +1052,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private void validateQueue(String queueName) {
     if (queueName != null) {
-      getQueue(queueName)
+      findQueue(queueName)
           .orElseThrow(
               () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
     }
@@ -1066,7 +1067,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     var schedule =
         Objects.requireNonNull(systemDatabase, "systemDatabase cannot be null")
-            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .findSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
             .orElseThrow(
                 () ->
                     new IllegalStateException(
@@ -1119,7 +1120,7 @@ public class DBOSExecutor implements AutoCloseable {
       @NonNull String scheduleName, SystemDatabase systemDatabase, DBOSSerializer serializer) {
     var schedule =
         Objects.requireNonNull(systemDatabase)
-            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .findSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
             .orElseThrow(
                 () ->
                     new IllegalStateException(
@@ -1191,8 +1192,9 @@ public class DBOSExecutor implements AutoCloseable {
         serializer);
   }
 
-  public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
-    return systemDatabase.getExternalState(service, workflowName, key);
+  public Optional<ExternalState> findExternalState(
+      String service, String workflowName, String key) {
+    return systemDatabase.findExternalState(service, workflowName, key);
   }
 
   public ExternalState upsertExternalState(ExternalState state) {
@@ -1297,10 +1299,6 @@ public class DBOSExecutor implements AutoCloseable {
       return new WorkflowInfo(workflowId, functionId);
     }
     return null;
-  }
-
-  private RegisteredWorkflow getWorkflow(Invocation inv) {
-    return getWorkflow(inv.workflowName(), inv.className(), inv.instanceName());
   }
 
   private RegisteredWorkflow getWorkflow(
@@ -1458,7 +1456,8 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalStateException(
           "The @Workflow method must be called on the DBOS instance passed to the startWorkflow lambda");
     }
-    var workflow = getWorkflow(invocation);
+    var workflow =
+        getWorkflow(invocation.workflowName(), invocation.className(), invocation.instanceName());
 
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
@@ -1615,7 +1614,7 @@ public class DBOSExecutor implements AutoCloseable {
       RegisteredWorkflow workflow, Object[] args, ExecutionOptions options, WorkflowInfo parent) {
 
     if (parent != null) {
-      var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
+      var childId = systemDatabase.findChildWorkflow(parent.workflowId(), parent.functionId());
       if (childId.isPresent()) {
         return retrieveWorkflow(childId.get());
       }

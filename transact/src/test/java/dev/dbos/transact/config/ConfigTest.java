@@ -183,7 +183,7 @@ public class ConfigTest {
         dbos.launch();
 
         var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
-        var dbConfig = DBTestAccess.getHikariConfig(sysdb);
+        var dbConfig = DBTestAccess.findHikariConfig(sysdb);
         assertTrue(dbConfig.isPresent());
         assertEquals(poolName, dbConfig.get().getPoolName());
 

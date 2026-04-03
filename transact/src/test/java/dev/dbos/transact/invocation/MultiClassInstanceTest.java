@@ -168,14 +168,14 @@ public class MultiClassInstanceTest {
       assertEquals(1, bimpla.nWfCalls);
       assertEquals(0, bimpl1.nWfCalls);
 
-      var stat = client.getWorkflowStatus(handle.workflowId());
+      var stat = client.findWorkflowStatus(handle.workflowId());
       assertEquals(
           "SUCCESS",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       DBUtils.setWorkflowState(dataSource, handle.workflowId(), WorkflowState.PENDING.name());
 
-      stat = client.getWorkflowStatus(handle.workflowId());
+      stat = client.findWorkflowStatus(handle.workflowId());
       assertEquals(
           "PENDING",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
@@ -183,7 +183,7 @@ public class MultiClassInstanceTest {
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
       var eh = dbosExecutor.executeWorkflowById(handle.workflowId(), false, true);
       eh.getResult();
-      stat = client.getWorkflowStatus(handle.workflowId());
+      stat = client.findWorkflowStatus(handle.workflowId());
       assertEquals(
           "SUCCESS",
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
