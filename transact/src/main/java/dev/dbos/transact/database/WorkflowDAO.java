@@ -445,7 +445,7 @@ class WorkflowDAO {
     // --- WHERE Clauses ---
     StringJoiner whereConditions = new StringJoiner(" AND ");
 
-    if (input.workflowName() != null) {
+    if (input.workflowName() != null && !input.workflowName().isEmpty()) {
       whereConditions.add("name = ANY(?)");
       parameters.add(input.workflowName());
     }
@@ -457,18 +457,18 @@ class WorkflowDAO {
       whereConditions.add("config_name = ?");
       parameters.add(input.instanceName());
     }
-    if (input.queueName() != null) {
+    if (input.queueName() != null && !input.queueName().isEmpty()) {
       whereConditions.add("queue_name = ANY(?)");
       parameters.add(input.queueName());
     }
     if (input.queuesOnly() != null && input.queuesOnly()) {
       whereConditions.add("queue_name IS NOT NULL");
     }
-    if (input.forkedFrom() != null) {
+    if (input.forkedFrom() != null && !input.forkedFrom().isEmpty()) {
       whereConditions.add("forked_from = ANY(?)");
       parameters.add(input.forkedFrom());
     }
-    if (input.parentWorkflowId() != null) {
+    if (input.parentWorkflowId() != null && !input.parentWorkflowId().isEmpty()) {
       whereConditions.add("parent_workflow_id = ANY(?)");
       parameters.add(input.parentWorkflowId());
     }
@@ -477,11 +477,11 @@ class WorkflowDAO {
       // Append wildcard directly to the parameter value
       parameters.add(input.workflowIdPrefix() + "%");
     }
-    if (input.workflowIds() != null) {
+    if (input.workflowIds() != null && !input.workflowIds().isEmpty()) {
       whereConditions.add("workflow_uuid = ANY(?)");
       parameters.add(input.workflowIds());
     }
-    if (input.authenticatedUser() != null) {
+    if (input.authenticatedUser() != null && !input.authenticatedUser().isEmpty()) {
       whereConditions.add("authenticated_user = ANY(?)");
       parameters.add(input.authenticatedUser());
     }
@@ -495,15 +495,15 @@ class WorkflowDAO {
       // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
       parameters.add(input.endTime().toInstant().toEpochMilli());
     }
-    if (input.status() != null) {
+    if (input.status() != null && !input.status().isEmpty()) {
       whereConditions.add("status = ANY(?)");
       parameters.add(input.status());
     }
-    if (input.applicationVersion() != null) {
+    if (input.applicationVersion() != null && !input.applicationVersion().isEmpty()) {
       whereConditions.add("application_version = ANY(?)");
       parameters.add(input.applicationVersion());
     }
-    if (input.executorIds() != null) {
+    if (input.executorIds() != null && !input.executorIds().isEmpty()) {
       whereConditions.add("executor_id = ANY(?)");
       parameters.add(input.executorIds());
     }
