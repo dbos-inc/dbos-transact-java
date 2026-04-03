@@ -28,11 +28,11 @@ public record ListWorkflowsRequest(
         status != null ? List.of(status) : null,
         start_time != null ? OffsetDateTime.parse(start_time) : null,
         end_time != null ? OffsetDateTime.parse(end_time) : null,
-        workflow_name,
+        workflow_name != null ? List.of(workflow_name) : null,
         null, // class_name,
         null, // instance_name
-        application_version,
-        authenticated_user,
+        application_version != null ? List.of(application_version) : null,
+        authenticated_user != null ? List.of(authenticated_user) : null,
         limit,
         offset,
         sort_desc,
@@ -42,7 +42,7 @@ public record ListWorkflowsRequest(
         null, // queueName
         false, // queuesOnly
         null, // Executor IDs
-        fork_from,
-        parent_workflow_id);
+        fork_from != null ? List.of(fork_from) : null,
+        parent_workflow_id != null ? List.of(parent_workflow_id) : null);
   }
 }

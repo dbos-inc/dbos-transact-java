@@ -3,6 +3,7 @@ package dev.dbos.transact.client;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ScheduleStatus;
@@ -218,6 +219,9 @@ public class ClientScheduleTest {
 
   @Test
   public void clientBackfillSchedule() throws Exception {
+    // Pause scheduler to prevent interference with backfill results
+    DBOSTestAccess.getSchedulerService(dbos).pause();
+
     try (var client = pgContainer.dbosClient()) {
       // Use a cron that won't fire during the test (every minute)
       client.createSchedule(
@@ -241,6 +245,9 @@ public class ClientScheduleTest {
 
   @Test
   public void clientBackfillScheduleEmptyWindow() {
+    // Pause scheduler to prevent interference with backfill results
+    DBOSTestAccess.getSchedulerService(dbos).pause();
+
     try (var client = pgContainer.dbosClient()) {
       client.createSchedule(
           "backfill-empty", workflowName(), className(), "0/1 * * * * *", null, false, null, null);
