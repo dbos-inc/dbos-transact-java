@@ -24,7 +24,7 @@ public record ListQueuedWorkflowsRequest(
         status != null ? List.of(status) : null,
         start_time != null ? OffsetDateTime.parse(start_time) : null,
         end_time != null ? OffsetDateTime.parse(end_time) : null,
-        workflow_name,
+        workflow_name != null ? List.of(workflow_name) : null,
         null, // class_name,
         null, // instance_name
         null, // app version
@@ -35,10 +35,10 @@ public record ListQueuedWorkflowsRequest(
         null, // wf id prefix
         load_input,
         false, // load output
-        queue_name,
+        queue_name != null ? List.of(queue_name) : null,
         true, // queuesOnly: only list queued workflows
         null, // Executor IDs
-        fork_from,
-        parent_workflow_id); // parent workflow id
+        fork_from != null ? List.of(fork_from) : null,
+        parent_workflow_id != null ? List.of(parent_workflow_id) : null);
   }
 }

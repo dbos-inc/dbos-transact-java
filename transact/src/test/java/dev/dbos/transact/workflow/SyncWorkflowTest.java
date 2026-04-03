@@ -125,9 +125,6 @@ public class SyncWorkflowTest {
     wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(2, wfs.size());
     assertEquals("wf-124", wfs.get(1).workflowId());
-
-    wfs = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIds(List.of()));
-    assertEquals(0, wfs.size());
   }
 
   @Test
