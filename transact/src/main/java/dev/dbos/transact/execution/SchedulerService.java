@@ -134,20 +134,20 @@ public class SchedulerService implements AutoCloseable {
     }
 
     // shut down any scheduled future that isn't in the list of current schedules
-    var scheduleIds = schedules.stream().map(s -> s.id()).collect(Collectors.toSet());
+    var currentIds = schedules.stream().map(WorkflowSchedule::id).collect(Collectors.toSet());
     for (var key : workflowScheduleFutures.keySet()) {
-      if (!scheduleIds.contains(key)) {
+      if (!currentIds.contains(key)) {
         cancelWorkflowSchedule(key);
       }
     }
 
     for (var schedule : schedules) {
-
+      var scheduleRunning = workflowScheduleFutures.containsKey(schedule.id());
       if (!schedule.isActive()) {
-        if (workflowScheduleFutures.containsKey(schedule.id())) {
+        if (scheduleRunning) {
           cancelWorkflowSchedule(schedule.id());
         }
-      } else {
+      } else if (!scheduleRunning) {
         var optRegWf = dbosExecutor.getWorkflow(schedule.workflowName(), schedule.className());
         if (optRegWf.isEmpty()) {
           logger.error(
