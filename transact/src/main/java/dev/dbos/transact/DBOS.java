@@ -175,6 +175,8 @@ public class DBOS implements AutoCloseable {
     return registerWorkflows(interfaceClass, implementation, "");
   }
 
+  // TODO: revamp register wf API
+
   /**
    * Register all workflows and steps in the provided class instance
    *

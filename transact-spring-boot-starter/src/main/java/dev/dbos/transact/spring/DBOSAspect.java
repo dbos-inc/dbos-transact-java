@@ -73,6 +73,8 @@ public class DBOSAspect {
     return ((MethodSignature) pjp.getSignature()).getName();
   }
 
+  // TODO: handle named workflow instances
+
   /**
    * Intercepts {@link Workflow @Workflow} annotated methods and routes them through DBOS for
    * durable execution. The workflow is looked up by the target's class name (or its {@link

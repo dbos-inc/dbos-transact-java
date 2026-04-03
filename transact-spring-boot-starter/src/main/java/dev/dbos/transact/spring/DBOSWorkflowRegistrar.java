@@ -41,6 +41,8 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
     this.applicationContext = applicationContext;
   }
 
+  // TODO: handle named workflow instances
+
   @Override
   public void afterSingletonsInstantiated() {
     for (String beanName : applicationContext.getBeanDefinitionNames()) {

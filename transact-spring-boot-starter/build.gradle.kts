@@ -31,6 +31,14 @@ dependencies {
   testImplementation(platform("org.junit:junit-bom:6.0.3"))
   testImplementation("org.junit.jupiter:junit-jupiter")
   testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+  testImplementation("org.springframework.boot:spring-boot-test:3.4.4")
+  testImplementation("org.assertj:assertj-core:3.27.3")
+  testImplementation("org.springframework.boot:spring-boot-autoconfigure:3.4.4")
+  testImplementation("org.springframework:spring-aop:6.2.5")
+  testImplementation("org.aspectj:aspectjweaver:1.9.22.1")
+  testImplementation("org.mockito:mockito-core:5.22.0")
+  testRuntimeOnly("ch.qos.logback:logback-classic:1.5.32")
 }
 
 val publishingToMavenCentral =
