@@ -2440,7 +2440,7 @@ public class ConductorTest {
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
-      verify(mockDB).getSchedule("schedule-1");
+      verify(mockDB).findSchedule("schedule-1");
 
       JsonNode json = mapper.readTree(listener.message);
       assertEquals("get_schedule", json.get("type").asText());
