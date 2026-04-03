@@ -24,6 +24,8 @@ tasks.named("build") { dependsOn("javadoc") }
 dependencies {
   api(project(":transact"))
   compileOnly("org.springframework.boot:spring-boot-autoconfigure:3.4.4")
+  compileOnly("org.springframework:spring-aop:6.2.5")
+  compileOnly("org.aspectj:aspectjweaver:1.9.22.1")
   annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
 
   testImplementation(platform("org.junit:junit-bom:6.0.3"))

@@ -12,8 +12,10 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
 
 /**
  * Spring Boot auto-configuration for DBOS Transact. Creates a {@link DBOSConfig} and {@link DBOS}
@@ -34,6 +36,7 @@ import org.springframework.context.annotation.Bean;
 @AutoConfiguration
 @ConditionalOnClass(DBOS.class)
 @EnableConfigurationProperties(DBOSProperties.class)
+@EnableAspectJAutoProxy
 public class DBOSAutoConfiguration {
 
   @Bean
@@ -63,6 +66,19 @@ public class DBOSAutoConfiguration {
   @ConditionalOnMissingBean
   public DBOSLifecycle dbosLifecycle(DBOS dbos) {
     return new DBOSLifecycle(dbos);
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  public DBOSAspect dbosAspect(DBOS dbos) {
+    return new DBOSAspect(dbos);
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  public DBOSWorkflowRegistrar dbosWorkflowRegistrar(
+      DBOS dbos, ApplicationContext applicationContext) {
+    return new DBOSWorkflowRegistrar(dbos, applicationContext);
   }
 
   private DBOSConfig buildConfig(DBOSProperties props) {
