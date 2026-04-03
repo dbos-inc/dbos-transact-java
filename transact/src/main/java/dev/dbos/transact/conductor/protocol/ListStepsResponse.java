@@ -19,14 +19,14 @@ public class ListStepsResponse extends BaseResponse {
     public String completed_at_epoch_ms;
 
     public Step(StepInfo info) {
-      Object _output = info.output();
-      var _error = info.error();
+      var output = info.output();
+      var error = info.error();
 
       this.function_id = info.functionId();
       this.function_name = info.functionName();
-      this.output = _output != null ? JSONUtil.toJson(_output) : null;
+      this.output = output != null ? JSONUtil.toJson(output) : null;
       this.error =
-          _error != null ? String.format("%s: %s", _error.className(), _error.message()) : null;
+          error != null ? "%s: %s".formatted(error.className(), error.message()) : null;
       this.child_workflow_id = info.childWorkflowId();
       this.started_at_epoch_ms =
           info.startedAtEpochMs() == null ? null : info.startedAtEpochMs().toString();
