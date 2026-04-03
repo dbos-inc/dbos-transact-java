@@ -173,7 +173,7 @@ public class PartitionedQueuesTest {
       var className = "dev.dbos.transact.queue.PartitionsTestServiceImpl";
       var wfName = "normalWorkflow";
       var nqOptions =
-          new DBOSClient.EnqueueOptions(wfName,className,  queue.name())
+          new DBOSClient.EnqueueOptions(wfName, className, queue.name())
               .withQueuePartitionKey(blockedPartitionKey);
       var clientHandle = client.enqueueWorkflow(nqOptions, null);
       assertEquals(clientHandle.workflowId(), clientHandle.getResult());

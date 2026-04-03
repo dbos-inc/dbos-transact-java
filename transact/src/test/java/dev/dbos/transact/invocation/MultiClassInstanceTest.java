@@ -153,7 +153,7 @@ public class MultiClassInstanceTest {
     try (var client = pgContainer.dbosClient()) {
       var options =
           new dev.dbos.transact.DBOSClient.EnqueueOptions(
-                  "stepWorkflow", "dev.dbos.transact.invocation.BearServiceImpl",  "testQueue")
+                  "stepWorkflow", "dev.dbos.transact.invocation.BearServiceImpl", "testQueue")
               .withInstanceName("A");
       var handle = client.<Instant, RuntimeException>enqueueWorkflow(options, new Object[] {});
 

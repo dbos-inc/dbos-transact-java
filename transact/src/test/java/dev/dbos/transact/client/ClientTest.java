@@ -52,7 +52,7 @@ public class ClientTest {
     qs.pause();
 
     try (var client = pgContainer.dbosClient()) {
-      var options = new DBOSClient.EnqueueOptions("enqueueTest","ClientServiceImpl",  "testQueue");
+      var options = new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var rows = DBUtils.getWorkflowRows(dataSource);
       assertEquals(1, rows.size());
@@ -107,7 +107,7 @@ public class ClientTest {
   @RetryingTest(3)
   public void clientEnqueueTimeouts() throws Exception {
     try (var client = pgContainer.dbosClient()) {
-      var options = new DBOSClient.EnqueueOptions("sleep","ClientServiceImpl",  "testQueue");
+      var options = new DBOSClient.EnqueueOptions("sleep", "ClientServiceImpl", "testQueue");
 
       var handle1 =
           client.enqueueWorkflow(options.withTimeout(Duration.ofSeconds(1)), new Object[] {10000});
