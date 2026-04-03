@@ -198,18 +198,15 @@ public class DBOSClient implements AutoCloseable {
       @Nullable SerializationStrategy serialization) {
 
     public EnqueueOptions {
-      if (Objects.requireNonNull(workflowName, "EnqueueOptions workflowName must not be null")
-          .isEmpty()) {
+      if (workflowName != null && workflowName.isEmpty()) {
         throw new IllegalArgumentException("EnqueueOptions workflowName must not be empty");
       }
 
-      if (Objects.requireNonNull(queueName, "EnqueueOptions queueName must not be null")
-          .isEmpty()) {
+      if (queueName != null && queueName.isEmpty()) {
         throw new IllegalArgumentException("EnqueueOptions queueName must not be empty");
       }
 
-      if (Objects.requireNonNull(className, "EnqueueOptions className must not be null")
-          .isEmpty()) {
+      if (className != null && className.isEmpty()) {
         throw new IllegalArgumentException("EnqueueOptions className must not be empty");
       }
 
