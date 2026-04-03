@@ -16,15 +16,20 @@ import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 
 /**
- * Spring Boot auto-configuration for DBOS Transact. Creates a {@link DBOS} bean from {@code dbos.*}
- * application properties and manages its lifecycle alongside the Spring application context.
+ * Spring Boot auto-configuration for DBOS Transact. Creates a {@link DBOSConfig} and {@link DBOS}
+ * bean from {@code dbos.*} application properties and manages the DBOS lifecycle alongside the
+ * Spring application context.
  *
  * <p>The {@link DBOS} instance is started (via {@link DBOS#launch()}) after all other beans have
  * been initialized, so workflows and queues may be registered in {@code @PostConstruct} methods
  * before launch occurs.
  *
- * <p>If a {@link DataSource} bean is present in the context it will be used automatically, unless
- * {@code dbos.database-url} is also set in which case the explicit URL takes precedence.
+ * <p>To customize the auto-configured {@link DBOSConfig} without replacing it, declare one or more
+ * {@link DBOSConfigCustomizer} beans. To replace it entirely, declare your own {@code @Bean
+ * DBOSConfig}.
+ *
+ * <p>If a {@link DataSource} bean is present in the context and no {@code dbos.datasource.*}
+ * properties are set, that datasource will be used automatically.
  */
 @AutoConfiguration
 @ConditionalOnClass(DBOS.class)
@@ -33,11 +38,23 @@ public class DBOSAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean
-  public DBOS dbos(DBOSProperties props, ObjectProvider<DataSource> dataSourceProvider) {
+  public DBOSConfig dbosConfig(
+      DBOSProperties props, ObjectProvider<DBOSConfigCustomizer> customizers) {
     DBOSConfig config = buildConfig(props);
-    DataSource dataSource = dataSourceProvider.getIfAvailable();
-    if (dataSource != null && config.databaseUrl() == null && config.dataSource() == null) {
-      config = config.withDataSource(dataSource);
+    for (DBOSConfigCustomizer customizer : customizers.orderedStream().toList()) {
+      config = customizer.customize(config);
+    }
+    return config;
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  public DBOS dbos(DBOSConfig config, ObjectProvider<DataSource> dataSourceProvider) {
+    if (config.databaseUrl() == null && config.dataSource() == null) {
+      DataSource dataSource = dataSourceProvider.getIfAvailable();
+      if (dataSource != null) {
+        config = config.withDataSource(dataSource);
+      }
     }
     return new DBOS(config);
   }
