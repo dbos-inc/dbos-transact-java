@@ -38,11 +38,11 @@ public class QueueService implements AutoCloseable {
     speedup = 0.01;
   }
 
-  public synchronized void pause() {
+  public void pause() {
     paused.set(true);
   }
 
-  public synchronized void unpause() {
+  public void unpause() {
     paused.set(false);
   }
 

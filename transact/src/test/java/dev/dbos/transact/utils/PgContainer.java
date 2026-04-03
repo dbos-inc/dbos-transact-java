@@ -74,7 +74,7 @@ public class PgContainer implements AutoCloseable {
 
   @Override
   public void close() throws Exception {
-    // drop a database we created and return the container too the pool
+    // drop the database we created and return the container too the pool
     var _jdbcUrl = pgContainer.getJdbcUrl();
     try (var conn = DriverManager.getConnection(_jdbcUrl, username(), password());
         var stmt = conn.createStatement()) {

@@ -22,6 +22,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -67,6 +68,7 @@ public class SchedulerService implements AutoCloseable {
   private final SystemDatabase systemDatabase;
   private final Duration pollingInterval;
   private final AtomicReference<ScheduledExecutorService> execServiceRef = new AtomicReference<>();
+  private final AtomicBoolean paused = new AtomicBoolean(false);
   private final ConcurrentHashMap<String, ScheduledFuture<?>> workflowScheduleFutures =
       new ConcurrentHashMap<>();
 
@@ -98,6 +100,14 @@ public class SchedulerService implements AutoCloseable {
     }
   }
 
+  public void pause() {
+    paused.set(true);
+  }
+
+  public void unpause() {
+    paused.set(false);
+  }
+
   private void pollWorkflowSchedules() {
     try {
       pollWorkflowSchedulesImpl();
@@ -124,20 +134,24 @@ public class SchedulerService implements AutoCloseable {
     }
 
     // shut down any scheduled future that isn't in the list of current schedules
-    var scheduleIds = schedules.stream().map(s -> s.id()).collect(Collectors.toSet());
+    var currentIds = schedules.stream().map(WorkflowSchedule::id).collect(Collectors.toSet());
     for (var key : workflowScheduleFutures.keySet()) {
-      if (!scheduleIds.contains(key)) {
+      if (!currentIds.contains(key)) {
         cancelWorkflowSchedule(key);
       }
     }
 
     for (var schedule : schedules) {
-
+      var scheduleRunning = workflowScheduleFutures.containsKey(schedule.id());
       if (!schedule.isActive()) {
-        if (workflowScheduleFutures.containsKey(schedule.id())) {
+        // if the schedule is no longer active but we still have a scheduled future for it, cancel
+        // it
+        if (scheduleRunning) {
           cancelWorkflowSchedule(schedule.id());
         }
-      } else {
+      } else if (!scheduleRunning) {
+        // if the schedule is active but we don't yet have a scheduled future for it, schedule it
+        // now
         var optRegWf = dbosExecutor.getWorkflow(schedule.workflowName(), schedule.className());
         if (optRegWf.isEmpty()) {
           logger.error(
@@ -199,12 +213,17 @@ public class SchedulerService implements AutoCloseable {
                     .ifPresent(
                         cronTime -> {
                           this.nextTime = cronTime.truncatedTo(ChronoUnit.SECONDS);
-                          // prevFuture should be null or a scheduled task that already fired.
-                          // but we still cancel it just to be sure
                           var prevFuture =
                               workflowScheduleFutures.put(
                                   wfSchedule.id(), scheduleTask(this.nextTime, this));
+                          // prevFuture should be null or a scheduled task that already fired.
+                          // cancel it anyway just to be sure
                           if (prevFuture != null) {
+                            if (!prevFuture.isDone()) {
+                              logger.debug(
+                                  "Previous scheduled task for {} has not yet completed",
+                                  wfSchedule.scheduleName());
+                            }
                             prevFuture.cancel(false);
                           }
                         });
@@ -219,6 +238,13 @@ public class SchedulerService implements AutoCloseable {
                 }
 
                 try {
+                  if (paused.get()) {
+                    logger.debug(
+                        "Skipping scheduled workflow {} schedule {} because scheduler is paused",
+                        regWorkflow.fullyQualifiedName(),
+                        wfSchedule.scheduleName());
+                    return;
+                  }
                   var args = new Object[] {nextTime.toInstant(), wfSchedule.context()};
                   var workflowId = "sched-%s-%s".formatted(wfSchedule.scheduleName(), nextTime);
                   logger.debug(
@@ -284,6 +310,13 @@ public class SchedulerService implements AutoCloseable {
 
               var scheduledTime = nextTime;
               try {
+                if (paused.get()) {
+                  logger.debug(
+                      "Skipping annotated workflow {} schedule {} because scheduler is paused",
+                      workflowName,
+                      swf.cron());
+                  return;
+                }
                 var args = new Object[] {scheduledTime.toInstant(), Instant.now()};
                 var workflowId = "sched-%s-%s".formatted(workflowName, scheduledTime);
                 logger.debug(

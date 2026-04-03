@@ -3,6 +3,7 @@ package dev.dbos.transact.scheduled;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ScheduleStatus;
@@ -13,6 +14,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
@@ -401,6 +403,9 @@ class WorkflowScheduleTest {
   public void backfillScheduleCorrectTimes() throws Exception {
     var impl = registerAndLaunch();
 
+    // Pause scheduler to prevent interference with backfill results
+    DBOSTestAccess.getSchedulerService(dbos).pause();
+
     // Every minute at second 0: "0 * * * * *" (6-field cron)
     dbos.createSchedule(
         "backfill-correct", workflowName(), className(), "0 * * * * *", null, false, null, null);
@@ -429,6 +434,9 @@ class WorkflowScheduleTest {
   @Test
   public void backfillScheduleHourly() throws Exception {
     var impl = registerAndLaunch();
+
+    // Pause scheduler to prevent interference with backfill results
+    DBOSTestAccess.getSchedulerService(dbos).pause();
 
     // Every hour at minute 0: "0 0 * * * *" (6-field cron, runs at top of each hour)
     dbos.createSchedule(
@@ -460,6 +468,9 @@ class WorkflowScheduleTest {
   @Test
   public void backfillScheduleDaily() throws Exception {
     var impl = registerAndLaunch();
+
+    // Pause scheduler to prevent interference with backfill results
+    DBOSTestAccess.getSchedulerService(dbos).pause();
 
     // Every day at midnight: "0 0 0 * * *" (6-field cron)
     dbos.createSchedule(
@@ -535,18 +546,18 @@ class WorkflowScheduleTest {
     var impl = registerAndLaunch();
 
     dbos.createSchedule(
-        "run-sched", workflowName(), className(), "0/1 * * * * *", null, false, null, null);
+        "run-sched", "latchedRun", className(), "0/1 * * * * *", null, false, null, null);
 
     // Verify schedule was created and is active
     var schedule = dbos.getSchedule("run-sched");
     assertTrue(schedule.isPresent(), "Schedule should be created");
     assertEquals(ScheduleStatus.ACTIVE, schedule.get().status());
 
-    // Allow time for scheduler polls + workflow executions
-    // Schedule triggers at second boundary, so wait long enough for multiple executions
-    Thread.sleep(8000);
-
-    assertTrue(impl.counter >= 2, "Expected at least 2 executions, got " + impl.counter);
-    assertTrue(impl.counter <= 10, "Expected at most 10 executions, got " + impl.counter);
+    // latch initialized with 3 count, with each execution counting down once.
+    // Wait for all 3 counts to be released, which indicates the workflow ran at least 3 times
+    // (scheduler should run it every second).
+    assertTrue(
+        impl.latch.await(5, TimeUnit.SECONDS),
+        "Expected latch to count down to zero within 5 seconds");
   }
 }
