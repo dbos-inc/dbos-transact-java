@@ -1430,18 +1430,18 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
+  public <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
       RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
     var execOptions =
         new ExecutionOptions(
-            options.workflowId(),
-            options.timeout(),
-            options.deadline(),
-            options.queueName(),
-            options.deduplicationId(),
-            options.priority(),
-            options.queuePartitionKey(),
-            options.appVersion(),
+            options != null ? options.workflowId() : null,
+            options != null ? options.timeout() : null,
+            options != null ? options.deadline() : null,
+            options != null ? options.queueName() : null,
+            options != null ? options.deduplicationId() : null,
+            options != null ? options.priority() : null,
+            options != null ? options.queuePartitionKey() : null,
+            options != null ? options.appVersion() : null,
             false,
             false,
             null);
@@ -1465,8 +1465,10 @@ public class DBOSExecutor implements AutoCloseable {
     var childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
-    var nextTimeout = options.timeout() != null ? options.timeout() : ctx.getNextTimeout();
-    var nextDeadline = options.deadline() != null ? options.deadline() : ctx.getNextDeadline();
+    var nextTimeout =
+        options != null && options.timeout() != null ? options.timeout() : ctx.getNextTimeout();
+    var nextDeadline =
+        options != null && options.deadline() != null ? options.deadline() : ctx.getNextDeadline();
 
     // default to context timeout & deadline if nextTimeout is null or Inherit
     Duration timeout = ctx.getTimeout();
@@ -1485,7 +1487,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     var workflowId =
         Objects.requireNonNullElseGet(
-            options.workflowId(),
+            options != null ? options.workflowId() : null,
             () ->
                 Objects.requireNonNullElseGet(
                     ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
@@ -1495,12 +1497,11 @@ public class DBOSExecutor implements AutoCloseable {
             workflowId,
             Timeout.of(timeout),
             deadline,
-            options.queueName(),
-            options.deduplicationId(),
-            options.priority(),
-            options.queuePartitionKey(),
-            options.appVersion(),
-            false,
+            options != null ? options.queueName() : null,
+            options != null ? options.deduplicationId() : null,
+            options != null ? options.priority() : null,
+            options != null ? options.queuePartitionKey() : null,
+            options != null ? options.appVersion() : null,            false,
             false,
             null);
     return executeWorkflow(workflow, invocation.args(), execOptions, parent);

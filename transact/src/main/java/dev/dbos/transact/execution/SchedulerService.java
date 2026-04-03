@@ -257,7 +257,7 @@ public class SchedulerService implements AutoCloseable {
                       new StartWorkflowOptions(workflowId)
                           .withQueue(queueName)
                           .withAppVersion(appVersion);
-                  dbosExecutor.startWorkflow(regWorkflow, args, options);
+                  dbosExecutor.startRegisteredWorkflow(regWorkflow, args, options);
                   systemDatabase.updateScheduleLastFiredAt(
                       wfSchedule.scheduleName(), nextTime.toInstant());
                 } catch (Exception e) {
@@ -329,7 +329,7 @@ public class SchedulerService implements AutoCloseable {
                     new StartWorkflowOptions(workflowId)
                         .withQueue(swf.queue())
                         .withAppVersion(appVersion);
-                dbosExecutor.startWorkflow(swf.workflow(), args, options);
+                dbosExecutor.startRegisteredWorkflow(swf.workflow(), args, options);
                 nextTime = setLastTime(dbosExecutor, swf, scheduledTime);
               } catch (Exception e) {
                 logger.error("Annotated scheduled task exception {}", workflowName, e);

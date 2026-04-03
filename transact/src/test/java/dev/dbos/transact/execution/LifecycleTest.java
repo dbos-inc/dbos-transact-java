@@ -108,7 +108,7 @@ class TestLifecycleService implements DBOSLifecycleListener {
     int total = 0;
     for (var wf : wfs) {
       Object[] args = {nInstances, nWfs};
-      var h = dbos.startWorkflow(wf, args, new StartWorkflowOptions(UUID.randomUUID().toString()));
+      var h = dbos.startRegisteredWorkflow(wf, args, new StartWorkflowOptions(UUID.randomUUID().toString()));
       total += (Integer) h.getResult();
     }
     return total;

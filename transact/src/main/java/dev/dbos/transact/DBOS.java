@@ -364,7 +364,7 @@ public class DBOS implements AutoCloseable {
    * @return A handle to the enqueued or running workflow
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
-      @NonNull ThrowingSupplier<T, E> supplier, @NonNull StartWorkflowOptions options) {
+      @NonNull ThrowingSupplier<T, E> supplier, @Nullable StartWorkflowOptions options) {
     return ensureLaunched("startWorkflow").startWorkflow(supplier, options);
   }
 
@@ -378,7 +378,7 @@ public class DBOS implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
       @NonNull ThrowingSupplier<T, E> supplier) {
-    return startWorkflow(supplier, new StartWorkflowOptions());
+    return startWorkflow(supplier, null);
   }
 
   /**
@@ -390,7 +390,7 @@ public class DBOS implements AutoCloseable {
    * @return A handle to the enqueued or running workflow
    */
   public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
-      @NonNull ThrowingRunnable<E> runnable, @NonNull StartWorkflowOptions options) {
+      @NonNull ThrowingRunnable<E> runnable, @Nullable StartWorkflowOptions options) {
     return startWorkflow(
         () -> {
           runnable.execute();
@@ -408,7 +408,7 @@ public class DBOS implements AutoCloseable {
    */
   public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
       @NonNull ThrowingRunnable<E> runnable) {
-    return startWorkflow(runnable, new StartWorkflowOptions());
+    return startWorkflow(runnable, null);
   }
 
   /**
@@ -420,9 +420,9 @@ public class DBOS implements AutoCloseable {
    * @param options Execution options, such as ID, queue, and timeout/deadline
    * @return WorkflowHandle to the executed workflow
    */
-  public WorkflowHandle<?, ?> startWorkflow(
-      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
-    return ensureLaunched("startWorkflow").startWorkflow(regWorkflow, args, options);
+  public WorkflowHandle<?, ?> startRegisteredWorkflow(
+      @NonNull RegisteredWorkflow regWorkflow, @NonNull Object[] args, @Nullable StartWorkflowOptions options) {
+    return ensureLaunched("startRegisteredWorkflow").startRegisteredWorkflow(regWorkflow, args, options);
   }
 
   /**
