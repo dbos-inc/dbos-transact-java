@@ -322,7 +322,8 @@ public class ListWorkflowsTest {
     assertEquals(3, multi.size());
 
     // Empty list → no filter, returns all workflows
-    List<WorkflowStatus> all = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIds(List.of()));
+    List<WorkflowStatus> all =
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIds(List.of()));
     assertEquals(10, all.size());
 
     // Incremental withAddedWorkflowId
