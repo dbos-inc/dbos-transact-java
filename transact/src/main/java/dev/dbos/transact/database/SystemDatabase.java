@@ -627,7 +627,8 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public Optional<ExternalState> findExternalState(String service, String workflowName, String key) {
+  public Optional<ExternalState> findExternalState(
+      String service, String workflowName, String key) {
     return dbRetry(
         () -> {
           final String sql =
