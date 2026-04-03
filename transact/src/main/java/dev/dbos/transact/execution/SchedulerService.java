@@ -219,6 +219,11 @@ public class SchedulerService implements AutoCloseable {
                           // prevFuture should be null or a scheduled task that already fired.
                           // cancel it anyway just to be sure
                           if (prevFuture != null) {
+                            if (!prevFuture.isDone()) {
+                              logger.debug(
+                                  "Previous scheduled task for {} has not yet completed",
+                                  wfSchedule.scheduleName());
+                            }
                             prevFuture.cancel(false);
                           }
                         });
