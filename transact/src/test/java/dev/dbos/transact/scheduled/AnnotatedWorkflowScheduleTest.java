@@ -113,7 +113,7 @@ class AnnotatedWorkflowScheduleTest {
             IllegalArgumentException.class,
             () -> dbos.registerWorkflows(InvalidSig.class, new InvalidSigImpl()));
     assertEquals(
-        "Invalid signature for annotated workflow schedule dev.dbos.transact.scheduled.InvalidSigImpl//scheduledWF. Signature must be (Instant, Instant)",
+        "Invalid signature for annotated workflow schedule scheduledWF/dev.dbos.transact.scheduled.InvalidSigImpl/. Signature must be (Instant, Instant)",
         e.getMessage());
   }
 

@@ -264,7 +264,7 @@ public class InteropTest {
 
       // Enqueue the canonical workflow with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("interop", "canonicalWorkflow", "interopq")
+          new DBOSClient.EnqueueOptions("canonicalWorkflow", "interop", "interopq")
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
