@@ -144,10 +144,14 @@ public class SchedulerService implements AutoCloseable {
     for (var schedule : schedules) {
       var scheduleRunning = workflowScheduleFutures.containsKey(schedule.id());
       if (!schedule.isActive()) {
+        // if the schedule is no longer active but we still have a scheduled future for it, cancel
+        // it
         if (scheduleRunning) {
           cancelWorkflowSchedule(schedule.id());
         }
       } else if (!scheduleRunning) {
+        // if the schedule is active but we don't yet have a scheduled future for it, schedule it
+        // now
         var optRegWf = dbosExecutor.getWorkflow(schedule.workflowName(), schedule.className());
         if (optRegWf.isEmpty()) {
           logger.error(
@@ -209,11 +213,11 @@ public class SchedulerService implements AutoCloseable {
                     .ifPresent(
                         cronTime -> {
                           this.nextTime = cronTime.truncatedTo(ChronoUnit.SECONDS);
-                          // prevFuture should be null or a scheduled task that already fired.
-                          // but we still cancel it just to be sure
                           var prevFuture =
                               workflowScheduleFutures.put(
                                   wfSchedule.id(), scheduleTask(this.nextTime, this));
+                          // prevFuture should be null or a scheduled task that already fired.
+                          // cancel it anyway just to be sure
                           if (prevFuture != null) {
                             prevFuture.cancel(false);
                           }
