@@ -2,7 +2,9 @@
   "name": "Java 21 Bare Minimum",
   "image": "mcr.microsoft.com/devcontainers/java:21",
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
+    }
   },
   "customizations": {
     "vscode": {
