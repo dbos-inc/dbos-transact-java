@@ -155,7 +155,7 @@ public class InteropTest {
       // No writeStream in Java (streams not supported)
 
       // Receive message
-      Object msg = dbos.recv("interop_topic", Duration.ofSeconds(30));
+      var msg = dbos.<Map<String, Object>>recv("interop_topic", Duration.ofSeconds(30)).orElseThrow();
 
       // Build deterministic result
       Map<String, Object> result = new LinkedHashMap<>();
@@ -347,7 +347,7 @@ public class InteropTest {
     insertPortableNotification(workflowId, "interop_topic", GOLDEN_MESSAGE_JSON);
 
     // Retrieve and verify the workflow executes correctly
-    WorkflowHandle<String, ?> handle = dbos.retrieveWorkflow(workflowId);
+    WorkflowHandle<Map<String, Object>, ?> handle = dbos.retrieveWorkflow(workflowId);
     Object result = handle.getResult();
     assertResultMatchesExpected(result);
 

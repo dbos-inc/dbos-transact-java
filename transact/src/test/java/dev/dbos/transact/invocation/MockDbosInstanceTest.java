@@ -12,6 +12,7 @@ import dev.dbos.transact.workflow.Workflow;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
@@ -32,7 +33,7 @@ class MockTestServiceImpl implements MockTestService {
   public String testWorkflow() {
     var today = dbos.runStep(() -> LocalDate.now(), "todaysDate");
     dbos.setEvent("greetEvent", today);
-    var name = dbos.recv("greetTopic", Duration.ofSeconds(30));
+    var name = dbos.<String>recv("greetTopic", Duration.ofSeconds(30)).orElseThrow();
     return String.format("Hello %s, today is %s", name, today.format(DateTimeFormatter.ISO_DATE));
   }
 }
@@ -52,7 +53,7 @@ public class MockDbosInstanceTest {
         .thenReturn(date);
     when(mockDBOS.recv(
             ArgumentMatchers.eq("greetTopic"), ArgumentMatchers.eq(Duration.ofSeconds(30))))
-        .thenReturn("Alice");
+        .thenReturn(Optional.of("Alice"));
 
     // Call the workflow
     String result = impl.testWorkflow();

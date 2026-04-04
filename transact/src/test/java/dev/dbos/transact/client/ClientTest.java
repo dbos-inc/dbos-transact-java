@@ -67,7 +67,7 @@ public class ClientTest {
       assertTrue(result instanceof String);
       assertEquals("42-spam", result);
 
-      var stat = client.findWorkflowStatus(handle.workflowId());
+      var stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(
           WorkflowState.SUCCESS,
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
@@ -117,7 +117,7 @@ public class ClientTest {
           () -> {
             handle1.getResult();
           });
-      var stat1 = client.findWorkflowStatus(handle1.workflowId());
+      var stat1 = client.getWorkflowStatus(handle1.workflowId());
       assertEquals(
           WorkflowState.CANCELLED,
           stat1.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
@@ -131,7 +131,7 @@ public class ClientTest {
           () -> {
             handle2.getResult();
           });
-      var stat2 = client.findWorkflowStatus(handle2.workflowId());
+      var stat2 = client.getWorkflowStatus(handle2.workflowId());
       assertEquals(
           WorkflowState.CANCELLED,
           stat2.orElseThrow(() -> new AssertionError("Workflow status not found")).status());

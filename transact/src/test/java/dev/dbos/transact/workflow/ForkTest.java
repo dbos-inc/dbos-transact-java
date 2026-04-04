@@ -357,7 +357,7 @@ public class ForkTest {
     var options = new StartWorkflowOptions(wfid);
     var handle = dbos.startWorkflow(() -> proxy.setEventWorkflow(key), options);
     assertDoesNotThrow(() -> handle.getResult());
-    assertEquals("event-5", dbos.getEvent(handle.workflowId(), key, timeout));
+    assertEquals("event-5", dbos.<String>getEvent(handle.workflowId(), key, timeout).orElseThrow());
 
     var events = DBUtils.getWorkflowEvents(dataSource, handle.workflowId());
     var eventHistory = DBUtils.getWorkflowEventHistory(dataSource, handle.workflowId());
@@ -369,23 +369,28 @@ public class ForkTest {
 
     // Fork the workflow from each step, verify the event is set to the appropriate value
     var forkZero = dbos.forkWorkflow(wfid, 0);
-    assertNull(dbos.getEvent(forkZero.workflowId(), key, timeout));
+    assertNull(dbos.getEvent(forkZero.workflowId(), key, timeout).orElse(null));
 
     var forkOne = dbos.forkWorkflow(wfid, 1);
-    assertEquals("event-1", dbos.getEvent(forkOne.workflowId(), key, timeout));
+    assertEquals(
+        "event-1", dbos.<String>getEvent(forkOne.workflowId(), key, timeout).orElseThrow());
 
     var forkTwo = dbos.forkWorkflow(wfid, 2);
-    assertEquals("event-2", dbos.getEvent(forkTwo.workflowId(), key, timeout));
+    assertEquals(
+        "event-2", dbos.<String>getEvent(forkTwo.workflowId(), key, timeout).orElseThrow());
 
     var forkThree = dbos.forkWorkflow(wfid, 3);
-    assertEquals("event-3", dbos.getEvent(forkThree.workflowId(), key, timeout));
+    assertEquals(
+        "event-3", dbos.<String>getEvent(forkThree.workflowId(), key, timeout).orElseThrow());
 
     var forkFour = dbos.forkWorkflow(wfid, 4);
-    assertEquals("event-4", dbos.getEvent(forkFour.workflowId(), key, timeout));
+    assertEquals(
+        "event-4", dbos.<String>getEvent(forkFour.workflowId(), key, timeout).orElseThrow());
 
     // Fork from a fork
     var forkFive = dbos.forkWorkflow(forkFour.workflowId(), 4);
-    assertEquals("event-4", dbos.getEvent(forkFive.workflowId(), key, timeout));
+    assertEquals(
+        "event-4", dbos.<String>getEvent(forkFive.workflowId(), key, timeout).orElseThrow());
 
     events = DBUtils.getWorkflowEvents(dataSource, forkThree.workflowId());
     eventHistory = DBUtils.getWorkflowEventHistory(dataSource, forkThree.workflowId());
@@ -398,7 +403,7 @@ public class ForkTest {
     DBOSTestAccess.getQueueService(dbos).unpause();
     for (var h : List.of(forkOne, forkTwo, forkThree, forkFour, forkFive)) {
       assertDoesNotThrow(() -> h.getResult());
-      assertEquals("event-5", dbos.getEvent(h.workflowId(), key, timeout));
+      assertEquals("event-5", dbos.<String>getEvent(h.workflowId(), key, timeout).orElseThrow());
     }
   }
 }

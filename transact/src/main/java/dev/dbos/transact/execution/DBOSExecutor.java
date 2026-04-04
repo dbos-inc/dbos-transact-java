@@ -957,7 +957,7 @@ public class DBOSExecutor implements AutoCloseable {
   public Optional<WorkflowSchedule> findSchedule(String name) {
     return this.callFunctionAsStep(
         () -> {
-          return systemDatabase.findSchedule(name);
+          return systemDatabase.getSchedule(name);
         },
         "DBOS.getSchedule",
         null);
@@ -1067,7 +1067,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     var schedule =
         Objects.requireNonNull(systemDatabase, "systemDatabase cannot be null")
-            .findSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
             .orElseThrow(
                 () ->
                     new IllegalStateException(
@@ -1120,7 +1120,7 @@ public class DBOSExecutor implements AutoCloseable {
       @NonNull String scheduleName, SystemDatabase systemDatabase, DBOSSerializer serializer) {
     var schedule =
         Objects.requireNonNull(systemDatabase)
-            .findSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
             .orElseThrow(
                 () ->
                     new IllegalStateException(

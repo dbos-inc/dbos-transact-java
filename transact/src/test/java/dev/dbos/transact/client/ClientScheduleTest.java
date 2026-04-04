@@ -56,7 +56,7 @@ public class ClientScheduleTest {
       client.createSchedule(
           "my-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
 
-      var s = client.findSchedule("my-sched").orElseThrow();
+      var s = client.getSchedule("my-sched").orElseThrow();
       assertEquals("my-sched", s.scheduleName());
       assertEquals(workflowName(), s.workflowName());
       assertEquals(className(), s.className());
@@ -106,7 +106,7 @@ public class ClientScheduleTest {
   @Test
   public void clientGetScheduleNotFound() {
     try (var client = pgContainer.dbosClient()) {
-      assertTrue(client.findSchedule("nonexistent").isEmpty());
+      assertTrue(client.getSchedule("nonexistent").isEmpty());
     }
   }
 
@@ -117,10 +117,10 @@ public class ClientScheduleTest {
     try (var client = pgContainer.dbosClient()) {
       client.createSchedule(
           "del-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
-      assertTrue(client.findSchedule("del-sched").isPresent());
+      assertTrue(client.getSchedule("del-sched").isPresent());
 
       client.deleteSchedule("del-sched");
-      assertTrue(client.findSchedule("del-sched").isEmpty());
+      assertTrue(client.getSchedule("del-sched").isEmpty());
     }
   }
 
@@ -140,12 +140,10 @@ public class ClientScheduleTest {
           "pause-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
 
       client.pauseSchedule("pause-sched");
-      assertEquals(
-          ScheduleStatus.PAUSED, client.findSchedule("pause-sched").orElseThrow().status());
+      assertEquals(ScheduleStatus.PAUSED, client.getSchedule("pause-sched").orElseThrow().status());
 
       client.resumeSchedule("pause-sched");
-      assertEquals(
-          ScheduleStatus.ACTIVE, client.findSchedule("pause-sched").orElseThrow().status());
+      assertEquals(ScheduleStatus.ACTIVE, client.getSchedule("pause-sched").orElseThrow().status());
     }
   }
 
@@ -279,7 +277,7 @@ public class ClientScheduleTest {
           "cross-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
 
       var dbosSchedule = dbos.findSchedule("cross-sched").orElseThrow();
-      var clientSchedule = client.findSchedule("cross-sched").orElseThrow();
+      var clientSchedule = client.getSchedule("cross-sched").orElseThrow();
 
       assertEquals(dbosSchedule.scheduleName(), clientSchedule.scheduleName());
       assertEquals(dbosSchedule.workflowName(), clientSchedule.workflowName());
@@ -288,17 +286,15 @@ public class ClientScheduleTest {
 
       client.pauseSchedule("cross-sched");
       assertEquals(dbos.findSchedule("cross-sched").orElseThrow().status(), ScheduleStatus.PAUSED);
-      assertEquals(
-          client.findSchedule("cross-sched").orElseThrow().status(), ScheduleStatus.PAUSED);
+      assertEquals(client.getSchedule("cross-sched").orElseThrow().status(), ScheduleStatus.PAUSED);
 
       client.resumeSchedule("cross-sched");
       assertEquals(dbos.findSchedule("cross-sched").orElseThrow().status(), ScheduleStatus.ACTIVE);
-      assertEquals(
-          client.findSchedule("cross-sched").orElseThrow().status(), ScheduleStatus.ACTIVE);
+      assertEquals(client.getSchedule("cross-sched").orElseThrow().status(), ScheduleStatus.ACTIVE);
 
       client.deleteSchedule("cross-sched");
       assertTrue(dbos.findSchedule("cross-sched").isEmpty());
-      assertTrue(client.findSchedule("cross-sched").isEmpty());
+      assertTrue(client.getSchedule("cross-sched").isEmpty());
     }
   }
 }

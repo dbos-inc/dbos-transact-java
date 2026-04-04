@@ -445,10 +445,11 @@ public class DBOS implements AutoCloseable {
    * Get the status of a workflow
    *
    * @param workflowId ID of the workflow to query
-   * @return Current workflow status for the provided workflowId, or null.
+   * @return Current workflow status for the provided workflowId, or empty if no such workflow
+   *     exists.
    */
-  public @Nullable WorkflowStatus getWorkflowStatus(@NonNull String workflowId) {
-    return ensureLaunched("getWorkflowStatus").getWorkflowStatus(workflowId);
+  public @NonNull Optional<WorkflowStatus> getWorkflowStatus(@NonNull String workflowId) {
+    return Optional.ofNullable(ensureLaunched("getWorkflowStatus").getWorkflowStatus(workflowId));
   }
 
   /**
@@ -504,8 +505,9 @@ public class DBOS implements AutoCloseable {
    * @param timeout duration after which the call times out
    * @return the message if there is one or else null
    */
-  public @Nullable Object recv(@Nullable String topic, @NonNull Duration timeout) {
-    return ensureLaunched("recv").recv(topic, timeout);
+  public @NonNull @SuppressWarnings("unchecked") <T> Optional<T> recv(
+      @Nullable String topic, @NonNull Duration timeout) {
+    return Optional.ofNullable((T) ensureLaunched("recv").recv(topic, timeout));
   }
 
   /**
@@ -542,11 +544,11 @@ public class DBOS implements AutoCloseable {
    * @param timeout time to wait for data before timing out
    * @return the published value or null
    */
-  public @Nullable Object getEvent(
+  public @NonNull @SuppressWarnings("unchecked") <T> Optional<T> getEvent(
       @NonNull String workflowId, @NonNull String key, @NonNull Duration timeout) {
     logger.debug("Received getEvent for {} {}", workflowId, key);
 
-    return ensureLaunched("getEvent").getEvent(workflowId, key, timeout);
+    return Optional.ofNullable((T) ensureLaunched("getEvent").getEvent(workflowId, key, timeout));
   }
 
   /**

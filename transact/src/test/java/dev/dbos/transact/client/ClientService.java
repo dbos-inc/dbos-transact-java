@@ -30,7 +30,7 @@ class ClientServiceImpl implements ClientService {
 
   @Workflow
   public String sendTest(int i) {
-    var message = dbos.recv("test-topic", Duration.ofSeconds(10));
+    var message = dbos.<String>recv("test-topic", Duration.ofSeconds(10)).orElseThrow();
     return String.format("%d-%s", i, message);
   }
 

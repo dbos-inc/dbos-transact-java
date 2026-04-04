@@ -655,9 +655,9 @@ public class DBOSClient implements AutoCloseable {
    * @param timeout Maximum time duration to wait before returning `null`
    * @return Workflow event value, or `null` if the timeout is hit.
    */
-  public @Nullable Object getEvent(
+  public @NonNull Optional<Object> getEvent(
       @NonNull String targetId, @NonNull String key, @NonNull Duration timeout) {
-    return systemDatabase.getEvent(targetId, key, timeout, null);
+    return Optional.ofNullable(systemDatabase.getEvent(targetId, key, timeout, null));
   }
 
   /**
@@ -788,7 +788,7 @@ public class DBOSClient implements AutoCloseable {
    * @param workflowId ID of the workflow to query for status
    * @return WorkflowStatus of the workflow, or empty if the workflow does not exist
    */
-  public @NonNull Optional<WorkflowStatus> findWorkflowStatus(@NonNull String workflowId) {
+  public @NonNull Optional<WorkflowStatus> getWorkflowStatus(@NonNull String workflowId) {
     return Optional.ofNullable(systemDatabase.getWorkflowStatus(workflowId));
   }
 
@@ -871,8 +871,8 @@ public class DBOSClient implements AutoCloseable {
    * @param name schedule name
    * @return the schedule, or empty if not found
    */
-  public @NonNull Optional<WorkflowSchedule> findSchedule(@NonNull String name) {
-    return systemDatabase.findSchedule(name);
+  public @NonNull Optional<WorkflowSchedule> getSchedule(@NonNull String name) {
+    return systemDatabase.getSchedule(name);
   }
 
   /**

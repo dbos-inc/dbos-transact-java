@@ -74,7 +74,7 @@ class NotServiceImpl implements NotService {
   @Override
   public String recvWorkflow(String topic, Duration timeout) {
     recvReadyLatch.countDown();
-    String msg = (String) dbos.recv(topic, timeout);
+    String msg = dbos.<String>recv(topic, timeout).orElse(null);
     return msg;
   }
 
@@ -82,9 +82,9 @@ class NotServiceImpl implements NotService {
   @Override
   public String recvMultiple(String topic) {
     recvReadyLatch.countDown();
-    String msg1 = (String) dbos.recv(topic, Duration.ofSeconds(5));
-    String msg2 = (String) dbos.recv(topic, Duration.ofSeconds(5));
-    String msg3 = (String) dbos.recv(topic, Duration.ofSeconds(5));
+    String msg1 = dbos.<String>recv(topic, Duration.ofSeconds(5)).orElseThrow();
+    String msg2 = dbos.<String>recv(topic, Duration.ofSeconds(5)).orElseThrow();
+    String msg3 = dbos.<String>recv(topic, Duration.ofSeconds(5)).orElseThrow();
     return msg1 + msg2 + msg3;
   }
 
@@ -94,10 +94,12 @@ class NotServiceImpl implements NotService {
     try {
       recvReadyLatch.await();
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException("Interrupted while waiting for recv signal", e);
     }
-    String msg1 = (String) dbos.recv(topic, Duration.ofSeconds(0));
-    String msg2 = (String) dbos.recv(topic, Duration.ofSeconds(0));
-    String msg3 = (String) dbos.recv(topic, Duration.ofSeconds(0));
+    String msg1 = dbos.<String>recv(topic, Duration.ofSeconds(0)).orElse(null);
+    String msg2 = dbos.<String>recv(topic, Duration.ofSeconds(0)).orElse(null);
+    String msg3 = dbos.<String>recv(topic, Duration.ofSeconds(0)).orElse(null);
     int rc = 0;
     if (msg1 != null) ++rc;
     if (msg2 != null) ++rc;
@@ -109,30 +111,30 @@ class NotServiceImpl implements NotService {
   @Override
   public String concWorkflow(String topic) {
     recvReadyLatch.countDown();
-    String message = (String) dbos.recv(topic, Duration.ofSeconds(5));
+    String message = dbos.<String>recv(topic, Duration.ofSeconds(5)).orElseThrow();
     return message;
   }
 
   @Workflow
   @Override
   public String disallowedRecvInStep() {
-    dbos.runStep(() -> dbos.recv("a", Duration.ofSeconds(0)), "recv");
+    dbos.runStep(() -> dbos.recv("a", Duration.ofSeconds(0)).orElseThrow(), "recv");
     return "Done";
   }
 
   @Workflow
   @Override
   public String recvTwoMessages() {
-    String msg1 = (String) dbos.recv(null, Duration.ofSeconds(10));
+    String msg1 = dbos.<String>recv(null, Duration.ofSeconds(10)).orElseThrow();
     recvTwoLatch.countDown();
-    String msg2 = (String) dbos.recv(null, Duration.ofSeconds(2));
+    String msg2 = dbos.<String>recv(null, Duration.ofSeconds(2)).orElse(null);
     return "%s-%s".formatted(msg1, msg2);
   }
 
   @Workflow
   @Override
   public String recvOneMessage() {
-    String msg1 = (String) dbos.recv(null, Duration.ofSeconds(10));
+    String msg1 = dbos.<String>recv(null, Duration.ofSeconds(10)).orElseThrow();
     return msg1;
   }
 
@@ -282,7 +284,7 @@ class NotificationServiceTest {
         assertThrows(
             IllegalStateException.class,
             () -> {
-              dbos.recv("someTopic", Duration.ofSeconds(5));
+              dbos.recv("someTopic", Duration.ofSeconds(5)).orElseThrow();
             });
     assertEquals("DBOS.recv() must be called from a workflow.", e1.getMessage());
     var e2 =

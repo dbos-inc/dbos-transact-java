@@ -560,7 +560,7 @@ public class SystemDatabaseTest {
   public void testCreateAndGetSchedule() {
     sysdb.createSchedule(makeSchedule("sched-1"));
 
-    var result = sysdb.findSchedule("sched-1");
+    var result = sysdb.getSchedule("sched-1");
     assertTrue(result.isPresent());
     var s = result.get();
     assertEquals("sched-1", s.scheduleName());
@@ -578,7 +578,7 @@ public class SystemDatabaseTest {
 
   @Test
   public void testGetScheduleNotFound() {
-    var result = sysdb.findSchedule("nonexistent");
+    var result = sysdb.getSchedule("nonexistent");
     assertFalse(result.isPresent());
   }
 
@@ -702,21 +702,21 @@ public class SystemDatabaseTest {
     sysdb.createSchedule(makeSchedule("sched-pause"));
 
     sysdb.pauseSchedule("sched-pause");
-    assertEquals(ScheduleStatus.PAUSED, sysdb.findSchedule("sched-pause").get().status());
+    assertEquals(ScheduleStatus.PAUSED, sysdb.getSchedule("sched-pause").get().status());
 
     sysdb.resumeSchedule("sched-pause");
-    assertEquals(ScheduleStatus.ACTIVE, sysdb.findSchedule("sched-pause").get().status());
+    assertEquals(ScheduleStatus.ACTIVE, sysdb.getSchedule("sched-pause").get().status());
   }
 
   @Test
   public void testUpdateLastFiredAt() {
     sysdb.createSchedule(makeSchedule("sched-fired"));
-    assertNull(sysdb.findSchedule("sched-fired").get().lastFiredAt());
+    assertNull(sysdb.getSchedule("sched-fired").get().lastFiredAt());
 
     sysdb.updateScheduleLastFiredAt("sched-fired", Instant.parse("2026-03-26T10:00:00Z"));
     assertEquals(
         Instant.parse("2026-03-26T10:00:00Z"),
-        sysdb.findSchedule("sched-fired").get().lastFiredAt());
+        sysdb.getSchedule("sched-fired").get().lastFiredAt());
   }
 
   @Test
@@ -726,11 +726,11 @@ public class SystemDatabaseTest {
     assertEquals(2, sysdb.listSchedules(null, null, null).size());
 
     sysdb.deleteSchedule("sched-del-1");
-    assertFalse(sysdb.findSchedule("sched-del-1").isPresent());
+    assertFalse(sysdb.getSchedule("sched-del-1").isPresent());
     assertEquals(1, sysdb.listSchedules(null, null, null).size());
 
     sysdb.deleteSchedule("sched-del-2");
-    assertFalse(sysdb.findSchedule("sched-del-2").isPresent());
+    assertFalse(sysdb.getSchedule("sched-del-2").isPresent());
     assertEquals(0, sysdb.listSchedules(null, null, null).size());
   }
 
@@ -751,7 +751,7 @@ public class SystemDatabaseTest {
             "my-queue");
     sysdb.createSchedule(schedule);
 
-    var s = sysdb.findSchedule("sched-full").get();
+    var s = sysdb.getSchedule("sched-full").get();
     assertEquals("my-id-123", s.id());
     assertEquals("sched-full", s.scheduleName());
     assertEquals("fullWorkflow", s.workflowName());

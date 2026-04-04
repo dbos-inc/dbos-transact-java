@@ -71,7 +71,7 @@ public class PortableSerializationTest {
     @Workflow(name = "recvWorkflow")
     @Override
     public String recvWorkflow(String topic, long timeoutMs) {
-      Object received = dbos.recv(topic, Duration.ofMillis(timeoutMs));
+      var received = dbos.<String>recv(topic, Duration.ofMillis(timeoutMs)).orElseThrow();
       return "received:" + received;
     }
   }
@@ -661,9 +661,12 @@ public class PortableSerializationTest {
       assertEquals("done", result);
 
       // Get events with different serializations
-      Object defaultVal = client.getEvent(workflowId, "defaultEvent", Duration.ofSeconds(5));
-      Object nativeVal = client.getEvent(workflowId, "nativeEvent", Duration.ofSeconds(5));
-      Object portableVal = client.getEvent(workflowId, "portableEvent", Duration.ofSeconds(5));
+      Object defaultVal =
+          client.getEvent(workflowId, "defaultEvent", Duration.ofSeconds(5)).orElseThrow();
+      Object nativeVal =
+          client.getEvent(workflowId, "nativeEvent", Duration.ofSeconds(5)).orElseThrow();
+      Object portableVal =
+          client.getEvent(workflowId, "portableEvent", Duration.ofSeconds(5)).orElseThrow();
 
       // All should be retrievable regardless of serialization format
       assertEquals("defaultValue", defaultVal);
@@ -804,7 +807,7 @@ public class PortableSerializationTest {
     @Override
     public String customSerWorkflow(String input) {
       dbos.setEvent("testKey", "eventValue-" + input);
-      Object msg = dbos.recv("testTopic", Duration.ofSeconds(30));
+      var msg = dbos.<String>recv("testTopic", Duration.ofSeconds(30)).orElseThrow();
       return "result:" + input + ":" + msg;
     }
   }
@@ -852,7 +855,8 @@ public class PortableSerializationTest {
         assertEquals("custom_base64", testEvent.get().serialization());
 
         // Verify getEvent works through custom serializer
-        Object eventVal = client.getEvent(workflowId, "testKey", Duration.ofSeconds(5));
+        Object eventVal =
+            client.getEvent(workflowId, "testKey", Duration.ofSeconds(5)).orElseThrow();
         assertEquals("eventValue-hello", eventVal);
       }
     }
@@ -902,11 +906,11 @@ public class PortableSerializationTest {
         assertEquals("eventSet", handle.getResult());
 
         // Read event from Phase 1 (java_jackson) - should still be readable
-        Object val1 = client.getEvent(wfId1, "myKey", Duration.ofSeconds(5));
+        Object val1 = client.getEvent(wfId1, "myKey", Duration.ofSeconds(5)).orElseThrow();
         assertEquals("myValue", val1);
 
         // Read event from Phase 2 (custom_base64) - should be readable
-        Object val2 = client.getEvent(wfId2, "myKey", Duration.ofSeconds(5));
+        Object val2 = client.getEvent(wfId2, "myKey", Duration.ofSeconds(5)).orElseThrow();
         assertEquals("myValue", val2);
       }
 
@@ -923,7 +927,10 @@ public class PortableSerializationTest {
       localDbos.launch();
 
       try (DBOSClient client = new DBOSClient(dataSource, null, new TestBase64Serializer())) {
-        Object val2 = client.getEvent(wfId1, "myKey", Duration.ofSeconds(5)); // Read from Phase 1
+        Object val2 =
+            client
+                .getEvent(wfId1, "myKey", Duration.ofSeconds(5))
+                .orElseThrow(); // Read from Phase 1
         assertEquals("myValue", val2);
       }
     }
@@ -972,7 +979,7 @@ public class PortableSerializationTest {
       try (DBOSClient client = new DBOSClient(dataSource)) {
         assertThrows(
             IllegalArgumentException.class,
-            () -> client.getEvent(wfId, "myKey", Duration.ofSeconds(2)),
+            () -> client.getEvent(wfId, "myKey", Duration.ofSeconds(2)).orElseThrow(),
             "Serialization is not available");
       }
     }
