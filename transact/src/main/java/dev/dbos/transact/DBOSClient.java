@@ -862,7 +862,7 @@ public class DBOSClient implements AutoCloseable {
         backfill,
         cronTimeZone,
         queueName,
-        wfSchedule -> systemDatabase.createSchedule(wfSchedule));
+        systemDatabase::createSchedule);
   }
 
   /**

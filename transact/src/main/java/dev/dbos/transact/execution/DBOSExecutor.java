@@ -526,10 +526,7 @@ public class DBOSExecutor implements AutoCloseable {
           opts.intervalSeconds(),
           opts.backOffRate(),
           childWfId,
-          () -> {
-            var res = stepfunc.execute();
-            return res;
-          });
+          stepfunc::execute);
     } catch (Exception t) {
       throw (E) t;
     }
@@ -860,20 +857,12 @@ public class DBOSExecutor implements AutoCloseable {
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.listWorkflows(input);
-        },
-        "DBOS.listWorkflows",
-        null);
+        () -> systemDatabase.listWorkflows(input), "DBOS.listWorkflows", null);
   }
 
   public List<StepInfo> listWorkflowSteps(String workflowId) {
     return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.listWorkflowSteps(workflowId);
-        },
-        "DBOS.listWorkflowSteps",
-        null);
+        () -> systemDatabase.listWorkflowSteps(workflowId), "DBOS.listWorkflowSteps", null);
   }
 
   public List<VersionInfo> listApplicationVersions() {
@@ -956,19 +945,13 @@ public class DBOSExecutor implements AutoCloseable {
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
     return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.getSchedule(name);
-        },
-        "DBOS.getSchedule",
-        null);
+        () -> systemDatabase.getSchedule(name), "DBOS.getSchedule", null);
   }
 
   public List<WorkflowSchedule> listSchedules(
       List<ScheduleStatus> statuses, List<String> workflowNames, List<String> namePrefixes) {
     return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.listSchedules(statuses, workflowNames, namePrefixes);
-        },
+        () -> systemDatabase.listSchedules(statuses, workflowNames, namePrefixes),
         "DBOS.listSchedules",
         null);
   }
@@ -1202,11 +1185,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public WorkflowStatus getWorkflowStatus(String workflowId) {
     return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.getWorkflowStatus(workflowId);
-        },
-        "DBOS.getWorkflowStatus",
-        null);
+        () -> systemDatabase.getWorkflowStatus(workflowId), "DBOS.getWorkflowStatus", null);
   }
 
   public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
@@ -1216,11 +1195,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public <T, E extends Exception> T getResult(String workflowId) throws E {
     return this.callFunctionAsStep(
-        () -> {
-          return awaitWorkflowResult(workflowId);
-        },
-        "DBOS.getResult",
-        workflowId);
+        () -> awaitWorkflowResult(workflowId), "DBOS.getResult", workflowId);
   }
 
   public boolean patch(String patchName) {
