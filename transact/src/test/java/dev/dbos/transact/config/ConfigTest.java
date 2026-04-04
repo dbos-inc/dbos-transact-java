@@ -13,6 +13,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.net.URI;
 import java.util.List;
@@ -148,7 +149,7 @@ public class ConfigTest {
       var options = new StartWorkflowOptions("dswfid");
       var handle = dbos.startWorkflow(() -> proxy.workflow(), options);
       assertEquals(6, handle.getResult());
-      assertEquals("SUCCESS", handle.getStatus().status());
+      assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     } finally {
       dbos.shutdown();
     }
@@ -190,7 +191,7 @@ public class ConfigTest {
         var options = new StartWorkflowOptions("dswfid");
         var handle = dbos.startWorkflow(() -> proxy.workflow(), options);
         assertEquals(6, handle.getResult());
-        assertEquals("SUCCESS", handle.getStatus().status());
+        assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
       } finally {
         dbos.shutdown();
       }

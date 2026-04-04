@@ -304,13 +304,13 @@ public class SystemDatabaseTest {
 
     for (var i = 1; i <= 6; i++) {
       var result1 = sysdb.initWorkflowStatus(status, 5, true, false);
-      assertEquals(WorkflowState.PENDING.toString(), result1.status());
+      assertEquals(WorkflowState.PENDING.name(), result1.status());
       assertEquals(wfid, result1.workflowId());
       assertEquals(0, result1.deadlineEpochMS());
 
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertNotNull(row);
-      assertEquals("PENDING", row.status());
+      assertEquals(WorkflowState.PENDING.name(), row.status());
       assertEquals(i, row.recoveryAttempts());
     }
 
@@ -319,7 +319,7 @@ public class SystemDatabaseTest {
         () -> sysdb.initWorkflowStatus(status, 5, true, false));
     var row = DBUtils.getWorkflowRow(dataSource, wfid);
     assertNotNull(row);
-    assertEquals("MAX_RECOVERY_ATTEMPTS_EXCEEDED", row.status());
+    assertEquals(WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name(), row.status());
     assertEquals(7, row.recoveryAttempts());
   }
 
@@ -334,7 +334,7 @@ public class SystemDatabaseTest {
             .deduplicationId("dedupe-id");
 
     var result1 = sysdb.initWorkflowStatus(builder.build(), 5, false, false);
-    assertEquals(WorkflowState.PENDING.toString(), result1.status());
+    assertEquals(WorkflowState.PENDING.name(), result1.status());
     assertEquals(wfid, result1.workflowId());
     assertEquals(0, result1.deadlineEpochMS());
 
@@ -391,7 +391,7 @@ public class SystemDatabaseTest {
     var wfRows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, wfRows.size());
     assertEquals(wfId, wfRows.get(0).workflowId());
-    assertEquals("SUCCESS", wfRows.get(0).status());
+    assertEquals(WorkflowState.SUCCESS.name(), wfRows.get(0).status());
 
     var stepRows = DBUtils.getStepRows(dataSource, wfId);
     assertEquals(2, stepRows.size());
@@ -439,7 +439,7 @@ public class SystemDatabaseTest {
     assertEquals(1, exported.size());
     var wf = exported.get(0);
     assertEquals(wfId, wf.status().workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wf.status().status());
+    assertEquals(WorkflowState.SUCCESS, wf.status().status());
     assertEquals("TestWorkflow", wf.status().workflowName());
 
     assertEquals(2, wf.steps().size());
@@ -918,7 +918,7 @@ public class SystemDatabaseTest {
     assertEquals("OriginalTestWorkflow", forkedStatus.workflowName());
     assertEquals("com.example.OriginalTestWorkflow", forkedStatus.className());
     assertEquals(
-        WorkflowState.ENQUEUED.name(), forkedStatus.status()); // Forked workflows start as ENQUEUED
+        WorkflowState.ENQUEUED, forkedStatus.status()); // Forked workflows start as ENQUEUED
     assertEquals(originalWorkflowId, forkedStatus.forkedFrom());
 
     // Validate raw database values for both workflows
@@ -1027,7 +1027,7 @@ public class SystemDatabaseTest {
     // Verify other forked workflow properties
     assertEquals("EmptyAuthRolesTestWorkflow", forkedStatus.workflowName());
     assertEquals("com.example.EmptyAuthRolesTestWorkflow", forkedStatus.className());
-    assertEquals(WorkflowState.ENQUEUED.name(), forkedStatus.status());
+    assertEquals(WorkflowState.ENQUEUED, forkedStatus.status());
     assertEquals(originalWorkflowId, forkedStatus.forkedFrom());
 
     // Validate raw database values for both workflows

@@ -13,6 +13,7 @@ import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -67,7 +68,7 @@ public class PgSqlClientTest {
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(workflowId, row.workflowId());
-    assertEquals("ENQUEUED", row.status());
+    assertEquals(WorkflowState.ENQUEUED.name(), row.status());
 
     var handle = dbos.retrieveWorkflow(workflowId);
 
@@ -78,7 +79,7 @@ public class PgSqlClientTest {
     assertEquals("42-spam", result);
 
     var stat = handle.getStatus();
-    assertEquals("SUCCESS", stat.status());
+    assertEquals(WorkflowState.SUCCESS, stat.status());
   }
 
   @Test
@@ -108,7 +109,7 @@ public class PgSqlClientTest {
         () -> {
           handle1.getResult();
         });
-    assertEquals("CANCELLED", handle1.getStatus().status());
+    assertEquals(WorkflowState.CANCELLED, handle1.getStatus().status());
   }
 
   @Test
@@ -120,7 +121,7 @@ public class PgSqlClientTest {
         () -> {
           handle1.getResult();
         });
-    assertEquals("CANCELLED", handle1.getStatus().status());
+    assertEquals(WorkflowState.CANCELLED, handle1.getStatus().status());
   }
 
   @Test

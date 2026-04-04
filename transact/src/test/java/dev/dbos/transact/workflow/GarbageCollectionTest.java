@@ -112,7 +112,7 @@ public class GarbageCollectionTest {
 
     dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);
     for (var handle : handles) {
-      assertEquals(WorkflowState.CANCELLED.toString(), handle.getStatus().status());
+      assertEquals(WorkflowState.CANCELLED, handle.getStatus().status());
     }
     impl.timeoutLatch.countDown();
     assertEquals(finalHandle.workflowId(), finalHandle.getResult());

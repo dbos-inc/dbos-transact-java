@@ -72,7 +72,7 @@ public class ForkTest {
 
     assertEquals("hellohello", result);
     var handle = dbos.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
 
     assertEquals(1, impl.step1Count);
@@ -85,7 +85,7 @@ public class ForkTest {
 
     var handle1 = dbos.forkWorkflow(workflowId, 0);
     assertEquals("hellohello", handle1.getResult());
-    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertNotEquals(handle1.workflowId(), workflowId);
     assertEquals(workflowId, handle1.getStatus().forkedFrom());
 
@@ -102,7 +102,7 @@ public class ForkTest {
 
     var handle2 = dbos.forkWorkflow(workflowId, 2);
     assertEquals("hellohello", handle2.getResult());
-    assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle2.getStatus().status());
     assertNotEquals(handle2.workflowId(), workflowId);
     assertEquals(workflowId, handle2.getStatus().forkedFrom());
 
@@ -116,7 +116,7 @@ public class ForkTest {
 
     var handle3 = dbos.forkWorkflow(workflowId, 4);
     assertEquals("hellohello", handle3.getResult());
-    assertEquals(WorkflowState.SUCCESS.name(), handle3.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle3.getStatus().status());
     assertNotEquals(handle3.workflowId(), workflowId);
     assertEquals(workflowId, handle3.getStatus().forkedFrom());
 
@@ -138,7 +138,7 @@ public class ForkTest {
 
     assertEquals("hellohello", result);
     var handle = dbos.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
 
     assertEquals(1, impl.step1Count);
@@ -154,7 +154,7 @@ public class ForkTest {
 
     var handle1 = dbos.forkWorkflow(workflowId, 0, options);
     assertEquals("hellohello", handle1.getResult());
-    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertEquals(forkedWorkflowId, handle1.workflowId());
     assertEquals(workflowId, handle1.getStatus().forkedFrom());
 
@@ -179,7 +179,7 @@ public class ForkTest {
 
     assertEquals("hellohello", result);
     var handle = dbos.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
     assertNotNull(handle.getStatus().appVersion());
 
@@ -209,7 +209,7 @@ public class ForkTest {
 
     assertEquals("hellohello", result);
     var handle = dbos.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
     assertNotNull(handle.getStatus().appVersion());
 
@@ -240,7 +240,7 @@ public class ForkTest {
 
     assertEquals("hellohello", result);
     var handle = dbos.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
     assertEquals(1000, handle.getStatus().timeoutMs());
 
@@ -278,7 +278,7 @@ public class ForkTest {
 
     assertEquals("hellohello", result);
     var handle = dbos.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
 
     assertEquals(1, impl.step1Count);
@@ -291,7 +291,7 @@ public class ForkTest {
 
     var handle1 = dbos.forkWorkflow(workflowId, 3);
     assertEquals("hellohello", handle1.getResult());
-    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertNotEquals(handle1.workflowId(), workflowId);
     assertEquals(workflowId, handle1.getStatus().forkedFrom());
 
@@ -318,7 +318,7 @@ public class ForkTest {
 
     assertEquals("hellohello", result);
     var handle = dbos.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
 
     assertEquals(1, impl.step1Count);
@@ -331,7 +331,7 @@ public class ForkTest {
 
     var handle1 = dbos.forkWorkflow(workflowId, 3);
     assertEquals("hellohello", handle1.getResult());
-    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertNotEquals(handle1.workflowId(), workflowId);
     assertEquals(workflowId, handle1.getStatus().forkedFrom());
 

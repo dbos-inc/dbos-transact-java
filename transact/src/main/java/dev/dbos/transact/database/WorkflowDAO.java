@@ -580,7 +580,7 @@ class WorkflowDAO {
     WorkflowStatus info =
         new WorkflowStatus(
             rs.getString("workflow_uuid"),
-            rs.getString("status"),
+            WorkflowState.valueOf(rs.getString("status")),
             rs.getString("name"),
             Objects.requireNonNullElse(rs.getString("class_name"), ""),
             Objects.requireNonNullElse(rs.getString("config_name"), ""),

@@ -247,13 +247,13 @@ class SimpleServiceImpl implements SimpleService {
   @Override
   @Workflow(name = "getStatus")
   public String getStatus(String wfid) {
-    return dbos.getWorkflowStatus(wfid).status();
+    return dbos.getWorkflowStatus(wfid).status().name();
   }
 
   @Override
   @Workflow(name = "getStatusInStep")
   public String getStatusInStep(String wfid) {
-    return dbos.runStep(() -> dbos.getWorkflowStatus(wfid).status(), "getStatusInStep");
+    return dbos.runStep(() -> dbos.getWorkflowStatus(wfid).status().name(), "getStatusInStep");
   }
 
   @Override

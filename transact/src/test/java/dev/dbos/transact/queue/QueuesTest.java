@@ -129,7 +129,7 @@ public class QueuesTest {
     assertEquals(4, rows.size());
 
     for (var row : rows) {
-      assertEquals("SUCCESS", row.status());
+      assertEquals(WorkflowState.SUCCESS.name(), row.status());
       assertEquals("firstQueue", row.queueName());
       assertNull(row.deduplicationId());
     }
@@ -201,7 +201,7 @@ public class QueuesTest {
       String id = "wfid" + i;
 
       assertEquals(id, wfs.get(i).workflowId());
-      assertEquals(WorkflowState.ENQUEUED.name(), wfs.get(i).status());
+      assertEquals(WorkflowState.ENQUEUED, wfs.get(i).status());
     }
 
     queueService.unpause();
@@ -213,7 +213,7 @@ public class QueuesTest {
       assertEquals(id, handle.workflowId());
       String result = (String) handle.getResult();
       assertEquals("inputq" + i + "inputq" + i, result);
-      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+      assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     }
   }
 
@@ -248,7 +248,7 @@ public class QueuesTest {
       String id = "wfid" + i;
 
       assertEquals(id, wfs.get(i).workflowId());
-      assertEquals(WorkflowState.ENQUEUED.name(), wfs.get(i).status());
+      assertEquals(WorkflowState.ENQUEUED, wfs.get(i).status());
     }
 
     wfs = dbos.listWorkflows(input.withQueueName("abc"));
@@ -297,13 +297,13 @@ public class QueuesTest {
     String result = handle1.getResult();
     assertEquals("firstQueue", handle1.getStatus().queueName());
     assertEquals("firstinputfirstinput", result);
-    assertEquals(WorkflowState.SUCCESS.name(), handle1.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
 
     assertEquals(id2, handle2.workflowId());
     Integer result2 = (Integer) handle2.getResult();
     assertEquals("secondQueue", handle2.getStatus().queueName());
     assertEquals(50, result2);
-    assertEquals(WorkflowState.SUCCESS.name(), handle2.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle2.getStatus().status());
   }
 
   @Test
@@ -378,7 +378,7 @@ public class QueuesTest {
     }
 
     for (WorkflowHandle<Double, ?> h : handles) {
-      assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
+      assertEquals(WorkflowState.SUCCESS, h.getStatus().status());
     }
   }
 
@@ -599,9 +599,9 @@ public class QueuesTest {
     impl.wfSemaphore.acquire(2);
 
     assertEquals(2, impl.counter.get());
-    assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().status());
-    assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().status());
-    assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().status());
+    assertEquals(WorkflowState.PENDING, handle1.getStatus().status());
+    assertEquals(WorkflowState.PENDING, handle2.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());
 
     // update WF3 to appear as if it's from a different executor
     String sql =
@@ -621,11 +621,11 @@ public class QueuesTest {
 
     var executor = DBOSTestAccess.getDbosExecutor(dbos);
     List<WorkflowHandle<?, ?>> otherHandles = executor.recoverPendingWorkflows(List.of("other"));
-    assertEquals(WorkflowState.PENDING.toString(), handle1.getStatus().status());
-    assertEquals(WorkflowState.PENDING.toString(), handle2.getStatus().status());
+    assertEquals(WorkflowState.PENDING, handle1.getStatus().status());
+    assertEquals(WorkflowState.PENDING, handle2.getStatus().status());
     assertEquals(1, otherHandles.size());
     assertEquals(otherHandles.get(0).workflowId(), handle3.workflowId());
-    assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());
 
     List<WorkflowHandle<?, ?>> localHandles = executor.recoverPendingWorkflows(List.of("local"));
     assertEquals(2, localHandles.size());
@@ -636,9 +636,9 @@ public class QueuesTest {
     assertEquals(2, impl.counter.get());
     // Recovery sets back to enqueued.
     //   The enqueued run will get skipped (first run is still blocked)
-    assertEquals(WorkflowState.ENQUEUED.toString(), handle1.getStatus().status());
-    assertEquals(WorkflowState.ENQUEUED.toString(), handle2.getStatus().status());
-    assertEquals(WorkflowState.ENQUEUED.toString(), handle3.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, handle1.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, handle2.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, handle3.getStatus().status());
 
     impl.latch.countDown();
     assertEquals(0, handle1.getResult());
@@ -670,7 +670,7 @@ public class QueuesTest {
 
       Thread.sleep(3000);
       assertEquals("oneone", h1.getResult());
-      assertEquals("ENQUEUED", h2.getStatus().status());
+      assertEquals(WorkflowState.ENQUEUED, h2.getStatus().status());
     }
   }
 }

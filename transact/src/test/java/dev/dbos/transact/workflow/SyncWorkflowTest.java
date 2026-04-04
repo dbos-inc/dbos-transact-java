@@ -85,7 +85,7 @@ public class SyncWorkflowTest {
     String hresult = handle.getResult();
     assertEquals("Processed: test-item", hresult);
     assertEquals("wf-123", handle.workflowId());
-    assertEquals("SUCCESS", handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
   }
 
   @Test
@@ -147,10 +147,10 @@ public class SyncWorkflowTest {
 
     assertEquals(2, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
     assertEquals("wf-123456-0", wfs.get(1).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(1).status());
 
     List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(1, steps.size());
@@ -178,16 +178,16 @@ public class SyncWorkflowTest {
 
     assertEquals(4, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
     assertEquals("child1", wfs.get(1).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(1).status());
 
     assertEquals("child2", wfs.get(2).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(2).status());
 
     assertEquals("child3", wfs.get(3).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(3).status());
 
     List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(6, steps.size());
@@ -229,13 +229,13 @@ public class SyncWorkflowTest {
 
     assertEquals(3, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
     assertEquals("child4", wfs.get(1).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(1).status());
 
     assertEquals("child5", wfs.get(2).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(2).status());
 
     List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(2, steps.size());

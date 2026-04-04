@@ -434,7 +434,7 @@ class AdminServerTest {
           .statusCode(200)
           .body("WorkflowUUID", equalTo(status.workflowId()))
           .body("WorkflowName", equalTo(status.workflowName()))
-          .body("Status", equalTo(status.status()))
+          .body("Status", equalTo(status.status().name()))
           .body("CreatedAt", equalTo("1754946202215"));
 
       ArgumentCaptor<ListWorkflowsInput> inputCaptor =

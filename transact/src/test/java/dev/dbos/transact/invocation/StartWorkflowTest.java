@@ -9,6 +9,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -75,7 +76,7 @@ public class StartWorkflowTest {
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(handle.workflowId(), row.workflowId());
-    assertEquals("SUCCESS", row.status());
+    assertEquals(WorkflowState.SUCCESS, row.status());
   }
 
   @Test
@@ -91,7 +92,7 @@ public class StartWorkflowTest {
     var row = handle.getStatus();
     assertNotNull(row);
     assertEquals(workflowId, row.workflowId());
-    assertEquals("SUCCESS", row.status());
+    assertEquals(WorkflowState.SUCCESS, row.status());
     assertNull(row.timeout());
     assertNull(row.deadline());
   }
@@ -109,7 +110,7 @@ public class StartWorkflowTest {
     var row = dbos.retrieveWorkflow(workflowId);
     assertNotNull(row);
     assertEquals(workflowId, row.workflowId());
-    assertEquals("SUCCESS", row.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, row.getStatus().status());
     assertEquals(1000, row.getStatus().timeoutMs());
     assertNotNull(row.getStatus().deadlineEpochMs());
   }

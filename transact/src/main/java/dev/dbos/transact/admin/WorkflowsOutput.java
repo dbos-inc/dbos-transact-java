@@ -36,7 +36,7 @@ record WorkflowsOutput(
 
     return new WorkflowsOutput(
         status.workflowId(),
-        status.status(),
+        status.status().name(),
         status.workflowName(),
         status.className(),
         status.instanceName(),

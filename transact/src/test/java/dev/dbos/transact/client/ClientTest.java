@@ -14,6 +14,7 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -58,7 +59,7 @@ public class ClientTest {
       assertEquals(1, rows.size());
       var row = rows.get(0);
       assertEquals(handle.workflowId(), row.workflowId());
-      assertEquals("ENQUEUED", row.status());
+      assertEquals(WorkflowState.ENQUEUED.name(), row.status());
 
       qs.unpause();
 
@@ -68,7 +69,7 @@ public class ClientTest {
 
       var stat = client.findWorkflowStatus(handle.workflowId());
       assertEquals(
-          "SUCCESS",
+          WorkflowState.SUCCESS,
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
     }
   }
@@ -118,7 +119,7 @@ public class ClientTest {
           });
       var stat1 = client.findWorkflowStatus(handle1.workflowId());
       assertEquals(
-          "CANCELLED",
+          WorkflowState.CANCELLED,
           stat1.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var handle2 =
@@ -132,7 +133,7 @@ public class ClientTest {
           });
       var stat2 = client.findWorkflowStatus(handle2.workflowId());
       assertEquals(
-          "CANCELLED",
+          WorkflowState.CANCELLED,
           stat2.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
     }
   }

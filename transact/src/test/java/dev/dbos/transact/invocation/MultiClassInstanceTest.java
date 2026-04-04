@@ -106,7 +106,7 @@ public class MultiClassInstanceTest {
     assertEquals("stepWorkflow", browa.workflowName());
     assertEquals("A", browa.instanceName());
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", browa.className());
-    assertEquals("SUCCESS", browa.status());
+    assertEquals(WorkflowState.SUCCESS, browa.status());
 
     var brows1 = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowId(bhandle1.workflowId()));
     assertEquals(1, brows1.size());
@@ -115,7 +115,7 @@ public class MultiClassInstanceTest {
     assertEquals("stepWorkflow", brow1.workflowName());
     assertEquals("1", brow1.instanceName());
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", brow1.className());
-    assertEquals("SUCCESS", brow1.status());
+    assertEquals(WorkflowState.SUCCESS, brow1.status());
 
     var hrows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowId(hhandle.workflowId()));
     assertEquals(1, hrows.size());
@@ -124,7 +124,7 @@ public class MultiClassInstanceTest {
     assertEquals("stepWorkflow", hrow.workflowName());
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", hrow.className());
     assertEquals("", hrow.instanceName());
-    assertEquals("SUCCESS", hrow.status());
+    assertEquals(WorkflowState.SUCCESS, hrow.status());
 
     // All 3 w/ the same WF name
     var allrows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("stepWorkflow"));
@@ -170,14 +170,14 @@ public class MultiClassInstanceTest {
 
       var stat = client.findWorkflowStatus(handle.workflowId());
       assertEquals(
-          "SUCCESS",
+          WorkflowState.SUCCESS,
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       DBUtils.setWorkflowState(dataSource, handle.workflowId(), WorkflowState.PENDING.name());
 
       stat = client.findWorkflowStatus(handle.workflowId());
       assertEquals(
-          "PENDING",
+          WorkflowState.PENDING,
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -185,7 +185,7 @@ public class MultiClassInstanceTest {
       eh.getResult();
       stat = client.findWorkflowStatus(handle.workflowId());
       assertEquals(
-          "SUCCESS",
+          WorkflowState.SUCCESS,
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
       assertEquals(0, bimpl1.nWfCalls);
       assertEquals(2, bimpla.nWfCalls);

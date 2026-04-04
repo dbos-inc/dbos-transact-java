@@ -104,7 +104,7 @@ class DBOSExecutorTest {
       assertEquals("test-itemtest-item", result);
 
       List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
-      assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
+      assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
 
@@ -112,10 +112,10 @@ class DBOSExecutorTest {
 
       result = (String) handle.getResult();
       assertEquals("test-itemtest-item", result);
-      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+      assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
 
       wfs = dbos.listWorkflows(new ListWorkflowsInput());
-      assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
+      assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
     }
   }
 
@@ -156,7 +156,7 @@ class DBOSExecutorTest {
       assertEquals("test-itemtest-item", result);
 
       List<WorkflowStatus> wfs = dbos1.listWorkflows(new ListWorkflowsInput());
-      assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
+      assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
     }
 
     // Re-launch without registering workflows
@@ -194,7 +194,7 @@ class DBOSExecutorTest {
       assertEquals("test-itemstepOnestepTwo", result);
 
       List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
-      assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
+      assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
       List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
       assertEquals(2, steps.size());
@@ -208,10 +208,10 @@ class DBOSExecutorTest {
 
       result = handle.getResult();
       assertEquals("test-itemstepOnestepTwo", result);
-      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+      assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
 
       wfs = dbos.listWorkflows(new ListWorkflowsInput());
-      assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
+      assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
       steps = dbos.listWorkflowSteps(wfid);
       assertEquals(2, steps.size());
     }
@@ -239,7 +239,7 @@ class DBOSExecutorTest {
       assertEquals(1, impl.step2Count);
 
       List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
-      assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
+      assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
       List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
       assertEquals(2, steps.size());
@@ -256,10 +256,10 @@ class DBOSExecutorTest {
       assertEquals(1, impl.step1Count);
       assertEquals(2, impl.step2Count);
 
-      assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+      assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
 
       wfs = dbos.listWorkflows(new ListWorkflowsInput());
-      assertEquals(wfs.get(0).status(), WorkflowState.SUCCESS.name());
+      assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
       steps = dbos.listWorkflowSteps(wfid);
       assertEquals(2, steps.size());
     }

@@ -8,7 +8,7 @@ import java.util.Objects;
 
 public class WorkflowStatusBuilder {
   private String workflowId;
-  private String status;
+  private WorkflowState status;
 
   private String workflowName;
   private String className;
@@ -78,12 +78,12 @@ public class WorkflowStatusBuilder {
   }
 
   public WorkflowStatusBuilder status(String status) {
-    this.status = status;
+    this.status = WorkflowState.valueOf(status);
     return this;
   }
 
   public WorkflowStatusBuilder status(WorkflowState state) {
-    this.status = state.name();
+    this.status = state;
     return this;
   }
 

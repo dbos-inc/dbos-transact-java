@@ -105,7 +105,7 @@ class RecoveryServiceTest {
       for (GetPendingWorkflowsOutput output : pending) {
         WorkflowHandle<?, ?> handle = dbosExecutor.recoverWorkflow(output);
         handle.getResult();
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+        assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
       }
     }
   }
@@ -143,7 +143,7 @@ class RecoveryServiceTest {
 
       for (var handle : pending) {
         handle.getResult();
-        assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+        assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
       }
     }
   }
@@ -179,11 +179,11 @@ class RecoveryServiceTest {
 
       var h = dbos.retrieveWorkflow(wfid1);
       h.getResult();
-      assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
+      assertEquals(WorkflowState.SUCCESS, h.getStatus().status());
 
       h = dbos.retrieveWorkflow(wfid2);
       h.getResult();
-      assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
+      assertEquals(WorkflowState.SUCCESS, h.getStatus().status());
     }
   }
 

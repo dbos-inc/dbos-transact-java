@@ -14,6 +14,7 @@ import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -156,7 +157,7 @@ public class PortableSerializationTest {
 
     // Verify the workflow completed successfully
     var status = handle.getStatus();
-    assertEquals("SUCCESS", status.status());
+    assertEquals(WorkflowState.SUCCESS, status.status());
 
     // Verify the output was written in portable format
     var row = DBUtils.getWorkflowRow(dataSource, workflowId);
@@ -205,7 +206,7 @@ public class PortableSerializationTest {
 
       // Verify the workflow completed successfully
       var status = handle.getStatus();
-      assertEquals("SUCCESS", status.status());
+      assertEquals(WorkflowState.SUCCESS, status.status());
 
       // Verify the workflow was stored with portable serialization
       var row = DBUtils.getWorkflowRow(dataSource, workflowId);
@@ -257,7 +258,7 @@ public class PortableSerializationTest {
 
       // Verify the workflow completed successfully
       var status = handle.getStatus();
-      assertEquals("SUCCESS", status.status());
+      assertEquals(WorkflowState.SUCCESS, status.status());
 
       // Verify the workflow was stored with portable serialization
       var row = DBUtils.getWorkflowRow(dataSource, workflowId);
@@ -625,7 +626,7 @@ public class PortableSerializationTest {
       var row = DBUtils.getWorkflowRow(dataSource, workflowId);
       assertNotNull(row);
       assertEquals("portable_json", row.serialization());
-      assertEquals("ERROR", row.status());
+      assertEquals(WorkflowState.ERROR.name(), row.status());
 
       // Verify error is in portable JSON format
       assertNotNull(row.error());
@@ -719,7 +720,7 @@ public class PortableSerializationTest {
       var row = DBUtils.getWorkflowRow(dataSource, workflowId);
       assertNotNull(row);
       assertEquals("portable_json", row.serialization());
-      assertEquals("SUCCESS", row.status());
+      assertEquals(WorkflowState.SUCCESS.name(), row.status());
       assertEquals("Apextrue1.01[hello, world]{K3Y=VALU3}", rv);
     }
   }
@@ -1019,7 +1020,9 @@ public class PortableSerializationTest {
     long deadline = System.currentTimeMillis() + timeout.toMillis();
     while (System.currentTimeMillis() < deadline) {
       var row = DBUtils.getWorkflowRow(dataSource, workflowId);
-      if (row != null && ("SUCCESS".equals(row.status()) || "ERROR".equals(row.status()))) {
+      if (row != null
+          && (WorkflowState.SUCCESS.name().equals(row.status())
+              || WorkflowState.ERROR.name().equals(row.status()))) {
         return row;
       }
       Thread.sleep(200);
@@ -1044,7 +1047,7 @@ public class PortableSerializationTest {
 
     // The workflow should be marked as ERROR (not stuck in PENDING)
     var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
-    assertEquals("ERROR", row.status());
+    assertEquals(WorkflowState.ERROR.name(), row.status());
     assertNotNull(row.error());
     assertTrue(
         row.error().contains("deserialize") || row.error().contains("parse"),
@@ -1072,7 +1075,7 @@ public class PortableSerializationTest {
         "{\"positionalArgs\":[\"only_one_arg\"]}");
 
     var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
-    assertEquals("ERROR", row.status());
+    assertEquals(WorkflowState.ERROR.name(), row.status());
     assertNotNull(row.error());
     assertTrue(
         row.error().contains("Expected 2") || row.error().contains("argument"),
@@ -1100,7 +1103,7 @@ public class PortableSerializationTest {
         "{\"positionalArgs\":[{\"key\":\"val\"}, 30000]}");
 
     var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
-    assertEquals("ERROR", row.status());
+    assertEquals(WorkflowState.ERROR.name(), row.status());
     assertNotNull(row.error());
   }
 
@@ -1150,7 +1153,7 @@ public class PortableSerializationTest {
 
     var row = DBUtils.getWorkflowRow(dataSource, workflowId);
     assertNotNull(row);
-    assertEquals("SUCCESS", row.status());
+    assertEquals(WorkflowState.SUCCESS.name(), row.status());
   }
 
   /**
@@ -1185,7 +1188,7 @@ public class PortableSerializationTest {
 
     var row = DBUtils.getWorkflowRow(dataSource, workflowId);
     assertNotNull(row);
-    assertEquals("SUCCESS", row.status());
+    assertEquals(WorkflowState.SUCCESS.name(), row.status());
   }
 
   /** Workflow interface for testing date/time coercion from ISO-8601 strings. */
@@ -1236,7 +1239,7 @@ public class PortableSerializationTest {
 
     var row = DBUtils.getWorkflowRow(dataSource, workflowId);
     assertNotNull(row);
-    assertEquals("SUCCESS", row.status());
+    assertEquals(WorkflowState.SUCCESS.name(), row.status());
   }
 
   /**
@@ -1278,7 +1281,7 @@ public class PortableSerializationTest {
 
     // The workflow should fail with ERROR (not hang forever)
     var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
-    assertEquals("ERROR", row.status());
+    assertEquals(WorkflowState.ERROR.name(), row.status());
     assertNotNull(row.error());
   }
 
@@ -1319,7 +1322,7 @@ public class PortableSerializationTest {
     }
 
     var row = waitForWorkflowTerminal(workflowId, Duration.ofSeconds(30));
-    assertEquals("ERROR", row.status());
+    assertEquals(WorkflowState.ERROR.name(), row.status());
     assertNotNull(row.error());
   }
 
@@ -1356,7 +1359,7 @@ public class PortableSerializationTest {
 
       var row = DBUtils.getWorkflowRow(dataSource, workflowId);
       assertEquals("portable_json", row.serialization());
-      assertEquals("SUCCESS", row.status());
+      assertEquals(WorkflowState.SUCCESS.name(), row.status());
     }
   }
 
@@ -1393,7 +1396,7 @@ public class PortableSerializationTest {
 
       var row = DBUtils.getWorkflowRow(dataSource, workflowId);
       assertEquals("java_jackson", row.serialization());
-      assertEquals("SUCCESS", row.status());
+      assertEquals(WorkflowState.SUCCESS.name(), row.status());
     }
   }
 }

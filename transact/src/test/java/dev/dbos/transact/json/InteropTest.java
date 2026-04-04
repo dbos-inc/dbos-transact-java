@@ -12,6 +12,7 @@ import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -296,7 +297,7 @@ public class InteropTest {
       var wsRow = DBUtils.getWorkflowRow(dataSource, workflowId);
       assertNotNull(wsRow);
       assertEquals("portable_json", wsRow.serialization());
-      assertEquals("SUCCESS", wsRow.status());
+      assertEquals(WorkflowState.SUCCESS.name(), wsRow.status());
       assertEquals("canonicalWorkflow", wsRow.workflowName());
       assertEquals("interop", wsRow.className());
 
@@ -354,7 +355,7 @@ public class InteropTest {
     var wsRow = DBUtils.getWorkflowRow(dataSource, workflowId);
     assertNotNull(wsRow);
     assertEquals("portable_json", wsRow.serialization());
-    assertEquals("SUCCESS", wsRow.status());
+    assertEquals(WorkflowState.SUCCESS.name(), wsRow.status());
   }
 
   // ============================================================================

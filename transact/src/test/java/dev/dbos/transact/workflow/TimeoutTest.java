@@ -60,7 +60,7 @@ public class TimeoutTest {
     result = handle.getResult();
     assertEquals("1234512345", result);
     assertEquals(wfid1, handle.workflowId());
-    assertEquals("SUCCESS", handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
   }
 
   @Test
@@ -94,7 +94,7 @@ public class TimeoutTest {
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
     assertNotNull(s);
-    assertEquals(WorkflowState.CANCELLED.name(), s.status());
+    assertEquals(WorkflowState.CANCELLED, s.status());
 
     try {
       handle2.getResult();
@@ -106,7 +106,7 @@ public class TimeoutTest {
 
     var s2 = systemDatabase.getWorkflowStatus(wfid2);
     assertNotNull(s2);
-    assertEquals(WorkflowState.CANCELLED.name(), s2.status());
+    assertEquals(WorkflowState.CANCELLED, s2.status());
 
     // Negative test
     assertThrows(
@@ -144,7 +144,7 @@ public class TimeoutTest {
     result = (String) handle.getResult();
     assertEquals("1234512345", result);
     assertEquals(wfid1, handle.workflowId());
-    assertEquals("SUCCESS", handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
   }
 
   @Test
@@ -176,7 +176,7 @@ public class TimeoutTest {
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
     assertNotNull(s);
-    assertEquals(WorkflowState.CANCELLED.name(), s.status());
+    assertEquals(WorkflowState.CANCELLED, s.status());
   }
 
   @Test
@@ -203,7 +203,7 @@ public class TimeoutTest {
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
     assertNotNull(s);
-    assertEquals(WorkflowState.SUCCESS.name(), s.status());
+    assertEquals(WorkflowState.SUCCESS, s.status());
   }
 
   @Test
@@ -234,7 +234,7 @@ public class TimeoutTest {
 
     var s = systemDatabase.getWorkflowStatus(wfid1);
     assertTrue(s != null);
-    assertEquals(WorkflowState.CANCELLED.name(), s.status());
+    assertEquals(WorkflowState.CANCELLED, s.status());
   }
 
   @Test
@@ -260,7 +260,7 @@ public class TimeoutTest {
     setDelayEpoch(dataSource, wfid1);
 
     var handle = dbosExecutor.executeWorkflowById(wfid1, true, false);
-    assertEquals(WorkflowState.CANCELLED.name(), handle.getStatus().status());
+    assertEquals(WorkflowState.CANCELLED, handle.getStatus().status());
   }
 
   @Test
@@ -290,7 +290,7 @@ public class TimeoutTest {
     result = (String) handle.getResult();
     assertEquals("1234512345", result);
     assertEquals(wfid1, handle.workflowId());
-    assertEquals("SUCCESS", handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
   }
 
   @Test
@@ -315,11 +315,11 @@ public class TimeoutTest {
         });
 
     var parentStatus = dbos.retrieveWorkflow(wfid1).getStatus();
-    assertEquals(WorkflowState.ERROR.name(), parentStatus.status());
+    assertEquals(WorkflowState.ERROR, parentStatus.status());
     assertEquals("Awaited workflow childwf was cancelled.", parentStatus.error().message());
 
-    String childStatus = dbos.retrieveWorkflow("childwf").getStatus().status();
-    assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+    var childStatus = dbos.retrieveWorkflow("childwf").getStatus().status();
+    assertEquals(WorkflowState.CANCELLED, childStatus);
   }
 
   private static final Logger logger = LoggerFactory.getLogger(TimeoutTest.class);
@@ -345,11 +345,11 @@ public class TimeoutTest {
         });
 
     try {
-      String parentStatus = dbos.retrieveWorkflow(wfid1).getStatus().status();
-      assertEquals(WorkflowState.CANCELLED.name(), parentStatus);
+      var parentStatus = dbos.retrieveWorkflow(wfid1).getStatus().status();
+      assertEquals(WorkflowState.CANCELLED, parentStatus);
     } finally {
       var row = DBUtils.getWorkflowRow(dataSource, wfid1);
-      if (!row.status().equals("CANCELLED")) {
+      if (!WorkflowState.CANCELLED.name().equals(row.status())) {
         logger.warn("{}: {}", wfid1, row);
       }
     }
@@ -359,11 +359,11 @@ public class TimeoutTest {
     assertThrows(Exception.class, () -> handle.getResult());
 
     try {
-      String childStatus = dbos.retrieveWorkflow(childWfId).getStatus().status();
-      assertEquals(WorkflowState.CANCELLED.name(), childStatus);
+      var childStatus = dbos.retrieveWorkflow(childWfId).getStatus().status();
+      assertEquals(WorkflowState.CANCELLED, childStatus);
     } finally {
       var row = DBUtils.getWorkflowRow(dataSource, childWfId);
-      if (!row.status().equals("CANCELLED")) {
+      if (!WorkflowState.CANCELLED.name().equals(row.status())) {
         logger.warn("{}: {}", childWfId, row);
       }
     }

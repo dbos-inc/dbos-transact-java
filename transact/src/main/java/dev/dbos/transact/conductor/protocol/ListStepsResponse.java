@@ -25,8 +25,7 @@ public class ListStepsResponse extends BaseResponse {
       this.function_id = info.functionId();
       this.function_name = info.functionName();
       this.output = output != null ? JSONUtil.toJson(output) : null;
-      this.error =
-          error != null ? "%s: %s".formatted(error.className(), error.message()) : null;
+      this.error = error != null ? "%s: %s".formatted(error.className(), error.message()) : null;
       this.child_workflow_id = info.childWorkflowId();
       this.started_at_epoch_ms =
           info.startedAtEpochMs() == null ? null : info.startedAtEpochMs().toString();
