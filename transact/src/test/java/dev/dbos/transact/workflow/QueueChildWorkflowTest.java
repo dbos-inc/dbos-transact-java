@@ -34,7 +34,7 @@ public class QueueChildWorkflowTest {
     dbos.registerQueue(childQ);
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
@@ -86,7 +86,7 @@ public class QueueChildWorkflowTest {
     dbos.registerQueue(childQ);
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();

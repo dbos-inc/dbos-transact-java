@@ -55,7 +55,7 @@ class RecoveryServiceTest {
 
   private ExecutingService register(DBOS dbos) {
     var impl = new ExecutingServiceImpl(dbos);
-    var service = dbos.registerWorkflows(ExecutingService.class, impl);
+    var service = dbos.registerProxy(ExecutingService.class, impl);
     impl.setSelf(service);
     dbos.registerQueue(testQueue);
     return service;

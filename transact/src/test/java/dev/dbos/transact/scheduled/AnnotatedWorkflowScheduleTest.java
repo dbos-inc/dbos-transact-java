@@ -39,7 +39,7 @@ class AnnotatedWorkflowScheduleTest {
     var impl = new AnnotatedScheduledServiceImpl(dbos);
     var q = new Queue("q2").withConcurrency(1);
     dbos.registerQueue(q);
-    dbos.registerWorkflows(AnnotatedScheduledService.class, impl);
+    dbos.registerProxy(AnnotatedScheduledService.class, impl);
 
     dbos.launch();
     var schedulerService = DBOSTestAccess.getSchedulerService(dbos);
@@ -111,7 +111,7 @@ class AnnotatedWorkflowScheduleTest {
     var e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> dbos.registerWorkflows(InvalidSig.class, new InvalidSigImpl()));
+            () -> dbos.registerProxy(InvalidSig.class, new InvalidSigImpl()));
     assertEquals(
         "Invalid signature for annotated workflow schedule scheduledWF/dev.dbos.transact.scheduled.InvalidSigImpl/. Signature must be (Instant, Instant)",
         e.getMessage());
@@ -122,7 +122,7 @@ class AnnotatedWorkflowScheduleTest {
     var e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> dbos.registerWorkflows(InvalidCron.class, new InvalidCronImpl()));
+            () -> dbos.registerProxy(InvalidCron.class, new InvalidCronImpl()));
     assertEquals("Cron expression contains 5 parts but we expect one of [6]", e.getMessage());
   }
 }

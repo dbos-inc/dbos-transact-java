@@ -31,7 +31,7 @@ public class GarbageCollectionTest {
     dbos = new DBOS(dbosConfig);
 
     impl = new GCTestServiceImpl(dbos);
-    proxy = dbos.registerWorkflows(GCTestService.class, impl);
+    proxy = dbos.registerProxy(GCTestService.class, impl);
 
     dbos.launch();
   }

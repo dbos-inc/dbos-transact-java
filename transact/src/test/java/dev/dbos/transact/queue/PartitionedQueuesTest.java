@@ -99,7 +99,7 @@ public class PartitionedQueuesTest {
     dbos.registerQueue(queue);
 
     var impl = new ResumingTestServiceImpl();
-    var proxy = dbos.registerWorkflows(ResumingTestService.class, impl);
+    var proxy = dbos.registerProxy(ResumingTestService.class, impl);
     dbos.launch();
 
     var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("key");
@@ -138,7 +138,7 @@ public class PartitionedQueuesTest {
     dbos.registerQueues(queue, partitionlessQueue);
 
     var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
 
     var blockedPartitionKey = "blocked";
@@ -209,7 +209,7 @@ public class PartitionedQueuesTest {
   @Test
   public void testPartitionKeyWithoutQueue() throws Exception {
     var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
 
     var options = new StartWorkflowOptions().withQueuePartitionKey("partition-1");
@@ -223,7 +223,7 @@ public class PartitionedQueuesTest {
     var queue = new Queue("non-partitioned-queue");
     dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
 
     var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("partition-1");
@@ -237,7 +237,7 @@ public class PartitionedQueuesTest {
     var queue = new Queue("partitioned-queue").withPartitionedEnabled(true);
     dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
 
     var options = new StartWorkflowOptions().withQueue(queue);
@@ -251,7 +251,7 @@ public class PartitionedQueuesTest {
     var queue = new Queue("partitioned-queue").withPartitionedEnabled(true);
     dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
 
     var options =

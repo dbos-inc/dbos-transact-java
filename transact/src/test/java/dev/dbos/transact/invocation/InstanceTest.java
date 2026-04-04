@@ -126,7 +126,7 @@ public class InstanceTest {
 
     dbos = new DBOS(dbosConfig);
     var impl = new HawkServiceInstanceImpl(dbos);
-    proxy = dbos.registerWorkflows(HawkService.class, impl);
+    proxy = dbos.registerProxy(HawkService.class, impl);
     impl.setProxy(proxy);
 
     dbos.launch();

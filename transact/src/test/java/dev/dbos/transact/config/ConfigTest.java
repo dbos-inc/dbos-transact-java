@@ -142,8 +142,7 @@ public class ConfigTest {
     var dbos = new DBOS(config);
 
     try {
-      var proxy =
-          dbos.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
+      var proxy = dbos.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
       dbos.launch();
 
       var options = new StartWorkflowOptions("dswfid");
@@ -180,7 +179,7 @@ public class ConfigTest {
 
       try {
         var proxy =
-            dbos.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
+            dbos.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
         dbos.launch();
 
         var sysdb = DBOSTestAccess.getSystemDatabase(dbos);

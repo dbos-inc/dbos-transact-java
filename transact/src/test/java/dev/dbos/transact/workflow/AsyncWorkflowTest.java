@@ -32,7 +32,7 @@ public class AsyncWorkflowTest {
   public void sameWorkflowId() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     dbos.launch();
 
     String wfid = "wf-123";
@@ -82,7 +82,7 @@ public class AsyncWorkflowTest {
   @Test
   public void workflowWithError() throws Exception {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     dbos.launch();
 
     String wfid = "abc";
@@ -111,7 +111,7 @@ public class AsyncWorkflowTest {
   public void childWorkflowWithoutSet() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 
@@ -142,7 +142,7 @@ public class AsyncWorkflowTest {
   public void multipleChildren() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 
@@ -190,7 +190,7 @@ public class AsyncWorkflowTest {
   public void nestedChildren() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 
@@ -232,7 +232,7 @@ public class AsyncWorkflowTest {
   @Test
   public void startWorkflowClosure() {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     dbos.launch();
 
     WorkflowHandle<String, RuntimeException> handle =
@@ -247,7 +247,7 @@ public class AsyncWorkflowTest {
   public void resAndStatus() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 

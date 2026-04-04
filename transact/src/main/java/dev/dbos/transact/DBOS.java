@@ -166,13 +166,12 @@ public class DBOS implements AutoCloseable {
    *
    * @param <T> The interface type for the instance
    * @param interfaceClass The interface class for the workflows
-   * @param implementation An implementation instance providing the workflow and step function code
+   * @param target An implementation instance providing the workflow and step function code
    * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
    *     functions
    */
-  public <T> @NonNull T registerWorkflows(
-      @NonNull Class<T> interfaceClass, @NonNull T implementation) {
-    return registerWorkflows(interfaceClass, implementation, "");
+  public <T> @NonNull T registerProxy(@NonNull Class<T> interfaceClass, @NonNull T target) {
+    return registerProxy(interfaceClass, target, "");
   }
 
   /**
@@ -180,72 +179,74 @@ public class DBOS implements AutoCloseable {
    *
    * @param <T> The interface type for the instance
    * @param interfaceClass The interface class for the workflows
-   * @param implementation An implementation instance providing the workflow and step function code
+   * @param target An implementation instance providing the workflow and step function code
    * @param instanceName Name of the instance, allowing multiple instances of the same class to be
    *     registered
    * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
    *     functions
    */
-  public <T> @NonNull T registerWorkflows(
-      @NonNull Class<T> interfaceClass, @NonNull T implementation, @NonNull String instanceName) {
-    registerClassWorkflows(interfaceClass, implementation, instanceName);
-
-    return DBOSInvocationHandler.createProxy(
-        interfaceClass, implementation, instanceName, () -> this.dbosExecutor.get());
-  }
-
-  private void registerClassWorkflows(
-      @NonNull Class<?> interfaceClass,
-      @NonNull Object implementation,
-      @Nullable String instanceName) {
-    Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
-    Objects.requireNonNull(implementation, "implementation must not be null");
-    instanceName = Objects.requireNonNullElse(instanceName, "");
-    if (!interfaceClass.isInterface()) {
-      throw new IllegalArgumentException("interfaceClass must be an interface");
-    }
+  public <T> @NonNull T registerProxy(
+      @NonNull Class<T> interfaceClass, @NonNull T target, @Nullable String instanceName) {
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
+    Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
+    Objects.requireNonNull(target, "target must not be null");
+    instanceName = Objects.requireNonNullElse(instanceName, "");
 
-    // Use @WorkflowClassName annotation if present, otherwise use the Java class name
-    WorkflowClassName classNameAnnotation =
-        implementation.getClass().getAnnotation(WorkflowClassName.class);
-    String className =
-        (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
-            ? classNameAnnotation.value()
-            : implementation.getClass().getName();
-    workflowRegistry.register(interfaceClass, implementation, className, instanceName);
+    if (!hasWorkflows(target)) {
+      throw new IllegalArgumentException("Target does not contain any @Workflow methods");
+    }
 
-    Method[] methods = implementation.getClass().getDeclaredMethods();
-    for (Method method : methods) {
-      Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-      if (wfAnnotation != null) {
+    workflowRegistry.registerInstance(instanceName, target);
+
+    for (var method : target.getClass().getDeclaredMethods()) {
+      var wfTag = method.getAnnotation(Workflow.class);
+      if (wfTag != null) {
         method.setAccessible(true); // In case it's not public
-        registerWorkflowMethod(wfAnnotation, implementation, className, instanceName, method);
+        workflowRegistry.registerWorkflow(wfTag, target, method, instanceName);
       }
     }
+
+    return DBOSInvocationHandler.createProxy(
+        interfaceClass, target, instanceName, dbosExecutor::get);
   }
 
-  private void registerWorkflowMethod(
+  public void registerWorkflow(
       @NonNull Workflow wfTag,
       @NonNull Object target,
-      @NonNull String className,
-      @NonNull String instanceName,
-      @NonNull Method method) {
+      @NonNull Method method,
+      @Nullable String instanceName) {
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
 
-    String workflowName = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
-    workflowRegistry.register(
-        workflowName,
-        className,
-        target,
-        instanceName,
-        method,
-        wfTag.maxRecoveryAttempts(),
-        wfTag.serializationStrategy());
+    workflowRegistry.registerWorkflow(wfTag, target, method, instanceName);
+  }
+
+  public static boolean hasWorkflows(@NonNull Object target) {
+    var methods =
+        Objects.requireNonNull(target, "target can not be null").getClass().getDeclaredMethods();
+    for (var method : methods) {
+      if (method.isAnnotationPresent(Workflow.class)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public static @NonNull String getWorkflowClassName(@NonNull Object target) {
+    var klass = Objects.requireNonNull(target, "target can not be null").getClass();
+    var wfClassTag = klass.getAnnotation(WorkflowClassName.class);
+    return (wfClassTag == null || wfClassTag.value().isEmpty())
+        ? klass.getName()
+        : wfClassTag.value();
+  }
+
+  public static @NonNull String getWorkflowName(@NonNull Workflow wfTag, @NonNull Method method) {
+    return Objects.requireNonNull(wfTag, "wfTag can not be null").name().isEmpty()
+        ? Objects.requireNonNull(method, "method can not be null").getName()
+        : wfTag.name();
   }
 
   /**

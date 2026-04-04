@@ -38,7 +38,7 @@ public class DirectInvocationTest {
     var dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS(dbosConfig);
     var impl = new HawkServiceImpl(dbos);
-    proxy = dbos.registerWorkflows(HawkService.class, impl);
+    proxy = dbos.registerProxy(HawkService.class, impl);
     impl.setProxy(proxy);
 
     dbos.launch();

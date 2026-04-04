@@ -49,7 +49,7 @@ public class ForkTest {
     dataSource = pgContainer.dataSource();
 
     impl = new ForkTestServiceImpl(dbos);
-    proxy = dbos.registerWorkflows(ForkTestService.class, impl);
+    proxy = dbos.registerProxy(ForkTestService.class, impl);
     impl.setProxy(proxy);
 
     dbos.launch();

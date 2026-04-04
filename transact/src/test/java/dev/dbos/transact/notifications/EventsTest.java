@@ -184,7 +184,7 @@ public class EventsTest {
     this.dbos = new DBOS(dbosConfig);
     this.dataSource = pgContainer.dataSource();
     this.impl = new EventsServiceImpl(dbos);
-    this.proxy = dbos.registerWorkflows(EventsService.class, impl);
+    this.proxy = dbos.registerProxy(EventsService.class, impl);
     dbos.launch();
   }
 

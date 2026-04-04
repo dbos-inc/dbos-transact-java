@@ -168,7 +168,7 @@ class NotificationServiceTest {
   @Test
   public void basic_send_recv() throws Exception {
 
-    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    NotService notService = dbos.registerProxy(NotService.class, new NotServiceImpl(dbos));
 
     dbos.launch();
 
@@ -204,7 +204,7 @@ class NotificationServiceTest {
   @Test
   public void multiple_send_recv() throws Exception {
 
-    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    NotService notService = dbos.registerProxy(NotService.class, new NotServiceImpl(dbos));
     dbos.launch();
 
     String wfid1 = "recvwf1";
@@ -236,7 +236,7 @@ class NotificationServiceTest {
   @Test
   public void send_oaoo() throws Exception {
     var simpl = new NotServiceImpl(dbos);
-    NotService notService = dbos.registerWorkflows(NotService.class, simpl);
+    NotService notService = dbos.registerProxy(NotService.class, simpl);
     dbos.launch();
 
     String wfid1 = "recvwfc";
@@ -254,7 +254,7 @@ class NotificationServiceTest {
   @Test
   public void notopic() throws Exception {
 
-    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    NotService notService = dbos.registerProxy(NotService.class, new NotServiceImpl(dbos));
     dbos.launch();
 
     String wfid1 = "recvwf1";
@@ -278,7 +278,7 @@ class NotificationServiceTest {
 
   @Test
   public void noWorkflowRecv() {
-    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    NotService notService = dbos.registerProxy(NotService.class, new NotServiceImpl(dbos));
     dbos.launch();
     var e1 =
         assertThrows(
@@ -299,7 +299,7 @@ class NotificationServiceTest {
   @Test
   public void sendNotexistingID() throws Exception {
 
-    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    NotService notService = dbos.registerProxy(NotService.class, new NotServiceImpl(dbos));
     dbos.launch();
 
     // just to open the latch
@@ -316,7 +316,7 @@ class NotificationServiceTest {
   @Test
   public void sendNull() throws Exception {
 
-    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    NotService notService = dbos.registerProxy(NotService.class, new NotServiceImpl(dbos));
     dbos.launch();
 
     String wfid1 = "recvwf1";
@@ -341,7 +341,7 @@ class NotificationServiceTest {
   @Test
   public void timeout() {
 
-    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    NotService notService = dbos.registerProxy(NotService.class, new NotServiceImpl(dbos));
     dbos.launch();
 
     String wfid1 = "recvwf1";
@@ -364,7 +364,7 @@ class NotificationServiceTest {
     String wfuuid = UUID.randomUUID().toString();
     String topic = "test_topic";
 
-    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    NotService notService = dbos.registerProxy(NotService.class, new NotServiceImpl(dbos));
     dbos.launch();
 
     ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -400,7 +400,7 @@ class NotificationServiceTest {
   @Test
   public void recvSleep() throws Exception {
 
-    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    NotService notService = dbos.registerProxy(NotService.class, new NotServiceImpl(dbos));
     dbos.launch();
 
     String wfid1 = "recvwf1";
@@ -440,7 +440,7 @@ class NotificationServiceTest {
   @Test
   public void sendOutsideWFTest() throws Exception {
 
-    NotService notService = dbos.registerWorkflows(NotService.class, new NotServiceImpl(dbos));
+    NotService notService = dbos.registerProxy(NotService.class, new NotServiceImpl(dbos));
     dbos.launch();
 
     String wfid1 = "recvwf1";
@@ -466,7 +466,7 @@ class NotificationServiceTest {
     // Sending with the same idempotency key twice delivers only one message.
 
     var impl = new NotServiceImpl(dbos);
-    NotService notService = dbos.registerWorkflows(NotService.class, impl);
+    NotService notService = dbos.registerProxy(NotService.class, impl);
     dbos.launch();
 
     var handle = dbos.startWorkflow(() -> notService.recvTwoMessages());
@@ -487,7 +487,7 @@ class NotificationServiceTest {
     // Different idempotency keys deliver separate messages.
 
     var impl = new NotServiceImpl(dbos);
-    NotService notService = dbos.registerWorkflows(NotService.class, impl);
+    NotService notService = dbos.registerProxy(NotService.class, impl);
     dbos.launch();
 
     var handle = dbos.startWorkflow(() -> notService.recvTwoMessages());
@@ -504,7 +504,7 @@ class NotificationServiceTest {
     // Send from a workflow with same idempotency key twice delivers only one message.
 
     var impl = new NotServiceImpl(dbos);
-    NotService notService = dbos.registerWorkflows(NotService.class, impl);
+    NotService notService = dbos.registerProxy(NotService.class, impl);
     dbos.launch();
 
     var handle = dbos.startWorkflow(() -> notService.recvTwoMessages());
@@ -523,7 +523,7 @@ class NotificationServiceTest {
     // Send from a step (without idempotency key).
 
     var impl = new NotServiceImpl(dbos);
-    NotService notService = dbos.registerWorkflows(NotService.class, impl);
+    NotService notService = dbos.registerProxy(NotService.class, impl);
     dbos.launch();
 
     var handle = dbos.startWorkflow(() -> notService.recvOneMessage());
@@ -537,7 +537,7 @@ class NotificationServiceTest {
     // Send from a step with same idempotency key twice delivers only one message.
 
     var impl = new NotServiceImpl(dbos);
-    NotService notService = dbos.registerWorkflows(NotService.class, impl);
+    NotService notService = dbos.registerProxy(NotService.class, impl);
     dbos.launch();
 
     var handle = dbos.startWorkflow(() -> notService.recvTwoMessages());

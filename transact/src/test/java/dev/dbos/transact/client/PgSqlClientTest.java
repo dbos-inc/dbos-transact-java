@@ -51,7 +51,7 @@ public class PgSqlClientTest {
     dataSource = pgContainer.dataSource();
 
     dbos.registerQueue(new Queue("testQueue"));
-    service = dbos.registerWorkflows(ClientService.class, new ClientServiceImpl(dbos));
+    service = dbos.registerProxy(ClientService.class, new ClientServiceImpl(dbos));
 
     dbos.launch();
   }

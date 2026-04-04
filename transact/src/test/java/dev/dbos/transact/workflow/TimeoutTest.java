@@ -45,7 +45,7 @@ public class TimeoutTest {
   public void async() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
@@ -67,7 +67,7 @@ public class TimeoutTest {
   public void asyncTimedOut() {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
@@ -124,7 +124,7 @@ public class TimeoutTest {
   public void queued() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     Queue simpleQ = new Queue("simpleQ");
     dbos.registerQueue(simpleQ);
@@ -151,7 +151,7 @@ public class TimeoutTest {
   public void queuedTimedOut() {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     Queue simpleQ = new Queue("simpleQ");
     dbos.registerQueue(simpleQ);
@@ -183,7 +183,7 @@ public class TimeoutTest {
   public void sync() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
@@ -210,7 +210,7 @@ public class TimeoutTest {
   public void syncTimeout() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
@@ -241,7 +241,7 @@ public class TimeoutTest {
   public void recovery() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
@@ -267,7 +267,7 @@ public class TimeoutTest {
   public void parentChild() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
@@ -297,7 +297,7 @@ public class TimeoutTest {
   public void parentChildTimeOut() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
@@ -328,7 +328,7 @@ public class TimeoutTest {
   public void parentTimeoutInheritedByChild() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    var simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    var simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();
@@ -372,7 +372,7 @@ public class TimeoutTest {
   @Test
   public void parentAsyncTimeoutInheritedByChild() throws Exception {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    var simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    var simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
 
     dbos.launch();

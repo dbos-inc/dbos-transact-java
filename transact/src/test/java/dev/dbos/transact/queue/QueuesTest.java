@@ -56,7 +56,7 @@ public class QueuesTest {
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     dbos.registerQueue(firstQ);
 
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
     dbos.launch();
 
     String id = "q1234";
@@ -75,7 +75,7 @@ public class QueuesTest {
     Queue firstQ = new Queue("firstQueue");
     dbos.registerQueue(firstQ);
 
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
     dbos.launch();
 
     // pause queue service for test validation
@@ -146,7 +146,7 @@ public class QueuesTest {
     dbos.registerQueue(firstQ);
 
     ServiceQImpl impl = new ServiceQImpl();
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, impl);
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, impl);
 
     dbos.launch();
 
@@ -179,7 +179,7 @@ public class QueuesTest {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     dbos.registerQueue(firstQ);
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
 
     dbos.launch();
 
@@ -222,7 +222,7 @@ public class QueuesTest {
 
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     dbos.registerQueue(firstQ);
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
 
     dbos.launch();
     var queueService = DBOSTestAccess.getQueueService(dbos);
@@ -278,8 +278,8 @@ public class QueuesTest {
     Queue firstQ = new Queue("firstQueue").withConcurrency(1).withWorkerConcurrency(1);
     Queue secondQ = new Queue("secondQueue").withConcurrency(1).withWorkerConcurrency(1);
     dbos.registerQueues(firstQ, secondQ);
-    ServiceQ serviceQ1 = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
-    ServiceI serviceI = dbos.registerWorkflows(ServiceI.class, new ServiceIImpl());
+    ServiceQ serviceQ1 = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    ServiceI serviceI = dbos.registerProxy(ServiceI.class, new ServiceIImpl());
 
     dbos.launch();
 
@@ -319,7 +319,7 @@ public class QueuesTest {
             .withWorkerConcurrency(1);
     dbos.registerQueue(limitQ);
 
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
 
     dbos.launch();
     var queueService = DBOSTestAccess.getQueueService(dbos);
@@ -560,7 +560,7 @@ public class QueuesTest {
     Queue firstQ = new Queue("firstQueue");
     dbos.registerQueue(firstQ);
 
-    ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
 
     dbos.launch();
 
@@ -581,7 +581,7 @@ public class QueuesTest {
     dbos.registerQueue(queue);
 
     ConcurrencyTestServiceImpl impl = new ConcurrencyTestServiceImpl();
-    ConcurrencyTestService service = dbos.registerWorkflows(ConcurrencyTestService.class, impl);
+    ConcurrencyTestService service = dbos.registerProxy(ConcurrencyTestService.class, impl);
 
     dbos.launch();
 
@@ -658,7 +658,7 @@ public class QueuesTest {
       Queue queueTwo = new Queue("queueTwo");
       dbos.registerQueues(queueOne, queueTwo);
 
-      ServiceQ serviceQ = dbos.registerWorkflows(ServiceQ.class, new ServiceQImpl());
+      ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
       dbos.launch();
 
       var h2 =

@@ -117,7 +117,7 @@ public class ChaosTest {
         var dbos = new DBOS(dbosConfig)) {
 
       var impl = new ChaosServiceImpl(dbos, dataSource);
-      var proxy = dbos.registerWorkflows(ChaosService.class, impl);
+      var proxy = dbos.registerProxy(ChaosService.class, impl);
       impl.setSelf(proxy);
 
       dbos.launch();

@@ -32,7 +32,7 @@ public class UnifiedProxyTest {
   public void optionsWithCall() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     Queue q = new Queue("simpleQ");
     dbos.registerQueue(q);
 
@@ -82,7 +82,7 @@ public class UnifiedProxyTest {
   public void syncParentWithQueuedChildren() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
 
     dbos.registerQueue(new Queue("childQ"));
     impl.setSelf(simpleService);

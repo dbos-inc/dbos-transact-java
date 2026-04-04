@@ -29,7 +29,7 @@ public class SyncWorkflowTest {
   public void workflowWithOneInput() {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     dbos.launch();
 
     String result = simpleService.workWithString("test-item");
@@ -46,7 +46,7 @@ public class SyncWorkflowTest {
   @Test
   public void workflowWithError() {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     dbos.launch();
 
     var e = assertThrows(Exception.class, () -> simpleService.workWithError());
@@ -64,7 +64,7 @@ public class SyncWorkflowTest {
   public void setWorkflowId() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     dbos.launch();
 
     String result = null;
@@ -92,7 +92,7 @@ public class SyncWorkflowTest {
   public void sameWorkflowId() {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     dbos.launch();
 
     String result = null;
@@ -131,7 +131,7 @@ public class SyncWorkflowTest {
   public void childWorkflowWithoutSet() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 
@@ -163,7 +163,7 @@ public class SyncWorkflowTest {
   public void multipleChildren() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 
@@ -214,7 +214,7 @@ public class SyncWorkflowTest {
   public void nestedChildren() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 

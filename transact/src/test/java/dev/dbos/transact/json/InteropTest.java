@@ -258,7 +258,7 @@ public class InteropTest {
   public void testInteropCanonical() throws Exception {
     Queue testQueue = new Queue("interopq");
     dbos.registerQueue(testQueue);
-    dbos.registerWorkflows(InteropService.class, new InteropServiceImpl(dbos));
+    dbos.registerProxy(InteropService.class, new InteropServiceImpl(dbos));
     dbos.launch();
 
     try (DBOSClient client = new DBOSClient(dataSource)) {
@@ -335,7 +335,7 @@ public class InteropTest {
   public void testInteropDirectInsert() throws Exception {
     Queue testQueue = new Queue("interopq");
     dbos.registerQueue(testQueue);
-    dbos.registerWorkflows(InteropService.class, new InteropServiceImpl(dbos));
+    dbos.registerProxy(InteropService.class, new InteropServiceImpl(dbos));
     dbos.launch();
 
     String workflowId = UUID.randomUUID().toString();
@@ -381,7 +381,7 @@ public class InteropTest {
   public void testInteropNamedArgs() throws Exception {
     Queue testQueue = new Queue("interopq");
     dbos.registerQueue(testQueue);
-    dbos.registerWorkflows(NamedArgsService.class, new NamedArgsServiceImpl());
+    dbos.registerProxy(NamedArgsService.class, new NamedArgsServiceImpl());
     dbos.launch();
 
     try (DBOSClient client = new DBOSClient(dataSource)) {

@@ -45,7 +45,7 @@ class DBOSExecutorTest {
 
   private ExecutingService register(DBOS dbos) {
     var impl = new ExecutingServiceImpl(dbos);
-    var service = dbos.registerWorkflows(ExecutingService.class, impl);
+    var service = dbos.registerProxy(ExecutingService.class, impl);
     impl.setSelf(service);
     return service;
   }
@@ -221,7 +221,7 @@ class DBOSExecutorTest {
   public void ReExecuteWithStepTwoOnly() throws Exception {
     try (var dbos = new DBOS(dbosConfig)) {
       var impl = new ExecutingServiceImpl(dbos);
-      var proxy = dbos.registerWorkflows(ExecutingService.class, impl);
+      var proxy = dbos.registerProxy(ExecutingService.class, impl);
       impl.setSelf(proxy);
 
       dbos.launch();

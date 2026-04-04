@@ -158,7 +158,7 @@ public class Issue218 {
   private Issue218Service register(DBOS dbos) {
     dbos.registerQueue(queue);
     var impl = new Issue218ServiceImpl(dbos, queue);
-    var proxy = dbos.registerWorkflows(Issue218Service.class, impl);
+    var proxy = dbos.registerProxy(Issue218Service.class, impl);
     impl.setProxy(proxy);
     return proxy;
   }

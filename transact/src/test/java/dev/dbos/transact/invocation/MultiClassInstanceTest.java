@@ -44,13 +44,13 @@ public class MultiClassInstanceTest {
     bimpl1 = new BearServiceImpl(dbos);
     dbos.registerQueue(new Queue("testQueue"));
 
-    hproxy = dbos.registerWorkflows(HawkService.class, himpl);
+    hproxy = dbos.registerProxy(HawkService.class, himpl);
     himpl.setProxy(hproxy);
 
-    bproxya = dbos.registerWorkflows(BearService.class, bimpla, "A");
+    bproxya = dbos.registerProxy(BearService.class, bimpla, "A");
     bimpla.setProxy(bproxya);
 
-    bproxy1 = dbos.registerWorkflows(BearService.class, bimpl1, "1");
+    bproxy1 = dbos.registerProxy(BearService.class, bimpl1, "1");
     bimpl1.setProxy(bproxy1);
 
     dbos.launch();

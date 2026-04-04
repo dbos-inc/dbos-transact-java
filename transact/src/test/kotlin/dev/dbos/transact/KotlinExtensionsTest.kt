@@ -33,7 +33,7 @@ class KotlinExtensionsTest {
     dbos = DBOS(dbosConfig)
 
     impl = KotlinTestServiceImpl(dbos)
-    proxy = dbos.registerWorkflows(KotlinTestService::class.java, impl)
+    proxy = dbos.registerProxy(KotlinTestService::class.java, impl)
     impl.setProxy(proxy)
 
     dbos.launch()

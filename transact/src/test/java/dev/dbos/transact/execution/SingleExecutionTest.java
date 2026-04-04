@@ -287,19 +287,19 @@ public class SingleExecutionTest {
     dataSource = pgContainer.dataSource();
 
     execImpl = new TryConcExec();
-    execIfc = dbos.registerWorkflows(TryConcExecIfc.class, execImpl);
+    execIfc = dbos.registerProxy(TryConcExecIfc.class, execImpl);
     execImpl.self = execIfc;
 
     catchImpl = new CatchPlainException1();
-    catchIfc = dbos.registerWorkflows(CatchPlainException1Ifc.class, catchImpl);
+    catchIfc = dbos.registerProxy(CatchPlainException1Ifc.class, catchImpl);
     catchImpl.self = catchIfc;
 
     finallyImpl = new UsingFinallyClause();
-    finallyIfc = dbos.registerWorkflows(UsingFinallyClauseIfc.class, finallyImpl);
+    finallyIfc = dbos.registerProxy(UsingFinallyClauseIfc.class, finallyImpl);
     finallyImpl.self = finallyIfc;
 
     concImpl = new TryConcExec2();
-    concIfc = dbos.registerWorkflows(TryConcExec2Ifc.class, concImpl);
+    concIfc = dbos.registerProxy(TryConcExec2Ifc.class, concImpl);
     concImpl.self = concIfc;
 
     dbos.launch();

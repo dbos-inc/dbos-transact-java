@@ -40,7 +40,7 @@ public class WorkflowMgmtTest {
     dbos = new DBOS(dbosConfig);
 
     impl = new MgmtServiceImpl(dbos);
-    proxy = dbos.registerWorkflows(MgmtService.class, impl);
+    proxy = dbos.registerProxy(MgmtService.class, impl);
 
     myqueue = new Queue("myqueue");
     dbos.registerQueue(myqueue);
