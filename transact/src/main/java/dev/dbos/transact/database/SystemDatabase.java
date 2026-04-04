@@ -577,7 +577,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
-    return dbRetry(() -> schedulesDAO.findSchedule(name));
+    return dbRetry(() -> schedulesDAO.getSchedule(name));
   }
 
   public List<WorkflowSchedule> listSchedules(
