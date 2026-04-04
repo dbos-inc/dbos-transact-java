@@ -60,7 +60,7 @@ public class MultiDbosInstanceTest {
     dbosA = new DBOS(dbosConfigA);
     dataSourceA = pgContainerA.dataSource();
     implA = new TestServiceImpl(dbosA);
-    proxyA = dbosA.registerWorkflows(TestService.class, implA);
+    proxyA = dbosA.registerProxy(TestService.class, implA);
     queueA = new Queue("queueA");
     dbosA.registerQueue(queueA);
     dbosA.launch();
@@ -69,7 +69,7 @@ public class MultiDbosInstanceTest {
     dbosB = new DBOS(dbosConfigB);
     dataSourceB = pgContainerB.dataSource();
     implB = new TestServiceImpl(dbosB);
-    proxyB = dbosB.registerWorkflows(TestService.class, implB);
+    proxyB = dbosB.registerProxy(TestService.class, implB);
     queueB = new Queue("queueB");
     dbosB.registerQueue(queueB);
     dbosB.launch();

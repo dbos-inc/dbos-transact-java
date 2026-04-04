@@ -108,7 +108,9 @@ class TestLifecycleService implements DBOSLifecycleListener {
     int total = 0;
     for (var wf : wfs) {
       Object[] args = {nInstances, nWfs};
-      var h = dbos.startWorkflow(wf, args, new StartWorkflowOptions(UUID.randomUUID().toString()));
+      var h =
+          dbos.startRegisteredWorkflow(
+              wf, args, new StartWorkflowOptions(UUID.randomUUID().toString()));
       total += (Integer) h.getResult();
     }
     return total;
@@ -128,9 +130,9 @@ public class LifecycleTest {
   }
 
   private void setup(DBOS dbos, LifecycleTestWorkflowsImpl impl, TestLifecycleService svc) {
-    dbos.registerWorkflows(LifecycleTestWorkflows.class, impl, "inst1");
+    dbos.registerProxy(LifecycleTestWorkflows.class, impl, "inst1");
     dbos.registerLifecycleListener(svc);
-    dbos.registerWorkflows(LifecycleTestWorkflows.class, new LifecycleTestWorkflowsImpl(), "instA");
+    dbos.registerProxy(LifecycleTestWorkflows.class, new LifecycleTestWorkflowsImpl(), "instA");
 
     assertEquals(0, svc.launchCount);
     dbos.launch();

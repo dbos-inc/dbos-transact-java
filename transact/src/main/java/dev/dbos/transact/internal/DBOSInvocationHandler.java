@@ -1,16 +1,19 @@
 package dev.dbos.transact.internal;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
-import dev.dbos.transact.workflow.WorkflowClassName;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.Objects;
 import java.util.function.Supplier;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,19 +26,23 @@ public class DBOSInvocationHandler implements InvocationHandler {
   protected final Supplier<DBOSExecutor> executorSupplier;
 
   public DBOSInvocationHandler(
-      Object target, String instanceName, Supplier<DBOSExecutor> executorSupplier) {
-    this.target = target;
-    this.instanceName = instanceName;
-    this.executorSupplier = executorSupplier;
+      @NonNull Object target,
+      @Nullable String instanceName,
+      @NonNull Supplier<DBOSExecutor> executorSupplier) {
+    this.target = Objects.requireNonNull(target, "target must not be null");
+    this.instanceName = Objects.requireNonNullElse(instanceName, "");
+    this.executorSupplier =
+        Objects.requireNonNull(executorSupplier, "executorSupplier must not be null");
   }
 
   @SuppressWarnings("unchecked")
   public static <T> T createProxy(
-      Class<T> interfaceClass,
-      Object implementation,
-      String instanceName,
-      Supplier<DBOSExecutor> executor) {
-    if (!interfaceClass.isInterface()) {
+      @NonNull Class<T> interfaceClass,
+      @NonNull Object implementation,
+      @Nullable String instanceName,
+      @NonNull Supplier<DBOSExecutor> executor) {
+
+    if (!Objects.requireNonNull(interfaceClass, "interfaceClass must not be null").isInterface()) {
       throw new IllegalArgumentException("interfaceClass must be an interface");
     }
 
@@ -91,25 +98,22 @@ public class DBOSInvocationHandler implements InvocationHandler {
 
   protected Object handleWorkflow(
       Method method, Object[] args, Workflow workflow, StartWorkflowHook hook) throws Exception {
-    WorkflowClassName classNameAnnotation =
-        target.getClass().getAnnotation(WorkflowClassName.class);
-    String className =
-        (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
-            ? classNameAnnotation.value()
-            : target.getClass().getName();
-    var workflowName = workflow.name().isEmpty() ? method.getName() : workflow.name();
+
     var executor = executorSupplier.get();
     if (executor == null) {
       throw new IllegalStateException("executorSupplier returned null");
     }
 
+    var className = DBOS.getWorkflowClassName(target);
+    var workflowName = DBOS.getWorkflowName(workflow, method);
+
     if (hook != null) {
-      var invocation = new Invocation(executor, className, instanceName, workflowName, args);
+      var invocation = new Invocation(executor, workflowName, className, instanceName, args);
       hook.invoke(invocation);
       return defaultReturn(method);
     }
 
-    var handle = executor.invokeWorkflow(className, instanceName, workflowName, args);
+    var handle = executor.invokeWorkflow(workflowName, className, instanceName, args);
 
     // This is not really a getResult call - it is part of invocation which will be written
     //  as its own step entry.

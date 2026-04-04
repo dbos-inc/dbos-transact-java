@@ -40,7 +40,7 @@ public class WorkflowMgmtTest {
     dbos = new DBOS(dbosConfig);
 
     impl = new MgmtServiceImpl(dbos);
-    proxy = dbos.registerWorkflows(MgmtService.class, impl);
+    proxy = dbos.registerProxy(MgmtService.class, impl);
 
     myqueue = new Queue("myqueue");
     dbos.registerQueue(myqueue);
@@ -78,7 +78,7 @@ public class WorkflowMgmtTest {
     impl.workLatch.countDown();
 
     assertEquals(1, impl.stepsExecuted());
-    assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().status());
+    assertEquals(WorkflowState.CANCELLED, h.getStatus().status());
 
     WorkflowHandle<Integer, ?> handle = dbos.resumeWorkflow(workflowId);
 
@@ -92,7 +92,7 @@ public class WorkflowMgmtTest {
     assertEquals(23, handle.getResult());
     assertEquals(3, impl.stepsExecuted());
     h = dbos.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.SUCCESS.name(), h.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, h.getStatus().status());
 
     logger.info("Test completed");
   }
@@ -157,7 +157,7 @@ public class WorkflowMgmtTest {
 
     assertEquals(1, impl.stepsExecuted());
     var h = dbos.retrieveWorkflow(workflowId);
-    assertEquals(WorkflowState.CANCELLED.name(), h.getStatus().status());
+    assertEquals(WorkflowState.CANCELLED, h.getStatus().status());
 
     var handle = dbos.resumeWorkflow(workflowId);
 
@@ -171,7 +171,7 @@ public class WorkflowMgmtTest {
     assertEquals(23, handle.getResult());
     assertEquals(3, impl.stepsExecuted());
 
-    assertEquals(WorkflowState.SUCCESS.name(), origHandle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, origHandle.getStatus().status());
   }
 
   @Test

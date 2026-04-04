@@ -99,7 +99,7 @@ public class PartitionedQueuesTest {
     dbos.registerQueue(queue);
 
     var impl = new ResumingTestServiceImpl();
-    var proxy = dbos.registerWorkflows(ResumingTestService.class, impl);
+    var proxy = dbos.registerProxy(ResumingTestService.class, impl);
     dbos.launch();
 
     var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("key");
@@ -114,14 +114,14 @@ public class PartitionedQueuesTest {
     // Verify that the blocked workflow starts and is PENDING while the regular workflows remain
     // ENQUEUED.
     impl.startLatch.await();
-    assertEquals(WorkflowState.PENDING.toString(), blockedHandle.getStatus().status());
-    assertEquals(WorkflowState.ENQUEUED.toString(), regHandle1.getStatus().status());
-    assertEquals(WorkflowState.ENQUEUED.toString(), regHandle2.getStatus().status());
+    assertEquals(WorkflowState.PENDING, blockedHandle.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, regHandle1.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, regHandle2.getStatus().status());
 
     // Resume a regular workflow. Verify it completes.
     dbos.resumeWorkflow(wfid);
     assertEquals(42, regHandle1.getResult());
-    assertEquals(WorkflowState.SUCCESS.toString(), regHandle1.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, regHandle1.getStatus().status());
 
     // Complete the blocked workflow. Verify the second regular workflow also completes.
     impl.blockingLatch.countDown();
@@ -138,7 +138,7 @@ public class PartitionedQueuesTest {
     dbos.registerQueues(queue, partitionlessQueue);
 
     var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
 
     var blockedPartitionKey = "blocked";
@@ -153,8 +153,8 @@ public class PartitionedQueuesTest {
     var blockedNormalHandle = dbos.startWorkflow(() -> proxy.normalWorkflow(), options);
 
     impl.waitingLatch.await();
-    assertEquals(WorkflowState.PENDING.toString(), blockedBlockedHandle.getStatus().status());
-    assertEquals(WorkflowState.ENQUEUED.toString(), blockedNormalHandle.getStatus().status());
+    assertEquals(WorkflowState.PENDING, blockedBlockedHandle.getStatus().status());
+    assertEquals(WorkflowState.ENQUEUED, blockedNormalHandle.getStatus().status());
     assertEquals(blockedPartitionKey, blockedBlockedHandle.getStatus().queuePartitionKey());
     assertEquals(blockedPartitionKey, blockedNormalHandle.getStatus().queuePartitionKey());
 
@@ -173,7 +173,7 @@ public class PartitionedQueuesTest {
       var className = "dev.dbos.transact.queue.PartitionsTestServiceImpl";
       var wfName = "normalWorkflow";
       var nqOptions =
-          new DBOSClient.EnqueueOptions(className, wfName, queue.name())
+          new DBOSClient.EnqueueOptions(wfName, className, queue.name())
               .withQueuePartitionKey(blockedPartitionKey);
       var clientHandle = client.enqueueWorkflow(nqOptions, null);
       assertEquals(clientHandle.workflowId(), clientHandle.getResult());
@@ -209,7 +209,7 @@ public class PartitionedQueuesTest {
   @Test
   public void testPartitionKeyWithoutQueue() throws Exception {
     var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
 
     var options = new StartWorkflowOptions().withQueuePartitionKey("partition-1");
@@ -223,7 +223,7 @@ public class PartitionedQueuesTest {
     var queue = new Queue("non-partitioned-queue");
     dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
 
     var options = new StartWorkflowOptions().withQueue(queue).withQueuePartitionKey("partition-1");
@@ -237,7 +237,7 @@ public class PartitionedQueuesTest {
     var queue = new Queue("partitioned-queue").withPartitionedEnabled(true);
     dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
 
     var options = new StartWorkflowOptions().withQueue(queue);
@@ -251,7 +251,7 @@ public class PartitionedQueuesTest {
     var queue = new Queue("partitioned-queue").withPartitionedEnabled(true);
     dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerWorkflows(PartitionsTestService.class, impl);
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
     dbos.launch();
 
     var options =

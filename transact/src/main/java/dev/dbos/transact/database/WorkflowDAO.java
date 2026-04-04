@@ -82,11 +82,11 @@ class WorkflowDAO {
             insertWorkflowStatus(
                 connection, initStatus, ownerXid, isRecoveryRequest || isDequeuedRequest);
 
-        if (!Objects.equals(resRow.name(), initStatus.name())) {
+        if (!Objects.equals(resRow.workflowName(), initStatus.workflowName())) {
           String msg =
               String.format(
                   "Workflow already exists with a different function name: %s, but the provided function name is: %s",
-                  resRow.name(), initStatus.name());
+                  resRow.workflowName(), initStatus.workflowName());
           throw new DBOSConflictingWorkflowException(initStatus.workflowId(), msg);
         } else if (!Objects.equals(resRow.className(), initStatus.className())) {
           String msg =
@@ -164,7 +164,7 @@ class WorkflowDAO {
   static record InsertWorkflowResult(
       int recoveryAttempts,
       String status,
-      String name,
+      String workflowName,
       String className,
       String instanceName,
       String queueName,
@@ -230,7 +230,7 @@ class WorkflowDAO {
       stmt.setString(2, status.status().toString());
       stmt.setString(3, status.inputs());
 
-      stmt.setString(4, status.name());
+      stmt.setString(4, status.workflowName());
       stmt.setString(5, status.className());
       stmt.setString(6, status.instanceName());
 
@@ -580,7 +580,7 @@ class WorkflowDAO {
     WorkflowStatus info =
         new WorkflowStatus(
             rs.getString("workflow_uuid"),
-            rs.getString("status"),
+            WorkflowState.valueOf(rs.getString("status")),
             rs.getString("name"),
             Objects.requireNonNullElse(rs.getString("class_name"), ""),
             Objects.requireNonNullElse(rs.getString("config_name"), ""),
@@ -967,7 +967,7 @@ class WorkflowDAO {
     try (PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, forkedWorkflowId);
       stmt.setString(2, WorkflowState.ENQUEUED.name());
-      stmt.setString(3, originalStatus.name());
+      stmt.setString(3, originalStatus.workflowName());
       stmt.setString(4, originalStatus.className());
       stmt.setString(5, originalStatus.instanceName());
       stmt.setString(6, applicationVersion);

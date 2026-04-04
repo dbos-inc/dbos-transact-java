@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -33,7 +34,7 @@ public class CustomSchemaTest {
     var dbosConfig = pgContainer.dbosConfig().withDatabaseSchema(schema);
     dbos = new DBOS(dbosConfig);
     var impl = new HawkServiceImpl(dbos);
-    proxy = dbos.registerWorkflows(HawkService.class, impl);
+    proxy = dbos.registerProxy(HawkService.class, impl);
     impl.setProxy(proxy);
 
     dbos.launch();
@@ -66,8 +67,8 @@ public class CustomSchemaTest {
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertDoesNotThrow(() -> UUID.fromString((String) row.workflowId()));
-    assertEquals("SUCCESS", row.status());
-    assertEquals("simpleWorkflow", row.name());
+    assertEquals(WorkflowState.SUCCESS.name(), row.status());
+    assertEquals("simpleWorkflow", row.workflowName());
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", row.className());
     assertNotNull(row.output());
     assertNull(row.error());

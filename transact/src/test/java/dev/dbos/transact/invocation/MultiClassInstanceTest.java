@@ -44,13 +44,13 @@ public class MultiClassInstanceTest {
     bimpl1 = new BearServiceImpl(dbos);
     dbos.registerQueue(new Queue("testQueue"));
 
-    hproxy = dbos.registerWorkflows(HawkService.class, himpl);
+    hproxy = dbos.registerProxy(HawkService.class, himpl);
     himpl.setProxy(hproxy);
 
-    bproxya = dbos.registerWorkflows(BearService.class, bimpla, "A");
+    bproxya = dbos.registerProxy(BearService.class, bimpla, "A");
     bimpla.setProxy(bproxya);
 
-    bproxy1 = dbos.registerWorkflows(BearService.class, bimpl1, "1");
+    bproxy1 = dbos.registerProxy(BearService.class, bimpl1, "1");
     bimpl1.setProxy(bproxy1);
 
     dbos.launch();
@@ -103,28 +103,28 @@ public class MultiClassInstanceTest {
     assertEquals(1, browsa.size());
     var browa = browsa.get(0);
     assertEquals(bhandlea.workflowId(), browa.workflowId());
-    assertEquals("stepWorkflow", browa.name());
+    assertEquals("stepWorkflow", browa.workflowName());
     assertEquals("A", browa.instanceName());
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", browa.className());
-    assertEquals("SUCCESS", browa.status());
+    assertEquals(WorkflowState.SUCCESS, browa.status());
 
     var brows1 = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowId(bhandle1.workflowId()));
     assertEquals(1, brows1.size());
     var brow1 = brows1.get(0);
     assertEquals(bhandle1.workflowId(), brow1.workflowId());
-    assertEquals("stepWorkflow", brow1.name());
+    assertEquals("stepWorkflow", brow1.workflowName());
     assertEquals("1", brow1.instanceName());
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", brow1.className());
-    assertEquals("SUCCESS", brow1.status());
+    assertEquals(WorkflowState.SUCCESS, brow1.status());
 
     var hrows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowId(hhandle.workflowId()));
     assertEquals(1, hrows.size());
     var hrow = hrows.get(0);
     assertEquals(hhandle.workflowId(), hrow.workflowId());
-    assertEquals("stepWorkflow", hrow.name());
+    assertEquals("stepWorkflow", hrow.workflowName());
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", hrow.className());
     assertEquals("", hrow.instanceName());
-    assertEquals("SUCCESS", hrow.status());
+    assertEquals(WorkflowState.SUCCESS, hrow.status());
 
     // All 3 w/ the same WF name
     var allrows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("stepWorkflow"));
@@ -153,7 +153,7 @@ public class MultiClassInstanceTest {
     try (var client = pgContainer.dbosClient()) {
       var options =
           new dev.dbos.transact.DBOSClient.EnqueueOptions(
-                  "dev.dbos.transact.invocation.BearServiceImpl", "stepWorkflow", "testQueue")
+                  "stepWorkflow", "dev.dbos.transact.invocation.BearServiceImpl", "testQueue")
               .withInstanceName("A");
       var handle = client.<Instant, RuntimeException>enqueueWorkflow(options, new Object[] {});
 
@@ -170,14 +170,14 @@ public class MultiClassInstanceTest {
 
       var stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(
-          "SUCCESS",
+          WorkflowState.SUCCESS,
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       DBUtils.setWorkflowState(dataSource, handle.workflowId(), WorkflowState.PENDING.name());
 
       stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(
-          "PENDING",
+          WorkflowState.PENDING,
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
@@ -185,7 +185,7 @@ public class MultiClassInstanceTest {
       eh.getResult();
       stat = client.getWorkflowStatus(handle.workflowId());
       assertEquals(
-          "SUCCESS",
+          WorkflowState.SUCCESS,
           stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
       assertEquals(0, bimpl1.nWfCalls);
       assertEquals(2, bimpla.nWfCalls);

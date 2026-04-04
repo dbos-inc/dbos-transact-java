@@ -349,16 +349,17 @@ public class DBOSExecutor implements AutoCloseable {
     return this.appId;
   }
 
-  public Collection<RegisteredWorkflow> getWorkflows() {
+  public Collection<RegisteredWorkflow> getRegisteredWorkflows() {
     return this.workflowMap.values();
   }
 
-  public Collection<RegisteredWorkflowInstance> getInstances() {
+  public Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
     return this.instanceMap.values();
   }
 
-  public Optional<RegisteredWorkflow> getWorkflow(String workflowName, String className) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, workflowName);
+  public Optional<RegisteredWorkflow> getRegisteredWorkflow(
+      String workflowName, String className, String instanceName) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     return Optional.ofNullable(this.workflowMap.get(fqName));
   }
 
@@ -525,10 +526,7 @@ public class DBOSExecutor implements AutoCloseable {
           opts.intervalSeconds(),
           opts.backOffRate(),
           childWfId,
-          () -> {
-            var res = stepfunc.execute();
-            return res;
-          });
+          stepfunc::execute);
     } catch (Exception t) {
       throw (E) t;
     }
@@ -859,20 +857,12 @@ public class DBOSExecutor implements AutoCloseable {
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.listWorkflows(input);
-        },
-        "DBOS.listWorkflows",
-        null);
+        () -> systemDatabase.listWorkflows(input), "DBOS.listWorkflows", null);
   }
 
   public List<StepInfo> listWorkflowSteps(String workflowId) {
     return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.listWorkflowSteps(workflowId);
-        },
-        "DBOS.listWorkflowSteps",
-        null);
+        () -> systemDatabase.listWorkflowSteps(workflowId), "DBOS.listWorkflowSteps", null);
   }
 
   public List<VersionInfo> listApplicationVersions() {
@@ -931,7 +921,7 @@ public class DBOSExecutor implements AutoCloseable {
       @Nullable String queueName) {
 
     validateQueue(queueName);
-    validateWorkflow(className, workflowName);
+    validateWorkflow(workflowName, className);
 
     DBOSExecutor.createSchedule(
         scheduleName,
@@ -955,19 +945,13 @@ public class DBOSExecutor implements AutoCloseable {
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
     return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.getSchedule(name);
-        },
-        "DBOS.getSchedule",
-        null);
+        () -> systemDatabase.getSchedule(name), "DBOS.getSchedule", null);
   }
 
   public List<WorkflowSchedule> listSchedules(
       List<ScheduleStatus> statuses, List<String> workflowNames, List<String> namePrefixes) {
     return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.listSchedules(statuses, workflowNames, namePrefixes);
-        },
+        () -> systemDatabase.listSchedules(statuses, workflowNames, namePrefixes),
         "DBOS.listSchedules",
         null);
   }
@@ -1032,18 +1016,18 @@ public class DBOSExecutor implements AutoCloseable {
 
     for (WorkflowSchedule s : schedules) {
       validateQueue(s.queueName());
-      validateWorkflow(s.className(), s.workflowName());
+      validateWorkflow(s.workflowName(), s.className());
     }
 
     DBOSExecutor.applySchedules(schedules, systemDatabase);
   }
 
-  private void validateWorkflow(String className, String workflowName) {
-    validateWorkflow(className, "", workflowName);
+  private void validateWorkflow(String workflowName, String className) {
+    validateWorkflow(workflowName, className, "");
   }
 
-  private void validateWorkflow(String className, String instanceName, String workflowName) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
+  private void validateWorkflow(String workflowName, String className, String instanceName) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     if (!workflowMap.containsKey(fqName)) {
       throw new IllegalStateException("Workflow function %s is not registered".formatted(fqName));
     }
@@ -1201,11 +1185,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public WorkflowStatus getWorkflowStatus(String workflowId) {
     return this.callFunctionAsStep(
-        () -> {
-          return systemDatabase.getWorkflowStatus(workflowId);
-        },
-        "DBOS.getWorkflowStatus",
-        null);
+        () -> systemDatabase.getWorkflowStatus(workflowId), "DBOS.getWorkflowStatus", null);
   }
 
   public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
@@ -1215,11 +1195,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public <T, E extends Exception> T getResult(String workflowId) throws E {
     return this.callFunctionAsStep(
-        () -> {
-          return awaitWorkflowResult(workflowId);
-        },
-        "DBOS.getResult",
-        workflowId);
+        () -> awaitWorkflowResult(workflowId), "DBOS.getResult", workflowId);
   }
 
   public boolean patch(String patchName) {
@@ -1297,20 +1273,6 @@ public class DBOSExecutor implements AutoCloseable {
       return new WorkflowInfo(workflowId, functionId);
     }
     return null;
-  }
-
-  private RegisteredWorkflow getWorkflow(Invocation inv) {
-    return getWorkflow(inv.className(), inv.instanceName(), inv.workflowName());
-  }
-
-  private RegisteredWorkflow getWorkflow(
-      String className, String instanceName, String workflowName) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
-    var workflow = workflowMap.get(fqName);
-    if (workflow == null) {
-      throw new IllegalStateException("%s workflow not registered".formatted(fqName));
-    }
-    return workflow;
   }
 
   public record ExecutionOptions(
@@ -1430,18 +1392,18 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
+  public <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
       RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
     var execOptions =
         new ExecutionOptions(
-            options.workflowId(),
-            options.timeout(),
-            options.deadline(),
-            options.queueName(),
-            options.deduplicationId(),
-            options.priority(),
-            options.queuePartitionKey(),
-            options.appVersion(),
+            options != null ? options.workflowId() : null,
+            options != null ? options.timeout() : null,
+            options != null ? options.deadline() : null,
+            options != null ? options.queueName() : null,
+            options != null ? options.deduplicationId() : null,
+            options != null ? options.priority() : null,
+            options != null ? options.queuePartitionKey() : null,
+            options != null ? options.appVersion() : null,
             false,
             false,
             null);
@@ -1458,15 +1420,20 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalStateException(
           "The @Workflow method must be called on the DBOS instance passed to the startWorkflow lambda");
     }
-    var workflow = getWorkflow(invocation);
+    var workflow =
+        getRegisteredWorkflow(
+                invocation.workflowName(), invocation.className(), invocation.instanceName())
+            .orElse(null);
 
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
     var childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
-    var nextTimeout = options.timeout() != null ? options.timeout() : ctx.getNextTimeout();
-    var nextDeadline = options.deadline() != null ? options.deadline() : ctx.getNextDeadline();
+    var nextTimeout =
+        options != null && options.timeout() != null ? options.timeout() : ctx.getNextTimeout();
+    var nextDeadline =
+        options != null && options.deadline() != null ? options.deadline() : ctx.getNextDeadline();
 
     // default to context timeout & deadline if nextTimeout is null or Inherit
     Duration timeout = ctx.getTimeout();
@@ -1485,7 +1452,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     var workflowId =
         Objects.requireNonNullElseGet(
-            options.workflowId(),
+            options != null ? options.workflowId() : null,
             () ->
                 Objects.requireNonNullElseGet(
                     ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
@@ -1495,11 +1462,11 @@ public class DBOSExecutor implements AutoCloseable {
             workflowId,
             Timeout.of(timeout),
             deadline,
-            options.queueName(),
-            options.deduplicationId(),
-            options.priority(),
-            options.queuePartitionKey(),
-            options.appVersion(),
+            options != null ? options.queueName() : null,
+            options != null ? options.deduplicationId() : null,
+            options != null ? options.priority() : null,
+            options != null ? options.queuePartitionKey() : null,
+            options != null ? options.appVersion() : null,
             false,
             false,
             null);
@@ -1507,12 +1474,12 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
-      String className, String instanceName, String workflowName, Object[] args) {
+      String workflowName, String className, String instanceName, Object[] args) {
 
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     logger.debug("invokeWorkflow {}({})", fqName, args);
 
-    var workflow = getWorkflow(className, instanceName, workflowName);
+    var workflow = getRegisteredWorkflow(workflowName, className, instanceName).orElseThrow();
 
     var ctx = DBOSContextHolder.get();
 
@@ -1582,7 +1549,7 @@ public class DBOSExecutor implements AutoCloseable {
     Object[] inputs = status.input();
     var wfName =
         RegisteredWorkflow.fullyQualifiedName(
-            status.className(), status.instanceName(), status.name());
+            status.workflowName(), status.className(), status.instanceName());
     RegisteredWorkflow workflow = workflowMap.get(wfName);
 
     if (workflow == null) {
@@ -1650,7 +1617,7 @@ public class DBOSExecutor implements AutoCloseable {
 
       var workflowId =
           enqueueWorkflow(
-              workflow.name(),
+              workflow.workflowName(),
               workflow.className(),
               workflow.instanceName(),
               maxRetries,
@@ -1674,7 +1641,7 @@ public class DBOSExecutor implements AutoCloseable {
     WorkflowInitResult initResult =
         preInvokeWorkflow(
             systemDatabase,
-            workflow.name(),
+            workflow.workflowName(),
             workflow.className(),
             workflow.instanceName(),
             maxRetries,
@@ -1795,7 +1762,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public static String enqueueWorkflow(
-      String name,
+      String workflowName,
       String className,
       String instanceName,
       Integer maxRetries,
@@ -1810,7 +1777,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     logger.debug(
         "enqueueWorkflow {}({}) {}",
-        RegisteredWorkflow.fullyQualifiedName(className, instanceName, name),
+        RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName),
         args,
         options);
 
@@ -1833,7 +1800,7 @@ public class DBOSExecutor implements AutoCloseable {
     try {
       preInvokeWorkflow(
           systemDatabase,
-          name,
+          workflowName,
           className,
           instanceName,
           maxRetries,

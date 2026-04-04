@@ -1,13 +1,18 @@
 package dev.dbos.transact.internal;
 
+import dev.dbos.transact.DBOS;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
 import dev.dbos.transact.execution.SchedulerService;
-import dev.dbos.transact.workflow.SerializationStrategy;
+import dev.dbos.transact.workflow.Workflow;
 
 import java.lang.reflect.Method;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 
 public class WorkflowRegistry {
   private final ConcurrentHashMap<String, RegisteredWorkflowInstance> wfInstRegistry =
@@ -15,25 +20,26 @@ public class WorkflowRegistry {
   private final ConcurrentHashMap<String, RegisteredWorkflow> wfRegistry =
       new ConcurrentHashMap<>();
 
-  public void register(Class<?> ifc, Object target, String className, String instanceName) {
+  public void registerInstance(@Nullable String instanceName, @NonNull Object target) {
+    instanceName = Objects.requireNonNullElse(instanceName, "");
+    var className = DBOS.getWorkflowClassName(target);
     var fqName = RegisteredWorkflowInstance.fullyQualifiedInstName(className, instanceName);
-    var regClass = new RegisteredWorkflowInstance(className, instanceName, ifc, target);
+    var regClass = new RegisteredWorkflowInstance(className, instanceName, target);
     var previous = wfInstRegistry.putIfAbsent(fqName, regClass);
     if (previous != null) {
       throw new IllegalStateException("Workflow class already registered with name: " + fqName);
     }
   }
 
-  public void register(
-      String className,
-      String workflowName,
-      Object target,
-      String instanceName,
-      Method method,
-      int maxRecoveryAttempts,
-      SerializationStrategy serializationStrategy) {
+  public void registerWorkflow(
+      @NonNull Workflow wfTag,
+      @NonNull Object target,
+      @NonNull Method method,
+      @Nullable String instanceName) {
 
-    var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
+    var workflowName = DBOS.getWorkflowName(wfTag, method);
+    var className = DBOS.getWorkflowClassName(target);
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     var regWorkflow =
         new RegisteredWorkflow(
             workflowName,
@@ -41,19 +47,14 @@ public class WorkflowRegistry {
             instanceName,
             target,
             method,
-            maxRecoveryAttempts,
-            serializationStrategy);
+            wfTag.maxRecoveryAttempts(),
+            wfTag.serializationStrategy());
     SchedulerService.validateAnnotatedWorkflowSchedule(regWorkflow);
 
     var previous = wfRegistry.putIfAbsent(fqName, regWorkflow);
     if (previous != null) {
       throw new IllegalStateException("Workflow already registered with name: " + fqName);
     }
-  }
-
-  public void clear() {
-    wfInstRegistry.clear();
-    wfRegistry.clear();
   }
 
   public Map<String, RegisteredWorkflow> getWorkflowSnapshot() {

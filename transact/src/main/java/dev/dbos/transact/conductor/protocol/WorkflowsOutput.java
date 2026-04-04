@@ -43,8 +43,8 @@ public class WorkflowsOutput {
     String[] authenticatedRoles = status.authenticatedRoles();
 
     this.WorkflowUUID = status.workflowId();
-    this.Status = status.status();
-    this.WorkflowName = status.name();
+    this.Status = status.status().name();
+    this.WorkflowName = status.workflowName();
     this.WorkflowClassName = status.className();
     this.WorkflowConfigName = status.instanceName();
     this.AuthenticatedUser = status.authenticatedUser();

@@ -118,7 +118,7 @@ public class ConfigEnvTest {
     String versionOne;
     {
       var d = new DBOS(pgContainer.dbosConfig());
-      d.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
+      d.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
       d.launch();
       versionOne = DBOSTestAccess.getDbosExecutor(d).appVersion();
       assertTrue(versionOne.length() > 0);
@@ -128,7 +128,7 @@ public class ConfigEnvTest {
 
     {
       var d = new DBOS(pgContainer.dbosConfig());
-      d.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
+      d.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
       d.launch();
       assertEquals(versionOne, DBOSTestAccess.getDbosExecutor(d).appVersion());
       d.shutdown();
@@ -137,7 +137,7 @@ public class ConfigEnvTest {
     String versionTwo;
     {
       var d = new DBOS(pgContainer.dbosConfig());
-      d.registerWorkflows(AltVersionService.class, new AltVersionServiceImpl(d));
+      d.registerProxy(AltVersionService.class, new AltVersionServiceImpl(d));
       d.launch();
       versionTwo = DBOSTestAccess.getDbosExecutor(d).appVersion();
       assertNotEquals(versionOne, versionTwo);
@@ -149,7 +149,7 @@ public class ConfigEnvTest {
         .execute(
             () -> {
               var d = new DBOS(pgContainer.dbosConfig());
-              d.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
+              d.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
               d.launch();
               assertEquals(versionThree, DBOSTestAccess.getDbosExecutor(d).appVersion());
               d.shutdown();
@@ -161,7 +161,7 @@ public class ConfigEnvTest {
       var d =
           new DBOS(
               pgContainer.dbosConfig().withAppVersion(versionFour).withExecutorId(testExecutorId));
-      var proxy = d.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
+      var proxy = d.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
       d.launch();
       assertEquals(versionFour, DBOSTestAccess.getDbosExecutor(d).appVersion());
       assertEquals(testExecutorId, DBOSTestAccess.getDbosExecutor(d).executorId());
@@ -174,7 +174,7 @@ public class ConfigEnvTest {
 
     var versionFive = UUID.randomUUID().toString();
     var d = new DBOS(pgContainer.dbosConfig().withAppVersion(versionFive));
-    d.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
+    d.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(d));
     d.launch();
 
     try {
@@ -255,8 +255,7 @@ public class ConfigEnvTest {
 
           try {
             var proxy =
-                dbos.registerWorkflows(
-                    ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
+                dbos.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
             dbos.launch();
 
             var handle = dbos.startWorkflow(() -> proxy.workflow());

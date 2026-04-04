@@ -50,7 +50,7 @@ class MgmtServiceImpl implements MgmtService {
 
     dbos.setEvent("key", "value");
     dbos.listWorkflows(new ListWorkflowsInput());
-    dbos.recv(null, Duration.ofSeconds(1));
+    dbos.recv(null, Duration.ofSeconds(1)).orElse(null);
   }
 
   @Override

@@ -52,7 +52,7 @@ public class MetricsTest {
   public void testGetMetrics() throws Exception {
     var dbosConfig = pgContainer.dbosConfig();
     try (var dbos = new DBOS(dbosConfig)) {
-      var proxy = dbos.registerWorkflows(MetricsService.class, new MetricsServiceImpl(dbos));
+      var proxy = dbos.registerProxy(MetricsService.class, new MetricsServiceImpl(dbos));
       dbos.launch();
 
       // create some metrics data before the start time

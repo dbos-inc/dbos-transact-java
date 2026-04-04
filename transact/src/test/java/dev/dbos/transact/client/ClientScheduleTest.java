@@ -35,7 +35,7 @@ public class ClientScheduleTest {
     dataSource = pgContainer.dataSource();
 
     serviceImpl = new ClientScheduleServiceImpl();
-    dbos.registerWorkflows(ClientScheduleService.class, serviceImpl);
+    dbos.registerProxy(ClientScheduleService.class, serviceImpl);
 
     dbos.launch();
   }

@@ -73,9 +73,15 @@ interface ServiceB {
   String step4(String input);
 
   String step5(String input);
+
+  void noopWorkflow();
 }
 
 class ServiceBImpl implements ServiceB {
+
+  @Override
+  @Workflow
+  public void noopWorkflow() {}
 
   @Override
   @Step(name = "step1")
@@ -327,8 +333,8 @@ public class StepsTest {
 
   @Test
   public void workflowWithStepsSync() throws Exception {
-    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
-    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
+    ServiceB serviceB = dbos.registerProxy(ServiceB.class, new ServiceBImpl());
+    ServiceA serviceA = dbos.registerProxy(ServiceA.class, new ServiceAImpl(serviceB));
     dbos.launch();
 
     String wid = "sync123";
@@ -360,8 +366,8 @@ public class StepsTest {
 
   @Test
   public void workflowWithStepsSyncError() throws Exception {
-    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
-    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
+    ServiceB serviceB = dbos.registerProxy(ServiceB.class, new ServiceBImpl());
+    ServiceA serviceA = dbos.registerProxy(ServiceA.class, new ServiceAImpl(serviceB));
     dbos.launch();
 
     var before = System.currentTimeMillis();
@@ -396,7 +402,7 @@ public class StepsTest {
   @Test
   public void workflowWithInlineSteps() throws Exception {
     ServiceWFAndStep service =
-        dbos.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl(dbos));
+        dbos.registerProxy(ServiceWFAndStep.class, new ServiceWFAndStepImpl(dbos));
     dbos.launch();
 
     var before = System.currentTimeMillis();
@@ -428,8 +434,8 @@ public class StepsTest {
 
   @Test
   public void asyncworkflowWithSteps() throws Exception {
-    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
-    ServiceA serviceA = dbos.registerWorkflows(ServiceA.class, new ServiceAImpl(serviceB));
+    ServiceB serviceB = dbos.registerProxy(ServiceB.class, new ServiceBImpl());
+    ServiceA serviceA = dbos.registerProxy(ServiceA.class, new ServiceAImpl(serviceB));
     dbos.launch();
 
     var before = System.currentTimeMillis();
@@ -463,7 +469,7 @@ public class StepsTest {
   @Test
   public void sameInterfaceWorkflowWithSteps() throws Exception {
     ServiceWFAndStepImpl impl = new ServiceWFAndStepImpl(dbos);
-    ServiceWFAndStep service = dbos.registerWorkflows(ServiceWFAndStep.class, impl);
+    ServiceWFAndStep service = dbos.registerProxy(ServiceWFAndStep.class, impl);
     dbos.launch();
 
     impl.setSelf(service);
@@ -491,7 +497,7 @@ public class StepsTest {
 
   @Test
   public void stepOutsideWorkflow() throws Exception {
-    ServiceB serviceB = dbos.registerWorkflows(ServiceB.class, new ServiceBImpl());
+    ServiceB serviceB = dbos.registerProxy(ServiceB.class, new ServiceBImpl());
     dbos.launch();
 
     String result = serviceB.step2("abcde");
@@ -507,7 +513,7 @@ public class StepsTest {
   @Test
   public void stepRetryLogic() throws Exception {
     ServiceWFAndStepImpl impl = new ServiceWFAndStepImpl(dbos);
-    ServiceWFAndStep service = dbos.registerWorkflows(ServiceWFAndStep.class, impl);
+    ServiceWFAndStep service = dbos.registerProxy(ServiceWFAndStep.class, impl);
     dbos.launch();
 
     impl.setSelf(service);
@@ -548,7 +554,7 @@ public class StepsTest {
   @Test
   public void inlineStepRetryLogic() throws Exception {
     ServiceWFAndStep service =
-        dbos.registerWorkflows(ServiceWFAndStep.class, new ServiceWFAndStepImpl(dbos));
+        dbos.registerProxy(ServiceWFAndStep.class, new ServiceWFAndStepImpl(dbos));
     dbos.launch();
 
     String workflowId = "wf-inlinestepretrytest-1234";

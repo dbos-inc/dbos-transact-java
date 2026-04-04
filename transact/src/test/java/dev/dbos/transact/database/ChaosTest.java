@@ -68,7 +68,7 @@ class ChaosServiceImpl implements ChaosService {
   @Workflow
   public String wfPart1() {
     // causeChaos(dataSource);
-    var r = (String) dbos.recv("topic", Duration.ofSeconds(5));
+    var r = dbos.<String>recv("topic", Duration.ofSeconds(5)).orElseThrow();
     // causeChaos(dataSource);
     dbos.setEvent("key", "v1");
     // causeChaos(dataSource);
@@ -81,7 +81,7 @@ class ChaosServiceImpl implements ChaosService {
     // causeChaos(dataSource);
     dbos.send(id1, "hello1", "topic");
     // causeChaos(dataSource);
-    var v1 = (String) dbos.getEvent(id1, "key", Duration.ofSeconds(5));
+    var v1 = dbos.<String>getEvent(id1, "key", Duration.ofSeconds(5)).orElseThrow();
     // causeChaos(dataSource);
     return "Part2" + v1;
   }
@@ -117,7 +117,7 @@ public class ChaosTest {
         var dbos = new DBOS(dbosConfig)) {
 
       var impl = new ChaosServiceImpl(dbos, dataSource);
-      var proxy = dbos.registerWorkflows(ChaosService.class, impl);
+      var proxy = dbos.registerProxy(ChaosService.class, impl);
       impl.setSelf(proxy);
 
       dbos.launch();

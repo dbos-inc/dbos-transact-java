@@ -54,7 +54,7 @@ public class ScaleTest {
   @EnabledIfEnvironmentVariable(named = "SCALE_TEST", matches = "^true$")
   public void scaleTest() throws Exception {
     try (var dbos = new DBOS(dbosConfig)) {
-      var service = dbos.registerWorkflows(ScaleService.class, new ScaleServiceImpl());
+      var service = dbos.registerProxy(ScaleService.class, new ScaleServiceImpl());
       dbos.launch();
 
       var usingThreadPoolExecutor = DBOSTestAccess.getDbosExecutor(dbos).usingThreadPoolExecutor();

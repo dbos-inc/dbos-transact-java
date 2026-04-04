@@ -41,7 +41,7 @@ class WorkflowScheduleTest {
   private ScheduledWorkflowImpl registerAndLaunch() {
     dbos = new DBOS(dbosConfig);
     var impl = new ScheduledWorkflowImpl();
-    dbos.registerWorkflows(ScheduledWorkflowService.class, impl);
+    dbos.registerProxy(ScheduledWorkflowService.class, impl);
     dbos.launch();
     return impl;
   }
@@ -80,7 +80,7 @@ class WorkflowScheduleTest {
   public void createScheduleWithAllFields() {
     dbos = new DBOS(dbosConfig);
     dbos.registerQueue(new dev.dbos.transact.workflow.Queue("sched-q").withConcurrency(1));
-    dbos.registerWorkflows(ScheduledWorkflowService.class, new ScheduledWorkflowImpl());
+    dbos.registerProxy(ScheduledWorkflowService.class, new ScheduledWorkflowImpl());
     dbos.launch();
 
     dbos.createSchedule(
