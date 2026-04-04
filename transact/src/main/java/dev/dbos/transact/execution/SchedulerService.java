@@ -152,7 +152,8 @@ public class SchedulerService implements AutoCloseable {
       } else if (!scheduleRunning) {
         // if the schedule is active but we don't yet have a scheduled future for it, schedule it
         // now
-        var optRegWf = dbosExecutor.findWorkflow(schedule.workflowName(), schedule.className(), "");
+        var optRegWf =
+            dbosExecutor.getRegisteredWorkflow(schedule.workflowName(), schedule.className(), "");
         if (optRegWf.isEmpty()) {
           logger.error(
               "Workflow schedule {} has missing workflow function {}",
@@ -172,7 +173,7 @@ public class SchedulerService implements AutoCloseable {
 
         final String queueName =
             Objects.requireNonNullElse(schedule.queueName(), Constants.DBOS_INTERNAL_QUEUE);
-        if (dbosExecutor.findQueue(queueName).isEmpty()) {
+        if (dbosExecutor.getQueue(queueName).isEmpty()) {
           logger.error(
               "Workflow schedule {} has invalid queue {}", schedule.scheduleName(), queueName);
           continue;
@@ -371,7 +372,7 @@ public class SchedulerService implements AutoCloseable {
       DBOSExecutor dbosExecutor, AnnotatedScheduledWorkflow swf) {
     if (!swf.ignoreMissed()) {
       var state =
-          dbosExecutor.findExternalState(
+          dbosExecutor.getExternalState(
               "DBOS.SchedulerService", swf.workflow().fullyQualifiedName(), "lastTime");
       if (state.isPresent()) {
         return ZonedDateTime.parse(state.get().value());
@@ -400,7 +401,7 @@ public class SchedulerService implements AutoCloseable {
   }
 
   private List<AnnotatedScheduledWorkflow> getAnnotatedWorkflowSchedules() {
-    return dbosExecutor.getWorkflows().stream()
+    return dbosExecutor.getRegisteredWorkflows().stream()
         .map(
             wf -> {
               var method = wf.workflowMethod();
@@ -418,7 +419,7 @@ public class SchedulerService implements AutoCloseable {
 
               var queueName =
                   schedTag.queue().isEmpty() ? Constants.DBOS_INTERNAL_QUEUE : schedTag.queue();
-              if (dbosExecutor.findQueue(queueName).isEmpty()) {
+              if (dbosExecutor.getQueue(queueName).isEmpty()) {
                 logger.error(
                     "Annotated workflow schedule {} refers to undefined queue {}",
                     wf.fullyQualifiedName(),

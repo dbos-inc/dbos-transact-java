@@ -104,7 +104,7 @@ public class ConfigTest {
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
       List<Class<?>> workflowClasses =
-          dbosExecutor.getWorkflows().stream()
+          dbosExecutor.getRegisteredWorkflows().stream()
               .map(r -> r.target().getClass())
               .collect(Collectors.toList());
       var version = assertDoesNotThrow(() -> AppVersionComputer.computeAppVersion(workflowClasses));

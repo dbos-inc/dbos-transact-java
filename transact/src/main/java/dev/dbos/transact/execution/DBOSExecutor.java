@@ -349,15 +349,15 @@ public class DBOSExecutor implements AutoCloseable {
     return this.appId;
   }
 
-  public Collection<RegisteredWorkflow> getWorkflows() {
+  public Collection<RegisteredWorkflow> getRegisteredWorkflows() {
     return this.workflowMap.values();
   }
 
-  public Collection<RegisteredWorkflowInstance> getInstances() {
+  public Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
     return this.instanceMap.values();
   }
 
-  public Optional<RegisteredWorkflow> findWorkflow(
+  public Optional<RegisteredWorkflow> getRegisteredWorkflow(
       String workflowName, String className, String instanceName) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     return Optional.ofNullable(this.workflowMap.get(fqName));
@@ -367,7 +367,7 @@ public class DBOSExecutor implements AutoCloseable {
     return this.queues;
   }
 
-  public Optional<Queue> findQueue(String queueName) {
+  public Optional<Queue> getQueue(String queueName) {
     if (queues == null) {
       throw new IllegalStateException(
           "attempted to retrieve workflow from executor when DBOS not launched");
@@ -954,7 +954,7 @@ public class DBOSExecutor implements AutoCloseable {
         });
   }
 
-  public Optional<WorkflowSchedule> findSchedule(String name) {
+  public Optional<WorkflowSchedule> getSchedule(String name) {
     return this.callFunctionAsStep(
         () -> {
           return systemDatabase.getSchedule(name);
@@ -1052,7 +1052,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private void validateQueue(String queueName) {
     if (queueName != null) {
-      findQueue(queueName)
+      getQueue(queueName)
           .orElseThrow(
               () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
     }
@@ -1192,8 +1192,7 @@ public class DBOSExecutor implements AutoCloseable {
         serializer);
   }
 
-  public Optional<ExternalState> findExternalState(
-      String service, String workflowName, String key) {
+  public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return systemDatabase.findExternalState(service, workflowName, key);
   }
 
@@ -1299,16 +1298,6 @@ public class DBOSExecutor implements AutoCloseable {
       return new WorkflowInfo(workflowId, functionId);
     }
     return null;
-  }
-
-  private RegisteredWorkflow getWorkflow(
-      String workflowName, String className, String instanceName) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
-    var workflow = workflowMap.get(fqName);
-    if (workflow == null) {
-      throw new IllegalStateException("%s workflow not registered".formatted(fqName));
-    }
-    return workflow;
   }
 
   public record ExecutionOptions(
@@ -1457,7 +1446,9 @@ public class DBOSExecutor implements AutoCloseable {
           "The @Workflow method must be called on the DBOS instance passed to the startWorkflow lambda");
     }
     var workflow =
-        getWorkflow(invocation.workflowName(), invocation.className(), invocation.instanceName());
+        getRegisteredWorkflow(
+                invocation.workflowName(), invocation.className(), invocation.instanceName())
+            .orElse(null);
 
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
@@ -1513,7 +1504,7 @@ public class DBOSExecutor implements AutoCloseable {
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     logger.debug("invokeWorkflow {}({})", fqName, args);
 
-    var workflow = getWorkflow(workflowName, className, instanceName);
+    var workflow = getRegisteredWorkflow(workflowName, className, instanceName).orElseThrow();
 
     var ctx = DBOSContextHolder.get();
 

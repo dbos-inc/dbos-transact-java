@@ -170,7 +170,7 @@ class SimpleServiceImpl implements SimpleService {
   public String syncWithQueued() {
 
     logger.info("In syncWithQueued {}", DBOS.workflowId());
-    var childQ = dbos.findQueue("childQ").get();
+    var childQ = dbos.getQueue("childQ").get();
 
     for (int i = 0; i < 3; i++) {
 

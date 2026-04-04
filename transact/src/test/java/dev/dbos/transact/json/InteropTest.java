@@ -155,7 +155,8 @@ public class InteropTest {
       // No writeStream in Java (streams not supported)
 
       // Receive message
-      var msg = dbos.<Map<String, Object>>recv("interop_topic", Duration.ofSeconds(30)).orElseThrow();
+      var msg =
+          dbos.<Map<String, Object>>recv("interop_topic", Duration.ofSeconds(30)).orElseThrow();
 
       // Build deterministic result
       Map<String, Object> result = new LinkedHashMap<>();

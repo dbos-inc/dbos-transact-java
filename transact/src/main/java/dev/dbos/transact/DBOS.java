@@ -326,8 +326,8 @@ public class DBOS implements AutoCloseable {
    * @param queueName Name of the queue
    * @return Queue definition for given `queueName`
    */
-  public @NonNull Optional<Queue> findQueue(@NonNull String queueName) {
-    return ensureLaunched("findQueue").findQueue(queueName);
+  public @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
+    return ensureLaunched("getQueue").getQueue(queueName);
   }
 
   /**
@@ -801,8 +801,8 @@ public class DBOS implements AutoCloseable {
    * @param name schedule name
    * @return the schedule, or empty if not found
    */
-  public @NonNull Optional<WorkflowSchedule> findSchedule(@NonNull String name) {
-    return ensureLaunched("findSchedule").findSchedule(name);
+  public @NonNull Optional<WorkflowSchedule> getSchedule(@NonNull String name) {
+    return ensureLaunched("getSchedule").getSchedule(name);
   }
 
   /**
@@ -924,7 +924,7 @@ public class DBOS implements AutoCloseable {
    * @return list of all registered workflow methods
    */
   public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
-    return ensureLaunched("getRegisteredWorkflows").getWorkflows();
+    return ensureLaunched("getRegisteredWorkflows").getRegisteredWorkflows();
   }
 
   /**
@@ -934,9 +934,9 @@ public class DBOS implements AutoCloseable {
    * @param className the name of the class containing the workflow
    * @return an Optional containing the RegisteredWorkflow if found, otherwise empty
    */
-  public Optional<RegisteredWorkflow> findRegisteredWorkflow(
+  public Optional<RegisteredWorkflow> getRegisteredWorkflow(
       @NonNull String workflowName, @NonNull String className) {
-    return findRegisteredWorkflow(workflowName, className, "");
+    return getRegisteredWorkflow(workflowName, className, "");
   }
 
   /**
@@ -947,10 +947,10 @@ public class DBOS implements AutoCloseable {
    * @param instanceName the name of the workflow instance
    * @return an Optional containing the RegisteredWorkflow if found, otherwise empty
    */
-  public Optional<RegisteredWorkflow> findRegisteredWorkflow(
+  public Optional<RegisteredWorkflow> getRegisteredWorkflow(
       @NonNull String workflowName, @NonNull String className, @NonNull String instanceName) {
-    return ensureLaunched("findRegisteredWorkflow")
-        .findWorkflow(workflowName, className, instanceName);
+    return ensureLaunched("getRegisteredWorkflow")
+        .getRegisteredWorkflow(workflowName, className, instanceName);
   }
 
   /**
@@ -959,7 +959,7 @@ public class DBOS implements AutoCloseable {
    * @return list of all class instances containing registered workflow methods
    */
   public @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
-    return ensureLaunched("getRegisteredWorkflowInstances").getInstances();
+    return ensureLaunched("getRegisteredWorkflowInstances").getRegisteredWorkflowInstances();
   }
 
   /**
@@ -971,9 +971,8 @@ public class DBOS implements AutoCloseable {
    * @param key Key assigned within the service+workflow
    * @return Value associated with the service+workflow+key combination
    */
-  public Optional<ExternalState> findExternalState(
-      String service, String workflowName, String key) {
-    return ensureLaunched("findExternalState").findExternalState(service, workflowName, key);
+  public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
+    return ensureLaunched("getExternalState").getExternalState(service, workflowName, key);
   }
 
   /**
