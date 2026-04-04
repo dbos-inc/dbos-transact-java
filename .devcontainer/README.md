@@ -6,7 +6,7 @@ Simple devcontainer configuration for GitHub Codespaces and VS Code Dev Containe
 
 - **Java 21**: Pre-installed and ready to use
 - **Docker-in-Docker**: For running Testcontainers in tests
-- **VS Code Extensions**: Java Extension Pack, Gradle, and Kotlin support
+- **VS Code Extensions**: Java Extension Pack
 
 ## Quick Start
 
