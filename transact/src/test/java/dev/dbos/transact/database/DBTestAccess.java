@@ -11,6 +11,6 @@ import com.zaxxer.hikari.HikariConfig;
 
 public class DBTestAccess {
   public static Optional<HikariConfig> findHikariConfig(SystemDatabase sysdb) {
-    return sysdb.findConfig();
+    return sysdb.getConfig();
   }
 }

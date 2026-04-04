@@ -1193,7 +1193,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
-    return systemDatabase.findExternalState(service, workflowName, key);
+    return systemDatabase.getExternalState(service, workflowName, key);
   }
 
   public ExternalState upsertExternalState(ExternalState state) {
@@ -1605,7 +1605,7 @@ public class DBOSExecutor implements AutoCloseable {
       RegisteredWorkflow workflow, Object[] args, ExecutionOptions options, WorkflowInfo parent) {
 
     if (parent != null) {
-      var childId = systemDatabase.findChildWorkflow(parent.workflowId(), parent.functionId());
+      var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
       if (childId.isPresent()) {
         return retrieveWorkflow(childId.get());
       }
