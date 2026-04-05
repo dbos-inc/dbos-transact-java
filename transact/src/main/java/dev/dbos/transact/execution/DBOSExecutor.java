@@ -1423,7 +1423,10 @@ public class DBOSExecutor implements AutoCloseable {
     var workflow =
         getRegisteredWorkflow(
                 invocation.workflowName(), invocation.className(), invocation.instanceName())
-            .orElse(null);
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "No registered workflow found for %s".formatted(invocation.fqName())));
 
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
