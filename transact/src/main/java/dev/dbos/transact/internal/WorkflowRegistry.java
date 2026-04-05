@@ -11,8 +11,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.jspecify.annotations.Nullable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 public class WorkflowRegistry {
   private final ConcurrentHashMap<String, RegisteredWorkflowInstance> wfInstRegistry =

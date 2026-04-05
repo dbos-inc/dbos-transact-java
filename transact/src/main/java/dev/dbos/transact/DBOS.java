@@ -246,8 +246,7 @@ public class DBOS implements AutoCloseable {
     var methods =
         Objects.requireNonNull(target, "target can not be null").getClass().getDeclaredMethods();
     for (var method : methods) {
-      if (method.isAnnotationPresent(Workflow.class) 
-        || method.isAnnotationPresent(Step.class)) {
+      if (method.isAnnotationPresent(Workflow.class) || method.isAnnotationPresent(Step.class)) {
         return true;
       }
     }
