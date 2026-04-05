@@ -212,6 +212,16 @@ public class DBOS implements AutoCloseable {
         interfaceClass, target, instanceName, dbosExecutor::get);
   }
 
+  /**
+   * Register a workflow method with DBOS. This method is used internally by the proxy registration
+   * process and should not typically be called directly by application code.
+   *
+   * @param wfTag the Workflow annotation containing workflow configuration
+   * @param target the object instance containing the workflow method
+   * @param method the Method representing the workflow function
+   * @param instanceName optional instance name for the workflow (can be null)
+   * @throws IllegalStateException if called after DBOS is launched
+   */
   public void registerWorkflow(
       @NonNull Workflow wfTag,
       @NonNull Object target,
@@ -224,6 +234,13 @@ public class DBOS implements AutoCloseable {
     workflowRegistry.registerWorkflow(wfTag, target, method, instanceName);
   }
 
+  /**
+   * Check if the provided target object contains any methods annotated with @Workflow.
+   *
+   * @param target the object to check for workflow methods
+   * @return true if the target contains at least one @Workflow annotated method, false otherwise
+   * @throws NullPointerException if target is null
+   */
   public static boolean hasWorkflows(@NonNull Object target) {
     var methods =
         Objects.requireNonNull(target, "target can not be null").getClass().getDeclaredMethods();
@@ -235,6 +252,14 @@ public class DBOS implements AutoCloseable {
     return false;
   }
 
+  /**
+   * Get the class name to use for workflow registration. Uses the value from @WorkflowClassName
+   * annotation if present, otherwise falls back to the actual class name.
+   *
+   * @param target the object whose class name to determine
+   * @return the workflow class name (from annotation or actual class name)
+   * @throws NullPointerException if target is null
+   */
   public static @NonNull String getWorkflowClassName(@NonNull Object target) {
     var klass = Objects.requireNonNull(target, "target can not be null").getClass();
     var wfClassTag = klass.getAnnotation(WorkflowClassName.class);
@@ -243,6 +268,15 @@ public class DBOS implements AutoCloseable {
         : wfClassTag.value();
   }
 
+  /**
+   * Get the workflow name to use for registration. Uses the name from the @Workflow annotation if
+   * specified, otherwise falls back to the method name.
+   *
+   * @param wfTag the Workflow annotation containing workflow configuration
+   * @param method the method representing the workflow function
+   * @return the workflow name (from annotation or method name)
+   * @throws NullPointerException if wfTag or method is null
+   */
   public static @NonNull String getWorkflowName(@NonNull Workflow wfTag, @NonNull Method method) {
     return Objects.requireNonNull(wfTag, "wfTag can not be null").name().isEmpty()
         ? Objects.requireNonNull(method, "method can not be null").getName()
@@ -325,7 +359,7 @@ public class DBOS implements AutoCloseable {
    * Retrieve a queue definition
    *
    * @param queueName Name of the queue
-   * @return Queue definition for given `queueName`
+   * @return Optional containing the queue definition for given `queueName`, or empty if not found
    */
   public @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
     return ensureLaunched("getQueue").getQueue(queueName);
@@ -543,7 +577,8 @@ public class DBOS implements AutoCloseable {
    * @param workflowId id of the workflow who data is to be retrieved
    * @param key identifies the data
    * @param timeout time to wait for data before timing out
-   * @return the published value or null
+   * @return Optional containing the published value if available, or empty if timeout occurs or no
+   *     value found
    */
   public @NonNull @SuppressWarnings("unchecked") <T> Optional<T> getEvent(
       @NonNull String workflowId, @NonNull String key, @NonNull Duration timeout) {
@@ -970,7 +1005,8 @@ public class DBOS implements AutoCloseable {
    * @param service Identity of the service maintaining the record
    * @param workflowName Fully qualified name of the workflow
    * @param key Key assigned within the service+workflow
-   * @return Value associated with the service+workflow+key combination
+   * @return Optional containing the value associated with the service+workflow+key combination, or
+   *     empty if not found
    */
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return ensureLaunched("getExternalState").getExternalState(service, workflowName, key);

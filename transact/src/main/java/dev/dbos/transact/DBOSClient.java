@@ -173,6 +173,10 @@ public class DBOSClient implements AutoCloseable {
     systemDatabase = new SystemDatabase(dataSource, schema, serializer);
   }
 
+  /**
+   * Close this DBOSClient and release any underlying database resources. This method closes the
+   * system database connection.
+   */
   @Override
   public void close() {
     systemDatabase.close();
@@ -596,12 +600,22 @@ public class DBOSClient implements AutoCloseable {
 
   /** Options for sending a message. */
   public record SendOptions(@Nullable SerializationStrategy serialization) {
-    /** Create SendOptions with default serialization. */
+    /**
+     * Create SendOptions with default serialization strategy. Uses the system's default
+     * serialization format for message encoding.
+     *
+     * @return SendOptions configured with default serialization
+     */
     public static SendOptions defaults() {
       return new SendOptions(SerializationStrategy.DEFAULT);
     }
 
-    /** Create SendOptions with portable JSON serialization. */
+    /**
+     * Create SendOptions with portable JSON serialization strategy. Uses portable JSON format
+     * suitable for cross-language workflow communication.
+     *
+     * @return SendOptions configured with portable JSON serialization
+     */
     public static SendOptions portable() {
       return new SendOptions(SerializationStrategy.PORTABLE);
     }
@@ -648,12 +662,13 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Get event from a workflow, or null if the operation times out
+   * Get event from a workflow
    *
    * @param targetId ID of the workflow setting the event
    * @param key Key for the event
-   * @param timeout Maximum time duration to wait before returning `null`
-   * @return Workflow event value, or `null` if the timeout is hit.
+   * @param timeout Maximum time duration to wait before timing out
+   * @return Optional containing the workflow event value if available, or empty if timeout occurs
+   *     or no event found
    */
   public @NonNull Optional<Object> getEvent(
       @NonNull String targetId, @NonNull String key, @NonNull Duration timeout) {
