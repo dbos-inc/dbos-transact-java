@@ -515,8 +515,7 @@ public class DBOSClient implements AutoCloseable {
         DBOSExecutor.enqueueWorkflow(
             Objects.requireNonNull(
                 options.workflowName(), "EnqueueOptions workflowName must not be null"),
-            Objects.requireNonNull(
-                options.className(), "EnqueueOptions className must not be null"),
+            options.className(),
             Objects.requireNonNullElse(options.instanceName(), ""),
             null,
             args,
