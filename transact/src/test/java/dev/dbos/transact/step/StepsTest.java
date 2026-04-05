@@ -73,15 +73,9 @@ interface ServiceB {
   String step4(String input);
 
   String step5(String input);
-
-  void noopWorkflow();
 }
 
 class ServiceBImpl implements ServiceB {
-
-  @Override
-  @Workflow
-  public void noopWorkflow() {}
 
   @Override
   @Step(name = "step1")

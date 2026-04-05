@@ -18,6 +18,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SerializationStrategy;
+import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.VersionInfo;
@@ -194,8 +195,8 @@ public class DBOS implements AutoCloseable {
     Objects.requireNonNull(target, "target must not be null");
     instanceName = Objects.requireNonNullElse(instanceName, "");
 
-    if (!hasWorkflows(target)) {
-      throw new IllegalArgumentException("Target does not contain any @Workflow methods");
+    if (!hasWorkflowsOrSteps(target)) {
+      throw new IllegalArgumentException("Target does not contain any @Workflow or @Step methods");
     }
 
     workflowRegistry.registerInstance(instanceName, target);
@@ -241,11 +242,12 @@ public class DBOS implements AutoCloseable {
    * @return true if the target contains at least one @Workflow annotated method, false otherwise
    * @throws NullPointerException if target is null
    */
-  public static boolean hasWorkflows(@NonNull Object target) {
+  public static boolean hasWorkflowsOrSteps(@NonNull Object target) {
     var methods =
         Objects.requireNonNull(target, "target can not be null").getClass().getDeclaredMethods();
     for (var method : methods) {
-      if (method.isAnnotationPresent(Workflow.class)) {
+      if (method.isAnnotationPresent(Workflow.class) 
+        || method.isAnnotationPresent(Step.class)) {
         return true;
       }
     }
