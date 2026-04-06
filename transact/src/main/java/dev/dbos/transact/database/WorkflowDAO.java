@@ -1082,6 +1082,24 @@ class WorkflowDAO {
       int rowsCopied = stmt.executeUpdate();
       logger.debug("Copied " + rowsCopied + " workflow_events to forked workflow");
     }
+
+    var streamsSql =
+        """
+          INSERT INTO "%1$s".streams
+            (workflow_uuid, function_id, key, value, "offset", serialization)
+          SELECT ? as workflow_uuid, function_id, key, value, "offset", serialization
+            FROM "%1$s".streams
+            WHERE workflow_uuid = ? AND function_id < ?
+        """
+            .formatted(schema);
+    try (PreparedStatement stmt = connection.prepareStatement(streamsSql)) {
+      stmt.setString(1, forkedWorkflowId);
+      stmt.setString(2, originalWorkflowId);
+      stmt.setInt(3, startStep);
+
+      int rowsCopied = stmt.executeUpdate();
+      logger.debug("Copied " + rowsCopied + " streams to forked workflow");
+    }
   }
 
   private static Long getRowsCutoff(Connection connection, long rowsThreshold, String schema)

@@ -14,6 +14,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
+import dev.dbos.transact.utils.DBUtils.StreamRow;
 import dev.dbos.transact.utils.PgContainer;
 
 import java.time.Duration;
@@ -405,5 +406,41 @@ public class ForkTest {
       assertDoesNotThrow(() -> h.getResult());
       assertEquals("event-5", dbos.<String>getEvent(h.workflowId(), key, timeout).orElseThrow());
     }
+  }
+
+  @Test
+  public void forkStreamCopied() throws Exception {
+    // streamWorkflow interleaves steps and stream writes:
+    //   fid=0 step1, fid=1 writeStream(v1), fid=2 step2,
+    //   fid=3 writeStream(v2), fid=4 closeStream, fid=5 step3
+    var wfid = "forkStreamCopied-%d".formatted(System.currentTimeMillis());
+    var handle =
+        dbos.startWorkflow(() -> proxy.streamWorkflow("stream-key"), new StartWorkflowOptions(wfid));
+    assertDoesNotThrow(() -> handle.getResult());
+
+    // Original has 3 raw entries: v1, v2, sentinel
+    assertEquals(3, DBUtils.getStreamEntries(dataSource, wfid).size());
+
+    // Pause so forked workflows don't run and write more entries
+    DBOSTestAccess.getQueueService(dbos).pause();
+
+    // Fork at 0: nothing copied (function_id < 0)
+    var fork0 = dbos.forkWorkflow(wfid, 0);
+    assertEquals(0, DBUtils.getStreamEntries(dataSource, fork0.workflowId()).size());
+
+    // Fork at 2: fid=1 (v1) copied
+    var fork2 = dbos.forkWorkflow(wfid, 2);
+    List<StreamRow> fork2Streams = DBUtils.getStreamEntries(dataSource, fork2.workflowId());
+    assertEquals(1, fork2Streams.size());
+    assertEquals("stream-key", fork2Streams.get(0).key());
+    assertEquals(0, fork2Streams.get(0).offset());
+
+    // Fork at 4: fid=1 (v1) and fid=3 (v2) copied
+    var fork4 = dbos.forkWorkflow(wfid, 4);
+    assertEquals(2, DBUtils.getStreamEntries(dataSource, fork4.workflowId()).size());
+
+    // Fork at 6: all 3 entries (v1, v2, sentinel) copied
+    var fork6 = dbos.forkWorkflow(wfid, 6);
+    assertEquals(3, DBUtils.getStreamEntries(dataSource, fork6.workflowId()).size());
   }
 }
