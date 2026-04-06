@@ -1787,7 +1787,9 @@ public class DBOSExecutor implements AutoCloseable {
 
     logger.debug(
         "enqueueWorkflow {}/{}/{}({}) {}",
-        workflowName, Objects.requireNonNullElse(className, ""), Objects.requireNonNullElse(instanceName, ""),
+        workflowName,
+        Objects.requireNonNullElse(className, ""),
+        Objects.requireNonNullElse(instanceName, ""),
         positionalArgs,
         options);
 
