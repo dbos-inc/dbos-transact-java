@@ -33,33 +33,6 @@ import javax.sql.DataSource;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-class ClientWorkflowHandle<T, E extends Exception> implements WorkflowHandle<T, E> {
-
-  private final SystemDatabase systemDatabase;
-  private final String workflowId;
-
-  public ClientWorkflowHandle(SystemDatabase systemDatabase, String workflowId) {
-    this.systemDatabase = systemDatabase;
-    this.workflowId = workflowId;
-  }
-
-  @Override
-  public String workflowId() {
-    return workflowId;
-  }
-
-  @Override
-  public T getResult() throws E {
-    var result = systemDatabase.<T>awaitWorkflowResult(workflowId);
-    return Result.<T, E>process(result);
-  }
-
-  @Override
-  public WorkflowStatus getStatus() {
-    return systemDatabase.getWorkflowStatus(workflowId);
-  }
-}
-
 /**
  * DBOSClient allows external programs to interact with DBOS apps via direct system database access.
  * Example interactions: Start/enqueue a workflow, and get the result Get events and send messages
@@ -540,7 +513,7 @@ public class DBOSClient implements AutoCloseable {
             systemDatabase,
             this.serializer);
 
-    return new ClientWorkflowHandle<>(systemDatabase, workflowId);
+    return new WorkflowHandleClient<>(workflowId);
   }
 
   /**
