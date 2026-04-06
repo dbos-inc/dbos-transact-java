@@ -17,6 +17,7 @@ import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
@@ -1180,5 +1181,71 @@ public class SystemDatabaseTest {
     assertEquals("TestWorkflow", retrievedStatus.workflowName());
     assertEquals("com.example.TestWorkflow", retrievedStatus.className());
     assertEquals("test-instance", retrievedStatus.instanceName());
+  }
+
+  private static ExportedWorkflow buildEmptyWorkflow(String wfId) {
+    long now = System.currentTimeMillis();
+    var status =
+        new WorkflowStatusBuilder(wfId)
+            .status(WorkflowState.SUCCESS)
+            .workflowName("TestWorkflow")
+            .appVersion("1.0.0")
+            .recoveryAttempts(0)
+            .priority(0)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+    return new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of());
+  }
+
+  @Test
+  public void testGetAllEvents() throws Exception {
+    var wfId = "get-all-events-wf-1";
+    sysdb.importWorkflow(List.of(buildEmptyWorkflow(wfId)));
+
+    sysdb.setEvent(wfId, 0, "key1", "value1", false, null);
+    sysdb.setEvent(wfId, 1, "key2", 42, false, null);
+
+    var events = sysdb.getAllEvents(wfId);
+
+    assertEquals(2, events.size());
+    assertEquals("value1", events.get("key1"));
+    assertEquals(42, events.get("key2"));
+  }
+
+  @Test
+  public void testGetAllEventsEmpty() throws Exception {
+    var wfId = "get-all-events-empty-wf-1";
+    sysdb.importWorkflow(List.of(buildEmptyWorkflow(wfId)));
+
+    var events = sysdb.getAllEvents(wfId);
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  public void testGetAllNotifications() throws Exception {
+    var wfId = "get-all-notifications-wf-1";
+    sysdb.importWorkflow(List.of(buildEmptyWorkflow(wfId)));
+
+    sysdb.sendDirect(wfId, "message1", "topic1", "notif-uuid-1", null);
+    sysdb.sendDirect(wfId, "message2", "topic2", "notif-uuid-2", null);
+
+    var notifications = sysdb.getAllNotifications(wfId);
+
+    assertEquals(2, notifications.size());
+    assertTrue(notifications.stream().anyMatch(n -> "topic1".equals(n.topic())));
+    assertTrue(notifications.stream().anyMatch(n -> "topic2".equals(n.topic())));
+    notifications.forEach(n -> assertNotNull(n.message()));
+    notifications.forEach(n -> assertFalse(n.consumed()));
+    notifications.forEach(n -> assertTrue(n.createdAtEpochMs() > 0));
+  }
+
+  @Test
+  public void testGetAllNotificationsEmpty() throws Exception {
+    var wfId = "get-all-notifications-empty-wf-1";
+    sysdb.importWorkflow(List.of(buildEmptyWorkflow(wfId)));
+
+    var notifications = sysdb.getAllNotifications(wfId);
+    assertTrue(notifications.isEmpty());
   }
 }
