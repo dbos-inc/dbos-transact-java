@@ -14,7 +14,10 @@ import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStream;
+import dev.dbos.transact.workflow.internal.StepResult;
+import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -38,6 +41,57 @@ public class ImportExportTest {
     sysdb = SystemDatabase.create(dbosConfig);
     dataSource = pgContainer.dataSource();
   }
+
+  /** Creates a workflow directly in the DB without using importWorkflow. */
+  private void createWorkflow(String wfId) throws SQLException {
+    sysdb.initWorkflowStatus(
+        new WorkflowStatusInternal.Builder()
+            .workflowId(wfId)
+            .status(WorkflowState.PENDING)
+            .workflowName("TestWorkflow")
+            .appVersion("1.0.0")
+            .priority(0)
+            .build(),
+        null,
+        false,
+        false);
+    sysdb.recordWorkflowOutput(wfId, null);
+
+    long now = System.currentTimeMillis();
+    sysdb.recordStepResultTxn(new StepResult(wfId, 0, "step0"), now - 2000);
+    sysdb.recordStepResultTxn(new StepResult(wfId, 1, "step1"), now - 1000);
+
+    // asStep=false: writes to workflow_events + workflow_events_history, not operation_outputs
+    sysdb.setEvent(wfId, 0, "event-key-1", "event-val-1", false, null);
+    sysdb.setEvent(wfId, 1, "event-key-2", "event-val-2", false, null);
+
+    sysdb.writeStreamFromStep(wfId, 1, "stream-key-1", "stream-val-1", null);
+    sysdb.writeStreamFromStep(wfId, 1, "stream-key-1", "stream-val-2", null);
+    sysdb.closeStream(wfId, 2, "stream-key-1");
+  }
+
+  /** Creates a workflow with child workflow step references directly in the DB. */
+  private void createWorkflowWithChildren(String wfId, String child1Id, String child2Id)
+      throws SQLException {
+    sysdb.initWorkflowStatus(
+        new WorkflowStatusInternal.Builder()
+            .workflowId(wfId)
+            .status(WorkflowState.PENDING)
+            .workflowName("TestWorkflow")
+            .appVersion("1.0.0")
+            .priority(0)
+            .build(),
+        null,
+        false,
+        false);
+    sysdb.recordWorkflowOutput(wfId, null);
+
+    long now = System.currentTimeMillis();
+    sysdb.recordChildWorkflow(wfId, child1Id, 0, "step0", now - 2000);
+    sysdb.recordChildWorkflow(wfId, child2Id, 1, "step1", now - 1000);
+  }
+
+  // ── Import tests (importWorkflow is the subject; setup via buildExportedWorkflow) ──────────
 
   private static ExportedWorkflow buildExportedWorkflow(String wfId) {
     long now = System.currentTimeMillis();
@@ -73,28 +127,6 @@ public class ImportExportTest {
             new WorkflowStream("stream-key-1", "stream-val-2", 1, 1, null));
 
     return new ExportedWorkflow(status, steps, events, eventHistory, streams);
-  }
-
-  private static ExportedWorkflow buildExportedWorkflowWithChildren(
-      String wfId, String child1Id, String child2Id) {
-    long now = System.currentTimeMillis();
-    var status =
-        new WorkflowStatusBuilder(wfId)
-            .status(WorkflowState.SUCCESS)
-            .workflowName("TestWorkflow")
-            .appVersion("1.0.0")
-            .recoveryAttempts(0)
-            .priority(0)
-            .createdAt(now)
-            .updatedAt(now)
-            .build();
-
-    var steps =
-        List.of(
-            new StepInfo(0, "step0", null, null, child1Id, 1000L, 2000L, null),
-            new StepInfo(1, "step1", null, null, child2Id, 2000L, 3000L, null));
-
-    return new ExportedWorkflow(status, steps, List.of(), List.of(), List.of());
   }
 
   @Test
@@ -149,10 +181,12 @@ public class ImportExportTest {
     }
   }
 
+  // ── Export tests (exportWorkflow is the subject; setup via direct DB calls) ───────────────
+
   @Test
   public void testExportWorkflow() throws Exception {
     var wfId = "export-wf-1";
-    sysdb.importWorkflow(List.of(buildExportedWorkflow(wfId)));
+    createWorkflow(wfId);
 
     var exported = sysdb.exportWorkflow(wfId, false);
 
@@ -162,17 +196,22 @@ public class ImportExportTest {
     assertEquals(WorkflowState.SUCCESS, wf.status().status());
     assertEquals("TestWorkflow", wf.status().workflowName());
 
-    assertEquals(2, wf.steps().size());
+    assertEquals(3, wf.steps().size());
     assertTrue(wf.steps().stream().anyMatch(s -> s.functionName().equals("step0")));
     assertTrue(wf.steps().stream().anyMatch(s -> s.functionName().equals("step1")));
+    assertTrue(wf.steps().stream().anyMatch(s -> s.functionName().equals("DBOS.closeStream")));
 
     assertEquals(2, wf.events().size());
     assertTrue(wf.events().stream().anyMatch(e -> e.key().equals("event-key-1")));
+    assertTrue(wf.events().stream().anyMatch(e -> e.key().equals("event-key-2")));
 
     assertEquals(2, wf.eventHistory().size());
 
-    assertEquals(2, wf.streams().size());
-    assertTrue(wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1")));
+    // 3 raw stream rows: stream-val-1, stream-val-2, and the close sentinel
+    assertEquals(3, wf.streams().size());
+    assertTrue(wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 0));
+    assertTrue(wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 1));
+    assertTrue(wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 2));
   }
 
   @Test
@@ -181,11 +220,9 @@ public class ImportExportTest {
     var child1Id = "export-no-children-child-1";
     var child2Id = "export-no-children-child-2";
 
-    sysdb.importWorkflow(
-        List.of(
-            buildExportedWorkflowWithChildren(parentId, child1Id, child2Id),
-            buildExportedWorkflow(child1Id),
-            buildExportedWorkflow(child2Id)));
+    createWorkflowWithChildren(parentId, child1Id, child2Id);
+    createWorkflow(child1Id);
+    createWorkflow(child2Id);
 
     var result = sysdb.exportWorkflow(parentId, false);
     assertEquals(1, result.size());
@@ -198,11 +235,9 @@ public class ImportExportTest {
     var child1Id = "export-children-child-1";
     var child2Id = "export-children-child-2";
 
-    sysdb.importWorkflow(
-        List.of(
-            buildExportedWorkflowWithChildren(parentId, child1Id, child2Id),
-            buildExportedWorkflow(child1Id),
-            buildExportedWorkflow(child2Id)));
+    createWorkflowWithChildren(parentId, child1Id, child2Id);
+    createWorkflow(child1Id);
+    createWorkflow(child2Id);
 
     var result = sysdb.exportWorkflow(parentId, true);
     assertEquals(3, result.size());
@@ -210,6 +245,8 @@ public class ImportExportTest {
     assertTrue(result.stream().anyMatch(w -> w.status().workflowId().equals(child1Id)));
     assertTrue(result.stream().anyMatch(w -> w.status().workflowId().equals(child2Id)));
   }
+
+  // ── Round-trip test (both import and export are subjects) ────────────────────────────────
 
   @Test
   public void testImportExportRoundTrip() throws Exception {
