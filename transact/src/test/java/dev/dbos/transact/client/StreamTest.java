@@ -10,8 +10,10 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.StepInfo;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.UUID;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -50,6 +52,11 @@ public class StreamTest {
     assertTrue(iter.hasNext());
     assertEquals("myvalue", iter.next());
     assertFalse(iter.hasNext());
+
+    // writeStream from workflow records one step
+    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    assertEquals(1, steps.size());
+    assertEquals("DBOS.writeStream", steps.get(0).functionName());
   }
 
   @Test
@@ -64,6 +71,11 @@ public class StreamTest {
     assertEquals("value2", iter.next());
     assertEquals("value3", iter.next());
     assertFalse(iter.hasNext());
+
+    // each writeStream from workflow records one step
+    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    assertEquals(3, steps.size());
+    assertTrue(steps.stream().allMatch(s -> s.functionName().equals("DBOS.writeStream")));
   }
 
   @Test
@@ -77,6 +89,12 @@ public class StreamTest {
     assertEquals("value1", iter.next());
     assertEquals("value2", iter.next());
     assertFalse(iter.hasNext());
+
+    // two writeStream + one closeStream each record a step
+    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    assertEquals(3, steps.size());
+    assertEquals(2, steps.stream().filter(s -> s.functionName().equals("DBOS.writeStream")).count());
+    assertEquals(1, steps.stream().filter(s -> s.functionName().equals("DBOS.closeStream")).count());
   }
 
   @Test
@@ -90,6 +108,11 @@ public class StreamTest {
     assertTrue(iter.hasNext());
     assertEquals("stepvalue", iter.next());
     assertFalse(iter.hasNext());
+
+    // writeStream from inside a step does not add its own step record
+    List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
+    assertEquals(1, steps.size());
+    assertEquals("streamStep", steps.get(0).functionName());
   }
 
   @Test
