@@ -21,7 +21,6 @@ public record RegisteredWorkflow(
   public RegisteredWorkflow {
     Objects.requireNonNull(workflowName, "workflow name must not be null");
     Objects.requireNonNull(className, "workflow class name must not be null");
-    instanceName = Objects.requireNonNullElse(instanceName, "");
     Objects.requireNonNull(target, "workflow target object must not be null");
     Objects.requireNonNull(workflowMethod, "workflow method must not be null");
   }

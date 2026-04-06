@@ -2,6 +2,7 @@ package dev.dbos.transact.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,6 +48,23 @@ public class ClientTest {
   }
 
   @Test
+  public void clientEnqueueNullClassName() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var options = new DBOSClient.EnqueueOptions("enqueueTest", "testQueue");
+      var handle = client.enqueuePortableWorkflow(options, new Object[] {42, "spam"}, null);
+
+      var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
+      assertEquals("enqueueTest", row.workflowName());
+      assertEquals("testQueue", row.queueName());
+      assertNull(row.className());
+      assertNull(row.instanceName());
+    }
+  }
+
+  @Test
   public void clientEnqueue() throws Exception {
 
     var qs = DBOSTestAccess.getQueueService(dbos);
@@ -67,10 +85,9 @@ public class ClientTest {
       assertTrue(result instanceof String);
       assertEquals("42-spam", result);
 
-      var stat = client.getWorkflowStatus(handle.workflowId());
-      assertEquals(
-          WorkflowState.SUCCESS,
-          stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+      var stat = client.getWorkflowStatus(handle.workflowId()).orElseThrow(() -> new AssertionError("Workflow status not found"));
+      assertEquals(WorkflowState.SUCCESS, stat.status());
+      assertNull(stat.instanceName());
     }
   }
 

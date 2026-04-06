@@ -218,14 +218,34 @@ class WorkflowDAO {
         """
             .formatted(this.schema);
 
+
+    Objects.requireNonNull(status.workflowId(), "workflowId must not be null");
+    Objects.requireNonNull(status.status(), "status must not be null");
+    if (status.workflowName() != null && status.workflowName().isEmpty()) {
+      throw new IllegalStateException("workflowName must not be empty");
+    }
+    if (status.className() != null && status.className().isEmpty()) {
+      throw new IllegalStateException("className must not be empty");
+    }
+    if (status.instanceName() != null && status.instanceName().isEmpty()) {
+      throw new IllegalStateException("instanceName must not be empty");
+    }
+    if (status.queueName() != null && status.queueName().isEmpty()) {
+      throw new IllegalStateException("queueName must not be empty");
+    }
+    if (status.deduplicationId() != null && status.deduplicationId().isEmpty()) {
+    throw new IllegalStateException("deduplicationId must notDB be empty");
+    }
+    if (status.queuePartitionKey() != null && status.queuePartitionKey().isEmpty()) {
+      throw new IllegalStateException("queuePartitionKey must not be empty");
+    }
+
     var authenticatedRolesJson =
         status.authenticatedRoles() != null ? JSONUtil.toJson(status.authenticatedRoles()) : null;
     try (PreparedStatement stmt = connection.prepareStatement(insertSQL)) {
 
       var now = Instant.now().toEpochMilli();
       var recoveryAttempts = status.status() == WorkflowState.ENQUEUED ? 0 : 1;
-      int priority = Objects.requireNonNullElse(status.priority(), 0);
-
       stmt.setString(1, status.workflowId());
       stmt.setString(2, status.status().toString());
       stmt.setString(3, status.inputs());
@@ -236,7 +256,7 @@ class WorkflowDAO {
 
       stmt.setString(7, status.queueName());
       stmt.setString(8, status.deduplicationId());
-      stmt.setInt(9, priority);
+      stmt.setInt(9, Objects.requireNonNullElse(status.priority(), 0));
       stmt.setString(10, status.queuePartitionKey());
 
       stmt.setString(11, status.authenticatedUser());
@@ -582,8 +602,8 @@ class WorkflowDAO {
             rs.getString("workflow_uuid"),
             WorkflowState.valueOf(rs.getString("status")),
             rs.getString("name"),
-            Objects.requireNonNullElse(rs.getString("class_name"), ""),
-            Objects.requireNonNullElse(rs.getString("config_name"), ""),
+            rs.getString("class_name"),
+            rs.getString("config_name"),
             rs.getString("authenticated_user"),
             rs.getString("assumed_role"),
             (authenticatedRolesJson != null)

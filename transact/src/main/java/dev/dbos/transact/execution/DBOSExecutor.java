@@ -1164,7 +1164,7 @@ public class DBOSExecutor implements AutoCloseable {
     enqueueWorkflow(
         workflowName,
         className,
-        "",
+        null,
         null,
         args,
         options,

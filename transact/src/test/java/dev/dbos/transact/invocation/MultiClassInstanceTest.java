@@ -1,6 +1,7 @@
 package dev.dbos.transact.invocation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
@@ -123,7 +124,7 @@ public class MultiClassInstanceTest {
     assertEquals(hhandle.workflowId(), hrow.workflowId());
     assertEquals("stepWorkflow", hrow.workflowName());
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", hrow.className());
-    assertEquals("", hrow.instanceName());
+    assertNull(hrow.instanceName());
     assertEquals(WorkflowState.SUCCESS, hrow.status());
 
     // All 3 w/ the same WF name

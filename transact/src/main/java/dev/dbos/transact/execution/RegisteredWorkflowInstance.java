@@ -11,6 +11,6 @@ public record RegisteredWorkflowInstance(String className, String instanceName, 
       @NonNull String className, @Nullable String instanceName) {
     return String.format(
         "%s/%s",
-        Objects.requireNonNullElse(className, ""), Objects.requireNonNullElse(instanceName, ""));
+        Objects.requireNonNull(className), Objects.requireNonNullElse(instanceName, ""));
   }
 }

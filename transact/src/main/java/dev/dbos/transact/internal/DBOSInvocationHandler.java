@@ -29,7 +29,7 @@ public class DBOSInvocationHandler implements InvocationHandler {
       @Nullable String instanceName,
       @NonNull Supplier<DBOSExecutor> executorSupplier) {
     this.target = Objects.requireNonNull(target, "target must not be null");
-    this.instanceName = Objects.requireNonNullElse(instanceName, "");
+    this.instanceName = instanceName;
     this.executorSupplier =
         Objects.requireNonNull(executorSupplier, "executorSupplier must not be null");
   }

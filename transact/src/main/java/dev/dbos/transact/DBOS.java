@@ -171,7 +171,7 @@ public class DBOS implements AutoCloseable {
    *     functions
    */
   public <T> @NonNull T registerProxy(@NonNull Class<T> interfaceClass, @NonNull T target) {
-    return registerProxy(interfaceClass, target, "");
+    return registerProxy(interfaceClass, target, null);
   }
 
   /**
@@ -192,7 +192,6 @@ public class DBOS implements AutoCloseable {
     }
     Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
     Objects.requireNonNull(target, "target must not be null");
-    instanceName = Objects.requireNonNullElse(instanceName, "");
 
     if (!hasWorkflowsOrSteps(target)) {
       throw new IllegalArgumentException("Target does not contain any @Workflow or @Step methods");

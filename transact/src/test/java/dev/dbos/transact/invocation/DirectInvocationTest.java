@@ -59,6 +59,7 @@ public class DirectInvocationTest {
     assertEquals(WorkflowState.SUCCESS.name(), row.status());
     assertEquals("simpleWorkflow", row.workflowName());
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", row.className());
+    assertNull(row.instanceName());
     assertNotNull(row.output());
     assertNull(row.error());
     assertNull(row.timeoutMs());

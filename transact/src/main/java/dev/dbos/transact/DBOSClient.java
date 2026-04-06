@@ -516,7 +516,7 @@ public class DBOSClient implements AutoCloseable {
             Objects.requireNonNull(
                 options.workflowName(), "EnqueueOptions workflowName must not be null"),
             options.className(),
-            Objects.requireNonNullElse(options.instanceName(), ""),
+            options.instanceName(),
             null,
             args,
             new DBOSExecutor.ExecutionOptions(
@@ -573,12 +573,12 @@ public class DBOSClient implements AutoCloseable {
         WorkflowStatusInternal.builder(workflowId, WorkflowState.ENQUEUED)
             .workflowName(options.workflowName())
             .className(options.className())
-            .instanceName(Objects.requireNonNullElse(options.instanceName(), ""))
+            .instanceName(options.instanceName())
             .queueName(options.queueName())
             .inputs(serializedArgs.serializedValue())
             .serialization(serializedArgs.serialization())
             .deduplicationId(options.deduplicationId())
-            .priority(Objects.requireNonNullElse(options.priority(), 0))
+            .priority(options.priority())
             .queuePartitionKey(options.queuePartitionKey())
             .appVersion(options.appVersion());
 
