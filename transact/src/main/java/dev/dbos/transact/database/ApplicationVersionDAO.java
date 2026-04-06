@@ -12,22 +12,15 @@ import javax.sql.DataSource;
 
 class ApplicationVersionDAO {
 
-  private final DataSource dataSource;
-  private final String schema;
-
-  ApplicationVersionDAO(DataSource dataSource, String schema) {
-    this.dataSource = dataSource;
-    this.schema = schema;
-  }
-
-  void createApplicationVersion(String versionName) throws SQLException {
+  static void createApplicationVersion(DataSource dataSource, String schema, String versionName)
+      throws SQLException {
     String sql =
         """
           INSERT INTO "%s".application_versions (version_id, version_name)
           VALUES (?, ?)
           ON CONFLICT (version_name) DO NOTHING
         """
-            .formatted(this.schema);
+            .formatted(schema);
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, UUID.randomUUID().toString());
@@ -36,7 +29,8 @@ class ApplicationVersionDAO {
     }
   }
 
-  void updateApplicationVersionTimestamp(String versionName, Instant newTimestamp)
+  static void updateApplicationVersionTimestamp(
+      DataSource dataSource, String schema, String versionName, Instant newTimestamp)
       throws SQLException {
     String sql =
         """
@@ -44,7 +38,7 @@ class ApplicationVersionDAO {
           SET version_timestamp = ?
           WHERE version_name = ?
         """
-            .formatted(this.schema);
+            .formatted(schema);
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setLong(1, newTimestamp.toEpochMilli());
@@ -53,14 +47,15 @@ class ApplicationVersionDAO {
     }
   }
 
-  List<VersionInfo> listApplicationVersions() throws SQLException {
+  static List<VersionInfo> listApplicationVersions(DataSource dataSource, String schema)
+      throws SQLException {
     String sql =
         """
           SELECT version_id, version_name, version_timestamp, created_at
           FROM "%s".application_versions
           ORDER BY version_timestamp DESC
         """
-            .formatted(this.schema);
+            .formatted(schema);
     List<VersionInfo> results = new ArrayList<>();
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql);
@@ -77,7 +72,8 @@ class ApplicationVersionDAO {
     return results;
   }
 
-  VersionInfo getLatestApplicationVersion() throws SQLException {
+  static VersionInfo getLatestApplicationVersion(DataSource dataSource, String schema)
+      throws SQLException {
     String sql =
         """
           SELECT version_id, version_name, version_timestamp, created_at
@@ -85,7 +81,7 @@ class ApplicationVersionDAO {
           ORDER BY version_timestamp DESC
           LIMIT 1
         """
-            .formatted(this.schema);
+            .formatted(schema);
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql);
         var rs = stmt.executeQuery()) {

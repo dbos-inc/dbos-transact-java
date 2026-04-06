@@ -10,21 +10,14 @@ import javax.sql.DataSource;
 
 class ExternalStateDAO {
 
-  private final DataSource dataSource;
-  private final String schema;
-
-  ExternalStateDAO(DataSource dataSource, String schema) {
-    this.dataSource = dataSource;
-    this.schema = schema;
-  }
-
-  Optional<ExternalState> getExternalState(String service, String workflowName, String key)
+  static Optional<ExternalState> getExternalState(
+      DataSource dataSource, String schema, String service, String workflowName, String key)
       throws SQLException {
     final String sql =
         """
           SELECT value, update_seq, update_time FROM "%s".event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ?
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
@@ -46,7 +39,8 @@ class ExternalStateDAO {
     }
   }
 
-  ExternalState upsertExternalState(ExternalState state) throws SQLException {
+  static ExternalState upsertExternalState(
+      DataSource dataSource, String schema, ExternalState state) throws SQLException {
     final var sql =
         """
           INSERT INTO "%s".event_dispatch_kv (
@@ -62,7 +56,7 @@ class ExternalStateDAO {
             ) THEN EXCLUDED.value ELSE event_dispatch_kv.value END
           RETURNING value, update_time, update_seq
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {

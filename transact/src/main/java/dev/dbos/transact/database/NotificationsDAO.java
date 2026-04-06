@@ -61,7 +61,6 @@ class NotificationsDAO {
       conn.setAutoCommit(false);
 
       try {
-        // Check if operation was already executed
         StepResult recordedOutput =
             StepsDAO.checkStepExecutionTxn(workflowId, stepId, functionName, conn, this.schema);
 
@@ -85,7 +84,6 @@ class NotificationsDAO {
         var serializedMsg =
             SerializationUtil.serializeValue(message, serialization, this.serializer);
 
-        // Insert notification with serialization format
         final String sql =
             """
               INSERT INTO "%s".notifications
@@ -103,14 +101,12 @@ class NotificationsDAO {
           stmt.setString(5, finalMessageId);
           stmt.executeUpdate();
         } catch (SQLException e) {
-          // Foreign key violation
           if ("23503".equals(e.getSQLState())) {
             throw new DBOSNonExistentWorkflowException(destinationId);
           }
           throw e;
         }
 
-        // Record operation result
         var output = new StepResult(workflowId, stepId, functionName, null, null, null, null);
         StepsDAO.recordStepResultTxn(
             output, startTime, System.currentTimeMillis(), conn, this.schema);
@@ -153,7 +149,6 @@ class NotificationsDAO {
       stmt.setString(5, serializedMsg.serialization());
       stmt.executeUpdate();
     } catch (SQLException e) {
-      // Foreign key violation
       if ("23503".equals(e.getSQLState())) {
         throw new DBOSNonExistentWorkflowException(destinationId);
       }
@@ -168,7 +163,6 @@ class NotificationsDAO {
     String functionName = "DBOS.recv";
     String finalTopic = (topic != null) ? topic : Constants.DBOS_NULL_TOPIC;
 
-    // First, check for previous executions
     StepResult recordedOutput;
     try (Connection c = dataSource.getConnection()) {
       recordedOutput =
@@ -187,11 +181,9 @@ class NotificationsDAO {
       logger.debug("Running recv, wfid {}, id: {}, topic: {}", workflowId, stepId, finalTopic);
     }
 
-    // Insert a condition to the notifications map
     String payload = workflowId + "::" + finalTopic;
     var lockPair = new NotificationService.LockConditionPair();
 
-    // Timeout / deadline for the notification
     double actualTimeout = timeout.toMillis();
     var targetTime = System.currentTimeMillis() + actualTimeout;
     var checkedDBForSleep = false;
@@ -200,13 +192,10 @@ class NotificationsDAO {
       lockPair.lock.lock();
       boolean success = notificationService.registerNotificationCondition(payload, lockPair);
       if (!success) {
-        // if this happens, the workflow is executing concurrently
         throw new DBOSWorkflowExecutionConflictException(workflowId);
       }
 
       while (true) {
-        // Check if the key is already in the database. If not, wait for the
-        // notification
         boolean hasExistingNotification;
         try (Connection conn = dataSource.getConnection()) {
           final String sql =
@@ -229,9 +218,7 @@ class NotificationsDAO {
 
         var nowTime = System.currentTimeMillis();
 
-        // Wait for the notification
         if (!checkedDBForSleep) {
-          // Support OAOO sleep
           actualTimeout =
               StepsDAO.durableSleepDuration(
                       dataSource,
@@ -259,12 +246,10 @@ class NotificationsDAO {
       notificationService.unregisterNotificationCondition(payload);
     }
 
-    // Transactionally consume and return the oldest unconsumed message, or null if none.
     try (Connection conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
 
       try {
-        // Find and mark consumed the oldest entry for this workflow+topic
         final String sql =
             """
             UPDATE "%1$s".notifications
@@ -287,8 +272,6 @@ class NotificationsDAO {
         String serializedMessage = null;
         String serialization = null;
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-          // JDBC uses positional parameters (?), and each placeholder must be bound explicitly,
-          // so we need to set the same values again for the nested SELECT
           stmt.setString(1, workflowId);
           stmt.setString(2, finalTopic);
           stmt.setString(3, workflowId);
@@ -305,7 +288,6 @@ class NotificationsDAO {
         var recvdMessage =
             SerializationUtil.deserializeValue(serializedMessage, serialization, this.serializer);
 
-        // Record operation result
         StepResult output =
             new StepResult(
                 workflowId, stepId, functionName, serializedMessage, null, null, serialization);
@@ -378,7 +360,6 @@ class NotificationsDAO {
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.setEvent";
 
-    // Serialize the message using the specified format
     SerializationUtil.SerializedResult serializedResult =
         SerializationUtil.serializeValue(message, serialization, this.serializer);
 
@@ -386,7 +367,6 @@ class NotificationsDAO {
       conn.setAutoCommit(false);
       try {
         if (asStep) {
-          // check for a previous operation result
           var recordedOutput =
               StepsDAO.checkStepExecutionTxn(
                   workflowId, functionId, functionName, conn, this.schema);
@@ -394,7 +374,7 @@ class NotificationsDAO {
             logger.debug(
                 "Replaying setEvent, workflow: {}, step: {}, key: {}", workflowId, functionId, key);
             conn.commit();
-            return; // Already sent before
+            return;
           } else {
             logger.debug(
                 "Running setEvent, workflow: {}, step: {}, key: {}", workflowId, functionId, key);
@@ -410,7 +390,6 @@ class NotificationsDAO {
             serializedResult.serialization());
 
         if (asStep) {
-          // Record the operation result
           StepResult output =
               new StepResult(workflowId, functionId, functionName, null, null, null, null);
           StepsDAO.recordStepResultTxn(
@@ -434,7 +413,6 @@ class NotificationsDAO {
     var startTime = System.currentTimeMillis();
     String functionName = "DBOS.getEvent";
 
-    // Check for previous executions only if it's in a workflow
     if (callerCtx != null) {
 
       StepResult recordedOutput;
@@ -463,8 +441,6 @@ class NotificationsDAO {
 
     lockConditionPair.lock.lock();
     try {
-      // Check if the key is already in the database. If not, wait for the
-      // notification.
       Object value = null;
       final String sql =
           """
@@ -472,7 +448,6 @@ class NotificationsDAO {
           """
               .formatted(this.schema);
 
-      // Wait for the notification
       double actualTimeout =
           Objects.requireNonNull(timeout, "getEvent timeout cannot be null").toMillis();
       var targetTime = System.currentTimeMillis() + actualTimeout;
@@ -480,7 +455,6 @@ class NotificationsDAO {
       var hasExistingNotification = false;
 
       while (true) {
-        // Database check
 
         try (Connection conn = dataSource.getConnection();
             PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -504,7 +478,6 @@ class NotificationsDAO {
         var nowTime = System.currentTimeMillis();
         if (nowTime > targetTime) break;
 
-        // Consult DB - part of timeout may have expired if sleep is durable.
         if (callerCtx != null && !checkedDBForSleep) {
           actualTimeout =
               StepsDAO.durableSleepDuration(
@@ -531,7 +504,6 @@ class NotificationsDAO {
         }
       }
 
-      // Record the output if it's in a workflow
       if (callerCtx != null) {
         var toSaveSer = SerializationUtil.serializeValue(value, null, this.serializer);
         StepResult output =
@@ -552,7 +524,6 @@ class NotificationsDAO {
 
     } finally {
       lockConditionPair.lock.unlock();
-      // Remove the condition from the map after use
       notificationService.unregisterNotificationCondition(payload);
     }
   }

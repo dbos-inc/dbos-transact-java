@@ -43,13 +43,8 @@ public class SystemDatabase implements AutoCloseable {
   private final DBOSSerializer serializer;
 
   private final WorkflowDAO workflowDAO;
-  private final StepsDAO stepsDAO;
-  private final QueuesDAO queuesDAO;
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
-  private final SchedulesDAO schedulesDAO;
-  private final ApplicationVersionDAO applicationVersionDAO;
-  private final ExternalStateDAO externalStateDAO;
 
   private SystemDatabase(
       DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
@@ -63,15 +58,10 @@ public class SystemDatabase implements AutoCloseable {
     this.created = created;
     this.serializer = serializer;
 
-    stepsDAO = new StepsDAO(dataSource, this.schema, serializer);
-    workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
-    queuesDAO = new QueuesDAO(dataSource, this.schema);
-    schedulesDAO = new SchedulesDAO(dataSource, this.schema, serializer);
     notificationService = new NotificationService(dataSource);
     notificationsDAO =
         new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
-    applicationVersionDAO = new ApplicationVersionDAO(dataSource, this.schema);
-    externalStateDAO = new ExternalStateDAO(dataSource, this.schema);
+    workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
@@ -286,11 +276,11 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public boolean clearQueueAssignment(String workflowId) {
-    return dbRetry(() -> queuesDAO.clearQueueAssignment(workflowId));
+    return dbRetry(() -> QueuesDAO.clearQueueAssignment(dataSource, schema, workflowId));
   }
 
   public List<String> getQueuePartitions(String queueName) {
-    return dbRetry(() -> queuesDAO.getQueuePartitions(queueName));
+    return dbRetry(() -> QueuesDAO.getQueuePartitions(dataSource, schema, queueName));
   }
 
   public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName) {
@@ -310,7 +300,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public List<StepInfo> listWorkflowSteps(String workflowId) {
-    return dbRetry(() -> stepsDAO.listWorkflowSteps(workflowId));
+    return dbRetry(() -> StepsDAO.listWorkflowSteps(dataSource, workflowId, schema, serializer));
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
@@ -320,7 +310,9 @@ public class SystemDatabase implements AutoCloseable {
   public List<String> getAndStartQueuedWorkflows(
       Queue queue, String executorId, String appVersion, String partitionKey) {
     return dbRetry(
-        () -> queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion, partitionKey));
+        () ->
+            QueuesDAO.getAndStartQueuedWorkflows(
+                dataSource, schema, queue, executorId, appVersion, partitionKey));
   }
 
   public void recordChildWorkflow(
@@ -385,7 +377,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void sleep(String workflowId, int functionId, Duration duration) {
-    dbRetry(() -> stepsDAO.sleep(workflowId, functionId, duration));
+    dbRetry(() -> StepsDAO.sleep(dataSource, workflowId, functionId, duration, schema, serializer));
   }
 
   public void cancelWorkflows(List<String> workflowIds) {
@@ -405,20 +397,21 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void createApplicationVersion(String versionName) {
-    dbRetry(() -> applicationVersionDAO.createApplicationVersion(versionName));
+    dbRetry(() -> ApplicationVersionDAO.createApplicationVersion(dataSource, schema, versionName));
   }
 
   public void updateApplicationVersionTimestamp(String versionName, Instant newTimestamp) {
     dbRetry(
-        () -> applicationVersionDAO.updateApplicationVersionTimestamp(versionName, newTimestamp));
+        () -> ApplicationVersionDAO.updateApplicationVersionTimestamp(
+            dataSource, schema, versionName, newTimestamp));
   }
 
   public List<VersionInfo> listApplicationVersions() {
-    return dbRetry(() -> applicationVersionDAO.listApplicationVersions());
+    return dbRetry(() -> ApplicationVersionDAO.listApplicationVersions(dataSource, schema));
   }
 
   public VersionInfo getLatestApplicationVersion() {
-    return dbRetry(() -> applicationVersionDAO.getLatestApplicationVersion());
+    return dbRetry(() -> ApplicationVersionDAO.getLatestApplicationVersion(dataSource, schema));
   }
 
   public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) {
@@ -426,46 +419,49 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public void createSchedule(WorkflowSchedule schedule) {
-    dbRetry(() -> schedulesDAO.createSchedule(schedule));
+    dbRetry(() -> SchedulesDAO.createSchedule(dataSource, schema, serializer, schedule));
   }
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
-    return dbRetry(() -> schedulesDAO.getSchedule(name));
+    return dbRetry(() -> SchedulesDAO.getSchedule(dataSource, schema, serializer, name));
   }
 
   public List<WorkflowSchedule> listSchedules(
       List<ScheduleStatus> statuses,
       List<String> workflowNames,
       List<String> scheduleNamePrefixes) {
-    return dbRetry(() -> schedulesDAO.listSchedules(statuses, workflowNames, scheduleNamePrefixes));
+    return dbRetry(
+        () -> SchedulesDAO.listSchedules(
+            dataSource, schema, serializer, statuses, workflowNames, scheduleNamePrefixes));
   }
 
   public void pauseSchedule(String name) {
-    dbRetry(() -> schedulesDAO.pauseSchedule(name));
+    dbRetry(() -> SchedulesDAO.pauseSchedule(dataSource, schema, name));
   }
 
   public void resumeSchedule(String name) {
-    dbRetry(() -> schedulesDAO.resumeSchedule(name));
+    dbRetry(() -> SchedulesDAO.resumeSchedule(dataSource, schema, name));
   }
 
   public void updateScheduleLastFiredAt(String name, Instant lastFiredAt) {
-    dbRetry(() -> schedulesDAO.updateScheduleLastFiredAt(name, lastFiredAt));
+    dbRetry(() -> SchedulesDAO.updateScheduleLastFiredAt(dataSource, schema, name, lastFiredAt));
   }
 
   public void deleteSchedule(String name) {
-    dbRetry(() -> schedulesDAO.deleteSchedule(name));
+    dbRetry(() -> SchedulesDAO.deleteSchedule(dataSource, schema, name));
   }
 
   public void applySchedules(List<WorkflowSchedule> schedules) {
-    dbRetry(() -> schedulesDAO.applySchedules(schedules));
+    dbRetry(() -> SchedulesDAO.applySchedules(dataSource, schema, serializer, schedules));
   }
 
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
-    return dbRetry(() -> externalStateDAO.getExternalState(service, workflowName, key));
+    return dbRetry(
+        () -> ExternalStateDAO.getExternalState(dataSource, schema, service, workflowName, key));
   }
 
   public ExternalState upsertExternalState(ExternalState state) {
-    return dbRetry(() -> externalStateDAO.upsertExternalState(state));
+    return dbRetry(() -> ExternalStateDAO.upsertExternalState(dataSource, schema, state));
   }
 
   public List<MetricData> getMetrics(Instant startTime, Instant endTime) {
@@ -473,11 +469,12 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public boolean patch(String workflowId, int functionId, String patchName) {
-    return dbRetry(() -> stepsDAO.patch(workflowId, functionId, patchName));
+    return dbRetry(() -> StepsDAO.patch(dataSource, workflowId, functionId, patchName, schema));
   }
 
   public boolean deprecatePatch(String workflowId, int functionId, String patchName) {
-    return dbRetry(() -> stepsDAO.deprecatePatch(workflowId, functionId, patchName));
+    return dbRetry(
+        () -> StepsDAO.deprecatePatch(dataSource, workflowId, functionId, patchName, schema));
   }
 
   public Set<String> getWorkflowChildren(String workflowId) {
