@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
@@ -1048,5 +1049,75 @@ public class SystemDatabaseTest {
     // Verify forked_from field is set correctly
     assertNull(originalRawRow.forkedFrom());
     assertEquals(originalWorkflowId, forkedRawRow.forkedFrom());
+  }
+
+  @Test
+  public void testWriteStreamAndReadStream() throws Exception {
+    String workflowId = "stream-wf-1";
+    var status = WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    int functionId = 1;
+
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value1", "portable_json");
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value2", "portable_json");
+
+    Object result = sysdb.readStream(workflowId, "key1", 0);
+    assertEquals("value1", result);
+
+    result = sysdb.readStream(workflowId, "key1", 1);
+    assertEquals("value2", result);
+  }
+
+  @Test
+  public void testWriteStreamFromWorkflow() throws Exception {
+    String workflowId = "stream-wf-2";
+    var status = WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    int functionId = 1;
+
+    sysdb.writeStreamFromWorkflow(workflowId, functionId, "key1", "value1", "portable_json");
+
+    Object result = sysdb.readStream(workflowId, "key1", 0);
+    assertEquals("value1", result);
+  }
+
+  @Test
+  public void testCloseStream() throws Exception {
+    String workflowId = "stream-wf-3";
+    var status = WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+
+    sysdb.writeStreamFromWorkflow(workflowId, 1, "key1", "value1", "portable_json");
+    sysdb.closeStream(workflowId, 2, "key1");
+
+    assertThrows(IllegalStateException.class, () -> sysdb.readStream(workflowId, "key1", 1));
+  }
+
+  @Test
+  public void testGetAllStreamEntries() throws Exception {
+    String workflowId = "stream-wf-4";
+    var status = WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    int functionId = 1;
+
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value1", "portable_json");
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value2", "portable_json");
+    sysdb.writeStreamFromStep(workflowId, functionId, "key2", "value3", "portable_json");
+    sysdb.closeStream(workflowId, functionId, "key2");
+
+    Map<String, List<Object>> entries = sysdb.getAllStreamEntries(workflowId);
+
+    assertEquals(2, entries.size());
+    assertEquals(List.of("value1", "value2"), entries.get("key1"));
+    assertEquals(List.of("value3"), entries.get("key2"));
+  }
+
+  @Test
+  public void testReadStreamNotFound() throws Exception {
+    String workflowId = "stream-wf-5";
+    var status = WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+
+    assertThrows(IllegalArgumentException.class, () -> sysdb.readStream(workflowId, "key", 0));
   }
 }
