@@ -423,8 +423,8 @@ public class DBUtils {
     return getStreamEntries(ds, workflowId, null);
   }
 
-  public static List<StreamRow> getStreamEntries(
-      DataSource ds, String workflowId, String schema) throws SQLException {
+  public static List<StreamRow> getStreamEntries(DataSource ds, String workflowId, String schema)
+      throws SQLException {
     schema = SystemDatabase.sanitizeSchema(schema);
     var sql =
         "SELECT key, value, \"offset\" FROM \"%s\".streams WHERE workflow_uuid = ? ORDER BY \"offset\""

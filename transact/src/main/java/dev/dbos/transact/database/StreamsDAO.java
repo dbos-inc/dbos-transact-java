@@ -85,7 +85,8 @@ class StreamsDAO {
         """
         INSERT INTO "%s".streams (workflow_uuid, key, value, "offset", function_id, serialization)
         VALUES (?, ?, ?, ?, ?, ?)
-        """.formatted(schema);
+        """
+            .formatted(schema);
 
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -104,7 +105,8 @@ class StreamsDAO {
         SELECT COALESCE(MAX("offset"), -1) + 1
         FROM "%s".streams
         WHERE workflow_uuid = ? AND key = ?
-        """.formatted(schema);
+        """
+            .formatted(schema);
 
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -128,7 +130,8 @@ class StreamsDAO {
         SELECT value, serialization
         FROM "%s".streams
         WHERE workflow_uuid = ? AND key = ? AND "offset" = ?
-        """.formatted(schema);
+        """
+            .formatted(schema);
 
     try (Connection conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
@@ -158,7 +161,8 @@ class StreamsDAO {
         FROM "%s".streams
         WHERE workflow_uuid = ?
         ORDER BY key, "offset"
-        """.formatted(schema);
+        """
+            .formatted(schema);
 
     var streams = new LinkedHashMap<String, List<Object>>();
     try (Connection conn = dataSource.getConnection();

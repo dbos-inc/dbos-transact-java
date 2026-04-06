@@ -13,8 +13,6 @@ import dev.dbos.transact.workflow.Queue;
 
 import java.util.Iterator;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;

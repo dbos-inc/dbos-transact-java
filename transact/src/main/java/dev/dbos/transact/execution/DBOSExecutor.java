@@ -60,7 +60,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -895,7 +894,8 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     if (ctx.isInStep()) {
-      throw new IllegalStateException("DBOS.closeStream() must be called from a workflow, not a step.");
+      throw new IllegalStateException(
+          "DBOS.closeStream() must be called from a workflow, not a step.");
     }
 
     int functionId = ctx.getAndIncrementFunctionId();

@@ -661,8 +661,7 @@ public class DBOSClient implements AutoCloseable {
    * @param key The stream key / name within the workflow
    * @return Iterator that yields each value in the stream
    */
-  public @NonNull Iterator<Object> readStream(
-      @NonNull String workflowId, @NonNull String key) {
+  public @NonNull Iterator<Object> readStream(@NonNull String workflowId, @NonNull String key) {
     return new dev.dbos.transact.database.StreamIterator(workflowId, key, systemDatabase);
   }
 
