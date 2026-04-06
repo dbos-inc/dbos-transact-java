@@ -803,11 +803,12 @@ class WorkflowDAO {
     }
   }
 
-  void resumeWorkflows(List<String> workflowIds) throws SQLException {
+  void resumeWorkflows(List<String> workflowIds, String queueName) throws SQLException {
     List<String> filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
     }
+
     String sql =
         """
           UPDATE "%s".workflow_status
@@ -827,7 +828,7 @@ class WorkflowDAO {
       Array array = conn.createArrayOf("text", filtered.toArray(String[]::new));
       try {
         stmt.setString(1, WorkflowState.ENQUEUED.name());
-        stmt.setString(2, Constants.DBOS_INTERNAL_QUEUE);
+        stmt.setString(2, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
         stmt.setArray(3, array);
         stmt.setString(4, WorkflowState.SUCCESS.name());
         stmt.setString(5, WorkflowState.ERROR.name());

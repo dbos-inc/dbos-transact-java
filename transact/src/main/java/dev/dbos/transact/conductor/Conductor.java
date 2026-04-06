@@ -778,7 +778,7 @@ public class Conductor implements AutoCloseable {
                   ? request.workflow_ids
                   : List.of(request.workflow_id);
           try {
-            conductor.dbosExecutor.resumeWorkflows(ids);
+            conductor.dbosExecutor.resumeWorkflows(ids, request.queue_name);
             return new SuccessResponse(request, true);
           } catch (Exception e) {
             logger.error("Exception encountered when resuming workflow(s) {}", ids, e);

@@ -693,14 +693,15 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
   }
 
-  public List<WorkflowHandle<Object, Exception>> resumeWorkflows(List<String> workflowIds) {
+  public List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      List<String> workflowIds, String queueName) {
     Objects.requireNonNull(workflowIds);
 
     // Execute the resume operation as a workflow step
     this.callFunctionAsStep(
         () -> {
           logger.info("Resuming workflow(s) {}", workflowIds);
-          systemDatabase.resumeWorkflows(workflowIds);
+          systemDatabase.resumeWorkflows(workflowIds, queueName);
           return null; // void
         },
         "DBOS.resumeWorkflow",

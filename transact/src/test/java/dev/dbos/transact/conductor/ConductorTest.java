@@ -637,7 +637,7 @@ public class ConductorTest {
       listener.send(MessageType.RESUME, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).resumeWorkflows(List.of(workflowId));
+      verify(mockExec).resumeWorkflows(List.of(workflowId), null);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -656,7 +656,7 @@ public class ConductorTest {
     String errorMessage = "canResumeThrows error";
     String workflowId = "sample-wf-id";
 
-    doThrow(new RuntimeException(errorMessage)).when(mockExec).resumeWorkflows(anyList());
+    doThrow(new RuntimeException(errorMessage)).when(mockExec).resumeWorkflows(anyList(), any());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -668,7 +668,7 @@ public class ConductorTest {
       listener.send(MessageType.RESUME, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).resumeWorkflows(List.of(workflowId));
+      verify(mockExec).resumeWorkflows(List.of(workflowId), null);
 
       SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
       assertEquals("resume", resp.type);
@@ -745,12 +745,40 @@ public class ConductorTest {
       listener.send(MessageType.RESUME, "bulk-resume-1", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).resumeWorkflows(workflowIds);
+      verify(mockExec).resumeWorkflows(workflowIds, null);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
       assertEquals("resume", jsonNode.get("type").asText());
       assertEquals("bulk-resume-1", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canResumeWithCustomQueue() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+    String customQueueName = "custom-test-queue";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "queue_name", customQueueName);
+      listener.send(MessageType.RESUME, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).resumeWorkflows(List.of(workflowId), customQueueName);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("resume", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }

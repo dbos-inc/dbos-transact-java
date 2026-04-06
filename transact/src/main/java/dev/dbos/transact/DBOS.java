@@ -614,25 +614,65 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Resume a workflow starting from the step after the last complete step
+   * Resume a workflow starting from the step after the last complete step. This method allows
+   * resuming workflows that were previously interrupted, failed, or canceled. The workflow will
+   * continue execution from where it left off, replaying any completed steps deterministically.
    *
    * @param <T> Return type of the workflow function
-   * @param <E> Checked exception thrown by the workflow function, if any
-   * @param workflowId id of the workflow
-   * @return A handle to the workflow
+   * @param <E> Type of checked exception thrown by the workflow function, if any
+   * @param workflowId ID of the workflow to resume; must not be null
+   * @param queueName optional queue name to enqueue the resumed workflow to; if null, the workflow
+   *     will be resumed in the default execution context
+   * @return A handle to the resumed workflow
+   * @throws IllegalStateException if called before DBOS is launched
    */
   @SuppressWarnings("unchecked")
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
-      @NonNull String workflowId) {
-    var handles = resumeWorkflows(List.of(workflowId));
+      @NonNull String workflowId, @Nullable String queueName) {
+    var handles = resumeWorkflows(List.of(workflowId), queueName);
     assert (handles.size() == 1);
     return (WorkflowHandle<T, E>) handles.get(0);
   }
 
   /**
+   * Resume a workflow starting from the step after the last complete step using the default queue.
+   * This method is equivalent to calling {@code resumeWorkflow(workflowId, null)}. The workflow
+   * will continue execution from where it left off, replaying any completed steps
+   * deterministically.
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Type of checked exception thrown by the workflow function, if any
+   * @param workflowId ID of the workflow to resume; must not be null
+   * @return A handle to the resumed workflow
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
+      @NonNull String workflowId) {
+    return resumeWorkflow(workflowId, null);
+  }
+
+  /**
    * Resume multiple workflows starting from the step after the last complete step for each
-   * workflow. This method allows bulk resumption of workflows that were previously interrupted or
-   * failed.
+   * workflow. This method allows bulk resumption of workflows that were previously interrupted,
+   * failed, or canceled. Each workflow will continue execution from where it left off, replaying
+   * any completed steps deterministically.
+   *
+   * @param workflowIds a list of workflow IDs to resume; must not be null
+   * @param queueName optional queue name to enqueue the resumed workflows to; if null, the
+   *     workflows will be resumed in the default execution context
+   * @return A list of handles to the resumed workflows
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      @NonNull List<String> workflowIds, @Nullable String queueName) {
+    return ensureLaunched("resumeWorkflow").resumeWorkflows(workflowIds, queueName);
+  }
+
+  /**
+   * Resume multiple workflows starting from the step after the last complete step for each workflow
+   * using the default queue. This method is equivalent to calling {@code
+   * resumeWorkflows(workflowIds, null)}. Each workflow will continue execution from where it left
+   * off, replaying any completed steps deterministically.
    *
    * @param workflowIds a list of workflow IDs to resume; must not be null
    * @return A list of handles to the resumed workflows
@@ -640,7 +680,7 @@ public class DBOS implements AutoCloseable {
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       @NonNull List<String> workflowIds) {
-    return ensureLaunched("resumeWorkflow").resumeWorkflows(workflowIds);
+    return resumeWorkflows(workflowIds, null);
   }
 
   /***
