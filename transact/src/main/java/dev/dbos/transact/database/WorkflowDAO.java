@@ -904,7 +904,7 @@ class WorkflowDAO {
 
     String applicationVersion = options.applicationVersion();
 
-    var timeout = Objects.requireNonNullElse(options.timeout(), Timeout.inherit());
+    var timeout = Objects.requireNonNullElseGet(options.timeout(), Timeout::inherit);
     Long timeoutMS = null;
     if (timeout instanceof Timeout.Inherit) {
       timeoutMS = status.timeoutMs();

@@ -202,7 +202,8 @@ public class SchedulerService implements AutoCloseable {
             new Runnable() {
 
               final ZoneId timeZone =
-                  Objects.requireNonNullElse(schedule.cronTimezone(), ZoneId.systemDefault());
+                  Objects.requireNonNullElseGet(
+                      schedule.cronTimezone(), () -> ZoneId.systemDefault());
               final WorkflowSchedule wfSchedule = schedule;
               final ExecutionTime executionTime = ExecutionTime.forCron(cron);
 

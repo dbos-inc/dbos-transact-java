@@ -212,7 +212,8 @@ public class DBOSExecutor implements AutoCloseable {
       queueService.start(queues, config.listenQueues());
 
       var schedulerPollingInterval =
-          Objects.requireNonNullElse(config.schedulerPollingInterval(), Duration.ofSeconds(30));
+          Objects.requireNonNullElseGet(
+              config.schedulerPollingInterval(), () -> Duration.ofSeconds(30));
       schedulerService = new SchedulerService(this, systemDatabase, schedulerPollingInterval);
       schedulerService.start();
 
