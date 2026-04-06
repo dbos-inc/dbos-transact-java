@@ -218,7 +218,6 @@ class WorkflowDAO {
         """
             .formatted(this.schema);
 
-
     Objects.requireNonNull(status.workflowId(), "workflowId must not be null");
     Objects.requireNonNull(status.status(), "status must not be null");
     if (status.workflowName() != null && status.workflowName().isEmpty()) {
@@ -234,7 +233,7 @@ class WorkflowDAO {
       throw new IllegalStateException("queueName must not be empty");
     }
     if (status.deduplicationId() != null && status.deduplicationId().isEmpty()) {
-    throw new IllegalStateException("deduplicationId must notDB be empty");
+      throw new IllegalStateException("deduplicationId must notDB be empty");
     }
     if (status.queuePartitionKey() != null && status.queuePartitionKey().isEmpty()) {
       throw new IllegalStateException("queuePartitionKey must not be empty");
