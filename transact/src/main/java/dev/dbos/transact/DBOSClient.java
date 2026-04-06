@@ -22,6 +22,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -649,6 +650,20 @@ public class DBOSClient implements AutoCloseable {
   public @Nullable Object getEvent(
       @NonNull String targetId, @NonNull String key, @NonNull Duration timeout) {
     return systemDatabase.getEvent(targetId, key, timeout, null);
+  }
+
+  /**
+   * Read values from a stream as an iterator. This function reads values from a stream identified
+   * by the workflow_id and key, returning an iterator that yields each value in order until the
+   * stream is closed or the workflow terminates.
+   *
+   * @param workflowId The workflow instance ID that owns the stream
+   * @param key The stream key / name within the workflow
+   * @return Iterator that yields each value in the stream
+   */
+  public @NonNull Iterator<Object> readStream(
+      @NonNull String workflowId, @NonNull String key) {
+    return new dev.dbos.transact.database.StreamIterator(workflowId, key, systemDatabase);
   }
 
   /**

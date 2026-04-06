@@ -35,6 +35,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -1030,5 +1031,51 @@ public class DBOS implements AutoCloseable {
    */
   public static @Nullable SerializationStrategy serializationStrategy() {
     return DBOSContext.serializationStrategy();
+  }
+
+  /**
+   * Write a value to a stream. Must be called from within a workflow or step.
+   *
+   * @param key The stream key / name within the workflow
+   * @param value A serializable value to write to the stream
+   */
+  public void writeStream(@NonNull String key, @NonNull Object value) {
+    writeStream(key, value, null);
+  }
+
+  /**
+   * Write a value to a stream with a specific serialization strategy. Must be called from within a
+   * workflow or step.
+   *
+   * @param key The stream key / name within the workflow
+   * @param value A serializable value to write to the stream
+   * @param serialization The serialization strategy to use (null for workflow default)
+   */
+  public void writeStream(
+      @NonNull String key, @NonNull Object value, @Nullable SerializationStrategy serialization) {
+    ensureLaunched("writeStream").writeStream(key, value, serialization);
+  }
+
+  /**
+   * Close a stream. Must be called from within a workflow, not a step.
+   *
+   * @param key The stream key / name within the workflow
+   */
+  public void closeStream(@NonNull String key) {
+    ensureLaunched("closeStream").closeStream(key);
+  }
+
+  /**
+   * Read values from a stream as an iterator. This function reads values from a stream identified
+   * by the workflow_id and key, returning an iterator that yields each value in order until the
+   * stream is closed or the workflow terminates.
+   *
+   * @param workflowId The workflow instance ID that owns the stream
+   * @param key The stream key / name within the workflow
+   * @return Iterator that yields each value in the stream
+   */
+  public @NonNull Iterator<Object> readStream(
+      @NonNull String workflowId, @NonNull String key) {
+    return ensureLaunched("readStream").readStream(workflowId, key);
   }
 }

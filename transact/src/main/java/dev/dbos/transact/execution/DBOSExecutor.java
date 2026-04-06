@@ -13,6 +13,7 @@ import dev.dbos.transact.context.WorkflowInfo;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.Result;
+import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
@@ -56,8 +57,10 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -855,6 +858,53 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     return systemDatabase.getEvent(workflowId, key, timeout, null);
+  }
+
+  public void writeStream(String key, Object value, SerializationStrategy serialization) {
+    logger.debug("Received writeStream for key {}", key);
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.writeStream() must be called from a workflow.");
+    }
+
+    if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
+      if (ctx.getSerialization() != null) {
+        serialization = ctx.getSerialization();
+      } else {
+        serialization = SerializationStrategy.DEFAULT;
+      }
+    }
+
+    if (ctx.isInStep()) {
+      systemDatabase.writeStreamFromStep(
+          ctx.getWorkflowId(), ctx.getCurrentFunctionId(), key, value, serialization.formatName());
+    } else {
+      int functionId = ctx.getAndIncrementFunctionId();
+      systemDatabase.writeStreamFromWorkflow(
+          ctx.getWorkflowId(), functionId, key, value, serialization.formatName());
+    }
+  }
+
+  public void closeStream(String key) {
+    logger.debug("Received closeStream for key {}", key);
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.closeStream() must be called from a workflow.");
+    }
+
+    if (ctx.isInStep()) {
+      throw new IllegalStateException("DBOS.closeStream() must be called from a workflow, not a step.");
+    }
+
+    int functionId = ctx.getAndIncrementFunctionId();
+    systemDatabase.closeStream(ctx.getWorkflowId(), functionId, key);
+  }
+
+  public Iterator<Object> readStream(String workflowId, String key) {
+    logger.debug("Received readStream for {} {}", workflowId, key);
+    return new StreamIterator(workflowId, key, systemDatabase);
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
