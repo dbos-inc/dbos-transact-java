@@ -23,7 +23,6 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Workflow;
-import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -251,37 +250,6 @@ public class DBOS implements AutoCloseable {
       }
     }
     return false;
-  }
-
-  /**
-   * Get the class name to use for workflow registration. Uses the value from @WorkflowClassName
-   * annotation if present, otherwise falls back to the actual class name.
-   *
-   * @param target the object whose class name to determine
-   * @return the workflow class name (from annotation or actual class name)
-   * @throws NullPointerException if target is null
-   */
-  private static @NonNull String getWorkflowClassName(@NonNull Object target) {
-    var klass = Objects.requireNonNull(target, "target can not be null").getClass();
-    var wfClassTag = klass.getAnnotation(WorkflowClassName.class);
-    return (wfClassTag == null || wfClassTag.value().isEmpty())
-        ? klass.getName()
-        : wfClassTag.value();
-  }
-
-  /**
-   * Get the workflow name to use for registration. Uses the name from the @Workflow annotation if
-   * specified, otherwise falls back to the method name.
-   *
-   * @param wfTag the Workflow annotation containing workflow configuration
-   * @param method the method representing the workflow function
-   * @return the workflow name (from annotation or method name)
-   * @throws NullPointerException if wfTag or method is null
-   */
-  private static @NonNull String getWorkflowName(@NonNull Workflow wfTag, @NonNull Method method) {
-    return Objects.requireNonNull(wfTag, "wfTag can not be null").name().isEmpty()
-        ? Objects.requireNonNull(method, "method can not be null").getName()
-        : wfTag.name();
   }
 
   /**

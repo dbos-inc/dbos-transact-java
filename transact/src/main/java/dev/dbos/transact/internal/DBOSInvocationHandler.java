@@ -1,6 +1,5 @@
 package dev.dbos.transact.internal;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.Step;
@@ -104,8 +103,8 @@ public class DBOSInvocationHandler implements InvocationHandler {
       throw new IllegalStateException("executorSupplier returned null");
     }
 
-    var className = DBOS.getWorkflowClassName(target);
-    var workflowName = DBOS.getWorkflowName(workflow, method);
+    var className = WorkflowRegistry.getWorkflowClassName(target);
+    var workflowName = WorkflowRegistry.getWorkflowName(workflow, method);
 
     if (hook != null) {
       var invocation = new Invocation(executor, workflowName, className, instanceName, args);

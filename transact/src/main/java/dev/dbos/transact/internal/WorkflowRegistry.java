@@ -1,10 +1,10 @@
 package dev.dbos.transact.internal;
 
-import dev.dbos.transact.DBOS;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
 import dev.dbos.transact.execution.SchedulerService;
 import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowClassName;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -15,14 +15,28 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 public class WorkflowRegistry {
+
+  public static @NonNull String getWorkflowClassName(@NonNull Object target) {
+    var klass = Objects.requireNonNull(target, "target can not be null").getClass();
+    var wfClassTag = klass.getAnnotation(WorkflowClassName.class);
+    return (wfClassTag == null || wfClassTag.value().isEmpty())
+        ? klass.getName()
+        : wfClassTag.value();
+  }
+
+  public static @NonNull String getWorkflowName(@NonNull Workflow wfTag, @NonNull Method method) {
+    return Objects.requireNonNull(wfTag, "wfTag can not be null").name().isEmpty()
+        ? Objects.requireNonNull(method, "method can not be null").getName()
+        : wfTag.name();
+  }
+
   private final ConcurrentHashMap<String, RegisteredWorkflowInstance> wfInstRegistry =
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, RegisteredWorkflow> wfRegistry =
       new ConcurrentHashMap<>();
 
   public void registerInstance(@Nullable String instanceName, @NonNull Object target) {
-    instanceName = Objects.requireNonNullElse(instanceName, "");
-    var className = DBOS.getWorkflowClassName(target);
+    var className = getWorkflowClassName(target);
     var fqName = RegisteredWorkflowInstance.fullyQualifiedInstName(className, instanceName);
     var regClass = new RegisteredWorkflowInstance(className, instanceName, target);
     var previous = wfInstRegistry.putIfAbsent(fqName, regClass);
@@ -37,8 +51,8 @@ public class WorkflowRegistry {
       @NonNull Method method,
       @Nullable String instanceName) {
 
-    var workflowName = DBOS.getWorkflowName(wfTag, method);
-    var className = DBOS.getWorkflowClassName(target);
+    var workflowName = getWorkflowName(wfTag, method);
+    var className = getWorkflowClassName(target);
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
     var regWorkflow =
         new RegisteredWorkflow(
