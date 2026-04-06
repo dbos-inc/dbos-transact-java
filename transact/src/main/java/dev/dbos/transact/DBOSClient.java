@@ -577,7 +577,6 @@ public class DBOSClient implements AutoCloseable {
             .queueName(options.queueName())
             .inputs(serializedArgs.serializedValue())
             .serialization(serializedArgs.serialization())
-            .createdAt(System.currentTimeMillis())
             .deduplicationId(options.deduplicationId())
             .priority(Objects.requireNonNullElse(options.priority(), 0))
             .queuePartitionKey(options.queuePartitionKey())

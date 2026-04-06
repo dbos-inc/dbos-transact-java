@@ -2,6 +2,8 @@ package dev.dbos.transact.workflow.internal;
 
 import dev.dbos.transact.workflow.WorkflowState;
 
+import java.util.Objects;
+
 public record WorkflowStatusInternal(
     String workflowId,
     WorkflowState status,
@@ -16,36 +18,31 @@ public record WorkflowStatusInternal(
     String assumedRole,
     String[] authenticatedRoles,
     String inputs,
-    String output,
-    String error,
     String executorId,
     String appVersion,
     String appId,
-    Long createdAt,
-    Long updatedAt,
-    Long recoveryAttempts,
-    Long startedAt,
     Long timeoutMs,
     Long deadlineEpochMs,
     String parentWorkflowId,
     String serialization) {
 
+  public WorkflowStatusInternal {
+    if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
+      throw new IllegalStateException("workflowId must not be empty");
+    }
+    Objects.requireNonNull(status, "status must not be null");
+  }
+
   public WorkflowStatusInternal() {
     this(
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null, null, null);
+        null, null, null, null, null);
   }
 
   public WorkflowStatusInternal(String workflowUUID, WorkflowState state) {
     this(
         workflowUUID,
         state,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
         null,
         null,
         null,
@@ -81,15 +78,9 @@ public record WorkflowStatusInternal(
     private String assumedRole;
     private String[] authenticatedRoles;
     private String inputs;
-    private String output;
-    private String error;
     private String executorId;
     private String appVersion;
     private String appId;
-    private Long createdAt;
-    private Long updatedAt;
-    private Long recoveryAttempts;
-    private Long startedAt;
     private Long timeoutMs;
     private Long deadlineEpochMs;
     private String serialization;
@@ -164,16 +155,6 @@ public record WorkflowStatusInternal(
       return this;
     }
 
-    public Builder output(String output) {
-      this.output = output;
-      return this;
-    }
-
-    public Builder error(String error) {
-      this.error = error;
-      return this;
-    }
-
     public Builder executorId(String executorId) {
       this.executorId = executorId;
       return this;
@@ -186,26 +167,6 @@ public record WorkflowStatusInternal(
 
     public Builder appId(String appId) {
       this.appId = appId;
-      return this;
-    }
-
-    public Builder createdAt(Long createdAt) {
-      this.createdAt = createdAt;
-      return this;
-    }
-
-    public Builder updatedAt(Long updatedAt) {
-      this.updatedAt = updatedAt;
-      return this;
-    }
-
-    public Builder recoveryAttempts(Long recoveryAttempts) {
-      this.recoveryAttempts = recoveryAttempts;
-      return this;
-    }
-
-    public Builder startedAt(Long startedAt) {
-      this.startedAt = startedAt;
       return this;
     }
 
@@ -239,15 +200,9 @@ public record WorkflowStatusInternal(
           assumedRole,
           authenticatedRoles,
           inputs,
-          output,
-          error,
           executorId,
           appVersion,
           appId,
-          createdAt,
-          updatedAt,
-          recoveryAttempts,
-          startedAt,
           timeoutMs,
           deadlineEpochMs,
           parentWorkflowId,
