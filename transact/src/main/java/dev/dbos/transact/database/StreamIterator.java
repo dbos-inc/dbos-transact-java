@@ -51,9 +51,8 @@ public class StreamIterator implements Iterator<Object> {
     }
   }
 
-  private boolean isWorkflowActive(String state) {
-    return WorkflowState.PENDING.name().equals(state)
-        || WorkflowState.ENQUEUED.name().equals(state);
+  private boolean isWorkflowActive(WorkflowState state) {
+    return WorkflowState.PENDING == state || WorkflowState.ENQUEUED == state;
   }
 
   @Override

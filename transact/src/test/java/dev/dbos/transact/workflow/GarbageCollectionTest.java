@@ -31,7 +31,7 @@ public class GarbageCollectionTest {
     dbos = new DBOS(dbosConfig);
 
     impl = new GCTestServiceImpl(dbos);
-    proxy = dbos.registerWorkflows(GCTestService.class, impl);
+    proxy = dbos.registerProxy(GCTestService.class, impl);
 
     dbos.launch();
   }
@@ -112,7 +112,7 @@ public class GarbageCollectionTest {
 
     dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);
     for (var handle : handles) {
-      assertEquals(WorkflowState.CANCELLED.toString(), handle.getStatus().status());
+      assertEquals(WorkflowState.CANCELLED, handle.getStatus().status());
     }
     impl.timeoutLatch.countDown();
     assertEquals(finalHandle.workflowId(), finalHandle.getResult());

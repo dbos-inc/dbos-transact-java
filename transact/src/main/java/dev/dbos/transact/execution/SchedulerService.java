@@ -152,12 +152,13 @@ public class SchedulerService implements AutoCloseable {
       } else if (!scheduleRunning) {
         // if the schedule is active but we don't yet have a scheduled future for it, schedule it
         // now
-        var optRegWf = dbosExecutor.getWorkflow(schedule.workflowName(), schedule.className());
+        var optRegWf =
+            dbosExecutor.getRegisteredWorkflow(schedule.workflowName(), schedule.className(), "");
         if (optRegWf.isEmpty()) {
           logger.error(
               "Workflow schedule {} has missing workflow function {}",
               schedule.scheduleName(),
-              RegisteredWorkflow.fullyQualifiedName(schedule.className(), schedule.workflowName()));
+              RegisteredWorkflow.fullyQualifiedName(schedule.workflowName(), schedule.className()));
           continue;
         }
 
@@ -201,7 +202,8 @@ public class SchedulerService implements AutoCloseable {
             new Runnable() {
 
               final ZoneId timeZone =
-                  Objects.requireNonNullElse(schedule.cronTimezone(), ZoneId.systemDefault());
+                  Objects.requireNonNullElseGet(
+                      schedule.cronTimezone(), () -> ZoneId.systemDefault());
               final WorkflowSchedule wfSchedule = schedule;
               final ExecutionTime executionTime = ExecutionTime.forCron(cron);
 
@@ -257,7 +259,7 @@ public class SchedulerService implements AutoCloseable {
                       new StartWorkflowOptions(workflowId)
                           .withQueue(queueName)
                           .withAppVersion(appVersion);
-                  dbosExecutor.startWorkflow(regWorkflow, args, options);
+                  dbosExecutor.startRegisteredWorkflow(regWorkflow, args, options);
                   systemDatabase.updateScheduleLastFiredAt(
                       wfSchedule.scheduleName(), nextTime.toInstant());
                 } catch (Exception e) {
@@ -329,7 +331,7 @@ public class SchedulerService implements AutoCloseable {
                     new StartWorkflowOptions(workflowId)
                         .withQueue(swf.queue())
                         .withAppVersion(appVersion);
-                dbosExecutor.startWorkflow(swf.workflow(), args, options);
+                dbosExecutor.startRegisteredWorkflow(swf.workflow(), args, options);
                 nextTime = setLastTime(dbosExecutor, swf, scheduledTime);
               } catch (Exception e) {
                 logger.error("Annotated scheduled task exception {}", workflowName, e);
@@ -400,7 +402,7 @@ public class SchedulerService implements AutoCloseable {
   }
 
   private List<AnnotatedScheduledWorkflow> getAnnotatedWorkflowSchedules() {
-    return dbosExecutor.getWorkflows().stream()
+    return dbosExecutor.getRegisteredWorkflows().stream()
         .map(
             wf -> {
               var method = wf.workflowMethod();

@@ -395,7 +395,9 @@ public record DBOSConfig(
 
   public @NonNull DBOSConfig withListenQueues(@Nullable Queue... queues) {
     var names =
-        Arrays.stream(Objects.requireNonNullElse(queues, new Queue[0])).map(Queue::name).toList();
+        Arrays.stream(Objects.requireNonNullElseGet(queues, () -> new Queue[0]))
+            .map(Queue::name)
+            .toList();
     return withListenQueues(names.toArray(String[]::new));
   }
 
@@ -403,7 +405,7 @@ public record DBOSConfig(
     var v =
         Stream.concat(
                 listenQueues.stream(),
-                Arrays.stream(Objects.requireNonNullElse(queueNames, new String[0])))
+                Arrays.stream(Objects.requireNonNullElseGet(queueNames, () -> new String[0])))
             .filter(Objects::nonNull)
             .collect(Collectors.toSet());
     return new DBOSConfig(

@@ -1026,7 +1026,7 @@ public class ConductorTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
-            .name("WF1")
+            .workflowName("WF1")
             .createdAt(1754936102215L)
             .updatedAt(1754936102215L)
             .executorId("test-executor")
@@ -1036,7 +1036,7 @@ public class ConductorTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-2")
             .status(WorkflowState.PENDING)
-            .name("WF2")
+            .workflowName("WF2")
             .createdAt(1754936722066L)
             .updatedAt(1754936722066L)
             .executorId("test-executor")
@@ -1046,7 +1046,7 @@ public class ConductorTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-3")
             .status(WorkflowState.PENDING)
-            .name("WF3")
+            .workflowName("WF3")
             .createdAt(1754946202215L)
             .updatedAt(1754946202215L)
             .executorId("test-executor")
@@ -1100,7 +1100,7 @@ public class ConductorTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
-            .name("WF1")
+            .workflowName("WF1")
             .createdAt(1754936102215L)
             .updatedAt(1754936102215L)
             .executorId("test-executor")
@@ -1110,7 +1110,7 @@ public class ConductorTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-2")
             .status(WorkflowState.PENDING)
-            .name("WF2")
+            .workflowName("WF2")
             .createdAt(1754936722066L)
             .updatedAt(1754936722066L)
             .executorId("test-executor")
@@ -1120,7 +1120,7 @@ public class ConductorTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-3")
             .status(WorkflowState.PENDING)
-            .name("WF3")
+            .workflowName("WF3")
             .createdAt(1754946202215L)
             .updatedAt(1754946202215L)
             .executorId("test-executor")
@@ -1297,7 +1297,7 @@ public class ConductorTest {
     WorkflowStatus status =
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
-            .name("WF1")
+            .workflowName("WF1")
             .createdAt(1754936102215L)
             .updatedAt(1754936102215L)
             .executorId("test-executor")
@@ -2001,7 +2001,7 @@ public class ConductorTest {
                 index > 0
                     ? WorkflowState.values()[index % WorkflowState.values().length]
                     : WorkflowState.SUCCESS)
-            .name("TestWorkflow" + (index > 0 ? (index + 1) : ""))
+            .workflowName("TestWorkflow" + (index > 0 ? (index + 1) : ""))
             .className("dev.dbos.transact.test.TestClass" + (index > 0 ? (index + 1) : ""))
             .instanceName("test-instance" + (index > 0 ? "-" + (index + 1) : ""))
             .authenticatedUser("test-user" + (index > 0 ? "-" + (index + 1) : ""))

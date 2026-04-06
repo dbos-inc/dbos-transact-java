@@ -32,7 +32,7 @@ public class AsyncWorkflowTest {
   public void sameWorkflowId() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     dbos.launch();
 
     String wfid = "wf-123";
@@ -47,7 +47,7 @@ public class AsyncWorkflowTest {
 
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
-    assertEquals(wfs.get(0).name(), "workWithString");
+    assertEquals(wfs.get(0).workflowName(), "workWithString");
     assertEquals(wfid, wfs.get(0).workflowId());
 
     try (var id = new WorkflowOptions(wfid).setContext()) {
@@ -82,7 +82,7 @@ public class AsyncWorkflowTest {
   @Test
   public void workflowWithError() throws Exception {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     dbos.launch();
 
     String wfid = "abc";
@@ -99,19 +99,19 @@ public class AsyncWorkflowTest {
 
     List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
     assertEquals(1, wfs.size());
-    assertEquals(wfs.get(0).name(), "workError");
+    assertEquals(wfs.get(0).workflowName(), "workError");
     assertNotNull(wfs.get(0).workflowId());
     assertEquals(wfs.get(0).workflowId(), handle.workflowId());
     assertEquals("java.lang.Exception", handle.getStatus().error().className());
     assertEquals("DBOS Test error", handle.getStatus().error().message());
-    assertEquals(WorkflowState.ERROR.name(), handle.getStatus().status());
+    assertEquals(WorkflowState.ERROR, handle.getStatus().status());
   }
 
   @Test
   public void childWorkflowWithoutSet() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 
@@ -126,10 +126,10 @@ public class AsyncWorkflowTest {
 
     assertEquals(2, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
     assertEquals("wf-123456-0", wfs.get(1).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(1).status());
 
     List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(1, steps.size());
@@ -142,7 +142,7 @@ public class AsyncWorkflowTest {
   public void multipleChildren() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 
@@ -157,16 +157,16 @@ public class AsyncWorkflowTest {
 
     assertEquals(4, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
     assertEquals("child1", wfs.get(1).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(1).status());
 
     assertEquals("child2", wfs.get(2).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(2).status());
 
     assertEquals("child3", wfs.get(3).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(3).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(3).status());
 
     List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(6, steps.size());
@@ -190,7 +190,7 @@ public class AsyncWorkflowTest {
   public void nestedChildren() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 
@@ -204,13 +204,13 @@ public class AsyncWorkflowTest {
 
     assertEquals(3, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(0).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
     assertEquals("child4", wfs.get(1).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(1).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(1).status());
 
     assertEquals("child5", wfs.get(2).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfs.get(2).status());
+    assertEquals(WorkflowState.SUCCESS, wfs.get(2).status());
 
     List<StepInfo> steps = dbos.listWorkflowSteps("wf-123456");
     assertEquals(2, steps.size());
@@ -232,7 +232,7 @@ public class AsyncWorkflowTest {
   @Test
   public void startWorkflowClosure() {
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     dbos.launch();
 
     WorkflowHandle<String, RuntimeException> handle =
@@ -240,14 +240,14 @@ public class AsyncWorkflowTest {
 
     String result = handle.getResult();
     assertEquals("Processed: test-item", result);
-    assertEquals(WorkflowState.SUCCESS.name(), handle.getStatus().status());
+    assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
   }
 
   @Test
   public void resAndStatus() throws Exception {
 
     SimpleServiceImpl impl = new SimpleServiceImpl(dbos);
-    SimpleService simpleService = dbos.registerWorkflows(SimpleService.class, impl);
+    SimpleService simpleService = dbos.registerProxy(SimpleService.class, impl);
     impl.setSelf(simpleService);
     dbos.launch();
 

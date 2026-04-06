@@ -12,6 +12,7 @@ import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -37,7 +38,7 @@ public class DirectInvocationTest {
     var dbosConfig = pgContainer.dbosConfig();
     dbos = new DBOS(dbosConfig);
     var impl = new HawkServiceImpl(dbos);
-    proxy = dbos.registerWorkflows(HawkService.class, impl);
+    proxy = dbos.registerProxy(HawkService.class, impl);
     impl.setProxy(proxy);
 
     dbos.launch();
@@ -55,9 +56,10 @@ public class DirectInvocationTest {
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertDoesNotThrow(() -> UUID.fromString((String) row.workflowId()));
-    assertEquals("SUCCESS", row.status());
-    assertEquals("simpleWorkflow", row.name());
+    assertEquals(WorkflowState.SUCCESS.name(), row.status());
+    assertEquals("simpleWorkflow", row.workflowName());
     assertEquals("dev.dbos.transact.invocation.HawkServiceImpl", row.className());
+    assertNull(row.instanceName());
     assertNotNull(row.output());
     assertNull(row.error());
     assertNull(row.timeoutMs());
@@ -140,7 +142,7 @@ public class DirectInvocationTest {
     var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, rows.size());
     var row = rows.get(0);
-    assertEquals("CANCELLED", row.status());
+    assertEquals(WorkflowState.CANCELLED.name(), row.status());
     assertNull(row.output());
     assertNull(row.error());
   }
@@ -157,7 +159,7 @@ public class DirectInvocationTest {
     var rows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, rows.size());
     var row = rows.get(0);
-    assertEquals("CANCELLED", row.status());
+    assertEquals(WorkflowState.CANCELLED.name(), row.status());
     assertNull(row.output());
     assertNull(row.error());
   }
@@ -175,7 +177,7 @@ public class DirectInvocationTest {
     assertEquals(1, rows.size());
     var row = rows.get(0);
     assertEquals(workflowId, row.workflowId());
-    assertEquals("CANCELLED", row.status());
+    assertEquals(WorkflowState.CANCELLED.name(), row.status());
     assertNull(row.output());
     assertNull(row.error());
   }
@@ -192,10 +194,10 @@ public class DirectInvocationTest {
     var row1 = rows.get(1);
     assertDoesNotThrow(() -> UUID.fromString(row0.workflowId()));
     assertEquals(row0.workflowId() + "-0", row1.workflowId());
-    assertEquals("SUCCESS", row0.status());
-    assertEquals("SUCCESS", row1.status());
-    assertEquals("parentWorkflow", row0.name());
-    assertEquals("simpleWorkflow", row1.name());
+    assertEquals(WorkflowState.SUCCESS.name(), row0.status());
+    assertEquals(WorkflowState.SUCCESS.name(), row1.status());
+    assertEquals("parentWorkflow", row0.workflowName());
+    assertEquals("simpleWorkflow", row1.workflowName());
     assertEquals(row0.output(), row1.output());
     assertNull(row0.timeoutMs());
     assertNull(row1.timeoutMs());
@@ -226,10 +228,10 @@ public class DirectInvocationTest {
     var row1 = rows.get(1);
     assertDoesNotThrow(() -> UUID.fromString(row0.workflowId()));
     assertEquals(row0.workflowId() + "-0", row1.workflowId());
-    assertEquals("SUCCESS", row0.status());
-    assertEquals("SUCCESS", row1.status());
-    assertEquals("parentStartWorkflow", row0.name());
-    assertEquals("simpleWorkflow", row1.name());
+    assertEquals(WorkflowState.SUCCESS.name(), row0.status());
+    assertEquals(WorkflowState.SUCCESS.name(), row1.status());
+    assertEquals("parentStartWorkflow", row0.workflowName());
+    assertEquals("simpleWorkflow", row1.workflowName());
     assertEquals(row0.output(), row1.output());
     assertNull(row0.timeoutMs());
     assertNull(row1.timeoutMs());

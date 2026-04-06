@@ -34,7 +34,7 @@ public class StreamTest {
     dataSource = pgContainer.dataSource();
 
     dbos.registerQueue(new Queue("testQueue"));
-    proxy = dbos.registerWorkflows(StreamTestService.class, new StreamTestServiceImpl(dbos));
+    proxy = dbos.registerProxy(StreamTestService.class, new StreamTestServiceImpl(dbos));
 
     dbos.launch();
   }

@@ -257,7 +257,7 @@ public class ListWorkflowsTest {
     List<WorkflowStatus> alpha =
         dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("alpha"));
     assertEquals(3, alpha.size());
-    alpha.forEach(wf -> assertEquals("alpha", wf.name()));
+    alpha.forEach(wf -> assertEquals("alpha", wf.workflowName()));
 
     // beta: wf-beta-1, wf-beta-2 = 2
     List<WorkflowStatus> beta =
@@ -282,13 +282,13 @@ public class ListWorkflowsTest {
     List<WorkflowStatus> success =
         dbos.listWorkflows(new ListWorkflowsInput().withStatus(WorkflowState.SUCCESS));
     assertEquals(7, success.size());
-    success.forEach(wf -> assertEquals("SUCCESS", wf.status()));
+    success.forEach(wf -> assertEquals(WorkflowState.SUCCESS, wf.status()));
 
     // ERROR: wf-alpha-3, wf-gamma-2 = 2
     List<WorkflowStatus> error =
         dbos.listWorkflows(new ListWorkflowsInput().withStatus(WorkflowState.ERROR));
     assertEquals(2, error.size());
-    error.forEach(wf -> assertEquals("ERROR", wf.status()));
+    error.forEach(wf -> assertEquals(WorkflowState.ERROR, wf.status()));
 
     // CANCELLED: wf-beta-2 = 1
     List<WorkflowStatus> cancelled =
@@ -591,7 +591,7 @@ public class ListWorkflowsTest {
         wf -> {
           assertNotNull(wf.workflowId());
           assertNotNull(wf.status());
-          assertNotNull(wf.name());
+          assertNotNull(wf.workflowName());
           assertNotNull(wf.createdAt());
         });
   }
@@ -611,7 +611,7 @@ public class ListWorkflowsTest {
         wf -> {
           assertNotNull(wf.workflowId());
           assertNotNull(wf.status());
-          assertNotNull(wf.name());
+          assertNotNull(wf.workflowName());
         });
   }
 
@@ -647,15 +647,17 @@ public class ListWorkflowsTest {
         wf -> {
           assertNotNull(wf.workflowId());
           assertNotNull(wf.status());
-          assertNotNull(wf.name());
+          assertNotNull(wf.workflowName());
           assertNotNull(wf.className());
           assertNotNull(wf.createdAt());
         });
 
     // Status counts must be correct even though output/error were not loaded
-    long successCount = wfs.stream().filter(wf -> "SUCCESS".equals(wf.status())).count();
-    long errorCount = wfs.stream().filter(wf -> "ERROR".equals(wf.status())).count();
-    long cancelledCount = wfs.stream().filter(wf -> "CANCELLED".equals(wf.status())).count();
+    long successCount =
+        wfs.stream().filter(wf -> WorkflowState.SUCCESS.equals(wf.status())).count();
+    long errorCount = wfs.stream().filter(wf -> WorkflowState.ERROR.equals(wf.status())).count();
+    long cancelledCount =
+        wfs.stream().filter(wf -> WorkflowState.CANCELLED.equals(wf.status())).count();
     assertEquals(7, successCount);
     assertEquals(2, errorCount);
     assertEquals(1, cancelledCount);
@@ -666,9 +668,9 @@ public class ListWorkflowsTest {
             .filter(wf -> "wf-alpha-1".equals(wf.workflowId()))
             .findFirst()
             .orElseThrow(() -> new AssertionError("wf-alpha-1 not found"));
-    assertEquals("alpha", alpha1.name());
+    assertEquals("alpha", alpha1.workflowName());
     assertEquals("ClassA", alpha1.className());
-    assertEquals("SUCCESS", alpha1.status());
+    assertEquals(WorkflowState.SUCCESS, alpha1.status());
     assertTrue(alpha1.input() == null || alpha1.input().length == 0);
     assertNull(alpha1.output());
     assertNull(alpha1.error());
@@ -697,7 +699,8 @@ public class ListWorkflowsTest {
     List<WorkflowStatus> alphaOrBeta =
         dbos.listWorkflows(new ListWorkflowsInput().withWorkflowNames(List.of("alpha", "beta")));
     assertEquals(5, alphaOrBeta.size());
-    alphaOrBeta.forEach(wf -> assertTrue("alpha".equals(wf.name()) || "beta".equals(wf.name())));
+    alphaOrBeta.forEach(
+        wf -> assertTrue("alpha".equals(wf.workflowName()) || "beta".equals(wf.workflowName())));
 
     // alpha=3, beta=2, gamma=3 → 8
     List<WorkflowStatus> threenames =
@@ -743,7 +746,10 @@ public class ListWorkflowsTest {
         dbos.listWorkflows(new ListWorkflowsInput().withStatuses(List.of("SUCCESS", "CANCELLED")));
     assertEquals(8, successOrCancelled.size());
     successOrCancelled.forEach(
-        wf -> assertTrue("SUCCESS".equals(wf.status()) || "CANCELLED".equals(wf.status())));
+        wf ->
+            assertTrue(
+                WorkflowState.SUCCESS.equals(wf.status())
+                    || WorkflowState.CANCELLED.equals(wf.status())));
 
     // --- forkedFrom ---
     // wf-forked-1 forked from wf-alpha-1; no workflow forked from wf-beta-1
@@ -773,8 +779,8 @@ public class ListWorkflowsTest {
     assertEquals(2, alphaSuccess.size());
     alphaSuccess.forEach(
         wf -> {
-          assertEquals("alpha", wf.name());
-          assertEquals("SUCCESS", wf.status());
+          assertEquals("alpha", wf.workflowName());
+          assertEquals(WorkflowState.SUCCESS, wf.status());
         });
 
     // className=ClassC + appVersion=v2.0 → wf-gamma-1, wf-forked-1, wf-gamma-2 = 3
@@ -807,7 +813,7 @@ public class ListWorkflowsTest {
     queuedSuccess.forEach(
         wf -> {
           assertNotNull(wf.queueName());
-          assertEquals("SUCCESS", wf.status());
+          assertEquals(WorkflowState.SUCCESS, wf.status());
         });
 
     // limit=2 on a sorted result

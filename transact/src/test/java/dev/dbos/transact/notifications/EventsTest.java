@@ -77,8 +77,9 @@ class EventsServiceImpl implements EventsService {
         "stepSetEvent");
     return dbos.runStep(
         () -> {
-          return (String)
-              dbos.getEvent(DBOSContext.workflowId(), key + "-fromstep", Duration.ofSeconds(0));
+          return dbos.<String>getEvent(
+                  DBOSContext.workflowId(), key + "-fromstep", Duration.ofSeconds(0))
+              .orElseThrow();
         },
         "getEventInStep");
   }
@@ -86,14 +87,14 @@ class EventsServiceImpl implements EventsService {
   @Workflow
   @Override
   public Object getEventWorkflow(String workflowId, String key, Duration timeOut) {
-    return dbos.getEvent(workflowId, key, timeOut);
+    return dbos.getEvent(workflowId, key, timeOut).orElse(null);
   }
 
   @Workflow
   @Override
   public void setMultipleEvents() {
     dbos.setEvent("key1", "value1");
-    dbos.setEvent("key2", Double.valueOf(241.5));
+    dbos.setEvent("key2", 241.5);
     dbos.setEvent("key3", null);
   }
 
@@ -116,7 +117,7 @@ class EventsServiceImpl implements EventsService {
   @Override
   public Object getWithlatch(String workflowId, String key, Duration timeOut) {
     getReadyLatch.countDown();
-    return dbos.getEvent(workflowId, key, timeOut);
+    return dbos.getEvent(workflowId, key, timeOut).orElseThrow();
   }
 
   @Workflow
@@ -133,10 +134,10 @@ class EventsServiceImpl implements EventsService {
   @Override
   public String getEventTwice(String wfid, String key) throws InterruptedException {
     advanceGetLatch1.await();
-    var v1 = (String) dbos.getEvent(wfid, key, Duration.ofSeconds(0));
+    var v1 = dbos.<String>getEvent(wfid, key, Duration.ofSeconds(0)).orElseThrow();
     doneGetLatch1.countDown();
     advanceGetLatch2.await();
-    var v2 = (String) dbos.getEvent(wfid, key, Duration.ofSeconds(0));
+    var v2 = dbos.<String>getEvent(wfid, key, Duration.ofSeconds(0)).orElseThrow();
     return v1 + v2;
   }
 
@@ -183,7 +184,7 @@ public class EventsTest {
     this.dbos = new DBOS(dbosConfig);
     this.dataSource = pgContainer.dataSource();
     this.impl = new EventsServiceImpl(dbos);
-    this.proxy = dbos.registerWorkflows(EventsService.class, impl);
+    this.proxy = dbos.registerProxy(EventsService.class, impl);
     dbos.launch();
   }
 
@@ -202,12 +203,12 @@ public class EventsTest {
     assertEquals("value2", proxy.getEventWorkflow(wfid, "key2", timeout));
 
     // Run getEvent outside of a workflow
-    assertEquals("value1", dbos.getEvent(wfid, "key1", timeout));
-    assertEquals("value2", dbos.getEvent(wfid, "key2", timeout));
+    assertEquals("value1", dbos.<String>getEvent(wfid, "key1", timeout).orElseThrow());
+    assertEquals("value2", dbos.<String>getEvent(wfid, "key2", timeout).orElseThrow());
 
     assertNull(proxy.getEventWorkflow(wfid, "key3", timeout));
 
-    assertEquals("value4", dbos.getEvent(wfid, "key4", timeout));
+    assertEquals("value4", dbos.<String>getEvent(wfid, "key4", timeout).orElseThrow());
 
     var steps = dbos.listWorkflowSteps(wfid);
     assertEquals(4, steps.size());
@@ -237,7 +238,8 @@ public class EventsTest {
     // No OAOO for getEvent outside of a workflow
     {
       var begin = System.currentTimeMillis();
-      var result = dbos.getEvent("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
+      var result =
+          dbos.getEvent("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2)).orElse(null);
       var end = System.currentTimeMillis();
       assert (end - begin > 1500);
       assertNull(result);
@@ -245,7 +247,8 @@ public class EventsTest {
 
     {
       var begin = System.currentTimeMillis();
-      var result = dbos.getEvent("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2));
+      var result =
+          dbos.getEvent("nonexistent-wfid", timeoutWFID, Duration.ofSeconds(2)).orElse(null);
       var end = System.currentTimeMillis();
       assert (end - begin > 1500);
       assertNull(result);
@@ -274,7 +277,7 @@ public class EventsTest {
     }
 
     // outside workflow
-    String val = (String) dbos.getEvent("id1", "key1", Duration.ofSeconds(3));
+    String val = dbos.<String>getEvent("id1", "key1", Duration.ofSeconds(3)).orElseThrow();
     assertEquals("value1", val);
     assertThrows(IllegalStateException.class, () -> dbos.setEvent("a", "b"));
   }
@@ -291,7 +294,7 @@ public class EventsTest {
     }
 
     // outside workflow
-    Double val = (Double) dbos.getEvent("id1", "key2", Duration.ofSeconds(3));
+    Double val = dbos.<Double>getEvent("id1", "key2", Duration.ofSeconds(3)).orElseThrow();
     assertEquals(241.5, val);
   }
 
@@ -305,7 +308,8 @@ public class EventsTest {
         new StartWorkflowOptions("id2"));
 
     String event = (String) dbos.retrieveWorkflow("id2").getResult();
-    String stepEvent = (String) dbos.getEvent("id1", "key1-fromstep", Duration.ofMillis(1000));
+    String stepEvent =
+        dbos.<String>getEvent("id1", "key1-fromstep", Duration.ofMillis(1000)).orElseThrow();
     assertEquals("value1", event);
     assertEquals("value1", stepEvent);
     assertEquals("value1", setwfh.getResult());
@@ -377,7 +381,7 @@ public class EventsTest {
   @Test
   public void timeout() {
     long start = System.currentTimeMillis();
-    dbos.getEvent("nonexistingid", "fake_key", Duration.ofMillis(10));
+    dbos.getEvent("nonexistingid", "fake_key", Duration.ofMillis(10)).orElse(null);
     long elapsed = System.currentTimeMillis() - start;
     assertTrue(elapsed < 1000);
   }
@@ -387,9 +391,9 @@ public class EventsTest {
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {
       Future<Object> future1 =
-          executor.submit(() -> dbos.getEvent("id1", "key1", Duration.ofSeconds(5)));
+          executor.submit(() -> dbos.getEvent("id1", "key1", Duration.ofSeconds(5)).orElseThrow());
       Future<Object> future2 =
-          executor.submit(() -> dbos.getEvent("id1", "key1", Duration.ofSeconds(5)));
+          executor.submit(() -> dbos.getEvent("id1", "key1", Duration.ofSeconds(5)).orElseThrow());
 
       String expectedMessage = "test message";
       try (var id = new WorkflowOptions("id1").setContext()) {

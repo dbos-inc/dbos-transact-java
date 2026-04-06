@@ -277,7 +277,7 @@ class AdminServerTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
-            .name("WF1")
+            .workflowName("WF1")
             .createdAt(1754936102215L)
             .updatedAt(1754936102215L)
             .executorId("test-executor")
@@ -287,7 +287,7 @@ class AdminServerTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-2")
             .status(WorkflowState.PENDING)
-            .name("WF2")
+            .workflowName("WF2")
             .createdAt(1754936722066L)
             .updatedAt(1754936722066L)
             .executorId("test-executor")
@@ -297,7 +297,7 @@ class AdminServerTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-3")
             .status(WorkflowState.PENDING)
-            .name("WF3")
+            .workflowName("WF3")
             .createdAt(1754946202215L)
             .updatedAt(1754946202215L)
             .executorId("test-executor")
@@ -345,7 +345,7 @@ class AdminServerTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
-            .name("WF1")
+            .workflowName("WF1")
             .createdAt(1754936102215L)
             .updatedAt(1754936102215L)
             .executorId("test-executor")
@@ -356,7 +356,7 @@ class AdminServerTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-2")
             .status(WorkflowState.PENDING)
-            .name("WF2")
+            .workflowName("WF2")
             .createdAt(1754936722066L)
             .updatedAt(1754936722066L)
             .executorId("test-executor")
@@ -367,7 +367,7 @@ class AdminServerTest {
     statuses.add(
         new WorkflowStatusBuilder("wf-3")
             .status(WorkflowState.PENDING)
-            .name("WF3")
+            .workflowName("WF3")
             .createdAt(1754946202215L)
             .updatedAt(1754946202215L)
             .executorId("test-executor")
@@ -416,7 +416,7 @@ class AdminServerTest {
     var status =
         new WorkflowStatusBuilder("test-wf-id")
             .status(WorkflowState.PENDING)
-            .name("WF3")
+            .workflowName("WF3")
             .createdAt(1754946202215L)
             .updatedAt(1754946202215L)
             .build();
@@ -433,8 +433,8 @@ class AdminServerTest {
           .then()
           .statusCode(200)
           .body("WorkflowUUID", equalTo(status.workflowId()))
-          .body("WorkflowName", equalTo(status.name()))
-          .body("Status", equalTo(status.status().toString()))
+          .body("WorkflowName", equalTo(status.workflowName()))
+          .body("Status", equalTo(status.status().name()))
           .body("CreatedAt", equalTo("1754946202215"));
 
       ArgumentCaptor<ListWorkflowsInput> inputCaptor =

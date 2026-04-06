@@ -834,7 +834,7 @@ public class Conductor implements AutoCloseable {
             ListWorkflowsInput input = request.asInput();
             List<WorkflowStatus> statuses = conductor.dbosExecutor.listWorkflows(input);
             List<WorkflowsOutput> output =
-                statuses.stream().map(s -> new WorkflowsOutput(s)).collect(Collectors.toList());
+                statuses.stream().map(WorkflowsOutput::new).collect(Collectors.toList());
             return new WorkflowOutputsResponse(request, output);
           } catch (Exception e) {
             logger.error("Exception encountered when listing workflows", e);
@@ -852,7 +852,7 @@ public class Conductor implements AutoCloseable {
             ListWorkflowsInput input = request.asInput();
             List<WorkflowStatus> statuses = conductor.dbosExecutor.listWorkflows(input);
             List<WorkflowsOutput> output =
-                statuses.stream().map(s -> new WorkflowsOutput(s)).collect(Collectors.toList());
+                statuses.stream().map(WorkflowsOutput::new).collect(Collectors.toList());
             return new WorkflowOutputsResponse(request, output);
           } catch (Exception e) {
             logger.error("Exception encountered when listing workflows", e);
@@ -901,9 +901,7 @@ public class Conductor implements AutoCloseable {
             List<StepInfo> stepInfoList =
                 conductor.dbosExecutor.listWorkflowSteps(request.workflow_id);
             List<ListStepsResponse.Step> steps =
-                stepInfoList.stream()
-                    .map(i -> new ListStepsResponse.Step(i))
-                    .collect(Collectors.toList());
+                stepInfoList.stream().map(ListStepsResponse.Step::new).collect(Collectors.toList());
             return new ListStepsResponse(request, steps);
           } catch (Exception e) {
             logger.error("Exception encountered when listing steps {}", request.workflow_id, e);
