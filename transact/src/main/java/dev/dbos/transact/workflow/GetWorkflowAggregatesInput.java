@@ -33,93 +33,223 @@ public record GetWorkflowAggregatesInput(
 
   public GetWorkflowAggregatesInput withGroupByStatus(boolean groupByStatus) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withGroupByName(boolean groupByName) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withGroupByQueueName(boolean groupByQueueName) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withGroupByExecutorId(boolean groupByExecutorId) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withGroupByApplicationVersion(
       boolean groupByApplicationVersion) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withWorkflowName(List<String> workflowName) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withStatus(List<String> status) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withQueueName(List<String> queueName) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withExecutorIds(List<String> executorIds) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withApplicationVersion(List<String> applicationVersion) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withWorkflowIdPrefix(List<String> workflowIdPrefix) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withStartTime(Instant startTime) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 
   public GetWorkflowAggregatesInput withEndTime(Instant endTime) {
     return new GetWorkflowAggregatesInput(
-        groupByStatus, groupByName, groupByQueueName, groupByExecutorId,
-        groupByApplicationVersion, workflowName, status, queueName, executorIds,
-        applicationVersion, workflowIdPrefix, startTime, endTime);
+        groupByStatus,
+        groupByName,
+        groupByQueueName,
+        groupByExecutorId,
+        groupByApplicationVersion,
+        workflowName,
+        status,
+        queueName,
+        executorIds,
+        applicationVersion,
+        workflowIdPrefix,
+        startTime,
+        endTime);
   }
 }

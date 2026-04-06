@@ -1214,8 +1214,7 @@ public class SystemDatabaseTest {
             buildNamedWorkflow("agg-wf-3", "WorkflowA", WorkflowState.ERROR),
             buildNamedWorkflow("agg-wf-4", "WorkflowB", WorkflowState.PENDING)));
 
-    var input =
-        new GetWorkflowAggregatesInput().withGroupByName(true).withGroupByStatus(true);
+    var input = new GetWorkflowAggregatesInput().withGroupByName(true).withGroupByStatus(true);
     var rows = sysdb.getWorkflowAggregates(input);
 
     var successA =
