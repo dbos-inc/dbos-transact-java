@@ -12,8 +12,10 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Timeout;
+import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
@@ -29,6 +31,7 @@ import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -586,6 +589,126 @@ class WorkflowDAO {
     }
 
     return workflows;
+  }
+
+  List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input)
+      throws SQLException {
+    if (input == null) {
+      input = new GetWorkflowAggregatesInput();
+    }
+
+    // Determine which columns to group by (in a stable order)
+    record GroupDim(String name, String column) {}
+    var dims = new ArrayList<GroupDim>();
+    if (input.groupByStatus()) dims.add(new GroupDim("status", "status"));
+    if (input.groupByName()) dims.add(new GroupDim("name", "name"));
+    if (input.groupByQueueName()) dims.add(new GroupDim("queue_name", "queue_name"));
+    if (input.groupByExecutorId()) dims.add(new GroupDim("executor_id", "executor_id"));
+    if (input.groupByApplicationVersion())
+      dims.add(new GroupDim("application_version", "application_version"));
+
+    if (dims.isEmpty()) {
+      throw new IllegalArgumentException(
+          "At least one groupBy flag must be set in GetWorkflowAggregatesInput");
+    }
+
+    List<Object> parameters = new ArrayList<>();
+    StringBuilder sqlBuilder = new StringBuilder("SELECT ");
+
+    StringJoiner selectCols = new StringJoiner(", ");
+    for (var dim : dims) selectCols.add(dim.column());
+    selectCols.add("COUNT(*) AS count");
+    sqlBuilder.append(selectCols).append(" FROM \"%s\".workflow_status".formatted(this.schema));
+
+    // --- WHERE ---
+    StringJoiner whereConditions = new StringJoiner(" AND ");
+
+    if (input.workflowName() != null && !input.workflowName().isEmpty()) {
+      whereConditions.add("name = ANY(?)");
+      parameters.add(input.workflowName());
+    }
+    if (input.status() != null && !input.status().isEmpty()) {
+      whereConditions.add("status = ANY(?)");
+      parameters.add(input.status());
+    }
+    if (input.queueName() != null && !input.queueName().isEmpty()) {
+      whereConditions.add("queue_name = ANY(?)");
+      parameters.add(input.queueName());
+    }
+    if (input.executorIds() != null && !input.executorIds().isEmpty()) {
+      whereConditions.add("executor_id = ANY(?)");
+      parameters.add(input.executorIds());
+    }
+    if (input.applicationVersion() != null && !input.applicationVersion().isEmpty()) {
+      whereConditions.add("application_version = ANY(?)");
+      parameters.add(input.applicationVersion());
+    }
+    if (input.startTime() != null) {
+      whereConditions.add("created_at >= ?");
+      parameters.add(input.startTime().toEpochMilli());
+    }
+    if (input.endTime() != null) {
+      whereConditions.add("created_at <= ?");
+      parameters.add(input.endTime().toEpochMilli());
+    }
+    if (input.workflowIdPrefix() != null && !input.workflowIdPrefix().isEmpty()) {
+      // Multiple prefixes are OR'd: (uuid LIKE 'a%' OR uuid LIKE 'b%' ...)
+      StringJoiner prefixOr = new StringJoiner(" OR ", "(", ")");
+      for (var prefix : input.workflowIdPrefix()) {
+        prefixOr.add("workflow_uuid LIKE ?");
+        parameters.add(prefix + "%");
+      }
+      whereConditions.add(prefixOr.toString());
+    }
+
+    if (whereConditions.length() > 0) {
+      sqlBuilder.append(" WHERE ").append(whereConditions);
+    }
+
+    // --- GROUP BY ---
+    StringJoiner groupByCols = new StringJoiner(", ");
+    for (var dim : dims) groupByCols.add(dim.column());
+    sqlBuilder.append(" GROUP BY ").append(groupByCols);
+    sqlBuilder.append(" ORDER BY ").append(groupByCols);
+
+    List<WorkflowAggregateRow> results = new ArrayList<>();
+    try (Connection connection = dataSource.getConnection();
+        PreparedStatement pstmt = connection.prepareStatement(sqlBuilder.toString())) {
+      List<Array> arrays = new ArrayList<>();
+      try {
+        for (int i = 0; i < parameters.size(); i++) {
+          Object param = parameters.get(i);
+          if (param instanceof String v) {
+            pstmt.setString(i + 1, v);
+          } else if (param instanceof Long v) {
+            pstmt.setLong(i + 1, v);
+          } else if (param instanceof Integer v) {
+            pstmt.setInt(i + 1, v);
+          } else if (param instanceof List<?> v) {
+            Array sqlArray = connection.createArrayOf("text", v.toArray());
+            arrays.add(sqlArray);
+            pstmt.setArray(i + 1, sqlArray);
+          } else {
+            pstmt.setObject(i + 1, param);
+          }
+        }
+        try (ResultSet rs = pstmt.executeQuery()) {
+          while (rs.next()) {
+            var group = new LinkedHashMap<String, String>();
+            for (var dim : dims) {
+              group.put(dim.name(), rs.getString(dim.column()));
+            }
+            results.add(new WorkflowAggregateRow(group, rs.getLong("count")));
+          }
+        }
+      } finally {
+        for (Array array : arrays) {
+          array.free();
+        }
+      }
+    }
+
+    return results;
   }
 
   private static WorkflowStatus resultsToWorkflowStatus(

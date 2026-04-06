@@ -13,7 +13,9 @@ import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.NotificationInfo;
+import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -284,6 +286,10 @@ public class SystemDatabase implements AutoCloseable {
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return dbRetry(() -> workflowDAO.listWorkflows(input));
+  }
+
+  public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {
+    return dbRetry(() -> workflowDAO.getWorkflowAggregates(input));
   }
 
   public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion) {

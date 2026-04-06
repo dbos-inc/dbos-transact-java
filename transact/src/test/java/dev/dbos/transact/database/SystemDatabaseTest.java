@@ -17,7 +17,7 @@ import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
-import dev.dbos.transact.workflow.NotificationInfo;
+import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
@@ -1184,11 +1184,16 @@ public class SystemDatabaseTest {
   }
 
   private static ExportedWorkflow buildEmptyWorkflow(String wfId) {
+    return buildNamedWorkflow(wfId, "TestWorkflow", WorkflowState.SUCCESS);
+  }
+
+  private static ExportedWorkflow buildNamedWorkflow(
+      String wfId, String workflowName, WorkflowState state) {
     long now = System.currentTimeMillis();
     var status =
         new WorkflowStatusBuilder(wfId)
-            .status(WorkflowState.SUCCESS)
-            .workflowName("TestWorkflow")
+            .status(state)
+            .workflowName(workflowName)
             .appVersion("1.0.0")
             .recoveryAttempts(0)
             .priority(0)
@@ -1197,6 +1202,106 @@ public class SystemDatabaseTest {
             .build();
     return new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of());
   }
+
+  // ── F-11: Workflow Aggregates ─────────────────────────────────────────────
+
+  @Test
+  public void testGetWorkflowAggregatesBasic() throws Exception {
+    sysdb.importWorkflow(
+        List.of(
+            buildNamedWorkflow("agg-wf-1", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("agg-wf-2", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("agg-wf-3", "WorkflowA", WorkflowState.ERROR),
+            buildNamedWorkflow("agg-wf-4", "WorkflowB", WorkflowState.PENDING)));
+
+    var input =
+        new GetWorkflowAggregatesInput().withGroupByName(true).withGroupByStatus(true);
+    var rows = sysdb.getWorkflowAggregates(input);
+
+    var successA =
+        rows.stream()
+            .filter(
+                r ->
+                    "WorkflowA".equals(r.group().get("name"))
+                        && WorkflowState.SUCCESS.name().equals(r.group().get("status")))
+            .findFirst();
+    assertTrue(successA.isPresent());
+    assertEquals(2, successA.get().count());
+
+    var errorA =
+        rows.stream()
+            .filter(
+                r ->
+                    "WorkflowA".equals(r.group().get("name"))
+                        && WorkflowState.ERROR.name().equals(r.group().get("status")))
+            .findFirst();
+    assertTrue(errorA.isPresent());
+    assertEquals(1, errorA.get().count());
+
+    var pendingB =
+        rows.stream()
+            .filter(
+                r ->
+                    "WorkflowB".equals(r.group().get("name"))
+                        && WorkflowState.PENDING.name().equals(r.group().get("status")))
+            .findFirst();
+    assertTrue(pendingB.isPresent());
+    assertEquals(1, pendingB.get().count());
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesWithFilter() throws Exception {
+    sysdb.importWorkflow(
+        List.of(
+            buildNamedWorkflow("agg-filter-wf-1", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("agg-filter-wf-2", "WorkflowA", WorkflowState.ERROR),
+            buildNamedWorkflow("agg-filter-wf-3", "WorkflowB", WorkflowState.SUCCESS)));
+
+    var input =
+        new GetWorkflowAggregatesInput()
+            .withGroupByName(true)
+            .withGroupByStatus(true)
+            .withWorkflowName(List.of("WorkflowA"));
+    var rows = sysdb.getWorkflowAggregates(input);
+
+    assertEquals(2, rows.size());
+    assertTrue(rows.stream().allMatch(r -> "WorkflowA".equals(r.group().get("name"))));
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesIdPrefix() throws Exception {
+    sysdb.importWorkflow(
+        List.of(
+            buildNamedWorkflow("prefix-aaa-1", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("prefix-aaa-2", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("prefix-bbb-1", "WorkflowB", WorkflowState.SUCCESS)));
+
+    var input =
+        new GetWorkflowAggregatesInput()
+            .withGroupByName(true)
+            .withWorkflowIdPrefix(List.of("prefix-aaa"));
+    var rows = sysdb.getWorkflowAggregates(input);
+
+    assertEquals(1, rows.size());
+    assertEquals("WorkflowA", rows.get(0).group().get("name"));
+    assertEquals(2, rows.get(0).count());
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesNoGroupByThrows() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> sysdb.getWorkflowAggregates(new GetWorkflowAggregatesInput()));
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesEmpty() throws Exception {
+    var input = new GetWorkflowAggregatesInput().withGroupByStatus(true);
+    var rows = sysdb.getWorkflowAggregates(input);
+    assertTrue(rows.isEmpty());
+  }
+
+  // ── F-4: Workflow Data Queries ────────────────────────────────────────────
 
   @Test
   public void testGetAllEvents() throws Exception {
