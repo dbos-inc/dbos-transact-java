@@ -242,7 +242,7 @@ public class DBOS implements AutoCloseable {
    * @return true if the target contains at least one @Workflow annotated method, false otherwise
    * @throws NullPointerException if target is null
    */
-  public static boolean hasWorkflowsOrSteps(@NonNull Object target) {
+  private static boolean hasWorkflowsOrSteps(@NonNull Object target) {
     var methods =
         Objects.requireNonNull(target, "target can not be null").getClass().getDeclaredMethods();
     for (var method : methods) {
@@ -261,7 +261,7 @@ public class DBOS implements AutoCloseable {
    * @return the workflow class name (from annotation or actual class name)
    * @throws NullPointerException if target is null
    */
-  public static @NonNull String getWorkflowClassName(@NonNull Object target) {
+  private static @NonNull String getWorkflowClassName(@NonNull Object target) {
     var klass = Objects.requireNonNull(target, "target can not be null").getClass();
     var wfClassTag = klass.getAnnotation(WorkflowClassName.class);
     return (wfClassTag == null || wfClassTag.value().isEmpty())
@@ -278,7 +278,7 @@ public class DBOS implements AutoCloseable {
    * @return the workflow name (from annotation or method name)
    * @throws NullPointerException if wfTag or method is null
    */
-  public static @NonNull String getWorkflowName(@NonNull Workflow wfTag, @NonNull Method method) {
+  private static @NonNull String getWorkflowName(@NonNull Workflow wfTag, @NonNull Method method) {
     return Objects.requireNonNull(wfTag, "wfTag can not be null").name().isEmpty()
         ? Objects.requireNonNull(method, "method can not be null").getName()
         : wfTag.name();
