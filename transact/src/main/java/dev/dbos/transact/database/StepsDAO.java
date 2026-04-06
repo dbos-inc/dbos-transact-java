@@ -278,6 +278,50 @@ class StepsDAO {
     }
   }
 
+  String getCheckpointName(Connection conn, String workflowId, int functionId) throws SQLException {
+    var sql =
+        """
+          SELECT function_name
+          FROM "%s".operation_outputs
+          WHERE workflow_uuid = ? AND function_id = ?
+        """
+            .formatted(this.schema);
+
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, workflowId);
+      ps.setInt(2, functionId);
+      try (var rs = ps.executeQuery()) {
+        if (rs.next()) {
+          return rs.getString("function_name");
+        } else {
+          return null;
+        }
+      }
+    }
+  }
+
+  boolean patch(String workflowId, int functionId, String patchName) throws SQLException {
+    Objects.requireNonNull(patchName, "patchName cannot be null");
+    try (Connection conn = dataSource.getConnection()) {
+      var checkpointName = getCheckpointName(conn, workflowId, functionId);
+      if (checkpointName == null) {
+        var output = new StepResult(workflowId, functionId, patchName, null, null, null, null);
+        recordStepResultTxn(output, System.currentTimeMillis(), null, conn, this.schema);
+        return true;
+      } else {
+        return patchName.equals(checkpointName);
+      }
+    }
+  }
+
+  boolean deprecatePatch(String workflowId, int functionId, String patchName) throws SQLException {
+    Objects.requireNonNull(patchName, "patchName cannot be null");
+    try (Connection conn = dataSource.getConnection()) {
+      var checkpointName = getCheckpointName(conn, workflowId, functionId);
+      return patchName.equals(checkpointName);
+    }
+  }
+
   static Duration durableSleepDuration(
       DataSource dataSource,
       String workflowUuid,
