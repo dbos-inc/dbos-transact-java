@@ -1,6 +1,7 @@
 package dev.dbos.transact;
 
 import dev.dbos.transact.database.Result;
+import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.DBOSSerializer;
@@ -653,7 +654,7 @@ public class DBOSClient implements AutoCloseable {
    * @return Iterator that yields each value in the stream
    */
   public @NonNull Iterator<Object> readStream(@NonNull String workflowId, @NonNull String key) {
-    return new dev.dbos.transact.database.StreamIterator(workflowId, key, systemDatabase);
+    return new StreamIterator(workflowId, key, systemDatabase);
   }
 
   /**
