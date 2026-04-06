@@ -15,9 +15,7 @@ import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
-import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -492,6 +490,7 @@ public class DBOSClient implements AutoCloseable {
             options.instanceName(),
             null,
             args,
+            null,
             new DBOSExecutor.ExecutionOptions(
                 Objects.requireNonNullElseGet(
                     options.workflowId(), () -> UUID.randomUUID().toString()),
@@ -533,38 +532,35 @@ public class DBOSClient implements AutoCloseable {
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs) {
 
-    String workflowId =
-        Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString());
-
-    // Serialize arguments in portable format
-    SerializationUtil.SerializedResult serializedArgs =
-        SerializationUtil.serializeArgs(
-            positionalArgs, namedArgs, SerializationUtil.PORTABLE, this.serializer);
-
-    // Create workflow status directly with portable serialization
-    var statusBuilder =
-        WorkflowStatusInternal.builder(workflowId, WorkflowState.ENQUEUED)
-            .workflowName(options.workflowName())
-            .className(options.className())
-            .instanceName(options.instanceName())
-            .queueName(options.queueName())
-            .inputs(serializedArgs.serializedValue())
-            .serialization(serializedArgs.serialization())
-            .deduplicationId(options.deduplicationId())
-            .priority(options.priority())
-            .queuePartitionKey(options.queuePartitionKey())
-            .appVersion(options.appVersion());
-
-    if (options.timeout() != null) {
-      statusBuilder.timeoutMs(options.timeout().toMillis());
-    }
-    if (options.deadline() != null) {
-      statusBuilder.deadlineEpochMs(options.deadline().toEpochMilli());
-    }
-
-    var status = statusBuilder.build();
-
-    systemDatabase.initWorkflowStatus(status, null, false, false);
+    var workflowId =
+        DBOSExecutor.enqueueWorkflow(
+            Objects.requireNonNull(
+                options.workflowName(), "EnqueueOptions workflowName must not be null"),
+            options.className(),
+            options.instanceName(),
+            null,
+            positionalArgs,
+            namedArgs,
+            new DBOSExecutor.ExecutionOptions(
+                Objects.requireNonNullElseGet(
+                    options.workflowId(), () -> UUID.randomUUID().toString()),
+                Timeout.of(options.timeout()),
+                options.deadline,
+                Objects.requireNonNull(
+                    options.queueName(), "EnqueueOptions queueName must not be null"),
+                options.deduplicationId,
+                options.priority,
+                options.queuePartitionKey,
+                options.appVersion,
+                false,
+                false,
+                SerializationUtil.PORTABLE),
+            null,
+            null,
+            null,
+            null,
+            systemDatabase,
+            this.serializer);
 
     return new WorkflowHandleClient<>(workflowId);
   }

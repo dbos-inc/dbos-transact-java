@@ -1167,6 +1167,7 @@ public class DBOSExecutor implements AutoCloseable {
         null,
         null,
         args,
+        null,
         options,
         null,
         null,
@@ -1626,6 +1627,7 @@ public class DBOSExecutor implements AutoCloseable {
               workflow.instanceName(),
               maxRetries,
               args,
+              null,
               options,
               parent,
               executorId(),
@@ -1650,6 +1652,7 @@ public class DBOSExecutor implements AutoCloseable {
             workflow.instanceName(),
             maxRetries,
             args,
+            null,
             workflowId,
             null,
             null,
@@ -1765,12 +1768,15 @@ public class DBOSExecutor implements AutoCloseable {
     return new WorkflowHandleFuture<>(this, workflowId, future);
   }
 
+  // Note, namedArgs param is to enable portable workflow enqueue via DBOSClient.
+  // Typical Java workflow invocations do not use named args
   public static String enqueueWorkflow(
       String workflowName,
       String className,
       String instanceName,
       Integer maxRetries,
-      Object[] args,
+      Object[] positionalArgs,
+      Map<String, Object> namedArgs,
       ExecutionOptions options,
       WorkflowInfo parent,
       String executorId,
@@ -1780,9 +1786,9 @@ public class DBOSExecutor implements AutoCloseable {
       DBOSSerializer serializer) {
 
     logger.debug(
-        "enqueueWorkflow {}({}) {}",
-        RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName),
-        args,
+        "enqueueWorkflow {}/{}/{}({}) {}",
+        workflowName, Objects.requireNonNullElse(className, ""), Objects.requireNonNullElse(instanceName, ""),
+        positionalArgs,
         options);
 
     var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
@@ -1808,7 +1814,8 @@ public class DBOSExecutor implements AutoCloseable {
           className,
           instanceName,
           maxRetries,
-          args,
+          positionalArgs,
+          namedArgs,
           workflowId,
           queueName,
           options.deduplicationId(),
@@ -1839,13 +1846,16 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  // Note, namedArgs param is to enable portable workflow enqueue via DBOSClient.
+  // Typical Java workflow invocations do not use named args
   private static WorkflowInitResult preInvokeWorkflow(
       SystemDatabase systemDatabase,
       String workflowName,
       String className,
       String instanceName,
       Integer maxRetries,
-      Object[] inputs,
+      Object[] positionalArgs,
+      Map<String, Object> namedArgs,
       String workflowId,
       String queueName,
       String deduplicationId,
@@ -1862,11 +1872,13 @@ public class DBOSExecutor implements AutoCloseable {
       String serialization,
       DBOSSerializer serializer) {
 
-    if (inputs == null) {
-      inputs = new Object[0];
-    }
     // Serialize inputs using the specified serialization format
-    var serializedArgs = SerializationUtil.serializeArgs(inputs, null, serialization, serializer);
+    var serializedArgs =
+        SerializationUtil.serializeArgs(
+            Objects.requireNonNullElseGet(positionalArgs, () -> new Object[0]),
+            namedArgs,
+            serialization,
+            serializer);
     String inputString = serializedArgs.serializedValue();
     String actualSerialization = serializedArgs.serialization();
     var startTime = System.currentTimeMillis();
