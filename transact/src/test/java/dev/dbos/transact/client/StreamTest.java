@@ -93,8 +93,10 @@ public class StreamTest {
     // two writeStream + one closeStream each record a step
     List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
     assertEquals(3, steps.size());
-    assertEquals(2, steps.stream().filter(s -> s.functionName().equals("DBOS.writeStream")).count());
-    assertEquals(1, steps.stream().filter(s -> s.functionName().equals("DBOS.closeStream")).count());
+    assertEquals(
+        2, steps.stream().filter(s -> s.functionName().equals("DBOS.writeStream")).count());
+    assertEquals(
+        1, steps.stream().filter(s -> s.functionName().equals("DBOS.closeStream")).count());
   }
 
   @Test

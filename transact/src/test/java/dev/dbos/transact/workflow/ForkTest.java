@@ -415,7 +415,8 @@ public class ForkTest {
     //   fid=3 writeStream(v2), fid=4 closeStream, fid=5 step3
     var wfid = "forkStreamCopied-%d".formatted(System.currentTimeMillis());
     var handle =
-        dbos.startWorkflow(() -> proxy.streamWorkflow("stream-key"), new StartWorkflowOptions(wfid));
+        dbos.startWorkflow(
+            () -> proxy.streamWorkflow("stream-key"), new StartWorkflowOptions(wfid));
     assertDoesNotThrow(() -> handle.getResult());
 
     // Original has 3 raw entries: v1, v2, sentinel

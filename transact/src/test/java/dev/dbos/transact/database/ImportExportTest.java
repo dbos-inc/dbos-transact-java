@@ -156,8 +156,10 @@ public class ImportExportTest {
 
     var streamRows = DBUtils.getStreamEntries(dataSource, wfId);
     assertEquals(2, streamRows.size());
-    assertTrue(streamRows.stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 0));
-    assertTrue(streamRows.stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 1));
+    assertTrue(
+        streamRows.stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 0));
+    assertTrue(
+        streamRows.stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 1));
   }
 
   @Test
@@ -209,9 +211,12 @@ public class ImportExportTest {
 
     // 3 raw stream rows: stream-val-1, stream-val-2, and the close sentinel
     assertEquals(3, wf.streams().size());
-    assertTrue(wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 0));
-    assertTrue(wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 1));
-    assertTrue(wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 2));
+    assertTrue(
+        wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 0));
+    assertTrue(
+        wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 1));
+    assertTrue(
+        wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1") && s.offset() == 2));
   }
 
   @Test

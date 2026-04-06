@@ -15,7 +15,6 @@ import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
-import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowSchedule;

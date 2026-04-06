@@ -150,11 +150,11 @@ class ForkTestServiceImpl implements ForkTestService {
   @Override
   @Workflow
   public void streamWorkflow(String key) {
-    proxy.stepOne("one");         // function_id=0
+    proxy.stepOne("one"); // function_id=0
     dbos.writeStream(key, "v1"); // function_id=1
-    proxy.stepTwo(2);             // function_id=2
+    proxy.stepTwo(2); // function_id=2
     dbos.writeStream(key, "v2"); // function_id=3
-    dbos.closeStream(key);        // function_id=4
-    proxy.stepThree(3.3f);        // function_id=5
+    dbos.closeStream(key); // function_id=4
+    proxy.stepThree(3.3f); // function_id=5
   }
 }
