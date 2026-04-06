@@ -200,11 +200,11 @@ class StepsDAO {
 
   List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      return listWorkflowSteps(connection, workflowId);
+      return listWorkflowSteps(connection, workflowId, this.schema, this.serializer);
     }
   }
 
-  List<StepInfo> listWorkflowSteps(Connection connection, String workflowId) throws SQLException {
+  static List<StepInfo> listWorkflowSteps(Connection connection, String workflowId, String schema, DBOSSerializer serializer) throws SQLException {
 
     final String sql =
         """
@@ -213,7 +213,7 @@ class StepsDAO {
           WHERE workflow_uuid = ?
           ORDER BY function_id;
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     List<StepInfo> steps = new ArrayList<>();
 
@@ -238,7 +238,7 @@ class StepsDAO {
           if (outputData != null) {
             try {
               outputVal =
-                  SerializationUtil.deserializeValue(outputData, serialization, this.serializer);
+                  SerializationUtil.deserializeValue(outputData, serialization, serializer);
             } catch (Exception e) {
               throw new RuntimeException(
                   "Failed to deserialize output for function " + functionId, e);
@@ -247,7 +247,7 @@ class StepsDAO {
 
           // Deserialize error if present
           ErrorResult stepError =
-              ErrorResult.deserialize(errorData, serialization, this.serializer);
+              ErrorResult.deserialize(errorData, serialization, serializer);
           steps.add(
               new StepInfo(
                   functionId,

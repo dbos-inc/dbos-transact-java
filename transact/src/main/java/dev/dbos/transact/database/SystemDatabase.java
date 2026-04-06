@@ -64,7 +64,7 @@ public class SystemDatabase implements AutoCloseable {
     this.serializer = serializer;
 
     stepsDAO = new StepsDAO(dataSource, this.schema, serializer);
-    workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer, stepsDAO);
+    workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
     queuesDAO = new QueuesDAO(dataSource, this.schema);
     schedulesDAO = new SchedulesDAO(dataSource, this.schema, serializer);
     notificationService = new NotificationService(dataSource);
