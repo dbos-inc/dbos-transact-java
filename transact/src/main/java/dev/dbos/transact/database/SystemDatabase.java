@@ -402,8 +402,9 @@ public class SystemDatabase implements AutoCloseable {
 
   public void updateApplicationVersionTimestamp(String versionName, Instant newTimestamp) {
     dbRetry(
-        () -> ApplicationVersionDAO.updateApplicationVersionTimestamp(
-            dataSource, schema, versionName, newTimestamp));
+        () ->
+            ApplicationVersionDAO.updateApplicationVersionTimestamp(
+                dataSource, schema, versionName, newTimestamp));
   }
 
   public List<VersionInfo> listApplicationVersions() {
@@ -431,8 +432,9 @@ public class SystemDatabase implements AutoCloseable {
       List<String> workflowNames,
       List<String> scheduleNamePrefixes) {
     return dbRetry(
-        () -> SchedulesDAO.listSchedules(
-            dataSource, schema, serializer, statuses, workflowNames, scheduleNamePrefixes));
+        () ->
+            SchedulesDAO.listSchedules(
+                dataSource, schema, serializer, statuses, workflowNames, scheduleNamePrefixes));
   }
 
   public void pauseSchedule(String name) {
