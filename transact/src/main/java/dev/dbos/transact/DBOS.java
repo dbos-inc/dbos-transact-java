@@ -222,7 +222,7 @@ public class DBOS implements AutoCloseable {
    * @param instanceName optional instance name for the workflow (can be null)
    * @throws IllegalStateException if called after DBOS is launched
    */
-  public void registerWorkflow(
+  void registerWorkflow(
       @NonNull Workflow wfTag,
       @NonNull Object target,
       @NonNull Method method,
@@ -241,7 +241,7 @@ public class DBOS implements AutoCloseable {
    * @return true if the target contains at least one @Workflow annotated method, false otherwise
    * @throws NullPointerException if target is null
    */
-  private static boolean hasWorkflowsOrSteps(@NonNull Object target) {
+  static boolean hasWorkflowsOrSteps(@NonNull Object target) {
     var methods =
         Objects.requireNonNull(target, "target can not be null").getClass().getDeclaredMethods();
     for (var method : methods) {
