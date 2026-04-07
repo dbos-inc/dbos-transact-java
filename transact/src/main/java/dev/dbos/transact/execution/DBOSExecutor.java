@@ -1593,13 +1593,13 @@ public class DBOSExecutor implements AutoCloseable {
     } else {
       var queue = queues.stream().filter(q -> q.name().equals(queueName)).findFirst();
       if (queue.isPresent()) {
-        if (queue.get().partitionedEnabled() && queuePartitionKey == null) {
+        if (queue.get().partitioningEnabled() && queuePartitionKey == null) {
           throw new IllegalArgumentException(
               "queue %s partitions enabled, but no partition key was provided"
                   .formatted(queueName));
         }
 
-        if (!queue.get().partitionedEnabled() && queuePartitionKey != null) {
+        if (!queue.get().partitioningEnabled() && queuePartitionKey != null) {
           throw new IllegalArgumentException(
               "queue %s is not a partitioned queue, but a partition key was provided"
                   .formatted(queueName));

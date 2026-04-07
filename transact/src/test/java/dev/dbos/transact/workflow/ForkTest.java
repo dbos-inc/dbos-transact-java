@@ -43,7 +43,7 @@ public class ForkTest {
   private ForkTestServiceImpl impl;
   private ForkTestService proxy;
   private Queue testQueue = new Queue("test-queue");
-  private Queue testPartitionQueue = new Queue("test-partition-queue").withPartitionedEnabled(true);
+  private Queue testPartitionQueue = new Queue("test-partition-queue").withPartitioningEnabled(true);
 
   @BeforeEach
   void beforeEach() {
@@ -309,7 +309,7 @@ public class ForkTest {
   @Test
   public void testForkInvalidQueue() throws Exception {
 
-    var workflowId = "testForkQueueName-%d".formatted(System.currentTimeMillis());
+    var workflowId = "testForkInvalidQueue-%d".formatted(System.currentTimeMillis());
     try (var o = new WorkflowOptions(workflowId).setContext()) {
       var result = proxy.simpleWorkflow("hello");
       assertEquals("hellohello", result);
@@ -348,7 +348,7 @@ public class ForkTest {
   @Test
   public void testForkInvalidPartitionKey() throws Exception {
 
-    var workflowId = "testForkQueueName-%d".formatted(System.currentTimeMillis());
+    var workflowId = "testForkInvalidPartitionKey-%d".formatted(System.currentTimeMillis());
     try (var o = new WorkflowOptions(workflowId).setContext()) {
       var result = proxy.simpleWorkflow("hello");
       assertEquals("hellohello", result);
