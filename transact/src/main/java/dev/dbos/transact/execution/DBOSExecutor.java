@@ -911,7 +911,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public Map<String, Object> getAllEvents(String workflowId) {
     return this.callFunctionAsStep(
-        () -> systemDatabase.getAllEvents(workflowId), "DBOS.getEvents", null);
+        () -> systemDatabase.getAllEvents(workflowId), "DBOS.getAllEvents", null);
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
