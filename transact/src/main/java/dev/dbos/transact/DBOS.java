@@ -946,10 +946,11 @@ public class DBOS implements AutoCloseable {
   /**
    * List workflows matching the supplied input filter criteria
    *
-   * @param input {@link ListWorkflowsInput} parameters to query workflows
+   * @param input {@link ListWorkflowsInput} parameters to query workflows. Pass null to list all
+   *     workflows.
    * @return a list of workflow status {@link WorkflowStatus}
    */
-  public @NonNull List<WorkflowStatus> listWorkflows(@NonNull ListWorkflowsInput input) {
+  public @NonNull List<WorkflowStatus> listWorkflows(@Nullable ListWorkflowsInput input) {
     return ensureLaunched("listWorkflows").listWorkflows(input);
   }
 

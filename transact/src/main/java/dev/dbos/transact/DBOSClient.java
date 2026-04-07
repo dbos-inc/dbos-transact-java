@@ -829,10 +829,10 @@ public class DBOSClient implements AutoCloseable {
   /**
    * List workflows matching the supplied input filter criteria
    *
-   * @param input Filter criteria to use for listing workflows
+   * @param input Filter criteria to use for listing workflows. Pass null to list all workflows.
    * @return list of workflows matching the `ListWorkflowsInput` criteria
    */
-  public @NonNull List<WorkflowStatus> listWorkflows(@NonNull ListWorkflowsInput input) {
+  public @NonNull List<WorkflowStatus> listWorkflows(@Nullable ListWorkflowsInput input) {
     return systemDatabase.listWorkflows(input);
   }
 
