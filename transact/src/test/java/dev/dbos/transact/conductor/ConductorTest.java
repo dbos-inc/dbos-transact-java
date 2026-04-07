@@ -1422,7 +1422,7 @@ public class ConductorTest {
             .appId("test-app-id")
             .build();
 
-    when(mockDB.getWorkflowStatus(workflowId)).thenReturn(status);
+    when(mockDB.listWorkflows(any())).thenReturn(List.of(status));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1433,7 +1433,13 @@ public class ConductorTest {
       listener.send(MessageType.GET_WORKFLOW, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getWorkflowStatus(workflowId);
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockDB).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(List.of(workflowId), input.workflowIds());
+      assertTrue(input.loadInput());
+      assertTrue(input.loadOutput());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1443,6 +1449,45 @@ public class ConductorTest {
       assertNotNull(outputNode);
       assertTrue(outputNode.isObject());
       assertEquals("wf-1", outputNode.get("WorkflowUUID").asText());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowWithoutInputOutput() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    WorkflowStatus status =
+        new WorkflowStatusBuilder("wf-1")
+            .status(WorkflowState.PENDING)
+            .workflowName("WF1")
+            .createdAt(1754936102215L)
+            .updatedAt(1754936102215L)
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build();
+
+    when(mockDB.listWorkflows(any())).thenReturn(List.of(status));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "load_input", false, "load_output", false);
+      listener.send(MessageType.GET_WORKFLOW, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockDB).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(List.of(workflowId), input.workflowIds());
+      assertFalse(input.loadInput());
+      assertFalse(input.loadOutput());
     }
   }
 
