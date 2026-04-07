@@ -168,15 +168,19 @@ public class SystemDatabaseTest {
     DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
     DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
 
+    // Record time before cancel so we can assert updated_at advances
+    long beforeCancel = System.currentTimeMillis();
+
     // Cancel all five IDs in one call
     sysdb.cancelWorkflows(
         List.of("wf-pending-1", "wf-pending-2", "wf-pending-3", "wf-success", "wf-error"));
 
-    // PENDING ones become CANCELLED
+    // PENDING ones become CANCELLED, and updated_at is refreshed
     for (var wfid : List.of("wf-pending-1", "wf-pending-2", "wf-pending-3")) {
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertNotNull(row);
       assertEquals(WorkflowState.CANCELLED.name(), row.status());
+      assertTrue(row.updatedAt() >= beforeCancel, "updated_at should be >= time before cancel");
     }
 
     // SUCCESS and ERROR are left untouched
@@ -203,6 +207,16 @@ public class SystemDatabaseTest {
     DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
     DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
 
+    // Set a non-null deadline on the cancellable workflows so we can assert it is cleared on resume
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(
+            "UPDATE dbos.workflow_status SET workflow_deadline_epoch_ms = ? WHERE workflow_uuid = ANY(?)")) {
+      long deadline = System.currentTimeMillis() + 60_000;
+      stmt.setLong(1, deadline);
+      stmt.setArray(2, conn.createArrayOf("text", new String[]{"wf-cancelled-1", "wf-cancelled-2"}));
+      stmt.executeUpdate();
+    }
+
     return List.of("wf-cancelled-1", "wf-cancelled-2", "wf-success", "wf-error");
   }
 
@@ -210,15 +224,18 @@ public class SystemDatabaseTest {
   public void testResumeWorkflows() throws Exception {
 
     var workflowIds = insertResumableWorkflows();
+    long beforeResume = System.currentTimeMillis();
 
     // Resume all four IDs in one call
     sysdb.resumeWorkflows(workflowIds, null);
 
-    // CANCELLED ones become ENQUEUED
+    // CANCELLED ones become ENQUEUED; updated_at advances; deadline is cleared
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertEquals(WorkflowState.ENQUEUED.name(), row.status());
       assertEquals(Constants.DBOS_INTERNAL_QUEUE, row.queueName());
+      assertTrue(row.updatedAt() >= beforeResume, "updated_at should be >= time before resume");
+      assertNull(row.deadlineEpochMs(), "workflow_deadline_epoch_ms should be cleared on resume");
     }
 
     // SUCCESS and ERROR are left untouched
@@ -232,15 +249,18 @@ public class SystemDatabaseTest {
   public void testResumeWorkflowsCustomQueue() throws Exception {
 
     var workflowIds = insertResumableWorkflows();
+    long beforeResume = System.currentTimeMillis();
 
     // Resume all four IDs in one call
     sysdb.resumeWorkflows(workflowIds, "customQueue");
 
-    // CANCELLED ones become ENQUEUED
+    // CANCELLED ones become ENQUEUED; updated_at advances; deadline is cleared
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertEquals(WorkflowState.ENQUEUED.name(), row.status());
       assertEquals("customQueue", row.queueName());
+      assertTrue(row.updatedAt() >= beforeResume, "updated_at should be >= time before resume");
+      assertNull(row.deadlineEpochMs(), "workflow_deadline_epoch_ms should be cleared on resume");
     }
 
     // SUCCESS and ERROR are left untouched
@@ -255,10 +275,12 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(
         WorkflowStatusInternal.builder("wf-id", WorkflowState.PENDING).build(), 5, false, false);
 
+    long beforeCancel = System.currentTimeMillis();
     sysdb.cancelWorkflows(Arrays.asList("wf-id", null));
 
-    assertEquals(
-        WorkflowState.CANCELLED.name(), DBUtils.getWorkflowRow(dataSource, "wf-id").status());
+    var row = DBUtils.getWorkflowRow(dataSource, "wf-id");
+    assertEquals(WorkflowState.CANCELLED.name(), row.status());
+    assertTrue(row.updatedAt() >= beforeCancel, "updated_at should be >= time before cancel");
   }
 
   @Test
@@ -267,10 +289,13 @@ public class SystemDatabaseTest {
         WorkflowStatusInternal.builder("wf-id", WorkflowState.PENDING).build(), 5, false, false);
     DBUtils.setWorkflowState(dataSource, "wf-id", WorkflowState.CANCELLED.name());
 
+    long beforeResume = System.currentTimeMillis();
     sysdb.resumeWorkflows(Arrays.asList("wf-id", null), null);
 
-    assertEquals(
-        WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, "wf-id").status());
+    var row = DBUtils.getWorkflowRow(dataSource, "wf-id");
+    assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+    assertTrue(row.updatedAt() >= beforeResume, "updated_at should be >= time before resume");
+    assertNull(row.deadlineEpochMs(), "workflow_deadline_epoch_ms should be cleared on resume");
   }
 
   @Test

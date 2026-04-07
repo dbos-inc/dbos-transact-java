@@ -45,6 +45,20 @@ class WorkflowDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(WorkflowDAO.class);
 
+  // All workflow_status columns except inputs/output/error/serialization, which are loaded
+  // conditionally. Add new columns here so both getWorkflowStatus and listWorkflows stay in sync.
+  private static final String WORKFLOW_STATUS_COLUMNS =
+      """
+        workflow_uuid, status,
+        name, class_name, config_name,
+        queue_name, deduplication_id, priority, queue_partition_key,
+        executor_id, application_version, application_id,
+        authenticated_user, assumed_role, authenticated_roles,
+        created_at, updated_at, recovery_attempts, started_at_epoch_ms,
+        workflow_timeout_ms, workflow_deadline_epoch_ms,
+        forked_from, parent_workflow_id, was_forked_from, delay_until_epoch_ms
+      """;
+
   private final DataSource dataSource;
   private final String schema;
   private final DBOSSerializer serializer;
@@ -393,21 +407,8 @@ class WorkflowDAO {
 
   WorkflowStatus getWorkflowStatus(Connection conn, String workflowId) throws SQLException {
     var sql =
-        """
-          SELECT
-            workflow_uuid, status,
-            name, class_name, config_name,
-            inputs, output, error, serialization,
-            queue_name, deduplication_id, priority, queue_partition_key,
-            executor_id, application_version, application_id,
-            authenticated_user, assumed_role, authenticated_roles,
-            created_at, updated_at, recovery_attempts, started_at_epoch_ms,
-            workflow_timeout_ms, workflow_deadline_epoch_ms,
-            forked_from, parent_workflow_id
-            FROM "%s".workflow_status
-            WHERE workflow_uuid = ?
-        """
-            .formatted(this.schema);
+        ("SELECT " + WORKFLOW_STATUS_COLUMNS + ", inputs, output, error, serialization")
+            + " FROM \"%s\".workflow_status WHERE workflow_uuid = ?".formatted(this.schema);
 
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -432,20 +433,7 @@ class WorkflowDAO {
     StringBuilder sqlBuilder = new StringBuilder();
     List<Object> parameters = new ArrayList<>();
 
-    // Start building the SELECT clause. The order of columns here is critical
-    // for mapping to the WorkflowStatus fields by index later in the ResultSet.
-    sqlBuilder.append(
-        """
-          SELECT
-            workflow_uuid, status,
-            name, class_name, config_name,
-            queue_name, deduplication_id, priority, queue_partition_key,
-            executor_id, application_version, application_id,
-            authenticated_user, assumed_role, authenticated_roles,
-            created_at, updated_at, recovery_attempts, started_at_epoch_ms,
-            workflow_timeout_ms, workflow_deadline_epoch_ms,
-            forked_from, parent_workflow_id
-        """);
+    sqlBuilder.append("SELECT ").append(WORKFLOW_STATUS_COLUMNS);
 
     var loadInput = input.loadInput() == null || input.loadInput();
     var loadOutput = input.loadOutput() == null || input.loadOutput();
@@ -482,6 +470,9 @@ class WorkflowDAO {
     }
     if (input.queuesOnly() != null && input.queuesOnly()) {
       whereConditions.add("queue_name IS NOT NULL");
+      if (input.status() == null || input.status().isEmpty()) {
+        whereConditions.add("status IN ('ENQUEUED', 'PENDING')");
+      }
     }
     if (input.forkedFrom() != null && !input.forkedFrom().isEmpty()) {
       whereConditions.add("forked_from = ANY(?)");
@@ -491,12 +482,11 @@ class WorkflowDAO {
       whereConditions.add("parent_workflow_id = ANY(?)");
       parameters.add(input.parentWorkflowId());
     }
-    // TODO: fix this code
     if (input.wasForkedFrom() != null) {
       if (input.wasForkedFrom()) {
-        whereConditions.add("forked_from IS NOT NULL");
+        whereConditions.add("was_forked_from = TRUE");
       } else {
-        whereConditions.add("forked_from IS NULL");
+        whereConditions.add("was_forked_from = FALSE");
       }
     }
     if (input.hasParent() != null) {
@@ -644,6 +634,8 @@ class WorkflowDAO {
             rs.getString("queue_partition_key"),
             rs.getString("forked_from"),
             rs.getString("parent_workflow_id"),
+            rs.getObject("was_forked_from", Boolean.class),
+            rs.getObject("delay_until_epoch_ms", Long.class),
             serialization);
     return info;
   }
@@ -795,7 +787,8 @@ class WorkflowDAO {
           SET status = ?,
               queue_name = NULL,
               deduplication_id = NULL,
-              started_at_epoch_ms = NULL
+              started_at_epoch_ms = NULL,
+              updated_at = (EXTRACT(EPOCH FROM now()) * 1000)::bigint
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
@@ -828,9 +821,10 @@ class WorkflowDAO {
           SET status = ?,
               queue_name = ?,
               recovery_attempts = 0,
-              workflow_deadline_epoch_ms = 0,
+              workflow_deadline_epoch_ms = NULL,
               deduplication_id = NULL,
-              started_at_epoch_ms = NULL
+              started_at_epoch_ms = NULL,
+              updated_at = (EXTRACT(EPOCH FROM now()) * 1000)::bigint
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
@@ -965,6 +959,9 @@ class WorkflowDAO {
               connection, originalWorkflowId, forkedWorkflowId, startStep, this.schema);
         }
 
+        // Mark the original workflow as having been forked
+        markWasForkedFrom(connection, originalWorkflowId, this.schema);
+
         connection.commit();
         return forkedWorkflowId;
 
@@ -1025,6 +1022,21 @@ class WorkflowDAO {
       stmt.setString(15, originalWorkflowId);
       stmt.setString(16, originalStatus.serialization());
 
+      stmt.executeUpdate();
+    }
+  }
+
+  private static void markWasForkedFrom(Connection connection, String workflowId, String schema)
+      throws SQLException {
+    String sql =
+        """
+          UPDATE "%s".workflow_status
+          SET was_forked_from = TRUE
+          WHERE workflow_uuid = ?
+        """
+            .formatted(schema);
+    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
       stmt.executeUpdate();
     }
   }

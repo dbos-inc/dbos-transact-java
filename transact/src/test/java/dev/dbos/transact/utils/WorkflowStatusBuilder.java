@@ -40,6 +40,8 @@ public class WorkflowStatusBuilder {
   private Long deadlineEpochMs;
   private String forkedFrom;
   private String parentWorkflowId;
+  private Boolean wasForkedFrom;
+  private Long delayUntilEpochMs;
   private String serialization;
 
   public WorkflowStatus build() {
@@ -70,6 +72,8 @@ public class WorkflowStatusBuilder {
         partitionKey,
         forkedFrom,
         parentWorkflowId,
+        wasForkedFrom,
+        delayUntilEpochMs,
         serialization);
   }
 
@@ -204,6 +208,16 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder parentWorkflowId(String parentWorkflowId) {
     this.parentWorkflowId = parentWorkflowId;
+    return this;
+  }
+
+  public WorkflowStatusBuilder wasForkedFrom(Boolean wasForkedFrom) {
+    this.wasForkedFrom = wasForkedFrom;
+    return this;
+  }
+
+  public WorkflowStatusBuilder delayUntilEpochMs(Long delayUntilEpochMs) {
+    this.delayUntilEpochMs = delayUntilEpochMs;
     return this;
   }
 

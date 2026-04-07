@@ -33,15 +33,15 @@ import org.junit.jupiter.api.*;
  *  wf-child-1    | SUCCESS   | child   | ClassA | instA  | -     | exec-1 | v1.0 | user-a | wf-alpha-1 | -          | +150
  *  wf-alpha-2    | SUCCESS   | alpha   | ClassA | instA  | -     | exec-1 | v1.0 | user-a | -          | -          | +200
  *  wf-alpha-3    | ERROR     | alpha   | ClassA | instB  | -     | exec-2 | v1.0 | user-b | -          | -          | +300
- *  wf-beta-1     | SUCCESS   | beta    | ClassB | instB  | q1    | exec-2 | v1.0 | user-a | -          | -          | +400
- *  wf-queue-3    | SUCCESS   | queueWf | ClassD | instC  | q3    | exec-2 | v1.0 | user-b | -          | -          | +450
+ *  wf-beta-1     | ENQUEUED  | beta    | ClassB | instB  | q1    | exec-2 | v1.0 | user-a | -          | -          | +400
+ *  wf-queue-3    | PENDING   | queueWf | ClassD | instC  | q3    | exec-2 | v1.0 | user-b | -          | -          | +450
  *  wf-beta-2     | CANCELLED | beta    | ClassB | instB  | -     | exec-1 | v2.0 | user-b | -          | -          | +500
  *  wf-gamma-1    | SUCCESS   | gamma   | ClassC | instA  | -     | exec-1 | v2.0 | user-a | -          | -          | +600
  *  wf-forked-1   | SUCCESS   | gamma   | ClassC | instA  | -     | exec-1 | v2.0 | user-a | -          | wf-alpha-1 | +650
- *  wf-gamma-2    | ERROR     | gamma   | ClassC | instA  | q2    | exec-2 | v2.0 | user-b | -          | -          | +700
+ *  wf-gamma-2    | ENQUEUED  | gamma   | ClassC | instA  | q2    | exec-2 | v2.0 | user-b | -          | -          | +700
  * </pre>
  *
- * Status totals: SUCCESS=7, ERROR=2, CANCELLED=1
+ * Status totals: SUCCESS=5, ERROR=1, ENQUEUED=2, PENDING=1, CANCELLED=1
  */
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ListWorkflowsTest {
@@ -137,7 +137,7 @@ public class ListWorkflowsTest {
         },
         {
           "wf-beta-1",
-          "SUCCESS",
+          "ENQUEUED",
           "beta",
           "ClassB",
           "instB",
@@ -151,7 +151,7 @@ public class ListWorkflowsTest {
         },
         {
           "wf-queue-3",
-          "SUCCESS",
+          "PENDING",
           "queueWf",
           "ClassD",
           "instC",
@@ -207,7 +207,7 @@ public class ListWorkflowsTest {
         },
         {
           "wf-gamma-2",
-          "ERROR",
+          "ENQUEUED",
           "gamma",
           "ClassC",
           "instA",
@@ -236,6 +236,13 @@ public class ListWorkflowsTest {
         ps.addBatch();
       }
       ps.executeBatch();
+    }
+
+    // wf-alpha-1 was the source of a fork (wf-forked-1 was forked from it)
+    try (var ps2 = dataSource.getConnection().prepareStatement(
+        "UPDATE \"dbos\".workflow_status SET was_forked_from = TRUE WHERE workflow_uuid = ?")) {
+      ps2.setString(1, "wf-alpha-1");
+      ps2.executeUpdate();
     }
   }
 
@@ -277,17 +284,16 @@ public class ListWorkflowsTest {
   @Test
   public void testFilterByStatus() throws Exception {
 
-    // SUCCESS: wf-alpha-1, wf-child-1, wf-alpha-2, wf-beta-1, wf-queue-3, wf-gamma-1, wf-forked-1 =
-    // 7
+    // SUCCESS: wf-alpha-1, wf-child-1, wf-alpha-2, wf-gamma-1, wf-forked-1 = 5
     List<WorkflowStatus> success =
         dbos.listWorkflows(ListWorkflowsInput.builder().status(WorkflowState.SUCCESS).build());
-    assertEquals(7, success.size());
+    assertEquals(5, success.size());
     success.forEach(wf -> assertEquals(WorkflowState.SUCCESS, wf.status()));
 
-    // ERROR: wf-alpha-3, wf-gamma-2 = 2
+    // ERROR: wf-alpha-3 = 1
     List<WorkflowStatus> error =
         dbos.listWorkflows(ListWorkflowsInput.builder().status(WorkflowState.ERROR).build());
-    assertEquals(2, error.size());
+    assertEquals(1, error.size());
     error.forEach(wf -> assertEquals(WorkflowState.ERROR, wf.status()));
 
     // CANCELLED: wf-beta-2 = 1
@@ -296,7 +302,7 @@ public class ListWorkflowsTest {
     assertEquals(1, cancelled.size());
     assertEquals("wf-beta-2", cancelled.get(0).workflowId());
 
-    // Multiple statuses in one filter
+    // Multiple statuses in one filter: ERROR=1, CANCELLED=1 → 2
     List<WorkflowStatus> errorOrCancelled =
         dbos.listWorkflows(
             ListWorkflowsInput.builder()
@@ -305,7 +311,7 @@ public class ListWorkflowsTest {
                         .map(WorkflowState::name)
                         .toList())
                 .build());
-    assertEquals(3, errorOrCancelled.size());
+    assertEquals(2, errorOrCancelled.size());
   }
 
   @Test
@@ -501,6 +507,23 @@ public class ListWorkflowsTest {
   }
 
   @Test
+  public void testFilterByWasForkedFrom() throws Exception {
+
+    // wasForkedFrom=true: only wf-alpha-1 (the source of wf-forked-1)
+    List<WorkflowStatus> sources =
+        dbos.listWorkflows(ListWorkflowsInput.builder().wasForkedFrom(true).build());
+    assertEquals(1, sources.size());
+    assertEquals("wf-alpha-1", sources.get(0).workflowId());
+    assertTrue(sources.get(0).wasForkedFrom());
+
+    // wasForkedFrom=false: all other 9 workflows
+    List<WorkflowStatus> nonSources =
+        dbos.listWorkflows(ListWorkflowsInput.builder().wasForkedFrom(false).build());
+    assertEquals(9, nonSources.size());
+    nonSources.forEach(wf -> assertFalse(wf.wasForkedFrom()));
+  }
+
+  @Test
   public void testLimitAndOffset() throws Exception {
 
     // Default sort is ASC by created_at; wf-alpha-1 (+100 ms) is first
@@ -671,8 +694,8 @@ public class ListWorkflowsTest {
     long errorCount = wfs.stream().filter(wf -> WorkflowState.ERROR.equals(wf.status())).count();
     long cancelledCount =
         wfs.stream().filter(wf -> WorkflowState.CANCELLED.equals(wf.status())).count();
-    assertEquals(7, successCount);
-    assertEquals(2, errorCount);
+    assertEquals(5, successCount);
+    assertEquals(1, errorCount);
     assertEquals(1, cancelledCount);
 
     // A specific row should be findable with correct metadata
@@ -757,11 +780,11 @@ public class ListWorkflowsTest {
     assertEquals(3, allQueues.size());
 
     // --- status ---
-    // SUCCESS=7, CANCELLED=1 → 8
+    // SUCCESS=5, CANCELLED=1 → 6
     List<WorkflowStatus> successOrCancelled =
         dbos.listWorkflows(
             ListWorkflowsInput.builder().status(List.of("SUCCESS", "CANCELLED")).build());
-    assertEquals(8, successOrCancelled.size());
+    assertEquals(6, successOrCancelled.size());
     successOrCancelled.forEach(
         wf ->
             assertTrue(
@@ -828,15 +851,15 @@ public class ListWorkflowsTest {
           assertNull(wf.error());
         });
 
-    // queuesOnly + status=SUCCESS → wf-beta-1, wf-queue-3 = 2
+    // queuesOnly + status=ENQUEUED → wf-beta-1, wf-gamma-2 = 2
     List<WorkflowStatus> queuedSuccess =
         dbos.listWorkflows(
-            ListWorkflowsInput.builder().queuesOnly(true).status(WorkflowState.SUCCESS).build());
+            ListWorkflowsInput.builder().queuesOnly(true).status(WorkflowState.ENQUEUED).build());
     assertEquals(2, queuedSuccess.size());
     queuedSuccess.forEach(
         wf -> {
           assertNotNull(wf.queueName());
-          assertEquals(WorkflowState.SUCCESS, wf.status());
+          assertEquals(WorkflowState.ENQUEUED, wf.status());
         });
 
     // limit=2 on a sorted result

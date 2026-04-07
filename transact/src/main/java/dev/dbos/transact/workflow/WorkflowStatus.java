@@ -62,6 +62,10 @@ public record WorkflowStatus(
     String forkedFrom,
     /** Parent workflow ID if this is a sub-workflow. */
     String parentWorkflowId,
+    /** Whether another workflow was forked from this one. */
+    Boolean wasForkedFrom,
+    /** Epoch time (ms) until which the workflow is delayed. */
+    Long delayUntilEpochMs,
     /** Serialized representation of the workflow. */
     String serialization) {
 
@@ -92,7 +96,10 @@ public record WorkflowStatus(
   }
 
   /**
-   * Checks equality based on all fields of the WorkflowStatus record.
+   * Custom equals required because this record contains array fields ({@code authenticatedRoles},
+   * {@code input}). The default record equals uses {@code Objects.equals()} on each component,
+   * which for arrays falls back to reference equality. Here we use {@code Arrays.equals} and
+   * {@code Arrays.deepEquals} to get value equality instead.
    *
    * @param obj the object to compare
    * @return true if all fields are equal, false otherwise
@@ -129,11 +136,14 @@ public record WorkflowStatus(
         && java.util.Objects.equals(priority, that.priority)
         && java.util.Objects.equals(queuePartitionKey, that.queuePartitionKey)
         && java.util.Objects.equals(forkedFrom, that.forkedFrom)
-        && java.util.Objects.equals(parentWorkflowId, that.parentWorkflowId);
+        && java.util.Objects.equals(parentWorkflowId, that.parentWorkflowId)
+        && java.util.Objects.equals(wasForkedFrom, that.wasForkedFrom)
+        && java.util.Objects.equals(delayUntilEpochMs, that.delayUntilEpochMs);
   }
 
   /**
-   * Computes the hash code based on all fields of the WorkflowStatus record.
+   * Custom hashCode required for the same reason as {@link #equals}: array fields need
+   * {@code Arrays.hashCode}/{@code Arrays.deepHashCode} for value-based hashing.
    *
    * @return the hash code
    */
@@ -165,6 +175,8 @@ public record WorkflowStatus(
         priority,
         queuePartitionKey,
         forkedFrom,
-        parentWorkflowId);
+        parentWorkflowId,
+        wasForkedFrom,
+        delayUntilEpochMs);
   }
 }
