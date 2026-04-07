@@ -30,10 +30,10 @@ import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
-import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -2869,7 +2869,13 @@ public class ConductorTest {
           "req-agg",
           Map.of(
               "body",
-              Map.of("group_by_status", true, "group_by_name", true, "status", List.of("SUCCESS", "FAILURE"))));
+              Map.of(
+                  "group_by_status",
+                  true,
+                  "group_by_name",
+                  true,
+                  "status",
+                  List.of("SUCCESS", "FAILURE"))));
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       ArgumentCaptor<GetWorkflowAggregatesInput> inputCaptor =
