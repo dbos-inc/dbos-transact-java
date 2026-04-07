@@ -300,7 +300,10 @@ public class ListWorkflowsTest {
     List<WorkflowStatus> errorOrCancelled =
         dbos.listWorkflows(
             ListWorkflowsInput.builder()
-                .status(List.of(WorkflowState.ERROR, WorkflowState.CANCELLED).stream().map(WorkflowState::name).toList())
+                .status(
+                    List.of(WorkflowState.ERROR, WorkflowState.CANCELLED).stream()
+                        .map(WorkflowState::name)
+                        .toList())
                 .build());
     assertEquals(3, errorOrCancelled.size());
   }

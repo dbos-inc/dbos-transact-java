@@ -11,6 +11,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -28,12 +29,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
-
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import dev.dbos.transact.json.JSONUtil;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class QueuesTest {
@@ -436,7 +434,6 @@ public class QueuesTest {
       logger.info("Waiting for queueService to stop");
     }
 
-
     var builder =
         WorkflowStatusInternal.builder()
             .workflowName("OrderProcessingWorkflow")
@@ -452,7 +449,7 @@ public class QueuesTest {
             .timeoutMs(300000l)
             .deadlineEpochMs(System.currentTimeMillis() + 2400000)
             .priority(1)
-            .inputs(JSONUtil.serializeArray(new Object[]{"ORD-12345"}));
+            .inputs(JSONUtil.serializeArray(new Object[] {"ORD-12345"}));
 
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
