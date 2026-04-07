@@ -20,6 +20,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
   @JsonSubTypes.Type(value = ForkWorkflowRequest.class, name = "fork_workflow"),
   @JsonSubTypes.Type(value = GetMetricsRequest.class, name = "get_metrics"),
   @JsonSubTypes.Type(value = GetScheduleRequest.class, name = "get_schedule"),
+  @JsonSubTypes.Type(value = GetWorkflowAggregatesRequest.class, name = "get_workflow_aggregates"),
   @JsonSubTypes.Type(value = GetWorkflowRequest.class, name = "get_workflow"),
   @JsonSubTypes.Type(value = ImportWorkflowRequest.class, name = "import_workflow"),
   @JsonSubTypes.Type(

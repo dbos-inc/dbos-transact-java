@@ -684,6 +684,7 @@ public class Conductor implements AutoCloseable {
       case FORK_WORKFLOW -> handleFork(this, message);
       case GET_METRICS -> handleGetMetrics(this, message);
       case GET_SCHEDULE -> handleGetSchedule(this, message);
+      case GET_WORKFLOW_AGGREGATES -> handleGetWorkflowAggregates(this, message);
       case GET_WORKFLOW -> handleGetWorkflow(this, message);
       case IMPORT_WORKFLOW -> handleImportWorkflow(this, message);
       case LIST_APPLICATION_VERSIONS -> handleListApplicationVersions(this, message);
@@ -984,6 +985,21 @@ public class Conductor implements AutoCloseable {
             }
           } catch (Exception e) {
             return new GetMetricsResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetWorkflowAggregates(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetWorkflowAggregatesRequest request = (GetWorkflowAggregatesRequest) message;
+          try {
+            var rows = conductor.systemDatabase.getWorkflowAggregates(request.toInput());
+            return new GetWorkflowAggregatesResponse(request, rows);
+          } catch (Exception e) {
+            logger.error("Exception encountered when getting workflow aggregates", e);
+            return new GetWorkflowAggregatesResponse(request, e);
           }
         });
   }

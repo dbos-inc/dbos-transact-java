@@ -29,6 +29,8 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
+import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
@@ -2844,6 +2846,81 @@ public class ConductorTest {
       assertEquals("trigger_schedule", json.get("type").asText());
       assertEquals("req-trigger-sched-err", json.get("request_id").asText());
       assertNotNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowAggregates() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<WorkflowAggregateRow> rows =
+        List.of(
+            new WorkflowAggregateRow(Map.of("status", "SUCCESS", "name", "myWorkflow"), 10),
+            new WorkflowAggregateRow(Map.of("status", "FAILURE", "name", "myWorkflow"), 3));
+    when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_AGGREGATES,
+          "req-agg",
+          Map.of(
+              "body",
+              Map.of("group_by_status", true, "group_by_name", true, "status", List.of("SUCCESS", "FAILURE"))));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<GetWorkflowAggregatesInput> inputCaptor =
+          ArgumentCaptor.forClass(GetWorkflowAggregatesInput.class);
+      verify(mockDB).getWorkflowAggregates(inputCaptor.capture());
+      GetWorkflowAggregatesInput captured = inputCaptor.getValue();
+      assertTrue(captured.groupByStatus());
+      assertTrue(captured.groupByName());
+      assertEquals(List.of("SUCCESS", "FAILURE"), captured.status());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_aggregates", json.get("type").asText());
+      assertEquals("req-agg", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+
+      JsonNode output = json.get("output");
+      assertNotNull(output);
+      assertTrue(output.isArray());
+      assertEquals(2, output.size());
+      assertEquals("SUCCESS", output.get(0).get("group").get("status").asText());
+      assertEquals("myWorkflow", output.get(0).get("group").get("name").asText());
+      assertEquals(10, output.get(0).get("count").asLong());
+      assertEquals("FAILURE", output.get(1).get("group").get("status").asText());
+      assertEquals(3, output.get(1).get("count").asLong());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowAggregatesThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canGetWorkflowAggregatesThrows error";
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockDB)
+        .getWorkflowAggregates(any(GetWorkflowAggregatesInput.class));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_AGGREGATES,
+          "req-agg-err",
+          Map.of("body", Map.of("group_by_status", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_aggregates", json.get("type").asText());
+      assertEquals(errorMessage, json.get("error_message").asText());
+      assertEquals(0, json.get("output").size());
     }
   }
 }
