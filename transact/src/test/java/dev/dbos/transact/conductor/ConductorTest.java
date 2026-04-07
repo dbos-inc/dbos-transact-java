@@ -373,7 +373,7 @@ public class ConductorTest {
       steps.add(
           new StepInfo(i, "function" + i, stringBuilder.toString(), null, null, null, null, null));
     }
-    when(mockExec.listWorkflowSteps("large-wf")).thenReturn(steps);
+    when(mockExec.listWorkflowSteps("large-wf", null, null, null)).thenReturn(steps);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1573,7 +1573,7 @@ public class ConductorTest {
     steps.add(new StepInfo(3, "function4", null, null, null, null, null, null));
     steps.add(new StepInfo(4, "function5", null, null, null, null, null, null));
 
-    when(mockExec.listWorkflowSteps(workflowId)).thenReturn(steps);
+    when(mockExec.listWorkflowSteps(workflowId, null, null, null)).thenReturn(steps);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1585,7 +1585,32 @@ public class ConductorTest {
       listener.send(MessageType.LIST_STEPS, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).listWorkflowSteps(workflowId);
+      verify(mockExec).listWorkflowSteps(workflowId, null, null, null);
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListStepsWithParameters() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "workflow-id-1";
+
+    List<StepInfo> steps = new ArrayList<>();
+    steps.add(new StepInfo(0, "function1", "output1", null, null, null, null, null));
+
+    when(mockExec.listWorkflowSteps(workflowId, false, 10, 5)).thenReturn(steps);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "load_output", false, "limit", 10, "offset", 5);
+      listener.send(MessageType.LIST_STEPS, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).listWorkflowSteps(workflowId, false, 10, 5);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1594,7 +1619,7 @@ public class ConductorTest {
       JsonNode outputNode = jsonNode.get("output");
       assertNotNull(outputNode);
       assertTrue(outputNode.isArray());
-      assertEquals(5, outputNode.size());
+      assertEquals(1, outputNode.size());
     }
   }
 

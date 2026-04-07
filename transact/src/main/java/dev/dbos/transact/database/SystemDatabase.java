@@ -315,8 +315,9 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> StepsDAO.recordStepResultTxn(dataSource, result, startTime, et, this.schema));
   }
 
-  public List<StepInfo> listWorkflowSteps(String workflowId) {
-    return dbRetry(() -> stepsDAO.listWorkflowSteps(workflowId));
+  public List<StepInfo> listWorkflowSteps(
+      String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
+    return dbRetry(() -> stepsDAO.listWorkflowSteps(workflowId, loadOutput, limit, offset));
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
@@ -822,7 +823,7 @@ public class SystemDatabase implements AutoCloseable {
           for (var wfid : workflowIds) {
             try (var conn = dataSource.getConnection()) {
               var status = workflowDAO.getWorkflowStatus(conn, wfid);
-              var steps = stepsDAO.listWorkflowSteps(conn, wfid);
+              var steps = stepsDAO.listWorkflowSteps(conn, wfid, true, null, null);
               var events = listWorkflowEvents(conn, wfid);
               var eventHistory = listWorkflowEventHistory(conn, wfid);
               var streams = listWorkflowStreams(conn, wfid);

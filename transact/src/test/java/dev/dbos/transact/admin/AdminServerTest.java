@@ -498,7 +498,7 @@ class AdminServerTest {
             null,
             null));
 
-    when(mockDB.listWorkflowSteps(any())).thenReturn(steps);
+    when(mockDB.listWorkflowSteps(any(), eq(null), eq(null), eq(null))).thenReturn(steps);
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();

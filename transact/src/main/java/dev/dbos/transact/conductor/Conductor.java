@@ -897,7 +897,8 @@ public class Conductor implements AutoCloseable {
           ListStepsRequest request = (ListStepsRequest) message;
           try {
             List<StepInfo> stepInfoList =
-                conductor.dbosExecutor.listWorkflowSteps(request.workflow_id);
+                conductor.dbosExecutor.listWorkflowSteps(
+                    request.workflow_id, request.load_output, request.limit, request.offset);
             List<ListStepsResponse.Step> steps =
                 stepInfoList.stream().map(ListStepsResponse.Step::new).collect(Collectors.toList());
             return new ListStepsResponse(request, steps);

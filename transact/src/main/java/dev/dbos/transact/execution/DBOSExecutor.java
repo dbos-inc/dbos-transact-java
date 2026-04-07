@@ -918,9 +918,12 @@ public class DBOSExecutor implements AutoCloseable {
         () -> systemDatabase.listWorkflows(input), "DBOS.listWorkflows", null);
   }
 
-  public List<StepInfo> listWorkflowSteps(String workflowId) {
+  public List<StepInfo> listWorkflowSteps(
+      String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
     return this.callFunctionAsStep(
-        () -> systemDatabase.listWorkflowSteps(workflowId), "DBOS.listWorkflowSteps", null);
+        () -> systemDatabase.listWorkflowSteps(workflowId, loadOutput, limit, offset),
+        "DBOS.listWorkflowSteps",
+        null);
   }
 
   public List<VersionInfo> listApplicationVersions() {

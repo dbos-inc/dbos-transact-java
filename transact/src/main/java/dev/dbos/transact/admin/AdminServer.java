@@ -220,7 +220,7 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void listSteps(HttpExchange exchange, String wfid) throws IOException {
-    var steps = systemDatabase.listWorkflowSteps(wfid);
+    var steps = systemDatabase.listWorkflowSteps(wfid, true, null, null);
     var response = steps.stream().map(StepOutput::of).collect(Collectors.toList());
     sendMappedJson(exchange, 200, response);
   }

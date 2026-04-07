@@ -944,7 +944,7 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * List all workflows
+   * List workflows matching the supplied input filter criteria
    *
    * @param input {@link ListWorkflowsInput} parameters to query workflows
    * @return a list of workflow status {@link WorkflowStatus}
@@ -960,7 +960,20 @@ public class DBOS implements AutoCloseable {
    * @return list of step information {@link StepInfo}
    */
   public @NonNull List<StepInfo> listWorkflowSteps(@NonNull String workflowId) {
-    return ensureLaunched("listWorkflowSteps").listWorkflowSteps(workflowId);
+    return listWorkflowSteps(workflowId, null, null);
+  }
+
+  /**
+   * List the steps in the workflow with optional pagination
+   *
+   * @param workflowId Id of the workflow whose steps to return
+   * @param limit Maximum number of steps to return
+   * @param offset Number of steps to skip before returning
+   * @return list of step information {@link StepInfo}
+   */
+  public @NonNull List<StepInfo> listWorkflowSteps(
+      @NonNull String workflowId, Integer limit, Integer offset) {
+    return ensureLaunched("listWorkflowSteps").listWorkflowSteps(workflowId, true, limit, offset);
   }
 
   /**
