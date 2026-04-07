@@ -712,7 +712,8 @@ public class Conductor implements AutoCloseable {
                 message,
                 conductor.dbosExecutor.executorId(),
                 conductor.dbosExecutor.appVersion(),
-                hostname);
+                hostname,
+                conductor.dbosExecutor.executorMetadata());
           } catch (Exception e) {
             return new ExecutorInfoResponse(message, e);
           }

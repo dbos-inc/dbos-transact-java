@@ -6,6 +6,7 @@ import dev.dbos.transact.workflow.Queue;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -27,6 +28,7 @@ public record DBOSConfig(
     boolean migrate,
     @Nullable String conductorKey,
     @Nullable String conductorDomain,
+    @Nullable Map<String, Object> conductorExecutorMetadata,
     @Nullable String appVersion,
     @Nullable String executorId,
     @Nullable String databaseSchema,
@@ -61,7 +63,7 @@ public record DBOSConfig(
         appName, null, null, null, null, false, // adminServer
         3001, // adminServerPort
         true, // migrate
-        null, null, null, null, null, false, null, null, null);
+        null, null, null, null, null, null, false, null, null, null);
   }
 
   public static @NonNull DBOSConfig defaultsFromEnv(@NonNull String appName) {
@@ -87,6 +89,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -108,6 +111,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -129,6 +133,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -150,6 +155,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -171,6 +177,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -192,6 +199,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -213,6 +221,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -234,6 +243,7 @@ public record DBOSConfig(
         v,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -255,6 +265,7 @@ public record DBOSConfig(
         migrate,
         v,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -275,6 +286,29 @@ public record DBOSConfig(
         adminServerPort,
         migrate,
         conductorKey,
+        v,
+        conductorExecutorMetadata,
+        appVersion,
+        executorId,
+        databaseSchema,
+        enablePatching,
+        listenQueues,
+        serializer,
+        schedulerPollingInterval);
+  }
+
+  public @NonNull DBOSConfig withConductorExecutorMetadata(@Nullable Map<String, Object> v) {
+    return new DBOSConfig(
+        appName,
+        databaseUrl,
+        dbUser,
+        dbPassword,
+        dataSource,
+        adminServer,
+        adminServerPort,
+        migrate,
+        conductorKey,
+        conductorDomain,
         v,
         appVersion,
         executorId,
@@ -297,6 +331,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         v,
         executorId,
         databaseSchema,
@@ -318,6 +353,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         v,
         databaseSchema,
@@ -339,6 +375,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         v,
@@ -368,6 +405,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -419,6 +457,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -440,6 +479,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -461,6 +501,7 @@ public record DBOSConfig(
         migrate,
         conductorKey,
         conductorDomain,
+        conductorExecutorMetadata,
         appVersion,
         executorId,
         databaseSchema,
@@ -477,8 +518,8 @@ public record DBOSConfig(
         DBOSConfig[appName=%s, databaseUrl=%s, dbUser=%s, dbPassword=***, \
         dataSource=%s, databaseSchema=%s, adminServer=%s, adminServerPort=%d, \
         migrate=%s, conductorKey=%s, conductorDomain=%s, \
-        appVersion=%s, executorId=%s, enablePatching=%s, listenQueues=%s, \
-        serializer=%s, schedulerPollingInterval=%s]
+        conductorExecutorMetadata=%s, appVersion=%s, executorId=%s, enablePatching=%s, \
+        listenQueues=%s, serializer=%s, schedulerPollingInterval=%s]
         """
         .formatted(
             appName,
@@ -491,6 +532,7 @@ public record DBOSConfig(
             migrate,
             conductorKey,
             conductorDomain,
+            conductorExecutorMetadata,
             appVersion,
             executorId,
             enablePatching,

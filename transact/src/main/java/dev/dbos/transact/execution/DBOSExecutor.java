@@ -352,6 +352,10 @@ public class DBOSExecutor implements AutoCloseable {
     return this.appId;
   }
 
+  public Map<String, Object> executorMetadata() {
+    return this.config.conductorExecutorMetadata();
+  }
+
   public Collection<RegisteredWorkflow> getRegisteredWorkflows() {
     return this.workflowMap.values();
   }

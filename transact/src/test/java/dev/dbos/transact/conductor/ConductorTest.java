@@ -339,6 +339,7 @@ public class ConductorTest {
       assertEquals("java", jsonNode.get("language").asText());
       assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
       assertNull(jsonNode.get("error_message"));
+      assertEquals("{}", jsonNode.get("executor_metadata").toString());
     }
   }
 
@@ -484,6 +485,45 @@ public class ConductorTest {
       assertEquals("java", jsonNode.get("language").asText());
       assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
       assertNull(jsonNode.get("error_message"));
+      assertEquals("{}", jsonNode.get("executor_metadata").toString());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canExecutorInfoWithMetadata() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String hostname = InetAddress.getLocalHost().getHostName();
+
+    Map<String, Object> metadata = Map.of("key1", "value1", "key2", 42);
+    when(mockExec.appVersion()).thenReturn("test-app-version");
+    when(mockExec.executorId()).thenReturn("test-executor-id");
+    when(mockExec.executorMetadata()).thenReturn(metadata);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("unknown-field", "unknown-field-value");
+      listener.send(MessageType.EXECUTOR_INFO, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("executor_info", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(hostname, jsonNode.get("hostname").asText());
+      assertEquals("test-app-version", jsonNode.get("application_version").asText());
+      assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
+      assertEquals("java", jsonNode.get("language").asText());
+      assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
+      assertNull(jsonNode.get("error_message"));
+      JsonNode metadataNode = jsonNode.get("executor_metadata");
+      assertNotNull(metadataNode);
+      assertEquals("value1", metadataNode.get("key1").asText());
+      assertEquals(42, metadataNode.get("key2").asInt());
     }
   }
 
