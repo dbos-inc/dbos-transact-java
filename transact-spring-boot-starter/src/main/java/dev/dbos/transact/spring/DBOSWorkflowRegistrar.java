@@ -1,6 +1,7 @@
 package dev.dbos.transact.spring;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.lang.reflect.Method;
@@ -19,8 +20,6 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
-
-import dev.dbos.transact.workflow.Step;
 
 /**
  * Scans all Spring beans after singleton initialization and registers those containing {@link

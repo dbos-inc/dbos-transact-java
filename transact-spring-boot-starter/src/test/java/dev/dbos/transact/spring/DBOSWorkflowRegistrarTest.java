@@ -1,17 +1,17 @@
 package dev.dbos.transact.spring;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.workflow.Workflow;
 
 import org.junit.jupiter.api.Test;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -54,7 +54,7 @@ class DBOSWorkflowRegistrarTest {
     assertNotNull(method);
     var wfTag = method.getAnnotation(Workflow.class);
     assertNotNull(wfTag);
-    
+
     verify(mockDbos).registerWorkflow(eq(wfTag), eq(bean), eq(method), eq(null));
   }
 
