@@ -1,5 +1,6 @@
 package dev.dbos.transact.spring;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -7,6 +8,10 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.workflow.Workflow;
 
 import org.junit.jupiter.api.Test;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -35,7 +40,7 @@ class DBOSWorkflowRegistrarTest {
   }
 
   @Test
-  void registersBeansWithWorkflowMethods() {
+  void registersBeansWithWorkflowMethods() throws Exception {
     var mockDbos = mock(DBOS.class);
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "workflowBean");
@@ -45,7 +50,12 @@ class DBOSWorkflowRegistrarTest {
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    // verify(mockDbos).registerClassWorkflows(bean, "");
+    var method = BeanWithWorkflow.class.getMethod("myWorkflow");
+    assertNotNull(method);
+    var wfTag = method.getAnnotation(Workflow.class);
+    assertNotNull(wfTag);
+    
+    verify(mockDbos).registerWorkflow(eq(wfTag), eq(bean), eq(method), eq(null));
   }
 
   @Test
@@ -58,9 +68,7 @@ class DBOSWorkflowRegistrarTest {
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    // verify(mockDbos, never())
-    //     .registerClassWorkflows(
-    //         org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    verify(mockDbos, never()).registerWorkflow(any(), any(), any(), any());
   }
 
   @Test
@@ -74,9 +82,7 @@ class DBOSWorkflowRegistrarTest {
     // should complete without throwing
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    // verify(mockDbos, never())
-    //     .registerClassWorkflows(
-    //         org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    verify(mockDbos, never()).registerWorkflow(any(), any(), any(), any());
   }
 
   @Test
@@ -92,8 +98,8 @@ class DBOSWorkflowRegistrarTest {
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    // verify(mockDbos).registerClassWorkflows(wfBean, "");
-    // verify(mockDbos, never()).registerClassWorkflows(plainBean, "");
+    verify(mockDbos).registerWorkflow(any(), eq(wfBean), any(), eq(null));
+    verify(mockDbos, never()).registerWorkflow(any(), eq(plainBean), any(), any());
   }
 
   @Test
@@ -116,8 +122,8 @@ class DBOSWorkflowRegistrarTest {
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    // verify(mockDbos).registerClassWorkflows(primaryBean, "");
-    // verify(mockDbos).registerClassWorkflows(secondaryBean, "secondaryBean");
+    verify(mockDbos).registerWorkflow(any(), eq(primaryBean), any(), eq(null));
+    verify(mockDbos).registerWorkflow(any(), eq(secondaryBean), any(), eq("secondaryBean"));
   }
 
   @Test
@@ -140,7 +146,7 @@ class DBOSWorkflowRegistrarTest {
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    // verify(mockDbos).registerClassWorkflows(beanA, "beanA");
-    // verify(mockDbos).registerClassWorkflows(beanB, "beanB");
+    verify(mockDbos).registerWorkflow(any(), eq(beanA), any(), eq("beanA"));
+    verify(mockDbos).registerWorkflow(any(), eq(beanB), any(), eq("beanB"));
   }
 }

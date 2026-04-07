@@ -221,7 +221,8 @@ public class DBOS implements AutoCloseable {
    * @param instanceName optional instance name for the workflow (can be null)
    * @throws IllegalStateException if called after DBOS is launched
    */
-  void registerWorkflow(
+  // TODO: Peter didn't want this method public
+  public void registerWorkflow(
       @NonNull Workflow wfTag,
       @NonNull Object target,
       @NonNull Method method,

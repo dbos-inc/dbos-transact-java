@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,8 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
+
+import dev.dbos.transact.workflow.Step;
 
 /**
  * Scans all Spring beans after singleton initialization and registers those containing {@link
@@ -64,7 +67,7 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
       }
 
       Class<?> targetClass = AopUtils.getTargetClass(bean);
-      if (!hasWorkflowMethods(targetClass)) {
+      if (!hasWorkflowsOrSteps(targetClass)) {
         continue;
       }
 
@@ -96,7 +99,7 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
 
       for (String beanName : beanNames) {
         Object rawTarget = rawTargetByName.get(beanName);
-        String registerName = beanName.equals(primaryBeanName) ? "" : beanName;
+        String registerName = beanName.equals(primaryBeanName) ? null : beanName;
 
         logger.debug(
             "Registering DBOS workflows from bean '{}' ({}) as '{}'",
@@ -104,8 +107,12 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
             targetClass.getName(),
             registerName);
 
-        // TODO: register workflows
-        // dbos.registerClassWorkflows(rawTarget, registerName);
+        for (var method : targetClass.getDeclaredMethods()) {
+          var wfTag = method.getAnnotation(Workflow.class);
+          if (wfTag != null) {
+            dbos.registerWorkflow(wfTag, rawTarget, method, registerName);
+          }
+        }
       }
     }
   }
@@ -135,9 +142,9 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
     return null;
   }
 
-  private static boolean hasWorkflowMethods(Class<?> targetClass) {
-    for (Method method : targetClass.getDeclaredMethods()) {
-      if (method.isAnnotationPresent(Workflow.class)) {
+  private static boolean hasWorkflowsOrSteps(Class<?> targetClass) {
+    for (Method method : Objects.requireNonNull(targetClass).getDeclaredMethods()) {
+      if (method.isAnnotationPresent(Workflow.class) || method.isAnnotationPresent(Step.class)) {
         return true;
       }
     }
