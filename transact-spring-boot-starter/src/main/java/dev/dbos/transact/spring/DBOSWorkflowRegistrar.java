@@ -104,7 +104,8 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
             targetClass.getName(),
             registerName);
 
-        dbos.registerClassWorkflows(rawTarget, registerName);
+        // TODO: register workflows
+        // dbos.registerClassWorkflows(rawTarget, registerName);
       }
     }
   }

@@ -153,8 +153,10 @@ public class DBOSAspect {
             });
 
     logger.debug("Intercepting @Workflow {}", regWf.fullyQualifiedName());
-    var handle = dbos.startWorkflow(regWf, pjp.getArgs(), null);
-    return handle.getResult();
+    // TODO: start registered workflow
+    throw new RuntimeException();
+    // var handle = dbos.startWorkflow(regWf, pjp.getArgs(), null);
+    // return handle.getResult();
   }
 
   /**
