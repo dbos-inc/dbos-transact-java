@@ -916,13 +916,10 @@ class WorkflowDAO {
     }
 
     String forkedWorkflowId =
-        options.forkedWorkflowId() == null
-            ? UUID.randomUUID().toString()
-            : options.forkedWorkflowId();
+        Objects.requireNonNullElseGet(
+            options.forkedWorkflowId(), () -> UUID.randomUUID().toString());
 
     logger.debug("forkWorkflow Original id {} forked id {}", originalWorkflowId, forkedWorkflowId);
-
-    String applicationVersion = options.applicationVersion();
 
     var timeout = Objects.requireNonNullElseGet(options.timeout(), Timeout::inherit);
     Long timeoutMS = null;
@@ -942,8 +939,10 @@ class WorkflowDAO {
             originalWorkflowId,
             forkedWorkflowId,
             status,
-            applicationVersion,
+            options.applicationVersion(),
             timeoutMS,
+            options.queueName(),
+            options.queuePartitionKey(),
             this.schema,
             this.serializer);
 
@@ -970,6 +969,8 @@ class WorkflowDAO {
       WorkflowStatus originalStatus,
       String applicationVersion,
       Long timeoutMS,
+      String queueName,
+      String queuePartitionKey,
       String schema,
       DBOSSerializer serializer)
       throws SQLException {
@@ -979,8 +980,9 @@ class WorkflowDAO {
         """
           INSERT INTO "%s".workflow_status (
             workflow_uuid, status, name, class_name, config_name, application_version, application_id,
-            authenticated_user, authenticated_roles, assumed_role, queue_name, inputs, workflow_timeout_ms, forked_from, serialization
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            authenticated_user, authenticated_roles, assumed_role, queue_name, queue_partition_key, inputs,
+            workflow_timeout_ms, forked_from, serialization
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
             .formatted(schema);
 
@@ -999,15 +1001,16 @@ class WorkflowDAO {
               ? null
               : JSONUtil.toJson(originalStatus.authenticatedRoles()));
       stmt.setString(10, originalStatus.assumedRole());
-      stmt.setString(11, Constants.DBOS_INTERNAL_QUEUE);
+      stmt.setString(11, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
+      stmt.setString(12, queuePartitionKey);
       stmt.setString(
-          12,
+          13,
           SerializationUtil.serializeArgs(
                   originalStatus.input(), null, originalStatus.serialization(), serializer)
               .serializedValue());
-      stmt.setObject(13, timeoutMS);
-      stmt.setString(14, originalWorkflowId);
-      stmt.setString(15, originalStatus.serialization());
+      stmt.setObject(14, timeoutMS);
+      stmt.setString(15, originalWorkflowId);
+      stmt.setString(16, originalStatus.serialization());
 
       stmt.executeUpdate();
     }

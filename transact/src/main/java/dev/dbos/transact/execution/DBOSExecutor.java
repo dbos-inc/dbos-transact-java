@@ -747,6 +747,8 @@ public class DBOSExecutor implements AutoCloseable {
             () -> {
               logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
 
+              validateQueue(options.queueName(), options.queuePartitionKey());
+
               return systemDatabase.forkWorkflow(workflowId, startStep, options);
             },
             "DBOS.forkWorkflow",
@@ -1582,6 +1584,32 @@ public class DBOSExecutor implements AutoCloseable {
     return executeWorkflow(workflow, inputs, options, null);
   }
 
+  private void validateQueue(String queueName, String queuePartitionKey) {
+    if (queueName == null || queueName.equals(Constants.DBOS_INTERNAL_QUEUE)) {
+      if (queuePartitionKey != null) {
+        throw new IllegalArgumentException(
+            "DBOS internal queue is not a partitioned queue, but a partition key was provided");
+      }
+    } else {
+      var queue = queues.stream().filter(q -> q.name().equals(queueName)).findFirst();
+      if (queue.isPresent()) {
+        if (queue.get().partitionedEnabled() && queuePartitionKey == null) {
+          throw new IllegalArgumentException(
+              "queue %s partitions enabled, but no partition key was provided"
+                  .formatted(queueName));
+        }
+
+        if (!queue.get().partitionedEnabled() && queuePartitionKey != null) {
+          throw new IllegalArgumentException(
+              "queue %s is not a partitioned queue, but a partition key was provided"
+                  .formatted(queueName));
+        }
+      } else {
+        throw new IllegalArgumentException("queue %s does not exist".formatted(queueName));
+      }
+    }
+  }
+
   private <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
       RegisteredWorkflow workflow, Object[] args, ExecutionOptions options, WorkflowInfo parent) {
 
@@ -1602,24 +1630,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (options.queueName() != null) {
 
-      final var queueName = options.queueName();
-      var queue = queues.stream().filter(q -> q.name().equals(queueName)).findFirst();
-      if (queue.isPresent()) {
-        if (queue.get().partitionedEnabled() && options.queuePartitionKey() == null) {
-          throw new IllegalArgumentException(
-              "queue %s partitions enabled, but no partition key was provided"
-                  .formatted(options.queueName()));
-        }
-
-        if (!queue.get().partitionedEnabled() && options.queuePartitionKey() != null) {
-          throw new IllegalArgumentException(
-              "queue %s is not a partitioned queue, but a partition key was provided"
-                  .formatted(options.queueName()));
-        }
-      } else {
-        throw new IllegalArgumentException(
-            "queue %s does not exist".formatted(options.queueName()));
-      }
+      validateQueue(options.queueName(), options.queuePartitionKey());
 
       var workflowId =
           enqueueWorkflow(

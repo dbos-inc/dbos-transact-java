@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
@@ -41,6 +42,8 @@ public class ForkTest {
 
   private ForkTestServiceImpl impl;
   private ForkTestService proxy;
+  private Queue testQueue = new Queue("test-queue");
+  private Queue testPartitionQueue = new Queue("test-partition-queue").withPartitionedEnabled(true);
 
   @BeforeEach
   void beforeEach() {
@@ -51,6 +54,7 @@ public class ForkTest {
     impl = new ForkTestServiceImpl(dbos);
     proxy = dbos.registerProxy(ForkTestService.class, impl);
     impl.setProxy(proxy);
+    dbos.registerQueues(testQueue, testPartitionQueue);
 
     dbos.launch();
   }
@@ -264,6 +268,111 @@ public class ForkTest {
     assertEquals(workflowId, handle3.getStatus().forkedFrom());
     assertNull(handle3.getStatus().timeoutMs());
     assertNull(handle2.getStatus().deadlineEpochMs());
+  }
+
+  @Test
+  public void testForkQueueName() throws Exception {
+
+    var workflowId = "testForkQueueName-%d".formatted(System.currentTimeMillis());
+    try (var o = new WorkflowOptions(workflowId).setContext()) {
+      var result = proxy.simpleWorkflow("hello");
+      assertEquals("hellohello", result);
+    }
+
+    DBOSTestAccess.getQueueService(dbos).pause();
+
+    // No queue options: should default to the internal queue with no partition key
+    var handle1 = dbos.forkWorkflow(workflowId, 0);
+    assertNotEquals(workflowId, handle1.workflowId());
+    assertEquals(Constants.DBOS_INTERNAL_QUEUE, handle1.getStatus().queueName());
+    assertNull(handle1.getStatus().queuePartitionKey());
+
+    // Explicit queueName: should use the specified queue with no partition key
+    var handle2 = dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue(testQueue));
+    assertNotEquals(workflowId, handle2.workflowId());
+    assertEquals(testQueue.name(), handle2.getStatus().queueName());
+    assertNull(handle2.getStatus().queuePartitionKey());
+
+    // Explicit queueName: should use the specified queue by name with no partition key
+    var handle3 = dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue(testQueue.name()));
+    assertNotEquals(workflowId, handle3.workflowId());
+    assertEquals(testQueue.name(), handle3.getStatus().queueName());
+    assertNull(handle3.getStatus().queuePartitionKey());
+
+    DBOSTestAccess.getQueueService(dbos).unpause();
+
+    assertEquals("hellohello", handle1.getResult());
+    assertEquals("hellohello", handle2.getResult());
+    assertEquals("hellohello", handle3.getResult());
+  }
+
+  @Test
+  public void testForkInvalidQueue() throws Exception {
+
+    var workflowId = "testForkQueueName-%d".formatted(System.currentTimeMillis());
+    try (var o = new WorkflowOptions(workflowId).setContext()) {
+      var result = proxy.simpleWorkflow("hello");
+      assertEquals("hellohello", result);
+    }
+
+    // specify partition key for default or custom non partitioned queue should throw
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue("invalid-queue")));
+  }
+
+  @Test
+  public void testForkQueuePartitionKey() throws Exception {
+
+    var workflowId = "testForkQueuePartitionKey-%d".formatted(System.currentTimeMillis());
+    try (var o = new WorkflowOptions(workflowId).setContext()) {
+      proxy.simpleWorkflow("hello");
+    }
+
+    DBOSTestAccess.getQueueService(dbos).pause();
+
+    // queueName with queuePartitionKey: both should be set
+    var options1 =
+        new ForkOptions()
+            .withQueue(testPartitionQueue.name())
+            .withQueuePartitionKey("partition-key");
+    var handle1 = dbos.forkWorkflow(workflowId, 0, options1);
+    assertNotEquals(workflowId, handle1.workflowId());
+    assertEquals(testPartitionQueue.name(), handle1.getStatus().queueName());
+    assertEquals("partition-key", handle1.getStatus().queuePartitionKey());
+
+    DBOSTestAccess.getQueueService(dbos).unpause();
+    assertEquals("hellohello", handle1.getResult());
+  }
+
+  @Test
+  public void testForkInvalidPartitionKey() throws Exception {
+
+    var workflowId = "testForkQueueName-%d".formatted(System.currentTimeMillis());
+    try (var o = new WorkflowOptions(workflowId).setContext()) {
+      var result = proxy.simpleWorkflow("hello");
+      assertEquals("hellohello", result);
+    }
+
+    // specify partition key for default or custom non partitioned queue should throw
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.forkWorkflow(
+                workflowId, 0, new ForkOptions().withQueuePartitionKey("test-part-key")));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            dbos.forkWorkflow(
+                workflowId,
+                0,
+                new ForkOptions().withQueue(testQueue).withQueuePartitionKey("test-part-key")));
+
+    // not specify partition key for partitioned queue should throw
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.forkWorkflow(workflowId, 0, new ForkOptions().withQueue(testPartitionQueue)));
   }
 
   @Test

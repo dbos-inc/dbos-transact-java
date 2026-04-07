@@ -892,6 +892,55 @@ public class ConductorTest {
     }
   }
 
+  @SuppressWarnings("unchecked")
+  @RetryingTest(3)
+  public void canForkCustomQueue() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+    String newWorkflowId = "new-" + workflowId;
+
+    var mockHandle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+    when(mockHandle.workflowId()).thenReturn(newWorkflowId);
+    when(mockExec.forkWorkflow(eq(workflowId), anyInt(), any())).thenReturn(mockHandle);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body =
+          Map.of(
+              "workflow_id",
+              workflowId,
+              "start_step",
+              2,
+              "queue_name",
+              "custom-queue",
+              "queue_partition_key",
+              "partition-key");
+      Map<String, Object> message = Map.of("body", body);
+      listener.send(MessageType.FORK_WORKFLOW, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ForkOptions> optionsCaptor = ArgumentCaptor.forClass(ForkOptions.class);
+      verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
+      ForkOptions capturedOptions = optionsCaptor.getValue();
+      assertNotNull(capturedOptions);
+      assertEquals("custom-queue", capturedOptions.queueName());
+      assertEquals("partition-key", capturedOptions.queuePartitionKey());
+      assertNull(capturedOptions.applicationVersion());
+      assertNull(capturedOptions.forkedWorkflowId());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("fork_workflow", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(newWorkflowId, jsonNode.get("new_workflow_id").asText());
+      assertNull(jsonNode.get("error_message"));
+    }
+  }
+
   @RetryingTest(3)
   public void canForkThrow() throws Exception {
     MessageListener listener = new MessageListener();

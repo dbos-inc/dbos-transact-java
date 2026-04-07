@@ -18,6 +18,7 @@ import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
@@ -933,7 +934,7 @@ public class SystemDatabaseTest {
     assertArrayEquals(authenticatedRoles, originalRetrieved.authenticatedRoles());
 
     // Fork the workflow
-    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
     var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
     assertNotNull(forkedWorkflowId);
     assertNotEquals(originalWorkflowId, forkedWorkflowId);
@@ -988,7 +989,7 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(originalStatus, null, false, false);
 
     // Fork the workflow
-    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
     var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
     assertNotNull(forkedWorkflowId);
 
@@ -1043,7 +1044,7 @@ public class SystemDatabaseTest {
     assertEquals(0, originalRetrieved.authenticatedRoles().length);
 
     // Fork the workflow
-    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
     var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
     assertNotNull(forkedWorkflowId);
     assertNotEquals(originalWorkflowId, forkedWorkflowId);
