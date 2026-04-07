@@ -43,7 +43,8 @@ public class ForkTest {
   private ForkTestServiceImpl impl;
   private ForkTestService proxy;
   private Queue testQueue = new Queue("test-queue");
-  private Queue testPartitionQueue = new Queue("test-partition-queue").withPartitioningEnabled(true);
+  private Queue testPartitionQueue =
+      new Queue("test-partition-queue").withPartitioningEnabled(true);
 
   @BeforeEach
   void beforeEach() {
