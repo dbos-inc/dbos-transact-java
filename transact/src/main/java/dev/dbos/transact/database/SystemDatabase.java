@@ -760,7 +760,7 @@ public class SystemDatabase implements AutoCloseable {
         () -> {
           var sql =
               """
-              SELECT topic, message, created_at_epoch_ms, consumed
+              SELECT topic, message, serialization, created_at_epoch_ms, consumed
               FROM "%s".notifications
               WHERE destination_uuid = ?
               ORDER BY created_at_epoch_ms
@@ -773,8 +773,13 @@ public class SystemDatabase implements AutoCloseable {
             stmt.setString(1, workflowId);
             try (var rs = stmt.executeQuery()) {
               while (rs.next()) {
-                var topic = rs.getString("topic");
-                var message = rs.getString("message");
+                var rawTopic = rs.getString("topic");
+                var topic =
+                    Constants.DBOS_NULL_TOPIC.equals(rawTopic) ? null : rawTopic;
+                var serialization = rs.getString("serialization");
+                var message =
+                    SerializationUtil.deserializeValue(
+                        rs.getString("message"), serialization, this.serializer);
                 var createdAtEpochMs = rs.getLong("created_at_epoch_ms");
                 var consumed = rs.getBoolean("consumed");
                 notifications.add(new NotificationInfo(topic, message, createdAtEpochMs, consumed));
