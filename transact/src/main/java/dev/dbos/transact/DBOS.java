@@ -175,8 +175,6 @@ public class DBOS implements AutoCloseable {
     return registerWorkflows(interfaceClass, implementation, "");
   }
 
-  // TODO: revamp register wf API
-
   /**
    * Register all workflows and steps in the provided class instance
    *
@@ -190,19 +188,22 @@ public class DBOS implements AutoCloseable {
    */
   public <T> @NonNull T registerWorkflows(
       @NonNull Class<T> interfaceClass, @NonNull T implementation, @NonNull String instanceName) {
-    if (!interfaceClass.isInterface()) {
-      throw new IllegalArgumentException("interfaceClass must be an interface");
-    }
-    registerClassWorkflows(implementation, instanceName);
+    registerClassWorkflows(interfaceClass, implementation, instanceName);
 
     return DBOSInvocationHandler.createProxy(
         interfaceClass, implementation, instanceName, () -> this.dbosExecutor.get());
   }
 
-  public void registerClassWorkflows(
-      @NonNull Object implementation, @Nullable String instanceName) {
+  private void registerClassWorkflows(
+      @NonNull Class<?> interfaceClass,
+      @NonNull Object implementation,
+      @Nullable String instanceName) {
+    Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
     Objects.requireNonNull(implementation, "implementation must not be null");
     instanceName = Objects.requireNonNullElse(instanceName, "");
+    if (!interfaceClass.isInterface()) {
+      throw new IllegalArgumentException("interfaceClass must be an interface");
+    }
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
@@ -214,7 +215,7 @@ public class DBOS implements AutoCloseable {
         (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
             ? classNameAnnotation.value()
             : implementation.getClass().getName();
-    workflowRegistry.register(implementation, className, instanceName);
+    workflowRegistry.register(interfaceClass, implementation, className, instanceName);
 
     Method[] methods = implementation.getClass().getDeclaredMethods();
     for (Method method : methods) {
@@ -363,7 +364,7 @@ public class DBOS implements AutoCloseable {
    * @return A handle to the enqueued or running workflow
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
-      @NonNull ThrowingSupplier<T, E> supplier, @Nullable StartWorkflowOptions options) {
+      @NonNull ThrowingSupplier<T, E> supplier, @NonNull StartWorkflowOptions options) {
     return ensureLaunched("startWorkflow").startWorkflow(supplier, options);
   }
 
@@ -377,7 +378,7 @@ public class DBOS implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
       @NonNull ThrowingSupplier<T, E> supplier) {
-    return startWorkflow(supplier, null);
+    return startWorkflow(supplier, new StartWorkflowOptions());
   }
 
   /**
@@ -389,7 +390,7 @@ public class DBOS implements AutoCloseable {
    * @return A handle to the enqueued or running workflow
    */
   public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
-      @NonNull ThrowingRunnable<E> runnable, @Nullable StartWorkflowOptions options) {
+      @NonNull ThrowingRunnable<E> runnable, @NonNull StartWorkflowOptions options) {
     return startWorkflow(
         () -> {
           runnable.execute();
@@ -407,7 +408,7 @@ public class DBOS implements AutoCloseable {
    */
   public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
       @NonNull ThrowingRunnable<E> runnable) {
-    return startWorkflow(runnable, null);
+    return startWorkflow(runnable, new StartWorkflowOptions());
   }
 
   /**
@@ -420,9 +421,7 @@ public class DBOS implements AutoCloseable {
    * @return WorkflowHandle to the executed workflow
    */
   public WorkflowHandle<?, ?> startWorkflow(
-      @NonNull RegisteredWorkflow regWorkflow,
-      @NonNull Object[] args,
-      @Nullable StartWorkflowOptions options) {
+      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
     return ensureLaunched("startWorkflow").startWorkflow(regWorkflow, args, options);
   }
 
@@ -921,20 +920,6 @@ public class DBOS implements AutoCloseable {
    */
   public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
     return ensureLaunched("getRegisteredWorkflows").getWorkflows();
-  }
-
-  /**
-   * Retrieves a registered workflow by its workflow name, class name, and optional instance name.
-   *
-   * @param workflowName the name of the workflow to retrieve
-   * @param className the class name containing the workflow
-   * @param instanceName the instance name of the workflow (nullable)
-   * @return an {@link Optional} containing the {@link RegisteredWorkflow} if found, otherwise empty
-   */
-  public @NonNull Optional<RegisteredWorkflow> getRegisteredWorkflow(
-      @NonNull String workflowName, @NonNull String className, @Nullable String instanceName) {
-    return ensureLaunched("getRegisteredWorkflow")
-        .getWorkflow(workflowName, className, Objects.requireNonNullElse(instanceName, ""));
   }
 
   /**

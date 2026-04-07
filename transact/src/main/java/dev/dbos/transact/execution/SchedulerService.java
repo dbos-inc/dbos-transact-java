@@ -152,8 +152,7 @@ public class SchedulerService implements AutoCloseable {
       } else if (!scheduleRunning) {
         // if the schedule is active but we don't yet have a scheduled future for it, schedule it
         // now
-        var optRegWf =
-            dbosExecutor.getWorkflow(schedule.workflowName(), schedule.className(), null);
+        var optRegWf = dbosExecutor.getWorkflow(schedule.workflowName(), schedule.className());
         if (optRegWf.isEmpty()) {
           logger.error(
               "Workflow schedule {} has missing workflow function {}",

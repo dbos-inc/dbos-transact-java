@@ -357,6 +357,11 @@ public class DBOSExecutor implements AutoCloseable {
     return this.instanceMap.values();
   }
 
+  public Optional<RegisteredWorkflow> getWorkflow(String workflowName, String className) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(className, workflowName);
+    return Optional.ofNullable(this.workflowMap.get(fqName));
+  }
+
   public List<Queue> getQueues() {
     return this.queues;
   }
@@ -1294,10 +1299,18 @@ public class DBOSExecutor implements AutoCloseable {
     return null;
   }
 
-  public Optional<RegisteredWorkflow> getWorkflow(
+  private RegisteredWorkflow getWorkflow(Invocation inv) {
+    return getWorkflow(inv.className(), inv.instanceName(), inv.workflowName());
+  }
+
+  private RegisteredWorkflow getWorkflow(
       String className, String instanceName, String workflowName) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
-    return Optional.ofNullable(this.workflowMap.get(fqName));
+    var workflow = workflowMap.get(fqName);
+    if (workflow == null) {
+      throw new IllegalStateException("%s workflow not registered".formatted(fqName));
+    }
+    return workflow;
   }
 
   public record ExecutionOptions(
@@ -1421,14 +1434,14 @@ public class DBOSExecutor implements AutoCloseable {
       RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
     var execOptions =
         new ExecutionOptions(
-            options != null ? options.workflowId() : null,
-            options != null ? options.timeout() : null,
-            options != null ? options.deadline() : null,
-            options != null ? options.queueName() : null,
-            options != null ? options.deduplicationId() : null,
-            options != null ? options.priority() : null,
-            options != null ? options.queuePartitionKey() : null,
-            options != null ? options.appVersion() : null,
+            options.workflowId(),
+            options.timeout(),
+            options.deadline(),
+            options.queueName(),
+            options.deduplicationId(),
+            options.priority(),
+            options.queuePartitionKey(),
+            options.appVersion(),
             false,
             false,
             null);
@@ -1445,27 +1458,15 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalStateException(
           "The @Workflow method must be called on the DBOS instance passed to the startWorkflow lambda");
     }
-    var workflow =
-        getWorkflow(invocation.className(), invocation.instanceName(), invocation.workflowName())
-            .orElseThrow(
-                () -> {
-                  var fqName =
-                      RegisteredWorkflow.fullyQualifiedName(
-                          invocation.className(),
-                          invocation.instanceName(),
-                          invocation.workflowName());
-                  return new IllegalStateException("%s workflow not registered".formatted(fqName));
-                });
+    var workflow = getWorkflow(invocation);
 
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
     var childWorkflowId =
         parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
 
-    var nextTimeout =
-        options != null && options.timeout() != null ? options.timeout() : ctx.getNextTimeout();
-    var nextDeadline =
-        options != null && options.deadline() != null ? options.deadline() : ctx.getNextDeadline();
+    var nextTimeout = options.timeout() != null ? options.timeout() : ctx.getNextTimeout();
+    var nextDeadline = options.deadline() != null ? options.deadline() : ctx.getNextDeadline();
 
     // default to context timeout & deadline if nextTimeout is null or Inherit
     Duration timeout = ctx.getTimeout();
@@ -1484,7 +1485,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     var workflowId =
         Objects.requireNonNullElseGet(
-            options != null ? options.workflowId() : null,
+            options.workflowId(),
             () ->
                 Objects.requireNonNullElseGet(
                     ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString()));
@@ -1494,11 +1495,11 @@ public class DBOSExecutor implements AutoCloseable {
             workflowId,
             Timeout.of(timeout),
             deadline,
-            options != null ? options.queueName() : null,
-            options != null ? options.deduplicationId() : null,
-            options != null ? options.priority() : null,
-            options != null ? options.queuePartitionKey() : null,
-            options != null ? options.appVersion() : null,
+            options.queueName(),
+            options.deduplicationId(),
+            options.priority(),
+            options.queuePartitionKey(),
+            options.appVersion(),
             false,
             false,
             null);
@@ -1511,10 +1512,7 @@ public class DBOSExecutor implements AutoCloseable {
     var fqName = RegisteredWorkflow.fullyQualifiedName(className, instanceName, workflowName);
     logger.debug("invokeWorkflow {}({})", fqName, args);
 
-    var workflow =
-        getWorkflow(className, instanceName, workflowName)
-            .orElseThrow(
-                () -> new IllegalStateException("%s workflow not registered".formatted(fqName)));
+    var workflow = getWorkflow(className, instanceName, workflowName);
 
     var ctx = DBOSContextHolder.get();
 
