@@ -685,6 +685,9 @@ public class Conductor implements AutoCloseable {
       case GET_METRICS -> handleGetMetrics(this, message);
       case GET_SCHEDULE -> handleGetSchedule(this, message);
       case GET_WORKFLOW_AGGREGATES -> handleGetWorkflowAggregates(this, message);
+      case GET_WORKFLOW_EVENTS -> handleGetWorkflowEvents(this, message);
+      case GET_WORKFLOW_NOTIFICATIONS -> handleGetWorkflowNotifications(this, message);
+      case GET_WORKFLOW_STREAMS -> handleGetWorkflowStreams(this, message);
       case GET_WORKFLOW -> handleGetWorkflow(this, message);
       case IMPORT_WORKFLOW -> handleImportWorkflow(this, message);
       case LIST_APPLICATION_VERSIONS -> handleListApplicationVersions(this, message);
@@ -1000,6 +1003,51 @@ public class Conductor implements AutoCloseable {
           } catch (Exception e) {
             logger.error("Exception encountered when getting workflow aggregates", e);
             return new GetWorkflowAggregatesResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetWorkflowEvents(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetWorkflowEventsRequest request = (GetWorkflowEventsRequest) message;
+          try {
+            var events = conductor.systemDatabase.getAllEvents(request.workflow_id);
+            return new GetWorkflowEventsResponse(request, events);
+          } catch (Exception e) {
+            logger.error("Exception encountered when getting workflow events for {}", request.workflow_id, e);
+            return new GetWorkflowEventsResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetWorkflowNotifications(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetWorkflowNotificationsRequest request = (GetWorkflowNotificationsRequest) message;
+          try {
+            var notifications = conductor.systemDatabase.getAllNotifications(request.workflow_id);
+            return new GetWorkflowNotificationsResponse(request, notifications);
+          } catch (Exception e) {
+            logger.error("Exception encountered when getting workflow notifications for {}", request.workflow_id, e);
+            return new GetWorkflowNotificationsResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetWorkflowStreams(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetWorkflowStreamsRequest request = (GetWorkflowStreamsRequest) message;
+          try {
+            var streams = conductor.systemDatabase.getAllStreamEntries(request.workflow_id);
+            return new GetWorkflowStreamsResponse(request, streams);
+          } catch (Exception e) {
+            logger.error("Exception encountered when getting workflow streams for {}", request.workflow_id, e);
+            return new GetWorkflowStreamsResponse(request, e);
           }
         });
   }
