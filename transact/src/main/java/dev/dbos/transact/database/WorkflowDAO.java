@@ -521,13 +521,11 @@ class WorkflowDAO {
     }
     if (input.startTime() != null) {
       whereConditions.add("created_at >= ?");
-      // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
-      parameters.add(input.startTime().toInstant().toEpochMilli());
+      parameters.add(input.startTime().toEpochMilli());
     }
     if (input.endTime() != null) {
       whereConditions.add("created_at <= ?");
-      // Convert OffsetDateTime to epoch milliseconds for comparison with DB column
-      parameters.add(input.endTime().toInstant().toEpochMilli());
+      parameters.add(input.endTime().toEpochMilli());
     }
     if (input.status() != null && !input.status().isEmpty()) {
       whereConditions.add("status = ANY(?)");

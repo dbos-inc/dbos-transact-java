@@ -2,7 +2,7 @@ package dev.dbos.transact.conductor.protocol;
 
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -60,8 +60,8 @@ public class ListWorkflowsRequest extends BaseMessage {
         .workflowIds(body.workflow_uuids)
         .workflowName(body.workflow_name)
         .authenticatedUser(body.authenticated_user)
-        .startTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null)
-        .endTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null)
+        .startTime(body.start_time != null ? Instant.parse(body.start_time) : null)
+        .endTime(body.end_time != null ? Instant.parse(body.end_time) : null)
         .status(body.status)
         .applicationVersion(body.application_version)
         .forkedFrom(body.forked_from)

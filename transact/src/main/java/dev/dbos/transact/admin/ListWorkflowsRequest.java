@@ -2,7 +2,7 @@ package dev.dbos.transact.admin;
 
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.List;
 
 // TODO: admin server gap analysis
@@ -27,8 +27,8 @@ public record ListWorkflowsRequest(
     return ListWorkflowsInput.builder()
         .workflowIds(workflow_uuids)
         .status(status != null ? List.of(status) : null)
-        .startTime(start_time != null ? OffsetDateTime.parse(start_time) : null)
-        .endTime(end_time != null ? OffsetDateTime.parse(end_time) : null)
+        .startTime(start_time != null ? Instant.parse(start_time) : null)
+        .endTime(end_time != null ? Instant.parse(end_time) : null)
         .workflowName(workflow_name != null ? List.of(workflow_name) : null)
         .applicationVersion(application_version != null ? List.of(application_version) : null)
         .authenticatedUser(authenticated_user != null ? List.of(authenticated_user) : null)

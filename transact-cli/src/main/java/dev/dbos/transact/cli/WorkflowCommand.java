@@ -4,7 +4,7 @@ import dev.dbos.transact.json.JSONUtil.JsonRuntimeException;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.Objects;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -129,38 +129,23 @@ class ListCommand implements Runnable {
   public void run() {
     var out = spec.commandLine().getOut();
 
-    var input = new ListWorkflowsInput();
-    input =
-        input
-            .withLimit(limit)
-            .withOffset(offset)
-            .withSortDesc(sortDescending)
-            .withQueuesOnly(queuesOnly)
-            .withLoadInput(false)
-            .withLoadOutput(false);
-    if (status != null) {
-      input = input.withAddedStatus(status);
-    }
-    if (name != null) {
-      input = input.withWorkflowName(name);
-    }
-    if (appVersion != null) {
-      input = input.withApplicationVersion(appVersion);
-    }
-    if (queue != null) {
-      input = input.withQueueName(queue);
-    }
-    if (this.startTime != null) {
-      var startTime = OffsetDateTime.parse(this.startTime);
-      input = input.withStartTime(startTime);
-    }
-    if (this.endTime != null) {
-      var endTime = OffsetDateTime.parse(this.endTime);
-      input = input.withEndTime(endTime);
-    }
+    var inputBuilder =
+        ListWorkflowsInput.builder()
+            .limit(limit)
+            .offset(offset)
+            .sortDesc(sortDescending)
+            .queuesOnly(queuesOnly)
+            .loadInput(false)
+            .loadOutput(false)
+            .status(status)
+            .workflowName(name)
+            .applicationVersion(appVersion)
+            .queueName(queue)
+            .startTime(startTime != null ? Instant.parse(startTime) : null)
+            .endTime(endTime != null ? Instant.parse(endTime) : null);
 
     var client = dbOptions.createClient();
-    var workflows = client.listWorkflows(input);
+    var workflows = client.listWorkflows(inputBuilder.build());
     var json = WorkflowCommand.prettyPrint(workflows);
     out.println(json);
   }
@@ -188,10 +173,11 @@ class GetCommand implements Runnable {
 
     Objects.requireNonNull(workflowId, "workflowId parameter cannot be null");
     var input =
-        new ListWorkflowsInput()
-            .withAddedWorkflowId(workflowId)
-            .withLoadInput(false)
-            .withLoadOutput(false);
+        ListWorkflowsInput.builder()
+            .workflowId(workflowId)
+            .loadInput(false)
+            .loadOutput(false)
+            .build();
     var client = dbOptions.createClient();
     var workflows = client.listWorkflows(input);
     if (workflows.isEmpty()) {
