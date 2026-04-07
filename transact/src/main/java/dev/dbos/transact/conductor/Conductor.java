@@ -1016,7 +1016,10 @@ public class Conductor implements AutoCloseable {
             var events = conductor.systemDatabase.getAllEvents(request.workflow_id);
             return new GetWorkflowEventsResponse(request, events);
           } catch (Exception e) {
-            logger.error("Exception encountered when getting workflow events for {}", request.workflow_id, e);
+            logger.error(
+                "Exception encountered when getting workflow events for {}",
+                request.workflow_id,
+                e);
             return new GetWorkflowEventsResponse(request, e);
           }
         });
@@ -1031,7 +1034,10 @@ public class Conductor implements AutoCloseable {
             var notifications = conductor.systemDatabase.getAllNotifications(request.workflow_id);
             return new GetWorkflowNotificationsResponse(request, notifications);
           } catch (Exception e) {
-            logger.error("Exception encountered when getting workflow notifications for {}", request.workflow_id, e);
+            logger.error(
+                "Exception encountered when getting workflow notifications for {}",
+                request.workflow_id,
+                e);
             return new GetWorkflowNotificationsResponse(request, e);
           }
         });
@@ -1046,7 +1052,10 @@ public class Conductor implements AutoCloseable {
             var streams = conductor.systemDatabase.getAllStreamEntries(request.workflow_id);
             return new GetWorkflowStreamsResponse(request, streams);
           } catch (Exception e) {
-            logger.error("Exception encountered when getting workflow streams for {}", request.workflow_id, e);
+            logger.error(
+                "Exception encountered when getting workflow streams for {}",
+                request.workflow_id,
+                e);
             return new GetWorkflowStreamsResponse(request, e);
           }
         });

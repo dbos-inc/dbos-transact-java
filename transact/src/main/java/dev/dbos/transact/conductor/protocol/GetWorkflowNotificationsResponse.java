@@ -1,11 +1,10 @@
 package dev.dbos.transact.conductor.protocol;
 
+import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.NotificationInfo;
 
 import java.util.Collections;
 import java.util.List;
-
-import dev.dbos.transact.json.JSONUtil;
 
 public class GetWorkflowNotificationsResponse extends BaseResponse {
 
@@ -13,10 +12,7 @@ public class GetWorkflowNotificationsResponse extends BaseResponse {
       String topic, String message, long created_at_epoch_ms, boolean consumed) {
     public static NotificationOutput from(NotificationInfo info) {
       return new NotificationOutput(
-          info.topic(),
-          JSONUtil.toJson(info.message()),
-          info.createdAtEpochMs(),
-          info.consumed());
+          info.topic(), JSONUtil.toJson(info.message()), info.createdAtEpochMs(), info.consumed());
     }
   }
 

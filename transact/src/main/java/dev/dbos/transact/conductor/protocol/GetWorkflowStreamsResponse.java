@@ -1,10 +1,10 @@
 package dev.dbos.transact.conductor.protocol;
 
+import dev.dbos.transact.json.JSONUtil;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-
-import dev.dbos.transact.json.JSONUtil;
 
 public class GetWorkflowStreamsResponse extends BaseResponse {
 

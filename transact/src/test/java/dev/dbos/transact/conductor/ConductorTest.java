@@ -2936,14 +2936,14 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    when(mockDB.getAllEvents("wf-events-1"))
-        .thenReturn(Map.of("key1", "hello", "key2", 42));
+    when(mockDB.getAllEvents("wf-events-1")).thenReturn(Map.of("key1", "hello", "key2", 42));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      listener.send(MessageType.GET_WORKFLOW_EVENTS, "req-events", Map.of("workflow_id", "wf-events-1"));
+      listener.send(
+          MessageType.GET_WORKFLOW_EVENTS, "req-events", Map.of("workflow_id", "wf-events-1"));
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       verify(mockDB).getAllEvents("wf-events-1");
@@ -2970,7 +2970,10 @@ public class ConductorTest {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      listener.send(MessageType.GET_WORKFLOW_EVENTS, "req-events-err", Map.of("workflow_id", "wf-events-err"));
+      listener.send(
+          MessageType.GET_WORKFLOW_EVENTS,
+          "req-events-err",
+          Map.of("workflow_id", "wf-events-err"));
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
@@ -2985,16 +2988,20 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    List<NotificationInfo> notifications = List.of(
-        new NotificationInfo("topic1", "msg1", 1000L, false),
-        new NotificationInfo(null, 99, 2000L, true));
+    List<NotificationInfo> notifications =
+        List.of(
+            new NotificationInfo("topic1", "msg1", 1000L, false),
+            new NotificationInfo(null, 99, 2000L, true));
     when(mockDB.getAllNotifications("wf-notifs-1")).thenReturn(notifications);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      listener.send(MessageType.GET_WORKFLOW_NOTIFICATIONS, "req-notifs", Map.of("workflow_id", "wf-notifs-1"));
+      listener.send(
+          MessageType.GET_WORKFLOW_NOTIFICATIONS,
+          "req-notifs",
+          Map.of("workflow_id", "wf-notifs-1"));
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       verify(mockDB).getAllNotifications("wf-notifs-1");
@@ -3028,7 +3035,10 @@ public class ConductorTest {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      listener.send(MessageType.GET_WORKFLOW_NOTIFICATIONS, "req-notifs-err", Map.of("workflow_id", "wf-notifs-err"));
+      listener.send(
+          MessageType.GET_WORKFLOW_NOTIFICATIONS,
+          "req-notifs-err",
+          Map.of("workflow_id", "wf-notifs-err"));
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
@@ -3052,7 +3062,8 @@ public class ConductorTest {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      listener.send(MessageType.GET_WORKFLOW_STREAMS, "req-streams", Map.of("workflow_id", "wf-streams-1"));
+      listener.send(
+          MessageType.GET_WORKFLOW_STREAMS, "req-streams", Map.of("workflow_id", "wf-streams-1"));
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       verify(mockDB).getAllStreamEntries("wf-streams-1");
@@ -3079,13 +3090,18 @@ public class ConductorTest {
     MessageListener listener = new MessageListener();
     testServer.setListener(listener);
 
-    doThrow(new RuntimeException("streams error")).when(mockDB).getAllStreamEntries("wf-streams-err");
+    doThrow(new RuntimeException("streams error"))
+        .when(mockDB)
+        .getAllStreamEntries("wf-streams-err");
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
       assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
 
-      listener.send(MessageType.GET_WORKFLOW_STREAMS, "req-streams-err", Map.of("workflow_id", "wf-streams-err"));
+      listener.send(
+          MessageType.GET_WORKFLOW_STREAMS,
+          "req-streams-err",
+          Map.of("workflow_id", "wf-streams-err"));
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
 
       JsonNode json = mapper.readTree(listener.message);
