@@ -945,14 +945,13 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Retrieves all events stored during the execution of a workflow.
-   * Events are key-value pairs that workflows can set during execution to persist intermediate
-   * state or communicate between steps. This method returns all events for the specified workflow
-   * with their deserialized values.
+   * Retrieves all events stored during the execution of a workflow. Events are key-value pairs that
+   * workflows can set during execution to persist intermediate state or communicate between steps.
+   * This method returns all events for the specified workflow with their deserialized values.
    *
    * @param workflowId the unique identifier of the workflow whose events to retrieve
-   * @return a map containing all events for the workflow, where keys are event names and values
-   *         are the deserialized event data
+   * @return a map containing all events for the workflow, where keys are event names and values are
+   *     the deserialized event data
    */
   public @NonNull Map<String, Object> getAllEvents(@NonNull String workflowId) {
     return ensureLaunched("getAllEvents").getAllEvents(workflowId);
