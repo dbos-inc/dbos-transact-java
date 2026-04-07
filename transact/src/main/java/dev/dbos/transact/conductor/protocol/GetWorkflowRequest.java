@@ -18,9 +18,10 @@ public class GetWorkflowRequest extends BaseMessage {
   }
 
   public ListWorkflowsInput toInput() {
-    return new ListWorkflowsInput()
-        .withWorkflowIds(List.of(workflow_id))
-        .withLoadInput(load_input)
-        .withLoadOutput(load_output);
+    return ListWorkflowsInput.builder()
+        .workflowIds(List.of(workflow_id))
+        .loadInput(load_input)
+        .loadOutput(load_output)
+        .build();
   }
 }

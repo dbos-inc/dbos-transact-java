@@ -491,6 +491,21 @@ class WorkflowDAO {
       whereConditions.add("parent_workflow_id = ANY(?)");
       parameters.add(input.parentWorkflowId());
     }
+    // TODO: fix this code
+    if (input.wasForkedFrom() != null) {
+      if (input.wasForkedFrom()) {
+        whereConditions.add("forked_from IS NOT NULL");
+      } else {
+        whereConditions.add("forked_from IS NULL");
+      }
+    }
+    if (input.hasParent() != null) {
+      if (input.hasParent()) {
+        whereConditions.add("parent_workflow_id IS NOT NULL");
+      } else {
+        whereConditions.add("parent_workflow_id IS NULL");
+      }
+    }
     if (input.workflowIdPrefix() != null) {
       whereConditions.add("workflow_uuid LIKE ?");
       // Append wildcard directly to the parameter value

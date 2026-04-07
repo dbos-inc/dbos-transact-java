@@ -5,6 +5,7 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+// TODO: admin server gap analysis
 public record ListQueuedWorkflowsRequest(
     String workflow_name,
     String start_time,
@@ -19,26 +20,21 @@ public record ListQueuedWorkflowsRequest(
     Boolean load_input) {
 
   public ListWorkflowsInput asInput() {
-    return new ListWorkflowsInput(
-        null, // workflow ids
-        status != null ? List.of(status) : null,
-        start_time != null ? OffsetDateTime.parse(start_time) : null,
-        end_time != null ? OffsetDateTime.parse(end_time) : null,
-        workflow_name != null ? List.of(workflow_name) : null,
-        null, // class_name,
-        null, // instance_name
-        null, // app version
-        null, // auth user
-        limit,
-        offset,
-        sort_desc,
-        null, // wf id prefix
-        load_input,
-        false, // load output
-        queue_name != null ? List.of(queue_name) : null,
-        true, // queuesOnly: only list queued workflows
-        null, // Executor IDs
-        fork_from != null ? List.of(fork_from) : null,
-        parent_workflow_id != null ? List.of(parent_workflow_id) : null);
+    return ListWorkflowsInput.builder()
+        .status(status != null ? List.of(status) : null)
+        .startTime(start_time != null ? OffsetDateTime.parse(start_time) : null)
+        .endTime(end_time != null ? OffsetDateTime.parse(end_time) : null)
+        .workflowName(workflow_name != null ? List.of(workflow_name) : null)
+        .limit(limit)
+        .offset(offset)
+        .sortDesc(sort_desc)
+        .loadInput(load_input)
+        .loadOutput(false)
+        .queueName(queue_name != null ? List.of(queue_name) : null)
+        .queuesOnly(true)
+        .executorId((java.util.List<String>) null)
+        .forkedFrom(fork_from != null ? List.of(fork_from) : null)
+        .parentWorkflowId(parent_workflow_id != null ? List.of(parent_workflow_id) : null)
+        .build();
   }
 }

@@ -769,13 +769,13 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void globalTimeout(OffsetDateTime endTime) {
     ListWorkflowsInput pendingInput =
-        new ListWorkflowsInput().withStatus(WorkflowState.PENDING).withEndTime(endTime);
+        ListWorkflowsInput.builder().status(WorkflowState.PENDING).endTime(endTime).build();
     for (WorkflowStatus status : systemDatabase.listWorkflows(pendingInput)) {
       cancelWorkflows(List.of(status.workflowId()));
     }
 
     ListWorkflowsInput enqueuedInput =
-        new ListWorkflowsInput().withStatus(WorkflowState.ENQUEUED).withEndTime(endTime);
+        ListWorkflowsInput.builder().status(WorkflowState.ENQUEUED).endTime(endTime).build();
     for (WorkflowStatus status : systemDatabase.listWorkflows(enqueuedInput)) {
       cancelWorkflows(List.of(status.workflowId()));
     }

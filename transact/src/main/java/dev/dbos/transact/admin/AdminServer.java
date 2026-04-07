@@ -208,9 +208,9 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {
-    var input = new ListWorkflowsInput().withWorkflowId(wfid);
+    var input = new ListWorkflowsInput(wfid);
     var workflows = systemDatabase.listWorkflows(input);
-    if (workflows.size() == 0) {
+    if (workflows.isEmpty()) {
       sendText(exchange, 404, "Workflow not found");
       return;
     }
