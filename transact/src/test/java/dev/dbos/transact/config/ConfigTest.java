@@ -13,6 +13,7 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.net.URI;
 import java.util.List;
@@ -103,7 +104,7 @@ public class ConfigTest {
       dbos.launch();
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
       List<Class<?>> workflowClasses =
-          dbosExecutor.getWorkflows().stream()
+          dbosExecutor.getRegisteredWorkflows().stream()
               .map(r -> r.target().getClass())
               .collect(Collectors.toList());
       var version = assertDoesNotThrow(() -> AppVersionComputer.computeAppVersion(workflowClasses));
@@ -141,14 +142,13 @@ public class ConfigTest {
     var dbos = new DBOS(config);
 
     try {
-      var proxy =
-          dbos.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
+      var proxy = dbos.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
       dbos.launch();
 
       var options = new StartWorkflowOptions("dswfid");
       var handle = dbos.startWorkflow(() -> proxy.workflow(), options);
       assertEquals(6, handle.getResult());
-      assertEquals("SUCCESS", handle.getStatus().status());
+      assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     } finally {
       dbos.shutdown();
     }
@@ -179,18 +179,18 @@ public class ConfigTest {
 
       try {
         var proxy =
-            dbos.registerWorkflows(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
+            dbos.registerProxy(ExecutorTestService.class, new ExecutorTestServiceImpl(dbos));
         dbos.launch();
 
         var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
-        var dbConfig = DBTestAccess.getHikariConfig(sysdb);
+        var dbConfig = DBTestAccess.findHikariConfig(sysdb);
         assertTrue(dbConfig.isPresent());
         assertEquals(poolName, dbConfig.get().getPoolName());
 
         var options = new StartWorkflowOptions("dswfid");
         var handle = dbos.startWorkflow(() -> proxy.workflow(), options);
         assertEquals(6, handle.getResult());
-        assertEquals("SUCCESS", handle.getStatus().status());
+        assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
       } finally {
         dbos.shutdown();
       }

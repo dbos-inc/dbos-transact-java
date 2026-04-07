@@ -18,11 +18,11 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.SerializationStrategy;
+import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Workflow;
-import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -166,13 +166,12 @@ public class DBOS implements AutoCloseable {
    *
    * @param <T> The interface type for the instance
    * @param interfaceClass The interface class for the workflows
-   * @param implementation An implementation instance providing the workflow and step function code
+   * @param target An implementation instance providing the workflow and step function code
    * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
    *     functions
    */
-  public <T> @NonNull T registerWorkflows(
-      @NonNull Class<T> interfaceClass, @NonNull T implementation) {
-    return registerWorkflows(interfaceClass, implementation, "");
+  public <T> @NonNull T registerProxy(@NonNull Class<T> interfaceClass, @NonNull T target) {
+    return registerProxy(interfaceClass, target, null);
   }
 
   /**
@@ -180,72 +179,76 @@ public class DBOS implements AutoCloseable {
    *
    * @param <T> The interface type for the instance
    * @param interfaceClass The interface class for the workflows
-   * @param implementation An implementation instance providing the workflow and step function code
+   * @param target An implementation instance providing the workflow and step function code
    * @param instanceName Name of the instance, allowing multiple instances of the same class to be
    *     registered
    * @return A proxy, with interface {@literal <T>}, that provides durability for the workflow
    *     functions
    */
-  public <T> @NonNull T registerWorkflows(
-      @NonNull Class<T> interfaceClass, @NonNull T implementation, @NonNull String instanceName) {
-    registerClassWorkflows(interfaceClass, implementation, instanceName);
-
-    return DBOSInvocationHandler.createProxy(
-        interfaceClass, implementation, instanceName, () -> this.dbosExecutor.get());
-  }
-
-  private void registerClassWorkflows(
-      @NonNull Class<?> interfaceClass,
-      @NonNull Object implementation,
-      @Nullable String instanceName) {
-    Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
-    Objects.requireNonNull(implementation, "implementation must not be null");
-    instanceName = Objects.requireNonNullElse(instanceName, "");
-    if (!interfaceClass.isInterface()) {
-      throw new IllegalArgumentException("interfaceClass must be an interface");
-    }
+  public <T> @NonNull T registerProxy(
+      @NonNull Class<T> interfaceClass, @NonNull T target, @Nullable String instanceName) {
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
+    Objects.requireNonNull(interfaceClass, "interfaceClass must not be null");
+    Objects.requireNonNull(target, "target must not be null");
 
-    // Use @WorkflowClassName annotation if present, otherwise use the Java class name
-    WorkflowClassName classNameAnnotation =
-        implementation.getClass().getAnnotation(WorkflowClassName.class);
-    String className =
-        (classNameAnnotation != null && !classNameAnnotation.value().isEmpty())
-            ? classNameAnnotation.value()
-            : implementation.getClass().getName();
-    workflowRegistry.register(interfaceClass, implementation, className, instanceName);
+    if (!hasWorkflowsOrSteps(target)) {
+      throw new IllegalArgumentException("Target does not contain any @Workflow or @Step methods");
+    }
 
-    Method[] methods = implementation.getClass().getDeclaredMethods();
-    for (Method method : methods) {
-      Workflow wfAnnotation = method.getAnnotation(Workflow.class);
-      if (wfAnnotation != null) {
+    workflowRegistry.registerInstance(instanceName, target);
+
+    for (var method : target.getClass().getDeclaredMethods()) {
+      var wfTag = method.getAnnotation(Workflow.class);
+      if (wfTag != null) {
         method.setAccessible(true); // In case it's not public
-        registerWorkflowMethod(wfAnnotation, implementation, className, instanceName, method);
+        workflowRegistry.registerWorkflow(wfTag, target, method, instanceName);
       }
     }
+
+    return DBOSInvocationHandler.createProxy(
+        interfaceClass, target, instanceName, dbosExecutor::get);
   }
 
-  private void registerWorkflowMethod(
+  /**
+   * Register a workflow method with DBOS. This method is used internally by the proxy registration
+   * process and should not typically be called directly by application code.
+   *
+   * @param wfTag the Workflow annotation containing workflow configuration
+   * @param target the object instance containing the workflow method
+   * @param method the Method representing the workflow function
+   * @param instanceName optional instance name for the workflow (can be null)
+   * @throws IllegalStateException if called after DBOS is launched
+   */
+  void registerWorkflow(
       @NonNull Workflow wfTag,
       @NonNull Object target,
-      @NonNull String className,
-      @NonNull String instanceName,
-      @NonNull Method method) {
+      @NonNull Method method,
+      @Nullable String instanceName) {
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
 
-    String name = wfTag.name().isEmpty() ? method.getName() : wfTag.name();
-    workflowRegistry.register(
-        className,
-        name,
-        target,
-        instanceName,
-        method,
-        wfTag.maxRecoveryAttempts(),
-        wfTag.serializationStrategy());
+    workflowRegistry.registerWorkflow(wfTag, target, method, instanceName);
+  }
+
+  /**
+   * Check if the provided target object contains any methods annotated with @Workflow.
+   *
+   * @param target the object to check for workflow methods
+   * @return true if the target contains at least one @Workflow annotated method, false otherwise
+   * @throws NullPointerException if target is null
+   */
+  static boolean hasWorkflowsOrSteps(@NonNull Object target) {
+    var methods =
+        Objects.requireNonNull(target, "target can not be null").getClass().getDeclaredMethods();
+    for (var method : methods) {
+      if (method.isAnnotationPresent(Workflow.class) || method.isAnnotationPresent(Step.class)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -324,7 +327,7 @@ public class DBOS implements AutoCloseable {
    * Retrieve a queue definition
    *
    * @param queueName Name of the queue
-   * @return Queue definition for given `queueName`
+   * @return Optional containing the queue definition for given `queueName`, or empty if not found
    */
   public @NonNull Optional<Queue> getQueue(@NonNull String queueName) {
     return ensureLaunched("getQueue").getQueue(queueName);
@@ -364,7 +367,7 @@ public class DBOS implements AutoCloseable {
    * @return A handle to the enqueued or running workflow
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
-      @NonNull ThrowingSupplier<T, E> supplier, @NonNull StartWorkflowOptions options) {
+      @NonNull ThrowingSupplier<T, E> supplier, @Nullable StartWorkflowOptions options) {
     return ensureLaunched("startWorkflow").startWorkflow(supplier, options);
   }
 
@@ -378,7 +381,7 @@ public class DBOS implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> startWorkflow(
       @NonNull ThrowingSupplier<T, E> supplier) {
-    return startWorkflow(supplier, new StartWorkflowOptions());
+    return startWorkflow(supplier, null);
   }
 
   /**
@@ -390,7 +393,7 @@ public class DBOS implements AutoCloseable {
    * @return A handle to the enqueued or running workflow
    */
   public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
-      @NonNull ThrowingRunnable<E> runnable, @NonNull StartWorkflowOptions options) {
+      @NonNull ThrowingRunnable<E> runnable, @Nullable StartWorkflowOptions options) {
     return startWorkflow(
         () -> {
           runnable.execute();
@@ -408,7 +411,7 @@ public class DBOS implements AutoCloseable {
    */
   public <E extends Exception> @NonNull WorkflowHandle<Void, E> startWorkflow(
       @NonNull ThrowingRunnable<E> runnable) {
-    return startWorkflow(runnable, new StartWorkflowOptions());
+    return startWorkflow(runnable, null);
   }
 
   /**
@@ -420,9 +423,12 @@ public class DBOS implements AutoCloseable {
    * @param options Execution options, such as ID, queue, and timeout/deadline
    * @return WorkflowHandle to the executed workflow
    */
-  public WorkflowHandle<?, ?> startWorkflow(
-      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
-    return ensureLaunched("startWorkflow").startWorkflow(regWorkflow, args, options);
+  public WorkflowHandle<?, ?> startRegisteredWorkflow(
+      @NonNull RegisteredWorkflow regWorkflow,
+      @NonNull Object[] args,
+      @Nullable StartWorkflowOptions options) {
+    return ensureLaunched("startRegisteredWorkflow")
+        .startRegisteredWorkflow(regWorkflow, args, options);
   }
 
   /**
@@ -442,10 +448,11 @@ public class DBOS implements AutoCloseable {
    * Get the status of a workflow
    *
    * @param workflowId ID of the workflow to query
-   * @return Current workflow status for the provided workflowId, or null.
+   * @return Current workflow status for the provided workflowId, or empty if no such workflow
+   *     exists.
    */
-  public @Nullable WorkflowStatus getWorkflowStatus(@NonNull String workflowId) {
-    return ensureLaunched("getWorkflowStatus").getWorkflowStatus(workflowId);
+  public @NonNull Optional<WorkflowStatus> getWorkflowStatus(@NonNull String workflowId) {
+    return Optional.ofNullable(ensureLaunched("getWorkflowStatus").getWorkflowStatus(workflowId));
   }
 
   /**
@@ -501,8 +508,9 @@ public class DBOS implements AutoCloseable {
    * @param timeout duration after which the call times out
    * @return the message if there is one or else null
    */
-  public @Nullable Object recv(@Nullable String topic, @NonNull Duration timeout) {
-    return ensureLaunched("recv").recv(topic, timeout);
+  public @NonNull @SuppressWarnings("unchecked") <T> Optional<T> recv(
+      @Nullable String topic, @NonNull Duration timeout) {
+    return Optional.ofNullable((T) ensureLaunched("recv").recv(topic, timeout));
   }
 
   /**
@@ -537,13 +545,14 @@ public class DBOS implements AutoCloseable {
    * @param workflowId id of the workflow who data is to be retrieved
    * @param key identifies the data
    * @param timeout time to wait for data before timing out
-   * @return the published value or null
+   * @return Optional containing the published value if available, or empty if timeout occurs or no
+   *     value found
    */
-  public @Nullable Object getEvent(
+  public @NonNull @SuppressWarnings("unchecked") <T> Optional<T> getEvent(
       @NonNull String workflowId, @NonNull String key, @NonNull Duration timeout) {
     logger.debug("Received getEvent for {} {}", workflowId, key);
 
-    return ensureLaunched("getEvent").getEvent(workflowId, key, timeout);
+    return Optional.ofNullable((T) ensureLaunched("getEvent").getEvent(workflowId, key, timeout));
   }
 
   /**
@@ -919,7 +928,33 @@ public class DBOS implements AutoCloseable {
    * @return list of all registered workflow methods
    */
   public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
-    return ensureLaunched("getRegisteredWorkflows").getWorkflows();
+    return ensureLaunched("getRegisteredWorkflows").getRegisteredWorkflows();
+  }
+
+  /**
+   * Finds a registered workflow by its workflow name, class name, and instance name.
+   *
+   * @param workflowName the name of the workflow
+   * @param className the name of the class containing the workflow
+   * @return an Optional containing the RegisteredWorkflow if found, otherwise empty
+   */
+  public Optional<RegisteredWorkflow> getRegisteredWorkflow(
+      @NonNull String workflowName, @NonNull String className) {
+    return getRegisteredWorkflow(workflowName, className, "");
+  }
+
+  /**
+   * Finds a registered workflow by its workflow name, class name, and instance name.
+   *
+   * @param workflowName the name of the workflow
+   * @param className the name of the class containing the workflow
+   * @param instanceName the name of the workflow instance
+   * @return an Optional containing the RegisteredWorkflow if found, otherwise empty
+   */
+  public Optional<RegisteredWorkflow> getRegisteredWorkflow(
+      @NonNull String workflowName, @NonNull String className, @NonNull String instanceName) {
+    return ensureLaunched("getRegisteredWorkflow")
+        .getRegisteredWorkflow(workflowName, className, instanceName);
   }
 
   /**
@@ -928,7 +963,7 @@ public class DBOS implements AutoCloseable {
    * @return list of all class instances containing registered workflow methods
    */
   public @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
-    return ensureLaunched("getRegisteredWorkflowInstances").getInstances();
+    return ensureLaunched("getRegisteredWorkflowInstances").getRegisteredWorkflowInstances();
   }
 
   /**
@@ -938,7 +973,8 @@ public class DBOS implements AutoCloseable {
    * @param service Identity of the service maintaining the record
    * @param workflowName Fully qualified name of the workflow
    * @param key Key assigned within the service+workflow
-   * @return Value associated with the service+workflow+key combination
+   * @return Optional containing the value associated with the service+workflow+key combination, or
+   *     empty if not found
    */
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return ensureLaunched("getExternalState").getExternalState(service, workflowName, key);

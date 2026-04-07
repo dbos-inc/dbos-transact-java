@@ -14,6 +14,7 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -111,8 +112,8 @@ public class Issue218 {
 
     var rows = DBUtils.getWorkflowRows(dataSource);
     for (var row : rows) {
-      var expected = row.workflowId().equals(wfid) ? "PENDING" : "ENQUEUED";
-      assertEquals(expected, row.status());
+      var expected = row.workflowId().equals(wfid) ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
+      assertEquals(expected.name(), row.status());
     }
 
     var steps = DBUtils.getStepRows(dataSource, wfid);
@@ -131,7 +132,7 @@ public class Issue218 {
 
     rows = DBUtils.getWorkflowRows(dataSource);
     for (var row : rows) {
-      assertEquals("SUCCESS", row.status());
+      assertEquals(WorkflowState.SUCCESS.name(), row.status());
     }
 
     steps = DBUtils.getStepRows(dataSource, wfid);
@@ -157,7 +158,7 @@ public class Issue218 {
   private Issue218Service register(DBOS dbos) {
     dbos.registerQueue(queue);
     var impl = new Issue218ServiceImpl(dbos, queue);
-    var proxy = dbos.registerWorkflows(Issue218Service.class, impl);
+    var proxy = dbos.registerProxy(Issue218Service.class, impl);
     impl.setProxy(proxy);
     return proxy;
   }

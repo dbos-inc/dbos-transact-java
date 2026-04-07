@@ -1,9 +1,15 @@
 package dev.dbos.transact.execution;
 
-public record RegisteredWorkflowInstance(
-    String className, String instanceName, Class<?> targetInterface, Object target) {
+import java.util.Objects;
 
-  public static String fullyQualifiedInstName(String className, String instanceName) {
-    return String.format("%s/%s", className, instanceName);
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+public record RegisteredWorkflowInstance(String className, String instanceName, Object target) {
+
+  public static String fullyQualifiedInstName(
+      @NonNull String className, @Nullable String instanceName) {
+    return String.format(
+        "%s/%s", Objects.requireNonNull(className), Objects.requireNonNullElse(instanceName, ""));
   }
 }

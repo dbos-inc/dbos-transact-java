@@ -150,7 +150,7 @@ public class PatchTest {
     var dbosConfig = pgContainer.dbosConfig().withEnablePatching().withAppVersion("test-version");
 
     try (var dbos = new DBOS(dbosConfig)) {
-      var proxy1 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplOne(dbos));
+      var proxy1 = dbos.registerProxy(PatchService.class, new PatchServiceImplOne(dbos));
       dbos.launch();
 
       assertEquals("test-version", DBOSTestAccess.getDbosExecutor(dbos).appVersion());
@@ -164,7 +164,7 @@ public class PatchTest {
 
     // Recreate DBOS with a new (patched) version of a workflow
     try (var dbos = new DBOS(dbosConfig)) {
-      var proxy2 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplTwo(dbos));
+      var proxy2 = dbos.registerProxy(PatchService.class, new PatchServiceImplTwo(dbos));
       dbos.launch();
 
       var h1 = dbos.retrieveWorkflow("impl1");
@@ -193,7 +193,7 @@ public class PatchTest {
 
     // Recreate DBOS with another new (patched) version of a workflow
     try (var dbos = new DBOS(dbosConfig)) {
-      var proxy3 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplThree(dbos));
+      var proxy3 = dbos.registerProxy(PatchService.class, new PatchServiceImplThree(dbos));
       dbos.launch();
 
       var h1 = dbos.retrieveWorkflow("impl1");
@@ -228,7 +228,7 @@ public class PatchTest {
 
     // Now, let's deprecate the patch
     try (var dbos = new DBOS(dbosConfig)) {
-      var proxy4 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplFour(dbos));
+      var proxy4 = dbos.registerProxy(PatchService.class, new PatchServiceImplFour(dbos));
       dbos.launch();
 
       var h1 = dbos.retrieveWorkflow("impl1");
@@ -263,7 +263,7 @@ public class PatchTest {
 
     // Now, let's deprecate the patch
     try (var dbos = new DBOS(dbosConfig)) {
-      var proxy5 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplFive(dbos));
+      var proxy5 = dbos.registerProxy(PatchService.class, new PatchServiceImplFive(dbos));
       dbos.launch();
 
       var h1 = dbos.retrieveWorkflow("impl1");
@@ -300,7 +300,7 @@ public class PatchTest {
     var dbosConfig = pgContainer.dbosConfig().withAppVersion("test-version");
 
     try (var dbos = new DBOS(dbosConfig)) {
-      var proxy2 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplTwo(dbos));
+      var proxy2 = dbos.registerProxy(PatchService.class, new PatchServiceImplTwo(dbos));
       dbos.launch();
 
       assertThrows(IllegalStateException.class, () -> proxy2.workflow());
@@ -312,7 +312,7 @@ public class PatchTest {
     var dbosConfig = pgContainer.dbosConfig().withAppVersion("test-version");
 
     try (var dbos = new DBOS(dbosConfig)) {
-      var proxy4 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplFour(dbos));
+      var proxy4 = dbos.registerProxy(PatchService.class, new PatchServiceImplFour(dbos));
       dbos.launch();
 
       assertThrows(IllegalStateException.class, () -> proxy4.workflow());
@@ -325,15 +325,15 @@ public class PatchTest {
 
     try (var dbos = new DBOS(dbosConfig)) {
       @SuppressWarnings("unused")
-      var proxy5 = dbos.registerWorkflows(PatchService.class, new PatchServiceImplFive(dbos));
+      var proxy5 = dbos.registerProxy(PatchService.class, new PatchServiceImplFive(dbos));
       assertThrows(
           IllegalStateException.class,
-          () -> dbos.registerWorkflows(PatchService.class, new PatchServiceImplFour(dbos)));
+          () -> dbos.registerProxy(PatchService.class, new PatchServiceImplFour(dbos)));
 
       // This is not allowed either, even though the methods do not overlap
       assertThrows(
           IllegalStateException.class,
-          () -> dbos.registerWorkflows(PatchService2.class, new PatchServiceImplFiveB(dbos)));
+          () -> dbos.registerProxy(PatchService2.class, new PatchServiceImplFiveB(dbos)));
     }
   }
 }

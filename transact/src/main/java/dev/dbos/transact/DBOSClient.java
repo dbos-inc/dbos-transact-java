@@ -15,9 +15,7 @@ import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
-import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -32,33 +30,6 @@ import javax.sql.DataSource;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-
-class ClientWorkflowHandle<T, E extends Exception> implements WorkflowHandle<T, E> {
-
-  private final SystemDatabase systemDatabase;
-  private final String workflowId;
-
-  public ClientWorkflowHandle(SystemDatabase systemDatabase, String workflowId) {
-    this.systemDatabase = systemDatabase;
-    this.workflowId = workflowId;
-  }
-
-  @Override
-  public String workflowId() {
-    return workflowId;
-  }
-
-  @Override
-  public T getResult() throws E {
-    var result = systemDatabase.<T>awaitWorkflowResult(workflowId);
-    return Result.<T, E>process(result);
-  }
-
-  @Override
-  public WorkflowStatus getStatus() {
-    return systemDatabase.getWorkflowStatus(workflowId);
-  }
-}
 
 /**
  * DBOSClient allows external programs to interact with DBOS apps via direct system database access.
@@ -173,6 +144,10 @@ public class DBOSClient implements AutoCloseable {
     systemDatabase = new SystemDatabase(dataSource, schema, serializer);
   }
 
+  /**
+   * Close this DBOSClient and release any underlying database resources. This method closes the
+   * system database connection.
+   */
   @Override
   public void close() {
     systemDatabase.close();
@@ -185,9 +160,9 @@ public class DBOSClient implements AutoCloseable {
    */
   public record EnqueueOptions(
       @NonNull String workflowName,
+      @Nullable String className,
+      @Nullable String instanceName,
       @NonNull String queueName,
-      @NonNull String className,
-      @NonNull String instanceName,
       @Nullable String workflowId,
       @Nullable String appVersion,
       @Nullable Duration timeout,
@@ -198,12 +173,18 @@ public class DBOSClient implements AutoCloseable {
       @Nullable SerializationStrategy serialization) {
 
     public EnqueueOptions {
-      if (workflowName != null && workflowName.isEmpty()) {
+      if (Objects.requireNonNull(workflowName, "EnqueueOptions workflowName must not be null")
+          .isEmpty()) {
         throw new IllegalArgumentException("EnqueueOptions workflowName must not be empty");
       }
 
-      if (queueName != null && queueName.isEmpty()) {
+      if (Objects.requireNonNull(queueName, "EnqueueOptions queueName must not be null")
+          .isEmpty()) {
         throw new IllegalArgumentException("EnqueueOptions queueName must not be empty");
+      }
+
+      if (workflowId != null && workflowId.isEmpty()) {
+        throw new IllegalArgumentException("EnqueueOptions workflowId must not be empty");
       }
 
       if (className != null && className.isEmpty()) {
@@ -220,8 +201,6 @@ public class DBOSClient implements AutoCloseable {
             "EnqueueOptions deduplicationId must not be empty if not null");
       }
 
-      if (instanceName == null) instanceName = "";
-
       if (timeout != null) {
         if (timeout.isNegative() || timeout.isZero()) {
           throw new IllegalArgumentException(
@@ -236,9 +215,14 @@ public class DBOSClient implements AutoCloseable {
     }
 
     /** Construct `EnqueueOptions` with a minimum set of required options */
+    public EnqueueOptions(@NonNull String workflowName, @NonNull String queueName) {
+      this(workflowName, null, null, queueName, null, null, null, null, null, null, null, null);
+    }
+
     public EnqueueOptions(
-        @NonNull String className, @NonNull String workflowName, @NonNull String queueName) {
-      this(workflowName, queueName, className, "", null, null, null, null, null, null, null, null);
+        @NonNull String workflowName, @Nullable String className, @NonNull String queueName) {
+      this(
+          workflowName, className, null, queueName, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -247,12 +231,12 @@ public class DBOSClient implements AutoCloseable {
      * @param className Class containing the workflow to enqueue
      * @return New `EnqueueOptions` with the class name set
      */
-    public @NonNull EnqueueOptions withClassName(@NonNull String className) {
+    public @NonNull EnqueueOptions withClassName(@Nullable String className) {
       return new EnqueueOptions(
           this.workflowName,
-          this.queueName,
           className,
           this.instanceName,
+          this.queueName,
           this.workflowId,
           this.appVersion,
           this.timeout,
@@ -273,9 +257,9 @@ public class DBOSClient implements AutoCloseable {
     public @NonNull EnqueueOptions withWorkflowId(@Nullable String workflowId) {
       return new EnqueueOptions(
           this.workflowName,
-          this.queueName,
           this.className,
           this.instanceName,
+          this.queueName,
           workflowId,
           this.appVersion,
           this.timeout,
@@ -296,9 +280,9 @@ public class DBOSClient implements AutoCloseable {
     public @NonNull EnqueueOptions withAppVersion(@Nullable String appVersion) {
       return new EnqueueOptions(
           this.workflowName,
-          this.queueName,
           this.className,
           this.instanceName,
+          this.queueName,
           this.workflowId,
           appVersion,
           this.timeout,
@@ -319,9 +303,9 @@ public class DBOSClient implements AutoCloseable {
     public @NonNull EnqueueOptions withTimeout(@Nullable Duration timeout) {
       return new EnqueueOptions(
           this.workflowName,
-          this.queueName,
           this.className,
           this.instanceName,
+          this.queueName,
           this.workflowId,
           this.appVersion,
           timeout,
@@ -342,9 +326,9 @@ public class DBOSClient implements AutoCloseable {
     public @NonNull EnqueueOptions withDeadline(@Nullable Instant deadline) {
       return new EnqueueOptions(
           this.workflowName,
-          this.queueName,
           this.className,
           this.instanceName,
+          this.queueName,
           this.workflowId,
           this.appVersion,
           this.timeout,
@@ -365,9 +349,9 @@ public class DBOSClient implements AutoCloseable {
     public @NonNull EnqueueOptions withDeduplicationId(@Nullable String deduplicationId) {
       return new EnqueueOptions(
           this.workflowName,
-          this.queueName,
           this.className,
           this.instanceName,
+          this.queueName,
           this.workflowId,
           this.appVersion,
           this.timeout,
@@ -388,9 +372,9 @@ public class DBOSClient implements AutoCloseable {
     public @NonNull EnqueueOptions withInstanceName(@Nullable String instName) {
       return new EnqueueOptions(
           this.workflowName,
-          this.queueName,
           this.className,
           instName,
+          this.queueName,
           this.workflowId,
           this.appVersion,
           this.timeout,
@@ -410,9 +394,9 @@ public class DBOSClient implements AutoCloseable {
     public @NonNull EnqueueOptions withPriority(@Nullable Integer priority) {
       return new EnqueueOptions(
           this.workflowName,
-          this.queueName,
           this.className,
           this.instanceName,
+          this.queueName,
           this.workflowId,
           this.appVersion,
           this.timeout,
@@ -434,9 +418,9 @@ public class DBOSClient implements AutoCloseable {
     public @NonNull EnqueueOptions withQueuePartitionKey(@Nullable String partitionKey) {
       return new EnqueueOptions(
           this.workflowName,
-          this.queueName,
           this.className,
           this.instanceName,
+          this.queueName,
           this.workflowId,
           this.appVersion,
           this.timeout,
@@ -459,9 +443,9 @@ public class DBOSClient implements AutoCloseable {
         @Nullable SerializationStrategy serialization) {
       return new EnqueueOptions(
           this.workflowName,
-          this.queueName,
           this.className,
           this.instanceName,
+          this.queueName,
           this.workflowId,
           this.appVersion,
           this.timeout,
@@ -502,11 +486,11 @@ public class DBOSClient implements AutoCloseable {
         DBOSExecutor.enqueueWorkflow(
             Objects.requireNonNull(
                 options.workflowName(), "EnqueueOptions workflowName must not be null"),
-            Objects.requireNonNull(
-                options.className(), "EnqueueOptions className must not be null"),
-            Objects.requireNonNullElse(options.instanceName(), ""),
+            options.className(),
+            options.instanceName(),
             null,
             args,
+            null,
             new DBOSExecutor.ExecutionOptions(
                 Objects.requireNonNullElseGet(
                     options.workflowId(), () -> UUID.randomUUID().toString()),
@@ -528,7 +512,7 @@ public class DBOSClient implements AutoCloseable {
             systemDatabase,
             this.serializer);
 
-    return new ClientWorkflowHandle<>(systemDatabase, workflowId);
+    return new WorkflowHandleClient<>(workflowId);
   }
 
   /**
@@ -548,51 +532,57 @@ public class DBOSClient implements AutoCloseable {
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs) {
 
-    String workflowId =
-        Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString());
-
-    // Serialize arguments in portable format
-    SerializationUtil.SerializedResult serializedArgs =
-        SerializationUtil.serializeArgs(
-            positionalArgs, namedArgs, SerializationUtil.PORTABLE, this.serializer);
-
-    // Create workflow status directly with portable serialization
-    var statusBuilder =
-        WorkflowStatusInternal.builder(workflowId, WorkflowState.ENQUEUED)
-            .name(options.workflowName())
-            .className(options.className())
-            .instanceName(Objects.requireNonNullElse(options.instanceName(), ""))
-            .queueName(options.queueName())
-            .inputs(serializedArgs.serializedValue())
-            .serialization(serializedArgs.serialization())
-            .createdAt(System.currentTimeMillis())
-            .deduplicationId(options.deduplicationId())
-            .priority(Objects.requireNonNullElse(options.priority(), 0))
-            .queuePartitionKey(options.queuePartitionKey())
-            .appVersion(options.appVersion());
-
-    if (options.timeout() != null) {
-      statusBuilder.timeoutMs(options.timeout().toMillis());
-    }
-    if (options.deadline() != null) {
-      statusBuilder.deadlineEpochMs(options.deadline().toEpochMilli());
-    }
-
-    var status = statusBuilder.build();
-
-    systemDatabase.initWorkflowStatus(status, null, false, false);
+    var workflowId =
+        DBOSExecutor.enqueueWorkflow(
+            Objects.requireNonNull(
+                options.workflowName(), "EnqueueOptions workflowName must not be null"),
+            options.className(),
+            options.instanceName(),
+            null,
+            positionalArgs,
+            namedArgs,
+            new DBOSExecutor.ExecutionOptions(
+                Objects.requireNonNullElseGet(
+                    options.workflowId(), () -> UUID.randomUUID().toString()),
+                Timeout.of(options.timeout()),
+                options.deadline,
+                Objects.requireNonNull(
+                    options.queueName(), "EnqueueOptions queueName must not be null"),
+                options.deduplicationId,
+                options.priority,
+                options.queuePartitionKey,
+                options.appVersion,
+                false,
+                false,
+                SerializationUtil.PORTABLE),
+            null,
+            null,
+            null,
+            null,
+            systemDatabase,
+            this.serializer);
 
     return new WorkflowHandleClient<>(workflowId);
   }
 
   /** Options for sending a message. */
   public record SendOptions(@Nullable SerializationStrategy serialization) {
-    /** Create SendOptions with default serialization. */
+    /**
+     * Create SendOptions with default serialization strategy. Uses the system's default
+     * serialization format for message encoding.
+     *
+     * @return SendOptions configured with default serialization
+     */
     public static SendOptions defaults() {
       return new SendOptions(SerializationStrategy.DEFAULT);
     }
 
-    /** Create SendOptions with portable JSON serialization. */
+    /**
+     * Create SendOptions with portable JSON serialization strategy. Uses portable JSON format
+     * suitable for cross-language workflow communication.
+     *
+     * @return SendOptions configured with portable JSON serialization
+     */
     public static SendOptions portable() {
       return new SendOptions(SerializationStrategy.PORTABLE);
     }
@@ -639,16 +629,17 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Get event from a workflow, or null if the operation times out
+   * Get event from a workflow
    *
    * @param targetId ID of the workflow setting the event
    * @param key Key for the event
-   * @param timeout Maximum time duration to wait before returning `null`
-   * @return Workflow event value, or `null` if the timeout is hit.
+   * @param timeout Maximum time duration to wait before timing out
+   * @return Optional containing the workflow event value if available, or empty if timeout occurs
+   *     or no event found
    */
-  public @Nullable Object getEvent(
+  public @NonNull Optional<Object> getEvent(
       @NonNull String targetId, @NonNull String key, @NonNull Duration timeout) {
-    return systemDatabase.getEvent(targetId, key, timeout, null);
+    return Optional.ofNullable(systemDatabase.getEvent(targetId, key, timeout, null));
   }
 
   /**
@@ -853,7 +844,7 @@ public class DBOSClient implements AutoCloseable {
         backfill,
         cronTimeZone,
         queueName,
-        wfSchedule -> systemDatabase.createSchedule(wfSchedule));
+        systemDatabase::createSchedule);
   }
 
   /**

@@ -12,6 +12,7 @@ import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowHandle;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -154,7 +155,8 @@ public class InteropTest {
       // No writeStream in Java (streams not supported)
 
       // Receive message
-      Object msg = dbos.recv("interop_topic", Duration.ofSeconds(30));
+      var msg =
+          dbos.<Map<String, Object>>recv("interop_topic", Duration.ofSeconds(30)).orElseThrow();
 
       // Build deterministic result
       Map<String, Object> result = new LinkedHashMap<>();
@@ -256,7 +258,7 @@ public class InteropTest {
   public void testInteropCanonical() throws Exception {
     Queue testQueue = new Queue("interopq");
     dbos.registerQueue(testQueue);
-    dbos.registerWorkflows(InteropService.class, new InteropServiceImpl(dbos));
+    dbos.registerProxy(InteropService.class, new InteropServiceImpl(dbos));
     dbos.launch();
 
     try (DBOSClient client = new DBOSClient(dataSource)) {
@@ -264,7 +266,7 @@ public class InteropTest {
 
       // Enqueue the canonical workflow with portable serialization
       var options =
-          new DBOSClient.EnqueueOptions("interop", "canonicalWorkflow", "interopq")
+          new DBOSClient.EnqueueOptions("canonicalWorkflow", "interop", "interopq")
               .withWorkflowId(workflowId)
               .withSerialization(SerializationStrategy.PORTABLE);
 
@@ -296,8 +298,8 @@ public class InteropTest {
       var wsRow = DBUtils.getWorkflowRow(dataSource, workflowId);
       assertNotNull(wsRow);
       assertEquals("portable_json", wsRow.serialization());
-      assertEquals("SUCCESS", wsRow.status());
-      assertEquals("canonicalWorkflow", wsRow.name());
+      assertEquals(WorkflowState.SUCCESS.name(), wsRow.status());
+      assertEquals("canonicalWorkflow", wsRow.workflowName());
       assertEquals("interop", wsRow.className());
 
       // Parse and verify inputs
@@ -333,7 +335,7 @@ public class InteropTest {
   public void testInteropDirectInsert() throws Exception {
     Queue testQueue = new Queue("interopq");
     dbos.registerQueue(testQueue);
-    dbos.registerWorkflows(InteropService.class, new InteropServiceImpl(dbos));
+    dbos.registerProxy(InteropService.class, new InteropServiceImpl(dbos));
     dbos.launch();
 
     String workflowId = UUID.randomUUID().toString();
@@ -346,7 +348,7 @@ public class InteropTest {
     insertPortableNotification(workflowId, "interop_topic", GOLDEN_MESSAGE_JSON);
 
     // Retrieve and verify the workflow executes correctly
-    WorkflowHandle<String, ?> handle = dbos.retrieveWorkflow(workflowId);
+    WorkflowHandle<Map<String, Object>, ?> handle = dbos.retrieveWorkflow(workflowId);
     Object result = handle.getResult();
     assertResultMatchesExpected(result);
 
@@ -354,7 +356,7 @@ public class InteropTest {
     var wsRow = DBUtils.getWorkflowRow(dataSource, workflowId);
     assertNotNull(wsRow);
     assertEquals("portable_json", wsRow.serialization());
-    assertEquals("SUCCESS", wsRow.status());
+    assertEquals(WorkflowState.SUCCESS.name(), wsRow.status());
   }
 
   // ============================================================================
@@ -379,7 +381,7 @@ public class InteropTest {
   public void testInteropNamedArgs() throws Exception {
     Queue testQueue = new Queue("interopq");
     dbos.registerQueue(testQueue);
-    dbos.registerWorkflows(NamedArgsService.class, new NamedArgsServiceImpl());
+    dbos.registerProxy(NamedArgsService.class, new NamedArgsServiceImpl());
     dbos.launch();
 
     try (DBOSClient client = new DBOSClient(dataSource)) {

@@ -298,19 +298,19 @@ public class SystemDatabaseTest {
     var wfid = "wfid-1";
     var status =
         WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING)
-            .name("wf-name")
+            .workflowName("wf-name")
             .inputs("wf-inputs")
             .build();
 
     for (var i = 1; i <= 6; i++) {
       var result1 = sysdb.initWorkflowStatus(status, 5, true, false);
-      assertEquals(WorkflowState.PENDING.toString(), result1.status());
+      assertEquals(WorkflowState.PENDING.name(), result1.status());
       assertEquals(wfid, result1.workflowId());
       assertEquals(0, result1.deadlineEpochMS());
 
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertNotNull(row);
-      assertEquals("PENDING", row.status());
+      assertEquals(WorkflowState.PENDING.name(), row.status());
       assertEquals(i, row.recoveryAttempts());
     }
 
@@ -319,7 +319,7 @@ public class SystemDatabaseTest {
         () -> sysdb.initWorkflowStatus(status, 5, true, false));
     var row = DBUtils.getWorkflowRow(dataSource, wfid);
     assertNotNull(row);
-    assertEquals("MAX_RECOVERY_ATTEMPTS_EXCEEDED", row.status());
+    assertEquals(WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name(), row.status());
     assertEquals(7, row.recoveryAttempts());
   }
 
@@ -328,13 +328,13 @@ public class SystemDatabaseTest {
     var wfid = "wfid-1";
     var builder =
         WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING)
-            .name("wf-name")
+            .workflowName("wf-name")
             .inputs("wf-inputs")
             .queueName("queue-name")
             .deduplicationId("dedupe-id");
 
     var result1 = sysdb.initWorkflowStatus(builder.build(), 5, false, false);
-    assertEquals(WorkflowState.PENDING.toString(), result1.status());
+    assertEquals(WorkflowState.PENDING.name(), result1.status());
     assertEquals(wfid, result1.workflowId());
     assertEquals(0, result1.deadlineEpochMS());
 
@@ -352,7 +352,7 @@ public class SystemDatabaseTest {
     var status =
         new WorkflowStatusBuilder(wfId)
             .status(WorkflowState.SUCCESS)
-            .name("TestWorkflow")
+            .workflowName("TestWorkflow")
             .appVersion("1.0.0")
             .recoveryAttempts(0)
             .priority(0)
@@ -391,7 +391,7 @@ public class SystemDatabaseTest {
     var wfRows = DBUtils.getWorkflowRows(dataSource);
     assertEquals(1, wfRows.size());
     assertEquals(wfId, wfRows.get(0).workflowId());
-    assertEquals("SUCCESS", wfRows.get(0).status());
+    assertEquals(WorkflowState.SUCCESS.name(), wfRows.get(0).status());
 
     var stepRows = DBUtils.getStepRows(dataSource, wfId);
     assertEquals(2, stepRows.size());
@@ -439,8 +439,8 @@ public class SystemDatabaseTest {
     assertEquals(1, exported.size());
     var wf = exported.get(0);
     assertEquals(wfId, wf.status().workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wf.status().status());
-    assertEquals("TestWorkflow", wf.status().name());
+    assertEquals(WorkflowState.SUCCESS, wf.status().status());
+    assertEquals("TestWorkflow", wf.status().workflowName());
 
     assertEquals(2, wf.steps().size());
     assertTrue(wf.steps().stream().anyMatch(s -> s.functionName().equals("step0")));
@@ -461,7 +461,7 @@ public class SystemDatabaseTest {
     var status =
         new WorkflowStatusBuilder(wfId)
             .status(WorkflowState.SUCCESS)
-            .name("TestWorkflow")
+            .workflowName("TestWorkflow")
             .appVersion("1.0.0")
             .recoveryAttempts(0)
             .priority(0)
@@ -774,7 +774,7 @@ public class SystemDatabaseTest {
     // Create workflow status with authentication fields
     var status =
         WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING)
-            .name("TestWorkflow")
+            .workflowName("TestWorkflow")
             .className("com.example.TestWorkflow")
             .authenticatedUser(authenticatedUser)
             .assumedRole(assumedRole)
@@ -803,7 +803,7 @@ public class SystemDatabaseTest {
     // Verify other fields are correctly stored
     assertEquals(workflowId, rawRow.workflowId());
     assertEquals(WorkflowState.PENDING.name(), rawRow.status());
-    assertEquals("TestWorkflow", rawRow.name());
+    assertEquals("TestWorkflow", rawRow.workflowName());
     assertEquals("com.example.TestWorkflow", rawRow.className());
   }
 
@@ -814,7 +814,7 @@ public class SystemDatabaseTest {
     // Create workflow status with null authentication fields
     var status =
         WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING)
-            .name("TestNullAuthWorkflow")
+            .workflowName("TestNullAuthWorkflow")
             .className("com.example.TestNullAuthWorkflow")
             .authenticatedUser(null)
             .assumedRole(null)
@@ -849,7 +849,7 @@ public class SystemDatabaseTest {
     // Create workflow status with empty authenticated roles
     var status =
         WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING)
-            .name("TestEmptyRolesWorkflow")
+            .workflowName("TestEmptyRolesWorkflow")
             .className("com.example.TestEmptyRolesWorkflow")
             .authenticatedUser(authenticatedUser)
             .assumedRole(assumedRole)
@@ -884,7 +884,7 @@ public class SystemDatabaseTest {
     // Create original workflow status with authentication fields
     var originalStatus =
         WorkflowStatusInternal.builder(originalWorkflowId, WorkflowState.SUCCESS)
-            .name("OriginalTestWorkflow")
+            .workflowName("OriginalTestWorkflow")
             .className("com.example.OriginalTestWorkflow")
             .authenticatedUser(authenticatedUser)
             .assumedRole(assumedRole)
@@ -915,10 +915,10 @@ public class SystemDatabaseTest {
     assertArrayEquals(authenticatedRoles, forkedStatus.authenticatedRoles());
 
     // Verify other forked workflow properties
-    assertEquals("OriginalTestWorkflow", forkedStatus.name());
+    assertEquals("OriginalTestWorkflow", forkedStatus.workflowName());
     assertEquals("com.example.OriginalTestWorkflow", forkedStatus.className());
     assertEquals(
-        WorkflowState.ENQUEUED.name(), forkedStatus.status()); // Forked workflows start as ENQUEUED
+        WorkflowState.ENQUEUED, forkedStatus.status()); // Forked workflows start as ENQUEUED
     assertEquals(originalWorkflowId, forkedStatus.forkedFrom());
 
     // Validate raw database values for both workflows
@@ -946,7 +946,7 @@ public class SystemDatabaseTest {
     // Create original workflow status with null authentication fields
     var originalStatus =
         WorkflowStatusInternal.builder(originalWorkflowId, WorkflowState.SUCCESS)
-            .name("NullAuthTestWorkflow")
+            .workflowName("NullAuthTestWorkflow")
             .className("com.example.NullAuthTestWorkflow")
             .authenticatedUser(null)
             .assumedRole(null)
@@ -994,7 +994,7 @@ public class SystemDatabaseTest {
     // Create original workflow status with empty authenticated roles
     var originalStatus =
         WorkflowStatusInternal.builder(originalWorkflowId, WorkflowState.SUCCESS)
-            .name("EmptyAuthRolesTestWorkflow")
+            .workflowName("EmptyAuthRolesTestWorkflow")
             .className("com.example.EmptyAuthRolesTestWorkflow")
             .authenticatedUser(authenticatedUser)
             .assumedRole(assumedRole)
@@ -1025,9 +1025,9 @@ public class SystemDatabaseTest {
     assertEquals(0, forkedStatus.authenticatedRoles().length);
 
     // Verify other forked workflow properties
-    assertEquals("EmptyAuthRolesTestWorkflow", forkedStatus.name());
+    assertEquals("EmptyAuthRolesTestWorkflow", forkedStatus.workflowName());
     assertEquals("com.example.EmptyAuthRolesTestWorkflow", forkedStatus.className());
-    assertEquals(WorkflowState.ENQUEUED.name(), forkedStatus.status());
+    assertEquals(WorkflowState.ENQUEUED, forkedStatus.status());
     assertEquals(originalWorkflowId, forkedStatus.forkedFrom());
 
     // Validate raw database values for both workflows
@@ -1048,5 +1048,137 @@ public class SystemDatabaseTest {
     // Verify forked_from field is set correctly
     assertNull(originalRawRow.forkedFrom());
     assertEquals(originalWorkflowId, forkedRawRow.forkedFrom());
+  }
+
+  @Test
+  public void testInsertWorkflowStatusValidation() throws Exception {
+    // Test null workflowId
+    assertThrows(
+        NullPointerException.class,
+        () -> {
+          var status = WorkflowStatusInternal.builder(null, WorkflowState.PENDING).build();
+          sysdb.initWorkflowStatus(status, null, false, false);
+        });
+
+    // Test null status
+    assertThrows(
+        NullPointerException.class,
+        () -> {
+          var status = WorkflowStatusInternal.builder("test-wf-id", null).build();
+          sysdb.initWorkflowStatus(status, null, false, false);
+        });
+  }
+
+  @Test
+  public void testInsertWorkflowStatusEmptyStringValidation() throws Exception {
+    // Test empty workflowName
+    assertThrows(
+        IllegalStateException.class,
+        () -> {
+          var status =
+              WorkflowStatusInternal.builder("test-wf-1", WorkflowState.PENDING)
+                  .workflowName("")
+                  .build();
+          sysdb.initWorkflowStatus(status, null, false, false);
+        });
+
+    // Test empty className
+    assertThrows(
+        IllegalStateException.class,
+        () -> {
+          var status =
+              WorkflowStatusInternal.builder("test-wf-2", WorkflowState.PENDING)
+                  .className("")
+                  .build();
+          sysdb.initWorkflowStatus(status, null, false, false);
+        });
+
+    // Test empty instanceName
+    assertThrows(
+        IllegalStateException.class,
+        () -> {
+          var status =
+              WorkflowStatusInternal.builder("test-wf-3", WorkflowState.PENDING)
+                  .instanceName("")
+                  .build();
+          sysdb.initWorkflowStatus(status, null, false, false);
+        });
+
+    // Test empty queueName
+    assertThrows(
+        IllegalStateException.class,
+        () -> {
+          var status =
+              WorkflowStatusInternal.builder("test-wf-4", WorkflowState.PENDING)
+                  .queueName("")
+                  .build();
+          sysdb.initWorkflowStatus(status, null, false, false);
+        });
+
+    // Test empty deduplicationId
+    assertThrows(
+        IllegalStateException.class,
+        () -> {
+          var status =
+              WorkflowStatusInternal.builder("test-wf-5", WorkflowState.PENDING)
+                  .deduplicationId("")
+                  .build();
+          sysdb.initWorkflowStatus(status, null, false, false);
+        });
+
+    // Test empty queuePartitionKey
+    assertThrows(
+        IllegalStateException.class,
+        () -> {
+          var status =
+              WorkflowStatusInternal.builder("test-wf-6", WorkflowState.PENDING)
+                  .queuePartitionKey("")
+                  .build();
+          sysdb.initWorkflowStatus(status, null, false, false);
+        });
+  }
+
+  @Test
+  public void testInsertWorkflowStatusValidNullValues() throws Exception {
+    // Test that null values (except for required fields) are allowed
+    var status =
+        WorkflowStatusInternal.builder("test-valid-nulls", WorkflowState.PENDING)
+            .workflowName(null)
+            .className(null)
+            .instanceName(null)
+            .queueName(null)
+            .deduplicationId(null)
+            .queuePartitionKey(null)
+            .build();
+
+    // This should not throw an exception
+    var result = sysdb.initWorkflowStatus(status, null, false, false);
+    assertEquals("test-valid-nulls", result.workflowId());
+    assertEquals(WorkflowState.PENDING.name(), result.status());
+  }
+
+  @Test
+  public void testInsertWorkflowStatusValidNonEmptyValues() throws Exception {
+    // Test that non-empty values are allowed
+    var status =
+        WorkflowStatusInternal.builder("test-valid-values", WorkflowState.PENDING)
+            .workflowName("TestWorkflow")
+            .className("com.example.TestWorkflow")
+            .instanceName("test-instance")
+            .queueName("test-queue")
+            .deduplicationId("dedupe-123")
+            .queuePartitionKey("partition-key")
+            .build();
+
+    // This should not throw an exception
+    var result = sysdb.initWorkflowStatus(status, null, false, false);
+    assertEquals("test-valid-values", result.workflowId());
+    assertEquals(WorkflowState.PENDING.name(), result.status());
+
+    // Verify the values were stored correctly
+    var retrievedStatus = sysdb.getWorkflowStatus("test-valid-values");
+    assertEquals("TestWorkflow", retrievedStatus.workflowName());
+    assertEquals("com.example.TestWorkflow", retrievedStatus.className());
+    assertEquals("test-instance", retrievedStatus.instanceName());
   }
 }

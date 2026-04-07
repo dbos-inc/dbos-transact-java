@@ -8,9 +8,9 @@ import java.util.Objects;
 
 public class WorkflowStatusBuilder {
   private String workflowId;
-  private String status;
+  private WorkflowState status;
 
-  private String name;
+  private String workflowName;
   private String className;
   private String instanceName;
 
@@ -46,7 +46,7 @@ public class WorkflowStatusBuilder {
     return new WorkflowStatus(
         workflowId,
         status,
-        name,
+        workflowName,
         className,
         instanceName,
         authenticatedUser,
@@ -78,17 +78,17 @@ public class WorkflowStatusBuilder {
   }
 
   public WorkflowStatusBuilder status(String status) {
-    this.status = status;
+    this.status = WorkflowState.valueOf(status);
     return this;
   }
 
   public WorkflowStatusBuilder status(WorkflowState state) {
-    this.status = state.name();
+    this.status = state;
     return this;
   }
 
-  public WorkflowStatusBuilder name(String name) {
-    this.name = name;
+  public WorkflowStatusBuilder workflowName(String workflowName) {
+    this.workflowName = workflowName;
     return this;
   }
 

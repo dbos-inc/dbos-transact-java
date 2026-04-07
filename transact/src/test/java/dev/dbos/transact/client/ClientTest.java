@@ -2,6 +2,7 @@ package dev.dbos.transact.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -14,6 +15,7 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -40,9 +42,26 @@ public class ClientTest {
     dataSource = pgContainer.dataSource();
 
     dbos.registerQueue(new Queue("testQueue"));
-    service = dbos.registerWorkflows(ClientService.class, new ClientServiceImpl(dbos));
+    service = dbos.registerProxy(ClientService.class, new ClientServiceImpl(dbos));
 
     dbos.launch();
+  }
+
+  @Test
+  public void clientEnqueueNullClassName() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var options = new DBOSClient.EnqueueOptions("enqueueTest", "testQueue");
+      var handle = client.enqueuePortableWorkflow(options, new Object[] {42, "spam"}, null);
+
+      var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
+      assertEquals("enqueueTest", row.workflowName());
+      assertEquals("testQueue", row.queueName());
+      assertNull(row.className());
+      assertNull(row.instanceName());
+    }
   }
 
   @Test
@@ -52,13 +71,13 @@ public class ClientTest {
     qs.pause();
 
     try (var client = pgContainer.dbosClient()) {
-      var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "enqueueTest", "testQueue");
+      var options = new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue");
       var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
       var rows = DBUtils.getWorkflowRows(dataSource);
       assertEquals(1, rows.size());
       var row = rows.get(0);
       assertEquals(handle.workflowId(), row.workflowId());
-      assertEquals("ENQUEUED", row.status());
+      assertEquals(WorkflowState.ENQUEUED.name(), row.status());
 
       qs.unpause();
 
@@ -66,10 +85,12 @@ public class ClientTest {
       assertTrue(result instanceof String);
       assertEquals("42-spam", result);
 
-      var stat = client.getWorkflowStatus(handle.workflowId());
-      assertEquals(
-          "SUCCESS",
-          stat.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
+      var stat =
+          client
+              .getWorkflowStatus(handle.workflowId())
+              .orElseThrow(() -> new AssertionError("Workflow status not found"));
+      assertEquals(WorkflowState.SUCCESS, stat.status());
+      assertNull(stat.instanceName());
     }
   }
 
@@ -107,7 +128,7 @@ public class ClientTest {
   @RetryingTest(3)
   public void clientEnqueueTimeouts() throws Exception {
     try (var client = pgContainer.dbosClient()) {
-      var options = new DBOSClient.EnqueueOptions("ClientServiceImpl", "sleep", "testQueue");
+      var options = new DBOSClient.EnqueueOptions("sleep", "ClientServiceImpl", "testQueue");
 
       var handle1 =
           client.enqueueWorkflow(options.withTimeout(Duration.ofSeconds(1)), new Object[] {10000});
@@ -118,7 +139,7 @@ public class ClientTest {
           });
       var stat1 = client.getWorkflowStatus(handle1.workflowId());
       assertEquals(
-          "CANCELLED",
+          WorkflowState.CANCELLED,
           stat1.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
 
       var handle2 =
@@ -132,7 +153,7 @@ public class ClientTest {
           });
       var stat2 = client.getWorkflowStatus(handle2.workflowId());
       assertEquals(
-          "CANCELLED",
+          WorkflowState.CANCELLED,
           stat2.orElseThrow(() -> new AssertionError("Workflow status not found")).status());
     }
   }

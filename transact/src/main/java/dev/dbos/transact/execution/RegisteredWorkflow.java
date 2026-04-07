@@ -7,9 +7,10 @@ import java.lang.reflect.Method;
 import java.util.Objects;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 public record RegisteredWorkflow(
-    String name,
+    String workflowName,
     String className,
     String instanceName,
     Object target,
@@ -18,28 +19,27 @@ public record RegisteredWorkflow(
     SerializationStrategy serializationStrategy) {
 
   public RegisteredWorkflow {
-    Objects.requireNonNull(name, "workflow name must not be null");
+    Objects.requireNonNull(workflowName, "workflow name must not be null");
     Objects.requireNonNull(className, "workflow class name must not be null");
-    instanceName = Objects.requireNonNullElse(instanceName, "");
     Objects.requireNonNull(target, "workflow target object must not be null");
     Objects.requireNonNull(workflowMethod, "workflow method must not be null");
   }
 
-  public static String fullyQualifiedName(@NonNull String className, @NonNull String workflowName) {
-    return fullyQualifiedName(className, "", workflowName);
+  public static String fullyQualifiedName(@NonNull String workflowName, @NonNull String className) {
+    return fullyQualifiedName(workflowName, className, "");
   }
 
   public static String fullyQualifiedName(
-      @NonNull String className, @NonNull String instanceName, @NonNull String workflowName) {
+      @NonNull String workflowName, @NonNull String className, @Nullable String instanceName) {
     return String.format(
         "%s/%s/%s",
+        Objects.requireNonNull(workflowName, "workflowName cannot be null"),
         Objects.requireNonNull(className, "className cannot be null"),
-        Objects.requireNonNull(instanceName, "instanceName cannot be null"),
-        Objects.requireNonNull(workflowName, "workflowName cannot be null"));
+        Objects.requireNonNullElse(instanceName, ""));
   }
 
   public String fullyQualifiedName() {
-    return fullyQualifiedName(className, instanceName, name);
+    return fullyQualifiedName(workflowName, className, instanceName);
   }
 
   @SuppressWarnings("unchecked")
@@ -47,13 +47,14 @@ public record RegisteredWorkflow(
     try {
       return (T) workflowMethod.invoke(target, args);
     } catch (Exception e) {
-      while (e instanceof InvocationTargetException) {
-        var ite = (InvocationTargetException) e;
-        var target = ite.getTargetException();
-        if (target instanceof Exception) {
-          e = (Exception) target;
+      while (e instanceof InvocationTargetException ite) {
+        var targetException = ite.getTargetException();
+        if (targetException instanceof Exception exception) {
+          e = exception;
         } else {
-          throw new RuntimeException(e);
+          // Preserve existing behavior: reflective invocation can surface a non-Exception
+          // Throwable (for example, an Error), which cannot be rethrown as E here.
+          throw new RuntimeException(targetException);
         }
       }
       throw (E) e;
