@@ -28,9 +28,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
+
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import dev.dbos.transact.json.JSONUtil;
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class QueuesTest {
@@ -194,7 +197,7 @@ public class QueuesTest {
           () -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
     }
 
-    var input = new ListWorkflowsInput().withQueuesOnly(true).withLoadInput(true);
+    var input = ListWorkflowsInput.builder().queuesOnly(true).loadInput(true).build();
     List<WorkflowStatus> wfs = dbos.listWorkflows(input);
 
     for (int i = 0; i < 5; i++) {
@@ -237,7 +240,7 @@ public class QueuesTest {
       Thread.sleep(100);
     }
 
-    var input = new ListWorkflowsInput().withQueuesOnly(true).withLoadInput(true);
+    var input = ListWorkflowsInput.builder().queuesOnly(true).loadInput(true).build();
     List<WorkflowStatus> wfs = dbos.listWorkflows(input);
     wfs.sort(
         (a, b) -> {
@@ -251,24 +254,54 @@ public class QueuesTest {
       assertEquals(WorkflowState.ENQUEUED, wfs.get(i).status());
     }
 
-    wfs = dbos.listWorkflows(input.withQueueName("abc"));
+    wfs =
+        dbos.listWorkflows(
+            ListWorkflowsInput.builder().queuesOnly(true).loadInput(true).queueName("abc").build());
     assertEquals(0, wfs.size());
 
-    wfs = dbos.listWorkflows(input.withQueueName("firstQueue"));
+    wfs =
+        dbos.listWorkflows(
+            ListWorkflowsInput.builder()
+                .queuesOnly(true)
+                .loadInput(true)
+                .queueName("firstQueue")
+                .build());
     assertEquals(5, wfs.size());
 
     wfs =
-        dbos.listWorkflows(input.withStartTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS)));
+        dbos.listWorkflows(
+            ListWorkflowsInput.builder()
+                .queuesOnly(true)
+                .loadInput(true)
+                .startTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS).toInstant())
+                .build());
     assertEquals(5, wfs.size());
 
     wfs =
-        dbos.listWorkflows(input.withStartTime(OffsetDateTime.now().plus(10, ChronoUnit.SECONDS)));
+        dbos.listWorkflows(
+            ListWorkflowsInput.builder()
+                .queuesOnly(true)
+                .loadInput(true)
+                .startTime(OffsetDateTime.now().plus(10, ChronoUnit.SECONDS).toInstant())
+                .build());
     assertEquals(0, wfs.size());
 
-    wfs = dbos.listWorkflows(input.withEndTime(OffsetDateTime.now()));
+    wfs =
+        dbos.listWorkflows(
+            ListWorkflowsInput.builder()
+                .queuesOnly(true)
+                .loadInput(true)
+                .endTime(OffsetDateTime.now().toInstant())
+                .build());
     assertEquals(5, wfs.size());
 
-    wfs = dbos.listWorkflows(input.withEndTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS)));
+    wfs =
+        dbos.listWorkflows(
+            ListWorkflowsInput.builder()
+                .queuesOnly(true)
+                .loadInput(true)
+                .endTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS).toInstant())
+                .build());
     assertEquals(0, wfs.size());
   }
 
@@ -403,6 +436,7 @@ public class QueuesTest {
       logger.info("Waiting for queueService to stop");
     }
 
+
     var builder =
         WorkflowStatusInternal.builder()
             .workflowName("OrderProcessingWorkflow")
@@ -418,7 +452,7 @@ public class QueuesTest {
             .timeoutMs(300000l)
             .deadlineEpochMs(System.currentTimeMillis() + 2400000)
             .priority(1)
-            .inputs("{\"orderId\":\"ORD-12345\"}");
+            .inputs(JSONUtil.serializeArray(new Object[]{"ORD-12345"}));
 
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
@@ -431,10 +465,7 @@ public class QueuesTest {
       systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
-    var readBack =
-        systemDatabase
-            .listWorkflows(new ListWorkflowsInput().withWorkflowId("id0").withLoadInput(false))
-            .get(0);
+    var readBack = systemDatabase.listWorkflows(new ListWorkflowsInput("id0")).get(0);
     assertArrayEquals(new String[] {"admin", "operator"}, readBack.authenticatedRoles());
 
     List<String> idsToRun =

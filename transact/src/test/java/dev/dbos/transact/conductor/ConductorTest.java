@@ -61,12 +61,14 @@ import java.util.concurrent.TimeUnit;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.java_websocket.WebSocket;
 import org.java_websocket.enums.Opcode;
 import org.java_websocket.framing.Framedata;
 import org.java_websocket.handshake.ClientHandshake;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.RetryingTest;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
@@ -362,7 +364,7 @@ public class ConductorTest {
     Random random = new Random();
     String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-    // Create a large list of steps to exceed 32KB
+    // Create a large list of steps to exceed 128KB
     List<StepInfo> steps = new ArrayList<>();
     for (int i = 0; i < 200; i++) {
       var stringBuilder = new StringBuilder(1024);
@@ -373,7 +375,7 @@ public class ConductorTest {
       steps.add(
           new StepInfo(i, "function" + i, stringBuilder.toString(), null, null, null, null, null));
     }
-    when(mockExec.listWorkflowSteps("large-wf", null, null, null)).thenReturn(steps);
+    when(mockExec.listWorkflowSteps("large-wf", true, null, null)).thenReturn(steps);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -384,8 +386,8 @@ public class ConductorTest {
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
 
-      // Each StepInfo is roughly 100-200 bytes. 500 steps should be > 50KB.
-      // 32KB fragment size should result in at least 2 frames.
+      // Each StepInfo is roughly 1KB. 200 steps should be ~200KB.
+      // 128KB fragment size should result in multiple frames.
       assertTrue(
           listener.frameCount > 1,
           "Should have received more than one frame, but got " + listener.frameCount);
@@ -1191,7 +1193,7 @@ public class ConductorTest {
           ArgumentCaptor.forClass(ListWorkflowsInput.class);
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
-      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.startTime());
+      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z").toInstant(), input.startTime());
       assertEquals(List.of("foobarbaz"), input.workflowName());
       assertNull(input.limit());
 
@@ -1265,7 +1267,7 @@ public class ConductorTest {
           ArgumentCaptor.forClass(ListWorkflowsInput.class);
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
-      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.startTime());
+      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z").toInstant(), input.startTime());
       assertEquals(List.of("foobarbaz"), input.workflowName());
       assertNull(input.limit());
 
@@ -1585,7 +1587,7 @@ public class ConductorTest {
       listener.send(MessageType.LIST_STEPS, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).listWorkflowSteps(workflowId, null, null, null);
+      verify(mockExec).listWorkflowSteps(workflowId, true, null, null);
     }
   }
 

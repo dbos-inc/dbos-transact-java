@@ -180,10 +180,11 @@ public class WorkflowMgmtTest {
     assertEquals("Hello, Chuck!", handle.getResult());
 
     var input =
-        new ListWorkflowsInput()
-            .withWorkflowId(handle.workflowId())
-            .withLoadInput(false)
-            .withLoadOutput(false);
+        ListWorkflowsInput.builder()
+            .workflowId(handle.workflowId())
+            .loadInput(false)
+            .loadOutput(false)
+            .build();
     var workflows = dbos.listWorkflows(input);
     assertEquals(1, workflows.size());
     var workflow = workflows.get(0);
@@ -273,7 +274,7 @@ public class WorkflowMgmtTest {
     assertEquals("Hello, Chuck!", handle.getResult());
 
     // loadInput/loadOutput default to true
-    var input = new ListWorkflowsInput().withWorkflowId(handle.workflowId());
+    var input = new ListWorkflowsInput(handle.workflowId());
     var workflows = dbos.listWorkflows(input);
     assertEquals(1, workflows.size());
     var workflow = workflows.get(0);

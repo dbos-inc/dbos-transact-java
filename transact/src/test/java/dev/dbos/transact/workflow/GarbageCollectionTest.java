@@ -50,16 +50,16 @@ public class GarbageCollectionTest {
     }
 
     // Garbage collect all but one completed workflow
-    List<WorkflowStatus> statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> statusList = systemDatabase.listWorkflows(null);
     assertEquals(11, statusList.size());
     systemDatabase.garbageCollect(null, 1L);
-    statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    statusList = systemDatabase.listWorkflows(null);
     assertEquals(2, statusList.size());
     assertEquals(handle.workflowId(), statusList.get(0).workflowId());
 
     // Garbage collect all completed workflows
     systemDatabase.garbageCollect(System.currentTimeMillis(), null);
-    statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    statusList = systemDatabase.listWorkflows(null);
     assertEquals(1, statusList.size());
     assertEquals(handle.workflowId(), statusList.get(0).workflowId());
 
@@ -67,7 +67,7 @@ public class GarbageCollectionTest {
     impl.gcLatch.countDown();
     assertEquals(handle.workflowId(), handle.getResult());
     systemDatabase.garbageCollect(System.currentTimeMillis(), null);
-    statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    statusList = systemDatabase.listWorkflows(null);
     assertEquals(0, statusList.size());
 
     // Verify GC runs without errors on an empty table
@@ -88,7 +88,7 @@ public class GarbageCollectionTest {
 
     // GC the first half, verify only half were GC'ed
     systemDatabase.garbageCollect(System.currentTimeMillis() - 1000, null);
-    statusList = systemDatabase.listWorkflows(new ListWorkflowsInput());
+    statusList = systemDatabase.listWorkflows(null);
     assertEquals(numWorkflows, statusList.size());
   }
 

@@ -41,7 +41,7 @@ public class BearServiceImpl implements BearService {
   @Workflow
   @Override
   public String listSteps(String wfid) {
-    var ll1 = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowId(wfid)).size();
+    var ll1 = dbos.listWorkflows(new ListWorkflowsInput(wfid)).size();
     var ll2 = dbos.listWorkflowSteps(wfid).size();
 
     return String.format("%d %d", ll1, ll2);
