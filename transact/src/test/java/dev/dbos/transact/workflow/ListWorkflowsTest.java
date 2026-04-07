@@ -239,8 +239,11 @@ public class ListWorkflowsTest {
     }
 
     // wf-alpha-1 was the source of a fork (wf-forked-1 was forked from it)
-    try (var ps2 = dataSource.getConnection().prepareStatement(
-        "UPDATE \"dbos\".workflow_status SET was_forked_from = TRUE WHERE workflow_uuid = ?")) {
+    try (var ps2 =
+        dataSource
+            .getConnection()
+            .prepareStatement(
+                "UPDATE \"dbos\".workflow_status SET was_forked_from = TRUE WHERE workflow_uuid = ?")) {
       ps2.setString(1, "wf-alpha-1");
       ps2.executeUpdate();
     }

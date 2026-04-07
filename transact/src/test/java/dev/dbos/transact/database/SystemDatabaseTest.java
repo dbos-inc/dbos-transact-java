@@ -209,11 +209,13 @@ public class SystemDatabaseTest {
 
     // Set a non-null deadline on the cancellable workflows so we can assert it is cleared on resume
     try (var conn = dataSource.getConnection();
-        var stmt = conn.prepareStatement(
-            "UPDATE dbos.workflow_status SET workflow_deadline_epoch_ms = ? WHERE workflow_uuid = ANY(?)")) {
+        var stmt =
+            conn.prepareStatement(
+                "UPDATE dbos.workflow_status SET workflow_deadline_epoch_ms = ? WHERE workflow_uuid = ANY(?)")) {
       long deadline = System.currentTimeMillis() + 60_000;
       stmt.setLong(1, deadline);
-      stmt.setArray(2, conn.createArrayOf("text", new String[]{"wf-cancelled-1", "wf-cancelled-2"}));
+      stmt.setArray(
+          2, conn.createArrayOf("text", new String[] {"wf-cancelled-1", "wf-cancelled-2"}));
       stmt.executeUpdate();
     }
 
