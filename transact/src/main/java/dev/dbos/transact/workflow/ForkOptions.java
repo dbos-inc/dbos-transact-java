@@ -89,7 +89,7 @@ public record ForkOptions(
   /**
    * Returns a copy of this object with the given queueName.
    *
-   * @param queueName Queue name to assign to the forked workflow
+   * @param queue Queue to assign to the forked workflow
    */
   public ForkOptions withQueue(Queue queue) {
     return new ForkOptions(
