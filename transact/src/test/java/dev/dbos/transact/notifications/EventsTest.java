@@ -418,7 +418,7 @@ public class EventsTest {
     // getAllEvents must appear in wf2's step list
     List<StepInfo> steps = dbos.listWorkflowSteps(wf2Id);
     assertEquals(1, steps.size());
-    assertEquals("DBOS.getEvents", steps.get(0).functionName());
+    assertEquals("DBOS.getAllEvents", steps.get(0).functionName());
 
     // Replay: re-run wf2 with the same ID — result must come from recorded output
     try (var ctx = new WorkflowOptions(wf2Id).setContext()) {
