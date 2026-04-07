@@ -13,6 +13,7 @@ import dev.dbos.transact.context.WorkflowInfo;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.Result;
+import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
@@ -56,6 +57,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -693,14 +695,15 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
   }
 
-  public List<WorkflowHandle<Object, Exception>> resumeWorkflows(List<String> workflowIds) {
+  public List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      List<String> workflowIds, String queueName) {
     Objects.requireNonNull(workflowIds);
 
     // Execute the resume operation as a workflow step
     this.callFunctionAsStep(
         () -> {
           logger.info("Resuming workflow(s) {}", workflowIds);
-          systemDatabase.resumeWorkflows(workflowIds);
+          systemDatabase.resumeWorkflows(workflowIds, queueName);
           return null; // void
         },
         "DBOS.resumeWorkflow",
@@ -745,6 +748,8 @@ public class DBOSExecutor implements AutoCloseable {
         this.callFunctionAsStep(
             () -> {
               logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
+
+              validateQueue(options.queueName(), options.queuePartitionKey());
 
               return systemDatabase.forkWorkflow(workflowId, startStep, options);
             },
@@ -854,6 +859,54 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     return systemDatabase.getEvent(workflowId, key, timeout, null);
+  }
+
+  public void writeStream(String key, Object value, SerializationStrategy serialization) {
+    logger.debug("Received writeStream for key {}", key);
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.writeStream() must be called from a workflow.");
+    }
+
+    if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
+      if (ctx.getSerialization() != null) {
+        serialization = ctx.getSerialization();
+      } else {
+        serialization = SerializationStrategy.DEFAULT;
+      }
+    }
+
+    if (ctx.isInStep()) {
+      systemDatabase.writeStreamFromStep(
+          ctx.getWorkflowId(), ctx.getCurrentFunctionId(), key, value, serialization.formatName());
+    } else {
+      int functionId = ctx.getAndIncrementFunctionId();
+      systemDatabase.writeStreamFromWorkflow(
+          ctx.getWorkflowId(), functionId, key, value, serialization.formatName());
+    }
+  }
+
+  public void closeStream(String key) {
+    logger.debug("Received closeStream for key {}", key);
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.closeStream() must be called from a workflow.");
+    }
+
+    if (ctx.isInStep()) {
+      throw new IllegalStateException(
+          "DBOS.closeStream() must be called from a workflow, not a step.");
+    }
+
+    int functionId = ctx.getAndIncrementFunctionId();
+    systemDatabase.closeStream(ctx.getWorkflowId(), functionId, key);
+  }
+
+  public Iterator<Object> readStream(String workflowId, String key) {
+    logger.debug("Received readStream for {} {}", workflowId, key);
+    return new StreamIterator(workflowId, key, systemDatabase);
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
@@ -1581,6 +1634,32 @@ public class DBOSExecutor implements AutoCloseable {
     return executeWorkflow(workflow, inputs, options, null);
   }
 
+  private void validateQueue(String queueName, String queuePartitionKey) {
+    if (queueName == null || queueName.equals(Constants.DBOS_INTERNAL_QUEUE)) {
+      if (queuePartitionKey != null) {
+        throw new IllegalArgumentException(
+            "DBOS internal queue is not a partitioned queue, but a partition key was provided");
+      }
+    } else {
+      var queue = queues.stream().filter(q -> q.name().equals(queueName)).findFirst();
+      if (queue.isPresent()) {
+        if (queue.get().partitioningEnabled() && queuePartitionKey == null) {
+          throw new IllegalArgumentException(
+              "queue %s partitions enabled, but no partition key was provided"
+                  .formatted(queueName));
+        }
+
+        if (!queue.get().partitioningEnabled() && queuePartitionKey != null) {
+          throw new IllegalArgumentException(
+              "queue %s is not a partitioned queue, but a partition key was provided"
+                  .formatted(queueName));
+        }
+      } else {
+        throw new IllegalArgumentException("queue %s does not exist".formatted(queueName));
+      }
+    }
+  }
+
   private <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
       RegisteredWorkflow workflow, Object[] args, ExecutionOptions options, WorkflowInfo parent) {
 
@@ -1601,24 +1680,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (options.queueName() != null) {
 
-      final var queueName = options.queueName();
-      var queue = queues.stream().filter(q -> q.name().equals(queueName)).findFirst();
-      if (queue.isPresent()) {
-        if (queue.get().partitionedEnabled() && options.queuePartitionKey() == null) {
-          throw new IllegalArgumentException(
-              "queue %s partitions enabled, but no partition key was provided"
-                  .formatted(options.queueName()));
-        }
-
-        if (!queue.get().partitionedEnabled() && options.queuePartitionKey() != null) {
-          throw new IllegalArgumentException(
-              "queue %s is not a partitioned queue, but a partition key was provided"
-                  .formatted(options.queueName()));
-        }
-      } else {
-        throw new IllegalArgumentException(
-            "queue %s does not exist".formatted(options.queueName()));
-      }
+      validateQueue(options.queueName(), options.queuePartitionKey());
 
       var workflowId =
           enqueueWorkflow(

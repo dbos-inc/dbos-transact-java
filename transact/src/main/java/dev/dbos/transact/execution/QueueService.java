@@ -134,7 +134,7 @@ public class QueueService implements AutoCloseable {
               }
 
               try {
-                if (queue.partitionedEnabled()) {
+                if (queue.partitioningEnabled()) {
                   var partitions = systemDatabase.getQueuePartitions(queue.name());
                   for (var partition : partitions) {
                     processPartition(partition);

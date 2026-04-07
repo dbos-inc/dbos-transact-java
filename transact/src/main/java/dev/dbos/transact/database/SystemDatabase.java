@@ -59,6 +59,7 @@ public class SystemDatabase implements AutoCloseable {
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
   private final SchedulesDAO schedulesDAO;
+  private final StreamsDAO streamsDAO;
 
   private SystemDatabase(
       DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
@@ -76,6 +77,7 @@ public class SystemDatabase implements AutoCloseable {
     workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
     queuesDAO = new QueuesDAO(dataSource, this.schema);
     schedulesDAO = new SchedulesDAO(dataSource, this.schema, serializer);
+    streamsDAO = new StreamsDAO(dataSource, this.schema);
     notificationService = new NotificationService(dataSource);
     notificationsDAO =
         new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
@@ -403,8 +405,8 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> workflowDAO.cancelWorkflows(workflowIds));
   }
 
-  public void resumeWorkflows(List<String> workflowIds) {
-    dbRetry(() -> workflowDAO.resumeWorkflows(workflowIds));
+  public void resumeWorkflows(List<String> workflowIds, String queueName) {
+    dbRetry(() -> workflowDAO.resumeWorkflows(workflowIds, queueName));
   }
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
@@ -1073,5 +1075,40 @@ public class SystemDatabase implements AutoCloseable {
             }
           }
         });
+  }
+
+  public void writeStreamFromStep(
+      String workflowId, int functionId, String key, Object value, String serializationFormat) {
+    dbRetry(
+        () -> {
+          streamsDAO.writeStreamFromStep(workflowId, functionId, key, value, serializationFormat);
+          return null;
+        });
+  }
+
+  public void writeStreamFromWorkflow(
+      String workflowId, int functionId, String key, Object value, String serializationFormat) {
+    dbRetry(
+        () -> {
+          streamsDAO.writeStreamFromWorkflow(
+              workflowId, functionId, key, value, serializationFormat);
+          return null;
+        });
+  }
+
+  public void closeStream(String workflowId, int functionId, String key) {
+    dbRetry(
+        () -> {
+          streamsDAO.closeStream(workflowId, functionId, key);
+          return null;
+        });
+  }
+
+  public Object readStream(String workflowId, String key, int offset) {
+    return dbRetry(() -> streamsDAO.readStream(workflowId, key, offset));
+  }
+
+  public Map<String, List<Object>> getAllStreamEntries(String workflowId) {
+    return dbRetry(() -> streamsDAO.getAllStreamEntries(workflowId));
   }
 }

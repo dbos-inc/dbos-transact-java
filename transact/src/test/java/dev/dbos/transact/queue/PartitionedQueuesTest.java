@@ -95,7 +95,7 @@ public class PartitionedQueuesTest {
 
   @Test
   public void testResumingQueuedPartitionedWorkflows() throws Exception {
-    Queue queue = new Queue("testQueue").withConcurrency(1).withPartitionedEnabled(true);
+    Queue queue = new Queue("testQueue").withConcurrency(1).withPartitioningEnabled(true);
     dbos.registerQueue(queue);
 
     var impl = new ResumingTestServiceImpl();
@@ -133,7 +133,7 @@ public class PartitionedQueuesTest {
 
   @Test
   public void testQueuePartitions() throws Exception {
-    Queue queue = new Queue("testQueue").withWorkerConcurrency(1).withPartitionedEnabled(true);
+    Queue queue = new Queue("testQueue").withWorkerConcurrency(1).withPartitioningEnabled(true);
     Queue partitionlessQueue = new Queue("partitionless-queue");
     dbos.registerQueues(queue, partitionlessQueue);
 
@@ -234,7 +234,7 @@ public class PartitionedQueuesTest {
 
   @Test
   public void testPartitionedQueueWithoutPartitionKey() throws Exception {
-    var queue = new Queue("partitioned-queue").withPartitionedEnabled(true);
+    var queue = new Queue("partitioned-queue").withPartitioningEnabled(true);
     dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
@@ -248,7 +248,7 @@ public class PartitionedQueuesTest {
 
   @Test
   public void testPartitionKeyWithDeduplicationID() throws Exception {
-    var queue = new Queue("partitioned-queue").withPartitionedEnabled(true);
+    var queue = new Queue("partitioned-queue").withPartitioningEnabled(true);
     dbos.registerQueue(queue);
     var impl = new PartitionsTestServiceImpl();
     var proxy = dbos.registerProxy(PartitionsTestService.class, impl);

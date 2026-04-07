@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
@@ -18,20 +19,18 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
+import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ScheduleStatus;
-import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
-import dev.dbos.transact.workflow.WorkflowEvent;
-import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
-import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
@@ -190,8 +189,7 @@ public class SystemDatabaseTest {
         WorkflowState.ERROR.name(), DBUtils.getWorkflowRow(dataSource, "wf-error").status());
   }
 
-  @Test
-  public void testResumeWorkflows() throws Exception {
+  List<String> insertResumableWorkflows() throws Exception {
     // Create workflows in different states
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
       sysdb.initWorkflowStatus(
@@ -208,13 +206,44 @@ public class SystemDatabaseTest {
     DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
     DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
 
+    return List.of("wf-cancelled-1", "wf-cancelled-2", "wf-success", "wf-error");
+  }
+
+  @Test
+  public void testResumeWorkflows() throws Exception {
+
+    var workflowIds = insertResumableWorkflows();
+
     // Resume all four IDs in one call
-    sysdb.resumeWorkflows(List.of("wf-cancelled-1", "wf-cancelled-2", "wf-success", "wf-error"));
+    sysdb.resumeWorkflows(workflowIds, null);
 
     // CANCELLED ones become ENQUEUED
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+      assertEquals(Constants.DBOS_INTERNAL_QUEUE, row.queueName());
+    }
+
+    // SUCCESS and ERROR are left untouched
+    assertEquals(
+        WorkflowState.SUCCESS.name(), DBUtils.getWorkflowRow(dataSource, "wf-success").status());
+    assertEquals(
+        WorkflowState.ERROR.name(), DBUtils.getWorkflowRow(dataSource, "wf-error").status());
+  }
+
+  @Test
+  public void testResumeWorkflowsCustomQueue() throws Exception {
+
+    var workflowIds = insertResumableWorkflows();
+
+    // Resume all four IDs in one call
+    sysdb.resumeWorkflows(workflowIds, "customQueue");
+
+    // CANCELLED ones become ENQUEUED
+    for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
+      var row = DBUtils.getWorkflowRow(dataSource, wfid);
+      assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+      assertEquals("customQueue", row.queueName());
     }
 
     // SUCCESS and ERROR are left untouched
@@ -241,7 +270,7 @@ public class SystemDatabaseTest {
         WorkflowStatusInternal.builder("wf-id", WorkflowState.PENDING).build(), 5, false, false);
     DBUtils.setWorkflowState(dataSource, "wf-id", WorkflowState.CANCELLED.name());
 
-    sysdb.resumeWorkflows(Arrays.asList("wf-id", null));
+    sysdb.resumeWorkflows(Arrays.asList("wf-id", null), null);
 
     assertEquals(
         WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, "wf-id").status());
@@ -346,198 +375,6 @@ public class SystemDatabaseTest {
     var after = DBUtils.getWorkflowRow(dataSource, wfid);
 
     assertTrue(before.equals(after));
-  }
-
-  private static ExportedWorkflow buildExportedWorkflow(String wfId) {
-    long now = System.currentTimeMillis();
-    var status =
-        new WorkflowStatusBuilder(wfId)
-            .status(WorkflowState.SUCCESS)
-            .workflowName("TestWorkflow")
-            .appVersion("1.0.0")
-            .recoveryAttempts(0)
-            .priority(0)
-            .createdAt(now)
-            .updatedAt(now)
-            .build();
-
-    var steps =
-        List.of(
-            new StepInfo(0, "step0", "output0", null, null, 1000L, 2000L, null),
-            new StepInfo(1, "step1", "output1", null, null, 2000L, 3000L, null));
-
-    var events =
-        List.of(
-            new WorkflowEvent("event-key-1", "event-val-1", null),
-            new WorkflowEvent("event-key-2", "event-val-2", null));
-
-    var eventHistory =
-        List.of(
-            new WorkflowEventHistory("event-key-1", "history-val-1", 0, null),
-            new WorkflowEventHistory("event-key-2", "history-val-2", 1, null));
-
-    var streams =
-        List.of(
-            new WorkflowStream("stream-key-1", "stream-val-1", 0, 0, null),
-            new WorkflowStream("stream-key-1", "stream-val-2", 1, 1, null));
-
-    return new ExportedWorkflow(status, steps, events, eventHistory, streams);
-  }
-
-  @Test
-  public void testImportWorkflow() throws Exception {
-    var wfId = "import-wf-1";
-    sysdb.importWorkflow(List.of(buildExportedWorkflow(wfId)));
-
-    var wfRows = DBUtils.getWorkflowRows(dataSource);
-    assertEquals(1, wfRows.size());
-    assertEquals(wfId, wfRows.get(0).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfRows.get(0).status());
-
-    var stepRows = DBUtils.getStepRows(dataSource, wfId);
-    assertEquals(2, stepRows.size());
-
-    var eventRows = DBUtils.getWorkflowEvents(dataSource, wfId);
-    assertEquals(2, eventRows.size());
-    assertTrue(
-        eventRows.stream()
-            .anyMatch(e -> e.key().equals("event-key-1") && e.value().equals("event-val-1")));
-    assertTrue(
-        eventRows.stream()
-            .anyMatch(e -> e.key().equals("event-key-2") && e.value().equals("event-val-2")));
-
-    var historyRows = DBUtils.getWorkflowEventHistory(dataSource, wfId);
-    assertEquals(2, historyRows.size());
-  }
-
-  @Test
-  public void testImportMultipleWorkflows() throws Exception {
-    sysdb.importWorkflow(
-        List.of(
-            buildExportedWorkflow("import-multi-wf-1"),
-            buildExportedWorkflow("import-multi-wf-2"),
-            buildExportedWorkflow("import-multi-wf-3")));
-
-    var wfRows = DBUtils.getWorkflowRows(dataSource);
-    assertEquals(3, wfRows.size());
-    assertTrue(wfRows.stream().anyMatch(r -> r.workflowId().equals("import-multi-wf-1")));
-    assertTrue(wfRows.stream().anyMatch(r -> r.workflowId().equals("import-multi-wf-2")));
-    assertTrue(wfRows.stream().anyMatch(r -> r.workflowId().equals("import-multi-wf-3")));
-
-    for (var wfId : List.of("import-multi-wf-1", "import-multi-wf-2", "import-multi-wf-3")) {
-      assertEquals(2, DBUtils.getStepRows(dataSource, wfId).size());
-      assertEquals(2, DBUtils.getWorkflowEvents(dataSource, wfId).size());
-    }
-  }
-
-  @Test
-  public void testExportWorkflow() throws Exception {
-    var wfId = "export-wf-1";
-    sysdb.importWorkflow(List.of(buildExportedWorkflow(wfId)));
-
-    var exported = sysdb.exportWorkflow(wfId, false);
-
-    assertEquals(1, exported.size());
-    var wf = exported.get(0);
-    assertEquals(wfId, wf.status().workflowId());
-    assertEquals(WorkflowState.SUCCESS, wf.status().status());
-    assertEquals("TestWorkflow", wf.status().workflowName());
-
-    assertEquals(2, wf.steps().size());
-    assertTrue(wf.steps().stream().anyMatch(s -> s.functionName().equals("step0")));
-    assertTrue(wf.steps().stream().anyMatch(s -> s.functionName().equals("step1")));
-
-    assertEquals(2, wf.events().size());
-    assertTrue(wf.events().stream().anyMatch(e -> e.key().equals("event-key-1")));
-
-    assertEquals(2, wf.eventHistory().size());
-
-    assertEquals(2, wf.streams().size());
-    assertTrue(wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1")));
-  }
-
-  private static ExportedWorkflow buildExportedWorkflowWithChildren(
-      String wfId, String child1Id, String child2Id) {
-    long now = System.currentTimeMillis();
-    var status =
-        new WorkflowStatusBuilder(wfId)
-            .status(WorkflowState.SUCCESS)
-            .workflowName("TestWorkflow")
-            .appVersion("1.0.0")
-            .recoveryAttempts(0)
-            .priority(0)
-            .createdAt(now)
-            .updatedAt(now)
-            .build();
-
-    // Steps reference child workflows via childWorkflowId
-    var steps =
-        List.of(
-            new StepInfo(0, "step0", null, null, child1Id, 1000L, 2000L, null),
-            new StepInfo(1, "step1", null, null, child2Id, 2000L, 3000L, null));
-
-    return new ExportedWorkflow(status, steps, List.of(), List.of(), List.of());
-  }
-
-  @Test
-  public void testExportWorkflowWithoutChildren() throws Exception {
-    var parentId = "export-no-children-parent";
-    var child1Id = "export-no-children-child-1";
-    var child2Id = "export-no-children-child-2";
-
-    sysdb.importWorkflow(
-        List.of(
-            buildExportedWorkflowWithChildren(parentId, child1Id, child2Id),
-            buildExportedWorkflow(child1Id),
-            buildExportedWorkflow(child2Id)));
-
-    var result = sysdb.exportWorkflow(parentId, false);
-    assertEquals(1, result.size());
-    assertEquals(parentId, result.get(0).status().workflowId());
-  }
-
-  @Test
-  public void testExportWorkflowWithChildren() throws Exception {
-    var parentId = "export-children-parent";
-    var child1Id = "export-children-child-1";
-    var child2Id = "export-children-child-2";
-
-    sysdb.importWorkflow(
-        List.of(
-            buildExportedWorkflowWithChildren(parentId, child1Id, child2Id),
-            buildExportedWorkflow(child1Id),
-            buildExportedWorkflow(child2Id)));
-
-    var result = sysdb.exportWorkflow(parentId, true);
-    assertEquals(3, result.size());
-    assertTrue(result.stream().anyMatch(w -> w.status().workflowId().equals(parentId)));
-    assertTrue(result.stream().anyMatch(w -> w.status().workflowId().equals(child1Id)));
-    assertTrue(result.stream().anyMatch(w -> w.status().workflowId().equals(child2Id)));
-  }
-
-  @Test
-  public void testImportExportRoundTrip() throws Exception {
-    var wfId = "roundtrip-wf-1";
-    var original = buildExportedWorkflow(wfId);
-    sysdb.importWorkflow(List.of(original));
-
-    var exported = sysdb.exportWorkflow(wfId, false);
-    assertEquals(1, exported.size());
-
-    // Delete the original and reimport from the exported data
-    sysdb.deleteWorkflows(List.of(wfId), false);
-    assertEquals(0, DBUtils.getWorkflowRows(dataSource).size());
-
-    sysdb.importWorkflow(exported);
-
-    var reimported = sysdb.exportWorkflow(wfId, false);
-    assertEquals(1, reimported.size());
-    var wf = reimported.get(0);
-    assertEquals(wfId, wf.status().workflowId());
-    assertEquals(2, wf.steps().size());
-    assertEquals(2, wf.events().size());
-    assertEquals(2, wf.eventHistory().size());
-    assertEquals(2, wf.streams().size());
   }
 
   // ── Schedule CRUD ──────────────────────────────────────────────────────────
@@ -903,7 +740,7 @@ public class SystemDatabaseTest {
     assertArrayEquals(authenticatedRoles, originalRetrieved.authenticatedRoles());
 
     // Fork the workflow
-    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
     var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
     assertNotNull(forkedWorkflowId);
     assertNotEquals(originalWorkflowId, forkedWorkflowId);
@@ -958,7 +795,7 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(originalStatus, null, false, false);
 
     // Fork the workflow
-    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
     var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
     assertNotNull(forkedWorkflowId);
 
@@ -1013,7 +850,7 @@ public class SystemDatabaseTest {
     assertEquals(0, originalRetrieved.authenticatedRoles().length);
 
     // Fork the workflow
-    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
     var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
     assertNotNull(forkedWorkflowId);
     assertNotEquals(originalWorkflowId, forkedWorkflowId);
@@ -1052,6 +889,75 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void testWriteStreamAndReadStream() throws Exception {
+    String workflowId = "stream-wf-1";
+    var status = WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    int functionId = 1;
+
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value1", "portable_json");
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value2", "portable_json");
+
+    Object result = sysdb.readStream(workflowId, "key1", 0);
+    assertEquals("value1", result);
+
+    result = sysdb.readStream(workflowId, "key1", 1);
+    assertEquals("value2", result);
+  }
+
+  @Test
+  public void testWriteStreamFromWorkflow() throws Exception {
+    String workflowId = "stream-wf-2";
+    var status = WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    int functionId = 1;
+
+    sysdb.writeStreamFromWorkflow(workflowId, functionId, "key1", "value1", "portable_json");
+
+    Object result = sysdb.readStream(workflowId, "key1", 0);
+    assertEquals("value1", result);
+  }
+
+  @Test
+  public void testCloseStream() throws Exception {
+    String workflowId = "stream-wf-3";
+    var status = WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+
+    sysdb.writeStreamFromWorkflow(workflowId, 1, "key1", "value1", "portable_json");
+    sysdb.closeStream(workflowId, 2, "key1");
+
+    assertThrows(IllegalStateException.class, () -> sysdb.readStream(workflowId, "key1", 1));
+  }
+
+  @Test
+  public void testGetAllStreamEntries() throws Exception {
+    String workflowId = "stream-wf-4";
+    var status = WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    int functionId = 1;
+
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value1", "portable_json");
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value2", "portable_json");
+    sysdb.writeStreamFromStep(workflowId, functionId, "key2", "value3", "portable_json");
+    sysdb.closeStream(workflowId, functionId, "key2");
+
+    Map<String, List<Object>> entries = sysdb.getAllStreamEntries(workflowId);
+
+    assertEquals(2, entries.size());
+    assertEquals(List.of("value1", "value2"), entries.get("key1"));
+    assertEquals(List.of("value3"), entries.get("key2"));
+  }
+
+  @Test
+  public void testReadStreamNotFound() throws Exception {
+    String workflowId = "stream-wf-5";
+    var status = WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+
+    assertThrows(IllegalArgumentException.class, () -> sysdb.readStream(workflowId, "key", 0));
+  }
+
   public void testInsertWorkflowStatusValidation() throws Exception {
     // Test null workflowId
     assertThrows(

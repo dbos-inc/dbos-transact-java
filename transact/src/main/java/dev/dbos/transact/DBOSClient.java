@@ -1,6 +1,7 @@
 package dev.dbos.transact;
 
 import dev.dbos.transact.database.Result;
+import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.json.DBOSSerializer;
@@ -20,6 +21,7 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -643,6 +645,19 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
+   * Read values from a stream as an iterator. This function reads values from a stream identified
+   * by the workflow_id and key, returning an iterator that yields each value in order until the
+   * stream is closed or the workflow terminates.
+   *
+   * @param workflowId The workflow instance ID that owns the stream
+   * @param key The stream key / name within the workflow
+   * @return Iterator that yields each value in the stream
+   */
+  public @NonNull Iterator<Object> readStream(@NonNull String workflowId, @NonNull String key) {
+    return new StreamIterator(workflowId, key, systemDatabase);
+  }
+
+  /**
    * Create a handle for a workflow. This call does not ensure that the workflow exists; use the
    * returned handle's `getStatus()`.
    *
@@ -676,30 +691,67 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Resume a canceled workflow, providing a handle to the workflow
+   * Resume a workflow starting from the step after the last complete step. This method allows
+   * resuming workflows that were previously interrupted, failed, or canceled. The workflow will
+   * continue execution from where it left off, replaying any completed steps deterministically.
    *
    * @param <T> Type of the workflow's return value
    * @param <E> Type of any checked exception thrown by the workflow
-   * @param workflowId ID of the workflow to resume
-   * @return `WorkflowHandle` for the resumed workflow
+   * @param workflowId ID of the workflow to resume; must not be null
+   * @param queueName optional queue name to enqueue the resumed workflow to; if null, the workflow
+   *     will be resumed in the default execution context
+   * @return WorkflowHandle for the resumed workflow
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
-      @NonNull String workflowId) {
-    systemDatabase.resumeWorkflows(List.of(workflowId));
+      @NonNull String workflowId, @Nullable String queueName) {
+    systemDatabase.resumeWorkflows(List.of(workflowId), queueName);
     return retrieveWorkflow(workflowId);
   }
 
   /**
-   * Resume multiple workflows starting from the step after the last complete step for each
-   * workflow. This method allows bulk resumption of workflows that were previously interrupted or
-   * failed.
+   * Resume a workflow starting from the step after the last complete step using the default queue.
+   * This method is equivalent to calling {@code resumeWorkflow(workflowId, null)}. The workflow
+   * will continue execution from where it left off, replaying any completed steps
+   * deterministically.
+   *
+   * @param <T> Type of the workflow's return value
+   * @param <E> Type of any checked exception thrown by the workflow
+   * @param workflowId ID of the workflow to resume; must not be null
+   * @return WorkflowHandle for the resumed workflow
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
+      @NonNull String workflowId) {
+    return resumeWorkflow(workflowId, null);
+  }
+
+  /**
+   * Resume multiple workflows starting from the step after the last complete step for each workflow
+   * using the default queue. This method is equivalent to calling {@code
+   * resumeWorkflows(workflowIds, null)}. Each workflow will continue execution from where it left
+   * off, replaying any completed steps deterministically.
    *
    * @param workflowIds a list of workflow IDs to resume; must not be null
    * @return A list of handles to the resumed workflows
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       @NonNull List<String> workflowIds) {
-    systemDatabase.resumeWorkflows(workflowIds);
+    return resumeWorkflows(workflowIds, null);
+  }
+
+  /**
+   * Resume multiple workflows starting from the step after the last complete step for each
+   * workflow. This method allows bulk resumption of workflows that were previously interrupted,
+   * failed, or canceled. Each workflow will continue execution from where it left off, replaying
+   * any completed steps deterministically.
+   *
+   * @param workflowIds a list of workflow IDs to resume; must not be null
+   * @param queueName optional queue name to enqueue the resumed workflows to; if null, the
+   *     workflows will be resumed in the default execution context
+   * @return A list of handles to the resumed workflows
+   */
+  public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      @NonNull List<String> workflowIds, @Nullable String queueName) {
+    systemDatabase.resumeWorkflows(workflowIds, queueName);
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
   }
 
