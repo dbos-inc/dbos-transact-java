@@ -1,5 +1,7 @@
 package dev.dbos.transact.conductor.protocol;
 
+import dev.dbos.transact.workflow.ForkOptions;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 public class ForkWorkflowRequest extends BaseMessage {
@@ -28,5 +30,16 @@ public class ForkWorkflowRequest extends BaseMessage {
     public Integer start_step;
     public String application_version; // optional
     public String new_workflow_id; // optional
+    public String queue_name; // optional
+    public String queue_partition_key; // optional
+  }
+
+  public ForkOptions toOptions() {
+    return new ForkOptions(
+        body.new_workflow_id,
+        body.application_version,
+        null,
+        body.queue_name,
+        body.queue_partition_key);
   }
 }

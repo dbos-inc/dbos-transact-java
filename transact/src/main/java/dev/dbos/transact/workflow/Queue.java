@@ -12,7 +12,7 @@ public record Queue(
     Integer concurrency,
     Integer workerConcurrency,
     boolean priorityEnabled,
-    boolean partitionedEnabled,
+    boolean partitioningEnabled,
     RateLimit rateLimit) {
 
   /** Rate limit parameter structure for DBOS workflow queues */
@@ -43,7 +43,7 @@ public record Queue(
   /** Produces a new Queue with the assigned name. */
   public Queue withName(String name) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitionedEnabled, rateLimit);
+        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
   }
 
   /**
@@ -52,7 +52,7 @@ public record Queue(
    */
   public Queue withConcurrency(Integer concurrency) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitionedEnabled, rateLimit);
+        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
   }
 
   /**
@@ -61,19 +61,19 @@ public record Queue(
    */
   public Queue withWorkerConcurrency(Integer workerConcurrency) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitionedEnabled, rateLimit);
+        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
   }
 
   /** Produces a new Queue with the prioritization enabled/disabled. */
   public Queue withPriorityEnabled(boolean priorityEnabled) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitionedEnabled, rateLimit);
+        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
   }
 
   /** Produces a new Queue with the partitioned enabled/disabled. */
-  public Queue withPartitionedEnabled(boolean partitionedEnabled) {
+  public Queue withPartitioningEnabled(boolean partitioningEnabled) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitionedEnabled, rateLimit);
+        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
   }
 
   /**
@@ -82,7 +82,7 @@ public record Queue(
    */
   public Queue withRateLimit(RateLimit rateLimit) {
     return new Queue(
-        name, concurrency, workerConcurrency, priorityEnabled, partitionedEnabled, rateLimit);
+        name, concurrency, workerConcurrency, priorityEnabled, partitioningEnabled, rateLimit);
   }
 
   /**

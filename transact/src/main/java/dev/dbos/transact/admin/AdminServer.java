@@ -239,7 +239,7 @@ public class AdminServer implements AutoCloseable {
 
     logger.info("resume workflow {}", wfid);
 
-    dbosExecutor.resumeWorkflows(List.of(wfid));
+    dbosExecutor.resumeWorkflows(List.of(wfid), null);
     exchange.sendResponseHeaders(204, 0);
   }
 
@@ -248,7 +248,9 @@ public class AdminServer implements AutoCloseable {
 
     var request = mapper.readValue(exchange.getRequestBody(), ForkRequest.class);
     int startStep = request.start_step == null ? 0 : request.start_step;
-    var options = new ForkOptions(request.new_workflow_id, request.application_version, null);
+    var options =
+        new ForkOptions(request.new_workflow_id)
+            .withApplicationVersion(request.application_version);
 
     logger.info("fork workflow {} step {}", wfid, startStep);
     var handle = dbosExecutor.forkWorkflow(wfid, startStep, options);

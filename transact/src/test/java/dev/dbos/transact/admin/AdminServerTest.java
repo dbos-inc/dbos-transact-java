@@ -559,7 +559,7 @@ class AdminServerTest {
 
       given().port(port).when().post("/workflows/test-wf-id/resume").then().statusCode(204);
 
-      verify(mockExec).resumeWorkflows(eq(List.of("test-wf-id")));
+      verify(mockExec).resumeWorkflows(eq(List.of("test-wf-id")), eq(null));
     }
   }
 
