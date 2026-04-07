@@ -774,8 +774,7 @@ public class SystemDatabase implements AutoCloseable {
             try (var rs = stmt.executeQuery()) {
               while (rs.next()) {
                 var rawTopic = rs.getString("topic");
-                var topic =
-                    Constants.DBOS_NULL_TOPIC.equals(rawTopic) ? null : rawTopic;
+                var topic = Constants.DBOS_NULL_TOPIC.equals(rawTopic) ? null : rawTopic;
                 var serialization = rs.getString("serialization");
                 var message =
                     SerializationUtil.deserializeValue(
