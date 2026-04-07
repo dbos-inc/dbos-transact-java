@@ -931,8 +931,9 @@ public class Conductor implements AutoCloseable {
         () -> {
           GetWorkflowRequest request = (GetWorkflowRequest) message;
           try {
-            var status = conductor.systemDatabase.getWorkflowStatus(request.workflow_id);
-            WorkflowsOutput output = status == null ? null : new WorkflowsOutput(status);
+            var status = conductor.systemDatabase.listWorkflows(request.toInput());
+            WorkflowsOutput output =
+                status == null || status.size() < 1 ? null : new WorkflowsOutput(status.get(0));
             return new GetWorkflowResponse(request, output);
           } catch (Exception e) {
             logger.error("Exception encountered when getting workflow {}", request.workflow_id, e);
