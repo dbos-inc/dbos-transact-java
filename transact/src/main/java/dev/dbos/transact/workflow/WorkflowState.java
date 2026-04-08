@@ -6,5 +6,10 @@ public enum WorkflowState {
   ERROR,
   MAX_RECOVERY_ATTEMPTS_EXCEEDED,
   CANCELLED,
-  ENQUEUED
+  ENQUEUED,
+  DELAYED;
+
+  public boolean isActive() {
+    return this == PENDING || this == ENQUEUED || this == DELAYED;
+  }
 }
