@@ -14,12 +14,12 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -395,7 +395,7 @@ public class QueuesTest {
     }
 
     var builder =
-        WorkflowStatusInternal.builder()
+        new WorkflowStatusInternalBuilder()
             .workflowName("OrderProcessingWorkflow")
             .className("com.example.workflows.OrderWorkflow")
             .instanceName("prod-config")
@@ -474,7 +474,7 @@ public class QueuesTest {
     }
 
     var builder =
-        WorkflowStatusInternal.builder()
+        new WorkflowStatusInternalBuilder()
             .workflowName("OrderProcessingWorkflow")
             .className("com.example.workflows.OrderWorkflow")
             .instanceName("prod-config")
