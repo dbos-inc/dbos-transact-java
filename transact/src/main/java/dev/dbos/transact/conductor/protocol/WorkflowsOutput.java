@@ -33,6 +33,8 @@ public class WorkflowsOutput {
   public String ForkedFrom;
   public String ParentWorkflowID;
   public String DequeuedAt;
+  public Boolean WasForkedFrom;
+  public String DelayUntilEpochMS;
 
   public WorkflowsOutput(WorkflowStatus status) {
     Object[] input = status.input();
@@ -71,5 +73,8 @@ public class WorkflowsOutput {
     this.ForkedFrom = status.forkedFrom();
     this.ParentWorkflowID = status.parentWorkflowId();
     this.DequeuedAt = status.startedAt() == null ? null : String.valueOf(status.startedAtMs());
+    this.WasForkedFrom = status.wasForkedFrom();
+    this.DelayUntilEpochMS =
+        status.delayUntil() == null ? null : String.valueOf(status.delayUntilMs());
   }
 }

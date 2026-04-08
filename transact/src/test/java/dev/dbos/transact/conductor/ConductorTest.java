@@ -1153,6 +1153,8 @@ public class ConductorTest {
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
+            .wasForkedFrom(true)
+            .delayUntil(Instant.ofEpochMilli(1754999999999L))
             .build());
     statuses.add(
         new WorkflowStatusBuilder("wf-2")
@@ -1210,6 +1212,10 @@ public class ConductorTest {
       assertTrue(outputNode.size() == 3);
 
       assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
+      assertTrue(outputNode.get(0).get("WasForkedFrom").asBoolean());
+      assertEquals("1754999999999", outputNode.get(0).get("DelayUntilEpochMS").asText());
+      assertTrue(outputNode.get(1).get("WasForkedFrom").isNull());
+      assertTrue(outputNode.get(1).get("DelayUntilEpochMS").isNull());
     }
   }
 
@@ -1227,6 +1233,8 @@ public class ConductorTest {
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
+            .wasForkedFrom(true)
+            .delayUntil(Instant.ofEpochMilli(1754999999999L))
             .build());
     statuses.add(
         new WorkflowStatusBuilder("wf-2")
@@ -1284,6 +1292,10 @@ public class ConductorTest {
       assertTrue(outputNode.size() == 3);
 
       assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
+      assertTrue(outputNode.get(0).get("WasForkedFrom").asBoolean());
+      assertEquals("1754999999999", outputNode.get(0).get("DelayUntilEpochMS").asText());
+      assertTrue(outputNode.get(1).get("WasForkedFrom").isNull());
+      assertTrue(outputNode.get(1).get("DelayUntilEpochMS").isNull());
     }
   }
 
@@ -1447,6 +1459,8 @@ public class ConductorTest {
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
+            .wasForkedFrom(true)
+            .delayUntil(Instant.ofEpochMilli(1754999999999L))
             .build();
 
     when(mockDB.listWorkflows(any())).thenReturn(List.of(status));
@@ -1476,6 +1490,8 @@ public class ConductorTest {
       assertNotNull(outputNode);
       assertTrue(outputNode.isObject());
       assertEquals("wf-1", outputNode.get("WorkflowUUID").asText());
+      assertTrue(outputNode.get("WasForkedFrom").asBoolean());
+      assertEquals("1754999999999", outputNode.get("DelayUntilEpochMS").asText());
     }
   }
 
