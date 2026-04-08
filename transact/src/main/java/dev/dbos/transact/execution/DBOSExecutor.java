@@ -51,7 +51,6 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -762,26 +761,15 @@ public class DBOSExecutor implements AutoCloseable {
     return retrieveWorkflow(forkedId);
   }
 
-  public void globalTimeout(Long cutoff) {
-    OffsetDateTime endTime = Instant.ofEpochMilli(cutoff).atOffset(ZoneOffset.UTC);
-    globalTimeout(endTime);
-  }
-
-  public void globalTimeout(OffsetDateTime endTime) {
+  public void globalTimeout(Instant endTime) {
     ListWorkflowsInput pendingInput =
-        ListWorkflowsInput.builder()
-            .status(WorkflowState.PENDING)
-            .endTime(endTime.toInstant())
-            .build();
+        ListWorkflowsInput.builder().status(WorkflowState.PENDING).endTime(endTime).build();
     for (WorkflowStatus status : systemDatabase.listWorkflows(pendingInput)) {
       cancelWorkflows(List.of(status.workflowId()));
     }
 
     ListWorkflowsInput enqueuedInput =
-        ListWorkflowsInput.builder()
-            .status(WorkflowState.ENQUEUED)
-            .endTime(endTime.toInstant())
-            .build();
+        ListWorkflowsInput.builder().status(WorkflowState.ENQUEUED).endTime(endTime).build();
     for (WorkflowStatus status : systemDatabase.listWorkflows(enqueuedInput)) {
       cancelWorkflows(List.of(status.workflowId()));
     }

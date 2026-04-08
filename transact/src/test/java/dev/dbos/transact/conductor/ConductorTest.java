@@ -1671,8 +1671,8 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).garbageCollect(1L, 2L);
-      verify(mockExec).globalTimeout(3L);
+      verify(mockDB).garbageCollect(Instant.ofEpochMilli(1L), 2L);
+      verify(mockExec).globalTimeout(Instant.ofEpochMilli(3L));
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1704,8 +1704,8 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).garbageCollect(1L, 2L);
-      verify(mockExec, never()).globalTimeout(anyLong());
+      verify(mockDB).garbageCollect(Instant.ofEpochMilli(1L), 2L);
+      verify(mockExec, never()).globalTimeout(any());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1722,7 +1722,7 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     String errorMessage = "canRetentionGcThrows error";
-    doThrow(new RuntimeException(errorMessage)).when(mockDB).garbageCollect(anyLong(), anyLong());
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).garbageCollect(any(), anyLong());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1743,8 +1743,8 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).garbageCollect(1L, 2L);
-      verify(mockExec, never()).globalTimeout(anyLong());
+      verify(mockDB).garbageCollect(Instant.ofEpochMilli(1L), 2L);
+      verify(mockExec, never()).globalTimeout(any());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1761,7 +1761,7 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     String errorMessage = "canRetentionTimeoutThrows error";
-    doThrow(new RuntimeException(errorMessage)).when(mockExec).globalTimeout(anyLong());
+    doThrow(new RuntimeException(errorMessage)).when(mockExec).globalTimeout(any());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1782,8 +1782,8 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).garbageCollect(1L, 2L);
-      verify(mockExec).globalTimeout(3L);
+      verify(mockDB).garbageCollect(Instant.ofEpochMilli(1L), 2L);
+      verify(mockExec).globalTimeout(Instant.ofEpochMilli(3));
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);

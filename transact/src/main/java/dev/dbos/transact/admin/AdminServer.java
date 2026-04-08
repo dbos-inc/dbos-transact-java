@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -173,7 +174,8 @@ public class AdminServer implements AutoCloseable {
 
     var request = mapper.readValue(exchange.getRequestBody(), GarbageCollectRequest.class);
 
-    systemDatabase.garbageCollect(request.cutoff_epoch_timestamp_ms, (long) request.rows_threshold);
+    systemDatabase.garbageCollect(
+        Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms), (long) request.rows_threshold);
 
     exchange.sendResponseHeaders(204, 0);
   }
@@ -182,7 +184,7 @@ public class AdminServer implements AutoCloseable {
     if (!ensurePostJson(exchange)) return;
 
     var request = mapper.readValue(exchange.getRequestBody(), GlobalTimeoutRequest.class);
-    dbosExecutor.globalTimeout(request.cutoff_epoch_timestamp_ms);
+    dbosExecutor.globalTimeout(Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms));
 
     exchange.sendResponseHeaders(204, 0);
   }

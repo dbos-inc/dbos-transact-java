@@ -502,8 +502,8 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) {
-    dbRetry(() -> workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold));
+  public void garbageCollect(Instant cutoff, Long rowsThreshold) {
+    dbRetry(() -> workflowDAO.garbageCollect(cutoff, rowsThreshold));
   }
 
   public void createSchedule(WorkflowSchedule schedule) {

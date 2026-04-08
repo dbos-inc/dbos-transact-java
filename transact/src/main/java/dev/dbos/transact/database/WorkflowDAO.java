@@ -1139,7 +1139,7 @@ class WorkflowDAO {
     }
   }
 
-  private static Long getRowsCutoff(Connection connection, long rowsThreshold, String schema)
+  private static Instant getRowsCutoff(Connection connection, long rowsThreshold, String schema)
       throws SQLException {
     String sql =
         """
@@ -1150,7 +1150,7 @@ class WorkflowDAO {
       stmt.setLong(1, rowsThreshold - 1);
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
-          return rs.getLong("created_at");
+          return Instant.ofEpochMilli(rs.getLong("created_at"));
         }
       }
     }
@@ -1158,26 +1158,26 @@ class WorkflowDAO {
     return null;
   }
 
-  void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) throws SQLException {
+  void garbageCollect(Instant cutoff, Long rowsThreshold) throws SQLException {
 
     try (Connection connection = dataSource.getConnection()) {
       if (rowsThreshold != null) {
-        Long rowsCutoff = getRowsCutoff(connection, rowsThreshold, this.schema);
+        var rowsCutoff = getRowsCutoff(connection, rowsThreshold, this.schema);
         if (rowsCutoff != null) {
-          if (cutoffEpochTimestampMs == null || rowsCutoff > cutoffEpochTimestampMs) {
-            cutoffEpochTimestampMs = rowsCutoff;
+          if (cutoff == null || rowsCutoff.isAfter(cutoff)) {
+            cutoff = rowsCutoff;
           }
         }
       }
 
-      if (cutoffEpochTimestampMs != null) {
+      if (cutoff != null) {
         String sql =
             """
               DELETE FROM "%s".workflow_status WHERE created_at < ? AND status NOT IN (?, ?)
             """
                 .formatted(this.schema);
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-          stmt.setLong(1, cutoffEpochTimestampMs);
+          stmt.setLong(1, cutoff.toEpochMilli());
           stmt.setString(2, WorkflowState.PENDING.toString());
           stmt.setString(3, WorkflowState.ENQUEUED.toString());
 

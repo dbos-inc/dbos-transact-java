@@ -949,8 +949,11 @@ public class Conductor implements AutoCloseable {
           RetentionRequest request = (RetentionRequest) message;
 
           try {
-            conductor.systemDatabase.garbageCollect(
-                request.body.gc_cutoff_epoch_ms, request.body.gc_rows_threshold);
+            var cutoff =
+                request.body.gc_cutoff_epoch_ms == null
+                    ? null
+                    : Instant.ofEpochMilli(request.body.gc_cutoff_epoch_ms);
+            conductor.systemDatabase.garbageCollect(cutoff, request.body.gc_rows_threshold);
           } catch (Exception e) {
             logger.error("Exception encountered garbage collecting system database", e);
             return new SuccessResponse(request, e);
@@ -958,7 +961,8 @@ public class Conductor implements AutoCloseable {
 
           try {
             if (request.body.timeout_cutoff_epoch_ms != null) {
-              conductor.dbosExecutor.globalTimeout(request.body.timeout_cutoff_epoch_ms);
+              conductor.dbosExecutor.globalTimeout(
+                  Instant.ofEpochMilli(request.body.timeout_cutoff_epoch_ms));
             }
           } catch (Exception e) {
             logger.error("Exception encountered setting global timeout", e);

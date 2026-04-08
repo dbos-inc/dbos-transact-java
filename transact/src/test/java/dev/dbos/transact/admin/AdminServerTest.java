@@ -246,7 +246,7 @@ class AdminServerTest {
           .then()
           .statusCode(204);
 
-      verify(mockDB).garbageCollect(eq(42L), eq(37L));
+      verify(mockDB).garbageCollect(eq(Instant.ofEpochMilli(42L)), eq(37L));
     }
   }
 
@@ -267,14 +267,14 @@ class AdminServerTest {
           .then()
           .statusCode(204);
 
-      verify(mockExec).globalTimeout(eq(42L));
+      verify(mockExec).globalTimeout(eq(Instant.ofEpochMilli(42L)));
     }
   }
 
   @Test
   public void listWorkflows() throws IOException {
 
-    List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+    List<WorkflowStatus> statuses = new ArrayList<>();
     statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)

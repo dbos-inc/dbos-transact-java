@@ -7,6 +7,8 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -58,7 +60,7 @@ public class GarbageCollectionTest {
     assertEquals(handle.workflowId(), statusList.get(0).workflowId());
 
     // Garbage collect all completed workflows
-    systemDatabase.garbageCollect(System.currentTimeMillis(), null);
+    systemDatabase.garbageCollect(Instant.now(), null);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(1, statusList.size());
     assertEquals(handle.workflowId(), statusList.get(0).workflowId());
@@ -66,7 +68,7 @@ public class GarbageCollectionTest {
     // Finish the blocked workflow, garbage collect everything
     impl.gcLatch.countDown();
     assertEquals(handle.workflowId(), handle.getResult());
-    systemDatabase.garbageCollect(System.currentTimeMillis(), null);
+    systemDatabase.garbageCollect(Instant.now(), null);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(0, statusList.size());
 
@@ -87,7 +89,7 @@ public class GarbageCollectionTest {
     }
 
     // GC the first half, verify only half were GC'ed
-    systemDatabase.garbageCollect(System.currentTimeMillis() - 1000, null);
+    systemDatabase.garbageCollect(Instant.now().minus(Duration.ofMillis(1000)), null);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(numWorkflows, statusList.size());
   }
@@ -110,7 +112,7 @@ public class GarbageCollectionTest {
     WorkflowHandle<String, ?> finalHandle =
         dbos.startWorkflow(() -> proxy.timeoutBlockedWorkflow());
 
-    dbosExecutor.globalTimeout(System.currentTimeMillis() - 1000);
+    dbosExecutor.globalTimeout(Instant.now().minus(Duration.ofMillis(1000)));
     for (var handle : handles) {
       assertEquals(WorkflowState.CANCELLED, handle.getStatus().status());
     }
