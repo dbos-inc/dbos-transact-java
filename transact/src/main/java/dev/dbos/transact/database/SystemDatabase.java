@@ -8,11 +8,14 @@ import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -285,6 +288,10 @@ public class SystemDatabase implements AutoCloseable {
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return dbRetry(() -> workflowDAO.listWorkflows(input));
+  }
+
+  public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {
+    return dbRetry(() -> workflowDAO.getWorkflowAggregates(input));
   }
 
   public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion) {
@@ -730,6 +737,57 @@ public class SystemDatabase implements AutoCloseable {
 
   public Set<String> getWorkflowChildren(String workflowId) {
     return dbRetry(() -> workflowDAO.getWorkflowChildren(workflowId));
+  }
+
+  public Map<String, Object> getAllEvents(String workflowId) {
+    return dbRetry(
+        () -> {
+          try (var conn = dataSource.getConnection()) {
+            var events = listWorkflowEvents(conn, workflowId);
+            var result = new LinkedHashMap<String, Object>();
+            for (var event : events) {
+              result.put(
+                  event.key(),
+                  SerializationUtil.deserializeValue(
+                      event.value(), event.serialization(), this.serializer));
+            }
+            return result;
+          }
+        });
+  }
+
+  public List<NotificationInfo> getAllNotifications(String workflowId) {
+    return dbRetry(
+        () -> {
+          var sql =
+              """
+              SELECT topic, message, serialization, created_at_epoch_ms, consumed
+              FROM "%s".notifications
+              WHERE destination_uuid = ?
+              ORDER BY created_at_epoch_ms
+              """
+                  .formatted(this.schema);
+
+          var notifications = new ArrayList<NotificationInfo>();
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, workflowId);
+            try (var rs = stmt.executeQuery()) {
+              while (rs.next()) {
+                var rawTopic = rs.getString("topic");
+                var topic = Constants.DBOS_NULL_TOPIC.equals(rawTopic) ? null : rawTopic;
+                var serialization = rs.getString("serialization");
+                var message =
+                    SerializationUtil.deserializeValue(
+                        rs.getString("message"), serialization, this.serializer);
+                var createdAtEpochMs = rs.getLong("created_at_epoch_ms");
+                var consumed = rs.getBoolean("consumed");
+                notifications.add(new NotificationInfo(topic, message, createdAtEpochMs, consumed));
+              }
+            }
+          }
+          return notifications;
+        });
   }
 
   List<WorkflowEvent> listWorkflowEvents(Connection conn, String workflowId) throws SQLException {

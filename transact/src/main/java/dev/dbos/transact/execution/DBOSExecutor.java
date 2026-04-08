@@ -906,6 +906,11 @@ public class DBOSExecutor implements AutoCloseable {
     return new StreamIterator(workflowId, key, systemDatabase);
   }
 
+  public Map<String, Object> getAllEvents(String workflowId) {
+    return this.callFunctionAsStep(
+        () -> systemDatabase.getAllEvents(workflowId), "DBOS.getAllEvents", null);
+  }
+
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return this.callFunctionAsStep(
         () -> systemDatabase.listWorkflows(input), "DBOS.listWorkflows", null);
