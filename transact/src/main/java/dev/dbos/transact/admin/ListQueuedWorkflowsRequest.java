@@ -6,9 +6,8 @@ import dev.dbos.transact.workflow.WorkflowState;
 import java.time.Instant;
 import java.util.List;
 
-// TODO: Complete the admin server gap analysis for queued workflow listing by verifying
-// that this request shape and its `asInput()` mapping cover the intended queue-specific
-// filters and behavior parity with the underlying workflow listing API.
+// TODO: Analyze admin server support for /workflows request fields and confirm
+// this request maps all required admin filters/options into ListWorkflowsInput.
 // Tracking issue: https://github.com/dbos-inc/dbos-transact-java/issues/345?reload=1
 public record ListQueuedWorkflowsRequest(
     String workflow_name,

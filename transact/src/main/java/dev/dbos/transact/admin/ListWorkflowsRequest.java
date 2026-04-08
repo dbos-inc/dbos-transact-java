@@ -6,7 +6,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 import java.time.Instant;
 import java.util.List;
 
-// TODO: Analyze admin server support for list-workflow request fields and confirm
+// TODO: Analyze admin server support for /queues request fields and confirm
 // this request maps all required admin filters/options into ListWorkflowsInput.
 // https://github.com/dbos-inc/dbos-transact-java/issues/345?reload=1
 public record ListWorkflowsRequest(

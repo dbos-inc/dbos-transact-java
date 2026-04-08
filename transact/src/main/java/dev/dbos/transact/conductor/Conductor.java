@@ -111,6 +111,7 @@ public class Conductor implements AutoCloseable {
   }
 
   // TODO: do we need the insecure connection?
+  // Tracking issue: https://github.com/dbos-inc/dbos-transact-java/issues/346
   private static HttpClient buildHttpClient() {
     try {
       // Intentionally insecure: matches previous Netty InsecureTrustManagerFactory behavior
