@@ -27,6 +27,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -246,8 +247,11 @@ class WorkflowDAO {
         status.authenticatedRoles() != null ? JSONUtil.toJson(status.authenticatedRoles()) : null;
     try (PreparedStatement stmt = connection.prepareStatement(insertSQL)) {
 
-      var now = Instant.now().toEpochMilli();
-      var recoveryAttempts = status.status() == WorkflowState.ENQUEUED ? 0 : 1;
+      var now = System.currentTimeMillis();
+      var recoveryAttempts =
+          status.status() == WorkflowState.ENQUEUED || status.status() == WorkflowState.DELAYED
+              ? 0
+              : 1;
       stmt.setString(1, status.workflowId());
       stmt.setString(2, status.status().toString());
       stmt.setString(3, status.inputs());
@@ -424,6 +428,65 @@ class WorkflowDAO {
     return null;
   }
 
+  void setWorkflowDelay(String workflowId, Duration delay, Instant delayUntil) throws SQLException {
+    Objects.requireNonNull(workflowId, "workflowId must not be null");
+
+    if (delay != null && delayUntil != null) {
+      throw new IllegalArgumentException("Specify either delay or delayUntil, not both");
+    }
+
+    Instant resolved = null;
+    if (delayUntil != null) {
+      if (delayUntil.toEpochMilli() < 0) {
+        throw new IllegalArgumentException("delayUntil must be positive");
+      }
+      resolved = delayUntil;
+    } else if (delay != null) {
+      resolved = Instant.now().plus(delay);
+    } else {
+      throw new IllegalArgumentException("must specify either delay or delayUntil");
+    }
+
+    var sql =
+        """
+          UPDATE workflow_status
+             SET delay_until_epoch_ms = ?,
+                 updated_at = EXTRACT(epoch FROM NOW()) * 1000
+           WHERE workflow_uuid = ?
+             AND status = ?
+        """
+            .formatted(this.schema);
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setLong(1, resolved.toEpochMilli());
+      stmt.setString(2, workflowId);
+      stmt.setString(3, WorkflowState.DELAYED.name());
+
+      stmt.executeUpdate();
+    }
+  }
+
+  void transitionDelayedWorkflows() throws SQLException {
+    var sql =
+        """
+          UPDATE "%s".workflow_status
+             SET status = ?
+           WHERE status = ?
+             AND delay_until_epoch_ms <= ?
+        """
+            .formatted(this.schema);
+
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, WorkflowState.ENQUEUED.name());
+      stmt.setString(2, WorkflowState.DELAYED.name());
+      stmt.setLong(3, System.currentTimeMillis());
+
+      stmt.executeUpdate();
+    }
+  }
+
+  // TODO: add delayed support when queues_only is true
   List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
 
     if (input == null) {
@@ -1263,13 +1326,14 @@ class WorkflowDAO {
       if (cutoffEpochTimestampMs != null) {
         String sql =
             """
-              DELETE FROM "%s".workflow_status WHERE created_at < ? AND status NOT IN (?, ?)
+              DELETE FROM "%s".workflow_status WHERE created_at < ? AND status NOT IN (?, ?, ?)
             """
                 .formatted(this.schema);
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
           stmt.setLong(1, cutoffEpochTimestampMs);
-          stmt.setString(2, WorkflowState.PENDING.toString());
-          stmt.setString(3, WorkflowState.ENQUEUED.toString());
+          stmt.setString(2, WorkflowState.PENDING.name());
+          stmt.setString(3, WorkflowState.ENQUEUED.name());
+          stmt.setString(4, WorkflowState.DELAYED.name());
 
           stmt.executeUpdate();
         }

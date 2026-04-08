@@ -512,6 +512,14 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold));
   }
 
+  public void setWorkflowDelay(String workflowId, Duration delay, Instant delayUntil) {
+    dbRetry(() -> workflowDAO.setWorkflowDelay(workflowId, delay, delayUntil));
+  }
+
+  public void transitionDelayedWorkflows() {
+    dbRetry(() -> workflowDAO.transitionDelayedWorkflows());
+  }
+
   public void createSchedule(WorkflowSchedule schedule) {
     dbRetry(() -> schedulesDAO.createSchedule(schedule));
   }

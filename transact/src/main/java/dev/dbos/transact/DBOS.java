@@ -945,6 +945,31 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
+   * Sets a delay for a workflow, causing it to be paused for a specified duration or until a
+   * specific time. This is useful for implementing delays, timeouts, or scheduling workflows to
+   * resume at a later time.
+   *
+   * <p>The delay must be specified using exactly one of the two parameters:
+   * <ul>
+   *   <li>Using {@code delay} parameter to specify a duration from now
+   *   <li>Using {@code delayUntil} parameter to specify an absolute time
+   * </ul>
+   *
+   * <p>Exactly one parameter must be non-null. Providing both parameters or neither parameter
+   * will result in an exception.
+   *
+   * @param workflowId the unique identifier of the workflow to delay
+   * @param delay the duration to delay the workflow from now, or null if using delayUntil
+   * @param delayUntil the absolute time until which to delay the workflow, or null if using delay
+   * @throws IllegalArgumentException if the workflow ID is invalid, or if both parameters are provided, or if both parameters are null
+   * @throws IllegalStateException if DBOS has not been launched
+   */
+  public void setWorkflowDelay(
+      @NonNull String workflowId, @Nullable Duration delay, @Nullable Instant delayUntil) {
+    ensureLaunched("setWorkflowDelay").setWorkflowDelay(workflowId, delay, delayUntil);
+  }
+
+  /**
    * Retrieves all events stored during the execution of a workflow. Events are key-value pairs that
    * workflows can set during execution to persist intermediate state or communicate between steps.
    * This method returns all events for the specified workflow with their deserialized values.

@@ -77,6 +77,11 @@ public class QueueService implements AutoCloseable {
     final Duration minPollingInterval = Duration.ofSeconds(1);
     final Duration maxPollingInterval = Duration.ofSeconds(120);
 
+    var execService = execServiceRef.get();
+    if (execService != null) {
+      execService.scheduleAtFixedRate(this::transitionDelayedWorkflows, 1, 1, TimeUnit.SECONDS);
+    }
+
     for (var _queue : queues) {
 
       var listening =
@@ -162,6 +167,16 @@ public class QueueService implements AutoCloseable {
           };
 
       task.schedule();
+    }
+  }
+
+  private void transitionDelayedWorkflows() {
+    if (!paused.get()) {
+      try {
+        systemDatabase.transitionDelayedWorkflows();
+      } catch (Throwable e) {
+        logger.error("Exception transitioning delayed workflows", e);
+      }
     }
   }
 }
