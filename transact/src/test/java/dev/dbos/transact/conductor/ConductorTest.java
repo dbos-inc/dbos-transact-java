@@ -1309,7 +1309,7 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertEquals(List.of("alpha", "beta"), input.workflowName());
-      assertEquals(List.of("SUCCESS", "PENDING"), input.status());
+      assertEquals(List.of(WorkflowState.SUCCESS, WorkflowState.PENDING), input.status());
       assertEquals(List.of("user-a", "user-b"), input.authenticatedUser());
       assertEquals(List.of("v1.0", "v2.0"), input.applicationVersion());
       assertEquals(List.of("exec-1", "exec-2"), input.executorIds());
@@ -1341,7 +1341,7 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertEquals(List.of("alpha"), input.workflowName());
-      assertEquals(List.of("SUCCESS"), input.status());
+      assertEquals(List.of(WorkflowState.SUCCESS), input.status());
       assertEquals(List.of("user-a"), input.authenticatedUser());
       assertEquals(List.of("v1.0"), input.applicationVersion());
       assertEquals(List.of("exec-1"), input.executorIds());
@@ -1371,7 +1371,7 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertEquals(List.of("alpha", "beta"), input.workflowName());
-      assertEquals(List.of("SUCCESS", "PENDING"), input.status());
+      assertEquals(List.of(WorkflowState.SUCCESS, WorkflowState.PENDING), input.status());
       assertEquals(List.of("q1", "q2"), input.queueName());
       assertTrue(input.queuesOnly());
     }
@@ -1400,7 +1400,7 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertEquals(List.of("alpha"), input.workflowName());
-      assertEquals(List.of("SUCCESS"), input.status());
+      assertEquals(List.of(WorkflowState.SUCCESS), input.status());
       assertEquals(List.of("q1"), input.queueName());
       assertTrue(input.queuesOnly());
     }

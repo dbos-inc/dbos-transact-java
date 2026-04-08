@@ -334,7 +334,7 @@ class AdminServerTest {
 
       verify(mockDB).listWorkflows(inputCaptor.capture());
       var input = inputCaptor.getValue();
-      assertEquals("WF", input.workflowIdPrefix());
+      assertEquals(List.of("WF"), input.workflowIdPrefix());
       assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00").toInstant(), input.endTime());
     }
   }
