@@ -76,16 +76,14 @@ class AnnotatedWorkflowScheduleTest {
     Duration delta = Duration.between(impl.scheduled, impl.actual).abs();
     assertTrue(delta.toMillis() < 1000);
 
-    var workflows =
-        dbos.listWorkflows(ListWorkflowsInput.builder().workflowName("withSteps").build());
+    var workflows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("withSteps"));
     assertTrue(workflows.size() <= 2);
     assertEquals(Constants.DBOS_INTERNAL_QUEUE, workflows.get(0).queueName());
 
     var steps = dbos.listWorkflowSteps(workflows.get(0).workflowId());
     assertEquals(2, steps.size());
 
-    var q2workflows =
-        dbos.listWorkflows(ListWorkflowsInput.builder().workflowName("everyThird").build());
+    var q2workflows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("everyThird"));
     assertTrue(q2workflows.size() >= 1);
     assertEquals("q2", q2workflows.get(0).queueName());
 

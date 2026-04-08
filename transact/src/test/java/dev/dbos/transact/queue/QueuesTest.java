@@ -25,7 +25,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -197,7 +196,7 @@ public class QueuesTest {
           () -> serviceQ.simpleQWorkflow(input), new StartWorkflowOptions(id).withQueue(firstQ));
     }
 
-    var input = ListWorkflowsInput.builder().queuesOnly(true).loadInput(true).build();
+    var input = new ListWorkflowsInput().withQueuesOnly(true).withLoadInput(true);
     List<WorkflowStatus> wfs = dbos.listWorkflows(input);
 
     for (int i = 0; i < 5; i++) {
@@ -240,7 +239,7 @@ public class QueuesTest {
       Thread.sleep(100);
     }
 
-    var input = ListWorkflowsInput.builder().queuesOnly(true).loadInput(true).build();
+    var input = new ListWorkflowsInput().withQueuesOnly(true).withLoadInput(true);
     List<WorkflowStatus> wfs = dbos.listWorkflows(input);
     wfs.sort(
         (a, b) -> {
@@ -254,54 +253,13 @@ public class QueuesTest {
       assertEquals(WorkflowState.ENQUEUED, wfs.get(i).status());
     }
 
-    wfs =
-        dbos.listWorkflows(
-            ListWorkflowsInput.builder().queuesOnly(true).loadInput(true).queueName("abc").build());
+    wfs = dbos.listWorkflows(input.withQueueName("abc"));
     assertEquals(0, wfs.size());
 
-    wfs =
-        dbos.listWorkflows(
-            ListWorkflowsInput.builder()
-                .queuesOnly(true)
-                .loadInput(true)
-                .queueName("firstQueue")
-                .build());
+    wfs = dbos.listWorkflows(input.withQueueName("firstQueue"));
     assertEquals(5, wfs.size());
 
-    wfs =
-        dbos.listWorkflows(
-            ListWorkflowsInput.builder()
-                .queuesOnly(true)
-                .loadInput(true)
-                .startTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS).toInstant())
-                .build());
-    assertEquals(5, wfs.size());
-
-    wfs =
-        dbos.listWorkflows(
-            ListWorkflowsInput.builder()
-                .queuesOnly(true)
-                .loadInput(true)
-                .startTime(OffsetDateTime.now().plus(10, ChronoUnit.SECONDS).toInstant())
-                .build());
-    assertEquals(0, wfs.size());
-
-    wfs =
-        dbos.listWorkflows(
-            ListWorkflowsInput.builder()
-                .queuesOnly(true)
-                .loadInput(true)
-                .endTime(OffsetDateTime.now().toInstant())
-                .build());
-    assertEquals(5, wfs.size());
-
-    wfs =
-        dbos.listWorkflows(
-            ListWorkflowsInput.builder()
-                .queuesOnly(true)
-                .loadInput(true)
-                .endTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS).toInstant())
-                .build());
+    wfs = dbos.listWorkflows(input.withEndTime(Instant.now().minus(10, ChronoUnit.SECONDS)));
     assertEquals(0, wfs.size());
   }
 

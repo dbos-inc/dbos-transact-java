@@ -128,27 +128,24 @@ public class MultiClassInstanceTest {
     assertEquals(WorkflowState.SUCCESS, hrow.status());
 
     // All 3 w/ the same WF name
-    var allrows =
-        dbos.listWorkflows(ListWorkflowsInput.builder().workflowName("stepWorkflow").build());
+    var allrows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("stepWorkflow"));
     assertEquals(3, allrows.size());
 
     // 2 from BSI
     var brows =
         dbos.listWorkflows(
-            ListWorkflowsInput.builder()
-                .workflowName("stepWorkflow")
-                .className("dev.dbos.transact.invocation.BearServiceImpl")
-                .build());
+            new ListWorkflowsInput()
+                .withWorkflowName("stepWorkflow")
+                .withClassName("dev.dbos.transact.invocation.BearServiceImpl"));
     assertEquals(2, brows.size());
 
     // 2 from BSI
     var browsjust1 =
         dbos.listWorkflows(
-            ListWorkflowsInput.builder()
-                .workflowName("stepWorkflow")
-                .className("dev.dbos.transact.invocation.BearServiceImpl")
-                .instanceName("1")
-                .build());
+            new ListWorkflowsInput()
+                .withWorkflowName("stepWorkflow")
+                .withClassName("dev.dbos.transact.invocation.BearServiceImpl")
+                .withInstanceName("1"));
     assertEquals(1, browsjust1.size());
   }
 
