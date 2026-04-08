@@ -34,10 +34,10 @@ public record WorkflowStatus(
     ErrorResult error,
     /** Identifier of the executor handling the workflow. */
     String executorId,
-    /** Epoch time (ms) when the workflow was created. */
-    Long createdAt,
-    /** Epoch time (ms) when the workflow was last updated. */
-    Long updatedAt,
+    /** When the workflow was created. */
+    Instant createdAt,
+    /** When the workflow was last updated. */
+    Instant updatedAt,
     /** Application version. */
     String appVersion,
     /** Application identifier. */
@@ -46,12 +46,12 @@ public record WorkflowStatus(
     Integer recoveryAttempts,
     /** Name of the queue the workflow is assigned to. */
     String queueName,
-    /** Timeout in milliseconds for the workflow execution. */
-    Long timeoutMs,
-    /** Deadline as epoch milliseconds for the workflow. */
-    Long deadlineEpochMs,
-    /** Epoch time (ms) when the workflow started. */
-    Long startedAtEpochMs,
+    /** Timeout for the workflow execution. */
+    Duration timeout,
+    /** Deadline for the workflow execution. */
+    Instant deadline,
+    /** When the workflow started executing. */
+    Instant startedAt,
     /** Deduplication identifier for the workflow. */
     String deduplicationId,
     /** Priority of the workflow in the queue. */
@@ -64,35 +64,44 @@ public record WorkflowStatus(
     String parentWorkflowId,
     /** Whether another workflow was forked from this one. */
     Boolean wasForkedFrom,
-    /** Epoch time (ms) until which the workflow is delayed. */
-    Long delayUntilEpochMs,
+    /** Time until which the workflow is delayed. */
+    Instant delayUntil,
     /** Serialized representation of the workflow. */
     String serialization) {
 
   /**
-   * Returns the workflow deadline as an {@link Instant}, if set.
+   * Returns the workflow timeout as a {@link Long}, if set.
    *
-   * @return the deadline as Instant, or null if not set
+   * @return the timeout as Long, or null if not set
    */
-  @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)
-  public Instant deadline() {
-    if (deadlineEpochMs != null) {
-      return Instant.ofEpochMilli(deadlineEpochMs);
-    }
-    return null;
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  public Long timeoutMs() {
+    return timeout == null ? null : timeout.toMillis();
   }
 
-  /**
-   * Returns the workflow timeout as a {@link Duration}, if set.
-   *
-   * @return the timeout as Duration, or null if not set
-   */
-  @com.fasterxml.jackson.annotation.JsonProperty(access = JsonProperty.Access.READ_ONLY)
-  public Duration timeout() {
-    if (timeoutMs != null) {
-      return Duration.ofMillis(timeoutMs);
-    }
-    return null;
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  public Long deadlineMs() {
+    return deadline == null ? null : deadline.toEpochMilli();
+  }
+
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  public Long createdAtMs() {
+    return createdAt == null ? null : createdAt.toEpochMilli();
+  }
+
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  public Long updatedAtMs() {
+    return updatedAt == null ? null : updatedAt.toEpochMilli();
+  }
+
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  public Long startedAtMs() {
+    return startedAt == null ? null : startedAt.toEpochMilli();
+  }
+
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  public Long delayUntilMs() {
+    return delayUntil == null ? null : delayUntil.toEpochMilli();
   }
 
   /**
@@ -129,16 +138,16 @@ public record WorkflowStatus(
         && java.util.Objects.equals(appId, that.appId)
         && java.util.Objects.equals(recoveryAttempts, that.recoveryAttempts)
         && java.util.Objects.equals(queueName, that.queueName)
-        && java.util.Objects.equals(timeoutMs, that.timeoutMs)
-        && java.util.Objects.equals(deadlineEpochMs, that.deadlineEpochMs)
-        && java.util.Objects.equals(startedAtEpochMs, that.startedAtEpochMs)
+        && java.util.Objects.equals(timeout, that.timeout)
+        && java.util.Objects.equals(deadline, that.deadline)
+        && java.util.Objects.equals(startedAt, that.startedAt)
         && java.util.Objects.equals(deduplicationId, that.deduplicationId)
         && java.util.Objects.equals(priority, that.priority)
         && java.util.Objects.equals(queuePartitionKey, that.queuePartitionKey)
         && java.util.Objects.equals(forkedFrom, that.forkedFrom)
         && java.util.Objects.equals(parentWorkflowId, that.parentWorkflowId)
         && java.util.Objects.equals(wasForkedFrom, that.wasForkedFrom)
-        && java.util.Objects.equals(delayUntilEpochMs, that.delayUntilEpochMs);
+        && java.util.Objects.equals(delayUntil, that.delayUntil);
   }
 
   /**
@@ -168,15 +177,15 @@ public record WorkflowStatus(
         appId,
         recoveryAttempts,
         queueName,
-        timeoutMs,
-        deadlineEpochMs,
-        startedAtEpochMs,
+        timeout,
+        deadline,
+        startedAt,
         deduplicationId,
         priority,
         queuePartitionKey,
         forkedFrom,
         parentWorkflowId,
         wasForkedFrom,
-        delayUntilEpochMs);
+        delayUntil);
   }
 }

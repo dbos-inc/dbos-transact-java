@@ -233,15 +233,15 @@ public class ForkTest {
     var handle1 = dbos.forkWorkflow(workflowId, 0);
     assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertNotEquals(workflowId, handle1.workflowId());
-    assertNull(handle1.getStatus().timeoutMs());
-    assertNull(handle1.getStatus().deadlineEpochMs());
+    assertNull(handle1.getStatus().timeout());
+    assertNull(handle1.getStatus().deadline());
 
     var options = new ForkOptions().withTimeout(Duration.ofSeconds(1));
     var handle2 = dbos.forkWorkflow(workflowId, 0, options);
     assertNotEquals(workflowId, handle2.workflowId());
     assertEquals(workflowId, handle2.getStatus().forkedFrom());
-    assertEquals(1000, handle2.getStatus().timeoutMs());
-    assertNull(handle2.getStatus().deadlineEpochMs());
+    assertEquals(Duration.ofMillis(1000), handle2.getStatus().timeout());
+    assertNull(handle2.getStatus().deadline());
   }
 
   @Test
@@ -259,29 +259,29 @@ public class ForkTest {
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
     assertFalse(handle.getStatus().wasForkedFrom());
-    assertEquals(1000, handle.getStatus().timeoutMs());
+    assertEquals(Duration.ofMillis(1000), handle.getStatus().timeout());
 
     DBOSTestAccess.getQueueService(dbos).pause();
 
     var handle1 = dbos.forkWorkflow(workflowId, 0);
     assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertNotEquals(workflowId, handle1.workflowId());
-    assertEquals(1000, handle1.getStatus().timeoutMs());
-    assertNull(handle1.getStatus().deadlineEpochMs());
+    assertEquals(Duration.ofMillis(1000), handle1.getStatus().timeout());
+    assertNull(handle1.getStatus().deadline());
 
     var forkOptions = new ForkOptions().withTimeout(Duration.ofSeconds(2));
     var handle2 = dbos.forkWorkflow(workflowId, 0, forkOptions);
     assertNotEquals(workflowId, handle2.workflowId());
     assertEquals(workflowId, handle2.getStatus().forkedFrom());
-    assertEquals(2000, handle2.getStatus().timeoutMs());
-    assertNull(handle2.getStatus().deadlineEpochMs());
+    assertEquals(Duration.ofMillis(2000), handle2.getStatus().timeout());
+    assertNull(handle2.getStatus().deadline());
 
     forkOptions = new ForkOptions().withNoTimeout();
     var handle3 = dbos.forkWorkflow(workflowId, 0, forkOptions);
     assertNotEquals(workflowId, handle3.workflowId());
     assertEquals(workflowId, handle3.getStatus().forkedFrom());
-    assertNull(handle3.getStatus().timeoutMs());
-    assertNull(handle2.getStatus().deadlineEpochMs());
+    assertNull(handle3.getStatus().timeout());
+    assertNull(handle2.getStatus().deadline());
   }
 
   @Test

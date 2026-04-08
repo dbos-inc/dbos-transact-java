@@ -18,6 +18,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -94,7 +95,7 @@ public class ImportExportTest {
   // ── Import tests (importWorkflow is the subject; setup via buildExportedWorkflow) ──────────
 
   private static ExportedWorkflow buildExportedWorkflow(String wfId) {
-    long now = System.currentTimeMillis();
+    Instant now = Instant.now();
     var status =
         new WorkflowStatusBuilder(wfId)
             .status(WorkflowState.SUCCESS)

@@ -27,6 +27,7 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -278,8 +279,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
             .workflowName("WF1")
-            .createdAt(1754936102215L)
-            .updatedAt(1754936102215L)
+            .createdAt(Instant.ofEpochMilli(1754936102215L))
+            .updatedAt(Instant.ofEpochMilli(1754936102215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -288,8 +289,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-2")
             .status(WorkflowState.PENDING)
             .workflowName("WF2")
-            .createdAt(1754936722066L)
-            .updatedAt(1754936722066L)
+            .createdAt(Instant.ofEpochMilli(1754936722066L))
+            .updatedAt(Instant.ofEpochMilli(1754936722066L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -298,8 +299,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-3")
             .status(WorkflowState.PENDING)
             .workflowName("WF3")
-            .createdAt(1754946202215L)
-            .updatedAt(1754946202215L)
+            .createdAt(Instant.ofEpochMilli(1754946202215L))
+            .updatedAt(Instant.ofEpochMilli(1754946202215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -346,8 +347,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
             .workflowName("WF1")
-            .createdAt(1754936102215L)
-            .updatedAt(1754936102215L)
+            .createdAt(Instant.ofEpochMilli(1754936102215L))
+            .updatedAt(Instant.ofEpochMilli(1754936102215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -357,8 +358,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-2")
             .status(WorkflowState.PENDING)
             .workflowName("WF2")
-            .createdAt(1754936722066L)
-            .updatedAt(1754936722066L)
+            .createdAt(Instant.ofEpochMilli(1754936722066L))
+            .updatedAt(Instant.ofEpochMilli(1754936722066L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -368,8 +369,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-3")
             .status(WorkflowState.PENDING)
             .workflowName("WF3")
-            .createdAt(1754946202215L)
-            .updatedAt(1754946202215L)
+            .createdAt(Instant.ofEpochMilli(1754946202215L))
+            .updatedAt(Instant.ofEpochMilli(1754946202215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -417,8 +418,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("test-wf-id")
             .status(WorkflowState.PENDING)
             .workflowName("WF3")
-            .createdAt(1754946202215L)
-            .updatedAt(1754946202215L)
+            .createdAt(Instant.ofEpochMilli(1754946202215L))
+            .updatedAt(Instant.ofEpochMilli(1754946202215L))
             .build();
 
     when(mockDB.listWorkflows(any())).thenReturn(List.of(status));

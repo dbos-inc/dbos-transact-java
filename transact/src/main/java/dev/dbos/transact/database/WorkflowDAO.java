@@ -591,6 +591,14 @@ class WorkflowDAO {
     return workflows;
   }
 
+  private static java.time.Instant toInstant(Long epochMs) {
+    return epochMs != null ? java.time.Instant.ofEpochMilli(epochMs) : null;
+  }
+
+  private static java.time.Duration toDuration(Long ms) {
+    return ms != null ? java.time.Duration.ofMillis(ms) : null;
+  }
+
   private static WorkflowStatus resultsToWorkflowStatus(
       ResultSet rs, boolean loadInput, boolean loadOutput, DBOSSerializer serializer)
       throws SQLException {
@@ -620,22 +628,22 @@ class WorkflowDAO {
                 : null,
             loadOutput ? ErrorResult.deserialize(serializedError, serialization, serializer) : null,
             rs.getString("executor_id"),
-            rs.getObject("created_at", Long.class),
-            rs.getObject("updated_at", Long.class),
+            toInstant(rs.getObject("created_at", Long.class)),
+            toInstant(rs.getObject("updated_at", Long.class)),
             rs.getString("application_version"),
             rs.getString("application_id"),
             rs.getInt("recovery_attempts"),
             rs.getString("queue_name"),
-            rs.getObject("workflow_timeout_ms", Long.class),
-            rs.getObject("workflow_deadline_epoch_ms", Long.class),
-            rs.getObject("started_at_epoch_ms", Long.class),
+            toDuration(rs.getObject("workflow_timeout_ms", Long.class)),
+            toInstant(rs.getObject("workflow_deadline_epoch_ms", Long.class)),
+            toInstant(rs.getObject("started_at_epoch_ms", Long.class)),
             rs.getString("deduplication_id"),
             rs.getObject("priority", Integer.class),
             rs.getString("queue_partition_key"),
             rs.getString("forked_from"),
             rs.getString("parent_workflow_id"),
             rs.getObject("was_forked_from", Boolean.class),
-            rs.getObject("delay_until_epoch_ms", Long.class),
+            toInstant(rs.getObject("delay_until_epoch_ms", Long.class)),
             serialization);
     return info;
   }
