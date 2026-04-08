@@ -25,6 +25,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -471,7 +472,9 @@ class WorkflowDAO {
     if (input.queuesOnly() != null && input.queuesOnly()) {
       whereConditions.add("queue_name IS NOT NULL");
       if (input.status() == null || input.status().isEmpty()) {
-        whereConditions.add("status IN ('ENQUEUED', 'PENDING')");
+        whereConditions.add("status IN (?, ?)");
+        parameters.add(WorkflowState.ENQUEUED.name());
+        parameters.add(WorkflowState.PENDING.name());
       }
     }
     if (input.forkedFrom() != null && !input.forkedFrom().isEmpty()) {
@@ -594,12 +597,12 @@ class WorkflowDAO {
     return workflows;
   }
 
-  private static java.time.Instant toInstant(Long epochMs) {
-    return epochMs != null ? java.time.Instant.ofEpochMilli(epochMs) : null;
+  private static Instant toInstant(Long epochMs) {
+    return epochMs != null ? Instant.ofEpochMilli(epochMs) : null;
   }
 
-  private static java.time.Duration toDuration(Long ms) {
-    return ms != null ? java.time.Duration.ofMillis(ms) : null;
+  private static Duration toDuration(Long ms) {
+    return ms != null ? Duration.ofMillis(ms) : null;
   }
 
   private static WorkflowStatus resultsToWorkflowStatus(
