@@ -5,7 +5,10 @@ import dev.dbos.transact.workflow.ListWorkflowsInput;
 import java.time.Instant;
 import java.util.List;
 
-// TODO: admin server gap analysis
+// TODO: Complete the admin server gap analysis for queued workflow listing by verifying
+// that this request shape and its `asInput()` mapping cover the intended queue-specific
+// filters and behavior parity with the underlying workflow listing API.
+// Tracking issue: https://github.com/dbos-inc/dbos-transact-java/issues/345?reload=1
 public record ListQueuedWorkflowsRequest(
     String workflow_name,
     String start_time,
@@ -32,7 +35,6 @@ public record ListQueuedWorkflowsRequest(
         .loadOutput(false)
         .queueName(queue_name != null ? List.of(queue_name) : null)
         .queuesOnly(true)
-        .executorId((java.util.List<String>) null)
         .forkedFrom(fork_from != null ? List.of(fork_from) : null)
         .parentWorkflowId(parent_workflow_id != null ? List.of(parent_workflow_id) : null)
         .build();
