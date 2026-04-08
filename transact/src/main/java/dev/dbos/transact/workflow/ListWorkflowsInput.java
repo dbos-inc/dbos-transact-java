@@ -10,7 +10,7 @@ import java.util.List;
  */
 public record ListWorkflowsInput(
     List<String> workflowIds,
-    List<String> status,
+    List<WorkflowState> status,
     Instant startTime,
     Instant endTime,
     List<String> workflowName,
@@ -21,7 +21,7 @@ public record ListWorkflowsInput(
     Integer limit,
     Integer offset,
     Boolean sortDesc,
-    String workflowIdPrefix,
+    List<String> workflowIdPrefix,
     Boolean loadInput,
     Boolean loadOutput,
     List<String> queueName,
@@ -68,208 +68,617 @@ public record ListWorkflowsInput(
         null);
   }
 
-  public static Builder builder() {
-    return new Builder();
+  // With methods for immutable updates
+  public ListWorkflowsInput withWorkflowIds(List<String> workflowIds) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
   }
 
-  public static class Builder {
-    private List<String> workflowIds;
-    private List<String> status;
-    private Instant startTime;
-    private Instant endTime;
-    private List<String> workflowName;
-    private String className;
-    private String instanceName;
-    private List<String> applicationVersion;
-    private List<String> authenticatedUser;
-    private Integer limit;
-    private Integer offset;
-    private Boolean sortDesc;
-    private String workflowIdPrefix;
-    private Boolean loadInput;
-    private Boolean loadOutput;
-    private List<String> queueName;
-    private Boolean queuesOnly;
-    private List<String> executorIds;
-    private List<String> forkedFrom;
-    private List<String> parentWorkflowId;
-    private Boolean wasForkedFrom;
-    private Boolean hasParent;
+  public ListWorkflowsInput withStatus(List<WorkflowState> status) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder workflowIds(List<String> workflowIds) {
-      this.workflowIds = workflowIds;
-      return this;
-    }
+  public ListWorkflowsInput withStartTime(Instant startTime) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder workflowId(String workflowId) {
-      return workflowIds(workflowId == null ? null : List.of(workflowId));
-    }
+  public ListWorkflowsInput withEndTime(Instant endTime) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder status(List<String> status) {
-      this.status = status;
-      return this;
-    }
+  public ListWorkflowsInput withWorkflowName(List<String> workflowName) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder status(String stat) {
-      return status(stat == null ? null : List.of(stat));
-    }
+  public ListWorkflowsInput withClassName(String className) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder status(WorkflowState stat) {
-      return status(stat == null ? null : List.of(stat.name()));
-    }
+  public ListWorkflowsInput withInstanceName(String instanceName) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder startTime(Instant startTime) {
-      this.startTime = startTime;
-      return this;
-    }
+  public ListWorkflowsInput withApplicationVersion(List<String> applicationVersion) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder endTime(Instant endTime) {
-      this.endTime = endTime;
-      return this;
-    }
+  public ListWorkflowsInput withAuthenticatedUser(List<String> authenticatedUser) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder workflowName(List<String> workflowName) {
-      this.workflowName = workflowName;
-      return this;
-    }
+  public ListWorkflowsInput withLimit(Integer limit) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder workflowName(String workflowName) {
-      return workflowName(workflowName == null ? null : List.of(workflowName));
-    }
+  public ListWorkflowsInput withOffset(Integer offset) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder className(String className) {
-      this.className = className;
-      return this;
-    }
+  public ListWorkflowsInput withSortDesc(Boolean sortDesc) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder instanceName(String instanceName) {
-      this.instanceName = instanceName;
-      return this;
-    }
+  public ListWorkflowsInput withWorkflowIdPrefix(List<String> workflowIdPrefix) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder applicationVersion(List<String> applicationVersion) {
-      this.applicationVersion = applicationVersion;
-      return this;
-    }
+  public ListWorkflowsInput withLoadInput(Boolean loadInput) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder applicationVersion(String applicationVersion) {
-      return applicationVersion(applicationVersion == null ? null : List.of(applicationVersion));
-    }
+  public ListWorkflowsInput withLoadOutput(Boolean loadOutput) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder authenticatedUser(List<String> authenticatedUser) {
-      this.authenticatedUser = authenticatedUser;
-      return this;
-    }
+  public ListWorkflowsInput withQueueName(List<String> queueName) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder authenticatedUser(String authenticatedUser) {
-      return authenticatedUser(authenticatedUser == null ? null : List.of(authenticatedUser));
-    }
+  public ListWorkflowsInput withQueuesOnly(Boolean queuesOnly) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder limit(Integer limit) {
-      this.limit = limit;
-      return this;
-    }
+  public ListWorkflowsInput withExecutorIds(List<String> executorIds) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder offset(Integer offset) {
-      this.offset = offset;
-      return this;
-    }
+  public ListWorkflowsInput withForkedFrom(List<String> forkedFrom) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder sortDesc(Boolean sortDesc) {
-      this.sortDesc = sortDesc;
-      return this;
-    }
+  public ListWorkflowsInput withParentWorkflowId(List<String> parentWorkflowId) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder workflowIdPrefix(String workflowIdPrefix) {
-      this.workflowIdPrefix = workflowIdPrefix;
-      return this;
-    }
+  public ListWorkflowsInput withWasForkedFrom(Boolean wasForkedFrom) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder loadInput(Boolean loadInput) {
-      this.loadInput = loadInput;
-      return this;
-    }
+  public ListWorkflowsInput withHasParent(Boolean hasParent) {
+    return new ListWorkflowsInput(
+        workflowIds,
+        status,
+        startTime,
+        endTime,
+        workflowName,
+        className,
+        instanceName,
+        applicationVersion,
+        authenticatedUser,
+        limit,
+        offset,
+        sortDesc,
+        workflowIdPrefix,
+        loadInput,
+        loadOutput,
+        queueName,
+        queuesOnly,
+        executorIds,
+        forkedFrom,
+        parentWorkflowId,
+        wasForkedFrom,
+        hasParent);
+  }
 
-    public Builder loadOutput(Boolean loadOutput) {
-      this.loadOutput = loadOutput;
-      return this;
-    }
+  // Single value overloads for list parameters
+  public ListWorkflowsInput withWorkflowIds(String workflowId) {
+    return withWorkflowIds(List.of(workflowId));
+  }
 
-    public Builder queueName(List<String> queueName) {
-      this.queueName = queueName;
-      return this;
-    }
+  public ListWorkflowsInput withStatus(WorkflowState status) {
+    return withStatus(List.of(status));
+  }
 
-    public Builder queueName(String queueName) {
-      return queueName(queueName == null ? null : List.of(queueName));
-    }
+  public ListWorkflowsInput withWorkflowName(String workflowName) {
+    return withWorkflowName(List.of(workflowName));
+  }
 
-    public Builder queuesOnly(Boolean queuesOnly) {
-      this.queuesOnly = queuesOnly;
-      return this;
-    }
+  public ListWorkflowsInput withApplicationVersion(String applicationVersion) {
+    return withApplicationVersion(List.of(applicationVersion));
+  }
 
-    public Builder executorId(List<String> executorIds) {
-      this.executorIds = executorIds;
-      return this;
-    }
+  public ListWorkflowsInput withAuthenticatedUser(String authenticatedUser) {
+    return withAuthenticatedUser(List.of(authenticatedUser));
+  }
 
-    public Builder executorId(String executorId) {
-      return executorId(executorId == null ? null : List.of(executorId));
-    }
+  public ListWorkflowsInput withWorkflowIdPrefix(String workflowIdPrefix) {
+    return withWorkflowIdPrefix(List.of(workflowIdPrefix));
+  }
 
-    public Builder forkedFrom(List<String> forkedFrom) {
-      this.forkedFrom = forkedFrom;
-      return this;
-    }
+  public ListWorkflowsInput withQueueName(String queueName) {
+    return withQueueName(List.of(queueName));
+  }
 
-    public Builder forkedFrom(String forkedFrom) {
-      return forkedFrom(forkedFrom == null ? null : List.of(forkedFrom));
-    }
+  public ListWorkflowsInput withExecutorIds(String executorId) {
+    return withExecutorIds(List.of(executorId));
+  }
 
-    public Builder parentWorkflowId(List<String> parentWorkflowId) {
-      this.parentWorkflowId = parentWorkflowId;
-      return this;
-    }
+  public ListWorkflowsInput withForkedFrom(String forkedFrom) {
+    return withForkedFrom(List.of(forkedFrom));
+  }
 
-    public Builder parentWorkflowId(String parentWorkflowId) {
-      return parentWorkflowId(parentWorkflowId == null ? null : List.of(parentWorkflowId));
-    }
-
-    public Builder wasForkedFrom(Boolean wasForkedFrom) {
-      this.wasForkedFrom = wasForkedFrom;
-      return this;
-    }
-
-    public Builder hasParent(Boolean hasParent) {
-      this.hasParent = hasParent;
-      return this;
-    }
-
-    public ListWorkflowsInput build() {
-      return new ListWorkflowsInput(
-          workflowIds,
-          status,
-          startTime,
-          endTime,
-          workflowName,
-          className,
-          instanceName,
-          applicationVersion,
-          authenticatedUser,
-          limit,
-          offset,
-          sortDesc,
-          workflowIdPrefix,
-          loadInput,
-          loadOutput,
-          queueName,
-          queuesOnly,
-          executorIds,
-          forkedFrom,
-          parentWorkflowId,
-          wasForkedFrom,
-          hasParent);
-    }
+  public ListWorkflowsInput withParentWorkflowId(String parentWorkflowId) {
+    return withParentWorkflowId(List.of(parentWorkflowId));
   }
 }

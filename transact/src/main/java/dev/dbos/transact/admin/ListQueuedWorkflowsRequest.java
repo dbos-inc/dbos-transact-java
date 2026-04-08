@@ -1,6 +1,7 @@
 package dev.dbos.transact.admin;
 
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Instant;
 import java.util.List;
@@ -23,20 +24,29 @@ public record ListQueuedWorkflowsRequest(
     Boolean load_input) {
 
   public ListWorkflowsInput asInput() {
-    return ListWorkflowsInput.builder()
-        .status(status != null ? List.of(status) : null)
-        .startTime(start_time != null ? Instant.parse(start_time) : null)
-        .endTime(end_time != null ? Instant.parse(end_time) : null)
-        .workflowName(workflow_name != null ? List.of(workflow_name) : null)
-        .limit(limit)
-        .offset(offset)
-        .sortDesc(sort_desc)
-        .loadInput(load_input)
-        .loadOutput(false)
-        .queueName(queue_name != null ? List.of(queue_name) : null)
-        .queuesOnly(true)
-        .forkedFrom(fork_from != null ? List.of(fork_from) : null)
-        .parentWorkflowId(parent_workflow_id != null ? List.of(parent_workflow_id) : null)
-        .build();
+    return new ListWorkflowsInput(
+        null, // workflowIds
+        status != null ? List.of(WorkflowState.valueOf(status)) : null,
+        start_time != null ? Instant.parse(start_time) : null,
+        end_time != null ? Instant.parse(end_time) : null,
+        workflow_name != null ? List.of(workflow_name) : null,
+        null, // className
+        null, // instanceName
+        null, // applicationVersion
+        null, // authenticatedUser
+        limit,
+        offset,
+        sort_desc,
+        null, // workflowIdPrefix
+        load_input,
+        false, // loadOutput
+        queue_name != null ? List.of(queue_name) : null,
+        true, // queuesOnly
+        null, // executorIds
+        fork_from != null ? List.of(fork_from) : null,
+        parent_workflow_id != null ? List.of(parent_workflow_id) : null,
+        null, // wasForkedFrom
+        null // hasParent
+        );
   }
 }

@@ -1,9 +1,11 @@
 package dev.dbos.transact.conductor.protocol;
 
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -56,30 +58,30 @@ public class ListWorkflowsRequest extends BaseMessage {
   }
 
   public ListWorkflowsInput asInput() {
-    return ListWorkflowsInput.builder()
-        .workflowIds(body.workflow_uuids)
-        .workflowName(body.workflow_name)
-        .authenticatedUser(body.authenticated_user)
-        .startTime(body.start_time != null ? Instant.parse(body.start_time) : null)
-        .endTime(body.end_time != null ? Instant.parse(body.end_time) : null)
-        .status(body.status)
-        .applicationVersion(body.application_version)
-        .forkedFrom(body.forked_from)
-        .parentWorkflowId(body.parent_workflow_id)
-        .queueName(body.queue_name)
-        .limit(body.limit)
-        .offset(body.offset)
-        .sortDesc(body.sort_desc)
-        .workflowIdPrefix(
-            body.workflow_id_prefix != null && !body.workflow_id_prefix.isEmpty()
-                ? body.workflow_id_prefix.get(0)
-                : null)
-        .loadInput(body.load_input)
-        .loadOutput(body.load_output)
-        .executorId(body.executor_id)
-        .queuesOnly(body.queues_only)
-        .wasForkedFrom(body.was_forked_from)
-        .hasParent(body.has_parent)
-        .build();
+    return new ListWorkflowsInput(
+        body.workflow_uuids,
+        body.status != null
+            ? body.status.stream().map(WorkflowState::valueOf).collect(Collectors.toList())
+            : null,
+        body.start_time != null ? Instant.parse(body.start_time) : null,
+        body.end_time != null ? Instant.parse(body.end_time) : null,
+        body.workflow_name,
+        null, // className
+        null, // instanceName
+        body.application_version,
+        body.authenticated_user,
+        body.limit,
+        body.offset,
+        body.sort_desc,
+        body.workflow_id_prefix,
+        body.load_input,
+        body.load_output,
+        body.queue_name,
+        body.queues_only,
+        body.executor_id,
+        body.forked_from,
+        body.parent_workflow_id,
+        body.was_forked_from,
+        body.has_parent);
   }
 }

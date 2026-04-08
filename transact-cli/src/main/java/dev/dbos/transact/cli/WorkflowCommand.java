@@ -3,8 +3,10 @@ package dev.dbos.transact.cli;
 import dev.dbos.transact.json.JSONUtil.JsonRuntimeException;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -76,7 +78,7 @@ class ListCommand implements Runnable {
   @Option(
       names = {"-n", "--name"},
       description = "Retrieve workflows with this name")
-  String name;
+  String workflowName;
 
   @Option(
       names = {"-v", "--app-version"},
@@ -129,23 +131,34 @@ class ListCommand implements Runnable {
   public void run() {
     var out = spec.commandLine().getOut();
 
-    var inputBuilder =
-        ListWorkflowsInput.builder()
-            .limit(limit)
-            .offset(offset)
-            .sortDesc(sortDescending)
-            .queuesOnly(queuesOnly)
-            .loadInput(false)
-            .loadOutput(false)
-            .status(status)
-            .workflowName(name)
-            .applicationVersion(appVersion)
-            .queueName(queue)
-            .startTime(startTime != null ? Instant.parse(startTime) : null)
-            .endTime(endTime != null ? Instant.parse(endTime) : null);
+    var input =
+        new ListWorkflowsInput(
+            null, // workflowIds
+            status != null ? List.of(WorkflowState.valueOf(status)) : null,
+            startTime != null ? Instant.parse(startTime) : null,
+            endTime != null ? Instant.parse(endTime) : null,
+            workflowName != null ? List.of(workflowName) : null,
+            null, // className
+            null, // instanceName
+            appVersion != null ? List.of(appVersion) : null,
+            null, // authenticatedUser
+            limit,
+            offset,
+            sortDescending,
+            null, // workflowIdPrefix
+            false, // loadInput
+            false, // loadOutput
+            queue != null ? List.of(queue) : null,
+            queuesOnly,
+            null, // executorIds
+            null, // forkedFrom
+            null, // parentWorkflowId
+            null, // wasForkedFrom
+            null // hasParent
+            );
 
     var client = dbOptions.createClient();
-    var workflows = client.listWorkflows(inputBuilder.build());
+    var workflows = client.listWorkflows(input);
     var json = WorkflowCommand.prettyPrint(workflows);
     out.println(json);
   }
@@ -173,11 +186,30 @@ class GetCommand implements Runnable {
 
     Objects.requireNonNull(workflowId, "workflowId parameter cannot be null");
     var input =
-        ListWorkflowsInput.builder()
-            .workflowId(workflowId)
-            .loadInput(false)
-            .loadOutput(false)
-            .build();
+        new ListWorkflowsInput(
+            List.of(workflowId), // workflowIds
+            null, // status
+            null, // startTime
+            null, // endTime
+            null, // workflowName
+            null, // className
+            null, // instanceName
+            null, // applicationVersion
+            null, // authenticatedUser
+            null, // limit
+            null, // offset
+            null, // sortDesc
+            null, // workflowIdPrefix
+            false, // loadInput
+            false, // loadOutput
+            null, // queueName
+            false, // queuesOnly
+            null, // executorIds
+            null, // forkedFrom
+            null, // parentWorkflowId
+            null, // wasForkedFrom
+            null // hasParent
+            );
     var client = dbOptions.createClient();
     var workflows = client.listWorkflows(input);
     if (workflows.isEmpty()) {

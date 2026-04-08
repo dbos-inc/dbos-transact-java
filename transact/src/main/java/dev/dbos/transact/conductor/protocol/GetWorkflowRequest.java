@@ -18,10 +18,29 @@ public class GetWorkflowRequest extends BaseMessage {
   }
 
   public ListWorkflowsInput toInput() {
-    return ListWorkflowsInput.builder()
-        .workflowIds(List.of(workflow_id))
-        .loadInput(load_input)
-        .loadOutput(load_output)
-        .build();
+    return new ListWorkflowsInput(
+        List.of(workflow_id),
+        null, // status
+        null, // startTime
+        null, // endTime
+        null, // workflowName
+        null, // className
+        null, // instanceName
+        null, // applicationVersion
+        null, // authenticatedUser
+        null, // limit
+        null, // offset
+        null, // sortDesc
+        null, // workflowIdPrefix
+        load_input,
+        load_output,
+        null, // queueName
+        null, // queuesOnly
+        null, // executorIds
+        null, // forkedFrom
+        null, // parentWorkflowId
+        null, // wasForkedFrom
+        null // hasParent
+        );
   }
 }
