@@ -1143,7 +1143,7 @@ public class SystemDatabaseTest {
 
   private static ExportedWorkflow buildNamedWorkflow(
       String wfId, String workflowName, WorkflowState state) {
-    long now = System.currentTimeMillis();
+    var now = Instant.now();
     var status =
         new WorkflowStatusBuilder(wfId)
             .status(state)
