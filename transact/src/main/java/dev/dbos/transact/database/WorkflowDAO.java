@@ -285,7 +285,7 @@ class WorkflowDAO {
       stmt.setInt(19, recoveryAttempts);
 
       stmt.setObject(20, status.timeoutMs());
-      stmt.setObject(21, status.deadlineEpochMs());
+      stmt.setObject(21, status.deadlineMs());
       stmt.setString(22, status.parentWorkflowId());
 
       stmt.setObject(23, ownerXid);

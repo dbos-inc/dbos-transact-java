@@ -1962,11 +1962,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
-    Long timeoutMs = timeout != null ? timeout.toMillis() : null;
-    Long deadlineEpochMs =
-        (queueName != null && timeoutMs != null)
-            ? null
-            : deadline != null ? deadline.toEpochMilli() : null;
+    Instant effectiveDeadline = (queueName != null && timeout != null) ? null : deadline;
 
     final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
     WorkflowStatusInternal workflowStatusInternal =
@@ -1987,8 +1983,8 @@ public class DBOSExecutor implements AutoCloseable {
             executorId,
             appVersion,
             appId,
-            timeoutMs,
-            deadlineEpochMs,
+            timeout,
+            effectiveDeadline,
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
             actualSerialization);
 

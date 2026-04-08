@@ -69,11 +69,6 @@ public record WorkflowStatus(
     /** Serialized representation of the workflow. */
     String serialization) {
 
-  /**
-   * Returns the workflow timeout as a {@link Long}, if set.
-   *
-   * @return the timeout as Long, or null if not set
-   */
   @JsonProperty(access = JsonProperty.Access.READ_ONLY)
   public Long timeoutMs() {
     return timeout == null ? null : timeout.toMillis();

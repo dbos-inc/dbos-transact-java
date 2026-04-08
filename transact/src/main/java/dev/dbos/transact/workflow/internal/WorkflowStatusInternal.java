@@ -2,7 +2,11 @@ package dev.dbos.transact.workflow.internal;
 
 import dev.dbos.transact.workflow.WorkflowState;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record WorkflowStatusInternal(
     String workflowId,
@@ -21,8 +25,8 @@ public record WorkflowStatusInternal(
     String executorId,
     String appVersion,
     String appId,
-    Long timeoutMs,
-    Long deadlineEpochMs,
+    Duration timeout,
+    Instant deadline,
     String parentWorkflowId,
     String serialization) {
 
@@ -63,6 +67,16 @@ public record WorkflowStatusInternal(
         null);
   }
 
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  public Long timeoutMs() {
+    return timeout == null ? null : timeout.toMillis();
+  }
+
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  public Long deadlineMs() {
+    return deadline == null ? null : deadline.toEpochMilli();
+  }
+
   public static class Builder {
     private String workflowId;
     private String parentWorkflowId;
@@ -81,8 +95,8 @@ public record WorkflowStatusInternal(
     private String executorId;
     private String appVersion;
     private String appId;
-    private Long timeoutMs;
-    private Long deadlineEpochMs;
+    private Duration timeout;
+    private Instant deadline;
     private String serialization;
 
     public Builder workflowId(String workflowId) {
@@ -170,13 +184,13 @@ public record WorkflowStatusInternal(
       return this;
     }
 
-    public Builder timeoutMs(Long timeoutMs) {
-      this.timeoutMs = timeoutMs;
+    public Builder timeout(Duration timeout) {
+      this.timeout = timeout;
       return this;
     }
 
-    public Builder deadlineEpochMs(Long deadlineEpochMs) {
-      this.deadlineEpochMs = deadlineEpochMs;
+    public Builder deadline(Instant deadline) {
+      this.deadline = deadline;
       return this;
     }
 
@@ -203,8 +217,8 @@ public record WorkflowStatusInternal(
           executorId,
           appVersion,
           appId,
-          timeoutMs,
-          deadlineEpochMs,
+          timeout,
+          deadline,
           parentWorkflowId,
           serialization);
     }

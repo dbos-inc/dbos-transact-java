@@ -23,6 +23,8 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -446,8 +448,8 @@ public class QueuesTest {
             .executorId(executorId)
             .appVersion(appVersion)
             .appId("order-app-123")
-            .timeoutMs(300000l)
-            .deadlineEpochMs(System.currentTimeMillis() + 2400000)
+            .timeout(Duration.ofMillis(300000))
+            .deadline(Instant.ofEpochMilli(System.currentTimeMillis() + 2400000))
             .priority(1)
             .inputs(JSONUtil.serializeArray(new Object[] {"ORD-12345"}));
 
@@ -525,8 +527,8 @@ public class QueuesTest {
             .executorId(executorId)
             .appVersion(appVersion)
             .appId("order-app-123")
-            .timeoutMs(300000l)
-            .deadlineEpochMs(System.currentTimeMillis() + 2400000)
+            .timeout(Duration.ofMillis(300000))
+            .deadline(Instant.ofEpochMilli(System.currentTimeMillis() + 2400000))
             .priority(1)
             .inputs("{\"orderId\":\"ORD-12345\"}");
 
