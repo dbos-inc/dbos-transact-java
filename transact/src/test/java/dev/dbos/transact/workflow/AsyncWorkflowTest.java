@@ -257,10 +257,10 @@ public class AsyncWorkflowTest {
     assertEquals("Base", wfres);
     var wfhstat = dbos.startWorkflow(() -> simpleService.getStatus(wfh.workflowId()));
     var wfstat = wfhstat.getResult();
-    assertEquals(WorkflowState.SUCCESS.toString(), wfstat);
+    assertEquals(WorkflowState.SUCCESS.name(), wfstat);
     var wfhstat2 = dbos.startWorkflow(() -> simpleService.getStatusInStep(wfh.workflowId()));
     var wfstat2 = wfhstat2.getResult();
-    assertEquals(WorkflowState.SUCCESS.toString(), wfstat2);
+    assertEquals(WorkflowState.SUCCESS.name(), wfstat2);
 
     var steps = dbos.listWorkflowSteps(wfhgrs.workflowId());
     assertEquals(1, steps.size());

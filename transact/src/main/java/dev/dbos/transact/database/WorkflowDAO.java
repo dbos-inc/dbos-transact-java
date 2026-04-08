@@ -125,7 +125,7 @@ class WorkflowDAO {
         // If there is an existing DB record and we aren't here to recover it,
         //  leave it be.  Roll back the change to max recovery attempts.
         if (!ownerXid.equals(resRow.ownerXid) && !isRecoveryRequest && !isDequeuedRequest) {
-          if (resRow.status.equals(WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.toString())) {
+          if (resRow.status.equals(WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name())) {
             throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
           }
           return new WorkflowInitResult(
@@ -151,9 +151,9 @@ class WorkflowDAO {
                   .formatted(this.schema);
 
           try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.toString());
+            stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name());
             stmt.setString(2, initStatus.workflowId());
-            stmt.setString(3, WorkflowState.PENDING.toString());
+            stmt.setString(3, WorkflowState.PENDING.name());
 
             stmt.executeUpdate();
           }
@@ -346,15 +346,15 @@ class WorkflowDAO {
             .formatted(this.schema);
 
     try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-      stmt.setString(1, status.toString());
+      stmt.setString(1, status.name());
       stmt.setString(2, output);
       stmt.setString(3, error);
       stmt.setLong(4, Instant.now().toEpochMilli());
       stmt.setString(5, workflowId);
-      stmt.setString(6, WorkflowState.CANCELLED.toString());
-      stmt.setString(7, status.toString());
-      stmt.setString(8, WorkflowState.SUCCESS.toString());
-      stmt.setString(9, WorkflowState.ERROR.toString());
+      stmt.setString(6, WorkflowState.CANCELLED.name());
+      stmt.setString(7, status.name());
+      stmt.setString(8, WorkflowState.SUCCESS.name());
+      stmt.setString(9, WorkflowState.ERROR.name());
 
       stmt.executeUpdate();
     }
@@ -1307,8 +1307,8 @@ class WorkflowDAO {
                 .formatted(this.schema);
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
           stmt.setLong(1, cutoff.toEpochMilli());
-          stmt.setString(2, WorkflowState.PENDING.toString());
-          stmt.setString(3, WorkflowState.ENQUEUED.toString());
+          stmt.setString(2, WorkflowState.PENDING.name());
+          stmt.setString(3, WorkflowState.ENQUEUED.name());
 
           stmt.executeUpdate();
         }

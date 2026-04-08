@@ -78,7 +78,7 @@ class QueuesDAO {
 
         try (PreparedStatement ps = connection.prepareStatement(limiterQuery)) {
           ps.setString(1, queue.name());
-          ps.setString(2, WorkflowState.ENQUEUED.toString());
+          ps.setString(2, WorkflowState.ENQUEUED.name());
           ps.setLong(3, cutoffTime.toEpochMilli());
           if (partitionKey != null) {
             ps.setString(4, partitionKey);
@@ -116,7 +116,7 @@ class QueuesDAO {
         Map<String, Integer> pendingWorkflows = new HashMap<>();
         try (PreparedStatement ps = connection.prepareStatement(pendingQuery)) {
           ps.setString(1, queue.name());
-          ps.setString(2, WorkflowState.PENDING.toString());
+          ps.setString(2, WorkflowState.PENDING.name());
           if (partitionKey != null) {
             ps.setString(3, partitionKey);
           }
@@ -205,7 +205,7 @@ class QueuesDAO {
       List<String> dequeuedWorkflowIds = new ArrayList<>();
       try (var ps = connection.prepareStatement(query)) {
         ps.setString(1, queue.name());
-        ps.setString(2, WorkflowState.ENQUEUED.toString());
+        ps.setString(2, WorkflowState.ENQUEUED.name());
         ps.setString(3, appVersion);
         if (partitionKey != null) {
           ps.setString(4, partitionKey);
@@ -252,7 +252,7 @@ class QueuesDAO {
             }
           }
 
-          ps.setString(1, WorkflowState.PENDING.toString());
+          ps.setString(1, WorkflowState.PENDING.name());
           ps.setString(2, appVersion);
           ps.setString(3, executorId);
           ps.setLong(4, now);

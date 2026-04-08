@@ -590,7 +590,7 @@ public class QueuesTest {
     try (Connection connection = DBUtils.getConnection(dbosConfig);
         PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
-      pstmt.setString(1, WorkflowState.PENDING.toString());
+      pstmt.setString(1, WorkflowState.PENDING.name());
       pstmt.setString(2, "other");
       pstmt.setString(3, opt3.workflowId());
 
