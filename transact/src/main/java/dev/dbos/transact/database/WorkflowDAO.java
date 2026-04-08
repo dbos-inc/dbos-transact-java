@@ -496,10 +496,13 @@ class WorkflowDAO {
         whereConditions.add("parent_workflow_id IS NULL");
       }
     }
-    if (input.workflowIdPrefix() != null) {
-      whereConditions.add("workflow_uuid LIKE ?");
-      // Append wildcard directly to the parameter value
-      parameters.add(input.workflowIdPrefix() + "%");
+    if (input.workflowIdPrefix() != null && !input.workflowIdPrefix().isEmpty()) {
+      StringJoiner prefixConditions = new StringJoiner(" OR ", "(", ")");
+      for (String prefix : input.workflowIdPrefix()) {
+        prefixConditions.add("workflow_uuid LIKE ?");
+        parameters.add(prefix + "%");
+      }
+      whereConditions.add(prefixConditions.toString());
     }
     if (input.workflowIds() != null && !input.workflowIds().isEmpty()) {
       whereConditions.add("workflow_uuid = ANY(?)");
