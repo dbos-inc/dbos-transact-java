@@ -109,8 +109,24 @@ public class ImportExportTest {
 
     var steps =
         List.of(
-            new StepInfo(0, "step0", "output0", null, null, 1000L, 2000L, null),
-            new StepInfo(1, "step1", "output1", null, null, 2000L, 3000L, null));
+            new StepInfo(
+                0,
+                "step0",
+                "output0",
+                null,
+                null,
+                Instant.ofEpochMilli(1000),
+                Instant.ofEpochMilli(2000),
+                null),
+            new StepInfo(
+                1,
+                "step1",
+                "output1",
+                null,
+                null,
+                Instant.ofEpochMilli(2000),
+                Instant.ofEpochMilli(3000),
+                null));
 
     var events =
         List.of(

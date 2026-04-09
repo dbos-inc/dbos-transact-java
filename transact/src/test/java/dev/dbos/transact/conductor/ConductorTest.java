@@ -2258,7 +2258,7 @@ public class ConductorTest {
 
     int stepCount = (int) (Math.random() * 8) + 2;
     List<StepInfo> steps = new ArrayList<>();
-    long currentTime = System.currentTimeMillis() + (index * 10000L);
+    var now = Instant.now().plus(Duration.ofSeconds(index * 10));
     String prefix = index > 0 ? "wf" + (index + 1) + "_" : "";
     for (int i = 0; i < stepCount; i++) {
       steps.add(
@@ -2268,8 +2268,8 @@ public class ConductorTest {
               prefix + "result" + (i + 1),
               null,
               null,
-              currentTime + (i * 1000),
-              currentTime + ((i + 1) * 1000),
+              now.plus(Duration.ofSeconds(i)),
+              now.plus(Duration.ofSeconds(i + 1)),
               null));
     }
 

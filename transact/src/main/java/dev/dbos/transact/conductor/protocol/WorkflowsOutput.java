@@ -59,22 +59,22 @@ public class WorkflowsOutput {
         status.error() != null
             ? String.format("%s: %s", status.error().className(), status.error().message())
             : null;
-    this.CreatedAt = status.createdAt() == null ? null : String.valueOf(status.createdAtMs());
-    this.UpdatedAt = status.updatedAt() == null ? null : String.valueOf(status.updatedAtMs());
+    this.CreatedAt = status.createdAt() == null ? null : String.valueOf(status.createdAtEpochMs());
+    this.UpdatedAt = status.updatedAt() == null ? null : String.valueOf(status.updatedAtEpochMs());
     this.QueueName = status.queueName();
     this.ApplicationVersion = status.appVersion();
     this.ExecutorID = status.executorId();
     this.WorkflowTimeoutMS = status.timeout() == null ? null : String.valueOf(status.timeoutMs());
     this.WorkflowDeadlineEpochMS =
-        status.deadline() == null ? null : String.valueOf(status.deadlineMs());
+        status.deadline() == null ? null : String.valueOf(status.deadlineEpochMs());
     this.DeduplicationID = status.deduplicationId();
     this.Priority = Objects.requireNonNullElse(status.priority(), 0).toString();
     this.QueuePartitionKey = status.queuePartitionKey();
     this.ForkedFrom = status.forkedFrom();
     this.ParentWorkflowID = status.parentWorkflowId();
-    this.DequeuedAt = status.startedAt() == null ? null : String.valueOf(status.startedAtMs());
+    this.DequeuedAt = status.startedAt() == null ? null : String.valueOf(status.startedAtEpochMs());
     this.WasForkedFrom = status.wasForkedFrom();
     this.DelayUntilEpochMS =
-        status.delayUntil() == null ? null : String.valueOf(status.delayUntilMs());
+        status.delayUntil() == null ? null : String.valueOf(status.delayUntilEpochMs());
   }
 }

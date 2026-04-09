@@ -12,6 +12,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.*;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -277,8 +278,8 @@ class StepsDAO {
                   outputVal,
                   stepError,
                   childWorkflowId,
-                  startedAt,
-                  completedAt,
+                  startedAt == null ? null : Instant.ofEpochMilli(startedAt),
+                  completedAt == null ? null : Instant.ofEpochMilli(completedAt),
                   serialization));
         }
       }

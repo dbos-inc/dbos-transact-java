@@ -75,27 +75,27 @@ public record WorkflowStatus(
   }
 
   @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-  public Long deadlineMs() {
+  public Long deadlineEpochMs() {
     return deadline == null ? null : deadline.toEpochMilli();
   }
 
   @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-  public Long createdAtMs() {
+  public Long createdAtEpochMs() {
     return createdAt == null ? null : createdAt.toEpochMilli();
   }
 
   @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-  public Long updatedAtMs() {
+  public Long updatedAtEpochMs() {
     return updatedAt == null ? null : updatedAt.toEpochMilli();
   }
 
   @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-  public Long startedAtMs() {
+  public Long startedAtEpochMs() {
     return startedAt == null ? null : startedAt.toEpochMilli();
   }
 
   @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-  public Long delayUntilMs() {
+  public Long delayUntilEpochMs() {
     return delayUntil == null ? null : delayUntil.toEpochMilli();
   }
 
