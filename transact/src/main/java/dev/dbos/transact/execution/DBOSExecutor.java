@@ -37,6 +37,7 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -716,13 +717,12 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void setWorkflowDelay(
-      @NonNull String workflowId, @Nullable Duration delay, @Nullable Instant delayUntil) {
+      @NonNull String workflowId, @NonNull WorkflowDelay delay) {
     Objects.requireNonNull(workflowId);
     this.callFunctionAsStep(
         () -> {
-          var resolved = delay == null ? delayUntil : delay;
-          logger.info("setWorkflowDelay workflow {} delay {}", workflowId, resolved);
-          systemDatabase.setWorkflowDelay(workflowId, delay, delayUntil);
+          logger.info("setWorkflowDelay workflow {} delay {}", workflowId, delay);
+          systemDatabase.setWorkflowDelay(workflowId, delay);
           return null; // void
         },
         "DBOS.setWorkflowDelay",

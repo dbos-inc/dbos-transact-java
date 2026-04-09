@@ -16,6 +16,7 @@ import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
+import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
@@ -27,7 +28,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -429,23 +429,19 @@ class WorkflowDAO {
     return null;
   }
 
-  void setWorkflowDelay(String workflowId, Duration delay, Instant delayUntil) throws SQLException {
+  void setWorkflowDelay(String workflowId, WorkflowDelay delay) throws SQLException {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
-
-    if (delay != null && delayUntil != null) {
-      throw new IllegalArgumentException("Specify either delay or delayUntil, not both");
-    }
+    Objects.requireNonNull(delay, "delay must not be null");
 
     Instant resolved = null;
-    if (delayUntil != null) {
-      if (delayUntil.toEpochMilli() < 0) {
-        throw new IllegalArgumentException("delayUntil must be positive");
-      }
-      resolved = delayUntil;
-    } else if (delay != null) {
-      resolved = Instant.now().plus(delay);
-    } else {
-      throw new IllegalArgumentException("must specify either delay or delayUntil");
+    if (delay instanceof WorkflowDelay.Delay d) {
+      resolved = Instant.now().plus(d.delay());
+    } else if (delay instanceof WorkflowDelay.DelayUntil du) {
+      resolved = du.delayUntil();
+    }
+
+    if (resolved == null) {
+      throw new IllegalArgumentException("Unexpected WorkflowDelay value");
     }
 
     var sql =

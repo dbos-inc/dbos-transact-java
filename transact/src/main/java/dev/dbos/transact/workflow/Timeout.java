@@ -23,10 +23,6 @@ public sealed interface Timeout permits Timeout.Inherit, Timeout.None, Timeout.E
     return new None();
   }
 
-  static Timeout ofOrNone(Duration d) {
-    return of(d);
-  }
-
   static Timeout of(Duration d) {
     if (d == null) return none();
     return new Explicit(d);

@@ -16,6 +16,7 @@ import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
+import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -521,8 +522,8 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> workflowDAO.garbageCollect(cutoff, rowsThreshold));
   }
 
-  public void setWorkflowDelay(String workflowId, Duration delay, Instant delayUntil) {
-    dbRetry(() -> workflowDAO.setWorkflowDelay(workflowId, delay, delayUntil));
+  public void setWorkflowDelay(String workflowId, WorkflowDelay delay) {
+    dbRetry(() -> workflowDAO.setWorkflowDelay(workflowId, delay));
   }
 
   public void transitionDelayedWorkflows() {
