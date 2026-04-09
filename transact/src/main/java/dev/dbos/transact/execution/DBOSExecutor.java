@@ -716,8 +716,7 @@ public class DBOSExecutor implements AutoCloseable {
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
   }
 
-  public void setWorkflowDelay(
-      @NonNull String workflowId, @NonNull WorkflowDelay delay) {
+  public void setWorkflowDelay(@NonNull String workflowId, @NonNull WorkflowDelay delay) {
     Objects.requireNonNull(workflowId);
     this.callFunctionAsStep(
         () -> {

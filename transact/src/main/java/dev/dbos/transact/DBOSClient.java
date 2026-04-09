@@ -1011,8 +1011,7 @@ public class DBOSClient implements AutoCloseable {
    * @param delay the duration to delay the workflow from now
    * @throws IllegalArgumentException if the workflow ID is invalid
    */
-  public void setWorkflowDelay(
-      @NonNull String workflowId, @NonNull Duration delay) {
+  public void setWorkflowDelay(@NonNull String workflowId, @NonNull Duration delay) {
     var wfDelay = new WorkflowDelay.Delay(Objects.requireNonNull(delay, "delay must not be null"));
     systemDatabase.setWorkflowDelay(workflowId, wfDelay);
   }
@@ -1026,9 +1025,10 @@ public class DBOSClient implements AutoCloseable {
    * @param delayUntil the absolute time until which to delay the workflow
    * @throws IllegalArgumentException if the workflow ID is invalid
    */
-  public void setWorkflowDelay(
-      @NonNull String workflowId, @NonNull Instant delayUntil) {
-    var wfDelay = new WorkflowDelay.DelayUntil(Objects.requireNonNull(delayUntil, "delayUntil must not be null"));
+  public void setWorkflowDelay(@NonNull String workflowId, @NonNull Instant delayUntil) {
+    var wfDelay =
+        new WorkflowDelay.DelayUntil(
+            Objects.requireNonNull(delayUntil, "delayUntil must not be null"));
     systemDatabase.setWorkflowDelay(workflowId, wfDelay);
   }
 }
