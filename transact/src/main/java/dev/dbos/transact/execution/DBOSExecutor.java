@@ -1,5 +1,8 @@
 package dev.dbos.transact.execution;
 
+import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
+import static dev.dbos.transact.internal.Validation.nullableIsPositive;
+
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
@@ -1228,6 +1231,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             null,
+            null,
             latestAppVersion,
             false,
             false,
@@ -1356,40 +1360,53 @@ public class DBOSExecutor implements AutoCloseable {
       String deduplicationId,
       Integer priority,
       String queuePartitionKey,
+      Duration delay,
       String appVersion,
       boolean isRecoveryRequest,
       boolean isDequeuedRequest,
       String serialization) {
     public ExecutionOptions {
-      if (timeout instanceof Timeout.Explicit explicit) {
-        if (explicit.value().isNegative() || explicit.value().isZero()) {
-          throw new IllegalArgumentException("timeout must be a positive non-zero duration");
-        }
+      if (nullableIsEmpty(workflowId)) {
+        throw new IllegalArgumentException("workflowId must not be empty");
       }
 
-      if (queuePartitionKey != null && queuePartitionKey.isEmpty()) {
-        throw new IllegalArgumentException(
-            "EnqueueOptions queuePartitionKey must not be empty if not null");
+      if (timeout instanceof Timeout.Explicit explicit && !nullableIsPositive(explicit.value())) {
+        throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
       }
 
-      if (deduplicationId != null && deduplicationId.isEmpty()) {
-        throw new IllegalArgumentException(
-            "EnqueueOptions deduplicationId must not be empty if not null");
+      if (nullableIsEmpty(queueName)) {
+        throw new IllegalArgumentException("queueName must not be empty");
       }
 
-      if (queuePartitionKey != null && queueName == null) {
-        throw new IllegalArgumentException(
-            "ExecutionOptions partition key provided but queue name is missing");
+      if (nullableIsEmpty(deduplicationId)) {
+        throw new IllegalArgumentException("deduplicationId must not be empty");
       }
 
-      if (queuePartitionKey != null && deduplicationId != null) {
-        throw new IllegalArgumentException(
-            "ExecutionOptions partition key and deduplication ID cannot both be set");
+      if (nullableIsEmpty(queuePartitionKey)) {
+        throw new IllegalArgumentException("queuePartitionKey must not be empty");
       }
+
+      if (!nullableIsPositive(delay)) {
+        throw new IllegalArgumentException("delay must be a positive non-zero duration");
+      }
+
+      if (nullableIsEmpty(appVersion)) {
+        throw new IllegalArgumentException("appVersion must not be empty");
+      }
+
+      if (nullableIsEmpty(serialization)) {
+        throw new IllegalArgumentException("serialization must not be empty");
+      }
+
+      // TODO this check needs to be in enqueueWorkflow
+      // if (queuePartitionKey != null && deduplicationId != null) {
+      //   throw new IllegalArgumentException(
+      //       "ExecutionOptions partition key and deduplication ID cannot both be set");
+      // }
     }
 
     public ExecutionOptions(String workflowId) {
-      this(workflowId, null, null, null, null, null, null, null, false, false, null);
+      this(workflowId, null, null, null, null, null, null, null, null, false, false, null);
     }
 
     public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
@@ -1397,6 +1414,7 @@ public class DBOSExecutor implements AutoCloseable {
           workflowId,
           Timeout.of(timeout),
           deadline,
+          null,
           null,
           null,
           null,
@@ -1416,6 +1434,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.appVersion,
           true,
           false,
@@ -1431,6 +1450,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.appVersion,
           false,
           true,
@@ -1446,6 +1466,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.appVersion,
           this.isRecoveryRequest,
           this.isDequeuedRequest,
@@ -1476,6 +1497,7 @@ public class DBOSExecutor implements AutoCloseable {
             options != null ? options.deduplicationId() : null,
             options != null ? options.priority() : null,
             options != null ? options.queuePartitionKey() : null,
+            options != null ? options.delay() : null,
             options != null ? options.appVersion() : null,
             false,
             false,
@@ -1542,6 +1564,7 @@ public class DBOSExecutor implements AutoCloseable {
             options != null ? options.deduplicationId() : null,
             options != null ? options.priority() : null,
             options != null ? options.queuePartitionKey() : null,
+            options != null ? options.delay() : null,
             options != null ? options.appVersion() : null,
             false,
             false,

@@ -1,5 +1,8 @@
 package dev.dbos.transact;
 
+import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
+import static dev.dbos.transact.internal.Validation.nullableIsPositive;
+
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
@@ -173,59 +176,85 @@ public class DBOSClient implements AutoCloseable {
       @Nullable String deduplicationId,
       @Nullable Integer priority,
       @Nullable String queuePartitionKey,
+      @Nullable Duration delay,
       @Nullable SerializationStrategy serialization) {
 
     public EnqueueOptions {
-      if (Objects.requireNonNull(workflowName, "EnqueueOptions workflowName must not be null")
-          .isEmpty()) {
-        throw new IllegalArgumentException("EnqueueOptions workflowName must not be empty");
+      if (nullableIsEmpty(workflowName)) {
+        throw new IllegalArgumentException("workflowName must not be empty");
       }
 
-      if (Objects.requireNonNull(queueName, "EnqueueOptions queueName must not be null")
-          .isEmpty()) {
-        throw new IllegalArgumentException("EnqueueOptions queueName must not be empty");
+      if (nullableIsEmpty(className)) {
+        throw new IllegalArgumentException("className must not be empty");
       }
 
-      if (workflowId != null && workflowId.isEmpty()) {
-        throw new IllegalArgumentException("EnqueueOptions workflowId must not be empty");
+      if (nullableIsEmpty(instanceName)) {
+        throw new IllegalArgumentException("instanceName must not be empty");
       }
 
-      if (className != null && className.isEmpty()) {
-        throw new IllegalArgumentException("EnqueueOptions className must not be empty");
+      if (nullableIsEmpty(queueName)) {
+        throw new IllegalArgumentException("queueName must not be empty");
       }
 
-      if (queuePartitionKey != null && queuePartitionKey.isEmpty()) {
-        throw new IllegalArgumentException(
-            "EnqueueOptions queuePartitionKey must not be empty if not null");
+      if (nullableIsEmpty(workflowId)) {
+        throw new IllegalArgumentException("workflowId must not be empty");
       }
 
-      if (deduplicationId != null && deduplicationId.isEmpty()) {
-        throw new IllegalArgumentException(
-            "EnqueueOptions deduplicationId must not be empty if not null");
+      if (nullableIsEmpty(appVersion)) {
+        throw new IllegalArgumentException("appVersion must not be empty");
       }
 
-      if (timeout != null) {
-        if (timeout.isNegative() || timeout.isZero()) {
-          throw new IllegalArgumentException(
-              "EnqueueOptions timeout must be a positive non-zero duration");
-        }
+      if (!nullableIsPositive(timeout)) {
+        throw new IllegalArgumentException("timeout must be positive, non-zero duration");
+      }
 
-        if (deadline != null) {
-          throw new IllegalArgumentException(
-              "EnqueueOptions timeout and deadline cannot both be set");
-        }
+      if (nullableIsEmpty(deduplicationId)) {
+        throw new IllegalArgumentException("deduplicationId must not be empty");
+      }
+
+      if (nullableIsEmpty(queuePartitionKey)) {
+        throw new IllegalArgumentException("queuePartitionKey must not be empty");
+      }
+
+      if (!nullableIsPositive(delay)) {
+        throw new IllegalArgumentException("delay must be positive, non-zero duration");
       }
     }
 
     /** Construct `EnqueueOptions` with a minimum set of required options */
     public EnqueueOptions(@NonNull String workflowName, @NonNull String queueName) {
-      this(workflowName, null, null, queueName, null, null, null, null, null, null, null, null);
+      this(
+          workflowName,
+          null,
+          null,
+          queueName,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null);
     }
 
     public EnqueueOptions(
         @NonNull String workflowName, @Nullable String className, @NonNull String queueName) {
       this(
-          workflowName, className, null, queueName, null, null, null, null, null, null, null, null);
+          workflowName,
+          className,
+          null,
+          queueName,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null);
     }
 
     /**
@@ -247,6 +276,7 @@ public class DBOSClient implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.serialization);
     }
 
@@ -270,6 +300,7 @@ public class DBOSClient implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.serialization);
     }
 
@@ -293,6 +324,7 @@ public class DBOSClient implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.serialization);
     }
 
@@ -316,6 +348,7 @@ public class DBOSClient implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.serialization);
     }
 
@@ -339,6 +372,7 @@ public class DBOSClient implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.serialization);
     }
 
@@ -362,6 +396,7 @@ public class DBOSClient implements AutoCloseable {
           deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.serialization);
     }
 
@@ -385,6 +420,7 @@ public class DBOSClient implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.serialization);
     }
 
@@ -407,6 +443,7 @@ public class DBOSClient implements AutoCloseable {
           this.deduplicationId,
           priority,
           this.queuePartitionKey,
+          this.delay,
           this.serialization);
     }
 
@@ -431,6 +468,31 @@ public class DBOSClient implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           partitionKey,
+          this.delay,
+          this.serialization);
+    }
+
+    /**
+     * Specify a delay before the workflow starts executing. The workflow will remain in the queue
+     * until the delay has elapsed.
+     *
+     * @param delay Duration to wait before the workflow begins execution.
+     * @return New `EnqueueOptions` with the delay set
+     */
+    public @NonNull EnqueueOptions withDelay(@Nullable Duration delay) {
+      return new EnqueueOptions(
+          this.workflowName,
+          this.className,
+          this.instanceName,
+          this.queueName,
+          this.workflowId,
+          this.appVersion,
+          this.timeout,
+          this.deadline,
+          this.deduplicationId,
+          this.priority,
+          this.queuePartitionKey,
+          delay,
           this.serialization);
     }
 
@@ -456,18 +518,55 @@ public class DBOSClient implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           serialization);
     }
+  }
 
-    /**
-     * Get the workflow ID that will be used
-     *
-     * @return The workflow idemptence ID
-     */
-    @Override
-    public @Nullable String workflowId() {
-      return workflowId != null && workflowId.isEmpty() ? null : workflowId;
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
+      @NonNull EnqueueOptions options,
+      @Nullable Object[] positionalArgs,
+      @Nullable Map<String, Object> namedArgs,
+      @Nullable String serializationFormat) {
+
+    Objects.requireNonNull(options, "options must not be null");
+    Objects.requireNonNull(options.workflowName, "EnqueueOptions workflowName must not be null");
+    Objects.requireNonNull(options.queueName, "EnqueueOptions queueName must not be null");
+
+    if (options.timeout != null && options.deadline != null) {
+      throw new IllegalArgumentException("Can't set timeout and deadline EnqueueOptions");
     }
+
+    var workflowId =
+        DBOSExecutor.enqueueWorkflow(
+            options.workflowName(),
+            options.className(),
+            options.instanceName(),
+            null,
+            positionalArgs,
+            namedArgs,
+            new DBOSExecutor.ExecutionOptions(
+                Objects.requireNonNullElseGet(
+                    options.workflowId(), () -> UUID.randomUUID().toString()),
+                Timeout.of(options.timeout()),
+                options.deadline,
+                options.queueName(),
+                options.deduplicationId,
+                options.priority,
+                options.queuePartitionKey,
+                options.delay,
+                options.appVersion,
+                false,
+                false,
+                serializationFormat),
+            null,
+            null,
+            null,
+            null,
+            systemDatabase,
+            this.serializer);
+
+    return new WorkflowHandleClient<>(workflowId);
   }
 
   /**
@@ -481,41 +580,9 @@ public class DBOSClient implements AutoCloseable {
    */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> enqueueWorkflow(
       @NonNull EnqueueOptions options, @Nullable Object[] args) {
-
-    String serializationFormat =
+    var serializationFormat =
         options.serialization() != null ? options.serialization().formatName() : null;
-
-    var workflowId =
-        DBOSExecutor.enqueueWorkflow(
-            Objects.requireNonNull(
-                options.workflowName(), "EnqueueOptions workflowName must not be null"),
-            options.className(),
-            options.instanceName(),
-            null,
-            args,
-            null,
-            new DBOSExecutor.ExecutionOptions(
-                Objects.requireNonNullElseGet(
-                    options.workflowId(), () -> UUID.randomUUID().toString()),
-                Timeout.of(options.timeout()),
-                options.deadline,
-                Objects.requireNonNull(
-                    options.queueName(), "EnqueueOptions queueName must not be null"),
-                options.deduplicationId,
-                options.priority,
-                options.queuePartitionKey,
-                options.appVersion,
-                false,
-                false,
-                serializationFormat),
-            null,
-            null,
-            null,
-            null,
-            systemDatabase,
-            this.serializer);
-
-    return new WorkflowHandleClient<>(workflowId);
+    return enqueueWorkflow(options, args, null, serializationFormat);
   }
 
   /**
@@ -534,38 +601,7 @@ public class DBOSClient implements AutoCloseable {
       @NonNull EnqueueOptions options,
       @Nullable Object[] positionalArgs,
       @Nullable Map<String, Object> namedArgs) {
-
-    var workflowId =
-        DBOSExecutor.enqueueWorkflow(
-            Objects.requireNonNull(
-                options.workflowName(), "EnqueueOptions workflowName must not be null"),
-            options.className(),
-            options.instanceName(),
-            null,
-            positionalArgs,
-            namedArgs,
-            new DBOSExecutor.ExecutionOptions(
-                Objects.requireNonNullElseGet(
-                    options.workflowId(), () -> UUID.randomUUID().toString()),
-                Timeout.of(options.timeout()),
-                options.deadline,
-                Objects.requireNonNull(
-                    options.queueName(), "EnqueueOptions queueName must not be null"),
-                options.deduplicationId,
-                options.priority,
-                options.queuePartitionKey,
-                options.appVersion,
-                false,
-                false,
-                SerializationUtil.PORTABLE),
-            null,
-            null,
-            null,
-            null,
-            systemDatabase,
-            this.serializer);
-
-    return new WorkflowHandleClient<>(workflowId);
+    return enqueueWorkflow(options, positionalArgs, namedArgs, SerializationUtil.PORTABLE);
   }
 
   /** Options for sending a message. */
