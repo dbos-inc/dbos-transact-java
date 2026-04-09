@@ -3140,8 +3140,8 @@ public class ConductorTest {
 
     List<NotificationInfo> notifications =
         List.of(
-            new NotificationInfo("topic1", "msg1", 1000L, false),
-            new NotificationInfo(null, 99, 2000L, true));
+            new NotificationInfo("topic1", "msg1", Instant.ofEpochMilli(1000), false),
+            new NotificationInfo(null, 99, Instant.ofEpochMilli(2000), true));
     when(mockDB.getAllNotifications("wf-notifs-1")).thenReturn(notifications);
 
     try (Conductor conductor = builder.build()) {

@@ -228,6 +228,14 @@ public class SystemDatabase implements AutoCloseable {
     }
   }
 
+  static Instant toInstant(Long epochMs) {
+    return epochMs != null ? Instant.ofEpochMilli(epochMs) : null;
+  }
+
+  static Duration toDuration(Long ms) {
+    return ms != null ? Duration.ofMillis(ms) : null;
+  }
+
   /**
    * Initializes the status of a workflow.
    *
@@ -790,7 +798,9 @@ public class SystemDatabase implements AutoCloseable {
                         rs.getString("message"), serialization, this.serializer);
                 var createdAtEpochMs = rs.getLong("created_at_epoch_ms");
                 var consumed = rs.getBoolean("consumed");
-                notifications.add(new NotificationInfo(topic, message, createdAtEpochMs, consumed));
+                notifications.add(
+                    new NotificationInfo(
+                        topic, message, SystemDatabase.toInstant(createdAtEpochMs), consumed));
               }
             }
           }

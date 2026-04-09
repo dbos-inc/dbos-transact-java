@@ -12,7 +12,7 @@ public class GetWorkflowNotificationsResponse extends BaseResponse {
       String topic, String message, long created_at_epoch_ms, boolean consumed) {
     public static NotificationOutput from(NotificationInfo info) {
       return new NotificationOutput(
-          info.topic(), JSONUtil.toJson(info.message()), info.createdAtEpochMs(), info.consumed());
+          info.topic(), JSONUtil.toJson(info.message()), info.createdAtMs(), info.consumed());
     }
   }
 

@@ -782,14 +782,6 @@ class WorkflowDAO {
     return results;
   }
 
-  private static Instant toInstant(Long epochMs) {
-    return epochMs != null ? Instant.ofEpochMilli(epochMs) : null;
-  }
-
-  private static Duration toDuration(Long ms) {
-    return ms != null ? Duration.ofMillis(ms) : null;
-  }
-
   private static WorkflowStatus resultsToWorkflowStatus(
       ResultSet rs, boolean loadInput, boolean loadOutput, DBOSSerializer serializer)
       throws SQLException {
@@ -819,22 +811,22 @@ class WorkflowDAO {
                 : null,
             loadOutput ? ErrorResult.deserialize(serializedError, serialization, serializer) : null,
             rs.getString("executor_id"),
-            toInstant(rs.getObject("created_at", Long.class)),
-            toInstant(rs.getObject("updated_at", Long.class)),
+            SystemDatabase.toInstant(rs.getObject("created_at", Long.class)),
+            SystemDatabase.toInstant(rs.getObject("updated_at", Long.class)),
             rs.getString("application_version"),
             rs.getString("application_id"),
             rs.getInt("recovery_attempts"),
             rs.getString("queue_name"),
-            toDuration(rs.getObject("workflow_timeout_ms", Long.class)),
-            toInstant(rs.getObject("workflow_deadline_epoch_ms", Long.class)),
-            toInstant(rs.getObject("started_at_epoch_ms", Long.class)),
+            SystemDatabase.toDuration(rs.getObject("workflow_timeout_ms", Long.class)),
+            SystemDatabase.toInstant(rs.getObject("workflow_deadline_epoch_ms", Long.class)),
+            SystemDatabase.toInstant(rs.getObject("started_at_epoch_ms", Long.class)),
             rs.getString("deduplication_id"),
             rs.getObject("priority", Integer.class),
             rs.getString("queue_partition_key"),
             rs.getString("forked_from"),
             rs.getString("parent_workflow_id"),
             rs.getObject("was_forked_from", Boolean.class),
-            toInstant(rs.getObject("delay_until_epoch_ms", Long.class)),
+            SystemDatabase.toInstant(rs.getObject("delay_until_epoch_ms", Long.class)),
             serialization);
     return info;
   }
