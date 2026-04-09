@@ -1369,8 +1369,9 @@ class WorkflowDAO {
                 .formatted(this.schema);
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
           stmt.setLong(1, cutoff.toEpochMilli());
-          stmt.setString(2, WorkflowState.PENDING.toString());
-          stmt.setString(3, WorkflowState.ENQUEUED.toString());
+          stmt.setString(2, WorkflowState.PENDING.name());
+          stmt.setString(3, WorkflowState.ENQUEUED.name());
+          stmt.setString(4, WorkflowState.DELAYED.name());
 
           stmt.executeUpdate();
         }
