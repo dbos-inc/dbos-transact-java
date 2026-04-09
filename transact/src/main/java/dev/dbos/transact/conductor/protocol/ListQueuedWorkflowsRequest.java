@@ -1,10 +1,12 @@
 package dev.dbos.transact.conductor.protocol;
 
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.WorkflowState;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -52,216 +54,36 @@ public class ListQueuedWorkflowsRequest extends BaseMessage {
     public Boolean load_input;
     public Boolean load_output;
     public Boolean was_forked_from;
-  }
-
-  public static class Builder {
-    private List<String> workflow_uuids;
-    private List<String> workflow_name;
-    private List<String> authenticated_user;
-    private String start_time;
-    private String end_time;
-    private List<String> status;
-    private List<String> application_version;
-    private List<String> forked_from;
-    private List<String> parent_workflow_id;
-    private List<String> queue_name;
-    private List<String> workflow_id_prefix;
-    private List<String> executor_id;
-    private Integer limit;
-    private Integer offset;
-    private Boolean sort_desc;
-    private Boolean load_input;
-    private Boolean load_output;
-    private Boolean was_forked_from;
-
-    public Builder workflowUuids(List<String> workflow_uuids) {
-      this.workflow_uuids = workflow_uuids;
-      return this;
-    }
-
-    public Builder workflowName(String workflowName) {
-      workflow_name = workflowName == null ? null : List.of(workflowName);
-      return this;
-    }
-
-    public Builder workflowNames(List<String> workflowName) {
-      workflow_name = workflowName;
-      return this;
-    }
-
-    public Builder authenticatedUser(String authenticated_user) {
-      this.authenticated_user = authenticated_user == null ? null : List.of(authenticated_user);
-      return this;
-    }
-
-    public Builder authenticatedUsers(List<String> authenticated_user) {
-      this.authenticated_user = authenticated_user;
-      return this;
-    }
-
-    public Builder applicationVersion(String application_version) {
-      this.application_version = application_version == null ? null : List.of(application_version);
-      return this;
-    }
-
-    public Builder applicationVersions(List<String> application_version) {
-      this.application_version = application_version;
-      return this;
-    }
-
-    public Builder startTime(String startTime) {
-      start_time = startTime;
-      return this;
-    }
-
-    public Builder endTime(String endTime) {
-      end_time = endTime;
-      return this;
-    }
-
-    public Builder status(String status) {
-      this.status = status == null ? null : List.of(status);
-      return this;
-    }
-
-    public Builder statuses(List<String> status) {
-      this.status = status;
-      return this;
-    }
-
-    public Builder forkedFrom(String forkedFrom) {
-      this.forked_from = forkedFrom == null ? null : List.of(forkedFrom);
-      return this;
-    }
-
-    public Builder forkedFrom(List<String> forkedFrom) {
-      this.forked_from = forkedFrom;
-      return this;
-    }
-
-    public Builder parentWorkflowId(String parentWorkflowId) {
-      this.parent_workflow_id = parentWorkflowId == null ? null : List.of(parentWorkflowId);
-      return this;
-    }
-
-    public Builder parentWorkflowIds(List<String> parentWorkflowId) {
-      this.parent_workflow_id = parentWorkflowId;
-      return this;
-    }
-
-    public Builder queueName(String queueName) {
-      this.queue_name = queueName == null ? null : List.of(queueName);
-      return this;
-    }
-
-    public Builder queueNames(List<String> queueName) {
-      this.queue_name = queueName;
-      return this;
-    }
-
-    public Builder limit(Integer limit) {
-      this.limit = limit;
-      return this;
-    }
-
-    public Builder offset(Integer offset) {
-      this.offset = offset;
-      return this;
-    }
-
-    public Builder sortDesc(Boolean sortDesc) {
-      this.sort_desc = sortDesc;
-      return this;
-    }
-
-    public Builder loadInput(Boolean loadInput) {
-      this.load_input = loadInput;
-      return this;
-    }
-
-    public Builder loadOutput(Boolean loadOutput) {
-      this.load_output = loadOutput;
-      return this;
-    }
-
-    public Builder workflowIdPrefix(String workflow_id_prefix) {
-      this.workflow_id_prefix = workflow_id_prefix == null ? null : List.of(workflow_id_prefix);
-      return this;
-    }
-
-    public Builder workflowIdPrefixes(List<String> workflow_id_prefix) {
-      this.workflow_id_prefix = workflow_id_prefix;
-      return this;
-    }
-
-    public Builder executorId(String executor_id) {
-      this.executor_id = executor_id == null ? null : List.of(executor_id);
-      return this;
-    }
-
-    public Builder executorIds(List<String> executor_id) {
-      this.executor_id = executor_id;
-      return this;
-    }
-
-    public Builder wasForkedFrom(Boolean was_forked_from) {
-      this.was_forked_from = was_forked_from;
-      return this;
-    }
-
-    public ListQueuedWorkflowsRequest build(String requestId) {
-      ListQueuedWorkflowsRequest request = new ListQueuedWorkflowsRequest();
-      request.type = MessageType.LIST_QUEUED_WORKFLOWS.getValue();
-      request.request_id = requestId;
-
-      Body body = new Body();
-      body.workflow_uuids = this.workflow_uuids;
-      body.workflow_name = this.workflow_name;
-      body.authenticated_user = this.authenticated_user;
-      body.start_time = this.start_time;
-      body.end_time = this.end_time;
-      body.status = this.status;
-      body.application_version = this.application_version;
-      body.forked_from = this.forked_from;
-      body.parent_workflow_id = this.parent_workflow_id;
-      body.queue_name = this.queue_name;
-      body.limit = this.limit;
-      body.offset = this.offset;
-      body.sort_desc = this.sort_desc;
-      body.workflow_id_prefix = this.workflow_id_prefix;
-      body.load_input = this.load_input;
-      body.load_output = this.load_output;
-      body.executor_id = this.executor_id;
-      body.was_forked_from = this.was_forked_from;
-      request.body = body;
-      return request;
-    }
+    public Boolean has_parent;
   }
 
   public ListWorkflowsInput asInput() {
     Objects.requireNonNull(body);
 
-    return new ListWorkflowsInput()
-        .withQueuesOnly(true)
-        .withWorkflowIds(body.workflow_uuids)
-        .withWorkflowNames(body.workflow_name)
-        .withAuthenticatedUsers(body.authenticated_user)
-        .withStartTime(body.start_time != null ? OffsetDateTime.parse(body.start_time) : null)
-        .withEndTime(body.end_time != null ? OffsetDateTime.parse(body.end_time) : null)
-        .withStatuses(body.status)
-        .withApplicationVersions(body.application_version)
-        .withForkedFrom(body.forked_from)
-        .withParentWorkflowIds(body.parent_workflow_id)
-        .withQueueNames(body.queue_name)
-        .withLimit(body.limit)
-        .withOffset(body.offset)
-        .withSortDesc(body.sort_desc)
-        .withWorkflowIdPrefix(
-            body.workflow_id_prefix != null && !body.workflow_id_prefix.isEmpty()
-                ? body.workflow_id_prefix.get(0)
-                : null)
-        .withLoadInput(body.load_input)
-        .withLoadOutput(body.load_output)
-        .withExecutorIds(body.executor_id);
+    return new ListWorkflowsInput(
+        body.workflow_uuids,
+        body.status != null
+            ? body.status.stream().map(WorkflowState::valueOf).collect(Collectors.toList())
+            : null,
+        body.start_time != null ? Instant.parse(body.start_time) : null,
+        body.end_time != null ? Instant.parse(body.end_time) : null,
+        body.workflow_name,
+        null, // className
+        null, // instanceName
+        body.application_version,
+        body.authenticated_user,
+        body.limit,
+        body.offset,
+        body.sort_desc,
+        body.workflow_id_prefix,
+        body.load_input,
+        body.load_output,
+        body.queue_name,
+        true, // queuesOnly
+        body.executor_id,
+        body.forked_from,
+        body.parent_workflow_id,
+        body.was_forked_from,
+        body.has_parent);
   }
 }

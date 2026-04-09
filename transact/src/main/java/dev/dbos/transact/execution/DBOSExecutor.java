@@ -51,7 +51,6 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -350,6 +349,10 @@ public class DBOSExecutor implements AutoCloseable {
 
   public String appId() {
     return this.appId;
+  }
+
+  public Map<String, Object> executorMetadata() {
+    return this.config.conductorExecutorMetadata();
   }
 
   public Collection<RegisteredWorkflow> getRegisteredWorkflows() {
@@ -772,21 +775,15 @@ public class DBOSExecutor implements AutoCloseable {
     return retrieveWorkflow(forkedId);
   }
 
-  public void globalTimeout(Long cutoff) {
-    OffsetDateTime endTime = Instant.ofEpochMilli(cutoff).atOffset(ZoneOffset.UTC);
-    globalTimeout(endTime);
-  }
-
-  public void globalTimeout(OffsetDateTime endTime) {
-    ListWorkflowsInput pendingInput =
-        new ListWorkflowsInput().withStatus(WorkflowState.PENDING).withEndTime(endTime);
-    for (WorkflowStatus status : systemDatabase.listWorkflows(pendingInput)) {
+  public void globalTimeout(Instant endTime) {
+    var input = new ListWorkflowsInput().withEndTime(endTime);
+    for (WorkflowStatus status :
+        systemDatabase.listWorkflows(input.withStatus(WorkflowState.PENDING))) {
       cancelWorkflows(List.of(status.workflowId()));
     }
 
-    ListWorkflowsInput enqueuedInput =
-        new ListWorkflowsInput().withStatus(WorkflowState.ENQUEUED).withEndTime(endTime);
-    for (WorkflowStatus status : systemDatabase.listWorkflows(enqueuedInput)) {
+    for (WorkflowStatus status :
+        systemDatabase.listWorkflows(input.withStatus(WorkflowState.ENQUEUED))) {
       cancelWorkflows(List.of(status.workflowId()));
     }
   }
@@ -933,9 +930,12 @@ public class DBOSExecutor implements AutoCloseable {
         () -> systemDatabase.listWorkflows(input), "DBOS.listWorkflows", null);
   }
 
-  public List<StepInfo> listWorkflowSteps(String workflowId) {
+  public List<StepInfo> listWorkflowSteps(
+      String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
     return this.callFunctionAsStep(
-        () -> systemDatabase.listWorkflowSteps(workflowId), "DBOS.listWorkflowSteps", null);
+        () -> systemDatabase.listWorkflowSteps(workflowId, loadOutput, limit, offset),
+        "DBOS.listWorkflowSteps",
+        null);
   }
 
   public List<VersionInfo> listApplicationVersions() {
@@ -1968,11 +1968,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
 
-    Long timeoutMs = timeout != null ? timeout.toMillis() : null;
-    Long deadlineEpochMs =
-        (queueName != null && timeoutMs != null)
-            ? null
-            : deadline != null ? deadline.toEpochMilli() : null;
+    Instant effectiveDeadline = (queueName != null && timeout != null) ? null : deadline;
 
     final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
     WorkflowStatusInternal workflowStatusInternal =
@@ -1993,8 +1989,8 @@ public class DBOSExecutor implements AutoCloseable {
             executorId,
             appVersion,
             appId,
-            timeoutMs,
-            deadlineEpochMs,
+            timeout,
+            effectiveDeadline,
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
             actualSerialization);
 

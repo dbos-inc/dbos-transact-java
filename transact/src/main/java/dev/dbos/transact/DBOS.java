@@ -950,18 +950,20 @@ public class DBOS implements AutoCloseable {
    * resume at a later time.
    *
    * <p>The delay must be specified using exactly one of the two parameters:
+   *
    * <ul>
    *   <li>Using {@code delay} parameter to specify a duration from now
    *   <li>Using {@code delayUntil} parameter to specify an absolute time
    * </ul>
    *
-   * <p>Exactly one parameter must be non-null. Providing both parameters or neither parameter
-   * will result in an exception.
+   * <p>Exactly one parameter must be non-null. Providing both parameters or neither parameter will
+   * result in an exception.
    *
    * @param workflowId the unique identifier of the workflow to delay
    * @param delay the duration to delay the workflow from now, or null if using delayUntil
    * @param delayUntil the absolute time until which to delay the workflow, or null if using delay
-   * @throws IllegalArgumentException if the workflow ID is invalid, or if both parameters are provided, or if both parameters are null
+   * @throws IllegalArgumentException if the workflow ID is invalid, or if both parameters are
+   *     provided, or if both parameters are null
    * @throws IllegalStateException if DBOS has not been launched
    */
   public void setWorkflowDelay(
@@ -983,12 +985,13 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * List all workflows
+   * List workflows matching the supplied input filter criteria
    *
-   * @param input {@link ListWorkflowsInput} parameters to query workflows
+   * @param input {@link ListWorkflowsInput} parameters to query workflows. Pass null to list all
+   *     workflows.
    * @return a list of workflow status {@link WorkflowStatus}
    */
-  public @NonNull List<WorkflowStatus> listWorkflows(@NonNull ListWorkflowsInput input) {
+  public @NonNull List<WorkflowStatus> listWorkflows(@Nullable ListWorkflowsInput input) {
     return ensureLaunched("listWorkflows").listWorkflows(input);
   }
 
@@ -999,7 +1002,20 @@ public class DBOS implements AutoCloseable {
    * @return list of step information {@link StepInfo}
    */
   public @NonNull List<StepInfo> listWorkflowSteps(@NonNull String workflowId) {
-    return ensureLaunched("listWorkflowSteps").listWorkflowSteps(workflowId);
+    return listWorkflowSteps(workflowId, null, null);
+  }
+
+  /**
+   * List the steps in the workflow with optional pagination
+   *
+   * @param workflowId Id of the workflow whose steps to return
+   * @param limit Maximum number of steps to return
+   * @param offset Number of steps to skip before returning
+   * @return list of step information {@link StepInfo}
+   */
+  public @NonNull List<StepInfo> listWorkflowSteps(
+      @NonNull String workflowId, Integer limit, Integer offset) {
+    return ensureLaunched("listWorkflowSteps").listWorkflowSteps(workflowId, true, limit, offset);
   }
 
   /**

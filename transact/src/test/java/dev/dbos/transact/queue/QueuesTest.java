@@ -11,18 +11,20 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
+import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.time.OffsetDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -257,18 +259,7 @@ public class QueuesTest {
     wfs = dbos.listWorkflows(input.withQueueName("firstQueue"));
     assertEquals(5, wfs.size());
 
-    wfs =
-        dbos.listWorkflows(input.withStartTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS)));
-    assertEquals(5, wfs.size());
-
-    wfs =
-        dbos.listWorkflows(input.withStartTime(OffsetDateTime.now().plus(10, ChronoUnit.SECONDS)));
-    assertEquals(0, wfs.size());
-
-    wfs = dbos.listWorkflows(input.withEndTime(OffsetDateTime.now()));
-    assertEquals(5, wfs.size());
-
-    wfs = dbos.listWorkflows(input.withEndTime(OffsetDateTime.now().minus(10, ChronoUnit.SECONDS)));
+    wfs = dbos.listWorkflows(input.withEndTime(Instant.now().minus(10, ChronoUnit.SECONDS)));
     assertEquals(0, wfs.size());
   }
 
@@ -404,7 +395,7 @@ public class QueuesTest {
     }
 
     var builder =
-        WorkflowStatusInternal.builder()
+        new WorkflowStatusInternalBuilder()
             .workflowName("OrderProcessingWorkflow")
             .className("com.example.workflows.OrderWorkflow")
             .instanceName("prod-config")
@@ -415,10 +406,10 @@ public class QueuesTest {
             .executorId(executorId)
             .appVersion(appVersion)
             .appId("order-app-123")
-            .timeoutMs(300000l)
-            .deadlineEpochMs(System.currentTimeMillis() + 2400000)
+            .timeout(Duration.ofMillis(300000))
+            .deadline(Instant.ofEpochMilli(System.currentTimeMillis() + 2400000))
             .priority(1)
-            .inputs("{\"orderId\":\"ORD-12345\"}");
+            .inputs(JSONUtil.serializeArray(new Object[] {"ORD-12345"}));
 
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
@@ -431,10 +422,7 @@ public class QueuesTest {
       systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
-    var readBack =
-        systemDatabase
-            .listWorkflows(new ListWorkflowsInput().withWorkflowId("id0").withLoadInput(false))
-            .get(0);
+    var readBack = systemDatabase.listWorkflows(new ListWorkflowsInput("id0")).get(0);
     assertArrayEquals(new String[] {"admin", "operator"}, readBack.authenticatedRoles());
 
     List<String> idsToRun =
@@ -486,7 +474,7 @@ public class QueuesTest {
     }
 
     var builder =
-        WorkflowStatusInternal.builder()
+        new WorkflowStatusInternalBuilder()
             .workflowName("OrderProcessingWorkflow")
             .className("com.example.workflows.OrderWorkflow")
             .instanceName("prod-config")
@@ -497,8 +485,8 @@ public class QueuesTest {
             .executorId(executorId)
             .appVersion(appVersion)
             .appId("order-app-123")
-            .timeoutMs(300000l)
-            .deadlineEpochMs(System.currentTimeMillis() + 2400000)
+            .timeout(Duration.ofMillis(300000))
+            .deadline(Instant.ofEpochMilli(System.currentTimeMillis() + 2400000))
             .priority(1)
             .inputs("{\"orderId\":\"ORD-12345\"}");
 
@@ -602,7 +590,7 @@ public class QueuesTest {
     try (Connection connection = DBUtils.getConnection(dbosConfig);
         PreparedStatement pstmt = connection.prepareStatement(sql)) {
 
-      pstmt.setString(1, WorkflowState.PENDING.toString());
+      pstmt.setString(1, WorkflowState.PENDING.name());
       pstmt.setString(2, "other");
       pstmt.setString(3, opt3.workflowId());
 

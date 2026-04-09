@@ -8,6 +8,7 @@ import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
+import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowEvent;
@@ -15,9 +16,9 @@ import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.StepResult;
-import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -45,7 +46,7 @@ public class ImportExportTest {
   /** Creates a workflow directly in the DB without using importWorkflow. */
   private void createWorkflow(String wfId) throws SQLException {
     sysdb.initWorkflowStatus(
-        new WorkflowStatusInternal.Builder()
+        new WorkflowStatusInternalBuilder()
             .workflowId(wfId)
             .status(WorkflowState.PENDING)
             .workflowName("TestWorkflow")
@@ -74,7 +75,7 @@ public class ImportExportTest {
   private void createWorkflowWithChildren(String wfId, String child1Id, String child2Id)
       throws SQLException {
     sysdb.initWorkflowStatus(
-        new WorkflowStatusInternal.Builder()
+        new WorkflowStatusInternalBuilder()
             .workflowId(wfId)
             .status(WorkflowState.PENDING)
             .workflowName("TestWorkflow")
@@ -94,7 +95,7 @@ public class ImportExportTest {
   // ── Import tests (importWorkflow is the subject; setup via buildExportedWorkflow) ──────────
 
   private static ExportedWorkflow buildExportedWorkflow(String wfId) {
-    long now = System.currentTimeMillis();
+    Instant now = Instant.now();
     var status =
         new WorkflowStatusBuilder(wfId)
             .status(WorkflowState.SUCCESS)

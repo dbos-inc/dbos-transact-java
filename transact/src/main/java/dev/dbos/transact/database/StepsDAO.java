@@ -198,28 +198,49 @@ class StepsDAO {
     return recordedResult;
   }
 
-  List<StepInfo> listWorkflowSteps(String workflowId) throws SQLException {
+  List<StepInfo> listWorkflowSteps(
+      String workflowId, Boolean loadOutput, Integer limit, Integer offset) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      return listWorkflowSteps(connection, workflowId);
+      return listWorkflowSteps(connection, workflowId, loadOutput, limit, offset);
     }
   }
 
-  List<StepInfo> listWorkflowSteps(Connection connection, String workflowId) throws SQLException {
+  List<StepInfo> listWorkflowSteps(
+      Connection connection, String workflowId, Boolean loadOutput, Integer limit, Integer offset)
+      throws SQLException {
 
-    final String sql =
-        """
+    StringBuilder sqlBuilder =
+        new StringBuilder(
+            """
           SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization
           FROM "%s".operation_outputs
           WHERE workflow_uuid = ?
-          ORDER BY function_id;
+          ORDER BY function_id
         """
-            .formatted(this.schema);
+                .formatted(this.schema));
+
+    if (limit != null) {
+      sqlBuilder.append(" LIMIT ?");
+    }
+    if (offset != null) {
+      sqlBuilder.append(" OFFSET ?");
+    }
+
+    final String sql = sqlBuilder.toString();
 
     List<StepInfo> steps = new ArrayList<>();
 
     try (PreparedStatement stmt = connection.prepareStatement(sql)) {
 
-      stmt.setString(1, workflowId);
+      int paramIndex = 1;
+      stmt.setString(paramIndex++, workflowId);
+
+      if (limit != null) {
+        stmt.setInt(paramIndex++, limit);
+      }
+      if (offset != null) {
+        stmt.setInt(paramIndex++, offset);
+      }
 
       try (ResultSet rs = stmt.executeQuery()) {
 
@@ -233,21 +254,22 @@ class StepsDAO {
           Long completedAt = rs.getObject("completed_at_epoch_ms", Long.class);
           String serialization = rs.getString("serialization");
 
-          // Deserialize output if present
           Object outputVal = null;
-          if (outputData != null) {
-            try {
-              outputVal =
-                  SerializationUtil.deserializeValue(outputData, serialization, this.serializer);
-            } catch (Exception e) {
-              throw new RuntimeException(
-                  "Failed to deserialize output for function " + functionId, e);
-            }
-          }
+          ErrorResult stepError = null;
 
-          // Deserialize error if present
-          ErrorResult stepError =
-              ErrorResult.deserialize(errorData, serialization, this.serializer);
+          if (Objects.requireNonNullElse(loadOutput, true)) {
+            // Deserialize output & error if present
+            if (outputData != null) {
+              try {
+                outputVal =
+                    SerializationUtil.deserializeValue(outputData, serialization, this.serializer);
+              } catch (Exception e) {
+                throw new RuntimeException(
+                    "Failed to deserialize output for function " + functionId, e);
+              }
+            }
+            stepError = ErrorResult.deserialize(errorData, serialization, this.serializer);
+          }
           steps.add(
               new StepInfo(
                   functionId,

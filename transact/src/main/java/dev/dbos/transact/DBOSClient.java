@@ -829,10 +829,10 @@ public class DBOSClient implements AutoCloseable {
   /**
    * List workflows matching the supplied input filter criteria
    *
-   * @param input Filter criteria to use for listing workflows
+   * @param input Filter criteria to use for listing workflows. Pass null to list all workflows.
    * @return list of workflows matching the `ListWorkflowsInput` criteria
    */
-  public @NonNull List<WorkflowStatus> listWorkflows(@NonNull ListWorkflowsInput input) {
+  public @NonNull List<WorkflowStatus> listWorkflows(@Nullable ListWorkflowsInput input) {
     return systemDatabase.listWorkflows(input);
   }
 
@@ -843,7 +843,20 @@ public class DBOSClient implements AutoCloseable {
    * @return List of steps executed by the workflow
    */
   public @NonNull List<StepInfo> listWorkflowSteps(@NonNull String workflowId) {
-    return systemDatabase.listWorkflowSteps(workflowId);
+    return listWorkflowSteps(workflowId, null, null);
+  }
+
+  /**
+   * List the steps executed by a workflow with optional pagination
+   *
+   * @param workflowId ID of the workflow to list
+   * @param limit Maximum number of steps to return
+   * @param offset Number of steps to skip before returning
+   * @return List of steps executed by the workflow
+   */
+  public @NonNull List<StepInfo> listWorkflowSteps(
+      @NonNull String workflowId, Integer limit, Integer offset) {
+    return systemDatabase.listWorkflowSteps(workflowId, true, limit, offset);
   }
 
   /**
@@ -994,18 +1007,20 @@ public class DBOSClient implements AutoCloseable {
    * resume at a later time.
    *
    * <p>The delay must be specified using exactly one of the two parameters:
+   *
    * <ul>
    *   <li>Using {@code delay} parameter to specify a duration from now
    *   <li>Using {@code delayUntil} parameter to specify an absolute time
    * </ul>
    *
-   * <p>Exactly one parameter must be non-null. Providing both parameters or neither parameter
-   * will result in an exception.
+   * <p>Exactly one parameter must be non-null. Providing both parameters or neither parameter will
+   * result in an exception.
    *
    * @param workflowId the unique identifier of the workflow to delay
    * @param delay the duration to delay the workflow from now, or null if using delayUntil
    * @param delayUntil the absolute time until which to delay the workflow, or null if using delay
-   * @throws IllegalArgumentException if the workflow ID is invalid, or if both parameters are provided, or if both parameters are null
+   * @throws IllegalArgumentException if the workflow ID is invalid, or if both parameters are
+   *     provided, or if both parameters are null
    * @throws IllegalStateException if DBOS has not been launched
    */
   public void setWorkflowDelay(

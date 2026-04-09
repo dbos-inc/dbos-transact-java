@@ -35,7 +35,7 @@ public class SyncWorkflowTest {
     String result = simpleService.workWithString("test-item");
     assertEquals("Processed: test-item", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).workflowName(), "workWithString");
     assertNotNull(wfs.get(0).workflowId());
@@ -52,7 +52,7 @@ public class SyncWorkflowTest {
     var e = assertThrows(Exception.class, () -> simpleService.workWithError());
     assertEquals("DBOS Test error", e.getMessage());
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).workflowName(), "workError");
     assertEquals("java.lang.Exception", wfs.get(0).error().className());
@@ -76,7 +76,7 @@ public class SyncWorkflowTest {
 
     assertEquals("Processed: test-item", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).workflowName(), "workWithString");
     assertEquals(wfid, wfs.get(0).workflowId());
@@ -102,7 +102,7 @@ public class SyncWorkflowTest {
 
     assertEquals("Processed: test-item", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
     assertEquals(1, wfs.size());
     assertEquals(wfs.get(0).workflowName(), "workWithString");
     assertEquals("wf-123", wfs.get(0).workflowId());
@@ -113,7 +113,7 @@ public class SyncWorkflowTest {
       result = simpleService.workWithString("test-item");
     }
     assertEquals(1, impl.executionCount);
-    wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    wfs = dbos.listWorkflows(null);
     assertEquals(1, wfs.size());
     assertEquals("wf-123", wfs.get(0).workflowId());
 
@@ -122,7 +122,7 @@ public class SyncWorkflowTest {
     }
 
     assertEquals(2, impl.executionCount);
-    wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    wfs = dbos.listWorkflows(null);
     assertEquals(2, wfs.size());
     assertEquals("wf-124", wfs.get(1).workflowId());
   }
@@ -143,7 +143,7 @@ public class SyncWorkflowTest {
 
     assertEquals("123abc", result);
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
 
     assertEquals(2, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());
@@ -174,7 +174,7 @@ public class SyncWorkflowTest {
     var handle = dbos.retrieveWorkflow("wf-123456");
     assertEquals("123abcdefghi", handle.getResult());
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
 
     assertEquals(4, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());
@@ -225,7 +225,7 @@ public class SyncWorkflowTest {
     var handle = dbos.retrieveWorkflow("wf-123456");
     assertEquals("p-c-gc-123", handle.getResult());
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
 
     assertEquals(3, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());

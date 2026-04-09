@@ -322,8 +322,9 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> StepsDAO.recordStepResultTxn(dataSource, result, startTime, et, this.schema));
   }
 
-  public List<StepInfo> listWorkflowSteps(String workflowId) {
-    return dbRetry(() -> stepsDAO.listWorkflowSteps(workflowId));
+  public List<StepInfo> listWorkflowSteps(
+      String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
+    return dbRetry(() -> stepsDAO.listWorkflowSteps(workflowId, loadOutput, limit, offset));
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
@@ -508,8 +509,8 @@ public class SystemDatabase implements AutoCloseable {
         });
   }
 
-  public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) {
-    dbRetry(() -> workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold));
+  public void garbageCollect(Instant cutoff, Long rowsThreshold) {
+    dbRetry(() -> workflowDAO.garbageCollect(cutoff, rowsThreshold));
   }
 
   public void setWorkflowDelay(String workflowId, Duration delay, Instant delayUntil) {
@@ -888,7 +889,7 @@ public class SystemDatabase implements AutoCloseable {
           for (var wfid : workflowIds) {
             try (var conn = dataSource.getConnection()) {
               var status = workflowDAO.getWorkflowStatus(conn, wfid);
-              var steps = stepsDAO.listWorkflowSteps(conn, wfid);
+              var steps = stepsDAO.listWorkflowSteps(conn, wfid, true, null, null);
               var events = listWorkflowEvents(conn, wfid);
               var eventHistory = listWorkflowEventHistory(conn, wfid);
               var streams = listWorkflowStreams(conn, wfid);
@@ -1011,15 +1012,15 @@ public class SystemDatabase implements AutoCloseable {
                 wfStmt.setString(12, status.executorId());
                 wfStmt.setString(13, status.appVersion());
                 wfStmt.setString(14, status.appId());
-                wfStmt.setObject(15, status.createdAt());
-                wfStmt.setObject(16, status.updatedAt());
-                wfStmt.setObject(17, status.startedAtEpochMs());
+                wfStmt.setObject(15, status.createdAtMs());
+                wfStmt.setObject(16, status.updatedAtMs());
+                wfStmt.setObject(17, status.startedAtMs());
                 wfStmt.setString(18, status.queueName());
                 wfStmt.setString(19, status.deduplicationId());
                 wfStmt.setObject(20, status.priority());
                 wfStmt.setString(21, status.queuePartitionKey());
                 wfStmt.setObject(22, status.timeoutMs());
-                wfStmt.setObject(23, status.deadlineEpochMs());
+                wfStmt.setObject(23, status.deadlineMs());
                 wfStmt.setObject(24, status.recoveryAttempts());
                 wfStmt.setString(25, status.forkedFrom());
                 wfStmt.setString(26, status.parentWorkflowId());

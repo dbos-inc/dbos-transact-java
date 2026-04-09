@@ -111,6 +111,7 @@ public class Conductor implements AutoCloseable {
   }
 
   // TODO: do we need the insecure connection?
+  // Tracking issue: https://github.com/dbos-inc/dbos-transact-java/issues/346
   private static HttpClient buildHttpClient() {
     try {
       // Intentionally insecure: matches previous Netty InsecureTrustManagerFactory behavior
@@ -716,7 +717,8 @@ public class Conductor implements AutoCloseable {
                 message,
                 conductor.dbosExecutor.executorId(),
                 conductor.dbosExecutor.appVersion(),
-                hostname);
+                hostname,
+                conductor.dbosExecutor.executorMetadata());
           } catch (Exception e) {
             return new ExecutorInfoResponse(message, e);
           }
@@ -900,7 +902,8 @@ public class Conductor implements AutoCloseable {
           ListStepsRequest request = (ListStepsRequest) message;
           try {
             List<StepInfo> stepInfoList =
-                conductor.dbosExecutor.listWorkflowSteps(request.workflow_id);
+                conductor.dbosExecutor.listWorkflowSteps(
+                    request.workflow_id, request.load_output, request.limit, request.offset);
             List<ListStepsResponse.Step> steps =
                 stepInfoList.stream().map(ListStepsResponse.Step::new).collect(Collectors.toList());
             return new ListStepsResponse(request, steps);
@@ -934,8 +937,9 @@ public class Conductor implements AutoCloseable {
         () -> {
           GetWorkflowRequest request = (GetWorkflowRequest) message;
           try {
-            var status = conductor.systemDatabase.getWorkflowStatus(request.workflow_id);
-            WorkflowsOutput output = status == null ? null : new WorkflowsOutput(status);
+            var status = conductor.systemDatabase.listWorkflows(request.toInput());
+            WorkflowsOutput output =
+                status == null || status.size() < 1 ? null : new WorkflowsOutput(status.get(0));
             return new GetWorkflowResponse(request, output);
           } catch (Exception e) {
             logger.error("Exception encountered when getting workflow {}", request.workflow_id, e);
@@ -950,8 +954,11 @@ public class Conductor implements AutoCloseable {
           RetentionRequest request = (RetentionRequest) message;
 
           try {
-            conductor.systemDatabase.garbageCollect(
-                request.body.gc_cutoff_epoch_ms, request.body.gc_rows_threshold);
+            var cutoff =
+                request.body.gc_cutoff_epoch_ms == null
+                    ? null
+                    : Instant.ofEpochMilli(request.body.gc_cutoff_epoch_ms);
+            conductor.systemDatabase.garbageCollect(cutoff, request.body.gc_rows_threshold);
           } catch (Exception e) {
             logger.error("Exception encountered garbage collecting system database", e);
             return new SuccessResponse(request, e);
@@ -959,7 +966,8 @@ public class Conductor implements AutoCloseable {
 
           try {
             if (request.body.timeout_cutoff_epoch_ms != null) {
-              conductor.dbosExecutor.globalTimeout(request.body.timeout_cutoff_epoch_ms);
+              conductor.dbosExecutor.globalTimeout(
+                  Instant.ofEpochMilli(request.body.timeout_cutoff_epoch_ms));
             }
           } catch (Exception e) {
             logger.error("Exception encountered setting global timeout", e);

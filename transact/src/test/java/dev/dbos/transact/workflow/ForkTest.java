@@ -2,10 +2,12 @@ package dev.dbos.transact.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
@@ -80,6 +82,7 @@ public class ForkTest {
     var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
+    assertFalse(handle.getStatus().wasForkedFrom());
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);
@@ -90,6 +93,7 @@ public class ForkTest {
     logger.info("First execution done starting fork");
 
     var handle1 = dbos.forkWorkflow(workflowId, 0);
+    assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertEquals("hellohello", handle1.getResult());
     assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertNotEquals(handle1.workflowId(), workflowId);
@@ -146,6 +150,7 @@ public class ForkTest {
     var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
+    assertFalse(handle.getStatus().wasForkedFrom());
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);
@@ -159,6 +164,7 @@ public class ForkTest {
     var options = new ForkOptions().withForkedWorkflowId(forkedWorkflowId);
 
     var handle1 = dbos.forkWorkflow(workflowId, 0, options);
+    assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertEquals("hellohello", handle1.getResult());
     assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertEquals(forkedWorkflowId, handle1.workflowId());
@@ -187,11 +193,13 @@ public class ForkTest {
     var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
+    assertFalse(handle.getStatus().wasForkedFrom());
     assertNotNull(handle.getStatus().appVersion());
 
     DBOSTestAccess.getQueueService(dbos).pause();
 
     var handle1 = dbos.forkWorkflow(workflowId, 0);
+    assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertNotEquals(workflowId, handle1.workflowId());
     assertNull(handle1.getStatus().appVersion());
     assertEquals(workflowId, handle1.getStatus().forkedFrom());
@@ -217,21 +225,23 @@ public class ForkTest {
     var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
+    assertFalse(handle.getStatus().wasForkedFrom());
     assertNotNull(handle.getStatus().appVersion());
 
     DBOSTestAccess.getQueueService(dbos).pause();
 
     var handle1 = dbos.forkWorkflow(workflowId, 0);
+    assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertNotEquals(workflowId, handle1.workflowId());
-    assertNull(handle1.getStatus().timeoutMs());
-    assertNull(handle1.getStatus().deadlineEpochMs());
+    assertNull(handle1.getStatus().timeout());
+    assertNull(handle1.getStatus().deadline());
 
     var options = new ForkOptions().withTimeout(Duration.ofSeconds(1));
     var handle2 = dbos.forkWorkflow(workflowId, 0, options);
     assertNotEquals(workflowId, handle2.workflowId());
     assertEquals(workflowId, handle2.getStatus().forkedFrom());
-    assertEquals(1000, handle2.getStatus().timeoutMs());
-    assertNull(handle2.getStatus().deadlineEpochMs());
+    assertEquals(Duration.ofMillis(1000), handle2.getStatus().timeout());
+    assertNull(handle2.getStatus().deadline());
   }
 
   @Test
@@ -248,28 +258,30 @@ public class ForkTest {
     var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
-    assertEquals(1000, handle.getStatus().timeoutMs());
+    assertFalse(handle.getStatus().wasForkedFrom());
+    assertEquals(Duration.ofMillis(1000), handle.getStatus().timeout());
 
     DBOSTestAccess.getQueueService(dbos).pause();
 
     var handle1 = dbos.forkWorkflow(workflowId, 0);
+    assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertNotEquals(workflowId, handle1.workflowId());
-    assertEquals(1000, handle1.getStatus().timeoutMs());
-    assertNull(handle1.getStatus().deadlineEpochMs());
+    assertEquals(Duration.ofMillis(1000), handle1.getStatus().timeout());
+    assertNull(handle1.getStatus().deadline());
 
     var forkOptions = new ForkOptions().withTimeout(Duration.ofSeconds(2));
     var handle2 = dbos.forkWorkflow(workflowId, 0, forkOptions);
     assertNotEquals(workflowId, handle2.workflowId());
     assertEquals(workflowId, handle2.getStatus().forkedFrom());
-    assertEquals(2000, handle2.getStatus().timeoutMs());
-    assertNull(handle2.getStatus().deadlineEpochMs());
+    assertEquals(Duration.ofMillis(2000), handle2.getStatus().timeout());
+    assertNull(handle2.getStatus().deadline());
 
     forkOptions = new ForkOptions().withNoTimeout();
     var handle3 = dbos.forkWorkflow(workflowId, 0, forkOptions);
     assertNotEquals(workflowId, handle3.workflowId());
     assertEquals(workflowId, handle3.getStatus().forkedFrom());
-    assertNull(handle3.getStatus().timeoutMs());
-    assertNull(handle2.getStatus().deadlineEpochMs());
+    assertNull(handle3.getStatus().timeout());
+    assertNull(handle2.getStatus().deadline());
   }
 
   @Test
@@ -285,6 +297,7 @@ public class ForkTest {
 
     // No queue options: should default to the internal queue with no partition key
     var handle1 = dbos.forkWorkflow(workflowId, 0);
+    assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertNotEquals(workflowId, handle1.workflowId());
     assertEquals(Constants.DBOS_INTERNAL_QUEUE, handle1.getStatus().queueName());
     assertNull(handle1.getStatus().queuePartitionKey());
@@ -339,6 +352,7 @@ public class ForkTest {
             .withQueue(testPartitionQueue.name())
             .withQueuePartitionKey("partition-key");
     var handle1 = dbos.forkWorkflow(workflowId, 0, options1);
+    assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertNotEquals(workflowId, handle1.workflowId());
     assertEquals(testPartitionQueue.name(), handle1.getStatus().queueName());
     assertEquals("partition-key", handle1.getStatus().queuePartitionKey());
@@ -391,6 +405,7 @@ public class ForkTest {
     var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
+    assertFalse(handle.getStatus().wasForkedFrom());
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);
@@ -401,6 +416,7 @@ public class ForkTest {
     logger.info("First execution done starting fork");
 
     var handle1 = dbos.forkWorkflow(workflowId, 3);
+    assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertEquals("hellohello", handle1.getResult());
     assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertNotEquals(handle1.workflowId(), workflowId);
@@ -431,6 +447,7 @@ public class ForkTest {
     var handle = dbos.retrieveWorkflow(workflowId);
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
     assertNull(handle.getStatus().forkedFrom());
+    assertFalse(handle.getStatus().wasForkedFrom());
 
     assertEquals(1, impl.step1Count);
     assertEquals(1, impl.step2Count);
@@ -441,6 +458,7 @@ public class ForkTest {
     logger.info("First execution done starting fork");
 
     var handle1 = dbos.forkWorkflow(workflowId, 3);
+    assertTrue(dbos.retrieveWorkflow(workflowId).getStatus().wasForkedFrom());
     assertEquals("hellohello", handle1.getResult());
     assertEquals(WorkflowState.SUCCESS, handle1.getStatus().status());
     assertNotEquals(handle1.workflowId(), workflowId);
@@ -480,6 +498,7 @@ public class ForkTest {
 
     // Fork the workflow from each step, verify the event is set to the appropriate value
     var forkZero = dbos.forkWorkflow(wfid, 0);
+    assertTrue(dbos.retrieveWorkflow(wfid).getStatus().wasForkedFrom());
     assertNull(dbos.getEvent(forkZero.workflowId(), key, timeout).orElse(null));
 
     var forkOne = dbos.forkWorkflow(wfid, 1);
@@ -537,6 +556,7 @@ public class ForkTest {
 
     // Fork at 0: nothing copied (function_id < 0)
     var fork0 = dbos.forkWorkflow(wfid, 0);
+    assertTrue(dbos.retrieveWorkflow(wfid).getStatus().wasForkedFrom());
     assertEquals(0, DBUtils.getStreamEntries(dataSource, fork0.workflowId()).size());
 
     // Fork at 2: fid=1 (v1) copied

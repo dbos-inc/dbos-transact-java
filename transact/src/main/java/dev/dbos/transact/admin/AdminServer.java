@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -173,7 +174,8 @@ public class AdminServer implements AutoCloseable {
 
     var request = mapper.readValue(exchange.getRequestBody(), GarbageCollectRequest.class);
 
-    systemDatabase.garbageCollect(request.cutoff_epoch_timestamp_ms, (long) request.rows_threshold);
+    systemDatabase.garbageCollect(
+        Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms), (long) request.rows_threshold);
 
     exchange.sendResponseHeaders(204, 0);
   }
@@ -182,7 +184,7 @@ public class AdminServer implements AutoCloseable {
     if (!ensurePostJson(exchange)) return;
 
     var request = mapper.readValue(exchange.getRequestBody(), GlobalTimeoutRequest.class);
-    dbosExecutor.globalTimeout(request.cutoff_epoch_timestamp_ms);
+    dbosExecutor.globalTimeout(Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms));
 
     exchange.sendResponseHeaders(204, 0);
   }
@@ -208,9 +210,9 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {
-    var input = new ListWorkflowsInput().withWorkflowId(wfid);
+    var input = new ListWorkflowsInput(wfid);
     var workflows = systemDatabase.listWorkflows(input);
-    if (workflows.size() == 0) {
+    if (workflows.isEmpty()) {
       sendText(exchange, 404, "Workflow not found");
       return;
     }
@@ -220,7 +222,7 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void listSteps(HttpExchange exchange, String wfid) throws IOException {
-    var steps = systemDatabase.listWorkflowSteps(wfid);
+    var steps = systemDatabase.listWorkflowSteps(wfid, true, null, null);
     var response = steps.stream().map(StepOutput::of).collect(Collectors.toList());
     sendMappedJson(exchange, 200, response);
   }
