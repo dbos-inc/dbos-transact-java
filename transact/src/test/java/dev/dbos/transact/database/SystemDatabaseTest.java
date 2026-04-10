@@ -1111,7 +1111,9 @@ public class SystemDatabaseTest {
         sysdb.initWorkflowStatus(
             WorkflowStatusInternalBuilder.create(wfid).build(), 5, false, false);
     assertEquals(WorkflowState.PENDING, result.status());
-    assertEquals(WorkflowState.PENDING.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.PENDING.name(), row.status());
+    assertNull(row.delayUntilEpochMs());
   }
 
   @Test
@@ -1124,23 +1126,33 @@ public class SystemDatabaseTest {
             false,
             false);
     assertEquals(WorkflowState.ENQUEUED, result.status());
-    assertEquals(WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+    assertNull(row.delayUntilEpochMs());
   }
 
   @Test
   public void testInitWorkflowStatusStateQueueWithDelay() throws Exception {
     var wfid = "wf-state-queue-delay";
+    var delay = Duration.ofSeconds(60);
+    long before = System.currentTimeMillis();
     var result =
         sysdb.initWorkflowStatus(
             WorkflowStatusInternalBuilder.create(wfid)
                 .queueName("test-queue")
-                .delay(Duration.ofSeconds(60))
+                .delay(delay)
                 .build(),
             5,
             false,
             false);
     assertEquals(WorkflowState.DELAYED, result.status());
-    assertEquals(WorkflowState.DELAYED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.DELAYED.name(), row.status());
+    // delay_until_epoch_ms should be an absolute epoch timestamp ~60 seconds from now
+    assertNotNull(row.delayUntilEpochMs());
+    assertTrue(row.delayUntilEpochMs() >= before + delay.toMillis() - 1_000);
+    assertTrue(row.delayUntilEpochMs() <= before + delay.toMillis() + 1_000);
   }
 
   // ── Workflow Delay ────────────────────────────────────────────────────────
@@ -1158,12 +1170,12 @@ public class SystemDatabaseTest {
         false);
 
     long before = System.currentTimeMillis();
-    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.Delay(Duration.ofSeconds(60)));
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.Delay(Duration.ofSeconds(30)));
 
     var row = DBUtils.getWorkflowRow(dataSource, wfid);
     assertNotNull(row.delayUntilEpochMs());
-    assertTrue(row.delayUntilEpochMs() >= before + 59_000);
-    assertTrue(row.delayUntilEpochMs() <= before + 61_000);
+    assertTrue(row.delayUntilEpochMs() >= before + 29_000);
+    assertTrue(row.delayUntilEpochMs() <= before + 31_000);
   }
 
   @Test
@@ -1187,18 +1199,28 @@ public class SystemDatabaseTest {
 
   @Test
   public void testSetWorkflowDelayIgnoresNonDelayedWorkflow() throws Exception {
-    // ENQUEUED (queue, no delay) — setWorkflowDelay should be a no-op
-    var wfid = "wf-delay-non-delayed";
-    sysdb.initWorkflowStatus(
-        WorkflowStatusInternalBuilder.create(wfid).queueName("test-queue").build(),
-        5,
-        false,
-        false);
+    var targetDelay = new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60));
 
-    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
+    for (var state :
+        List.of(
+            WorkflowState.PENDING,
+            WorkflowState.ENQUEUED,
+            WorkflowState.SUCCESS,
+            WorkflowState.ERROR,
+            WorkflowState.CANCELLED)) {
+      var wfid = "wf-delay-non-delayed-" + state.name().toLowerCase();
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create(wfid).queueName("test-queue").build(),
+          5,
+          false,
+          false);
+      DBUtils.setWorkflowState(dataSource, wfid, state.name());
 
-    var row = DBUtils.getWorkflowRow(dataSource, wfid);
-    assertNull(row.delayUntilEpochMs());
+      sysdb.setWorkflowDelay(wfid, targetDelay);
+
+      var row = DBUtils.getWorkflowRow(dataSource, wfid);
+      assertNull(row.delayUntilEpochMs(), "Expected no delay for status " + state);
+    }
   }
 
   @Test

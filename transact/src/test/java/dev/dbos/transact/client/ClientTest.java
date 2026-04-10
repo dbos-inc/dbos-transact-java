@@ -271,6 +271,77 @@ public class ClientTest {
   }
 
   @Test
+  public void clientSetWorkflowDelayWithDuration() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var delay = Duration.ofSeconds(60);
+      var options =
+          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+              .withDelay(delay);
+      var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
+      var wfId = handle.workflowId();
+
+      // enqueueWorkflow stores delay_until_epoch_ms as an absolute epoch timestamp
+      long before = System.currentTimeMillis();
+      var row = DBUtils.getWorkflowRow(dataSource, wfId);
+      assertEquals(WorkflowState.DELAYED.name(), row.status());
+      assertNotNull(row.delayUntilEpochMs());
+      assertTrue(row.delayUntilEpochMs() >= before + delay.toMillis() - 1_000);
+      assertTrue(row.delayUntilEpochMs() <= before + delay.toMillis() + 1_000);
+
+      // setWorkflowDelay updates delay_until_epoch_ms to a new absolute epoch timestamp
+      before = System.currentTimeMillis();
+      client.setWorkflowDelay(wfId, Duration.ofSeconds(30));
+
+      row = DBUtils.getWorkflowRow(dataSource, wfId);
+      assertTrue(row.delayUntilEpochMs() >= before + 29_000);
+      assertTrue(row.delayUntilEpochMs() <= before + 31_000);
+
+      // Clear the delay so the workflow can run
+      client.setWorkflowDelay(wfId, Instant.now().minusSeconds(1));
+      qs.unpause();
+      assertEquals("42-spam", handle.getResult());
+    }
+  }
+
+  @Test
+  public void clientSetWorkflowDelayWithInstant() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    try (var client = pgContainer.dbosClient()) {
+      var delay = Duration.ofSeconds(60);
+      var options =
+          new DBOSClient.EnqueueOptions("enqueueTest", "ClientServiceImpl", "testQueue")
+              .withDelay(delay);
+      var handle = client.enqueueWorkflow(options, new Object[] {42, "spam"});
+      var wfId = handle.workflowId();
+
+      // enqueueWorkflow stores delay_until_epoch_ms as an absolute epoch timestamp
+      long before = System.currentTimeMillis();
+      var row = DBUtils.getWorkflowRow(dataSource, wfId);
+      assertEquals(WorkflowState.DELAYED.name(), row.status());
+      assertNotNull(row.delayUntilEpochMs());
+      assertTrue(row.delayUntilEpochMs() >= before + delay.toMillis() - 1_000);
+      assertTrue(row.delayUntilEpochMs() <= before + delay.toMillis() + 1_000);
+
+      // setWorkflowDelay updates delay_until_epoch_ms to a new absolute epoch timestamp
+      var targetInstant = Instant.now().plusSeconds(120);
+      client.setWorkflowDelay(wfId, targetInstant);
+
+      row = DBUtils.getWorkflowRow(dataSource, wfId);
+      assertEquals(targetInstant.toEpochMilli(), row.delayUntilEpochMs());
+
+      // Clear the delay so the workflow can run
+      client.setWorkflowDelay(wfId, Instant.now().minusSeconds(1));
+      qs.unpause();
+      assertEquals("42-spam", handle.getResult());
+    }
+  }
+
+  @Test
   public void versionCrudCrossApiConsistency() throws Exception {
     var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
     sysdb.createApplicationVersion("v1.0.0");

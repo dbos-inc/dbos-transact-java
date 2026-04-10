@@ -257,7 +257,7 @@ class WorkflowDAO {
       stmt.setString(8, status.deduplicationId());
       stmt.setInt(9, Objects.requireNonNullElse(status.priority(), 0));
       stmt.setString(10, status.queuePartitionKey());
-      stmt.setObject(11, status.delayMs());
+      stmt.setObject(11, status.delayMs() != null ? now + status.delayMs() : null);
 
       stmt.setString(12, status.authenticatedUser());
       stmt.setString(13, status.assumedRole());

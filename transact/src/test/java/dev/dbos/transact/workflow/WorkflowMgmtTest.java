@@ -8,12 +8,16 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
+import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +33,7 @@ public class WorkflowMgmtTest {
 
   DBOSConfig dbosConfig;
   @AutoClose DBOS dbos;
+  @AutoClose HikariDataSource dataSource;
 
   private MgmtService proxy;
   private MgmtServiceImpl impl;
@@ -38,6 +43,7 @@ public class WorkflowMgmtTest {
   void beforeEach() {
     dbosConfig = pgContainer.dbosConfig().withAppVersion("v1.0.0");
     dbos = new DBOS(dbosConfig);
+    dataSource = pgContainer.dataSource();
 
     impl = new MgmtServiceImpl(dbos);
     proxy = dbos.registerProxy(MgmtService.class, impl);
@@ -262,6 +268,73 @@ public class WorkflowMgmtTest {
     // v1.0.0 should now sort first in the list (highest timestamp)
     var versions = dbos.listApplicationVersions();
     assertEquals("v1.0.0", versions.get(0).versionName());
+  }
+
+  @Test
+  public void setWorkflowDelayWithDuration() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    long before = System.currentTimeMillis();
+    var delay = Duration.ofSeconds(60);
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.helloWorkflow("world"),
+            new StartWorkflowOptions().withQueue(myqueue).withDelay(delay));
+    var wfId = handle.workflowId();
+
+    // startWorkflow stores delay_until_epoch_ms as an absolute epoch timestamp
+    var row = DBUtils.getWorkflowRow(dataSource, wfId);
+    assertEquals(WorkflowState.DELAYED.name(), row.status());
+    assertNotNull(row.delayUntilEpochMs());
+    assertTrue(row.delayUntilEpochMs() >= before + delay.toMillis() - 1_000);
+    assertTrue(row.delayUntilEpochMs() <= before + delay.toMillis() + 1_000);
+
+    // setWorkflowDelay updates delay_until_epoch_ms to a new absolute epoch timestamp
+    before = System.currentTimeMillis();
+    dbos.setWorkflowDelay(wfId, Duration.ofSeconds(30));
+
+    row = DBUtils.getWorkflowRow(dataSource, wfId);
+    assertTrue(row.delayUntilEpochMs() >= before + 29_000);
+    assertTrue(row.delayUntilEpochMs() <= before + 31_000);
+
+    // Clear the delay so the workflow can run
+    dbos.setWorkflowDelay(wfId, Instant.now().minusSeconds(1));
+    qs.unpause();
+    assertEquals("Hello, world!", handle.getResult());
+  }
+
+  @Test
+  public void setWorkflowDelayWithInstant() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    long before = System.currentTimeMillis();
+    var delay = Duration.ofSeconds(60);
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.helloWorkflow("world"),
+            new StartWorkflowOptions().withQueue(myqueue).withDelay(delay));
+    var wfId = handle.workflowId();
+
+    // startWorkflow stores delay_until_epoch_ms as an absolute epoch timestamp
+    var row = DBUtils.getWorkflowRow(dataSource, wfId);
+    assertEquals(WorkflowState.DELAYED.name(), row.status());
+    assertNotNull(row.delayUntilEpochMs());
+    assertTrue(row.delayUntilEpochMs() >= before + delay.toMillis() - 1_000);
+    assertTrue(row.delayUntilEpochMs() <= before + delay.toMillis() + 1_000);
+
+    // setWorkflowDelay updates delay_until_epoch_ms to a new absolute epoch timestamp
+    var targetInstant = Instant.now().plusSeconds(120);
+    dbos.setWorkflowDelay(wfId, targetInstant);
+
+    row = DBUtils.getWorkflowRow(dataSource, wfId);
+    assertEquals(targetInstant.toEpochMilli(), row.delayUntilEpochMs());
+
+    // Clear the delay so the workflow can run
+    dbos.setWorkflowDelay(wfId, Instant.now().minusSeconds(1));
+    qs.unpause();
+    assertEquals("Hello, world!", handle.getResult());
   }
 
   @Test
