@@ -1283,6 +1283,90 @@ public class SystemDatabaseTest {
         WorkflowState.DELAYED.name(), DBUtils.getWorkflowRow(dataSource, futureWfid).status());
   }
 
+  // ── insertWorkflowStatus ON CONFLICT behavior ──────────────────────────────
+
+  @Test
+  public void testInsertWorkflowStatusConflictPending() throws Exception {
+    // PENDING (no queue): on conflict, recovery_attempts is incremented and executor_id is updated
+    var wfid = "wf-conflict-pending";
+    var first = WorkflowStatusInternalBuilder.create(wfid).executorId("executor-1").build();
+    sysdb.initWorkflowStatus(first, 5, false, false);
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.PENDING.name(), row.status());
+    assertEquals("executor-1", row.executorId());
+    assertEquals(1L, row.recoveryAttempts()); // PENDING starts at 1
+
+    // Re-insert as a recovery request — ON CONFLICT should increment recovery_attempts and update
+    // executor_id
+    var second = WorkflowStatusInternalBuilder.create(wfid).executorId("executor-2").build();
+    sysdb.initWorkflowStatus(second, 5, true, false);
+
+    row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(2L, row.recoveryAttempts()); // 1 + 1 = 2
+    assertEquals("executor-2", row.executorId()); // updated to new executor
+  }
+
+  @Test
+  public void testInsertWorkflowStatusConflictEnqueued() throws Exception {
+    // ENQUEUED (queue, no delay): on conflict, recovery_attempts and executor_id are both preserved
+    var wfid = "wf-conflict-enqueued";
+    var first =
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("myqueue")
+            .executorId("executor-1")
+            .build();
+    sysdb.initWorkflowStatus(first, 5, false, false);
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+    assertEquals("executor-1", row.executorId());
+    assertEquals(0L, row.recoveryAttempts()); // ENQUEUED starts at 0
+
+    // Re-insert as a recovery request — ON CONFLICT should preserve both values
+    var second =
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("myqueue")
+            .executorId("executor-2")
+            .build();
+    sysdb.initWorkflowStatus(second, 5, true, false);
+
+    row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(0L, row.recoveryAttempts()); // preserved — existing status was ENQUEUED
+    assertEquals("executor-1", row.executorId()); // preserved — incoming status was ENQUEUED
+  }
+
+  @Test
+  public void testInsertWorkflowStatusConflictDelayed() throws Exception {
+    // DELAYED (queue + delay): on conflict, recovery_attempts and executor_id are both preserved
+    var wfid = "wf-conflict-delayed";
+    var first =
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("myqueue")
+            .delay(Duration.ofHours(1))
+            .executorId("executor-1")
+            .build();
+    sysdb.initWorkflowStatus(first, 5, false, false);
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.DELAYED.name(), row.status());
+    assertEquals("executor-1", row.executorId());
+    assertEquals(0L, row.recoveryAttempts()); // DELAYED starts at 0
+
+    // Re-insert as a recovery request — ON CONFLICT should preserve both values
+    var second =
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("myqueue")
+            .delay(Duration.ofHours(1))
+            .executorId("executor-2")
+            .build();
+    sysdb.initWorkflowStatus(second, 5, true, false);
+
+    row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(0L, row.recoveryAttempts()); // preserved — existing status was DELAYED
+    assertEquals("executor-1", row.executorId()); // preserved — incoming status was DELAYED
+  }
+
   @Test
   public void testGetWorkflowAggregatesBasic() throws Exception {
     sysdb.importWorkflow(

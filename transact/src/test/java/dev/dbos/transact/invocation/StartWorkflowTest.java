@@ -4,8 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
@@ -143,5 +145,52 @@ public class StartWorkflowTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
+  }
+
+  @Test
+  void startWorkflowWithDelayManualTransition() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    var delay = Duration.ofMillis(500);
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.simpleWorkflow(),
+            new StartWorkflowOptions().withQueue("queue").withDelay(delay));
+
+    // Workflow should be DELAYED before the delay expires
+    assertEquals(WorkflowState.DELAYED, handle.getStatus().status());
+
+    // Wait until the delay has passed
+    Thread.sleep(delay.toMillis() + 100);
+
+    // Manually call transitionDelayedWorkflows, simulating what the paused QueueService would do
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    sysdb.transitionDelayedWorkflows();
+
+    // Workflow should now be ENQUEUED, waiting for the QueueService to pick it up
+    assertEquals(WorkflowState.ENQUEUED, handle.getStatus().status());
+
+    // Unpause and let the workflow run
+    qs.unpause();
+    assertEquals(localDate, handle.getResult());
+  }
+
+  @Test
+  void startWorkflowWithDelayRealPolling() throws Exception {
+    long start = System.currentTimeMillis();
+    var delay = Duration.ofSeconds(5);
+
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.simpleWorkflow(),
+            new StartWorkflowOptions().withQueue("queue").withDelay(delay));
+
+    assertEquals(localDate, handle.getResult());
+
+    long elapsed = System.currentTimeMillis() - start;
+    assertTrue(
+        elapsed >= delay.toMillis(),
+        "Expected at least 5s delay but elapsed was " + elapsed + "ms");
   }
 }

@@ -139,6 +139,42 @@ public class QueuesTest {
   }
 
   @Test
+  public void testDedupeIdWithDelay() throws Exception {
+
+    Queue firstQ = new Queue("firstQueue");
+    dbos.registerQueue(firstQ);
+
+    ServiceQ serviceQ = dbos.registerProxy(ServiceQ.class, new ServiceQImpl());
+    dbos.launch();
+
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    var dedupeId = "dedupeId";
+    var options = new StartWorkflowOptions().withQueue(firstQ).withDeduplicationId(dedupeId);
+    var h1 =
+        dbos.startWorkflow(
+            () -> serviceQ.simpleQWorkflow("abc"), options.withDelay(Duration.ofHours(1)));
+    var s1 = h1.getStatus();
+    assertEquals(WorkflowState.DELAYED, s1.status());
+    assertEquals(dedupeId, s1.deduplicationId());
+
+    // Same dedupe ID should conflict even while DELAYED
+    assertThrows(
+        RuntimeException.class,
+        () -> dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("def"), options));
+
+    // Clear the delay and run
+    dbos.setWorkflowDelay(h1.workflowId(), Instant.now().minusSeconds(1));
+    qs.unpause();
+    h1.getResult();
+
+    // After completion the dedupe ID is released — re-enqueue should succeed
+    var h2 = dbos.startWorkflow(() -> serviceQ.simpleQWorkflow("ghi"), options);
+    h2.getResult();
+  }
+
+  @Test
   public void testPriority() throws Exception {
 
     Queue firstQ =

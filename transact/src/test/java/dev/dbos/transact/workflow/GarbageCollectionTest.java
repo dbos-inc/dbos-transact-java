@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
 
@@ -26,6 +27,7 @@ public class GarbageCollectionTest {
 
   private GCTestServiceImpl impl;
   private GCTestService proxy;
+  private Queue gcQueue;
 
   @BeforeEach
   void beforeEach() {
@@ -34,6 +36,9 @@ public class GarbageCollectionTest {
 
     impl = new GCTestServiceImpl(dbos);
     proxy = dbos.registerProxy(GCTestService.class, impl);
+
+    gcQueue = new Queue("gcqueue");
+    dbos.registerQueue(gcQueue);
 
     dbos.launch();
   }
@@ -92,6 +97,44 @@ public class GarbageCollectionTest {
     systemDatabase.garbageCollect(Instant.now().minus(Duration.ofMillis(1000)), null);
     statusList = systemDatabase.listWorkflows(null);
     assertEquals(numWorkflows, statusList.size());
+  }
+
+  @Test
+  void gcPreservesDelayedAndEnqueued() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    var systemDatabase = DBOSTestAccess.getSystemDatabase(dbos);
+
+    // Create a DELAYED workflow (long delay, won't run)
+    var delayedHandle =
+        dbos.startWorkflow(
+            () -> proxy.testWorkflow(1),
+            new StartWorkflowOptions().withQueue(gcQueue).withDelay(Duration.ofHours(1)));
+
+    // Create an ENQUEUED workflow (stays ENQUEUED since QueueService is paused)
+    var enqueuedHandle =
+        dbos.startWorkflow(
+            () -> proxy.testWorkflow(2), new StartWorkflowOptions().withQueue(gcQueue));
+
+    // Run some completed workflows
+    proxy.testWorkflow(3);
+    proxy.testWorkflow(4);
+
+    List<WorkflowStatus> statusList = systemDatabase.listWorkflows(null);
+    assertEquals(4, statusList.size());
+
+    // GC all completed workflows
+    systemDatabase.garbageCollect(Instant.now(), null);
+
+    // DELAYED and ENQUEUED should survive; completed ones should be gone
+    statusList = systemDatabase.listWorkflows(null);
+    assertEquals(2, statusList.size());
+    var survivingIds = statusList.stream().map(WorkflowStatus::workflowId).toList();
+    assertTrue(survivingIds.contains(delayedHandle.workflowId()));
+    assertTrue(survivingIds.contains(enqueuedHandle.workflowId()));
+
+    qs.unpause();
   }
 
   @Test
