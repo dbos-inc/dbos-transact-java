@@ -180,9 +180,7 @@ class WorkflowDAO {
       String className,
       String instanceName,
       String queueName,
-      Long timeoutMs,
       Long deadlineEpochMs,
-      String executorId,
       String serialization,
       String ownerXid) {}
 
@@ -227,7 +225,7 @@ class WorkflowDAO {
                   THEN EXCLUDED.executor_id
                   ELSE workflow_status.executor_id
               END
-          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_timeout_ms, workflow_deadline_epoch_ms, executor_id, owner_xid, serialization
+          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, owner_xid, serialization
         """
             .formatted(this.schema);
 
@@ -289,9 +287,7 @@ class WorkflowDAO {
                   rs.getString("class_name"),
                   rs.getString("config_name"),
                   rs.getString("queue_name"),
-                  rs.getObject("workflow_timeout_ms", Long.class),
                   rs.getObject("workflow_deadline_epoch_ms", Long.class),
-                  rs.getString("executor_id"),
                   rs.getString("serialization"),
                   rs.getString("owner_xid"));
 
