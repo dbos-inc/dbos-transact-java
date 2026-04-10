@@ -537,15 +537,7 @@ public class QueuesTest {
           builder.workflowId(wfid).deduplicationId("dedup" + i).executorId(executor2).build();
       systemDatabase.initWorkflowStatus(status, null, false, false);
 
-      // Update the workflow_status table for the wfid variable, setting status to "PENDING"
-      String updateSql = "UPDATE dbos.workflow_status SET status = ? WHERE workflow_uuid = ?;";
-      try (Connection conn = DBUtils.getConnection(dbosConfig);
-          PreparedStatement pstmt = conn.prepareStatement(updateSql)) {
-        pstmt.setString(1, WorkflowState.PENDING.name());
-        pstmt.setString(2, wfid);
-        int updated = pstmt.executeUpdate();
-        assertEquals(1, updated);
-      }
+      DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
     }
 
     List<String> idsToRun =

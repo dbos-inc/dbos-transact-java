@@ -1699,6 +1699,12 @@ public class DBOSExecutor implements AutoCloseable {
   private <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
       RegisteredWorkflow workflow, Object[] args, ExecutionOptions options, WorkflowInfo parent) {
 
+    Objects.requireNonNull(options, "options must not be null");
+    var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
+    if (workflowId.isEmpty()) {
+      throw new IllegalArgumentException("workflowId cannot be empty");
+    }
+
     if (parent != null) {
       var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
       if (childId.isPresent()) {
@@ -1718,30 +1724,25 @@ public class DBOSExecutor implements AutoCloseable {
 
       validateQueue(options.queueName(), options.queuePartitionKey());
 
-      var workflowId =
-          enqueueWorkflow(
-              workflow.workflowName(),
-              workflow.className(),
-              workflow.instanceName(),
-              maxRetries,
-              args,
-              null,
-              options,
-              parent,
-              executorId(),
-              appVersion(),
-              appId(),
-              systemDatabase,
-              this.serializer);
+      enqueueWorkflow(
+          workflow.workflowName(),
+          workflow.className(),
+          workflow.instanceName(),
+          maxRetries,
+          args,
+          null,
+          options,
+          parent,
+          executorId(),
+          appVersion(),
+          appId(),
+          systemDatabase,
+          this.serializer);
       return new WorkflowHandleDBPoll<>(this, workflowId);
     }
 
     logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
 
-    var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
-    if (workflowId.isEmpty()) {
-      throw new IllegalArgumentException("workflowId cannot be empty");
-    }
     WorkflowInitResult initResult =
         preInvokeWorkflow(
             systemDatabase,
@@ -1772,11 +1773,11 @@ public class DBOSExecutor implements AutoCloseable {
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
     }
-    if (initResult.status().equals(WorkflowState.SUCCESS.name())) {
+    if (initResult.status().equals(WorkflowState.SUCCESS)) {
       return retrieveWorkflow(workflowId);
-    } else if (initResult.status().equals(WorkflowState.ERROR.name())) {
+    } else if (initResult.status().equals(WorkflowState.ERROR)) {
       logger.warn("Idempotency check not impl for error");
-    } else if (initResult.status().equals(WorkflowState.CANCELLED.name())) {
+    } else if (initResult.status().equals(WorkflowState.CANCELLED)) {
       logger.warn("Idempotency check not impl for cancelled");
     }
 

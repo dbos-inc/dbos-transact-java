@@ -394,6 +394,10 @@ class WorkflowDAO {
   }
 
   WorkflowStatus getWorkflowStatus(Connection conn, String workflowId) throws SQLException {
+    if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
+      throw new IllegalArgumentException("workflowId must not be empty");
+    }
+
     var sql =
         ("SELECT " + WORKFLOW_STATUS_COLUMNS + ", inputs, output, error, serialization")
             + " FROM \"%s\".workflow_status WHERE workflow_uuid = ?".formatted(this.schema);

@@ -35,7 +35,7 @@ public record WorkflowStatusInternal(
       throw new IllegalArgumentException("workflowId must not be empty");
     }
     if (nullableIsEmpty(workflowName)) {
-      throw new IllegalArgumentException("workflowId must not be empty");
+      throw new IllegalArgumentException("workflowName must not be empty");
     }
     if (nullableIsEmpty(className)) {
       throw new IllegalArgumentException("className must not be empty");
