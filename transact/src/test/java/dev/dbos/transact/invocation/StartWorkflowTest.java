@@ -54,12 +54,6 @@ public class StartWorkflowTest {
     // timeout can't be negative or zero
     assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ZERO));
     assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(-1)));
-
-    // timeout & deadline can't both be set
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            options.withDeadline(Instant.now().plusSeconds(1)).withTimeout(Duration.ofSeconds(1)));
   }
 
   @Test
@@ -113,6 +107,17 @@ public class StartWorkflowTest {
     assertEquals(WorkflowState.SUCCESS, row.getStatus().status());
     assertEquals(Duration.ofMillis(1000), row.getStatus().timeout());
     assertNotNull(row.getStatus().deadline());
+  }
+
+  @Test
+  void timeoutAndDurationSetThrows() throws Exception {
+    var options =
+        new StartWorkflowOptions()
+            .withTimeout(Duration.ofSeconds(10))
+            .withDeadline(Instant.now().plus(Duration.ofDays(1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
   }
 
   @Test

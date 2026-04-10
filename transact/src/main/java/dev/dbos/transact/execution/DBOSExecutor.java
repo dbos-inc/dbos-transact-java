@@ -1,7 +1,7 @@
 package dev.dbos.transact.execution;
 
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
-import static dev.dbos.transact.internal.Validation.nullableIsPositive;
+import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.Constants;
@@ -1370,7 +1370,7 @@ public class DBOSExecutor implements AutoCloseable {
         throw new IllegalArgumentException("workflowId must not be empty");
       }
 
-      if (timeout instanceof Timeout.Explicit explicit && !nullableIsPositive(explicit.value())) {
+      if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
         throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
       }
 
@@ -1386,7 +1386,7 @@ public class DBOSExecutor implements AutoCloseable {
         throw new IllegalArgumentException("queuePartitionKey must not be empty");
       }
 
-      if (!nullableIsPositive(delay)) {
+      if (nullableIsNotPositive(delay)) {
         throw new IllegalArgumentException("delay must be a positive non-zero duration");
       }
 
@@ -1397,12 +1397,6 @@ public class DBOSExecutor implements AutoCloseable {
       if (nullableIsEmpty(serialization)) {
         throw new IllegalArgumentException("serialization must not be empty");
       }
-
-      // TODO this check needs to be in enqueueWorkflow
-      // if (queuePartitionKey != null && deduplicationId != null) {
-      //   throw new IllegalArgumentException(
-      //       "ExecutionOptions partition key and deduplication ID cannot both be set");
-      // }
     }
 
     public ExecutionOptions(String workflowId) {
@@ -1479,11 +1473,6 @@ public class DBOSExecutor implements AutoCloseable {
       }
       return null;
     }
-
-    @Override
-    public String workflowId() {
-      return workflowId != null && workflowId.isEmpty() ? null : workflowId;
-    }
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
@@ -1509,6 +1498,12 @@ public class DBOSExecutor implements AutoCloseable {
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
     logger.debug("startWorkflow {}", options);
+
+    if (options != null
+        && options.timeout() instanceof Timeout.Explicit explicit
+        && options.deadline() != null) {
+      throw new IllegalArgumentException("explicit timeout and deadline cannot both be set");
+    }
 
     var invocation = captureInvocation(supplier);
     if (invocation.executor() != this) {
@@ -1761,6 +1756,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             null,
+            null,
             executorId(),
             // executed workflows always use the current app version.
             // Option.appVersion is only used for enqueue
@@ -1888,22 +1884,23 @@ public class DBOSExecutor implements AutoCloseable {
       SystemDatabase systemDatabase,
       DBOSSerializer serializer) {
 
-    logger.debug(
-        "enqueueWorkflow {}/{}/{}({}) {}",
-        workflowName,
-        Objects.requireNonNullElse(className, ""),
-        Objects.requireNonNullElse(instanceName, ""),
-        positionalArgs,
-        options);
-
-    var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
-    if (workflowId.isEmpty()) {
+    if (Objects.requireNonNull(options.workflowId(), "workflowId must not be null").isEmpty()) {
       throw new IllegalArgumentException("workflowId cannot be empty");
     }
-    var queueName = Objects.requireNonNull(options.queueName(), "queueName must not be null");
-    if (queueName.isEmpty()) {
+    if (Objects.requireNonNull(options.queueName(), "queueName must not be null").isEmpty()) {
       throw new IllegalArgumentException("queueName cannot be empty");
     }
+    if (options.queuePartitionKey != null && options.deduplicationId != null) {
+      throw new IllegalArgumentException(
+          "queuePartitionKey and deduplicationId cannot both be set");
+    }
+
+    logger.debug(
+        "enqueueWorkflow {}:{}:{}",
+        options.workflowId(),
+        options.queueName(),
+        RegisteredWorkflow.fullyQualifiedName(
+            workflowName, Objects.requireNonNullElse(className, ""), instanceName));
 
     // Note, options.appVesion specifies the appVersion the workflow starter may have set
     // app version parameter specifies the current running code app version, if known.
@@ -1921,25 +1918,26 @@ public class DBOSExecutor implements AutoCloseable {
           maxRetries,
           positionalArgs,
           namedArgs,
-          workflowId,
-          queueName,
-          options.deduplicationId(),
-          options.priority(),
-          options.queuePartitionKey(),
+          options.workflowId,
+          options.queueName,
+          options.deduplicationId,
+          options.priority,
+          options.queuePartitionKey,
+          options.delay,
           executorId,
           appVersion,
           appId,
           parent,
           options.timeoutDuration(),
-          options.deadline(),
+          options.deadline,
           options.isRecoveryRequest,
           options.isDequeuedRequest,
-          options.serialization(),
+          options.serialization,
           serializer);
-      return workflowId;
+      return options.workflowId;
     } catch (DBOSWorkflowExecutionConflictException e) {
-      logger.debug("Workflow execution conflict for workflowId {}", workflowId);
-      return workflowId;
+      logger.debug("Workflow execution conflict for workflowId {}", options.workflowId);
+      return options.workflowId;
     } catch (DBOSQueueDuplicatedException e) {
       logger.debug(
           "Workflow queue {} reused deduplicationId {}", e.queueName(), e.deduplicationId());
@@ -1966,6 +1964,7 @@ public class DBOSExecutor implements AutoCloseable {
       String deduplicationId,
       Integer priority,
       String queuePartitionKey,
+      Duration delay,
       String executorId,
       String appVersion,
       String appId,
@@ -1988,22 +1987,20 @@ public class DBOSExecutor implements AutoCloseable {
     String actualSerialization = serializedArgs.serialization();
     var startTime = System.currentTimeMillis();
 
-    WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
-
     Instant effectiveDeadline = (queueName != null && timeout != null) ? null : deadline;
 
     final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
     WorkflowStatusInternal workflowStatusInternal =
         new WorkflowStatusInternal(
             workflowId,
-            status,
             workflowName,
             className,
             instanceName,
             queueName,
             deduplicationId,
-            priority == null ? 0 : priority,
+            priority,
             queuePartitionKey,
+            delay,
             null,
             null,
             null,
@@ -2013,6 +2010,7 @@ public class DBOSExecutor implements AutoCloseable {
             appId,
             timeout,
             effectiveDeadline,
+            null,
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
             actualSerialization);
 

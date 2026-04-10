@@ -59,7 +59,7 @@ public class SystemDatabaseTest {
   public void testDeleteWorkflows() throws Exception {
     for (var i = 0; i < 5; i++) {
       var wfid = "wfid-%d".formatted(i);
-      var status = WorkflowStatusInternalBuilder.create(wfid, WorkflowState.PENDING).build();
+      var status = WorkflowStatusInternalBuilder.create(wfid).build();
       sysdb.initWorkflowStatus(status, 5, false, false);
     }
 
@@ -142,7 +142,7 @@ public class SystemDatabaseTest {
   public void testDeleteWorkflowsList() throws Exception {
     for (var i = 0; i < 5; i++) {
       var wfid = "wfid-%d".formatted(i);
-      var status = WorkflowStatusInternalBuilder.create(wfid, WorkflowState.PENDING).build();
+      var status = WorkflowStatusInternalBuilder.create(wfid).build();
       sysdb.initWorkflowStatus(status, 5, false, false);
     }
 
@@ -158,22 +158,12 @@ public class SystemDatabaseTest {
   public void testCancelWorkflows() throws Exception {
     // Create workflows in different states
     for (var wfid : List.of("wf-pending-1", "wf-pending-2", "wf-pending-3")) {
-      sysdb.initWorkflowStatus(
-          WorkflowStatusInternalBuilder.create(wfid, WorkflowState.PENDING).build(),
-          5,
-          false,
-          false);
+      sysdb.initWorkflowStatus(WorkflowStatusInternalBuilder.create(wfid).build(), 5, false, false);
     }
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternalBuilder.create("wf-success", WorkflowState.PENDING).build(),
-        5,
-        false,
-        false);
+        WorkflowStatusInternalBuilder.create("wf-success").build(), 5, false, false);
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternalBuilder.create("wf-error", WorkflowState.PENDING).build(),
-        5,
-        false,
-        false);
+        WorkflowStatusInternalBuilder.create("wf-error").build(), 5, false, false);
     DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
     DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
 
@@ -202,23 +192,13 @@ public class SystemDatabaseTest {
   List<String> insertResumableWorkflows() throws Exception {
     // Create workflows in different states
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
-      sysdb.initWorkflowStatus(
-          WorkflowStatusInternalBuilder.create(wfid, WorkflowState.PENDING).build(),
-          5,
-          false,
-          false);
+      sysdb.initWorkflowStatus(WorkflowStatusInternalBuilder.create(wfid).build(), 5, false, false);
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.CANCELLED.name());
     }
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternalBuilder.create("wf-success", WorkflowState.PENDING).build(),
-        5,
-        false,
-        false);
+        WorkflowStatusInternalBuilder.create("wf-success").build(), 5, false, false);
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternalBuilder.create("wf-error", WorkflowState.PENDING).build(),
-        5,
-        false,
-        false);
+        WorkflowStatusInternalBuilder.create("wf-error").build(), 5, false, false);
     DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
     DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
 
@@ -290,10 +270,7 @@ public class SystemDatabaseTest {
   @Test
   public void testCancelWorkflowsNullInList() throws Exception {
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternalBuilder.create("wf-id", WorkflowState.PENDING).build(),
-        5,
-        false,
-        false);
+        WorkflowStatusInternalBuilder.create("wf-id").build(), 5, false, false);
 
     long beforeCancel = System.currentTimeMillis();
     sysdb.cancelWorkflows(Arrays.asList("wf-id", null));
@@ -306,10 +283,7 @@ public class SystemDatabaseTest {
   @Test
   public void testResumeWorkflowsNullInList() throws Exception {
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternalBuilder.create("wf-id", WorkflowState.PENDING).build(),
-        5,
-        false,
-        false);
+        WorkflowStatusInternalBuilder.create("wf-id").build(), 5, false, false);
     DBUtils.setWorkflowState(dataSource, "wf-id", WorkflowState.CANCELLED.name());
 
     long beforeResume = System.currentTimeMillis();
@@ -324,10 +298,7 @@ public class SystemDatabaseTest {
   @Test
   public void testDeleteWorkflowsNullInList() throws Exception {
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternalBuilder.create("wf-id", WorkflowState.PENDING).build(),
-        5,
-        false,
-        false);
+        WorkflowStatusInternalBuilder.create("wf-id").build(), 5, false, false);
 
     sysdb.deleteWorkflows(Arrays.asList("wf-id", null), false);
 
@@ -338,14 +309,14 @@ public class SystemDatabaseTest {
   public void testGetChildWorkflows() throws Exception {
     for (var i = 0; i < 5; i++) {
       var wfid = "wfid-%d".formatted(i);
-      var status = WorkflowStatusInternalBuilder.create(wfid, WorkflowState.PENDING).build();
+      var status = WorkflowStatusInternalBuilder.create(wfid).build();
       sysdb.initWorkflowStatus(status, 5, false, false);
     }
 
     for (var i = 0; i < 5; i++) {
       var parentWfId = "wfid-2";
       var wfid = "childwfid-%d".formatted(i);
-      var status = WorkflowStatusInternalBuilder.create(wfid, WorkflowState.PENDING).build();
+      var status = WorkflowStatusInternalBuilder.create(wfid).build();
       sysdb.initWorkflowStatus(status, 5, false, false);
       sysdb.recordChildWorkflow(
           parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
@@ -354,7 +325,7 @@ public class SystemDatabaseTest {
     for (var i = 0; i < 5; i++) {
       var parentWfId = "childwfid-%d".formatted(i);
       var wfid = "grandchildwfid-%d".formatted(i);
-      var status = WorkflowStatusInternalBuilder.create(wfid, WorkflowState.PENDING).build();
+      var status = WorkflowStatusInternalBuilder.create(wfid).build();
       sysdb.initWorkflowStatus(status, 5, false, false);
       sysdb.recordChildWorkflow(
           parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
@@ -375,7 +346,7 @@ public class SystemDatabaseTest {
   public void testRetries() throws Exception {
     var wfid = "wfid-1";
     var status =
-        WorkflowStatusInternalBuilder.create(wfid, WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create(wfid)
             .workflowName("wf-name")
             .inputs("wf-inputs")
             .build();
@@ -405,14 +376,14 @@ public class SystemDatabaseTest {
   public void testDedupeId() throws Exception {
     var wfid = "wfid-1";
     var builder =
-        WorkflowStatusInternalBuilder.create(wfid, WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create(wfid)
             .workflowName("wf-name")
             .inputs("wf-inputs")
             .queueName("queue-name")
             .deduplicationId("dedupe-id");
 
     var result1 = sysdb.initWorkflowStatus(builder.build(), 5, false, false);
-    assertEquals(WorkflowState.PENDING.name(), result1.status());
+    assertEquals(WorkflowState.ENQUEUED.name(), result1.status());
     assertEquals(wfid, result1.workflowId());
     assertEquals(0, result1.deadlineEpochMS());
 
@@ -659,7 +630,7 @@ public class SystemDatabaseTest {
 
     // Create workflow status with authentication fields
     var status =
-        WorkflowStatusInternalBuilder.create(workflowId, WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create(workflowId)
             .workflowName("TestWorkflow")
             .className("com.example.TestWorkflow")
             .authenticatedUser(authenticatedUser)
@@ -699,7 +670,7 @@ public class SystemDatabaseTest {
 
     // Create workflow status with null authentication fields
     var status =
-        WorkflowStatusInternalBuilder.create(workflowId, WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create(workflowId)
             .workflowName("TestNullAuthWorkflow")
             .className("com.example.TestNullAuthWorkflow")
             .authenticatedUser(null)
@@ -734,7 +705,7 @@ public class SystemDatabaseTest {
 
     // Create workflow status with empty authenticated roles
     var status =
-        WorkflowStatusInternalBuilder.create(workflowId, WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create(workflowId)
             .workflowName("TestEmptyRolesWorkflow")
             .className("com.example.TestEmptyRolesWorkflow")
             .authenticatedUser(authenticatedUser)
@@ -769,7 +740,7 @@ public class SystemDatabaseTest {
 
     // Create original workflow status with authentication fields
     var originalStatus =
-        WorkflowStatusInternalBuilder.create(originalWorkflowId, WorkflowState.SUCCESS)
+        WorkflowStatusInternalBuilder.create(originalWorkflowId)
             .workflowName("OriginalTestWorkflow")
             .className("com.example.OriginalTestWorkflow")
             .authenticatedUser(authenticatedUser)
@@ -831,7 +802,7 @@ public class SystemDatabaseTest {
 
     // Create original workflow status with null authentication fields
     var originalStatus =
-        WorkflowStatusInternalBuilder.create(originalWorkflowId, WorkflowState.SUCCESS)
+        WorkflowStatusInternalBuilder.create(originalWorkflowId)
             .workflowName("NullAuthTestWorkflow")
             .className("com.example.NullAuthTestWorkflow")
             .authenticatedUser(null)
@@ -879,7 +850,7 @@ public class SystemDatabaseTest {
 
     // Create original workflow status with empty authenticated roles
     var originalStatus =
-        WorkflowStatusInternalBuilder.create(originalWorkflowId, WorkflowState.SUCCESS)
+        WorkflowStatusInternalBuilder.create(originalWorkflowId)
             .workflowName("EmptyAuthRolesTestWorkflow")
             .className("com.example.EmptyAuthRolesTestWorkflow")
             .authenticatedUser(authenticatedUser)
@@ -939,7 +910,7 @@ public class SystemDatabaseTest {
   @Test
   public void testWriteStreamAndReadStream() throws Exception {
     String workflowId = "stream-wf-1";
-    var status = WorkflowStatusInternalBuilder.create(workflowId, WorkflowState.PENDING).build();
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
     sysdb.initWorkflowStatus(status, 5, false, false);
     int functionId = 1;
 
@@ -956,7 +927,7 @@ public class SystemDatabaseTest {
   @Test
   public void testWriteStreamFromWorkflow() throws Exception {
     String workflowId = "stream-wf-2";
-    var status = WorkflowStatusInternalBuilder.create(workflowId, WorkflowState.PENDING).build();
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
     sysdb.initWorkflowStatus(status, 5, false, false);
     int functionId = 1;
 
@@ -969,7 +940,7 @@ public class SystemDatabaseTest {
   @Test
   public void testCloseStream() throws Exception {
     String workflowId = "stream-wf-3";
-    var status = WorkflowStatusInternalBuilder.create(workflowId, WorkflowState.PENDING).build();
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
     sysdb.initWorkflowStatus(status, 5, false, false);
 
     sysdb.writeStreamFromWorkflow(workflowId, 1, "key1", "value1", "portable_json");
@@ -981,7 +952,7 @@ public class SystemDatabaseTest {
   @Test
   public void testGetAllStreamEntries() throws Exception {
     String workflowId = "stream-wf-4";
-    var status = WorkflowStatusInternalBuilder.create(workflowId, WorkflowState.PENDING).build();
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
     sysdb.initWorkflowStatus(status, 5, false, false);
     int functionId = 1;
 
@@ -1000,7 +971,7 @@ public class SystemDatabaseTest {
   @Test
   public void testReadStreamNotFound() throws Exception {
     String workflowId = "stream-wf-5";
-    var status = WorkflowStatusInternalBuilder.create(workflowId, WorkflowState.PENDING).build();
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
     sysdb.initWorkflowStatus(status, 5, false, false);
 
     assertThrows(IllegalArgumentException.class, () -> sysdb.readStream(workflowId, "key", 0));
@@ -1011,15 +982,7 @@ public class SystemDatabaseTest {
     assertThrows(
         NullPointerException.class,
         () -> {
-          var status = WorkflowStatusInternalBuilder.create(null, WorkflowState.PENDING).build();
-          sysdb.initWorkflowStatus(status, null, false, false);
-        });
-
-    // Test null status
-    assertThrows(
-        NullPointerException.class,
-        () -> {
-          var status = WorkflowStatusInternalBuilder.create("test-wf-id", null).build();
+          var status = WorkflowStatusInternalBuilder.create(null).build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
   }
@@ -1028,67 +991,51 @@ public class SystemDatabaseTest {
   public void testInsertWorkflowStatusEmptyStringValidation() throws Exception {
     // Test empty workflowName
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
-          var status =
-              WorkflowStatusInternalBuilder.create("test-wf-1", WorkflowState.PENDING)
-                  .workflowName("")
-                  .build();
+          var status = WorkflowStatusInternalBuilder.create("test-wf-1").workflowName("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
 
     // Test empty className
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
-          var status =
-              WorkflowStatusInternalBuilder.create("test-wf-2", WorkflowState.PENDING)
-                  .className("")
-                  .build();
+          var status = WorkflowStatusInternalBuilder.create("test-wf-2").className("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
 
     // Test empty instanceName
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
-          var status =
-              WorkflowStatusInternalBuilder.create("test-wf-3", WorkflowState.PENDING)
-                  .instanceName("")
-                  .build();
+          var status = WorkflowStatusInternalBuilder.create("test-wf-3").instanceName("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
 
     // Test empty queueName
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
-          var status =
-              WorkflowStatusInternalBuilder.create("test-wf-4", WorkflowState.PENDING)
-                  .queueName("")
-                  .build();
+          var status = WorkflowStatusInternalBuilder.create("test-wf-4").queueName("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
 
     // Test empty deduplicationId
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
           var status =
-              WorkflowStatusInternalBuilder.create("test-wf-5", WorkflowState.PENDING)
-                  .deduplicationId("")
-                  .build();
+              WorkflowStatusInternalBuilder.create("test-wf-5").deduplicationId("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
 
     // Test empty queuePartitionKey
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
           var status =
-              WorkflowStatusInternalBuilder.create("test-wf-6", WorkflowState.PENDING)
-                  .queuePartitionKey("")
-                  .build();
+              WorkflowStatusInternalBuilder.create("test-wf-6").queuePartitionKey("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
   }
@@ -1097,7 +1044,7 @@ public class SystemDatabaseTest {
   public void testInsertWorkflowStatusValidNullValues() throws Exception {
     // Test that null values (except for required fields) are allowed
     var status =
-        WorkflowStatusInternalBuilder.create("test-valid-nulls", WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create("test-valid-nulls")
             .workflowName(null)
             .className(null)
             .instanceName(null)
@@ -1116,7 +1063,7 @@ public class SystemDatabaseTest {
   public void testInsertWorkflowStatusValidNonEmptyValues() throws Exception {
     // Test that non-empty values are allowed
     var status =
-        WorkflowStatusInternalBuilder.create("test-valid-values", WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create("test-valid-values")
             .workflowName("TestWorkflow")
             .className("com.example.TestWorkflow")
             .instanceName("test-instance")
@@ -1128,7 +1075,7 @@ public class SystemDatabaseTest {
     // This should not throw an exception
     var result = sysdb.initWorkflowStatus(status, null, false, false);
     assertEquals("test-valid-values", result.workflowId());
-    assertEquals(WorkflowState.PENDING.name(), result.status());
+    assertEquals(WorkflowState.ENQUEUED.name(), result.status());
 
     // Verify the values were stored correctly
     var retrievedStatus = sysdb.getWorkflowStatus("test-valid-values");

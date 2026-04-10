@@ -207,18 +207,6 @@ public class PartitionedQueuesTest {
   }
 
   @Test
-  public void testPartitionKeyWithoutQueue() throws Exception {
-    var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
-    dbos.launch();
-
-    var options = new StartWorkflowOptions().withQueuePartitionKey("partition-1");
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> dbos.startWorkflow(() -> proxy.normalWorkflow(), options));
-  }
-
-  @Test
   public void testPartitionKeyOnNonPartitionedQueue() throws Exception {
     var queue = new Queue("non-partitioned-queue");
     dbos.registerQueue(queue);

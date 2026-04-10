@@ -188,6 +188,7 @@ class WorkflowDAO {
       String queueName,
       Long timeoutMs,
       Long deadlineEpochMs,
+      String executorId,
       String serialization,
       String ownerXid) {}
 
@@ -212,62 +213,46 @@ class WorkflowDAO {
           INSERT INTO "%s".workflow_status (
             workflow_uuid, status, inputs,
             name, class_name, config_name,
-            queue_name, deduplication_id, priority, queue_partition_key,
+            queue_name, deduplication_id, priority, queue_partition_key, delay_until_epoch_ms,
             authenticated_user, assumed_role, authenticated_roles,
             executor_id, application_version, application_id,
             created_at, updated_at, recovery_attempts,
             workflow_timeout_ms, workflow_deadline_epoch_ms,
-            parent_workflow_id, owner_xid, serialization
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            forked_from, parent_workflow_id, owner_xid, serialization
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               recovery_attempts = CASE
-                  WHEN EXCLUDED.status != 'ENQUEUED'
-                    THEN workflow_status.recovery_attempts + ?
-                    ELSE workflow_status.recovery_attempts
+                  WHEN workflow_status.status !='ENQUEUED' AND workflow_status.status !='DELAYED'
+                  THEN workflow_status.recovery_attempts + ?
+                  ELSE workflow_status.recovery_attempts
               END,
               updated_at = EXCLUDED.updated_at,
               executor_id = CASE
-                  WHEN EXCLUDED.status = 'ENQUEUED'
-                    THEN workflow_status.executor_id
-                    ELSE EXCLUDED.executor_id
+                  WHEN EXCLUDED.status != 'ENQUEUED' AND EXCLUDED.status != 'DELAYED'
+                  THEN EXCLUDED.executor_id
+                  ELSE workflow_status.executor_id
               END
-          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_timeout_ms, workflow_deadline_epoch_ms, owner_xid, serialization
+          RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_timeout_ms, workflow_deadline_epoch_ms, executor_id, owner_xid, serialization
         """
             .formatted(this.schema);
 
+    Objects.requireNonNull(status, "status must not be null");
     Objects.requireNonNull(status.workflowId(), "workflowId must not be null");
-    Objects.requireNonNull(status.status(), "status must not be null");
-    if (status.workflowName() != null && status.workflowName().isEmpty()) {
-      throw new IllegalStateException("workflowName must not be empty");
-    }
-    if (status.className() != null && status.className().isEmpty()) {
-      throw new IllegalStateException("className must not be empty");
-    }
-    if (status.instanceName() != null && status.instanceName().isEmpty()) {
-      throw new IllegalStateException("instanceName must not be empty");
-    }
-    if (status.queueName() != null && status.queueName().isEmpty()) {
-      throw new IllegalStateException("queueName must not be empty");
-    }
-    if (status.deduplicationId() != null && status.deduplicationId().isEmpty()) {
-      throw new IllegalStateException("deduplicationId must notDB be empty");
-    }
-    if (status.queuePartitionKey() != null && status.queuePartitionKey().isEmpty()) {
-      throw new IllegalStateException("queuePartitionKey must not be empty");
-    }
+    var state =
+        status.queueName() == null
+            ? WorkflowState.PENDING
+            : status.delay() == null ? WorkflowState.ENQUEUED : WorkflowState.DELAYED;
+    var recoveryAttempts =
+        state == WorkflowState.ENQUEUED || state == WorkflowState.DELAYED ? 0 : 1;
 
     var authenticatedRolesJson =
         status.authenticatedRoles() != null ? JSONUtil.toJson(status.authenticatedRoles()) : null;
     try (PreparedStatement stmt = connection.prepareStatement(insertSQL)) {
 
       var now = System.currentTimeMillis();
-      var recoveryAttempts =
-          status.status() == WorkflowState.ENQUEUED || status.status() == WorkflowState.DELAYED
-              ? 0
-              : 1;
       stmt.setString(1, status.workflowId());
-      stmt.setString(2, status.status().toString());
+      stmt.setString(2, state.name());
       stmt.setString(3, status.inputs());
 
       stmt.setString(4, status.workflowName());
@@ -278,26 +263,28 @@ class WorkflowDAO {
       stmt.setString(8, status.deduplicationId());
       stmt.setInt(9, Objects.requireNonNullElse(status.priority(), 0));
       stmt.setString(10, status.queuePartitionKey());
+      stmt.setObject(11, status.delayMs());
 
-      stmt.setString(11, status.authenticatedUser());
-      stmt.setString(12, status.assumedRole());
-      stmt.setString(13, authenticatedRolesJson);
+      stmt.setString(12, status.authenticatedUser());
+      stmt.setString(13, status.assumedRole());
+      stmt.setString(14, authenticatedRolesJson);
 
-      stmt.setString(14, status.executorId());
-      stmt.setString(15, status.appVersion());
-      stmt.setString(16, status.appId());
+      stmt.setString(15, status.executorId());
+      stmt.setString(16, status.appVersion());
+      stmt.setString(17, status.appId());
 
-      stmt.setLong(17, now); // created_at
-      stmt.setLong(18, now); // updated_at
-      stmt.setInt(19, recoveryAttempts);
+      stmt.setLong(18, now); // created_at
+      stmt.setLong(19, now); // updated_at
+      stmt.setInt(20, recoveryAttempts);
 
-      stmt.setObject(20, status.timeoutMs());
-      stmt.setObject(21, status.deadlineMs());
-      stmt.setString(22, status.parentWorkflowId());
+      stmt.setObject(21, status.timeoutMs());
+      stmt.setObject(22, status.deadlineMs());
+      stmt.setString(23, status.forkedFrom());
+      stmt.setString(24, status.parentWorkflowId());
 
-      stmt.setObject(23, ownerXid);
-      stmt.setString(24, status.serialization());
-      stmt.setInt(25, incrementAttempts ? 1 : 0);
+      stmt.setObject(25, ownerXid);
+      stmt.setString(26, status.serialization());
+      stmt.setInt(27, incrementAttempts ? 1 : 0);
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -311,6 +298,7 @@ class WorkflowDAO {
                   rs.getString("queue_name"),
                   rs.getObject("workflow_timeout_ms", Long.class),
                   rs.getObject("workflow_deadline_epoch_ms", Long.class),
+                  rs.getString("executor_id"),
                   rs.getString("serialization"),
                   rs.getString("owner_xid"));
 
@@ -483,7 +471,6 @@ class WorkflowDAO {
     }
   }
 
-  // TODO: add delayed support when queues_only is true
   List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
 
     if (input == null) {
@@ -533,9 +520,10 @@ class WorkflowDAO {
     if (input.queuesOnly() != null && input.queuesOnly()) {
       whereConditions.add("queue_name IS NOT NULL");
       if (input.status() == null || input.status().isEmpty()) {
-        whereConditions.add("status IN (?, ?)");
+        whereConditions.add("status IN (?, ?, ?)");
         parameters.add(WorkflowState.ENQUEUED.name());
         parameters.add(WorkflowState.PENDING.name());
+        parameters.add(WorkflowState.DELAYED.name());
       }
     }
     if (input.forkedFrom() != null && !input.forkedFrom().isEmpty()) {

@@ -1,7 +1,7 @@
 package dev.dbos.transact.context;
 
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
-import static dev.dbos.transact.internal.Validation.nullableIsPositive;
+import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
 import dev.dbos.transact.workflow.Timeout;
 
@@ -30,7 +30,7 @@ public record WorkflowOptions(
       throw new IllegalArgumentException("workflowId must not be empty");
     }
 
-    if (timeout instanceof Timeout.Explicit explicit && !nullableIsPositive(explicit.value())) {
+    if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
       throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
     }
   }

@@ -1,7 +1,7 @@
 package dev.dbos.transact;
 
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
-import static dev.dbos.transact.internal.Validation.nullableIsPositive;
+import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
 import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.StreamIterator;
@@ -204,7 +204,7 @@ public class DBOSClient implements AutoCloseable {
         throw new IllegalArgumentException("appVersion must not be empty");
       }
 
-      if (!nullableIsPositive(timeout)) {
+      if (nullableIsNotPositive(timeout)) {
         throw new IllegalArgumentException("timeout must be positive, non-zero duration");
       }
 
@@ -216,7 +216,7 @@ public class DBOSClient implements AutoCloseable {
         throw new IllegalArgumentException("queuePartitionKey must not be empty");
       }
 
-      if (!nullableIsPositive(delay)) {
+      if (nullableIsNotPositive(delay)) {
         throw new IllegalArgumentException("delay must be positive, non-zero duration");
       }
     }

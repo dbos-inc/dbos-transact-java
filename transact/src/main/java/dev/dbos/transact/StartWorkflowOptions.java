@@ -1,7 +1,7 @@
 package dev.dbos.transact;
 
 import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
-import static dev.dbos.transact.internal.Validation.nullableIsPositive;
+import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Timeout;
@@ -48,7 +48,7 @@ public record StartWorkflowOptions(
       throw new IllegalArgumentException("workflowId must not be empty");
     }
 
-    if (timeout instanceof Timeout.Explicit explicit && !nullableIsPositive(explicit.value())) {
+    if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
       throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
     }
 
@@ -64,7 +64,7 @@ public record StartWorkflowOptions(
       throw new IllegalArgumentException("queuePartitionKey must not be empty");
     }
 
-    if (!nullableIsPositive(delay)) {
+    if (nullableIsNotPositive(delay)) {
       throw new IllegalArgumentException("delay must be a positive non-zero duration");
     }
 

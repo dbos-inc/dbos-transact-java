@@ -95,6 +95,41 @@ public class ClientTest {
   }
 
   @Test
+  public void invalidClientEnqueueThrows() throws Exception {
+    try (var client = pgContainer.dbosClient()) {
+      assertThrows(
+          NullPointerException.class,
+          () -> client.enqueueWorkflow(null, new Object[] {42, "spam"}));
+      assertThrows(
+          NullPointerException.class,
+          () ->
+              client.enqueueWorkflow(
+                  new DBOSClient.EnqueueOptions(null, "q"), new Object[] {42, "spam"}));
+      assertThrows(
+          NullPointerException.class,
+          () ->
+              client.enqueueWorkflow(
+                  new DBOSClient.EnqueueOptions("wf", null), new Object[] {42, "spam"}));
+      assertThrows(
+          IllegalArgumentException.class,
+          () ->
+              client.enqueueWorkflow(
+                  new DBOSClient.EnqueueOptions("wf", "q")
+                      .withTimeout(Duration.ofSeconds(1))
+                      .withDeadline(Instant.now()),
+                  new Object[] {42, "spam"}));
+      assertThrows(
+          IllegalArgumentException.class,
+          () ->
+              client.enqueueWorkflow(
+                  new DBOSClient.EnqueueOptions("wf", "q")
+                      .withDeduplicationId("dedupe")
+                      .withQueuePartitionKey("qpk"),
+                  new Object[] {42, "spam"}));
+    }
+  }
+
+  @Test
   public void clientEnqueueDeDupe() throws Exception {
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.pause();

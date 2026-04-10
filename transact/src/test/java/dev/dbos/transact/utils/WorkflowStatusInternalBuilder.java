@@ -1,6 +1,5 @@
 package dev.dbos.transact.utils;
 
-import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.time.Duration;
@@ -8,8 +7,6 @@ import java.time.Instant;
 
 public class WorkflowStatusInternalBuilder {
   private String workflowId;
-  private String parentWorkflowId;
-  private WorkflowState status;
   private String workflowName;
   private String className;
   private String instanceName;
@@ -17,6 +14,7 @@ public class WorkflowStatusInternalBuilder {
   private String deduplicationId;
   private Integer priority;
   private String queuePartitionKey;
+  private Duration delay;
   private String authenticatedUser;
   private String assumedRole;
   private String[] authenticatedRoles;
@@ -26,24 +24,16 @@ public class WorkflowStatusInternalBuilder {
   private String appId;
   private Duration timeout;
   private Instant deadline;
+  private String forkedFrom;
+  private String parentWorkflowId;
   private String serialization;
 
-  public static WorkflowStatusInternalBuilder create(String workflowId, WorkflowState status) {
-    return new WorkflowStatusInternalBuilder().workflowId(workflowId).status(status);
+  public static WorkflowStatusInternalBuilder create(String workflowId) {
+    return new WorkflowStatusInternalBuilder().workflowId(workflowId);
   }
 
   public WorkflowStatusInternalBuilder workflowId(String workflowId) {
     this.workflowId = workflowId;
-    return this;
-  }
-
-  public WorkflowStatusInternalBuilder parentWorkflowId(String parentWorkflowId) {
-    this.parentWorkflowId = parentWorkflowId;
-    return this;
-  }
-
-  public WorkflowStatusInternalBuilder status(WorkflowState status) {
-    this.status = status;
     return this;
   }
 
@@ -79,6 +69,11 @@ public class WorkflowStatusInternalBuilder {
 
   public WorkflowStatusInternalBuilder queuePartitionKey(String queuePartitionKey) {
     this.queuePartitionKey = queuePartitionKey;
+    return this;
+  }
+
+  public WorkflowStatusInternalBuilder delay(Duration delay) {
+    this.delay = delay;
     return this;
   }
 
@@ -127,6 +122,16 @@ public class WorkflowStatusInternalBuilder {
     return this;
   }
 
+  public WorkflowStatusInternalBuilder forkedFrom(String forkedFrom) {
+    this.forkedFrom = forkedFrom;
+    return this;
+  }
+
+  public WorkflowStatusInternalBuilder parentWorkflowId(String parentWorkflowId) {
+    this.parentWorkflowId = parentWorkflowId;
+    return this;
+  }
+
   public WorkflowStatusInternalBuilder serialization(String serialization) {
     this.serialization = serialization;
     return this;
@@ -135,7 +140,6 @@ public class WorkflowStatusInternalBuilder {
   public WorkflowStatusInternal build() {
     return new WorkflowStatusInternal(
         workflowId,
-        status,
         workflowName,
         className,
         instanceName,
@@ -143,6 +147,7 @@ public class WorkflowStatusInternalBuilder {
         deduplicationId,
         priority,
         queuePartitionKey,
+        delay,
         authenticatedUser,
         assumedRole,
         authenticatedRoles,
@@ -152,6 +157,7 @@ public class WorkflowStatusInternalBuilder {
         appId,
         timeout,
         deadline,
+        forkedFrom,
         parentWorkflowId,
         serialization);
   }

@@ -2,6 +2,7 @@ package dev.dbos.transact.queue;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -413,12 +414,7 @@ public class QueuesTest {
 
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
-      var status =
-          builder
-              .workflowId(wfid)
-              .status(WorkflowState.ENQUEUED)
-              .deduplicationId("dedup" + i)
-              .build();
+      var status = builder.workflowId(wfid).deduplicationId("dedup" + i).build();
       systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
@@ -493,28 +489,27 @@ public class QueuesTest {
     // executor1
     for (int i = 0; i < 2; i++) {
       String wfid = "id" + i;
-      var status =
-          builder
-              .workflowId(wfid)
-              .status(WorkflowState.ENQUEUED)
-              .deduplicationId("dedup" + i)
-              .build();
+      var status = builder.workflowId(wfid).deduplicationId("dedup" + i).build();
       systemDatabase.initWorkflowStatus(status, null, false, false);
     }
 
     // executor2
     String executor2 = "remote";
     for (int i = 2; i < 5; i++) {
-
       String wfid = "id" + i;
       var status =
-          builder
-              .workflowId(wfid)
-              .status(WorkflowState.PENDING)
-              .deduplicationId("dedup" + i)
-              .executorId(executor2)
-              .build();
+          builder.workflowId(wfid).deduplicationId("dedup" + i).executorId(executor2).build();
       systemDatabase.initWorkflowStatus(status, null, false, false);
+
+      // Update the workflow_status table for the wfid variable, setting status to "PENDING"
+      String updateSql = "UPDATE dbos.workflow_status SET status = ? WHERE workflow_uuid = ?;";
+      try (Connection conn = DBUtils.getConnection(dbosConfig);
+          PreparedStatement pstmt = conn.prepareStatement(updateSql)) {
+        pstmt.setString(1, WorkflowState.PENDING.name());
+        pstmt.setString(2, wfid);
+        int updated = pstmt.executeUpdate();
+        assertEquals(1, updated);
+      }
     }
 
     List<String> idsToRun =
@@ -532,6 +527,31 @@ public class QueuesTest {
             appVersion,
             null);
     assertEquals(2, idsToRun.size());
+  }
+
+  @Test
+  public void testQueueOptionsNotWrittenWhenNotEnqueued() throws Exception {
+    var impl = new PartitionsTestServiceImpl();
+    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
+    dbos.launch();
+
+    var options =
+        new StartWorkflowOptions()
+            .withDeduplicationId("dedupe")
+            .withDelay(Duration.ofSeconds(10))
+            .withPriority(100)
+            .withQueuePartitionKey("partition-1");
+    var handle = dbos.startWorkflow(() -> proxy.normalWorkflow(), options);
+    var result = handle.getResult();
+    assertEquals(handle.workflowId(), result);
+
+    var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
+    assertNotNull(row);
+    assertNull(row.queueName());
+    assertNull(row.deduplicationId());
+    assertNull(row.queuePartitionKey());
+    assertEquals(0, row.priority());
+    assertNull(row.delayUntilEpochMs());
   }
 
   @Test

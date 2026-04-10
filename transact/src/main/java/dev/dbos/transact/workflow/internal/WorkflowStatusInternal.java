@@ -1,16 +1,15 @@
 package dev.dbos.transact.workflow.internal;
 
-import dev.dbos.transact.workflow.WorkflowState;
+import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
+import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record WorkflowStatusInternal(
     String workflowId,
-    WorkflowState status,
     String workflowName,
     String className,
     String instanceName,
@@ -18,6 +17,7 @@ public record WorkflowStatusInternal(
     String deduplicationId,
     Integer priority,
     String queuePartitionKey,
+    Duration delay,
     String authenticatedUser,
     String assumedRole,
     String[] authenticatedRoles,
@@ -27,49 +27,72 @@ public record WorkflowStatusInternal(
     String appId,
     Duration timeout,
     Instant deadline,
+    String forkedFrom,
     String parentWorkflowId,
     String serialization) {
 
   public WorkflowStatusInternal {
-    if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
-      throw new IllegalStateException("workflowId must not be empty");
+    if (nullableIsEmpty(workflowId)) {
+      throw new IllegalArgumentException("workflowId must not be empty");
     }
-    Objects.requireNonNull(status, "status must not be null");
-  }
-
-  public WorkflowStatusInternal() {
-    this(
-        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null);
-  }
-
-  public WorkflowStatusInternal(String workflowUUID, WorkflowState state) {
-    this(
-        workflowUUID,
-        state,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null);
+    if (nullableIsEmpty(workflowName)) {
+      throw new IllegalArgumentException("workflowId must not be empty");
+    }
+    if (nullableIsEmpty(className)) {
+      throw new IllegalArgumentException("className must not be empty");
+    }
+    if (nullableIsEmpty(instanceName)) {
+      throw new IllegalArgumentException("instanceName must not be empty");
+    }
+    if (nullableIsEmpty(queueName)) {
+      throw new IllegalArgumentException("queueName must not be empty");
+    }
+    if (nullableIsEmpty(deduplicationId)) {
+      throw new IllegalArgumentException("deduplicationId must not be empty");
+    }
+    if (nullableIsEmpty(queuePartitionKey)) {
+      throw new IllegalArgumentException("queuePartitionKey must not be empty");
+    }
+    if (nullableIsNotPositive(delay)) {
+      throw new IllegalArgumentException("delay must be a positive non-zero duration");
+    }
+    if (nullableIsEmpty(authenticatedUser)) {
+      throw new IllegalArgumentException("authenticatedUser must not be empty");
+    }
+    if (nullableIsEmpty(assumedRole)) {
+      throw new IllegalArgumentException("assumedRole must not be empty");
+    }
+    if (nullableIsEmpty(inputs)) {
+      throw new IllegalArgumentException("inputs must not be empty");
+    }
+    if (nullableIsEmpty(appVersion)) {
+      throw new IllegalArgumentException("appVersion must not be empty");
+    }
+    // if (nullableIsEmpty(appId)) {
+    //   throw new IllegalArgumentException("appId must not be empty");
+    // }
+    if (nullableIsNotPositive(timeout)) {
+      throw new IllegalArgumentException("timeout must be a positive non-zero duration");
+    }
+    if (nullableIsEmpty(forkedFrom)) {
+      throw new IllegalArgumentException("forkedFrom must not be empty");
+    }
+    if (nullableIsEmpty(parentWorkflowId)) {
+      throw new IllegalArgumentException("parentWorkflowId must not be empty");
+    }
+    if (nullableIsEmpty(serialization)) {
+      throw new IllegalArgumentException("serialization must not be empty");
+    }
   }
 
   @JsonProperty(access = JsonProperty.Access.READ_ONLY)
   public Long timeoutMs() {
     return timeout == null ? null : timeout.toMillis();
+  }
+
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  public Long delayMs() {
+    return delay == null ? null : delay.toMillis();
   }
 
   @JsonProperty(access = JsonProperty.Access.READ_ONLY)

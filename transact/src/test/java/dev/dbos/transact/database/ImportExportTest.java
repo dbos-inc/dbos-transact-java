@@ -48,7 +48,6 @@ public class ImportExportTest {
     sysdb.initWorkflowStatus(
         new WorkflowStatusInternalBuilder()
             .workflowId(wfId)
-            .status(WorkflowState.PENDING)
             .workflowName("TestWorkflow")
             .appVersion("1.0.0")
             .priority(0)
@@ -77,7 +76,6 @@ public class ImportExportTest {
     sysdb.initWorkflowStatus(
         new WorkflowStatusInternalBuilder()
             .workflowId(wfId)
-            .status(WorkflowState.PENDING)
             .workflowName("TestWorkflow")
             .appVersion("1.0.0")
             .priority(0)

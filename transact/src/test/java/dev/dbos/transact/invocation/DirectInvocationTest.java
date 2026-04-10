@@ -132,6 +132,17 @@ public class DirectInvocationTest {
   }
 
   @Test
+  void directInvokeCantSetTimeoutAndDeadline() throws Exception {
+
+    String workflowId = "directInvokeSetWorkflowIdAndTimeout";
+    var options =
+        new WorkflowOptions(workflowId)
+            .withTimeout(Duration.ofSeconds(10))
+            .withDeadline(Instant.now());
+    assertThrows(IllegalArgumentException.class, () -> options.setContext());
+  }
+
+  @Test
   void directInvokeTimeoutCancellation() throws Exception {
 
     var options = new WorkflowOptions().withTimeout(Duration.ofSeconds(1));
