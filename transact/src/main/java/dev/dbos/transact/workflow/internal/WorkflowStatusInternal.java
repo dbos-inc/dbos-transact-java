@@ -6,7 +6,7 @@ import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
 import java.time.Duration;
 import java.time.Instant;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 public record WorkflowStatusInternal(
     String workflowId,
@@ -85,18 +85,18 @@ public record WorkflowStatusInternal(
     }
   }
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public Long timeoutMs() {
     return timeout == null ? null : timeout.toMillis();
   }
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public Long delayMs() {
     return delay == null ? null : delay.toMillis();
   }
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-  public Long deadlineMs() {
+  @JsonIgnore
+  public Long deadlineEpochMs() {
     return deadline == null ? null : deadline.toEpochMilli();
   }
 }

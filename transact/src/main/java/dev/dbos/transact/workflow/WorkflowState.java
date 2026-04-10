@@ -1,6 +1,6 @@
 package dev.dbos.transact.workflow;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 public enum WorkflowState {
   PENDING,
@@ -11,7 +11,7 @@ public enum WorkflowState {
   ENQUEUED,
   DELAYED;
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public boolean isActive() {
     return this == PENDING || this == ENQUEUED || this == DELAYED;
   }

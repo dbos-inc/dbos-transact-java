@@ -2,7 +2,7 @@ package dev.dbos.transact.workflow;
 
 import java.time.Instant;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 public record StepInfo(
     int functionId,
@@ -14,12 +14,12 @@ public record StepInfo(
     Instant completedAt,
     String serialization) {
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public Long startedAtEpochMs() {
     return startedAt == null ? null : startedAt.toEpochMilli();
   }
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public Long completedAtEpochMs() {
     return completedAt == null ? null : completedAt.toEpochMilli();
   }

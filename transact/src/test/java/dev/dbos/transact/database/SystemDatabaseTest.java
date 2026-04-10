@@ -1242,7 +1242,7 @@ public class SystemDatabaseTest {
     assertTrue(notifications.stream().anyMatch(n -> "topic2".equals(n.topic())));
     notifications.forEach(n -> assertNotNull(n.message()));
     notifications.forEach(n -> assertFalse(n.consumed()));
-    notifications.forEach(n -> assertTrue(n.createdAtMs() > 0));
+    notifications.forEach(n -> assertTrue(n.createdAtEpochMs() > 0));
   }
 
   @Test

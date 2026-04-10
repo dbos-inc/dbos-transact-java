@@ -3,7 +3,7 @@ package dev.dbos.transact.workflow;
 import java.time.Duration;
 import java.time.Instant;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 /**
  * Represents the status and metadata of a workflow execution. Contains information such as workflow
@@ -69,32 +69,32 @@ public record WorkflowStatus(
     /** Serialized representation of the workflow. */
     String serialization) {
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public Long timeoutMs() {
     return timeout == null ? null : timeout.toMillis();
   }
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public Long deadlineEpochMs() {
     return deadline == null ? null : deadline.toEpochMilli();
   }
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public Long createdAtEpochMs() {
     return createdAt == null ? null : createdAt.toEpochMilli();
   }
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public Long updatedAtEpochMs() {
     return updatedAt == null ? null : updatedAt.toEpochMilli();
   }
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public Long startedAtEpochMs() {
     return startedAt == null ? null : startedAt.toEpochMilli();
   }
 
-  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @JsonIgnore
   public Long delayUntilEpochMs() {
     return delayUntil == null ? null : delayUntil.toEpochMilli();
   }
