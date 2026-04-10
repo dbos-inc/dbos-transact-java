@@ -24,7 +24,6 @@ public class WorkflowStatusInternalBuilder {
   private String appId;
   private Duration timeout;
   private Instant deadline;
-  private String forkedFrom;
   private String parentWorkflowId;
   private String serialization;
 
@@ -122,11 +121,6 @@ public class WorkflowStatusInternalBuilder {
     return this;
   }
 
-  public WorkflowStatusInternalBuilder forkedFrom(String forkedFrom) {
-    this.forkedFrom = forkedFrom;
-    return this;
-  }
-
   public WorkflowStatusInternalBuilder parentWorkflowId(String parentWorkflowId) {
     this.parentWorkflowId = parentWorkflowId;
     return this;
@@ -157,7 +151,6 @@ public class WorkflowStatusInternalBuilder {
         appId,
         timeout,
         deadline,
-        forkedFrom,
         parentWorkflowId,
         serialization);
   }

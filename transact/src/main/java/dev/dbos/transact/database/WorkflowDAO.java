@@ -122,6 +122,8 @@ class WorkflowDAO {
           throw new DBOSConflictingWorkflowException(initStatus.workflowId(), msg);
         }
 
+        var state = WorkflowState.valueOf(resRow.status);
+
         // If there is an existing DB record and we aren't here to recover it,
         //  leave it be.  Roll back the change to max recovery attempts.
         if (!ownerXid.equals(resRow.ownerXid) && !isRecoveryRequest && !isDequeuedRequest) {
@@ -129,7 +131,7 @@ class WorkflowDAO {
             throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
           }
           return new WorkflowInitResult(
-              resRow.status(), resRow.deadlineEpochMs(), false, resRow.serialization());
+              state, resRow.deadlineEpochMs(), false, resRow.serialization());
         }
 
         // Upsert above already set executor assignment and incremented the recovery attempt
@@ -158,7 +160,7 @@ class WorkflowDAO {
         }
 
         return new WorkflowInitResult(
-            resRow.status(), resRow.deadlineEpochMs(), true, resRow.serialization());
+            state, resRow.deadlineEpochMs(), true, resRow.serialization());
 
       } finally {
         if (shouldCommit) {
@@ -210,8 +212,8 @@ class WorkflowDAO {
             executor_id, application_version, application_id,
             created_at, updated_at, recovery_attempts,
             workflow_timeout_ms, workflow_deadline_epoch_ms,
-            forked_from, parent_workflow_id, owner_xid, serialization
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            parent_workflow_id, owner_xid, serialization
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT (workflow_uuid)
             DO UPDATE SET
               recovery_attempts = CASE
@@ -271,12 +273,11 @@ class WorkflowDAO {
 
       stmt.setObject(21, status.timeoutMs());
       stmt.setObject(22, status.deadlineEpochMs());
-      stmt.setString(23, status.forkedFrom());
-      stmt.setString(24, status.parentWorkflowId());
+      stmt.setString(23, status.parentWorkflowId());
 
-      stmt.setObject(25, ownerXid);
-      stmt.setString(26, status.serialization());
-      stmt.setInt(27, incrementAttempts ? 1 : 0);
+      stmt.setObject(24, ownerXid);
+      stmt.setString(25, status.serialization());
+      stmt.setInt(26, incrementAttempts ? 1 : 0);
 
       try (ResultSet rs = stmt.executeQuery()) {
         if (rs.next()) {
@@ -426,7 +427,7 @@ class WorkflowDAO {
 
     var sql =
         """
-          UPDATE workflow_status
+          UPDATE "%s".workflow_status
              SET delay_until_epoch_ms = ?,
                  updated_at = EXTRACT(epoch FROM NOW()) * 1000
            WHERE workflow_uuid = ?

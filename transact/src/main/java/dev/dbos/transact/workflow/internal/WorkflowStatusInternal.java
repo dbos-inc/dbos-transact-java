@@ -27,7 +27,6 @@ public record WorkflowStatusInternal(
     String appId,
     Duration timeout,
     Instant deadline,
-    String forkedFrom,
     String parentWorkflowId,
     String serialization) {
 
@@ -68,14 +67,9 @@ public record WorkflowStatusInternal(
     if (nullableIsEmpty(appVersion)) {
       throw new IllegalArgumentException("appVersion must not be empty");
     }
-    // if (nullableIsEmpty(appId)) {
-    //   throw new IllegalArgumentException("appId must not be empty");
-    // }
+    // Note, appId can be empty
     if (nullableIsNotPositive(timeout)) {
       throw new IllegalArgumentException("timeout must be a positive non-zero duration");
-    }
-    if (nullableIsEmpty(forkedFrom)) {
-      throw new IllegalArgumentException("forkedFrom must not be empty");
     }
     if (nullableIsEmpty(parentWorkflowId)) {
       throw new IllegalArgumentException("parentWorkflowId must not be empty");

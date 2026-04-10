@@ -24,8 +24,10 @@ import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowSchedule;
+import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowState;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -353,7 +355,7 @@ public class SystemDatabaseTest {
 
     for (var i = 1; i <= 6; i++) {
       var result1 = sysdb.initWorkflowStatus(status, 5, true, false);
-      assertEquals(WorkflowState.PENDING.name(), result1.status());
+      assertEquals(WorkflowState.PENDING, result1.status());
       assertNull(result1.deadlineEpochMS());
 
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
@@ -382,7 +384,7 @@ public class SystemDatabaseTest {
             .deduplicationId("dedupe-id");
 
     var result1 = sysdb.initWorkflowStatus(builder.build(), 5, false, false);
-    assertEquals(WorkflowState.ENQUEUED.name(), result1.status());
+    assertEquals(WorkflowState.ENQUEUED, result1.status());
     assertNull(result1.deadlineEpochMS());
 
     var before = DBUtils.getWorkflowRow(dataSource, wfid);
@@ -1053,7 +1055,7 @@ public class SystemDatabaseTest {
 
     // This should not throw an exception
     var result = sysdb.initWorkflowStatus(status, null, false, false);
-    assertEquals(WorkflowState.PENDING.name(), result.status());
+    assertEquals(WorkflowState.PENDING, result.status());
   }
 
   @Test
@@ -1071,7 +1073,7 @@ public class SystemDatabaseTest {
 
     // This should not throw an exception
     var result = sysdb.initWorkflowStatus(status, null, false, false);
-    assertEquals(WorkflowState.ENQUEUED.name(), result.status());
+    assertEquals(WorkflowState.ENQUEUED, result.status());
 
     // Verify the values were stored correctly
     var retrievedStatus = sysdb.getWorkflowStatus("test-valid-values");
@@ -1100,7 +1102,171 @@ public class SystemDatabaseTest {
     return new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of());
   }
 
-  // ── F-11: Workflow Aggregates ─────────────────────────────────────────────
+  // ── Workflow state based on queue/delay ──────────────────────────────────
+
+  @Test
+  public void testInitWorkflowStatusStateNoQueue() throws Exception {
+    var wfid = "wf-state-no-queue";
+    var result =
+        sysdb.initWorkflowStatus(
+            WorkflowStatusInternalBuilder.create(wfid).build(), 5, false, false);
+    assertEquals(WorkflowState.PENDING, result.status());
+    assertEquals(WorkflowState.PENDING.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+  }
+
+  @Test
+  public void testInitWorkflowStatusStateQueueNoDelay() throws Exception {
+    var wfid = "wf-state-queue-no-delay";
+    var result =
+        sysdb.initWorkflowStatus(
+            WorkflowStatusInternalBuilder.create(wfid).queueName("test-queue").build(),
+            5,
+            false,
+            false);
+    assertEquals(WorkflowState.ENQUEUED, result.status());
+    assertEquals(
+        WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+  }
+
+  @Test
+  public void testInitWorkflowStatusStateQueueWithDelay() throws Exception {
+    var wfid = "wf-state-queue-delay";
+    var result =
+        sysdb.initWorkflowStatus(
+            WorkflowStatusInternalBuilder.create(wfid)
+                .queueName("test-queue")
+                .delay(Duration.ofSeconds(60))
+                .build(),
+            5,
+            false,
+            false);
+    assertEquals(WorkflowState.DELAYED, result.status());
+    assertEquals(WorkflowState.DELAYED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+  }
+
+  // ── Workflow Delay ────────────────────────────────────────────────────────
+
+  @Test
+  public void testSetWorkflowDelayWithDuration() throws Exception {
+    var wfid = "wf-delay-duration";
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("test-queue")
+            .delay(Duration.ofSeconds(60))
+            .build(),
+        5,
+        false,
+        false);
+
+    long before = System.currentTimeMillis();
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.Delay(Duration.ofSeconds(60)));
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertNotNull(row.delayUntilEpochMs());
+    assertTrue(row.delayUntilEpochMs() >= before + 59_000);
+    assertTrue(row.delayUntilEpochMs() <= before + 61_000);
+  }
+
+  @Test
+  public void testSetWorkflowDelayWithInstant() throws Exception {
+    var wfid = "wf-delay-instant";
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("test-queue")
+            .delay(Duration.ofSeconds(60))
+            .build(),
+        5,
+        false,
+        false);
+
+    var targetInstant = Instant.now().plusSeconds(120);
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(targetInstant));
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(targetInstant.toEpochMilli(), row.delayUntilEpochMs());
+  }
+
+  @Test
+  public void testSetWorkflowDelayIgnoresNonDelayedWorkflow() throws Exception {
+    // ENQUEUED (queue, no delay) — setWorkflowDelay should be a no-op
+    var wfid = "wf-delay-non-delayed";
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create(wfid).queueName("test-queue").build(),
+        5,
+        false,
+        false);
+
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertNull(row.delayUntilEpochMs());
+  }
+
+  @Test
+  public void testTransitionDelayedWorkflowsPastDeadline() throws Exception {
+    var wfid = "wf-transition-past";
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("test-queue")
+            .delay(Duration.ofSeconds(60))
+            .build(),
+        5,
+        false,
+        false);
+
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().minusSeconds(5)));
+    sysdb.transitionDelayedWorkflows();
+
+    assertEquals(
+        WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+  }
+
+  @Test
+  public void testTransitionDelayedWorkflowsFutureDeadlineNotTransitioned() throws Exception {
+    var wfid = "wf-transition-future";
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("test-queue")
+            .delay(Duration.ofSeconds(60))
+            .build(),
+        5,
+        false,
+        false);
+
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
+    sysdb.transitionDelayedWorkflows();
+
+    assertEquals(
+        WorkflowState.DELAYED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+  }
+
+  @Test
+  public void testTransitionDelayedWorkflowsMixed() throws Exception {
+    var pastWfid = "wf-transition-mixed-past";
+    var futureWfid = "wf-transition-mixed-future";
+
+    for (var wfid : List.of(pastWfid, futureWfid)) {
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create(wfid)
+              .queueName("test-queue")
+              .delay(Duration.ofSeconds(60))
+              .build(),
+          5,
+          false,
+          false);
+    }
+
+    sysdb.setWorkflowDelay(pastWfid, new WorkflowDelay.DelayUntil(Instant.now().minusSeconds(5)));
+    sysdb.setWorkflowDelay(
+        futureWfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
+
+    sysdb.transitionDelayedWorkflows();
+
+    assertEquals(
+        WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, pastWfid).status());
+    assertEquals(
+        WorkflowState.DELAYED.name(), DBUtils.getWorkflowRow(dataSource, futureWfid).status());
+  }
 
   @Test
   public void testGetWorkflowAggregatesBasic() throws Exception {

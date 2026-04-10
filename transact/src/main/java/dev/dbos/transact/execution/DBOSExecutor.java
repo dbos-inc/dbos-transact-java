@@ -2010,7 +2010,6 @@ public class DBOSExecutor implements AutoCloseable {
             appId,
             timeout,
             effectiveDeadline,
-            null,
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
             actualSerialization);
 
