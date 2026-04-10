@@ -23,8 +23,8 @@ import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.VersionInfo;
-import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowDelay;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
@@ -1124,8 +1124,7 @@ public class SystemDatabaseTest {
             false,
             false);
     assertEquals(WorkflowState.ENQUEUED, result.status());
-    assertEquals(
-        WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+    assertEquals(WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
   }
 
   @Test
@@ -1217,8 +1216,7 @@ public class SystemDatabaseTest {
     sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().minusSeconds(5)));
     sysdb.transitionDelayedWorkflows();
 
-    assertEquals(
-        WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+    assertEquals(WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
   }
 
   @Test
@@ -1236,8 +1234,7 @@ public class SystemDatabaseTest {
     sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
     sysdb.transitionDelayedWorkflows();
 
-    assertEquals(
-        WorkflowState.DELAYED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+    assertEquals(WorkflowState.DELAYED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
   }
 
   @Test
@@ -1257,8 +1254,7 @@ public class SystemDatabaseTest {
     }
 
     sysdb.setWorkflowDelay(pastWfid, new WorkflowDelay.DelayUntil(Instant.now().minusSeconds(5)));
-    sysdb.setWorkflowDelay(
-        futureWfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
+    sysdb.setWorkflowDelay(futureWfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
 
     sysdb.transitionDelayedWorkflows();
 
