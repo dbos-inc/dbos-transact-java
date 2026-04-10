@@ -1138,10 +1138,7 @@ public class SystemDatabaseTest {
     long before = System.currentTimeMillis();
     var result =
         sysdb.initWorkflowStatus(
-            WorkflowStatusInternalBuilder.create(wfid)
-                .queueName("test-queue")
-                .delay(delay)
-                .build(),
+            WorkflowStatusInternalBuilder.create(wfid).queueName("test-queue").delay(delay).build(),
             5,
             false,
             false);
