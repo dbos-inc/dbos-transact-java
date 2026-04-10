@@ -129,11 +129,7 @@ class WorkflowDAO {
             throw new DBOSMaxRecoveryAttemptsExceededException(initStatus.workflowId(), maxRetries);
           }
           return new WorkflowInitResult(
-              initStatus.workflowId(),
-              resRow.status(),
-              resRow.deadlineEpochMs(),
-              false,
-              resRow.serialization());
+              resRow.status(), resRow.deadlineEpochMs(), false, resRow.serialization());
         }
 
         // Upsert above already set executor assignment and incremented the recovery attempt
@@ -162,11 +158,7 @@ class WorkflowDAO {
         }
 
         return new WorkflowInitResult(
-            initStatus.workflowId(),
-            resRow.status(),
-            resRow.deadlineEpochMs(),
-            true,
-            resRow.serialization());
+            resRow.status(), resRow.deadlineEpochMs(), true, resRow.serialization());
 
       } finally {
         if (shouldCommit) {

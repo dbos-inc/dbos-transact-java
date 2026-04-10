@@ -354,8 +354,7 @@ public class SystemDatabaseTest {
     for (var i = 1; i <= 6; i++) {
       var result1 = sysdb.initWorkflowStatus(status, 5, true, false);
       assertEquals(WorkflowState.PENDING.name(), result1.status());
-      assertEquals(wfid, result1.workflowId());
-      assertEquals(0, result1.deadlineEpochMS());
+      assertNull(result1.deadlineEpochMS());
 
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertNotNull(row);
@@ -384,8 +383,7 @@ public class SystemDatabaseTest {
 
     var result1 = sysdb.initWorkflowStatus(builder.build(), 5, false, false);
     assertEquals(WorkflowState.ENQUEUED.name(), result1.status());
-    assertEquals(wfid, result1.workflowId());
-    assertEquals(0, result1.deadlineEpochMS());
+    assertNull(result1.deadlineEpochMS());
 
     var before = DBUtils.getWorkflowRow(dataSource, wfid);
     assertThrows(
@@ -1055,7 +1053,6 @@ public class SystemDatabaseTest {
 
     // This should not throw an exception
     var result = sysdb.initWorkflowStatus(status, null, false, false);
-    assertEquals("test-valid-nulls", result.workflowId());
     assertEquals(WorkflowState.PENDING.name(), result.status());
   }
 
@@ -1074,7 +1071,6 @@ public class SystemDatabaseTest {
 
     // This should not throw an exception
     var result = sysdb.initWorkflowStatus(status, null, false, false);
-    assertEquals("test-valid-values", result.workflowId());
     assertEquals(WorkflowState.ENQUEUED.name(), result.status());
 
     // Verify the values were stored correctly

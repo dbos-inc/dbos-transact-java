@@ -1500,7 +1500,7 @@ public class DBOSExecutor implements AutoCloseable {
     logger.debug("startWorkflow {}", options);
 
     if (options != null
-        && options.timeout() instanceof Timeout.Explicit explicit
+        && options.timeout() instanceof Timeout.Explicit
         && options.deadline() != null) {
       throw new IllegalArgumentException("explicit timeout and deadline cannot both be set");
     }
@@ -1845,14 +1845,14 @@ public class DBOSExecutor implements AutoCloseable {
           }
         };
 
-    long newTimeout = initResult.deadlineEpochMS() - System.currentTimeMillis();
-    if (initResult.deadlineEpochMS() > 0 && newTimeout < 0) {
+    if (initResult.deadlineEpochMS() != null
+        && System.currentTimeMillis() > initResult.deadlineEpochMS()) {
       systemDatabase.cancelWorkflows(List.of(workflowId));
       return retrieveWorkflow(workflowId);
     }
 
     var future = CompletableFuture.supplyAsync(task, executorService);
-    if (newTimeout > 0) {
+    if (initResult.deadlineEpochMS() != null) {
       timeoutScheduler.schedule(
           () -> {
             if (!future.isDone()) {
@@ -1860,7 +1860,7 @@ public class DBOSExecutor implements AutoCloseable {
               future.cancel(true);
             }
           },
-          newTimeout,
+          initResult.deadlineEpochMS() - System.currentTimeMillis(),
           TimeUnit.MILLISECONDS);
     }
 
