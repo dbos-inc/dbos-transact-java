@@ -75,7 +75,7 @@ public class ClientScheduleTest {
   public void clientCreateScheduleDuplicate() {
     try (var client = pgContainer.dbosClient()) {
       var dupSched =
-          new WorkflowSchedule("my-schedm", workflowName(), className(), "0/5 * * * * *");
+          new WorkflowSchedule("dup-sched", workflowName(), className(), "0/5 * * * * *");
 
       client.createSchedule(dupSched);
       assertThrows(RuntimeException.class, () -> client.createSchedule(dupSched));

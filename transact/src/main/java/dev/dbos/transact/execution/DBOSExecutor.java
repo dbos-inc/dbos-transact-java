@@ -937,8 +937,6 @@ public class DBOSExecutor implements AutoCloseable {
   public void createSchedule(@NonNull WorkflowSchedule schedule) {
 
     Objects.requireNonNull(schedule, "schedule cannot be null");
-    SchedulerService.CRON_PARSER.parse(
-        Objects.requireNonNull(schedule.cron(), "cron cannot be null"));
     validateQueue(schedule.queueName());
     validateWorkflow(schedule.workflowName(), schedule.className());
 
