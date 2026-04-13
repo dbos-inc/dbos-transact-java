@@ -32,7 +32,6 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -820,25 +819,8 @@ public class DBOS implements AutoCloseable {
    *
    * @param schedule the schedule configuration
    */
-  public void createSchedule(
-      @NonNull String scheduleName,
-      @NonNull String workflowName,
-      @NonNull String className,
-      @NonNull String schedule,
-      @Nullable Object context,
-      boolean backfill,
-      @Nullable ZoneId cronTimeZone,
-      @Nullable String queueName) {
-    ensureLaunched("createSchedule")
-        .createSchedule(
-            scheduleName,
-            workflowName,
-            className,
-            schedule,
-            context,
-            backfill,
-            cronTimeZone,
-            queueName);
+  public void createSchedule(@NonNull WorkflowSchedule schedule) {
+    ensureLaunched("createSchedule").createSchedule(schedule);
   }
 
   /**

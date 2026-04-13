@@ -51,7 +51,6 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -72,7 +71,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -936,70 +934,21 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
   }
 
-  public static void createSchedule(
-      @NonNull String scheduleName,
-      @NonNull String workflowName,
-      @NonNull String className,
-      @NonNull String schedule,
-      @Nullable Object context,
-      boolean automaticBackfill,
-      @Nullable ZoneId cronTimeZone,
-      @Nullable String queueName,
-      @NonNull Consumer<WorkflowSchedule> scheduleConsumer) {
-    Objects.requireNonNull(scheduleName, "scheduleName cannot be null");
-    Objects.requireNonNull(workflowName, "workflowName cannot be null");
-    Objects.requireNonNull(className, "className cannot be null");
-    // validate schedule CRON
-    SchedulerService.CRON_PARSER.parse(Objects.requireNonNull(schedule, "schedule cannot be null"));
+  public void createSchedule(@NonNull WorkflowSchedule schedule) {
 
-    final var wfSchedule =
-        new WorkflowSchedule(
-            UUID.randomUUID().toString(),
-            scheduleName,
-            workflowName,
-            className,
-            schedule,
-            ScheduleStatus.ACTIVE,
-            context,
-            null,
-            automaticBackfill,
-            cronTimeZone,
-            queueName);
+    Objects.requireNonNull(schedule, "schedule cannot be null");
+    SchedulerService.CRON_PARSER.parse(
+        Objects.requireNonNull(schedule.cron(), "cron cannot be null"));
+    validateQueue(schedule.queueName());
+    validateWorkflow(schedule.workflowName(), schedule.className());
 
-    scheduleConsumer.accept(wfSchedule);
-  }
-
-  public void createSchedule(
-      @NonNull String scheduleName,
-      @NonNull String workflowName,
-      @NonNull String className,
-      @NonNull String schedule,
-      @Nullable Object context,
-      boolean automaticBackfill,
-      @Nullable ZoneId cronTimeZone,
-      @Nullable String queueName) {
-
-    validateQueue(queueName);
-    validateWorkflow(workflowName, className);
-
-    DBOSExecutor.createSchedule(
-        scheduleName,
-        workflowName,
-        className,
-        schedule,
-        context,
-        automaticBackfill,
-        cronTimeZone,
-        queueName,
-        wfSchedule -> {
-          this.callFunctionAsStep(
-              () -> {
-                systemDatabase.createSchedule(wfSchedule);
-                return null;
-              },
-              "DBOS.createSchedule",
-              null);
-        });
+    this.callFunctionAsStep(
+        () -> {
+          systemDatabase.createSchedule(schedule);
+          return null;
+        },
+        "DBOS.createSchedule",
+        null);
   }
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
