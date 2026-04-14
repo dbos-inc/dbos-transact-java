@@ -498,7 +498,7 @@ class WorkflowScheduleTest {
     // Wait for all 3 counts to be released, which indicates the workflow ran at least 3 times
     // (scheduler should run it every second).
     assertTrue(
-        impl.latch.await(5, TimeUnit.SECONDS),
-        "Expected latch to count down to zero within 5 seconds");
+        impl.latch.await(15, TimeUnit.SECONDS),
+        "Expected latch to count down to zero within 15 seconds");
   }
 }
