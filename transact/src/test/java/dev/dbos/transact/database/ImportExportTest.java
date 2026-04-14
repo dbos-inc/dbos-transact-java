@@ -1,6 +1,8 @@
 package dev.dbos.transact.database;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.config.DBOSConfig;
@@ -291,5 +293,52 @@ public class ImportExportTest {
     assertEquals(2, wf.events().size());
     assertEquals(2, wf.eventHistory().size());
     assertEquals(2, wf.streams().size());
+  }
+
+  @Test
+  public void testImportDelayedWorkflow() throws Exception {
+    // A DELAYED workflow should preserve its delay_until_epoch_ms through import/export.
+    var wfId = "delayed-import-wf-1";
+    Instant now = Instant.now();
+    Instant delayUntil = now.plusSeconds(300);
+
+    var status =
+        new WorkflowStatusBuilder(wfId)
+            .status(WorkflowState.DELAYED)
+            .workflowName("TestWorkflow")
+            .appVersion("1.0.0")
+            .recoveryAttempts(0)
+            .priority(0)
+            .queueName("test-queue")
+            .createdAt(now)
+            .updatedAt(now)
+            .delayUntil(delayUntil)
+            .build();
+    var exported = new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of());
+
+    sysdb.importWorkflow(List.of(exported));
+
+    var wfRows = DBUtils.getWorkflowRows(dataSource);
+    assertEquals(1, wfRows.size());
+    assertEquals(wfId, wfRows.get(0).workflowId());
+    assertEquals(WorkflowState.DELAYED.name(), wfRows.get(0).status());
+
+    // Verify delay_until_epoch_ms round-trips through export
+    var reimported = sysdb.exportWorkflow(wfId, false);
+    assertEquals(1, reimported.size());
+    var ws = reimported.get(0).status();
+    assertNotNull(ws.delayUntil());
+    assertEquals(delayUntil.toEpochMilli(), ws.delayUntilEpochMs());
+  }
+
+  @Test
+  public void testImportNonDelayedWorkflowHasNoDelay() throws Exception {
+    // A non-DELAYED workflow should have null delay_until_epoch_ms after import.
+    var wfId = "non-delayed-import-wf-1";
+    sysdb.importWorkflow(List.of(buildExportedWorkflow(wfId)));
+
+    var reimported = sysdb.exportWorkflow(wfId, false);
+    assertEquals(1, reimported.size());
+    assertNull(reimported.get(0).status().delayUntil());
   }
 }

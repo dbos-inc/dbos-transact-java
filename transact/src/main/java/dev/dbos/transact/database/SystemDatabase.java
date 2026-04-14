@@ -923,9 +923,10 @@ public class SystemDatabase implements AutoCloseable {
           created_at, updated_at, started_at_epoch_ms,
           queue_name, deduplication_id, priority, queue_partition_key,
           workflow_timeout_ms, workflow_deadline_epoch_ms,
-          recovery_attempts, forked_from, parent_workflow_id, serialization
+          recovery_attempts, forked_from, parent_workflow_id, serialization,
+          delay_until_epoch_ms
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """
             .formatted(this.schema);
@@ -1036,6 +1037,7 @@ public class SystemDatabase implements AutoCloseable {
                 wfStmt.setString(25, status.forkedFrom());
                 wfStmt.setString(26, status.parentWorkflowId());
                 wfStmt.setString(27, status.serialization());
+                wfStmt.setObject(28, status.delayUntilEpochMs());
                 wfStmt.addBatch();
 
                 for (var step : workflow.steps()) {
