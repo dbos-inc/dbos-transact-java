@@ -7,6 +7,7 @@ import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ScheduleStatus;
+import dev.dbos.transact.workflow.WorkflowSchedule;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -54,7 +55,7 @@ public class ClientScheduleTest {
   public void clientCreateAndGetSchedule() {
     try (var client = pgContainer.dbosClient()) {
       client.createSchedule(
-          "my-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+          new WorkflowSchedule("my-sched", workflowName(), className(), "0/5 * * * * *"));
 
       var s = client.getSchedule("my-sched").orElseThrow();
       assertEquals("my-sched", s.scheduleName());
@@ -73,20 +74,11 @@ public class ClientScheduleTest {
   @Test
   public void clientCreateScheduleDuplicate() {
     try (var client = pgContainer.dbosClient()) {
-      client.createSchedule(
-          "dup-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
-      assertThrows(
-          RuntimeException.class,
-          () ->
-              client.createSchedule(
-                  "dup-sched",
-                  workflowName(),
-                  className(),
-                  "0/5 * * * * *",
-                  null,
-                  false,
-                  null,
-                  null));
+      var dupSched =
+          new WorkflowSchedule("dup-sched", workflowName(), className(), "0/5 * * * * *");
+
+      client.createSchedule(dupSched);
+      assertThrows(RuntimeException.class, () -> client.createSchedule(dupSched));
     }
   }
 
@@ -97,7 +89,7 @@ public class ClientScheduleTest {
           RuntimeException.class,
           () ->
               client.createSchedule(
-                  "bad-cron", workflowName(), className(), "not-a-cron", null, false, null, null));
+                  new WorkflowSchedule("bad-cron", workflowName(), className(), "not-a-cron")));
     }
   }
 
@@ -116,7 +108,7 @@ public class ClientScheduleTest {
   public void clientDeleteSchedule() {
     try (var client = pgContainer.dbosClient()) {
       client.createSchedule(
-          "del-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+          new WorkflowSchedule("del-sched", workflowName(), className(), "0/5 * * * * *"));
       assertTrue(client.getSchedule("del-sched").isPresent());
 
       client.deleteSchedule("del-sched");
@@ -137,7 +129,7 @@ public class ClientScheduleTest {
   public void clientPauseAndResumeSchedule() {
     try (var client = pgContainer.dbosClient()) {
       client.createSchedule(
-          "pause-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+          new WorkflowSchedule("pause-sched", workflowName(), className(), "0/5 * * * * *"));
 
       client.pauseSchedule("pause-sched");
       assertEquals(ScheduleStatus.PAUSED, client.getSchedule("pause-sched").orElseThrow().status());
@@ -153,11 +145,11 @@ public class ClientScheduleTest {
   public void clientListSchedules() {
     try (var client = pgContainer.dbosClient()) {
       client.createSchedule(
-          "alpha-1", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+          new WorkflowSchedule("alpha-1", workflowName(), className(), "0/5 * * * * *"));
       client.createSchedule(
-          "alpha-2", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+          new WorkflowSchedule("alpha-2", workflowName(), className(), "0/5 * * * * *"));
       client.createSchedule(
-          "beta-1", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+          new WorkflowSchedule("beta-1", workflowName(), className(), "0/5 * * * * *"));
       client.pauseSchedule("beta-1");
 
       assertEquals(3, client.listSchedules(null, null, null).size());
@@ -181,7 +173,7 @@ public class ClientScheduleTest {
     try (var client = pgContainer.dbosClient()) {
       // Use a cron that won't fire during the test (Jan 1st only)
       client.createSchedule(
-          "trigger-sched", workflowName(), className(), "0 0 0 1 1 *", null, false, null, null);
+          new WorkflowSchedule("trigger-sched", workflowName(), className(), "0 0 0 1 1 *"));
 
       serviceImpl.reset();
       var handle = client.triggerSchedule("trigger-sched");
@@ -198,7 +190,8 @@ public class ClientScheduleTest {
     try (var client = pgContainer.dbosClient()) {
       // Use a cron that won't fire during the test (Jan 1st only)
       client.createSchedule(
-          "ctx-sched", workflowName(), className(), "0 0 0 1 1 *", "my-context", false, null, null);
+          new WorkflowSchedule("ctx-sched", workflowName(), className(), "0 0 0 1 1 *")
+              .withContext("my-context"));
 
       serviceImpl.reset();
       client.triggerSchedule("ctx-sched").getResult();
@@ -225,7 +218,7 @@ public class ClientScheduleTest {
     try (var client = pgContainer.dbosClient()) {
       // Use a cron that won't fire during the test (every minute)
       client.createSchedule(
-          "backfill-sched", workflowName(), className(), "0 * * * * *", null, false, null, null);
+          new WorkflowSchedule("backfill-sched", workflowName(), className(), "0 * * * * *"));
 
       // Backfill for times that won't be picked up by the scheduler
       var start = Instant.parse("2024-01-01T10:00:30Z");
@@ -250,7 +243,7 @@ public class ClientScheduleTest {
 
     try (var client = pgContainer.dbosClient()) {
       client.createSchedule(
-          "backfill-empty", workflowName(), className(), "0/1 * * * * *", null, false, null, null);
+          new WorkflowSchedule("backfill-empty", workflowName(), className(), "0/1 * * * * *"));
 
       var t = Instant.now().truncatedTo(ChronoUnit.SECONDS);
       var handles = client.backfillSchedule("backfill-empty", t, t);
@@ -274,7 +267,7 @@ public class ClientScheduleTest {
   public void clientScheduleCrudConsistency() {
     try (var client = pgContainer.dbosClient()) {
       client.createSchedule(
-          "cross-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+          new WorkflowSchedule("cross-sched", workflowName(), className(), "0/5 * * * * *"));
 
       var dbosSchedule = dbos.getSchedule("cross-sched").orElseThrow();
       var clientSchedule = client.getSchedule("cross-sched").orElseThrow();

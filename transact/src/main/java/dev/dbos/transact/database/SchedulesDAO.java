@@ -1,5 +1,6 @@
 package dev.dbos.transact.database;
 
+import dev.dbos.transact.execution.SchedulerService;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ScheduleStatus;
@@ -42,6 +43,16 @@ class SchedulesDAO {
   static void createSchedule(
       Connection conn, String schema, DBOSSerializer serializer, WorkflowSchedule schedule)
       throws SQLException {
+
+    Objects.requireNonNull(schedule, "schedule must not be null");
+    Objects.requireNonNull(schedule.scheduleName(), "scheduleName must not be null");
+    Objects.requireNonNull(schedule.workflowName(), "workflowName must not be null");
+    // Note, class name may be null since we may be creating portable schedules in a different
+    // language
+    Objects.requireNonNull(schedule.status(), "status must not be null");
+    Objects.requireNonNull(schedule.cron(), "cron must not be null");
+    SchedulerService.CRON_PARSER.parse(schedule.cron());
+
     String sql =
         """
         INSERT INTO "%s".workflow_schedules
@@ -65,7 +76,7 @@ class SchedulesDAO {
       ps.setString(3, schedule.workflowName());
       ps.setString(4, schedule.className());
       ps.setString(5, schedule.cron());
-      ps.setString(6, Objects.requireNonNull(schedule.status()).name());
+      ps.setString(6, schedule.status().name());
       ps.setString(7, serializedContext.serializedValue());
       ps.setString(8, schedule.lastFiredAt() != null ? schedule.lastFiredAt().toString() : null);
       ps.setBoolean(9, schedule.automaticBackfill());

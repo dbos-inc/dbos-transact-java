@@ -404,7 +404,7 @@ public class SystemDatabaseTest {
         name,
         "myWorkflow",
         "com.example.MyClass",
-        "0 * * * *",
+        "0 * * * * *",
         ScheduleStatus.ACTIVE,
         "{}",
         null,
@@ -423,7 +423,7 @@ public class SystemDatabaseTest {
     assertEquals("sched-1", s.scheduleName());
     assertEquals("myWorkflow", s.workflowName());
     assertEquals("com.example.MyClass", s.className());
-    assertEquals("0 * * * *", s.cron());
+    assertEquals("0 * * * * *", s.cron());
     assertEquals(ScheduleStatus.ACTIVE, s.status());
     assertEquals("{}", s.context());
     assertNull(s.lastFiredAt());
@@ -447,20 +447,21 @@ public class SystemDatabaseTest {
 
   @Test
   public void testCreateScheduleNullStatusThrows() {
-    var schedule =
-        new WorkflowSchedule(
-            null,
-            "sched-null-status",
-            "myWorkflow",
-            "com.example.MyClass",
-            "0 * * * *",
-            null,
-            "{}",
-            null,
-            false,
-            null,
-            null);
-    assertThrows(NullPointerException.class, () -> sysdb.createSchedule(schedule));
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            new WorkflowSchedule(
+                null,
+                "sched-null-status",
+                "myWorkflow",
+                "com.example.MyClass",
+                "0 * * * * *",
+                null,
+                "{}",
+                null,
+                false,
+                null,
+                null));
   }
 
   @Test
@@ -473,7 +474,7 @@ public class SystemDatabaseTest {
             "beta-1",
             "otherWorkflow",
             null,
-            "0 * * * *",
+            "0 * * * * *",
             ScheduleStatus.ACTIVE,
             "{}",
             null,
@@ -599,7 +600,7 @@ public class SystemDatabaseTest {
             "sched-full",
             "fullWorkflow",
             "com.example.Full",
-            "*/5 * * * *",
+            "*/5 * * * * *",
             ScheduleStatus.ACTIVE,
             "{\"key\":\"val\"}",
             Instant.parse("2026-03-01T00:00:00Z"),
@@ -613,7 +614,7 @@ public class SystemDatabaseTest {
     assertEquals("sched-full", s.scheduleName());
     assertEquals("fullWorkflow", s.workflowName());
     assertEquals("com.example.Full", s.className());
-    assertEquals("*/5 * * * *", s.cron());
+    assertEquals("*/5 * * * * *", s.cron());
     assertEquals("{\"key\":\"val\"}", s.context());
     assertEquals(Instant.parse("2026-03-01T00:00:00Z"), s.lastFiredAt());
     assertTrue(s.automaticBackfill());
