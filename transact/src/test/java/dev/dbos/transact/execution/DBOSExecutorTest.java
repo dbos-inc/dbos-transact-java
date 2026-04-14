@@ -50,6 +50,16 @@ class DBOSExecutorTest {
     return service;
   }
 
+  private static void awaitStepCount(DBOS dbos, String wfid, int expected, int timeoutMs)
+      throws Exception {
+    long deadline = System.currentTimeMillis() + timeoutMs;
+    while (System.currentTimeMillis() < deadline) {
+      if (dbos.listWorkflowSteps(wfid).size() == expected) return;
+      Thread.sleep(50);
+    }
+    assertEquals(expected, dbos.listWorkflowSteps(wfid).size());
+  }
+
   @Test
   @EnabledForJreRange(min = JRE.JAVA_21)
   public void virtualThreadPoolJava21() throws Exception {
@@ -201,8 +211,7 @@ class DBOSExecutorTest {
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
       DBUtils.deleteAllStepOutputs(dataSource, wfid);
-      steps = dbos.listWorkflowSteps(wfid);
-      assertEquals(0, steps.size());
+      awaitStepCount(dbos, wfid, 0, 2000);
 
       WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
 
@@ -212,8 +221,7 @@ class DBOSExecutorTest {
 
       wfs = dbos.listWorkflows(null);
       assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
-      steps = dbos.listWorkflowSteps(wfid);
-      assertEquals(2, steps.size());
+      awaitStepCount(dbos, wfid, 2, 2000);
     }
   }
 
@@ -246,8 +254,7 @@ class DBOSExecutorTest {
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
       DBUtils.deleteStepOutput(dataSource, wfid, 1);
-      steps = dbos.listWorkflowSteps(wfid);
-      assertEquals(1, steps.size());
+      awaitStepCount(dbos, wfid, 1, 2000);
 
       WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
 
@@ -260,8 +267,7 @@ class DBOSExecutorTest {
 
       wfs = dbos.listWorkflows(null);
       assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
-      steps = dbos.listWorkflowSteps(wfid);
-      assertEquals(2, steps.size());
+      awaitStepCount(dbos, wfid, 2, 2000);
     }
   }
 
