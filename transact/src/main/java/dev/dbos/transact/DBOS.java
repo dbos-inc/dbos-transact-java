@@ -23,6 +23,7 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
@@ -32,10 +33,11 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
@@ -615,25 +617,65 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Resume a workflow starting from the step after the last complete step
+   * Resume a workflow starting from the step after the last complete step. This method allows
+   * resuming workflows that were previously interrupted, failed, or canceled. The workflow will
+   * continue execution from where it left off, replaying any completed steps deterministically.
    *
    * @param <T> Return type of the workflow function
-   * @param <E> Checked exception thrown by the workflow function, if any
-   * @param workflowId id of the workflow
-   * @return A handle to the workflow
+   * @param <E> Type of checked exception thrown by the workflow function, if any
+   * @param workflowId ID of the workflow to resume; must not be null
+   * @param queueName optional queue name to enqueue the resumed workflow to; if null, the workflow
+   *     will be resumed in the default execution context
+   * @return A handle to the resumed workflow
+   * @throws IllegalStateException if called before DBOS is launched
    */
   @SuppressWarnings("unchecked")
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
-      @NonNull String workflowId) {
-    var handles = resumeWorkflows(List.of(workflowId));
+      @NonNull String workflowId, @Nullable String queueName) {
+    var handles = resumeWorkflows(List.of(workflowId), queueName);
     assert (handles.size() == 1);
     return (WorkflowHandle<T, E>) handles.get(0);
   }
 
   /**
+   * Resume a workflow starting from the step after the last complete step using the default queue.
+   * This method is equivalent to calling {@code resumeWorkflow(workflowId, null)}. The workflow
+   * will continue execution from where it left off, replaying any completed steps
+   * deterministically.
+   *
+   * @param <T> Return type of the workflow function
+   * @param <E> Type of checked exception thrown by the workflow function, if any
+   * @param workflowId ID of the workflow to resume; must not be null
+   * @return A handle to the resumed workflow
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> resumeWorkflow(
+      @NonNull String workflowId) {
+    return resumeWorkflow(workflowId, null);
+  }
+
+  /**
    * Resume multiple workflows starting from the step after the last complete step for each
-   * workflow. This method allows bulk resumption of workflows that were previously interrupted or
-   * failed.
+   * workflow. This method allows bulk resumption of workflows that were previously interrupted,
+   * failed, or canceled. Each workflow will continue execution from where it left off, replaying
+   * any completed steps deterministically.
+   *
+   * @param workflowIds a list of workflow IDs to resume; must not be null
+   * @param queueName optional queue name to enqueue the resumed workflows to; if null, the
+   *     workflows will be resumed in the default execution context
+   * @return A list of handles to the resumed workflows
+   * @throws IllegalStateException if called before DBOS is launched
+   */
+  public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      @NonNull List<String> workflowIds, @Nullable String queueName) {
+    return ensureLaunched("resumeWorkflow").resumeWorkflows(workflowIds, queueName);
+  }
+
+  /**
+   * Resume multiple workflows starting from the step after the last complete step for each workflow
+   * using the default queue. This method is equivalent to calling {@code
+   * resumeWorkflows(workflowIds, null)}. Each workflow will continue execution from where it left
+   * off, replaying any completed steps deterministically.
    *
    * @param workflowIds a list of workflow IDs to resume; must not be null
    * @return A list of handles to the resumed workflows
@@ -641,7 +683,7 @@ public class DBOS implements AutoCloseable {
    */
   public @NonNull List<WorkflowHandle<Object, Exception>> resumeWorkflows(
       @NonNull List<String> workflowIds) {
-    return ensureLaunched("resumeWorkflow").resumeWorkflows(workflowIds);
+    return resumeWorkflows(workflowIds, null);
   }
 
   /***
@@ -779,25 +821,8 @@ public class DBOS implements AutoCloseable {
    *
    * @param schedule the schedule configuration
    */
-  public void createSchedule(
-      @NonNull String scheduleName,
-      @NonNull String workflowName,
-      @NonNull String className,
-      @NonNull String schedule,
-      @Nullable Object context,
-      boolean backfill,
-      @Nullable ZoneId cronTimeZone,
-      @Nullable String queueName) {
-    ensureLaunched("createSchedule")
-        .createSchedule(
-            scheduleName,
-            workflowName,
-            className,
-            schedule,
-            context,
-            backfill,
-            cronTimeZone,
-            queueName);
+  public void createSchedule(@NonNull WorkflowSchedule schedule) {
+    ensureLaunched("createSchedule").createSchedule(schedule);
   }
 
   /**
@@ -904,12 +929,58 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * List all workflows
+   * Sets a delay for a workflow, causing it to be paused for a specified duration or until a
+   * specific time. This is useful for implementing delays, timeouts, or scheduling workflows to
+   * resume at a later time.
    *
-   * @param input {@link ListWorkflowsInput} parameters to query workflows
+   * @param workflowId the unique identifier of the workflow to delay
+   * @param delay the duration to delay the workflow from now
+   * @throws IllegalArgumentException if the workflow ID is invalid
+   * @throws IllegalStateException if DBOS has not been launched
+   */
+  public void setWorkflowDelay(@NonNull String workflowId, @NonNull Duration delay) {
+    var wfDelay = new WorkflowDelay.Delay(Objects.requireNonNull(delay, "delay must not be null"));
+    ensureLaunched("setWorkflowDelay").setWorkflowDelay(workflowId, wfDelay);
+  }
+
+  /**
+   * Sets a delay for a workflow, causing it to be paused for a specified duration or until a
+   * specific time. This is useful for implementing delays, timeouts, or scheduling workflows to
+   * resume at a later time.
+   *
+   * @param workflowId the unique identifier of the workflow to delay
+   * @param delayUntil the absolute time until which to delay the workflow
+   * @throws IllegalArgumentException if the workflow ID is invalid
+   * @throws IllegalStateException if DBOS has not been launched
+   */
+  public void setWorkflowDelay(@NonNull String workflowId, @NonNull Instant delayUntil) {
+    var wfDelay =
+        new WorkflowDelay.DelayUntil(
+            Objects.requireNonNull(delayUntil, "delayUntil must not be null"));
+    ensureLaunched("setWorkflowDelay").setWorkflowDelay(workflowId, wfDelay);
+  }
+
+  /**
+   * Retrieves all events stored during the execution of a workflow. Events are key-value pairs that
+   * workflows can set during execution to persist intermediate state or communicate between steps.
+   * This method returns all events for the specified workflow with their deserialized values.
+   *
+   * @param workflowId the unique identifier of the workflow whose events to retrieve
+   * @return a map containing all events for the workflow, where keys are event names and values are
+   *     the deserialized event data
+   */
+  public @NonNull Map<String, Object> getAllEvents(@NonNull String workflowId) {
+    return ensureLaunched("getAllEvents").getAllEvents(workflowId);
+  }
+
+  /**
+   * List workflows matching the supplied input filter criteria
+   *
+   * @param input {@link ListWorkflowsInput} parameters to query workflows. Pass null to list all
+   *     workflows.
    * @return a list of workflow status {@link WorkflowStatus}
    */
-  public @NonNull List<WorkflowStatus> listWorkflows(@NonNull ListWorkflowsInput input) {
+  public @NonNull List<WorkflowStatus> listWorkflows(@Nullable ListWorkflowsInput input) {
     return ensureLaunched("listWorkflows").listWorkflows(input);
   }
 
@@ -920,7 +991,20 @@ public class DBOS implements AutoCloseable {
    * @return list of step information {@link StepInfo}
    */
   public @NonNull List<StepInfo> listWorkflowSteps(@NonNull String workflowId) {
-    return ensureLaunched("listWorkflowSteps").listWorkflowSteps(workflowId);
+    return listWorkflowSteps(workflowId, null, null);
+  }
+
+  /**
+   * List the steps in the workflow with optional pagination
+   *
+   * @param workflowId Id of the workflow whose steps to return
+   * @param limit Maximum number of steps to return
+   * @param offset Number of steps to skip before returning
+   * @return list of step information {@link StepInfo}
+   */
+  public @NonNull List<StepInfo> listWorkflowSteps(
+      @NonNull String workflowId, Integer limit, Integer offset) {
+    return ensureLaunched("listWorkflowSteps").listWorkflowSteps(workflowId, true, limit, offset);
   }
 
   /**
@@ -1067,5 +1151,50 @@ public class DBOS implements AutoCloseable {
    */
   public static @Nullable SerializationStrategy serializationStrategy() {
     return DBOSContext.serializationStrategy();
+  }
+
+  /**
+   * Write a value to a stream. Must be called from within a workflow or step.
+   *
+   * @param key The stream key / name within the workflow
+   * @param value A serializable value to write to the stream
+   */
+  public void writeStream(@NonNull String key, @NonNull Object value) {
+    writeStream(key, value, null);
+  }
+
+  /**
+   * Write a value to a stream with a specific serialization strategy. Must be called from within a
+   * workflow or step.
+   *
+   * @param key The stream key / name within the workflow
+   * @param value A serializable value to write to the stream
+   * @param serialization The serialization strategy to use (null for workflow default)
+   */
+  public void writeStream(
+      @NonNull String key, @NonNull Object value, @Nullable SerializationStrategy serialization) {
+    ensureLaunched("writeStream").writeStream(key, value, serialization);
+  }
+
+  /**
+   * Close a stream. Must be called from within a workflow, not a step.
+   *
+   * @param key The stream key / name within the workflow
+   */
+  public void closeStream(@NonNull String key) {
+    ensureLaunched("closeStream").closeStream(key);
+  }
+
+  /**
+   * Read values from a stream as an iterator. This function reads values from a stream identified
+   * by the workflow_id and key, returning an iterator that yields each value in order until the
+   * stream is closed or the workflow terminates.
+   *
+   * @param workflowId The workflow instance ID that owns the stream
+   * @param key The stream key / name within the workflow
+   * @return Iterator that yields each value in the stream
+   */
+  public @NonNull Iterator<Object> readStream(@NonNull String workflowId, @NonNull String key) {
+    return ensureLaunched("readStream").readStream(workflowId, key);
   }
 }

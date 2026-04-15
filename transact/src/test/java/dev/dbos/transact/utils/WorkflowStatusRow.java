@@ -29,6 +29,7 @@ public record WorkflowStatusRow(
     String deduplicationId,
     Integer priority,
     String queuePartitionKey,
+    Long delayUntilEpochMs,
     String forkedFrom,
     String parentWorkflowId,
     String serialization) {
@@ -60,6 +61,7 @@ public record WorkflowStatusRow(
         rs.getString("deduplication_id"),
         rs.getObject("priority", Integer.class),
         rs.getString("queue_partition_key"),
+        rs.getObject("delay_until_epoch_ms", Long.class),
         rs.getString("forked_from"),
         rs.getString("parent_workflow_id"),
         rs.getString("serialization"));

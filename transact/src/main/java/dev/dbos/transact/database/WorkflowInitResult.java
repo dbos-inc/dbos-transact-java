@@ -1,14 +1,9 @@
 package dev.dbos.transact.database;
 
-import java.util.Objects;
+import dev.dbos.transact.workflow.WorkflowState;
 
 public record WorkflowInitResult(
-    String workflowId,
-    String status,
+    WorkflowState status,
     Long deadlineEpochMS,
     boolean shouldExecuteOnThisExecutor,
-    String serialization) {
-  public Long deadlineEpochMS() {
-    return Objects.requireNonNullElse(deadlineEpochMS, 0L);
-  }
-}
+    String serialization) {}

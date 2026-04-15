@@ -27,6 +27,8 @@ interface ForkTestService {
   String child2(Float number);
 
   void setEventWorkflow(String key) throws InterruptedException;
+
+  void streamWorkflow(String key);
 }
 
 class ForkTestServiceImpl implements ForkTestService {
@@ -143,5 +145,16 @@ class ForkTestServiceImpl implements ForkTestService {
       dbos.setEvent(key, "event-%d".formatted(i));
       Thread.sleep(100);
     }
+  }
+
+  @Override
+  @Workflow
+  public void streamWorkflow(String key) {
+    proxy.stepOne("one"); // function_id=0
+    dbos.writeStream(key, "v1"); // function_id=1
+    proxy.stepTwo(2); // function_id=2
+    dbos.writeStream(key, "v2"); // function_id=3
+    dbos.closeStream(key); // function_id=4
+    proxy.stepThree(3.3f); // function_id=5
   }
 }

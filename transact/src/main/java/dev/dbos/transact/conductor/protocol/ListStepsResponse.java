@@ -28,9 +28,9 @@ public class ListStepsResponse extends BaseResponse {
       this.error = error != null ? "%s: %s".formatted(error.className(), error.message()) : null;
       this.child_workflow_id = info.childWorkflowId();
       this.started_at_epoch_ms =
-          info.startedAtEpochMs() == null ? null : info.startedAtEpochMs().toString();
+          info.startedAt() == null ? null : String.valueOf(info.startedAtEpochMs());
       this.completed_at_epoch_ms =
-          info.completedAtEpochMs() == null ? null : info.completedAtEpochMs().toString();
+          info.completedAt() == null ? null : String.valueOf(info.completedAtEpochMs());
     }
   }
 

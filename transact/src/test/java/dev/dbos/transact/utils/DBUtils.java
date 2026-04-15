@@ -415,4 +415,33 @@ public class DBUtils {
     }
     return success;
   }
+
+  public record StreamRow(String key, String value, int offset) {}
+
+  public static List<StreamRow> getStreamEntries(DataSource ds, String workflowId)
+      throws SQLException {
+    return getStreamEntries(ds, workflowId, null);
+  }
+
+  public static List<StreamRow> getStreamEntries(DataSource ds, String workflowId, String schema)
+      throws SQLException {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    var sql =
+        "SELECT key, value, \"offset\" FROM \"%s\".streams WHERE workflow_uuid = ? ORDER BY \"offset\""
+            .formatted(schema);
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        List<StreamRow> rows = new ArrayList<>();
+        while (rs.next()) {
+          var key = rs.getString("key");
+          var value = rs.getString("value");
+          var offset = rs.getInt("offset");
+          rows.add(new StreamRow(key, value, offset));
+        }
+        return rows;
+      }
+    }
+  }
 }

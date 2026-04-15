@@ -47,8 +47,8 @@ record WorkflowsOutput(
         output,
         null,
         error,
-        status.createdAt().toString(),
-        status.updatedAt().toString(),
+        status.createdAt() != null ? String.valueOf(status.createdAtEpochMs()) : null,
+        status.updatedAt() != null ? String.valueOf(status.updatedAtEpochMs()) : null,
         status.queueName(),
         status.appVersion(),
         status.executorId());

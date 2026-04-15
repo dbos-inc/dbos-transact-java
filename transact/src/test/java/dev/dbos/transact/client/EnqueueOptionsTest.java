@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import dev.dbos.transact.DBOSClient;
 
 import java.time.Duration;
-import java.time.Instant;
 
 import org.junit.jupiter.api.Test;
 
@@ -13,31 +12,43 @@ import org.junit.jupiter.api.Test;
 public class EnqueueOptionsTest {
   @Test
   public void enqueueOptionsValidation() throws Exception {
-    // workflow/class/queue names must not be empty
+    // empty strings not allowed
+    assertThrows(
+        IllegalArgumentException.class, () -> new DBOSClient.EnqueueOptions("", "queue-name"));
+    assertThrows(
+        IllegalArgumentException.class, () -> new DBOSClient.EnqueueOptions("wf-name", ""));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("", "workflow-name", "queue-name"));
+        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withClassName(""));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("class-name", "", "queue-name"));
+        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withInstanceName(""));
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DBOSClient.EnqueueOptions("class-name", "workflow-name", ""));
+        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withWorkflowId(""));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withAppVersion(""));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withDeduplicationId(""));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withQueuePartitionKey(""));
 
-    var options = new DBOSClient.EnqueueOptions("class", "workflow", "queue");
-
-    // dedupe ID and partition key must not be empty if set
-    assertThrows(IllegalArgumentException.class, () -> options.withDeduplicationId(""));
-    assertThrows(IllegalArgumentException.class, () -> options.withQueuePartitionKey(""));
-
-    // timeout can't be negative or zero
-    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ZERO));
-    assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(-1)));
-
-    // timeout & deadline can't both be set
+    // zero or negative durations not allowed
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withTimeout(Duration.ZERO));
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            options.withDeadline(Instant.now().plusSeconds(1)).withTimeout(Duration.ofSeconds(1)));
+            new DBOSClient.EnqueueOptions("wf-name", "q-name").withTimeout(Duration.ofSeconds(-1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withDelay(Duration.ZERO));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DBOSClient.EnqueueOptions("wf-name", "q-name").withDelay(Duration.ofSeconds(-1)));
   }
 }

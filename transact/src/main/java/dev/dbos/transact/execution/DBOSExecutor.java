@@ -1,5 +1,8 @@
 package dev.dbos.transact.execution;
 
+import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
+import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
+
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
@@ -13,6 +16,7 @@ import dev.dbos.transact.context.WorkflowInfo;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.GetWorkflowEventContext;
 import dev.dbos.transact.database.Result;
+import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.database.WorkflowInitResult;
 import dev.dbos.transact.exceptions.DBOSAwaitedWorkflowCancelledException;
@@ -36,6 +40,7 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
@@ -50,12 +55,11 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -71,7 +75,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -348,6 +351,10 @@ public class DBOSExecutor implements AutoCloseable {
 
   public String appId() {
     return this.appId;
+  }
+
+  public Map<String, Object> executorMetadata() {
+    return this.config.conductorExecutorMetadata();
   }
 
   public Collection<RegisteredWorkflow> getRegisteredWorkflows() {
@@ -693,20 +700,33 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
   }
 
-  public List<WorkflowHandle<Object, Exception>> resumeWorkflows(List<String> workflowIds) {
+  public List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      List<String> workflowIds, String queueName) {
     Objects.requireNonNull(workflowIds);
 
     // Execute the resume operation as a workflow step
     this.callFunctionAsStep(
         () -> {
           logger.info("Resuming workflow(s) {}", workflowIds);
-          systemDatabase.resumeWorkflows(workflowIds);
+          systemDatabase.resumeWorkflows(workflowIds, queueName);
           return null; // void
         },
         "DBOS.resumeWorkflow",
         null);
 
     return workflowIds.stream().map(this::retrieveWorkflow).toList();
+  }
+
+  public void setWorkflowDelay(@NonNull String workflowId, @NonNull WorkflowDelay delay) {
+    Objects.requireNonNull(workflowId);
+    this.callFunctionAsStep(
+        () -> {
+          logger.info("setWorkflowDelay workflow {} delay {}", workflowId, delay);
+          systemDatabase.setWorkflowDelay(workflowId, delay);
+          return null; // void
+        },
+        "DBOS.setWorkflowDelay",
+        null);
   }
 
   public void cancelWorkflows(List<String> workflowIds) {
@@ -746,6 +766,8 @@ public class DBOSExecutor implements AutoCloseable {
             () -> {
               logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
 
+              validateQueue(options.queueName(), options.queuePartitionKey());
+
               return systemDatabase.forkWorkflow(workflowId, startStep, options);
             },
             "DBOS.forkWorkflow",
@@ -753,21 +775,13 @@ public class DBOSExecutor implements AutoCloseable {
     return retrieveWorkflow(forkedId);
   }
 
-  public void globalTimeout(Long cutoff) {
-    OffsetDateTime endTime = Instant.ofEpochMilli(cutoff).atOffset(ZoneOffset.UTC);
-    globalTimeout(endTime);
-  }
-
-  public void globalTimeout(OffsetDateTime endTime) {
-    ListWorkflowsInput pendingInput =
-        new ListWorkflowsInput().withStatus(WorkflowState.PENDING).withEndTime(endTime);
-    for (WorkflowStatus status : systemDatabase.listWorkflows(pendingInput)) {
-      cancelWorkflows(List.of(status.workflowId()));
-    }
-
-    ListWorkflowsInput enqueuedInput =
-        new ListWorkflowsInput().withStatus(WorkflowState.ENQUEUED).withEndTime(endTime);
-    for (WorkflowStatus status : systemDatabase.listWorkflows(enqueuedInput)) {
+  public void globalTimeout(Instant endTime) {
+    var input =
+        new ListWorkflowsInput()
+            .withEndTime(endTime)
+            .withStatus(
+                List.of(WorkflowState.PENDING, WorkflowState.ENQUEUED, WorkflowState.DELAYED));
+    for (WorkflowStatus status : systemDatabase.listWorkflows(input)) {
       cancelWorkflows(List.of(status.workflowId()));
     }
   }
@@ -856,14 +870,70 @@ public class DBOSExecutor implements AutoCloseable {
     return systemDatabase.getEvent(workflowId, key, timeout, null);
   }
 
+  public void writeStream(String key, Object value, SerializationStrategy serialization) {
+    logger.debug("Received writeStream for key {}", key);
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.writeStream() must be called from a workflow.");
+    }
+
+    if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
+      if (ctx.getSerialization() != null) {
+        serialization = ctx.getSerialization();
+      } else {
+        serialization = SerializationStrategy.DEFAULT;
+      }
+    }
+
+    if (ctx.isInStep()) {
+      systemDatabase.writeStreamFromStep(
+          ctx.getWorkflowId(), ctx.getCurrentFunctionId(), key, value, serialization.formatName());
+    } else {
+      int functionId = ctx.getAndIncrementFunctionId();
+      systemDatabase.writeStreamFromWorkflow(
+          ctx.getWorkflowId(), functionId, key, value, serialization.formatName());
+    }
+  }
+
+  public void closeStream(String key) {
+    logger.debug("Received closeStream for key {}", key);
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.closeStream() must be called from a workflow.");
+    }
+
+    if (ctx.isInStep()) {
+      throw new IllegalStateException(
+          "DBOS.closeStream() must be called from a workflow, not a step.");
+    }
+
+    int functionId = ctx.getAndIncrementFunctionId();
+    systemDatabase.closeStream(ctx.getWorkflowId(), functionId, key);
+  }
+
+  public Iterator<Object> readStream(String workflowId, String key) {
+    logger.debug("Received readStream for {} {}", workflowId, key);
+    return new StreamIterator(workflowId, key, systemDatabase);
+  }
+
+  public Map<String, Object> getAllEvents(String workflowId) {
+    return this.callFunctionAsStep(
+        () -> systemDatabase.getAllEvents(workflowId), "DBOS.getAllEvents", null);
+  }
+
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
     return this.callFunctionAsStep(
         () -> systemDatabase.listWorkflows(input), "DBOS.listWorkflows", null);
   }
 
-  public List<StepInfo> listWorkflowSteps(String workflowId) {
+  public List<StepInfo> listWorkflowSteps(
+      String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
     return this.callFunctionAsStep(
-        () -> systemDatabase.listWorkflowSteps(workflowId), "DBOS.listWorkflowSteps", null);
+        () -> systemDatabase.listWorkflowSteps(workflowId, loadOutput, limit, offset),
+        "DBOS.listWorkflowSteps",
+        null);
   }
 
   public List<VersionInfo> listApplicationVersions() {
@@ -878,70 +948,19 @@ public class DBOSExecutor implements AutoCloseable {
     systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
   }
 
-  public static void createSchedule(
-      @NonNull String scheduleName,
-      @NonNull String workflowName,
-      @NonNull String className,
-      @NonNull String schedule,
-      @Nullable Object context,
-      boolean automaticBackfill,
-      @Nullable ZoneId cronTimeZone,
-      @Nullable String queueName,
-      @NonNull Consumer<WorkflowSchedule> scheduleConsumer) {
-    Objects.requireNonNull(scheduleName, "scheduleName cannot be null");
-    Objects.requireNonNull(workflowName, "workflowName cannot be null");
-    Objects.requireNonNull(className, "className cannot be null");
-    // validate schedule CRON
-    SchedulerService.CRON_PARSER.parse(Objects.requireNonNull(schedule, "schedule cannot be null"));
+  public void createSchedule(@NonNull WorkflowSchedule schedule) {
 
-    final var wfSchedule =
-        new WorkflowSchedule(
-            UUID.randomUUID().toString(),
-            scheduleName,
-            workflowName,
-            className,
-            schedule,
-            ScheduleStatus.ACTIVE,
-            context,
-            null,
-            automaticBackfill,
-            cronTimeZone,
-            queueName);
+    Objects.requireNonNull(schedule, "schedule cannot be null");
+    validateQueue(schedule.queueName());
+    validateWorkflow(schedule.workflowName(), schedule.className());
 
-    scheduleConsumer.accept(wfSchedule);
-  }
-
-  public void createSchedule(
-      @NonNull String scheduleName,
-      @NonNull String workflowName,
-      @NonNull String className,
-      @NonNull String schedule,
-      @Nullable Object context,
-      boolean automaticBackfill,
-      @Nullable ZoneId cronTimeZone,
-      @Nullable String queueName) {
-
-    validateQueue(queueName);
-    validateWorkflow(workflowName, className);
-
-    DBOSExecutor.createSchedule(
-        scheduleName,
-        workflowName,
-        className,
-        schedule,
-        context,
-        automaticBackfill,
-        cronTimeZone,
-        queueName,
-        wfSchedule -> {
-          this.callFunctionAsStep(
-              () -> {
-                systemDatabase.createSchedule(wfSchedule);
-                return null;
-              },
-              "DBOS.createSchedule",
-              null);
-        });
+    this.callFunctionAsStep(
+        () -> {
+          systemDatabase.createSchedule(schedule);
+          return null;
+        },
+        "DBOS.createSchedule",
+        null);
   }
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
@@ -1157,6 +1176,7 @@ public class DBOSExecutor implements AutoCloseable {
             null,
             null,
             null,
+            null,
             latestAppVersion,
             false,
             false,
@@ -1285,40 +1305,47 @@ public class DBOSExecutor implements AutoCloseable {
       String deduplicationId,
       Integer priority,
       String queuePartitionKey,
+      Duration delay,
       String appVersion,
       boolean isRecoveryRequest,
       boolean isDequeuedRequest,
       String serialization) {
     public ExecutionOptions {
-      if (timeout instanceof Timeout.Explicit explicit) {
-        if (explicit.value().isNegative() || explicit.value().isZero()) {
-          throw new IllegalArgumentException("timeout must be a positive non-zero duration");
-        }
+      if (nullableIsEmpty(workflowId)) {
+        throw new IllegalArgumentException("workflowId must not be empty");
       }
 
-      if (queuePartitionKey != null && queuePartitionKey.isEmpty()) {
-        throw new IllegalArgumentException(
-            "EnqueueOptions queuePartitionKey must not be empty if not null");
+      if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
+        throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
       }
 
-      if (deduplicationId != null && deduplicationId.isEmpty()) {
-        throw new IllegalArgumentException(
-            "EnqueueOptions deduplicationId must not be empty if not null");
+      if (nullableIsEmpty(queueName)) {
+        throw new IllegalArgumentException("queueName must not be empty");
       }
 
-      if (queuePartitionKey != null && queueName == null) {
-        throw new IllegalArgumentException(
-            "ExecutionOptions partition key provided but queue name is missing");
+      if (nullableIsEmpty(deduplicationId)) {
+        throw new IllegalArgumentException("deduplicationId must not be empty");
       }
 
-      if (queuePartitionKey != null && deduplicationId != null) {
-        throw new IllegalArgumentException(
-            "ExecutionOptions partition key and deduplication ID cannot both be set");
+      if (nullableIsEmpty(queuePartitionKey)) {
+        throw new IllegalArgumentException("queuePartitionKey must not be empty");
+      }
+
+      if (nullableIsNotPositive(delay)) {
+        throw new IllegalArgumentException("delay must be a positive non-zero duration");
+      }
+
+      if (nullableIsEmpty(appVersion)) {
+        throw new IllegalArgumentException("appVersion must not be empty");
+      }
+
+      if (nullableIsEmpty(serialization)) {
+        throw new IllegalArgumentException("serialization must not be empty");
       }
     }
 
     public ExecutionOptions(String workflowId) {
-      this(workflowId, null, null, null, null, null, null, null, false, false, null);
+      this(workflowId, null, null, null, null, null, null, null, null, false, false, null);
     }
 
     public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
@@ -1326,6 +1353,7 @@ public class DBOSExecutor implements AutoCloseable {
           workflowId,
           Timeout.of(timeout),
           deadline,
+          null,
           null,
           null,
           null,
@@ -1345,6 +1373,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.appVersion,
           true,
           false,
@@ -1360,6 +1389,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.appVersion,
           false,
           true,
@@ -1375,6 +1405,7 @@ public class DBOSExecutor implements AutoCloseable {
           this.deduplicationId,
           this.priority,
           this.queuePartitionKey,
+          this.delay,
           this.appVersion,
           this.isRecoveryRequest,
           this.isDequeuedRequest,
@@ -1386,11 +1417,6 @@ public class DBOSExecutor implements AutoCloseable {
         return e.value();
       }
       return null;
-    }
-
-    @Override
-    public String workflowId() {
-      return workflowId != null && workflowId.isEmpty() ? null : workflowId;
     }
   }
 
@@ -1405,6 +1431,7 @@ public class DBOSExecutor implements AutoCloseable {
             options != null ? options.deduplicationId() : null,
             options != null ? options.priority() : null,
             options != null ? options.queuePartitionKey() : null,
+            options != null ? options.delay() : null,
             options != null ? options.appVersion() : null,
             false,
             false,
@@ -1416,6 +1443,12 @@ public class DBOSExecutor implements AutoCloseable {
       ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
 
     logger.debug("startWorkflow {}", options);
+
+    if (options != null
+        && options.timeout() instanceof Timeout.Explicit
+        && options.deadline() != null) {
+      throw new IllegalArgumentException("explicit timeout and deadline cannot both be set");
+    }
 
     var invocation = captureInvocation(supplier);
     if (invocation.executor() != this) {
@@ -1471,6 +1504,7 @@ public class DBOSExecutor implements AutoCloseable {
             options != null ? options.deduplicationId() : null,
             options != null ? options.priority() : null,
             options != null ? options.queuePartitionKey() : null,
+            options != null ? options.delay() : null,
             options != null ? options.appVersion() : null,
             false,
             false,
@@ -1581,8 +1615,40 @@ public class DBOSExecutor implements AutoCloseable {
     return executeWorkflow(workflow, inputs, options, null);
   }
 
+  private void validateQueue(String queueName, String queuePartitionKey) {
+    if (queueName == null || queueName.equals(Constants.DBOS_INTERNAL_QUEUE)) {
+      if (queuePartitionKey != null) {
+        throw new IllegalArgumentException(
+            "DBOS internal queue is not a partitioned queue, but a partition key was provided");
+      }
+    } else {
+      var queue = queues.stream().filter(q -> q.name().equals(queueName)).findFirst();
+      if (queue.isPresent()) {
+        if (queue.get().partitioningEnabled() && queuePartitionKey == null) {
+          throw new IllegalArgumentException(
+              "queue %s partitions enabled, but no partition key was provided"
+                  .formatted(queueName));
+        }
+
+        if (!queue.get().partitioningEnabled() && queuePartitionKey != null) {
+          throw new IllegalArgumentException(
+              "queue %s is not a partitioned queue, but a partition key was provided"
+                  .formatted(queueName));
+        }
+      } else {
+        throw new IllegalArgumentException("queue %s does not exist".formatted(queueName));
+      }
+    }
+  }
+
   private <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
       RegisteredWorkflow workflow, Object[] args, ExecutionOptions options, WorkflowInfo parent) {
+
+    Objects.requireNonNull(options, "options must not be null");
+    var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
+    if (workflowId.isEmpty()) {
+      throw new IllegalArgumentException("workflowId cannot be empty");
+    }
 
     if (parent != null) {
       var childId = systemDatabase.checkChildWorkflow(parent.workflowId(), parent.functionId());
@@ -1601,49 +1667,27 @@ public class DBOSExecutor implements AutoCloseable {
 
     if (options.queueName() != null) {
 
-      final var queueName = options.queueName();
-      var queue = queues.stream().filter(q -> q.name().equals(queueName)).findFirst();
-      if (queue.isPresent()) {
-        if (queue.get().partitionedEnabled() && options.queuePartitionKey() == null) {
-          throw new IllegalArgumentException(
-              "queue %s partitions enabled, but no partition key was provided"
-                  .formatted(options.queueName()));
-        }
+      validateQueue(options.queueName(), options.queuePartitionKey());
 
-        if (!queue.get().partitionedEnabled() && options.queuePartitionKey() != null) {
-          throw new IllegalArgumentException(
-              "queue %s is not a partitioned queue, but a partition key was provided"
-                  .formatted(options.queueName()));
-        }
-      } else {
-        throw new IllegalArgumentException(
-            "queue %s does not exist".formatted(options.queueName()));
-      }
-
-      var workflowId =
-          enqueueWorkflow(
-              workflow.workflowName(),
-              workflow.className(),
-              workflow.instanceName(),
-              maxRetries,
-              args,
-              null,
-              options,
-              parent,
-              executorId(),
-              appVersion(),
-              appId(),
-              systemDatabase,
-              this.serializer);
+      enqueueWorkflow(
+          workflow.workflowName(),
+          workflow.className(),
+          workflow.instanceName(),
+          maxRetries,
+          args,
+          null,
+          options,
+          parent,
+          executorId(),
+          appVersion(),
+          appId(),
+          systemDatabase,
+          this.serializer);
       return new WorkflowHandleDBPoll<>(this, workflowId);
     }
 
     logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
 
-    var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
-    if (workflowId.isEmpty()) {
-      throw new IllegalArgumentException("workflowId cannot be empty");
-    }
     WorkflowInitResult initResult =
         preInvokeWorkflow(
             systemDatabase,
@@ -1654,6 +1698,7 @@ public class DBOSExecutor implements AutoCloseable {
             args,
             null,
             workflowId,
+            null,
             null,
             null,
             null,
@@ -1673,11 +1718,11 @@ public class DBOSExecutor implements AutoCloseable {
     if (!initResult.shouldExecuteOnThisExecutor()) {
       return retrieveWorkflow(workflowId);
     }
-    if (initResult.status().equals(WorkflowState.SUCCESS.name())) {
+    if (initResult.status().equals(WorkflowState.SUCCESS)) {
       return retrieveWorkflow(workflowId);
-    } else if (initResult.status().equals(WorkflowState.ERROR.name())) {
+    } else if (initResult.status().equals(WorkflowState.ERROR)) {
       logger.warn("Idempotency check not impl for error");
-    } else if (initResult.status().equals(WorkflowState.CANCELLED.name())) {
+    } else if (initResult.status().equals(WorkflowState.CANCELLED)) {
       logger.warn("Idempotency check not impl for cancelled");
     }
 
@@ -1746,14 +1791,14 @@ public class DBOSExecutor implements AutoCloseable {
           }
         };
 
-    long newTimeout = initResult.deadlineEpochMS() - System.currentTimeMillis();
-    if (initResult.deadlineEpochMS() > 0 && newTimeout < 0) {
+    if (initResult.deadlineEpochMS() != null
+        && System.currentTimeMillis() > initResult.deadlineEpochMS()) {
       systemDatabase.cancelWorkflows(List.of(workflowId));
       return retrieveWorkflow(workflowId);
     }
 
     var future = CompletableFuture.supplyAsync(task, executorService);
-    if (newTimeout > 0) {
+    if (initResult.deadlineEpochMS() != null) {
       timeoutScheduler.schedule(
           () -> {
             if (!future.isDone()) {
@@ -1761,7 +1806,7 @@ public class DBOSExecutor implements AutoCloseable {
               future.cancel(true);
             }
           },
-          newTimeout,
+          initResult.deadlineEpochMS() - System.currentTimeMillis(),
           TimeUnit.MILLISECONDS);
     }
 
@@ -1785,22 +1830,23 @@ public class DBOSExecutor implements AutoCloseable {
       SystemDatabase systemDatabase,
       DBOSSerializer serializer) {
 
-    logger.debug(
-        "enqueueWorkflow {}/{}/{}({}) {}",
-        workflowName,
-        Objects.requireNonNullElse(className, ""),
-        Objects.requireNonNullElse(instanceName, ""),
-        positionalArgs,
-        options);
-
-    var workflowId = Objects.requireNonNull(options.workflowId(), "workflowId must not be null");
-    if (workflowId.isEmpty()) {
+    if (Objects.requireNonNull(options.workflowId(), "workflowId must not be null").isEmpty()) {
       throw new IllegalArgumentException("workflowId cannot be empty");
     }
-    var queueName = Objects.requireNonNull(options.queueName(), "queueName must not be null");
-    if (queueName.isEmpty()) {
+    if (Objects.requireNonNull(options.queueName(), "queueName must not be null").isEmpty()) {
       throw new IllegalArgumentException("queueName cannot be empty");
     }
+    if (options.queuePartitionKey != null && options.deduplicationId != null) {
+      throw new IllegalArgumentException(
+          "queuePartitionKey and deduplicationId cannot both be set");
+    }
+
+    logger.debug(
+        "enqueueWorkflow {}:{}:{}",
+        options.workflowId(),
+        options.queueName(),
+        RegisteredWorkflow.fullyQualifiedName(
+            workflowName, Objects.requireNonNullElse(className, ""), instanceName));
 
     // Note, options.appVesion specifies the appVersion the workflow starter may have set
     // app version parameter specifies the current running code app version, if known.
@@ -1818,25 +1864,26 @@ public class DBOSExecutor implements AutoCloseable {
           maxRetries,
           positionalArgs,
           namedArgs,
-          workflowId,
-          queueName,
-          options.deduplicationId(),
-          options.priority(),
-          options.queuePartitionKey(),
+          options.workflowId,
+          options.queueName,
+          options.deduplicationId,
+          options.priority,
+          options.queuePartitionKey,
+          options.delay,
           executorId,
           appVersion,
           appId,
           parent,
           options.timeoutDuration(),
-          options.deadline(),
+          options.deadline,
           options.isRecoveryRequest,
           options.isDequeuedRequest,
-          options.serialization(),
+          options.serialization,
           serializer);
-      return workflowId;
+      return options.workflowId;
     } catch (DBOSWorkflowExecutionConflictException e) {
-      logger.debug("Workflow execution conflict for workflowId {}", workflowId);
-      return workflowId;
+      logger.debug("Workflow execution conflict for workflowId {}", options.workflowId);
+      return options.workflowId;
     } catch (DBOSQueueDuplicatedException e) {
       logger.debug(
           "Workflow queue {} reused deduplicationId {}", e.queueName(), e.deduplicationId());
@@ -1863,6 +1910,7 @@ public class DBOSExecutor implements AutoCloseable {
       String deduplicationId,
       Integer priority,
       String queuePartitionKey,
+      Duration delay,
       String executorId,
       String appVersion,
       String appId,
@@ -1885,26 +1933,20 @@ public class DBOSExecutor implements AutoCloseable {
     String actualSerialization = serializedArgs.serialization();
     var startTime = System.currentTimeMillis();
 
-    WorkflowState status = queueName == null ? WorkflowState.PENDING : WorkflowState.ENQUEUED;
-
-    Long timeoutMs = timeout != null ? timeout.toMillis() : null;
-    Long deadlineEpochMs =
-        (queueName != null && timeoutMs != null)
-            ? null
-            : deadline != null ? deadline.toEpochMilli() : null;
+    Instant effectiveDeadline = (queueName != null && timeout != null) ? null : deadline;
 
     final int retries = maxRetries == null ? Constants.DEFAULT_MAX_RECOVERY_ATTEMPTS : maxRetries;
     WorkflowStatusInternal workflowStatusInternal =
         new WorkflowStatusInternal(
             workflowId,
-            status,
             workflowName,
             className,
             instanceName,
             queueName,
             deduplicationId,
-            priority == null ? 0 : priority,
+            priority,
             queuePartitionKey,
+            delay,
             null,
             null,
             null,
@@ -1912,8 +1954,8 @@ public class DBOSExecutor implements AutoCloseable {
             executorId,
             appVersion,
             appId,
-            timeoutMs,
-            deadlineEpochMs,
+            timeout,
+            effectiveDeadline,
             parentWorkflow != null ? parentWorkflow.workflowId() : null,
             actualSerialization);
 

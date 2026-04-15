@@ -4,6 +4,8 @@ import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
 public class WorkflowStatusBuilder {
@@ -31,15 +33,17 @@ public class WorkflowStatusBuilder {
   private String assumedRole;
   private String[] authenticatedRoles;
 
-  private Long createdAt;
-  private Long updatedAt;
+  private Instant createdAt;
+  private Instant updatedAt;
   private Integer recoveryAttempts;
-  private Long startedAtEpochMs;
+  private Instant startedAt;
 
-  private Long timeoutMs;
-  private Long deadlineEpochMs;
+  private Duration timeout;
+  private Instant deadline;
   private String forkedFrom;
   private String parentWorkflowId;
+  private Boolean wasForkedFrom;
+  private Instant delayUntil;
   private String serialization;
 
   public WorkflowStatus build() {
@@ -62,14 +66,16 @@ public class WorkflowStatusBuilder {
         appId,
         recoveryAttempts,
         queueName,
-        timeoutMs,
-        deadlineEpochMs,
-        startedAtEpochMs,
+        timeout,
+        deadline,
+        startedAt,
         deduplicationId,
         priority,
         partitionKey,
         forkedFrom,
         parentWorkflowId,
+        wasForkedFrom,
+        delayUntil,
         serialization);
   }
 
@@ -167,12 +173,12 @@ public class WorkflowStatusBuilder {
     return this;
   }
 
-  public WorkflowStatusBuilder createdAt(Long createdAt) {
+  public WorkflowStatusBuilder createdAt(Instant createdAt) {
     this.createdAt = createdAt;
     return this;
   }
 
-  public WorkflowStatusBuilder updatedAt(Long updatedAt) {
+  public WorkflowStatusBuilder updatedAt(Instant updatedAt) {
     this.updatedAt = updatedAt;
     return this;
   }
@@ -182,18 +188,18 @@ public class WorkflowStatusBuilder {
     return this;
   }
 
-  public WorkflowStatusBuilder startedAtEpochMs(Long startedAtEpochMs) {
-    this.startedAtEpochMs = startedAtEpochMs;
+  public WorkflowStatusBuilder startedAt(Instant startedAt) {
+    this.startedAt = startedAt;
     return this;
   }
 
-  public WorkflowStatusBuilder timeoutMs(Long timeoutMs) {
-    this.timeoutMs = timeoutMs;
+  public WorkflowStatusBuilder timeout(Duration timeout) {
+    this.timeout = timeout;
     return this;
   }
 
-  public WorkflowStatusBuilder deadlineEpochMs(Long deadlineEpochMs) {
-    this.deadlineEpochMs = deadlineEpochMs;
+  public WorkflowStatusBuilder deadline(Instant deadline) {
+    this.deadline = deadline;
     return this;
   }
 
@@ -204,6 +210,16 @@ public class WorkflowStatusBuilder {
 
   public WorkflowStatusBuilder parentWorkflowId(String parentWorkflowId) {
     this.parentWorkflowId = parentWorkflowId;
+    return this;
+  }
+
+  public WorkflowStatusBuilder wasForkedFrom(Boolean wasForkedFrom) {
+    this.wasForkedFrom = wasForkedFrom;
+    return this;
+  }
+
+  public WorkflowStatusBuilder delayUntil(Instant delayUntil) {
+    this.delayUntil = delayUntil;
     return this;
   }
 

@@ -50,6 +50,16 @@ class DBOSExecutorTest {
     return service;
   }
 
+  private static void awaitStepCount(DBOS dbos, String wfid, int expected, int timeoutMs)
+      throws Exception {
+    long deadline = System.currentTimeMillis() + timeoutMs;
+    while (System.currentTimeMillis() < deadline) {
+      if (dbos.listWorkflowSteps(wfid).size() == expected) return;
+      Thread.sleep(50);
+    }
+    assertEquals(expected, dbos.listWorkflowSteps(wfid).size());
+  }
+
   @Test
   @EnabledForJreRange(min = JRE.JAVA_21)
   public void virtualThreadPoolJava21() throws Exception {
@@ -103,7 +113,7 @@ class DBOSExecutorTest {
 
       assertEquals("test-itemtest-item", result);
 
-      List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+      List<WorkflowStatus> wfs = dbos.listWorkflows(null);
       assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
@@ -114,7 +124,7 @@ class DBOSExecutorTest {
       assertEquals("test-itemtest-item", result);
       assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
 
-      wfs = dbos.listWorkflows(new ListWorkflowsInput());
+      wfs = dbos.listWorkflows(null);
       assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
     }
   }
@@ -155,7 +165,7 @@ class DBOSExecutorTest {
       }
       assertEquals("test-itemtest-item", result);
 
-      List<WorkflowStatus> wfs = dbos1.listWorkflows(new ListWorkflowsInput());
+      List<WorkflowStatus> wfs = dbos1.listWorkflows(null);
       assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
     }
 
@@ -193,7 +203,7 @@ class DBOSExecutorTest {
 
       assertEquals("test-itemstepOnestepTwo", result);
 
-      List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+      List<WorkflowStatus> wfs = dbos.listWorkflows(null);
       assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
       List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
@@ -201,8 +211,7 @@ class DBOSExecutorTest {
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
       DBUtils.deleteAllStepOutputs(dataSource, wfid);
-      steps = dbos.listWorkflowSteps(wfid);
-      assertEquals(0, steps.size());
+      awaitStepCount(dbos, wfid, 0, 2000);
 
       WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
 
@@ -210,10 +219,9 @@ class DBOSExecutorTest {
       assertEquals("test-itemstepOnestepTwo", result);
       assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
 
-      wfs = dbos.listWorkflows(new ListWorkflowsInput());
+      wfs = dbos.listWorkflows(null);
       assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
-      steps = dbos.listWorkflowSteps(wfid);
-      assertEquals(2, steps.size());
+      awaitStepCount(dbos, wfid, 2, 2000);
     }
   }
 
@@ -238,7 +246,7 @@ class DBOSExecutorTest {
       assertEquals(1, impl.step1Count);
       assertEquals(1, impl.step2Count);
 
-      List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+      List<WorkflowStatus> wfs = dbos.listWorkflows(null);
       assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
 
       List<StepInfo> steps = dbos.listWorkflowSteps(wfid);
@@ -246,8 +254,7 @@ class DBOSExecutorTest {
 
       DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.PENDING.name());
       DBUtils.deleteStepOutput(dataSource, wfid, 1);
-      steps = dbos.listWorkflowSteps(wfid);
-      assertEquals(1, steps.size());
+      awaitStepCount(dbos, wfid, 1, 2000);
 
       WorkflowHandle<String, ?> handle = dbosExecutor.executeWorkflowById(wfid, true, false);
 
@@ -258,10 +265,9 @@ class DBOSExecutorTest {
 
       assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
 
-      wfs = dbos.listWorkflows(new ListWorkflowsInput());
+      wfs = dbos.listWorkflows(null);
       assertEquals(WorkflowState.SUCCESS, wfs.get(0).status());
-      steps = dbos.listWorkflowSteps(wfid);
-      assertEquals(2, steps.size());
+      awaitStepCount(dbos, wfid, 2, 2000);
     }
   }
 

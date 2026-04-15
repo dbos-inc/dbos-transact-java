@@ -19,6 +19,7 @@ import dev.dbos.transact.workflow.WorkflowState;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -48,6 +49,8 @@ interface EventsService {
   void setEventTwice(String key, String v1, String v2) throws InterruptedException;
 
   void setMultipleEventsWorkflow();
+
+  Map<String, Object> getAllEventsWorkflow(String workflowId);
 }
 
 class EventsServiceImpl implements EventsService {
@@ -154,6 +157,12 @@ class EventsServiceImpl implements EventsService {
           dbos.setEvent("key4", "value4");
         },
         "setEventStep");
+  }
+
+  @Workflow
+  @Override
+  public Map<String, Object> getAllEventsWorkflow(String workflowId) {
+    return dbos.getAllEvents(workflowId);
   }
 
   public void resetLatches() {
@@ -384,6 +393,38 @@ public class EventsTest {
     dbos.getEvent("nonexistingid", "fake_key", Duration.ofMillis(10)).orElse(null);
     long elapsed = System.currentTimeMillis() - start;
     assertTrue(elapsed < 1000);
+  }
+
+  @Test
+  public void getAllEventsAppearsInSteps() throws Exception {
+    // wf1 sets three events
+    var wf1Id = UUID.randomUUID().toString();
+    try (var ctx = new WorkflowOptions(wf1Id).setContext()) {
+      proxy.setMultipleEvents();
+    }
+
+    // wf2 calls getAllEvents on wf1 — should be recorded as a step
+    var wf2Id = UUID.randomUUID().toString();
+    Map<String, Object> events;
+    try (var ctx = new WorkflowOptions(wf2Id).setContext()) {
+      events = proxy.getAllEventsWorkflow(wf1Id);
+    }
+
+    assertEquals(3, events.size());
+    assertEquals("value1", events.get("key1"));
+    assertEquals(241.5, events.get("key2"));
+    assertNull(events.get("key3"));
+
+    // getAllEvents must appear in wf2's step list
+    List<StepInfo> steps = dbos.listWorkflowSteps(wf2Id);
+    assertEquals(1, steps.size());
+    assertEquals("DBOS.getAllEvents", steps.get(0).functionName());
+
+    // Replay: re-run wf2 with the same ID — result must come from recorded output
+    try (var ctx = new WorkflowOptions(wf2Id).setContext()) {
+      Map<String, Object> replayed = proxy.getAllEventsWorkflow(wf1Id);
+      assertEquals(events, replayed);
+    }
   }
 
   @Test

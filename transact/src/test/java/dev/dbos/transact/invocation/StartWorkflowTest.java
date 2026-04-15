@@ -4,8 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
@@ -37,7 +39,7 @@ public class StartWorkflowTest {
     impl.setProxy(proxy);
 
     dbos.registerQueues(
-        new Queue("queue"), new Queue("partitioned-queue").withPartitionedEnabled(true));
+        new Queue("queue"), new Queue("partitioned-queue").withPartitioningEnabled(true));
 
     dbos.launch();
   }
@@ -54,12 +56,6 @@ public class StartWorkflowTest {
     // timeout can't be negative or zero
     assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ZERO));
     assertThrows(IllegalArgumentException.class, () -> options.withTimeout(Duration.ofSeconds(-1)));
-
-    // timeout & deadline can't both be set
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            options.withDeadline(Instant.now().plusSeconds(1)).withTimeout(Duration.ofSeconds(1)));
   }
 
   @Test
@@ -111,8 +107,19 @@ public class StartWorkflowTest {
     assertNotNull(row);
     assertEquals(workflowId, row.workflowId());
     assertEquals(WorkflowState.SUCCESS, row.getStatus().status());
-    assertEquals(1000, row.getStatus().timeoutMs());
-    assertNotNull(row.getStatus().deadlineEpochMs());
+    assertEquals(Duration.ofMillis(1000), row.getStatus().timeout());
+    assertNotNull(row.getStatus().deadline());
+  }
+
+  @Test
+  void timeoutAndDurationSetThrows() throws Exception {
+    var options =
+        new StartWorkflowOptions()
+            .withTimeout(Duration.ofSeconds(10))
+            .withDeadline(Instant.now().plus(Duration.ofDays(1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
   }
 
   @Test
@@ -138,5 +145,52 @@ public class StartWorkflowTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
+  }
+
+  @Test
+  void startWorkflowWithDelayManualTransition() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    var delay = Duration.ofMillis(500);
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.simpleWorkflow(),
+            new StartWorkflowOptions().withQueue("queue").withDelay(delay));
+
+    // Workflow should be DELAYED before the delay expires
+    assertEquals(WorkflowState.DELAYED, handle.getStatus().status());
+
+    // Wait until the delay has passed
+    Thread.sleep(delay.toMillis() + 100);
+
+    // Manually call transitionDelayedWorkflows, simulating what the paused QueueService would do
+    var sysdb = DBOSTestAccess.getSystemDatabase(dbos);
+    sysdb.transitionDelayedWorkflows();
+
+    // Workflow should now be ENQUEUED, waiting for the QueueService to pick it up
+    assertEquals(WorkflowState.ENQUEUED, handle.getStatus().status());
+
+    // Unpause and let the workflow run
+    qs.unpause();
+    assertEquals(localDate, handle.getResult());
+  }
+
+  @Test
+  void startWorkflowWithDelayRealPolling() throws Exception {
+    long start = System.currentTimeMillis();
+    var delay = Duration.ofSeconds(5);
+
+    var handle =
+        dbos.startWorkflow(
+            () -> proxy.simpleWorkflow(),
+            new StartWorkflowOptions().withQueue("queue").withDelay(delay));
+
+    assertEquals(localDate, handle.getResult());
+
+    long elapsed = System.currentTimeMillis() - start;
+    assertTrue(
+        elapsed >= delay.toMillis(),
+        "Expected at least 5s delay but elapsed was " + elapsed + "ms");
   }
 }

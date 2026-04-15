@@ -111,6 +111,7 @@ public class Conductor implements AutoCloseable {
   }
 
   // TODO: do we need the insecure connection?
+  // Tracking issue: https://github.com/dbos-inc/dbos-transact-java/issues/346
   private static HttpClient buildHttpClient() {
     try {
       // Intentionally insecure: matches previous Netty InsecureTrustManagerFactory behavior
@@ -684,6 +685,10 @@ public class Conductor implements AutoCloseable {
       case FORK_WORKFLOW -> handleFork(this, message);
       case GET_METRICS -> handleGetMetrics(this, message);
       case GET_SCHEDULE -> handleGetSchedule(this, message);
+      case GET_WORKFLOW_AGGREGATES -> handleGetWorkflowAggregates(this, message);
+      case GET_WORKFLOW_EVENTS -> handleGetWorkflowEvents(this, message);
+      case GET_WORKFLOW_NOTIFICATIONS -> handleGetWorkflowNotifications(this, message);
+      case GET_WORKFLOW_STREAMS -> handleGetWorkflowStreams(this, message);
       case GET_WORKFLOW -> handleGetWorkflow(this, message);
       case IMPORT_WORKFLOW -> handleImportWorkflow(this, message);
       case LIST_APPLICATION_VERSIONS -> handleListApplicationVersions(this, message);
@@ -712,7 +717,8 @@ public class Conductor implements AutoCloseable {
                 message,
                 conductor.dbosExecutor.executorId(),
                 conductor.dbosExecutor.appVersion(),
-                hostname);
+                hostname,
+                conductor.dbosExecutor.executorMetadata());
           } catch (Exception e) {
             return new ExecutorInfoResponse(message, e);
           }
@@ -778,7 +784,7 @@ public class Conductor implements AutoCloseable {
                   ? request.workflow_ids
                   : List.of(request.workflow_id);
           try {
-            conductor.dbosExecutor.resumeWorkflows(ids);
+            conductor.dbosExecutor.resumeWorkflows(ids, request.queue_name);
             return new SuccessResponse(request, true);
           } catch (Exception e) {
             logger.error("Exception encountered when resuming workflow(s) {}", ids, e);
@@ -811,12 +817,9 @@ public class Conductor implements AutoCloseable {
             return new ForkWorkflowResponse(request, null, "Invalid Fork Workflow Request");
           }
           try {
-            var options =
-                new ForkOptions(
-                    request.body.new_workflow_id, request.body.application_version, null);
             WorkflowHandle<?, ?> handle =
                 conductor.dbosExecutor.forkWorkflow(
-                    request.body.workflow_id, request.body.start_step, options);
+                    request.body.workflow_id, request.body.start_step, request.toOptions());
             return new ForkWorkflowResponse(request, handle.workflowId());
           } catch (Exception e) {
             logger.error("Exception encountered when forking workflow {}", request, e);
@@ -899,7 +902,8 @@ public class Conductor implements AutoCloseable {
           ListStepsRequest request = (ListStepsRequest) message;
           try {
             List<StepInfo> stepInfoList =
-                conductor.dbosExecutor.listWorkflowSteps(request.workflow_id);
+                conductor.dbosExecutor.listWorkflowSteps(
+                    request.workflow_id, request.load_output, request.limit, request.offset);
             List<ListStepsResponse.Step> steps =
                 stepInfoList.stream().map(ListStepsResponse.Step::new).collect(Collectors.toList());
             return new ListStepsResponse(request, steps);
@@ -933,8 +937,9 @@ public class Conductor implements AutoCloseable {
         () -> {
           GetWorkflowRequest request = (GetWorkflowRequest) message;
           try {
-            var status = conductor.systemDatabase.getWorkflowStatus(request.workflow_id);
-            WorkflowsOutput output = status == null ? null : new WorkflowsOutput(status);
+            var status = conductor.systemDatabase.listWorkflows(request.toInput());
+            WorkflowsOutput output =
+                status == null || status.size() < 1 ? null : new WorkflowsOutput(status.get(0));
             return new GetWorkflowResponse(request, output);
           } catch (Exception e) {
             logger.error("Exception encountered when getting workflow {}", request.workflow_id, e);
@@ -949,8 +954,11 @@ public class Conductor implements AutoCloseable {
           RetentionRequest request = (RetentionRequest) message;
 
           try {
-            conductor.systemDatabase.garbageCollect(
-                request.body.gc_cutoff_epoch_ms, request.body.gc_rows_threshold);
+            var cutoff =
+                request.body.gc_cutoff_epoch_ms == null
+                    ? null
+                    : Instant.ofEpochMilli(request.body.gc_cutoff_epoch_ms);
+            conductor.systemDatabase.garbageCollect(cutoff, request.body.gc_rows_threshold);
           } catch (Exception e) {
             logger.error("Exception encountered garbage collecting system database", e);
             return new SuccessResponse(request, e);
@@ -958,7 +966,8 @@ public class Conductor implements AutoCloseable {
 
           try {
             if (request.body.timeout_cutoff_epoch_ms != null) {
-              conductor.dbosExecutor.globalTimeout(request.body.timeout_cutoff_epoch_ms);
+              conductor.dbosExecutor.globalTimeout(
+                  Instant.ofEpochMilli(request.body.timeout_cutoff_epoch_ms));
             }
           } catch (Exception e) {
             logger.error("Exception encountered setting global timeout", e);
@@ -987,6 +996,75 @@ public class Conductor implements AutoCloseable {
             }
           } catch (Exception e) {
             return new GetMetricsResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetWorkflowAggregates(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetWorkflowAggregatesRequest request = (GetWorkflowAggregatesRequest) message;
+          try {
+            var rows = conductor.systemDatabase.getWorkflowAggregates(request.toInput());
+            return new GetWorkflowAggregatesResponse(request, rows);
+          } catch (Exception e) {
+            logger.error("Exception encountered when getting workflow aggregates", e);
+            return new GetWorkflowAggregatesResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetWorkflowEvents(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetWorkflowEventsRequest request = (GetWorkflowEventsRequest) message;
+          try {
+            var events = conductor.systemDatabase.getAllEvents(request.workflow_id);
+            return new GetWorkflowEventsResponse(request, events);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when getting workflow events for {}",
+                request.workflow_id,
+                e);
+            return new GetWorkflowEventsResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetWorkflowNotifications(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetWorkflowNotificationsRequest request = (GetWorkflowNotificationsRequest) message;
+          try {
+            var notifications = conductor.systemDatabase.getAllNotifications(request.workflow_id);
+            return new GetWorkflowNotificationsResponse(request, notifications);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when getting workflow notifications for {}",
+                request.workflow_id,
+                e);
+            return new GetWorkflowNotificationsResponse(request, e);
+          }
+        });
+  }
+
+  static CompletableFuture<BaseResponse> handleGetWorkflowStreams(
+      Conductor conductor, BaseMessage message) {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          GetWorkflowStreamsRequest request = (GetWorkflowStreamsRequest) message;
+          try {
+            var streams = conductor.systemDatabase.getAllStreamEntries(request.workflow_id);
+            return new GetWorkflowStreamsResponse(request, streams);
+          } catch (Exception e) {
+            logger.error(
+                "Exception encountered when getting workflow streams for {}",
+                request.workflow_id,
+                e);
+            return new GetWorkflowStreamsResponse(request, e);
           }
         });
   }

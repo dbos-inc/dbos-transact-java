@@ -457,7 +457,7 @@ class NotificationServiceTest {
     assertEquals("hello", handle.getResult());
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
     assertEquals(1, wfs.size());
   }
 

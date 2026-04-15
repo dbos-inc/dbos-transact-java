@@ -1,5 +1,8 @@
 package dev.dbos.transact;
 
+import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
+import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
+
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.Timeout;
 
@@ -37,45 +40,52 @@ public record StartWorkflowOptions(
     @Nullable String deduplicationId,
     @Nullable Integer priority,
     @Nullable String queuePartitionKey,
+    @Nullable Duration delay,
     @Nullable String appVersion) {
 
   public StartWorkflowOptions {
-    if (timeout instanceof Timeout.Explicit explicit) {
-      if (explicit.value().isNegative() || explicit.value().isZero()) {
-        throw new IllegalArgumentException(
-            "StartWorkflowOptions explicit timeout must be a positive non-zero duration");
-      }
-
-      if (deadline != null) {
-        throw new IllegalArgumentException(
-            "StartWorkflowOptions explicit timeout and deadline cannot both be set");
-      }
+    if (nullableIsEmpty(workflowId)) {
+      throw new IllegalArgumentException("workflowId must not be empty");
     }
 
-    if (queuePartitionKey != null && queuePartitionKey.isEmpty()) {
-      throw new IllegalArgumentException(
-          "EnqueueOptions queuePartitionKey must not be empty if not null");
+    if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
+      throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
     }
 
-    if (deduplicationId != null && deduplicationId.isEmpty()) {
-      throw new IllegalArgumentException(
-          "EnqueueOptions deduplicationId must not be empty if not null");
+    if (nullableIsEmpty(queueName)) {
+      throw new IllegalArgumentException("queueName must not be empty");
+    }
+
+    if (nullableIsEmpty(deduplicationId)) {
+      throw new IllegalArgumentException("deduplicationId must not be empty");
+    }
+
+    if (nullableIsEmpty(queuePartitionKey)) {
+      throw new IllegalArgumentException("queuePartitionKey must not be empty");
+    }
+
+    if (nullableIsNotPositive(delay)) {
+      throw new IllegalArgumentException("delay must be a positive non-zero duration");
+    }
+
+    if (nullableIsEmpty(appVersion)) {
+      throw new IllegalArgumentException("appVersion must not be empty");
     }
   }
 
   /** Construct with default options */
   public StartWorkflowOptions() {
-    this(null, null, null, null, null, null, null, null);
+    this(null, null, null, null, null, null, null, null, null);
   }
 
   /** Construct with a specified workflow ID */
   public StartWorkflowOptions(String workflowId) {
-    this(workflowId, null, null, null, null, null, null, null);
+    this(workflowId, null, null, null, null, null, null, null, null);
   }
 
   /** Construct with a specified queue */
   public StartWorkflowOptions(@NonNull Queue queue) {
-    this(null, null, null, queue.name(), null, null, null, null);
+    this(null, null, null, queue.name(), null, null, null, null, null);
   }
 
   /** Produces a new StartWorkflowOptions that overrides the ID assigned to the started workflow */
@@ -88,6 +98,7 @@ public record StartWorkflowOptions(
         this.deduplicationId,
         this.priority,
         this.queuePartitionKey,
+        this.delay,
         this.appVersion);
   }
 
@@ -101,6 +112,7 @@ public record StartWorkflowOptions(
         this.deduplicationId,
         this.priority,
         this.queuePartitionKey,
+        this.delay,
         this.appVersion);
   }
 
@@ -129,6 +141,7 @@ public record StartWorkflowOptions(
         this.deduplicationId,
         this.priority,
         this.queuePartitionKey,
+        this.delay,
         this.appVersion);
   }
 
@@ -142,6 +155,7 @@ public record StartWorkflowOptions(
         this.deduplicationId,
         this.priority,
         this.queuePartitionKey,
+        this.delay,
         this.appVersion);
   }
 
@@ -163,6 +177,7 @@ public record StartWorkflowOptions(
         deduplicationId,
         this.priority,
         this.queuePartitionKey,
+        this.delay,
         this.appVersion);
   }
 
@@ -179,6 +194,7 @@ public record StartWorkflowOptions(
         this.deduplicationId,
         priority,
         this.queuePartitionKey,
+        this.delay,
         this.appVersion);
   }
 
@@ -192,6 +208,23 @@ public record StartWorkflowOptions(
         this.deduplicationId,
         this.priority,
         queuePartitionKey,
+        this.delay,
+        this.appVersion);
+  }
+
+  /**
+   * Produces a new StartWorkflowOptions that assigns a delay before the workflow starts executing
+   */
+  public @NonNull StartWorkflowOptions withDelay(@Nullable Duration delay) {
+    return new StartWorkflowOptions(
+        this.workflowId,
+        this.timeout,
+        this.deadline,
+        this.queueName,
+        this.deduplicationId,
+        this.priority,
+        this.queuePartitionKey,
+        delay,
         this.appVersion);
   }
 
@@ -205,6 +238,7 @@ public record StartWorkflowOptions(
         this.deduplicationId,
         this.priority,
         this.queuePartitionKey,
+        this.delay,
         appVersion);
   }
 

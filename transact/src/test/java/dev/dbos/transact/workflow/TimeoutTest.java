@@ -112,12 +112,6 @@ public class TimeoutTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> new StartWorkflowOptions().withTimeout(Duration.ofSeconds(-1)));
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            new StartWorkflowOptions()
-                .withDeadline(Instant.ofEpochMilli(System.currentTimeMillis() + 100))
-                .withTimeout(Duration.ofSeconds(1)));
   }
 
   @Test
@@ -257,7 +251,7 @@ public class TimeoutTest {
       simpleService.workWithString("12345");
     }
 
-    setDelayEpoch(dataSource, wfid1);
+    setWorkflowDeadlinePassed(dataSource, wfid1);
 
     var handle = dbosExecutor.executeWorkflowById(wfid1, true, false);
     assertEquals(WorkflowState.CANCELLED, handle.getStatus().status());
@@ -387,7 +381,7 @@ public class TimeoutTest {
     assertThrows(DBOSAwaitedWorkflowCancelledException.class, () -> handle.getResult());
   }
 
-  private void setDelayEpoch(DataSource ds, String workflowId) throws SQLException {
+  private void setWorkflowDeadlinePassed(DataSource ds, String workflowId) throws SQLException {
 
     String sql =
         "UPDATE dbos.workflow_status SET status = ?, updated_at = ?, workflow_deadline_epoch_ms = ? WHERE workflow_uuid = ?";

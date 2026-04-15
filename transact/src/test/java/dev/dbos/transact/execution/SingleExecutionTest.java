@@ -306,7 +306,7 @@ public class SingleExecutionTest {
   }
 
   WorkflowHandle<?, ?> reexecuteWorkflowById(String id) throws Exception {
-    DBUtils.setWorkflowState(dataSource, id, WorkflowState.PENDING.toString());
+    DBUtils.setWorkflowState(dataSource, id, WorkflowState.PENDING.name());
     return DBOSTestAccess.getDbosExecutor(dbos).executeWorkflowById(id, true, false);
   }
 
