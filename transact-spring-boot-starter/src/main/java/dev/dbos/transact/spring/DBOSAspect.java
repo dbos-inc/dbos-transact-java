@@ -153,7 +153,10 @@ public class DBOSAspect {
             });
 
     logger.debug("Intercepting @Workflow {}", regWf.fullyQualifiedName());
-    var handle = dbos.startRegisteredWorkflow(regWf, pjp.getArgs(), null);
+    // TODO: WorkflowOptions support for DBOSAspect
+    var handle =
+        dbos.startRegisteredWorkflow(
+            regWf, pjp.getArgs(), new StartWorkflowOptions(UUID.randomUUID().toString()));
     return handle.getResult();
   }
 
