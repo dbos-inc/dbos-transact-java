@@ -1,6 +1,7 @@
 package dev.dbos.transact.spring;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.StepOptions;
@@ -8,6 +9,7 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 
 import java.lang.reflect.Method;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.aspectj.lang.ProceedingJoinPoint;
