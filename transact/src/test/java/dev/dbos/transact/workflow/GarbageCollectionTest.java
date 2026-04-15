@@ -162,4 +162,43 @@ public class GarbageCollectionTest {
     impl.timeoutLatch.countDown();
     assertEquals(finalHandle.workflowId(), finalHandle.getResult());
   }
+
+  @Test
+  void globalTimeoutCancelsDelayed() throws Exception {
+    var qs = DBOSTestAccess.getQueueService(dbos);
+    qs.pause();
+
+    var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+
+    // Create delayed workflows that should be cancelled
+    int numDelayed = 5;
+    List<WorkflowHandle<Integer, ?>> delayedHandles = new ArrayList<>();
+    for (int i = 0; i < numDelayed; i++) {
+      delayedHandles.add(
+          dbos.startWorkflow(
+              () -> proxy.testWorkflow(0),
+              new StartWorkflowOptions().withQueue(gcQueue).withDelay(Duration.ofHours(1))));
+    }
+
+    Thread.sleep(1000L);
+
+    // Start one final delayed workflow after the sleep
+    WorkflowHandle<Integer, ?> finalDelayedHandle =
+        dbos.startWorkflow(
+            () -> proxy.testWorkflow(0),
+            new StartWorkflowOptions().withQueue(gcQueue).withDelay(Duration.ofHours(1)));
+
+    // Timeout all workflows created more than one second ago
+    dbosExecutor.globalTimeout(Instant.now().minus(Duration.ofMillis(1000)));
+
+    // All early delayed workflows should be cancelled
+    for (var handle : delayedHandles) {
+      assertEquals(WorkflowState.CANCELLED, handle.getStatus().status());
+    }
+
+    // The final delayed workflow should still be DELAYED (not cancelled)
+    assertEquals(WorkflowState.DELAYED, finalDelayedHandle.getStatus().status());
+
+    qs.unpause();
+  }
 }
