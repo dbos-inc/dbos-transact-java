@@ -8,6 +8,7 @@ import java.util.List;
 import javax.sql.DataSource;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -42,8 +43,10 @@ public class DBOSAutoConfiguration {
   @Bean
   @ConditionalOnMissingBean
   public DBOSConfig dbosConfig(
-      DBOSProperties props, ObjectProvider<DBOSConfigCustomizer> customizers) {
-    DBOSConfig config = buildConfig(props);
+      DBOSProperties props,
+      @Value("${spring.application.name:#{null}}") String springAppName,
+      ObjectProvider<DBOSConfigCustomizer> customizers) {
+    DBOSConfig config = buildConfig(props, springAppName);
     for (DBOSConfigCustomizer customizer : customizers.orderedStream().toList()) {
       config = customizer.customize(config);
     }
@@ -81,8 +84,9 @@ public class DBOSAutoConfiguration {
     return new DBOSWorkflowRegistrar(dbos, applicationContext);
   }
 
-  private DBOSConfig buildConfig(DBOSProperties props) {
-    DBOSConfig config = DBOSConfig.defaults(props.getAppName());
+  private DBOSConfig buildConfig(DBOSProperties props, String springAppName) {
+    String appName = props.getAppName() != null ? props.getAppName() : springAppName;
+    DBOSConfig config = DBOSConfig.defaults(appName);
 
     DBOSProperties.Datasource ds = props.getDatasource();
     if (ds.getUrl() != null) {
