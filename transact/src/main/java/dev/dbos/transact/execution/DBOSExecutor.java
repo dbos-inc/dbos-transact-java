@@ -390,7 +390,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  // Step Stuff
+  // Step methods
 
   public <T, E extends Exception> T runStep(
       @NonNull ThrowingSupplier<T, E> step,
@@ -415,6 +415,9 @@ public class DBOSExecutor implements AutoCloseable {
     }
     if (Objects.requireNonNull(stepName, "DBOS step name must not be null").isEmpty()) {
       throw new IllegalArgumentException("DBOS step name must not be empty");
+    }
+    if (!stepName.startsWith("DBOS.")) {
+      throw new IllegalArgumentException("DBOS step name must start with DBOS.");
     }
     // DBOS method are never retried
     return runStepInternal(step, new StepOptions(stepName), childWorkflowId);
