@@ -45,7 +45,6 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowHandleDBPoll;
 import dev.dbos.transact.workflow.internal.WorkflowHandleFuture;
@@ -535,14 +534,12 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  // Workflow Stuff
+  // Workflow Methods
 
-  WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) {
-    Objects.requireNonNull(output, "output must not be null");
-    String workflowId = Objects.requireNonNull(output.workflowId(), "workflowId must not be null");
-    String queue = output.queueName();
+  WorkflowHandle<?, ?> recoverWorkflow(String workflowId, String queueName) {
+    Objects.requireNonNull(workflowId, "workflowId must not be null");
 
-    if (queue != null) {
+    if (queueName != null) {
       boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
       if (cleared) {
         logger.debug("recoverWorkflow clear queue assignment {}", workflowId);
@@ -557,33 +554,10 @@ public class DBOSExecutor implements AutoCloseable {
   public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
     Objects.requireNonNull(executorIds);
 
-    List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
-    for (String _executorId : executorIds) {
-      List<GetPendingWorkflowsOutput> pendingWorkflows;
-      try {
-        pendingWorkflows = systemDatabase.getPendingWorkflows(_executorId, appVersion());
-      } catch (Exception e) {
-        logger.error(
-            "getPendingWorkflows failed:  executor {}, application version {}",
-            _executorId,
-            appVersion(),
-            e);
-        return new ArrayList<>();
-      }
-      logger.info(
-          "Recovering {} workflows for executor {} app version {}",
-          pendingWorkflows.size(),
-          _executorId,
-          appVersion());
-      for (var output : pendingWorkflows) {
-        try {
-          handles.add(recoverWorkflow(output));
-        } catch (Throwable t) {
-          logger.error("Workflow {} recovery failed", output.workflowId(), t);
-        }
-      }
-    }
-    return handles;
+    var workflows = systemDatabase.getPendingWorkflows(executorIds, appVersion);
+    return workflows.stream()
+        .map(wf -> recoverWorkflow(wf.workflowId(), wf.queueName()))
+        .collect(Collectors.toList());
   }
 
   private void postInvokeWorkflowResult(

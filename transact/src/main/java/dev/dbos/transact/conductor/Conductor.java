@@ -11,7 +11,6 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -920,9 +919,9 @@ public class Conductor implements AutoCloseable {
         () -> {
           ExistPendingWorkflowsRequest request = (ExistPendingWorkflowsRequest) message;
           try {
-            List<GetPendingWorkflowsOutput> pending =
+            var pending =
                 conductor.systemDatabase.getPendingWorkflows(
-                    request.executor_id, request.application_version);
+                    List.of(request.executor_id), request.application_version);
             return new ExistPendingWorkflowsResponse(request, !pending.isEmpty());
           } catch (Exception e) {
             logger.error("Exception encountered when checking for pending workflows", e);

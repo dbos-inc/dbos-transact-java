@@ -19,7 +19,6 @@ import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
@@ -808,38 +807,14 @@ class WorkflowDAO {
     return info;
   }
 
-  List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion)
+  List<WorkflowStatus> getPendingWorkflows(List<String> executorIds, String appVersion)
       throws SQLException {
-
-    final String sql =
-        """
-          SELECT workflow_uuid, queue_name
-          FROM "%s".workflow_status
-          WHERE status = ?
-            AND executor_id = ?
-            AND application_version = ?
-        """
-            .formatted(this.schema);
-
-    List<GetPendingWorkflowsOutput> results = new ArrayList<>();
-
-    try (Connection connection = dataSource.getConnection();
-        PreparedStatement stmt = connection.prepareStatement(sql)) {
-
-      stmt.setString(1, WorkflowState.PENDING.name());
-      stmt.setString(2, executorId);
-      stmt.setString(3, appVersion);
-
-      try (ResultSet rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          results.add(
-              new GetPendingWorkflowsOutput(
-                  rs.getString("workflow_uuid"), rs.getString("queue_name")));
-        }
-      }
-    }
-
-    return results;
+    var input =
+        new ListWorkflowsInput()
+            .withStatus(WorkflowState.PENDING)
+            .withExecutorIds(executorIds)
+            .withApplicationVersion(appVersion);
+    return listWorkflows(input);
   }
 
   @SuppressWarnings("unchecked")
