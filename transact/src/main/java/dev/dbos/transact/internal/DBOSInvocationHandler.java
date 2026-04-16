@@ -3,6 +3,7 @@ package dev.dbos.transact.internal;
 import dev.dbos.transact.context.DBOSContextHolder;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.workflow.Step;
+import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Workflow;
 
 import java.lang.reflect.InvocationHandler;
@@ -13,12 +14,9 @@ import java.util.function.Supplier;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class DBOSInvocationHandler implements InvocationHandler {
   public static final ThreadLocal<StartWorkflowHook> hookHolder = new ThreadLocal<>();
-  private static final Logger logger = LoggerFactory.getLogger(DBOSInvocationHandler.class);
 
   private final Object target;
   private final String instanceName;
@@ -127,29 +125,13 @@ public class DBOSInvocationHandler implements InvocationHandler {
     }
   }
 
-  protected Object handleStep(Method method, Object[] args, Step step) throws Exception {
+  protected Object handleStep(Method method, Object[] args, Step stepTag) throws Exception {
     var executor = executorSupplier.get();
     if (executor == null) {
       throw new IllegalStateException("executorSupplier returned null");
     }
 
-    var name = step.name().isEmpty() ? method.getName() : step.name();
-    logger.debug("Before : Executing step {}", name);
-    try {
-      Object result =
-          executor.runStepInternal(
-              name,
-              step.retriesAllowed(),
-              step.maxAttempts(),
-              step.intervalSeconds(),
-              step.backOffRate(),
-              null,
-              () -> method.invoke(target, args));
-      logger.debug("After: Step completed successfully");
-      return result;
-    } catch (Exception e) {
-      logger.error("Step failed", e);
-      throw e;
-    }
+    var options = StepOptions.create(stepTag, method);
+    return executor.runStep(() -> method.invoke(target, args), options, null);
   }
 }

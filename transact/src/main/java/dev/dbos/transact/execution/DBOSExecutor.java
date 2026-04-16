@@ -66,10 +66,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -389,224 +392,143 @@ public class DBOSExecutor implements AutoCloseable {
 
   // Step Stuff
 
-  /** This does not retry */
-  @SuppressWarnings("unchecked")
-  public <T, E extends Exception> T callFunctionAsStep(
-      ThrowingSupplier<T, E> fn, String functionName, String childWfId) throws E {
-
-    var ctx = DBOSContextHolder.get();
-    if (!ctx.isInWorkflow() || ctx.isInStep()) return fn.execute();
-
-    var startTime = System.currentTimeMillis();
-    int nextFuncId = ctx.getAndIncrementFunctionId();
-
-    StepResult result =
-        systemDatabase.checkStepExecutionTxn(ctx.getWorkflowId(), nextFuncId, functionName);
-    if (result != null) {
-      return result.toOutput(this.serializer, functionName);
-    }
-
-    T functionResult;
-
-    try {
-      functionResult = fn.execute();
-    } catch (Exception e) {
-      var jsonError = SerializationUtil.serializeError(e, null, this.serializer);
-      StepResult r =
-          new StepResult(
-              ctx.getWorkflowId(),
-              nextFuncId,
-              functionName,
-              null,
-              jsonError.serializedValue(),
-              childWfId,
-              jsonError.serialization());
-      systemDatabase.recordStepResultTxn(r, startTime);
-      throw (E) e;
-    }
-
-    // Record the successful result
-    var toSaveSer = SerializationUtil.serializeValue(functionResult, null, this.serializer);
-    StepResult o =
-        new StepResult(
-            ctx.getWorkflowId(),
-            nextFuncId,
-            functionName,
-            toSaveSer.serializedValue(),
-            null,
-            childWfId,
-            toSaveSer.serialization());
-    systemDatabase.recordStepResultTxn(o, startTime);
-
-    return functionResult;
-  }
-
-  @SuppressWarnings("unchecked")
-  public <T, E extends Exception> T runStepInternal(
-      ThrowingSupplier<T, E> stepfunc, StepOptions opts, String childWfId) throws E {
-    try {
-      return runStepInternal(
-          opts.name(),
-          opts.retriesAllowed(),
-          opts.maxAttempts(),
-          opts.intervalSeconds(),
-          opts.backOffRate(),
-          childWfId,
-          stepfunc::execute);
-    } catch (Exception t) {
-      throw (E) t;
-    }
-  }
-
-  record StepRetryInfo(int maxAttempts, Duration timeBetweenAttempts, double backOffRate) {
-    public StepRetryInfo {
-      if (maxAttempts < 1) {
-        maxAttempts = 1;
-      }
-    }
-  }
-
-  public <T, E extends Exception> T executeStep(
+  public <T, E extends Exception> T runStep(
       @NonNull ThrowingSupplier<T, E> step,
-      @NonNull String stepName,
-      @Nullable StepRetryInfo retryInfo)
+      @NonNull StepOptions options,
+      @Nullable String childWorkflowId)
       throws E {
-
     var ctx = DBOSContextHolder.get();
     if (!ctx.isInWorkflow()) {
-      // if there is no workflow, execute the step function without checkpointing
-      return step.execute();
+      return Objects.requireNonNull(step, "step must not be null").execute();
     }
+    return runStepInternal(step, options, childWorkflowId);
+  }
 
-    var workflowId = ctx.getWorkflowId();
-    var startTime = System.currentTimeMillis();
-    logger.debug("executeStep {} for workflow {}", stepName, workflowId);
-
-    var stepId = ctx.getAndIncrementFunctionId();
-
-    var prevResult = systemDatabase.checkStepExecutionTxn(workflowId, stepId, stepName);
-    if (prevResult != null) {}
-
-    var maxAttempts = retryInfo == null ? 1 : retryInfo.maxAttempts;
-
-    throw new RuntimeException();
+  private <T, E extends Exception> T runDbosFunctionAsStep(
+      @NonNull ThrowingSupplier<T, E> step,
+      @NonNull String stepName,
+      @Nullable String childWorkflowId)
+      throws E {
+    var ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow() || ctx.isInStep()) {
+      return Objects.requireNonNull(step, "step must not be null").execute();
+    }
+    if (Objects.requireNonNull(stepName, "DBOS step name must not be null").isEmpty()) {
+      throw new IllegalArgumentException("DBOS step name must not be empty");
+    }
+    // DBOS method are never retried
+    return runStepInternal(step, new StepOptions(stepName), childWorkflowId);
   }
 
   @SuppressWarnings("unchecked")
-  public <T, E extends Exception> T runStepInternal(
-      String stepName,
-      boolean retryAllowed,
-      int maxAttempts,
-      double timeBetweenAttemptsSec,
-      double backOffRate,
-      String childWfId,
-      ThrowingSupplier<T, E> function)
+  private <T, E extends Exception> T runStepInternal(
+      @NonNull ThrowingSupplier<T, E> step,
+      @NonNull StepOptions options,
+      @Nullable String childWorkflowId)
       throws E {
-    if (maxAttempts < 1) {
-      maxAttempts = 1;
-    }
-    if (!retryAllowed) {
-      maxAttempts = 1;
-    }
-    DBOSContext ctx = DBOSContextHolder.get();
-    boolean inWorkflow = ctx != null && ctx.isInWorkflow();
 
-    if (!inWorkflow) {
-      // if there is no workflow, execute the step function without checkpointing
-      return function.execute();
-    }
+    Objects.requireNonNull(step, "step must not be null");
+    Objects.requireNonNull(options, "options must not be null");
 
-    String workflowId = ctx.getWorkflowId();
-    var startTime = System.currentTimeMillis();
+    var ctx = DBOSContextHolder.get();
+    var workflowId = ctx.getWorkflowId();
+    var stepId = ctx.getAndIncrementFunctionId();
+    logger.debug("executeStep #{} ({}) for workflow {}", stepId, options.name(), workflowId);
 
-    logger.debug("Running step {} for workflow {}", stepName, workflowId);
-
-    int stepFunctionId = ctx.getAndIncrementFunctionId();
-
-    StepResult recordedResult =
-        systemDatabase.checkStepExecutionTxn(workflowId, stepFunctionId, stepName);
-
-    if (recordedResult != null) {
-      String output = recordedResult.output();
-      if (output != null) {
-        Object outputValue =
-            SerializationUtil.deserializeValue(
-                output, recordedResult.serialization(), this.serializer);
-        return (T) outputValue;
-      }
-
-      String error = recordedResult.error();
-      if (error != null) {
-        var throwable =
+    var prevResult = systemDatabase.checkStepExecutionTxn(workflowId, stepId, options.name());
+    if (prevResult != null) {
+      if (prevResult.error() != null) {
+        var t =
             SerializationUtil.deserializeError(
-                error, recordedResult.serialization(), this.serializer);
-        if (!(throwable instanceof Exception))
-          throw new RuntimeException(throwable.getMessage(), throwable);
-        throw (E) throwable;
+                prevResult.error(), prevResult.serialization(), this.serializer);
+        if (t instanceof Exception) {
+          throw (E) t;
+        } else {
+          throw new RuntimeException(t.getMessage(), t);
+        }
       }
+
+      if (prevResult.output() != null) {
+        return (T)
+            SerializationUtil.deserializeValue(
+                prevResult.output(), prevResult.serialization(), this.serializer);
+      }
+
+      throw new IllegalStateException(
+          "Recorded output and error are both null for workflow %s step %d (%s)"
+              .formatted(workflowId, stepId, options.name()));
     }
 
-    int currAttempts = 1;
-    SerializationUtil.SerializedResult serializedOutput = null;
-    Exception eThrown = null;
-    T result = null;
-    boolean shouldRetry = true;
+    var startTime = System.currentTimeMillis();
+    var curAttempts = 1;
+    var retryInterval = options.retryInterval();
+    T output = null;
+    Exception exception = null;
 
-    while (currAttempts <= maxAttempts) {
+    while (curAttempts <= options.maxAttempts()) {
+      boolean callSucceeded = false;
+
+      logger.debug(
+          "executeStep #{} for workflow {} attempt {} of {}",
+          stepId,
+          workflowId,
+          curAttempts,
+          options.maxAttempts());
       try {
-        ctx.setStepFunctionId(stepFunctionId);
-        result = function.execute();
-        shouldRetry = false;
-        serializedOutput = SerializationUtil.serializeValue(result, null, this.serializer);
-        eThrown = null;
+        ctx.setStepFunctionId(stepId);
+        output = step.execute();
+        exception = null;
+        callSucceeded = true;
       } catch (Exception e) {
-        Throwable actual =
-            (e instanceof InvocationTargetException)
-                ? ((InvocationTargetException) e).getTargetException()
-                : e;
-        eThrown = (Exception) actual;
+        var actual = (e instanceof InvocationTargetException ite) ? ite.getTargetException() : e;
+        exception = (e instanceof Exception) ? (Exception) actual : e;
       } finally {
         ctx.resetStepFunctionId();
       }
 
-      if (!shouldRetry || !retryAllowed) {
+      if (callSucceeded || curAttempts >= options.maxAttempts()) {
         break;
       }
 
       try {
-        Thread.sleep((long) (timeBetweenAttemptsSec * 1000));
+        Thread.sleep(retryInterval.toMillis());
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
-      timeBetweenAttemptsSec *= backOffRate;
-      ++currAttempts;
+      retryInterval = Duration.ofNanos((long) (retryInterval.toNanos() * options.backOffRate()));
+      curAttempts++;
     }
 
-    if (eThrown == null) {
-      StepResult stepResult =
+    if (exception != null) {
+      logger.debug("executeStep #{} for workflow {} threw {}", stepId, workflowId, exception);
+
+      var serializedException = SerializationUtil.serializeError(exception, null, serializer);
+      var stepResult =
           new StepResult(
               workflowId,
-              stepFunctionId,
-              stepName,
+              stepId,
+              options.name(),
+              null,
+              serializedException.serializedValue(),
+              childWorkflowId,
+              serializedException.serialization());
+      systemDatabase.recordStepResultTxn(stepResult, startTime);
+      throw (E) exception;
+    } else {
+      logger.debug("executeStep #{} for workflow {} completed {}", stepId, workflowId, output);
+
+      var serializedOutput = SerializationUtil.serializeValue(output, null, serializer);
+      var stepResult =
+          new StepResult(
+              workflowId,
+              stepId,
+              options.name(),
               serializedOutput.serializedValue(),
               null,
-              childWfId,
+              childWorkflowId,
               serializedOutput.serialization());
       systemDatabase.recordStepResultTxn(stepResult, startTime);
-      return result;
-    } else {
-      var serError = SerializationUtil.serializeError(eThrown, null, this.serializer);
-      StepResult stepResult =
-          new StepResult(
-              workflowId,
-              stepFunctionId,
-              stepName,
-              null,
-              serError.serializedValue(),
-              childWfId,
-              serError.serialization());
-      systemDatabase.recordStepResultTxn(stepResult, startTime);
-      throw (E) eThrown;
+      return output;
     }
   }
 
@@ -696,7 +618,7 @@ public class DBOSExecutor implements AutoCloseable {
     Objects.requireNonNull(workflowIds);
 
     // Execute the resume operation as a workflow step
-    this.callFunctionAsStep(
+    this.runDbosFunctionAsStep(
         () -> {
           logger.info("Resuming workflow(s) {}", workflowIds);
           systemDatabase.resumeWorkflows(workflowIds, queueName);
@@ -710,7 +632,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void setWorkflowDelay(@NonNull String workflowId, @NonNull WorkflowDelay delay) {
     Objects.requireNonNull(workflowId);
-    this.callFunctionAsStep(
+    this.runDbosFunctionAsStep(
         () -> {
           logger.info("setWorkflowDelay workflow {} delay {}", workflowId, delay);
           systemDatabase.setWorkflowDelay(workflowId, delay);
@@ -724,7 +646,7 @@ public class DBOSExecutor implements AutoCloseable {
     Objects.requireNonNull(workflowIds);
 
     // Execute the cancel operation as a workflow step
-    this.callFunctionAsStep(
+    this.runDbosFunctionAsStep(
         () -> {
           logger.info("Cancelling workflow(s) {}", workflowIds);
           systemDatabase.cancelWorkflows(workflowIds);
@@ -736,7 +658,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
     Objects.requireNonNull(workflowIds);
-    this.callFunctionAsStep(
+    this.runDbosFunctionAsStep(
         () -> {
           logger.info(
               "Deleting workflow(s) {}{}",
@@ -753,7 +675,7 @@ public class DBOSExecutor implements AutoCloseable {
       String workflowId, int startStep, ForkOptions options) {
 
     String forkedId =
-        this.callFunctionAsStep(
+        this.runDbosFunctionAsStep(
             () -> {
               logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
 
@@ -910,18 +832,18 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public Map<String, Object> getAllEvents(String workflowId) {
-    return this.callFunctionAsStep(
+    return this.runDbosFunctionAsStep(
         () -> systemDatabase.getAllEvents(workflowId), "DBOS.getAllEvents", null);
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-    return this.callFunctionAsStep(
+    return this.runDbosFunctionAsStep(
         () -> systemDatabase.listWorkflows(input), "DBOS.listWorkflows", null);
   }
 
   public List<StepInfo> listWorkflowSteps(
       String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
-    return this.callFunctionAsStep(
+    return this.runDbosFunctionAsStep(
         () -> systemDatabase.listWorkflowSteps(workflowId, loadOutput, limit, offset),
         "DBOS.listWorkflowSteps",
         null);
@@ -945,7 +867,7 @@ public class DBOSExecutor implements AutoCloseable {
     validateQueue(schedule.queueName());
     validateWorkflow(schedule.workflowName(), schedule.className());
 
-    this.callFunctionAsStep(
+    this.runDbosFunctionAsStep(
         () -> {
           systemDatabase.createSchedule(schedule);
           return null;
@@ -955,20 +877,20 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
-    return this.callFunctionAsStep(
+    return this.runDbosFunctionAsStep(
         () -> systemDatabase.getSchedule(name), "DBOS.getSchedule", null);
   }
 
   public List<WorkflowSchedule> listSchedules(
       List<ScheduleStatus> statuses, List<String> workflowNames, List<String> namePrefixes) {
-    return this.callFunctionAsStep(
+    return this.runDbosFunctionAsStep(
         () -> systemDatabase.listSchedules(statuses, workflowNames, namePrefixes),
         "DBOS.listSchedules",
         null);
   }
 
   public void deleteSchedule(String name) {
-    this.callFunctionAsStep(
+    this.runDbosFunctionAsStep(
         () -> {
           systemDatabase.deleteSchedule(name);
           return null;
@@ -978,7 +900,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void pauseSchedule(String name) {
-    this.callFunctionAsStep(
+    this.runDbosFunctionAsStep(
         () -> {
           systemDatabase.pauseSchedule(name);
           return null;
@@ -988,7 +910,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public void resumeSchedule(String name) {
-    this.callFunctionAsStep(
+    this.runDbosFunctionAsStep(
         () -> {
           systemDatabase.resumeSchedule(name);
           return null;
@@ -1197,7 +1119,7 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public WorkflowStatus getWorkflowStatus(String workflowId) {
-    return this.callFunctionAsStep(
+    return this.runDbosFunctionAsStep(
         () -> systemDatabase.getWorkflowStatus(workflowId), "DBOS.getWorkflowStatus", null);
   }
 
@@ -1207,8 +1129,34 @@ public class DBOSExecutor implements AutoCloseable {
   }
 
   public <T, E extends Exception> T getResult(String workflowId) throws E {
-    return this.callFunctionAsStep(
+    return this.runDbosFunctionAsStep(
         () -> awaitWorkflowResult(workflowId), "DBOS.getResult", workflowId);
+  }
+
+  @SuppressWarnings("unchecked")
+  public <T, E extends Exception> T getResult(String workflowId, Future<T> futureResult) throws E {
+    return this.runDbosFunctionAsStep(
+        () -> {
+          try {
+            return futureResult.get();
+          } catch (DBOSWorkflowExecutionConflictException e) {
+            return awaitWorkflowResult(workflowId);
+          } catch (CancellationException e) {
+            throw new DBOSAwaitedWorkflowCancelledException(workflowId);
+          } catch (ExecutionException e) {
+            if (e.getCause() instanceof Exception cause) {
+              if (cause instanceof DBOSWorkflowExecutionConflictException) {
+                return awaitWorkflowResult(workflowId);
+              }
+              throw (E) cause;
+            }
+            throw new RuntimeException("Future threw non-exception", e.getCause());
+          } catch (Exception e) {
+            throw (E) e;
+          }
+        },
+        "DBOS.getResult",
+        workflowId);
   }
 
   public boolean patch(String patchName) {

@@ -568,7 +568,7 @@ public class DBOS implements AutoCloseable {
   public <T, E extends Exception> T runStep(
       @NonNull ThrowingSupplier<T, E> stepfunc, @NonNull StepOptions opts) throws E {
 
-    return ensureLaunched("runStep").runStepInternal(stepfunc, opts, null);
+    return ensureLaunched("runStep").runStep(stepfunc, opts, null);
   }
 
   /**

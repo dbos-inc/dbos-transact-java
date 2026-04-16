@@ -1,86 +1,56 @@
 package dev.dbos.transact.workflow;
 
-/**
- * Step name and retry options. A step is retried if `retriesAllowed` is true, and maxAttempts is
- * greater than 1. Retries start `intervalSeconds` apart, and increase by a factor of `backOffRate`
- * with successive attempts.
- */
+import java.lang.reflect.Method;
+import java.time.Duration;
+import java.util.Objects;
+
+import org.jspecify.annotations.NonNull;
+
 public record StepOptions(
-    String name,
-    boolean retriesAllowed,
-    int maxAttempts,
-    double intervalSeconds,
-    double backOffRate) {
+    String name, int maxAttempts, Duration retryInterval, double backOffRate) {
+
   public static final double DEFAULT_INTERVAL_SECONDS = 1.0;
   public static final double DEFAULT_BACKOFF = 2.0;
 
-  /** Construct a StepOptions with specified name */
   public StepOptions(String name) {
-    this(name, false, 1, StepOptions.DEFAULT_INTERVAL_SECONDS, StepOptions.DEFAULT_BACKOFF);
-  }
-
-  /** Construct a StepOptions with specified name and maximum retry attempts */
-  public StepOptions(String name, int maxAttempts) {
     this(
         name,
-        maxAttempts > 1,
-        maxAttempts > 1 ? maxAttempts : 1,
-        StepOptions.DEFAULT_INTERVAL_SECONDS,
+        1,
+        Duration.ofSeconds((long) StepOptions.DEFAULT_INTERVAL_SECONDS),
         StepOptions.DEFAULT_BACKOFF);
   }
 
-  /**
-   * Construct a StepOptions with specified name and maximum retry attempts and initial retry
-   * interval
-   */
-  public StepOptions(String name, int maxAttempts, double intervalSeconds) {
-    this(
-        name,
-        maxAttempts > 1,
-        maxAttempts > 1 ? maxAttempts : 1,
-        intervalSeconds,
-        StepOptions.DEFAULT_BACKOFF);
+  public static StepOptions create(Step stepTag, Method method) {
+    var name = stepTag.name().isEmpty() ? method.getName() : stepTag.name();
+    var maxAttempts = stepTag.retriesAllowed() ? stepTag.maxAttempts() : 1;
+    var interval = Duration.ofMillis((long) (stepTag.intervalSeconds() * 1000));
+    return new StepOptions(name, maxAttempts, interval, stepTag.backOffRate());
   }
 
-  public StepOptions(
-      String name,
-      boolean retriesAllowed,
-      int maxAttempts,
-      double intervalSeconds,
-      double backOffRate) {
-    this.name = name;
-    this.retriesAllowed = retriesAllowed;
-    this.maxAttempts = maxAttempts;
-    this.intervalSeconds = intervalSeconds;
-    this.backOffRate = backOffRate;
+  public StepOptions withMaxAttempts(int maxAttempts) {
+    return new StepOptions(this.name, maxAttempts, this.retryInterval, this.backOffRate);
   }
 
-  /** Produces a new StepOptions with retry enabled/disabled. */
-  public StepOptions withRetriesAllowed(boolean b) {
-    return new StepOptions(this.name, b, this.maxAttempts, this.intervalSeconds, this.backOffRate);
+  public StepOptions withRetryInterval(Duration interval) {
+    return new StepOptions(this.name, this.maxAttempts, interval, this.backOffRate);
   }
 
-  /**
-   * Produces a new StepOptions with the specified maximum attempts. Retry will be enabled if this
-   * `n` is more than 1
-   */
-  public StepOptions withMaxAttempts(int n) {
-    return new StepOptions(this.name, n > 1, n, this.intervalSeconds, this.backOffRate);
+  public StepOptions withBackoffRate(double backOffRate) {
+    return new StepOptions(this.name, this.maxAttempts, this.retryInterval, backOffRate);
   }
 
-  /** Produces a new StepOptions with the specified retry interval. */
-  public StepOptions withIntervalSeconds(double t) {
-    return new StepOptions(this.name, this.retriesAllowed, this.maxAttempts, t, this.backOffRate);
+  @Override
+  public @NonNull String name() {
+    return Objects.requireNonNullElse(name, "");
   }
 
-  /** Produces a new StepOptions with the specified retry backoff rate. */
-  public StepOptions withBackoffRate(double t) {
-    return new StepOptions(
-        this.name, this.retriesAllowed, this.maxAttempts, this.intervalSeconds, t);
+  @Override
+  public int maxAttempts() {
+    return maxAttempts < 1 ? 1 : maxAttempts;
   }
 
-  /** Produces a new StepOptions with retries disabled. */
-  public StepOptions noRetries() {
-    return withRetriesAllowed(false).withMaxAttempts(1);
+  @Override
+  public Duration retryInterval() {
+    return Objects.requireNonNullElse(retryInterval, Duration.ZERO);
   }
 }
