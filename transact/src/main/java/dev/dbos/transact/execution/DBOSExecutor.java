@@ -89,7 +89,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
-  // Invocation, StartWorkflowHook and hookHolder all used by startWorkflow to caputre
+  // Invocation, StartWorkflowHook and hookHolder all used by startWorkflow to capture
   // workflow information w/o executing workflow function
 
   record Invocation(
@@ -1035,7 +1035,7 @@ public class DBOSExecutor implements AutoCloseable {
     if (!stepName.startsWith("DBOS.")) {
       throw new IllegalArgumentException("DBOS step name must start with DBOS.");
     }
-    // DBOS method are never retried
+    // DBOS methods are never retried
     return runStepInternal(step, new StepOptions(stepName), childWorkflowId);
   }
 
@@ -1051,7 +1051,7 @@ public class DBOSExecutor implements AutoCloseable {
 
     var hook = hookHolder.get();
     if (hook != null) {
-      throw new RuntimeException("@Step functions may not be called from the startWorkflow lambda");
+      throw new RuntimeException("@Step functions cannot be called from the startWorkflow lambda");
     }
 
     var ctx = DBOSContextHolder.get();
