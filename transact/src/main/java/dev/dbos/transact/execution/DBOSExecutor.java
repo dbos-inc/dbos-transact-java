@@ -102,7 +102,7 @@ public class DBOSExecutor implements AutoCloseable {
   private Set<DBOSLifecycleListener> listeners;
   private Map<String, RegisteredWorkflow> workflowMap;
   private Map<String, RegisteredWorkflowInstance> instanceMap;
-  private List<Queue> queues;
+  private Map<String, Queue> queueMap;
   private ConcurrentHashMap<String, Boolean> workflowsInProgress = new ConcurrentHashMap<>();
 
   private SystemDatabase systemDatabase;
@@ -155,7 +155,8 @@ public class DBOSExecutor implements AutoCloseable {
 
       this.workflowMap = Collections.unmodifiableMap(workflowMap);
       this.instanceMap = Collections.unmodifiableMap(instanceMap);
-      this.queues = Collections.unmodifiableList(queues);
+      this.queueMap =
+          queues.stream().collect(Collectors.toUnmodifiableMap(Queue::name, queue -> queue));
       this.listeners = listenerSet;
       this.alertHandler = alertHandler;
 
@@ -212,7 +213,7 @@ public class DBOSExecutor implements AutoCloseable {
       }
 
       queueService = new QueueService(this, systemDatabase);
-      queueService.start(queues, config.listenQueues());
+      queueService.start(queueMap.values(), config.listenQueues());
 
       var schedulerPollingInterval =
           Objects.requireNonNullElseGet(
@@ -371,23 +372,12 @@ public class DBOSExecutor implements AutoCloseable {
     return Optional.ofNullable(this.workflowMap.get(fqName));
   }
 
-  public List<Queue> getQueues() {
-    return this.queues;
+  public Collection<Queue> getQueues() {
+    return this.queueMap.values();
   }
 
   public Optional<Queue> getQueue(String queueName) {
-    if (queues == null) {
-      throw new IllegalStateException(
-          "attempted to retrieve workflow from executor when DBOS not launched");
-    }
-
-    for (var queue : queues) {
-      if (queue.name().equals(queueName)) {
-        return Optional.of(queue);
-      }
-    }
-
-    return Optional.empty();
+    return Optional.ofNullable(this.queueMap.get(queueName));
   }
 
   public void fireAlertHandler(String name, String message, Map<String, String> metadata) {
@@ -1622,7 +1612,7 @@ public class DBOSExecutor implements AutoCloseable {
             "DBOS internal queue is not a partitioned queue, but a partition key was provided");
       }
     } else {
-      var queue = queues.stream().filter(q -> q.name().equals(queueName)).findFirst();
+      var queue = this.getQueue(queueName);
       if (queue.isPresent()) {
         if (queue.get().partitioningEnabled() && queuePartitionKey == null) {
           throw new IllegalArgumentException(
