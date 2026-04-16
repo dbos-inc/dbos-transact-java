@@ -88,9 +88,6 @@ public class DBOSExecutor implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
-  // private static final DateTimeFormatter SCHEDULE_ID_FORMATTER =
-  //     DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ssXXX");
-
   private final DBOSConfig config;
   private final DBOSSerializer serializer;
 
@@ -177,25 +174,22 @@ public class DBOSExecutor implements AutoCloseable {
       logger.info("Executor ID: {}", this.executorId);
       logger.info("Application Version: {}", this.appVersion);
 
-      var executorServiceSupplier =
-          (Supplier<ExecutorService>)
-              () -> {
-                try {
-                  // use virtual thread executor when available (i.e. Java 21+)
-                  var method = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
-                  var svc = (ExecutorService) method.invoke(null);
-                  logger.debug("using newVirtualThreadPerTaskExecutor");
-                  return svc;
+      Supplier<ExecutorService> executorServiceSupplier =
+          () -> {
+            try {
+              // use virtual thread executor when available (i.e. Java 21+)
+              var method = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
+              var svc = (ExecutorService) method.invoke(null);
+              logger.debug("using newVirtualThreadPerTaskExecutor");
+              return svc;
 
-                } catch (NoSuchMethodException
-                    | IllegalAccessException
-                    | InvocationTargetException e) {
-                  // fall back to fixed thread pool executor if virtual thread executor unavailable
-                  logger.debug("using newFixedThreadPool");
-                  int threadCount = Runtime.getRuntime().availableProcessors() * 50;
-                  return Executors.newFixedThreadPool(threadCount);
-                }
-              };
+            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+              // fall back to fixed thread pool executor if virtual thread executor unavailable
+              logger.debug("using newFixedThreadPool");
+              int threadCount = Runtime.getRuntime().availableProcessors() * 50;
+              return Executors.newFixedThreadPool(threadCount);
+            }
+          };
 
       executorService = executorServiceSupplier.get();
       timeoutScheduler = Executors.newScheduledThreadPool(2);
@@ -225,15 +219,14 @@ public class DBOSExecutor implements AutoCloseable {
         listener.dbosLaunched(dbos);
       }
 
-      var recoveryTask =
-          (Runnable)
-              () -> {
-                try {
-                  recoverPendingWorkflows(List.of(executorId()));
-                } catch (Throwable t) {
-                  logger.error("Recovery task failed", t);
-                }
-              };
+      Runnable recoveryTask =
+          () -> {
+            try {
+              recoverPendingWorkflows(List.of(executorId()));
+            } catch (Throwable t) {
+              logger.error("Recovery task failed", t);
+            }
+          };
 
       executorService.submit(recoveryTask);
 
@@ -338,9 +331,7 @@ public class DBOSExecutor implements AutoCloseable {
     return schedulerService;
   }
 
-  public String appName() {
-    return config.appName();
-  }
+  // executor metadata
 
   public String executorId() {
     return this.executorId;
@@ -352,6 +343,10 @@ public class DBOSExecutor implements AutoCloseable {
 
   public String appId() {
     return this.appId;
+  }
+
+  public String appName() {
+    return config.appName();
   }
 
   public Map<String, Object> executorMetadata() {
@@ -392,68 +387,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) {
-    Objects.requireNonNull(output, "output must not be null");
-    String workflowId = Objects.requireNonNull(output.workflowId(), "workflowId must not be null");
-    String queue = output.queueName();
-
-    if (queue != null) {
-      boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
-      if (cleared) {
-        logger.debug("recoverWorkflow clear queue assignment {}", workflowId);
-        return retrieveWorkflow(workflowId);
-      }
-    }
-
-    logger.debug("recoverWorkflow execute {}", workflowId);
-    return executeWorkflowById(workflowId, true, false);
-  }
-
-  public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
-    Objects.requireNonNull(executorIds);
-
-    List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
-    for (String _executorId : executorIds) {
-      List<GetPendingWorkflowsOutput> pendingWorkflows;
-      try {
-        pendingWorkflows = systemDatabase.getPendingWorkflows(_executorId, appVersion());
-      } catch (Exception e) {
-        logger.error(
-            "getPendingWorkflows failed:  executor {}, application version {}",
-            _executorId,
-            appVersion(),
-            e);
-        return new ArrayList<>();
-      }
-      logger.info(
-          "Recovering {} workflows for executor {} app version {}",
-          pendingWorkflows.size(),
-          _executorId,
-          appVersion());
-      for (var output : pendingWorkflows) {
-        try {
-          handles.add(recoverWorkflow(output));
-        } catch (Throwable t) {
-          logger.error("Workflow {} recovery failed", output.workflowId(), t);
-        }
-      }
-    }
-    return handles;
-  }
-
-  private void postInvokeWorkflowResult(
-      SystemDatabase systemDatabase, String workflowId, Object result, String serialization) {
-
-    var serialized = SerializationUtil.serializeValue(result, serialization, this.serializer);
-    systemDatabase.recordWorkflowOutput(workflowId, serialized.serializedValue());
-  }
-
-  private void postInvokeWorkflowError(
-      SystemDatabase systemDatabase, String workflowId, Throwable error, String serialization) {
-
-    var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
-    systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
-  }
+  // Step Stuff
 
   /** This does not retry */
   @SuppressWarnings("unchecked")
@@ -481,19 +415,17 @@ public class DBOSExecutor implements AutoCloseable {
     try {
       functionResult = fn.execute();
     } catch (Exception e) {
-      if (inWorkflow) {
-        var jsonError = SerializationUtil.serializeError(e, null, this.serializer);
-        StepResult r =
-            new StepResult(
-                ctx.getWorkflowId(),
-                nextFuncId,
-                functionName,
-                null,
-                jsonError.serializedValue(),
-                childWfId,
-                jsonError.serialization());
-        systemDatabase.recordStepResultTxn(r, startTime);
-      }
+      var jsonError = SerializationUtil.serializeError(e, null, this.serializer);
+      StepResult r =
+          new StepResult(
+              ctx.getWorkflowId(),
+              nextFuncId,
+              functionName,
+              null,
+              jsonError.serializedValue(),
+              childWfId,
+              jsonError.serialization());
+      systemDatabase.recordStepResultTxn(r, startTime);
       throw (E) e;
     }
 
@@ -527,32 +459,6 @@ public class DBOSExecutor implements AutoCloseable {
           stepfunc::execute);
     } catch (Exception t) {
       throw (E) t;
-    }
-  }
-
-  @SuppressWarnings("unchecked")
-  private <T, E extends Exception> T handleExistingResult(StepResult result, String functionName)
-      throws E {
-    if (result.output() != null) {
-      Object outputValue =
-          SerializationUtil.deserializeValue(
-              result.output(), result.serialization(), this.serializer);
-      return (T) outputValue;
-    } else if (result.error() != null) {
-      Throwable t =
-          SerializationUtil.deserializeError(
-              result.error(), result.serialization(), this.serializer);
-      if (t instanceof Exception) {
-        throw (E) t;
-      } else {
-        throw new RuntimeException(t.getMessage(), t);
-      }
-    } else {
-      // Note that this shouldn't happen because the result is always wrapped in an
-      // array, making
-      // output not null.
-      throw new IllegalStateException(
-          String.format("Recorded output and error are both null for %s", functionName));
     }
   }
 
@@ -628,7 +534,7 @@ public class DBOSExecutor implements AutoCloseable {
             (e instanceof InvocationTargetException)
                 ? ((InvocationTargetException) e).getTargetException()
                 : e;
-        eThrown = e instanceof Exception ? (Exception) actual : e;
+        eThrown = (Exception) actual;
       } finally {
         ctx.resetStepFunctionId();
       }
@@ -671,6 +577,97 @@ public class DBOSExecutor implements AutoCloseable {
               serError.serialization());
       systemDatabase.recordStepResultTxn(stepResult, startTime);
       throw (E) eThrown;
+    }
+  }
+
+  // Workflow Stuff
+
+  WorkflowHandle<?, ?> recoverWorkflow(GetPendingWorkflowsOutput output) {
+    Objects.requireNonNull(output, "output must not be null");
+    String workflowId = Objects.requireNonNull(output.workflowId(), "workflowId must not be null");
+    String queue = output.queueName();
+
+    if (queue != null) {
+      boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
+      if (cleared) {
+        logger.debug("recoverWorkflow clear queue assignment {}", workflowId);
+        return retrieveWorkflow(workflowId);
+      }
+    }
+
+    logger.debug("recoverWorkflow execute {}", workflowId);
+    return executeWorkflowById(workflowId, true, false);
+  }
+
+  public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
+    Objects.requireNonNull(executorIds);
+
+    List<WorkflowHandle<?, ?>> handles = new ArrayList<>();
+    for (String _executorId : executorIds) {
+      List<GetPendingWorkflowsOutput> pendingWorkflows;
+      try {
+        pendingWorkflows = systemDatabase.getPendingWorkflows(_executorId, appVersion());
+      } catch (Exception e) {
+        logger.error(
+            "getPendingWorkflows failed:  executor {}, application version {}",
+            _executorId,
+            appVersion(),
+            e);
+        return new ArrayList<>();
+      }
+      logger.info(
+          "Recovering {} workflows for executor {} app version {}",
+          pendingWorkflows.size(),
+          _executorId,
+          appVersion());
+      for (var output : pendingWorkflows) {
+        try {
+          handles.add(recoverWorkflow(output));
+        } catch (Throwable t) {
+          logger.error("Workflow {} recovery failed", output.workflowId(), t);
+        }
+      }
+    }
+    return handles;
+  }
+
+  private void postInvokeWorkflowResult(
+      SystemDatabase systemDatabase, String workflowId, Object result, String serialization) {
+
+    var serialized = SerializationUtil.serializeValue(result, serialization, this.serializer);
+    systemDatabase.recordWorkflowOutput(workflowId, serialized.serializedValue());
+  }
+
+  private void postInvokeWorkflowError(
+      SystemDatabase systemDatabase, String workflowId, Throwable error, String serialization) {
+
+    var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
+    systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
+  }
+
+  @SuppressWarnings("unchecked")
+  private <T, E extends Exception> T handleExistingResult(StepResult result, String functionName)
+      throws E {
+    if (result.output() != null) {
+      Object outputValue =
+          SerializationUtil.deserializeValue(
+              result.output(), result.serialization(), this.serializer);
+      return (T) outputValue;
+    } else if (result.error() != null) {
+      Throwable t =
+          SerializationUtil.deserializeError(
+              result.error(), result.serialization(), this.serializer);
+      if (t instanceof Exception) {
+        throw (E) t;
+      } else {
+        throw new RuntimeException(t.getMessage(), t);
+      }
+    } else {
+      // Note that this shouldn't happen because the result is always wrapped in an
+      // array, making
+      // output not null.
+      throw new IllegalStateException(
+          String.format("Recorded output and error are both null for %s", functionName));
     }
   }
 
