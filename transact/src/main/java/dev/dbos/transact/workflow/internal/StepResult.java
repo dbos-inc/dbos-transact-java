@@ -1,5 +1,8 @@
 package dev.dbos.transact.workflow.internal;
 
+import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.json.SerializationUtil;
+
 public record StepResult(
     String workflowId,
     int stepId,
@@ -29,5 +32,24 @@ public record StepResult(
 
   public StepResult withSerialization(String v) {
     return new StepResult(workflowId, stepId, functionName, output, error, childWorkflowId, v);
+  }
+
+  @SuppressWarnings("unchecked")
+  public <T, E extends Exception> T toOutput(DBOSSerializer serializer, String stepName) throws E {
+    if (error != null) {
+      var t = SerializationUtil.deserializeError(error, serialization, serializer);
+      if (t instanceof Exception) {
+        throw (E) t;
+      } else {
+        throw new RuntimeException(t.getMessage(), t);
+      }
+    }
+
+    if (output != null) {
+      return (T) SerializationUtil.deserializeValue(output, serialization, serializer);
+    }
+
+    throw new IllegalStateException(
+        "Recorded output and error are both null for %s".formatted(stepName));
   }
 }

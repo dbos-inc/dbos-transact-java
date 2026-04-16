@@ -9,7 +9,7 @@ public class DBOSContextHolder {
       ThreadLocal.withInitial(DBOSContext::new);
 
   public static @NonNull DBOSContext get() {
-    return contextHolder.get();
+    return Objects.requireNonNull(contextHolder.get());
   }
 
   public static void clear() {

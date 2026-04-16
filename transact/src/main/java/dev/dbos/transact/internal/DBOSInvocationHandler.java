@@ -52,6 +52,8 @@ public class DBOSInvocationHandler implements InvocationHandler {
             new DBOSInvocationHandler(implementation, instanceName, executor));
   }
 
+  // TODO: move handleWorkflow and handleStep to DBOSExecutor so they can be used by SpringBoot
+  // Proxies
   @Override
   public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
 

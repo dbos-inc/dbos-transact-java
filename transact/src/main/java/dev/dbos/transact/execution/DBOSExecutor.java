@@ -393,21 +393,17 @@ public class DBOSExecutor implements AutoCloseable {
   @SuppressWarnings("unchecked")
   public <T, E extends Exception> T callFunctionAsStep(
       ThrowingSupplier<T, E> fn, String functionName, String childWfId) throws E {
-    DBOSContext ctx = DBOSContextHolder.get();
 
-    int nextFuncId;
-    boolean inWorkflow = ctx.isInWorkflow();
-    boolean inStep = ctx.isInStep();
+    var ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow() || ctx.isInStep()) return fn.execute();
+
     var startTime = System.currentTimeMillis();
-
-    if (!inWorkflow || inStep) return fn.execute();
-
-    nextFuncId = ctx.getAndIncrementFunctionId();
+    int nextFuncId = ctx.getAndIncrementFunctionId();
 
     StepResult result =
         systemDatabase.checkStepExecutionTxn(ctx.getWorkflowId(), nextFuncId, functionName);
     if (result != null) {
-      return handleExistingResult(result, functionName);
+      return result.toOutput(this.serializer, functionName);
     }
 
     T functionResult;
@@ -460,6 +456,40 @@ public class DBOSExecutor implements AutoCloseable {
     } catch (Exception t) {
       throw (E) t;
     }
+  }
+
+  record StepRetryInfo(int maxAttempts, Duration timeBetweenAttempts, double backOffRate) {
+    public StepRetryInfo {
+      if (maxAttempts < 1) {
+        maxAttempts = 1;
+      }
+    }
+  }
+
+  public <T, E extends Exception> T executeStep(
+      @NonNull ThrowingSupplier<T, E> step,
+      @NonNull String stepName,
+      @Nullable StepRetryInfo retryInfo)
+      throws E {
+
+    var ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      // if there is no workflow, execute the step function without checkpointing
+      return step.execute();
+    }
+
+    var workflowId = ctx.getWorkflowId();
+    var startTime = System.currentTimeMillis();
+    logger.debug("executeStep {} for workflow {}", stepName, workflowId);
+
+    var stepId = ctx.getAndIncrementFunctionId();
+
+    var prevResult = systemDatabase.checkStepExecutionTxn(workflowId, stepId, stepName);
+    if (prevResult != null) {}
+
+    var maxAttempts = retryInfo == null ? 1 : retryInfo.maxAttempts;
+
+    throw new RuntimeException();
   }
 
   @SuppressWarnings("unchecked")
@@ -643,32 +673,6 @@ public class DBOSExecutor implements AutoCloseable {
 
     var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
     systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
-  }
-
-  @SuppressWarnings("unchecked")
-  private <T, E extends Exception> T handleExistingResult(StepResult result, String functionName)
-      throws E {
-    if (result.output() != null) {
-      Object outputValue =
-          SerializationUtil.deserializeValue(
-              result.output(), result.serialization(), this.serializer);
-      return (T) outputValue;
-    } else if (result.error() != null) {
-      Throwable t =
-          SerializationUtil.deserializeError(
-              result.error(), result.serialization(), this.serializer);
-      if (t instanceof Exception) {
-        throw (E) t;
-      } else {
-        throw new RuntimeException(t.getMessage(), t);
-      }
-    } else {
-      // Note that this shouldn't happen because the result is always wrapped in an
-      // array, making
-      // output not null.
-      throw new IllegalStateException(
-          String.format("Recorded output and error are both null for %s", functionName));
-    }
   }
 
   /** Retrieve the workflowHandle for the workflowId */
