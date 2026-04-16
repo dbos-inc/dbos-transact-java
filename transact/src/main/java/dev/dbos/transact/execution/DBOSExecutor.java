@@ -23,8 +23,7 @@ import dev.dbos.transact.exceptions.DBOSWorkflowCancelledException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.internal.AppVersionComputer;
-import dev.dbos.transact.internal.DBOSInvocationHandler;
-import dev.dbos.transact.internal.Invocation;
+import dev.dbos.transact.internal.WorkflowRegistry;
 import dev.dbos.transact.json.ArgumentCoercion;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
@@ -37,6 +36,7 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowSchedule;
@@ -49,6 +49,7 @@ import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -74,6 +75,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -87,8 +89,31 @@ public class DBOSExecutor implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
+  // Invocation, StartWorkflowHook and hookHolder all used by startWorkflow to caputre
+  // workflow information w/o executing workflow function
+
+  record Invocation(
+      DBOSExecutor executor,
+      String workflowName,
+      String className,
+      String instanceName,
+      Object[] args) {
+
+    public String fqName() {
+      return RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
+    }
+  }
+
+  @FunctionalInterface
+  interface StartWorkflowHook {
+    void invoke(Invocation invocation);
+  }
+
+  private static final ThreadLocal<StartWorkflowHook> hookHolder = new ThreadLocal<>();
+
   private final DBOSConfig config;
   private final DBOSSerializer serializer;
+  private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
   private boolean dbosCloud;
   private String appVersion;
@@ -109,7 +134,6 @@ public class DBOSExecutor implements AutoCloseable {
   private ExecutorService executorService;
   private ScheduledExecutorService timeoutScheduler;
   private AlertHandler alertHandler;
-  private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
   public DBOSExecutor(DBOSConfig config) {
     this.config = config;
@@ -1025,6 +1049,11 @@ public class DBOSExecutor implements AutoCloseable {
     Objects.requireNonNull(step, "step must not be null");
     Objects.requireNonNull(options, "options must not be null");
 
+    var hook = hookHolder.get();
+    if (hook != null) {
+      throw new RuntimeException("@Step functions may not be called from the startWorkflow lambda");
+    }
+
     var ctx = DBOSContextHolder.get();
     var workflowId = ctx.getWorkflowId();
     var stepId = ctx.getAndIncrementFunctionId();
@@ -1129,64 +1158,89 @@ public class DBOSExecutor implements AutoCloseable {
 
   // Workflow Execution Methods
 
-  private static <T, E extends Exception> Invocation captureInvocation(
-      ThrowingSupplier<T, E> supplier) {
-    AtomicReference<Invocation> capturedInvocation = new AtomicReference<>();
-    DBOSInvocationHandler.hookHolder.set(
-        (invocation) -> {
-          if (!capturedInvocation.compareAndSet(null, invocation)) {
-            throw new RuntimeException(
-                "Only one @Workflow can be called in the startWorkflow lambda");
-          }
-        });
+  // execute a workflow via a proxy
+  public Object runWorkflow(
+      Object target, String instanceName, Method method, Object[] args, Workflow wfTag)
+      throws Exception {
+    var className = WorkflowRegistry.getWorkflowClassName(target);
+    var workflowName = WorkflowRegistry.getWorkflowName(wfTag, method);
 
-    try {
-      supplier.execute();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    } finally {
-      DBOSInvocationHandler.hookHolder.remove();
-    }
-
-    return Objects.requireNonNull(
-        capturedInvocation.get(), "The startWorkflow lambda must call exactly one @Workflow");
-  }
-
-  private static WorkflowInfo getParent(DBOSContext ctx) {
-    Objects.requireNonNull(ctx);
-    if (ctx.isInWorkflow()) {
-      if (ctx.isInStep()) {
-        throw new IllegalStateException("cannot invoke a workflow from a step");
+    // If the hook holder is set, we're invoking the workflow from startWorkflow.
+    // In this case, we provide the workflow invocation info and return a default value without
+    // execution
+    var hook = hookHolder.get();
+    if (hook != null) {
+      hook.invoke(new Invocation(this, workflowName, className, instanceName, args));
+      var type = method.getReturnType();
+      if (type.isPrimitive()) {
+        if (type == void.class) return null;
+        if (type == boolean.class) return false;
+        if (type == byte.class) return (byte) 0;
+        if (type == short.class) return (short) 0;
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        if (type == float.class) return 0f;
+        if (type == double.class) return 0d;
+        if (type == char.class) return '\0';
       }
 
-      var workflowId = ctx.getWorkflowId();
-      var functionId = ctx.getAndIncrementFunctionId();
-      return new WorkflowInfo(workflowId, functionId);
+      return null;
     }
-    return null;
+
+    // if the hook holder isn't set, we're invoking the workflow directly.
+    logger.debug(
+        "runWorkflow {}({})",
+        RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName),
+        args);
+
+    var workflow = getRegisteredWorkflow(workflowName, className, instanceName).orElseThrow();
+
+    var ctx = DBOSContextHolder.get();
+
+    WorkflowInfo parent = getParent(ctx);
+    String childWorkflowId =
+        parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
+
+    var workflowId =
+        Objects.requireNonNullElseGet(
+            ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString());
+
+    var nextTimeout = ctx.getNextTimeout();
+    var nextDeadline = ctx.getNextDeadline();
+
+    // default to context timeout & deadline if nextTimeout is null or Inherit
+    Duration timeout = ctx.getTimeout();
+    Instant deadline = ctx.getDeadline();
+    if (nextDeadline != null) {
+      deadline = nextDeadline;
+    } else if (nextTimeout instanceof Timeout.None) {
+      // clear timeout and deadline to null if nextTimeout is None
+      timeout = null;
+      deadline = null;
+    } else if (nextTimeout instanceof Timeout.Explicit e) {
+      // set the timeout and deadline if nextTimeout is Explicit
+      timeout = e.value();
+      deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
+    }
+
+    var options = new ExecutionOptions(workflowId, timeout, deadline);
+    if (workflow.serializationStrategy() != null) {
+      options = options.withSerialization(workflow.serializationStrategy().formatName());
+    }
+
+    // submit the workflow for execution and wait on the result.
+    var handle = executeWorkflow(workflow, args, options, parent);
+    try {
+      DBOSContextHolder.clear();
+      return handle.getResult();
+    } finally {
+      DBOSContextHolder.set(ctx);
+    }
   }
 
-  public <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
-      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
-    var execOptions =
-        new ExecutionOptions(
-            options != null ? options.workflowId() : null,
-            options != null ? options.timeout() : null,
-            options != null ? options.deadline() : null,
-            options != null ? options.queueName() : null,
-            options != null ? options.deduplicationId() : null,
-            options != null ? options.priority() : null,
-            options != null ? options.queuePartitionKey() : null,
-            options != null ? options.delay() : null,
-            options != null ? options.appVersion() : null,
-            false,
-            false,
-            null);
-    return executeWorkflow(regWorkflow, args, execOptions, null);
-  }
-
+  // execute a workflow via startWorkflow
   public <T, E extends Exception> WorkflowHandle<T, E> startWorkflow(
-      ThrowingSupplier<T, E> supplier, StartWorkflowOptions options) {
+      ThrowingSupplier<T, E> wfLambda, StartWorkflowOptions options) {
 
     logger.debug("startWorkflow {}", options);
 
@@ -1196,7 +1250,31 @@ public class DBOSExecutor implements AutoCloseable {
       throw new IllegalArgumentException("explicit timeout and deadline cannot both be set");
     }
 
-    var invocation = captureInvocation(supplier);
+    // set the invocation hook holder and invoke the lambda to retrieve the invocation information
+    Function<ThrowingSupplier<T, E>, Invocation> invocationSupplier =
+        (lambda) -> {
+          AtomicReference<Invocation> capturedInvocation = new AtomicReference<>();
+          DBOSExecutor.hookHolder.set(
+              (invocation) -> {
+                if (!capturedInvocation.compareAndSet(null, invocation)) {
+                  throw new RuntimeException(
+                      "Only one @Workflow can be called in the startWorkflow lambda");
+                }
+              });
+
+          try {
+            lambda.execute();
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          } finally {
+            DBOSExecutor.hookHolder.remove();
+          }
+
+          return Objects.requireNonNull(
+              capturedInvocation.get(), "The startWorkflow lambda must call exactly one @Workflow");
+        };
+
+    var invocation = invocationSupplier.apply(wfLambda);
     if (invocation.executor() != this) {
       throw new IllegalStateException(
           "The @Workflow method must be called on the DBOS instance passed to the startWorkflow lambda");
@@ -1258,49 +1336,27 @@ public class DBOSExecutor implements AutoCloseable {
     return executeWorkflow(workflow, invocation.args(), execOptions, parent);
   }
 
-  public <T, E extends Exception> WorkflowHandle<T, E> invokeWorkflow(
-      String workflowName, String className, String instanceName, Object[] args) {
-
-    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
-    logger.debug("invokeWorkflow {}({})", fqName, args);
-
-    var workflow = getRegisteredWorkflow(workflowName, className, instanceName).orElseThrow();
-
-    var ctx = DBOSContextHolder.get();
-
-    WorkflowInfo parent = getParent(ctx);
-    String childWorkflowId =
-        parent != null ? "%s-%d".formatted(parent.workflowId(), parent.functionId()) : null;
-
-    var workflowId =
-        Objects.requireNonNullElseGet(
-            ctx.getNextWorkflowId(childWorkflowId), () -> UUID.randomUUID().toString());
-
-    var nextTimeout = ctx.getNextTimeout();
-    var nextDeadline = ctx.getNextDeadline();
-
-    // default to context timeout & deadline if nextTimeout is null or Inherit
-    Duration timeout = ctx.getTimeout();
-    Instant deadline = ctx.getDeadline();
-    if (nextDeadline != null) {
-      deadline = nextDeadline;
-    } else if (nextTimeout instanceof Timeout.None) {
-      // clear timeout and deadline to null if nextTimeout is None
-      timeout = null;
-      deadline = null;
-    } else if (nextTimeout instanceof Timeout.Explicit e) {
-      // set the timeout and deadline if nextTimeout is Explicit
-      timeout = e.value();
-      deadline = Instant.ofEpochMilli(System.currentTimeMillis() + e.value().toMillis());
-    }
-
-    var options = new ExecutionOptions(workflowId, timeout, deadline);
-    if (workflow.serializationStrategy() != null) {
-      options = options.withSerialization(workflow.serializationStrategy().formatName());
-    }
-    return executeWorkflow(workflow, args, options, parent);
+  // start a registered workflow, used by event listeners
+  public <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
+      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
+    var execOptions =
+        new ExecutionOptions(
+            options != null ? options.workflowId() : null,
+            options != null ? options.timeout() : null,
+            options != null ? options.deadline() : null,
+            options != null ? options.queueName() : null,
+            options != null ? options.deduplicationId() : null,
+            options != null ? options.priority() : null,
+            options != null ? options.queuePartitionKey() : null,
+            options != null ? options.delay() : null,
+            options != null ? options.appVersion() : null,
+            false,
+            false,
+            null);
+    return executeWorkflow(regWorkflow, args, execOptions, null);
   }
 
+  // run an existing workflow via its workflow ID
   public <T, E extends Exception> WorkflowHandle<T, E> executeWorkflowById(
       String workflowId, boolean isRecoveryRequest, boolean isDequeuedRequest) {
     logger.debug("executeWorkflowById {}", workflowId);
@@ -1318,8 +1374,7 @@ public class DBOSExecutor implements AutoCloseable {
       } catch (Exception ignored) {
         // Best-effort; fall through with null to use default serializer
       }
-      postInvokeWorkflowError(
-          systemDatabase,
+      persistWorkflowError(
           workflowId,
           new RuntimeException("Failed to deserialize workflow inputs: " + e.getMessage(), e),
           serialization);
@@ -1349,7 +1404,7 @@ public class DBOSExecutor implements AutoCloseable {
       inputs = ArgumentCoercion.coerceArguments(inputs, workflow.workflowMethod());
     } catch (IllegalArgumentException e) {
       logger.error("Argument coercion failed for workflow {}", workflowId, e);
-      postInvokeWorkflowError(systemDatabase, workflowId, e, status.serialization());
+      persistWorkflowError(workflowId, e, status.serialization());
       throw e;
     }
 
@@ -1359,6 +1414,40 @@ public class DBOSExecutor implements AutoCloseable {
     if (isRecoveryRequest) options = options.asRecoveryRequest();
     if (isDequeuedRequest) options = options.asDequeuedRequest();
     return executeWorkflow(workflow, inputs, options, null);
+  }
+
+  // helper workflow execution methods
+  private static WorkflowInfo getParent(DBOSContext ctx) {
+    Objects.requireNonNull(ctx);
+    if (ctx.isInWorkflow()) {
+      if (ctx.isInStep()) {
+        throw new IllegalStateException("cannot invoke a workflow from a step");
+      }
+
+      var workflowId = ctx.getWorkflowId();
+      var functionId = ctx.getAndIncrementFunctionId();
+      return new WorkflowInfo(workflowId, functionId);
+    }
+    return null;
+  }
+
+  private void validateWorkflow(String workflowName, String className) {
+    validateWorkflow(workflowName, className, "");
+  }
+
+  private void validateWorkflow(String workflowName, String className, String instanceName) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
+    if (!workflowMap.containsKey(fqName)) {
+      throw new IllegalStateException("Workflow function %s is not registered".formatted(fqName));
+    }
+  }
+
+  private void validateQueue(String queueName) {
+    if (queueName != null) {
+      getQueue(queueName)
+          .orElseThrow(
+              () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
+    }
   }
 
   private void validateQueue(String queueName, String queuePartitionKey) {
@@ -1387,6 +1476,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
+  // execute or enqueue a worklow
   private <T, E extends Exception> WorkflowHandle<T, E> executeWorkflow(
       RegisteredWorkflow workflow, Object[] args, ExecutionOptions options, WorkflowInfo parent) {
 
@@ -1435,7 +1525,7 @@ public class DBOSExecutor implements AutoCloseable {
     logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
 
     WorkflowInitResult initResult =
-        preInvokeWorkflow(
+        persistWorkflow(
             systemDatabase,
             workflow.workflowName(),
             workflow.className(),
@@ -1494,18 +1584,22 @@ public class DBOSExecutor implements AutoCloseable {
                     SerializationUtil.PORTABLE.equals(initResult.serialization())
                         ? SerializationStrategy.PORTABLE
                         : SerializationStrategy.DEFAULT));
+
             if (Thread.currentThread().isInterrupted()) {
               logger.debug("executeWorkflow task interrupted before workflow.invoke");
               return null;
             }
-            T result = workflow.invoke(args);
+
+            T output = workflow.invoke(args);
+
             if (Thread.currentThread().isInterrupted()) {
-              logger.debug("executeWorkflow task interrupted before postInvokeWorkflowResult");
+              logger.debug("executeWorkflow task interrupted before workflow.invoke completion");
               return null;
             }
-            postInvokeWorkflowResult(
-                systemDatabase, workflowId, result, initResult.serialization());
-            return result;
+
+            persistWorkflowOutput(workflowId, output, initResult.serialization());
+
+            return output;
           } catch (DBOSWorkflowExecutionConflictException e) {
             // don't persist execution conflict exception
             throw e;
@@ -1529,7 +1623,7 @@ public class DBOSExecutor implements AutoCloseable {
               throw new DBOSAwaitedWorkflowCancelledException(workflowId);
             }
 
-            postInvokeWorkflowError(systemDatabase, workflowId, actual, initResult.serialization());
+            persistWorkflowError(workflowId, actual, initResult.serialization());
             throw e;
           } finally {
             DBOSContextHolder.clear();
@@ -1559,14 +1653,16 @@ public class DBOSExecutor implements AutoCloseable {
     return new WorkflowHandleFuture<>(this, workflowId, future);
   }
 
-  // Note, namedArgs param is to enable portable workflow enqueue via DBOSClient.
-  // Typical Java workflow invocations do not use named args
-  public static String enqueueWorkflow(
+  // Persist an queued workflow to the database without execution
+  // used by DBOSExecutor and DBOSClient
+  public static void enqueueWorkflow(
       String workflowName,
       String className,
       String instanceName,
       Integer maxRetries,
       Object[] positionalArgs,
+      // Note, namedArgs param is to enable portable workflow enqueue via DBOSClient.
+      // Typical Java workflow invocations do not use named args
       Map<String, Object> namedArgs,
       ExecutionOptions options,
       WorkflowInfo parent,
@@ -1602,7 +1698,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     try {
-      preInvokeWorkflow(
+      persistWorkflow(
           systemDatabase,
           workflowName,
           className,
@@ -1626,10 +1722,8 @@ public class DBOSExecutor implements AutoCloseable {
           options.isDequeuedRequest(),
           options.serialization(),
           serializer);
-      return options.workflowId();
     } catch (DBOSWorkflowExecutionConflictException e) {
       logger.debug("Workflow execution conflict for workflowId {}", options.workflowId());
-      return options.workflowId();
     } catch (DBOSQueueDuplicatedException e) {
       logger.debug(
           "Workflow queue {} reused deduplicationId {}", e.queueName(), e.deduplicationId());
@@ -1641,15 +1735,16 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  // Note, namedArgs param is to enable portable workflow enqueue via DBOSClient.
-  // Typical Java workflow invocations do not use named args
-  private static WorkflowInitResult preInvokeWorkflow(
+  // save workflow metadata to the system database
+  private static WorkflowInitResult persistWorkflow(
       SystemDatabase systemDatabase,
       String workflowName,
       String className,
       String instanceName,
       Integer maxRetries,
       Object[] positionalArgs,
+      // Note, namedArgs param is to enable portable workflow enqueue via DBOSClient.
+      // Typical Java workflow invocations do not use named args
       Map<String, Object> namedArgs,
       String workflowId,
       String queueName,
@@ -1722,36 +1817,13 @@ public class DBOSExecutor implements AutoCloseable {
     return initResult[0];
   }
 
-  private void postInvokeWorkflowResult(
-      SystemDatabase systemDatabase, String workflowId, Object result, String serialization) {
-
+  private void persistWorkflowOutput(String workflowId, Object result, String serialization) {
     var serialized = SerializationUtil.serializeValue(result, serialization, this.serializer);
     systemDatabase.recordWorkflowOutput(workflowId, serialized.serializedValue());
   }
 
-  private void postInvokeWorkflowError(
-      SystemDatabase systemDatabase, String workflowId, Throwable error, String serialization) {
-
+  private void persistWorkflowError(String workflowId, Throwable error, String serialization) {
     var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
     systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
-  }
-
-  private void validateWorkflow(String workflowName, String className) {
-    validateWorkflow(workflowName, className, "");
-  }
-
-  private void validateWorkflow(String workflowName, String className, String instanceName) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
-    if (!workflowMap.containsKey(fqName)) {
-      throw new IllegalStateException("Workflow function %s is not registered".formatted(fqName));
-    }
-  }
-
-  private void validateQueue(String queueName) {
-    if (queueName != null) {
-      getQueue(queueName)
-          .orElseThrow(
-              () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
-    }
   }
 }

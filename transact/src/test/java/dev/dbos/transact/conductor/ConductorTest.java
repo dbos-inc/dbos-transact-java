@@ -1539,12 +1539,13 @@ public class ConductorTest {
     testServer.setListener(listener);
     String executorId = "exec-id";
     String appVersion = "app-version";
+    var executorIds = List.of(executorId);
 
     List<WorkflowStatus> outputs = new ArrayList<>();
     outputs.add(new WorkflowStatusBuilder("wf-1").build());
     outputs.add(new WorkflowStatusBuilder("wf-2").queueName("queue").build());
 
-    when(mockDB.getPendingWorkflows(List.of(executorId), appVersion)).thenReturn(outputs);
+    when(mockDB.getPendingWorkflows(executorIds, appVersion)).thenReturn(outputs);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1556,7 +1557,7 @@ public class ConductorTest {
       listener.send(MessageType.EXIST_PENDING_WORKFLOWS, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getPendingWorkflows(List.of(executorId), appVersion);
+      verify(mockDB).getPendingWorkflows(executorIds, appVersion);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1572,8 +1573,9 @@ public class ConductorTest {
     testServer.setListener(listener);
     String executorId = "exec-id";
     String appVersion = "app-version";
+    var executorIds = List.of(executorId);
 
-    when(mockDB.getPendingWorkflows(List.of(executorId), appVersion)).thenReturn(List.of());
+    when(mockDB.getPendingWorkflows(executorIds, appVersion)).thenReturn(List.of());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1591,7 +1593,7 @@ public class ConductorTest {
       listener.send(MessageType.EXIST_PENDING_WORKFLOWS, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getPendingWorkflows(List.of(executorId), appVersion);
+      verify(mockDB).getPendingWorkflows(executorIds, appVersion);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);

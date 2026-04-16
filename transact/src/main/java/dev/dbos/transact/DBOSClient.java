@@ -538,33 +538,34 @@ public class DBOSClient implements AutoCloseable {
     }
 
     var workflowId =
-        DBOSExecutor.enqueueWorkflow(
-            options.workflowName(),
-            options.className(),
-            options.instanceName(),
-            null,
-            positionalArgs,
-            namedArgs,
-            new ExecutionOptions(
-                Objects.requireNonNullElseGet(
-                    options.workflowId(), () -> UUID.randomUUID().toString()),
-                Timeout.of(options.timeout()),
-                options.deadline,
-                options.queueName(),
-                options.deduplicationId,
-                options.priority,
-                options.queuePartitionKey,
-                options.delay,
-                options.appVersion,
-                false,
-                false,
-                serializationFormat),
-            null,
-            null,
-            null,
-            null,
-            systemDatabase,
-            this.serializer);
+        Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString());
+
+    DBOSExecutor.enqueueWorkflow(
+        options.workflowName(),
+        options.className(),
+        options.instanceName(),
+        null,
+        positionalArgs,
+        namedArgs,
+        new ExecutionOptions(
+            workflowId,
+            Timeout.of(options.timeout()),
+            options.deadline,
+            options.queueName(),
+            options.deduplicationId,
+            options.priority,
+            options.queuePartitionKey,
+            options.delay,
+            options.appVersion,
+            false,
+            false,
+            serializationFormat),
+        null,
+        null,
+        null,
+        null,
+        systemDatabase,
+        this.serializer);
 
     return new WorkflowHandleClient<>(workflowId);
   }

@@ -292,7 +292,7 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
                   },
                   new StepOptions("inlineStepWithRetries")
                       .withMaxAttempts(2)
-                      .withRetryInterval(Duration.ofMillis((long) (0.01 * 1000)))
+                      .withRetryInterval(Duration.ofMillis(100))
                       .withBackoffRate(2.0));
       ;
     } catch (Exception e) {
