@@ -1,8 +1,5 @@
 package dev.dbos.transact.execution;
 
-import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
-import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
-
 import dev.dbos.transact.AlertHandler;
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.DBOS;
@@ -389,7 +386,603 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  // Step methods
+  // DBOS / DBOSClient API methods
+
+  public void send(
+      String destinationId,
+      Object message,
+      String topic,
+      String idempotencyKey,
+      SerializationStrategy serialization) {
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (ctx.isInWorkflow() && !ctx.isInStep()) {
+      int stepId = ctx.getAndIncrementFunctionId();
+      systemDatabase.send(
+          ctx.getWorkflowId(),
+          stepId,
+          destinationId,
+          message,
+          topic,
+          idempotencyKey,
+          serialization.formatName());
+    } else {
+      systemDatabase.sendDirect(
+          destinationId, message, topic, idempotencyKey, serialization.formatName());
+    }
+  }
+
+  public Object recv(String topic, Duration timeout) {
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.recv() must be called from a workflow.");
+    }
+    if (ctx.isInStep()) {
+      throw new IllegalStateException("DBOS.recv() must not be called from within a step.");
+    }
+    int stepFunctionId = ctx.getAndIncrementFunctionId();
+    int timeoutFunctionId = ctx.getAndIncrementFunctionId();
+
+    return systemDatabase.recv(
+        ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeout);
+  }
+
+  public void setEvent(String key, Object value, SerializationStrategy serialization) {
+    logger.debug("Received setEvent for key {}", key);
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.setEvent() must be called from a workflow.");
+    }
+
+    if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
+      if (ctx.getSerialization() != null) {
+        serialization = ctx.getSerialization();
+      } else {
+        serialization = SerializationStrategy.DEFAULT;
+      }
+    }
+
+    var asStep = !ctx.isInStep();
+    var stepId = ctx.isInStep() ? ctx.getCurrentFunctionId() : ctx.getAndIncrementFunctionId();
+    systemDatabase.setEvent(
+        ctx.getWorkflowId(), stepId, key, value, asStep, serialization.formatName());
+  }
+
+  public Object getEvent(String workflowId, String key, Duration timeout) {
+    logger.debug("Received getEvent for {} {}", workflowId, key);
+
+    DBOSContext ctx = DBOSContextHolder.get();
+
+    if (ctx.isInWorkflow() && !ctx.isInStep()) {
+      int stepFunctionId = ctx.getAndIncrementFunctionId();
+      int timeoutFunctionId = ctx.getAndIncrementFunctionId();
+      GetWorkflowEventContext callerCtx =
+          new GetWorkflowEventContext(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId);
+      return systemDatabase.getEvent(workflowId, key, timeout, callerCtx);
+    }
+
+    return systemDatabase.getEvent(workflowId, key, timeout, null);
+  }
+
+  public Map<String, Object> getAllEvents(String workflowId) {
+    return this.runDbosFunctionAsStep(
+        () -> systemDatabase.getAllEvents(workflowId), "DBOS.getAllEvents", null);
+  }
+
+  public void sleep(Duration duration) {
+    DBOSContext context = DBOSContextHolder.get();
+
+    if (context.getWorkflowId() == null) {
+      throw new IllegalStateException("sleep() must be called from within a workflow");
+    }
+
+    systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
+  }
+
+  public void cancelWorkflows(List<String> workflowIds) {
+    Objects.requireNonNull(workflowIds);
+
+    // Execute the cancel operation as a workflow step
+    this.runDbosFunctionAsStep(
+        () -> {
+          logger.info("Cancelling workflow(s) {}", workflowIds);
+          systemDatabase.cancelWorkflows(workflowIds);
+          return null; // void
+        },
+        "DBOS.cancelWorkflow",
+        null);
+  }
+
+  public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
+    Objects.requireNonNull(workflowIds);
+    this.runDbosFunctionAsStep(
+        () -> {
+          logger.info(
+              "Deleting workflow(s) {}{}",
+              workflowIds,
+              deleteChildren ? " and their children" : "");
+          systemDatabase.deleteWorkflows(workflowIds, deleteChildren);
+          return null;
+        },
+        "DBOS.deleteWorkflow",
+        null);
+  }
+
+  public List<WorkflowHandle<Object, Exception>> resumeWorkflows(
+      List<String> workflowIds, String queueName) {
+    Objects.requireNonNull(workflowIds);
+
+    // Execute the resume operation as a workflow step
+    this.runDbosFunctionAsStep(
+        () -> {
+          logger.info("Resuming workflow(s) {}", workflowIds);
+          systemDatabase.resumeWorkflows(workflowIds, queueName);
+          return null; // void
+        },
+        "DBOS.resumeWorkflow",
+        null);
+
+    return workflowIds.stream().map(this::retrieveWorkflow).toList();
+  }
+
+  public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
+      String workflowId, int startStep, ForkOptions options) {
+
+    String forkedId =
+        this.runDbosFunctionAsStep(
+            () -> {
+              logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
+
+              validateQueue(options.queueName(), options.queuePartitionKey());
+
+              return systemDatabase.forkWorkflow(workflowId, startStep, options);
+            },
+            "DBOS.forkWorkflow",
+            null);
+    return retrieveWorkflow(forkedId);
+  }
+
+  public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {
+    logger.debug("retrieveWorkflow {}", workflowId);
+    return new WorkflowHandleDBPoll<>(this, workflowId);
+  }
+
+  public void setWorkflowDelay(@NonNull String workflowId, @NonNull WorkflowDelay delay) {
+    Objects.requireNonNull(workflowId);
+    this.runDbosFunctionAsStep(
+        () -> {
+          logger.info("setWorkflowDelay workflow {} delay {}", workflowId, delay);
+          systemDatabase.setWorkflowDelay(workflowId, delay);
+          return null; // void
+        },
+        "DBOS.setWorkflowDelay",
+        null);
+  }
+
+  public void writeStream(String key, Object value, SerializationStrategy serialization) {
+    logger.debug("Received writeStream for key {}", key);
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.writeStream() must be called from a workflow.");
+    }
+
+    if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
+      if (ctx.getSerialization() != null) {
+        serialization = ctx.getSerialization();
+      } else {
+        serialization = SerializationStrategy.DEFAULT;
+      }
+    }
+
+    if (ctx.isInStep()) {
+      systemDatabase.writeStreamFromStep(
+          ctx.getWorkflowId(), ctx.getCurrentFunctionId(), key, value, serialization.formatName());
+    } else {
+      int functionId = ctx.getAndIncrementFunctionId();
+      systemDatabase.writeStreamFromWorkflow(
+          ctx.getWorkflowId(), functionId, key, value, serialization.formatName());
+    }
+  }
+
+  public void closeStream(String key) {
+    logger.debug("Received closeStream for key {}", key);
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (!ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.closeStream() must be called from a workflow.");
+    }
+
+    if (ctx.isInStep()) {
+      throw new IllegalStateException(
+          "DBOS.closeStream() must be called from a workflow, not a step.");
+    }
+
+    int functionId = ctx.getAndIncrementFunctionId();
+    systemDatabase.closeStream(ctx.getWorkflowId(), functionId, key);
+  }
+
+  public Iterator<Object> readStream(String workflowId, String key) {
+    logger.debug("Received readStream for {} {}", workflowId, key);
+    return new StreamIterator(workflowId, key, systemDatabase);
+  }
+
+  public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
+    return this.runDbosFunctionAsStep(
+        () -> systemDatabase.listWorkflows(input), "DBOS.listWorkflows", null);
+  }
+
+  public List<StepInfo> listWorkflowSteps(
+      String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
+    return this.runDbosFunctionAsStep(
+        () -> systemDatabase.listWorkflowSteps(workflowId, loadOutput, limit, offset),
+        "DBOS.listWorkflowSteps",
+        null);
+  }
+
+  public List<VersionInfo> listApplicationVersions() {
+    return systemDatabase.listApplicationVersions();
+  }
+
+  public VersionInfo getLatestApplicationVersion() {
+    return systemDatabase.getLatestApplicationVersion();
+  }
+
+  public void setLatestApplicationVersion(String versionName) {
+    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
+  }
+
+  public void createSchedule(@NonNull WorkflowSchedule schedule) {
+
+    Objects.requireNonNull(schedule, "schedule cannot be null");
+    validateQueue(schedule.queueName());
+    validateWorkflow(schedule.workflowName(), schedule.className());
+
+    this.runDbosFunctionAsStep(
+        () -> {
+          systemDatabase.createSchedule(schedule);
+          return null;
+        },
+        "DBOS.createSchedule",
+        null);
+  }
+
+  public Optional<WorkflowSchedule> getSchedule(String name) {
+    return this.runDbosFunctionAsStep(
+        () -> systemDatabase.getSchedule(name), "DBOS.getSchedule", null);
+  }
+
+  public List<WorkflowSchedule> listSchedules(
+      List<ScheduleStatus> statuses, List<String> workflowNames, List<String> namePrefixes) {
+    return this.runDbosFunctionAsStep(
+        () -> systemDatabase.listSchedules(statuses, workflowNames, namePrefixes),
+        "DBOS.listSchedules",
+        null);
+  }
+
+  public void deleteSchedule(String name) {
+    this.runDbosFunctionAsStep(
+        () -> {
+          systemDatabase.deleteSchedule(name);
+          return null;
+        },
+        "DBOS.deleteSchedule",
+        null);
+  }
+
+  public void pauseSchedule(String name) {
+    this.runDbosFunctionAsStep(
+        () -> {
+          systemDatabase.pauseSchedule(name);
+          return null;
+        },
+        "DBOS.pauseSchedule",
+        null);
+  }
+
+  public void resumeSchedule(String name) {
+    this.runDbosFunctionAsStep(
+        () -> {
+          systemDatabase.resumeSchedule(name);
+          return null;
+        },
+        "DBOS.resumeSchedule",
+        null);
+  }
+
+  public void applySchedules(List<WorkflowSchedule> schedules) {
+
+    if (DBOSContextHolder.get().isInWorkflow()) {
+      throw new IllegalStateException(
+          "DBOS.applySchedules cannot be called from within a workflow");
+    }
+
+    for (WorkflowSchedule s : schedules) {
+      validateQueue(s.queueName());
+      validateWorkflow(s.workflowName(), s.className());
+    }
+
+    systemDatabase.applySchedules(
+        schedules.stream()
+            .map(
+                s -> {
+                  Objects.requireNonNull(s.scheduleName(), "scheduleName cannot be null");
+                  Objects.requireNonNull(s.workflowName(), "workflowName cannot be null");
+                  Objects.requireNonNull(s.className(), "className cannot be null");
+                  SchedulerService.CRON_PARSER.parse(
+                      Objects.requireNonNull(s.cron(), "cron cannot be null"));
+
+                  return s.withScheduleId(UUID.randomUUID().toString())
+                      .withStatus(ScheduleStatus.ACTIVE)
+                      .withLastFiredAt(null);
+                })
+            .toList());
+  }
+
+  public List<WorkflowHandle<Object, Exception>> backfillSchedule(
+      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
+
+    if (DBOSContextHolder.get().isInWorkflow()) {
+      throw new IllegalStateException(
+          "DBOS.backfillSchedule cannot be called from within a workflow");
+    }
+
+    var workflowIds =
+        DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase, serializer);
+    return workflowIds.stream().map(this::retrieveWorkflow).toList();
+  }
+
+  public static List<String> backfillSchedule(
+      @NonNull String scheduleName,
+      @NonNull Instant start,
+      @NonNull Instant end,
+      @NonNull SystemDatabase systemDatabase,
+      @Nullable DBOSSerializer serializer) {
+
+    var schedule =
+        Objects.requireNonNull(systemDatabase, "systemDatabase cannot be null")
+            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "Schedule %s does not exist".formatted(scheduleName)));
+
+    var timeZone = Objects.requireNonNullElse(schedule.cronTimezone(), ZoneOffset.UTC);
+    var cron = SchedulerService.CRON_PARSER.parse(schedule.cron());
+    var executionTime = ExecutionTime.forCron(cron);
+
+    var next = Objects.requireNonNull(start, "start cannot be null").atZone(timeZone);
+    var zonedEnd = Objects.requireNonNull(end, "end cannot be null").atZone(timeZone);
+    var workflowIds = new ArrayList<String>();
+
+    while (true) {
+      next = executionTime.nextExecution(next).orElse(null);
+      if (next == null || next.isAfter(zonedEnd)) {
+        break;
+      }
+
+      var workflowId = "sched-%s-%s".formatted(schedule.scheduleName(), next);
+      enqueueScheduledWorkflow(
+          schedule.workflowName(),
+          schedule.className(),
+          workflowId,
+          schedule.context(),
+          schedule.queueName(),
+          next.toInstant(),
+          systemDatabase,
+          serializer);
+
+      workflowIds.add(workflowId);
+    }
+    return workflowIds;
+  }
+
+  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(
+      @NonNull String scheduleName) {
+    if (DBOSContextHolder.get().isInWorkflow()) {
+      throw new IllegalStateException(
+          "DBOS.triggerSchedule cannot be called from within a workflow");
+    }
+
+    var workflowId = triggerSchedule(scheduleName, systemDatabase, serializer);
+    return retrieveWorkflow(workflowId);
+  }
+
+  public static String triggerSchedule(
+      @NonNull String scheduleName, SystemDatabase systemDatabase, DBOSSerializer serializer) {
+    var schedule =
+        Objects.requireNonNull(systemDatabase)
+            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "Schedule %s does not exist".formatted(scheduleName)));
+
+    var now = Instant.now();
+    var workflowId = "sched-%s-trigger-%s".formatted(schedule.scheduleName(), now);
+    enqueueScheduledWorkflow(
+        schedule.workflowName(),
+        schedule.className(),
+        workflowId,
+        schedule.context(),
+        schedule.queueName(),
+        now,
+        systemDatabase,
+        serializer);
+    return workflowId;
+  }
+
+  private static void enqueueScheduledWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @NonNull String workflowId,
+      Object context,
+      String queueName,
+      @NonNull Instant scheduledAt,
+      SystemDatabase systemDatabase,
+      DBOSSerializer serializer) {
+    var latestAppVersion = systemDatabase.getLatestApplicationVersion().versionName();
+    queueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
+    var args = new Object[] {Objects.requireNonNull(scheduledAt), context};
+
+    var options =
+        new ExecutionOptions(
+            workflowId,
+            null,
+            null,
+            queueName,
+            null,
+            null,
+            null,
+            null,
+            latestAppVersion,
+            false,
+            false,
+            null);
+    enqueueWorkflow(
+        workflowName,
+        className,
+        null,
+        null,
+        args,
+        null,
+        options,
+        null,
+        null,
+        null,
+        null,
+        systemDatabase,
+        serializer);
+  }
+
+  public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
+    return systemDatabase.getExternalState(service, workflowName, key);
+  }
+
+  public ExternalState upsertExternalState(ExternalState state) {
+    return systemDatabase.upsertExternalState(state);
+  }
+
+  public WorkflowStatus getWorkflowStatus(String workflowId) {
+    return this.runDbosFunctionAsStep(
+        () -> systemDatabase.getWorkflowStatus(workflowId), "DBOS.getWorkflowStatus", null);
+  }
+
+  public <T, E extends Exception> T getResult(String workflowId) throws E {
+    return this.runDbosFunctionAsStep(
+        () -> awaitWorkflowResult(workflowId), "DBOS.getResult", workflowId);
+  }
+
+  @SuppressWarnings("unchecked")
+  public <T, E extends Exception> T getResult(String workflowId, Future<T> futureResult) throws E {
+    return this.runDbosFunctionAsStep(
+        () -> {
+          try {
+            return futureResult.get();
+          } catch (DBOSWorkflowExecutionConflictException e) {
+            return awaitWorkflowResult(workflowId);
+          } catch (CancellationException e) {
+            throw new DBOSAwaitedWorkflowCancelledException(workflowId);
+          } catch (ExecutionException e) {
+            if (e.getCause() instanceof Exception cause) {
+              if (cause instanceof DBOSWorkflowExecutionConflictException) {
+                return awaitWorkflowResult(workflowId);
+              }
+              throw (E) cause;
+            }
+            throw new RuntimeException("Future threw non-exception", e.getCause());
+          } catch (Exception e) {
+            throw (E) e;
+          }
+        },
+        "DBOS.getResult",
+        workflowId);
+  }
+
+  private <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
+    var result = systemDatabase.<T>awaitWorkflowResult(workflowId);
+    return Result.<T, E>process(result);
+  }
+
+  public boolean patch(String patchName) {
+    if (!config.enablePatching()) {
+      throw new IllegalStateException("Patching must be enabled in DBOS Config");
+    }
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (ctx == null || !ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.patch must be called from a workflow");
+    }
+
+    var workflowId = ctx.getWorkflowId();
+    var functionId = ctx.getCurrentFunctionId();
+    patchName = "DBOS.patch-%s".formatted(patchName);
+    var patched = systemDatabase.patch(workflowId, functionId, patchName);
+    if (patched) {
+      ctx.getAndIncrementFunctionId();
+    }
+    return patched;
+  }
+
+  public boolean deprecatePatch(String patchName) {
+    if (!config.enablePatching()) {
+      throw new IllegalStateException("Patching must be enabled in DBOS Config");
+    }
+
+    DBOSContext ctx = DBOSContextHolder.get();
+    if (ctx == null || !ctx.isInWorkflow()) {
+      throw new IllegalStateException("DBOS.deprecatePatch must be called from a workflow");
+    }
+
+    var workflowId = ctx.getWorkflowId();
+    var functionId = ctx.getCurrentFunctionId();
+    patchName = "DBOS.patch-%s".formatted(patchName);
+    var patchExists = systemDatabase.deprecatePatch(workflowId, functionId, patchName);
+    if (patchExists) {
+      ctx.getAndIncrementFunctionId();
+    }
+    return true;
+  }
+
+  // AdminServer / Conductor methods
+
+  public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
+    Objects.requireNonNull(executorIds);
+
+    var workflows = systemDatabase.getPendingWorkflows(executorIds, appVersion);
+    return workflows.stream()
+        .map(wf -> recoverWorkflow(wf.workflowId(), wf.queueName()))
+        .collect(Collectors.toList());
+  }
+
+  WorkflowHandle<?, ?> recoverWorkflow(String workflowId, String queueName) {
+    Objects.requireNonNull(workflowId, "workflowId must not be null");
+
+    if (queueName != null) {
+      boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
+      if (cleared) {
+        logger.debug("recoverWorkflow clear queue assignment {}", workflowId);
+        return retrieveWorkflow(workflowId);
+      }
+    }
+
+    logger.debug("recoverWorkflow execute {}", workflowId);
+    return executeWorkflowById(workflowId, true, false);
+  }
+
+  public void globalTimeout(Instant endTime) {
+    var input =
+        new ListWorkflowsInput()
+            .withEndTime(endTime)
+            .withStatus(
+                List.of(WorkflowState.PENDING, WorkflowState.ENQUEUED, WorkflowState.DELAYED));
+    for (WorkflowStatus status : systemDatabase.listWorkflows(input)) {
+      cancelWorkflows(List.of(status.workflowId()));
+    }
+  }
+
+  // Step Execution methods
 
   public <T, E extends Exception> T runStep(
       @NonNull ThrowingSupplier<T, E> step,
@@ -534,647 +1127,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  // Workflow Methods
-
-  WorkflowHandle<?, ?> recoverWorkflow(String workflowId, String queueName) {
-    Objects.requireNonNull(workflowId, "workflowId must not be null");
-
-    if (queueName != null) {
-      boolean cleared = systemDatabase.clearQueueAssignment(workflowId);
-      if (cleared) {
-        logger.debug("recoverWorkflow clear queue assignment {}", workflowId);
-        return retrieveWorkflow(workflowId);
-      }
-    }
-
-    logger.debug("recoverWorkflow execute {}", workflowId);
-    return executeWorkflowById(workflowId, true, false);
-  }
-
-  public List<WorkflowHandle<?, ?>> recoverPendingWorkflows(List<String> executorIds) {
-    Objects.requireNonNull(executorIds);
-
-    var workflows = systemDatabase.getPendingWorkflows(executorIds, appVersion);
-    return workflows.stream()
-        .map(wf -> recoverWorkflow(wf.workflowId(), wf.queueName()))
-        .collect(Collectors.toList());
-  }
-
-  private void postInvokeWorkflowResult(
-      SystemDatabase systemDatabase, String workflowId, Object result, String serialization) {
-
-    var serialized = SerializationUtil.serializeValue(result, serialization, this.serializer);
-    systemDatabase.recordWorkflowOutput(workflowId, serialized.serializedValue());
-  }
-
-  private void postInvokeWorkflowError(
-      SystemDatabase systemDatabase, String workflowId, Throwable error, String serialization) {
-
-    var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
-    systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
-  }
-
-  /** Retrieve the workflowHandle for the workflowId */
-  public <R, E extends Exception> WorkflowHandle<R, E> retrieveWorkflow(String workflowId) {
-    logger.debug("retrieveWorkflow {}", workflowId);
-    return new WorkflowHandleDBPoll<>(this, workflowId);
-  }
-
-  public void sleep(Duration duration) {
-    DBOSContext context = DBOSContextHolder.get();
-
-    if (context.getWorkflowId() == null) {
-      throw new IllegalStateException("sleep() must be called from within a workflow");
-    }
-
-    systemDatabase.sleep(context.getWorkflowId(), context.getAndIncrementFunctionId(), duration);
-  }
-
-  public List<WorkflowHandle<Object, Exception>> resumeWorkflows(
-      List<String> workflowIds, String queueName) {
-    Objects.requireNonNull(workflowIds);
-
-    // Execute the resume operation as a workflow step
-    this.runDbosFunctionAsStep(
-        () -> {
-          logger.info("Resuming workflow(s) {}", workflowIds);
-          systemDatabase.resumeWorkflows(workflowIds, queueName);
-          return null; // void
-        },
-        "DBOS.resumeWorkflow",
-        null);
-
-    return workflowIds.stream().map(this::retrieveWorkflow).toList();
-  }
-
-  public void setWorkflowDelay(@NonNull String workflowId, @NonNull WorkflowDelay delay) {
-    Objects.requireNonNull(workflowId);
-    this.runDbosFunctionAsStep(
-        () -> {
-          logger.info("setWorkflowDelay workflow {} delay {}", workflowId, delay);
-          systemDatabase.setWorkflowDelay(workflowId, delay);
-          return null; // void
-        },
-        "DBOS.setWorkflowDelay",
-        null);
-  }
-
-  public void cancelWorkflows(List<String> workflowIds) {
-    Objects.requireNonNull(workflowIds);
-
-    // Execute the cancel operation as a workflow step
-    this.runDbosFunctionAsStep(
-        () -> {
-          logger.info("Cancelling workflow(s) {}", workflowIds);
-          systemDatabase.cancelWorkflows(workflowIds);
-          return null; // void
-        },
-        "DBOS.cancelWorkflow",
-        null);
-  }
-
-  public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
-    Objects.requireNonNull(workflowIds);
-    this.runDbosFunctionAsStep(
-        () -> {
-          logger.info(
-              "Deleting workflow(s) {}{}",
-              workflowIds,
-              deleteChildren ? " and their children" : "");
-          systemDatabase.deleteWorkflows(workflowIds, deleteChildren);
-          return null;
-        },
-        "DBOS.deleteWorkflow",
-        null);
-  }
-
-  public <T, E extends Exception> WorkflowHandle<T, E> forkWorkflow(
-      String workflowId, int startStep, ForkOptions options) {
-
-    String forkedId =
-        this.runDbosFunctionAsStep(
-            () -> {
-              logger.info("Forking workflow:{} from step:{} ", workflowId, startStep);
-
-              validateQueue(options.queueName(), options.queuePartitionKey());
-
-              return systemDatabase.forkWorkflow(workflowId, startStep, options);
-            },
-            "DBOS.forkWorkflow",
-            null);
-    return retrieveWorkflow(forkedId);
-  }
-
-  public void globalTimeout(Instant endTime) {
-    var input =
-        new ListWorkflowsInput()
-            .withEndTime(endTime)
-            .withStatus(
-                List.of(WorkflowState.PENDING, WorkflowState.ENQUEUED, WorkflowState.DELAYED));
-    for (WorkflowStatus status : systemDatabase.listWorkflows(input)) {
-      cancelWorkflows(List.of(status.workflowId()));
-    }
-  }
-
-  public void send(
-      String destinationId,
-      Object message,
-      String topic,
-      String idempotencyKey,
-      SerializationStrategy serialization) {
-
-    DBOSContext ctx = DBOSContextHolder.get();
-    if (ctx.isInWorkflow() && !ctx.isInStep()) {
-      int stepId = ctx.getAndIncrementFunctionId();
-      systemDatabase.send(
-          ctx.getWorkflowId(),
-          stepId,
-          destinationId,
-          message,
-          topic,
-          idempotencyKey,
-          serialization.formatName());
-    } else {
-      systemDatabase.sendDirect(
-          destinationId, message, topic, idempotencyKey, serialization.formatName());
-    }
-  }
-
-  /**
-   * Get a message sent to a particular topic
-   *
-   * @param topic the topic whose message to get
-   * @param timeout duration to wait before the call times out
-   * @return the message if there is one or else null
-   */
-  public Object recv(String topic, Duration timeout) {
-    DBOSContext ctx = DBOSContextHolder.get();
-    if (!ctx.isInWorkflow()) {
-      throw new IllegalStateException("DBOS.recv() must be called from a workflow.");
-    }
-    if (ctx.isInStep()) {
-      throw new IllegalStateException("DBOS.recv() must not be called from within a step.");
-    }
-    int stepFunctionId = ctx.getAndIncrementFunctionId();
-    int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-
-    return systemDatabase.recv(
-        ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId, topic, timeout);
-  }
-
-  public void setEvent(String key, Object value, SerializationStrategy serialization) {
-    logger.debug("Received setEvent for key {}", key);
-
-    DBOSContext ctx = DBOSContextHolder.get();
-    if (!ctx.isInWorkflow()) {
-      throw new IllegalStateException("DBOS.setEvent() must be called from a workflow.");
-    }
-
-    if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
-      if (ctx.getSerialization() != null) {
-        serialization = ctx.getSerialization();
-      } else {
-        serialization = SerializationStrategy.DEFAULT;
-      }
-    }
-
-    var asStep = !ctx.isInStep();
-    var stepId = ctx.isInStep() ? ctx.getCurrentFunctionId() : ctx.getAndIncrementFunctionId();
-    systemDatabase.setEvent(
-        ctx.getWorkflowId(), stepId, key, value, asStep, serialization.formatName());
-  }
-
-  public Object getEvent(String workflowId, String key, Duration timeout) {
-    logger.debug("Received getEvent for {} {}", workflowId, key);
-
-    DBOSContext ctx = DBOSContextHolder.get();
-
-    if (ctx.isInWorkflow() && !ctx.isInStep()) {
-      int stepFunctionId = ctx.getAndIncrementFunctionId();
-      int timeoutFunctionId = ctx.getAndIncrementFunctionId();
-      GetWorkflowEventContext callerCtx =
-          new GetWorkflowEventContext(ctx.getWorkflowId(), stepFunctionId, timeoutFunctionId);
-      return systemDatabase.getEvent(workflowId, key, timeout, callerCtx);
-    }
-
-    return systemDatabase.getEvent(workflowId, key, timeout, null);
-  }
-
-  public void writeStream(String key, Object value, SerializationStrategy serialization) {
-    logger.debug("Received writeStream for key {}", key);
-
-    DBOSContext ctx = DBOSContextHolder.get();
-    if (!ctx.isInWorkflow()) {
-      throw new IllegalStateException("DBOS.writeStream() must be called from a workflow.");
-    }
-
-    if (serialization == null || serialization.equals(SerializationStrategy.DEFAULT)) {
-      if (ctx.getSerialization() != null) {
-        serialization = ctx.getSerialization();
-      } else {
-        serialization = SerializationStrategy.DEFAULT;
-      }
-    }
-
-    if (ctx.isInStep()) {
-      systemDatabase.writeStreamFromStep(
-          ctx.getWorkflowId(), ctx.getCurrentFunctionId(), key, value, serialization.formatName());
-    } else {
-      int functionId = ctx.getAndIncrementFunctionId();
-      systemDatabase.writeStreamFromWorkflow(
-          ctx.getWorkflowId(), functionId, key, value, serialization.formatName());
-    }
-  }
-
-  public void closeStream(String key) {
-    logger.debug("Received closeStream for key {}", key);
-
-    DBOSContext ctx = DBOSContextHolder.get();
-    if (!ctx.isInWorkflow()) {
-      throw new IllegalStateException("DBOS.closeStream() must be called from a workflow.");
-    }
-
-    if (ctx.isInStep()) {
-      throw new IllegalStateException(
-          "DBOS.closeStream() must be called from a workflow, not a step.");
-    }
-
-    int functionId = ctx.getAndIncrementFunctionId();
-    systemDatabase.closeStream(ctx.getWorkflowId(), functionId, key);
-  }
-
-  public Iterator<Object> readStream(String workflowId, String key) {
-    logger.debug("Received readStream for {} {}", workflowId, key);
-    return new StreamIterator(workflowId, key, systemDatabase);
-  }
-
-  public Map<String, Object> getAllEvents(String workflowId) {
-    return this.runDbosFunctionAsStep(
-        () -> systemDatabase.getAllEvents(workflowId), "DBOS.getAllEvents", null);
-  }
-
-  public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-    return this.runDbosFunctionAsStep(
-        () -> systemDatabase.listWorkflows(input), "DBOS.listWorkflows", null);
-  }
-
-  public List<StepInfo> listWorkflowSteps(
-      String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
-    return this.runDbosFunctionAsStep(
-        () -> systemDatabase.listWorkflowSteps(workflowId, loadOutput, limit, offset),
-        "DBOS.listWorkflowSteps",
-        null);
-  }
-
-  public List<VersionInfo> listApplicationVersions() {
-    return systemDatabase.listApplicationVersions();
-  }
-
-  public VersionInfo getLatestApplicationVersion() {
-    return systemDatabase.getLatestApplicationVersion();
-  }
-
-  public void setLatestApplicationVersion(String versionName) {
-    systemDatabase.updateApplicationVersionTimestamp(versionName, Instant.now());
-  }
-
-  public void createSchedule(@NonNull WorkflowSchedule schedule) {
-
-    Objects.requireNonNull(schedule, "schedule cannot be null");
-    validateQueue(schedule.queueName());
-    validateWorkflow(schedule.workflowName(), schedule.className());
-
-    this.runDbosFunctionAsStep(
-        () -> {
-          systemDatabase.createSchedule(schedule);
-          return null;
-        },
-        "DBOS.createSchedule",
-        null);
-  }
-
-  public Optional<WorkflowSchedule> getSchedule(String name) {
-    return this.runDbosFunctionAsStep(
-        () -> systemDatabase.getSchedule(name), "DBOS.getSchedule", null);
-  }
-
-  public List<WorkflowSchedule> listSchedules(
-      List<ScheduleStatus> statuses, List<String> workflowNames, List<String> namePrefixes) {
-    return this.runDbosFunctionAsStep(
-        () -> systemDatabase.listSchedules(statuses, workflowNames, namePrefixes),
-        "DBOS.listSchedules",
-        null);
-  }
-
-  public void deleteSchedule(String name) {
-    this.runDbosFunctionAsStep(
-        () -> {
-          systemDatabase.deleteSchedule(name);
-          return null;
-        },
-        "DBOS.deleteSchedule",
-        null);
-  }
-
-  public void pauseSchedule(String name) {
-    this.runDbosFunctionAsStep(
-        () -> {
-          systemDatabase.pauseSchedule(name);
-          return null;
-        },
-        "DBOS.pauseSchedule",
-        null);
-  }
-
-  public void resumeSchedule(String name) {
-    this.runDbosFunctionAsStep(
-        () -> {
-          systemDatabase.resumeSchedule(name);
-          return null;
-        },
-        "DBOS.resumeSchedule",
-        null);
-  }
-
-  public static void applySchedules(
-      List<WorkflowSchedule> schedules, SystemDatabase systemDatabase) {
-
-    schedules =
-        schedules.stream()
-            .map(
-                s -> {
-                  Objects.requireNonNull(s.scheduleName(), "scheduleName cannot be null");
-                  Objects.requireNonNull(s.workflowName(), "workflowName cannot be null");
-                  Objects.requireNonNull(s.className(), "className cannot be null");
-                  SchedulerService.CRON_PARSER.parse(
-                      Objects.requireNonNull(s.cron(), "cron cannot be null"));
-
-                  return s.withScheduleId(UUID.randomUUID().toString())
-                      .withStatus(ScheduleStatus.ACTIVE)
-                      .withLastFiredAt(null);
-                })
-            .toList();
-    systemDatabase.applySchedules(schedules);
-  }
-
-  public void applySchedules(List<WorkflowSchedule> schedules) {
-
-    if (DBOSContextHolder.get().isInWorkflow()) {
-      throw new IllegalStateException(
-          "DBOS.applySchedules cannot be called from within a workflow");
-    }
-
-    for (WorkflowSchedule s : schedules) {
-      validateQueue(s.queueName());
-      validateWorkflow(s.workflowName(), s.className());
-    }
-
-    DBOSExecutor.applySchedules(schedules, systemDatabase);
-  }
-
-  private void validateWorkflow(String workflowName, String className) {
-    validateWorkflow(workflowName, className, "");
-  }
-
-  private void validateWorkflow(String workflowName, String className, String instanceName) {
-    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
-    if (!workflowMap.containsKey(fqName)) {
-      throw new IllegalStateException("Workflow function %s is not registered".formatted(fqName));
-    }
-  }
-
-  private void validateQueue(String queueName) {
-    if (queueName != null) {
-      getQueue(queueName)
-          .orElseThrow(
-              () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
-    }
-  }
-
-  public static List<String> backfillSchedule(
-      @NonNull String scheduleName,
-      @NonNull Instant start,
-      @NonNull Instant end,
-      @NonNull SystemDatabase systemDatabase,
-      @Nullable DBOSSerializer serializer) {
-
-    var schedule =
-        Objects.requireNonNull(systemDatabase, "systemDatabase cannot be null")
-            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
-            .orElseThrow(
-                () ->
-                    new IllegalStateException(
-                        "Schedule %s does not exist".formatted(scheduleName)));
-
-    var timeZone = Objects.requireNonNullElse(schedule.cronTimezone(), ZoneOffset.UTC);
-    var cron = SchedulerService.CRON_PARSER.parse(schedule.cron());
-    var executionTime = ExecutionTime.forCron(cron);
-
-    var next = Objects.requireNonNull(start, "start cannot be null").atZone(timeZone);
-    var zonedEnd = Objects.requireNonNull(end, "end cannot be null").atZone(timeZone);
-    var workflowIds = new ArrayList<String>();
-
-    while (true) {
-      next = executionTime.nextExecution(next).orElse(null);
-      if (next == null || next.isAfter(zonedEnd)) {
-        break;
-      }
-
-      var workflowId = "sched-%s-%s".formatted(schedule.scheduleName(), next);
-      enqueueScheduledWorkflow(
-          schedule.workflowName(),
-          schedule.className(),
-          workflowId,
-          schedule.context(),
-          schedule.queueName(),
-          next.toInstant(),
-          systemDatabase,
-          serializer);
-
-      workflowIds.add(workflowId);
-    }
-    return workflowIds;
-  }
-
-  public List<WorkflowHandle<Object, Exception>> backfillSchedule(
-      @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
-
-    if (DBOSContextHolder.get().isInWorkflow()) {
-      throw new IllegalStateException(
-          "DBOS.backfillSchedule cannot be called from within a workflow");
-    }
-
-    var workflowIds =
-        DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase, serializer);
-    return workflowIds.stream().map(this::retrieveWorkflow).toList();
-  }
-
-  public static String triggerSchedule(
-      @NonNull String scheduleName, SystemDatabase systemDatabase, DBOSSerializer serializer) {
-    var schedule =
-        Objects.requireNonNull(systemDatabase)
-            .getSchedule(Objects.requireNonNull(scheduleName, "scheduleName cannot be null"))
-            .orElseThrow(
-                () ->
-                    new IllegalStateException(
-                        "Schedule %s does not exist".formatted(scheduleName)));
-
-    var now = Instant.now();
-    var workflowId = "sched-%s-trigger-%s".formatted(schedule.scheduleName(), now);
-    enqueueScheduledWorkflow(
-        schedule.workflowName(),
-        schedule.className(),
-        workflowId,
-        schedule.context(),
-        schedule.queueName(),
-        now,
-        systemDatabase,
-        serializer);
-    return workflowId;
-  }
-
-  public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(
-      @NonNull String scheduleName) {
-    if (DBOSContextHolder.get().isInWorkflow()) {
-      throw new IllegalStateException(
-          "DBOS.triggerSchedule cannot be called from within a workflow");
-    }
-
-    var workflowId = triggerSchedule(scheduleName, systemDatabase, serializer);
-    return retrieveWorkflow(workflowId);
-  }
-
-  private static void enqueueScheduledWorkflow(
-      @NonNull String workflowName,
-      @NonNull String className,
-      @NonNull String workflowId,
-      Object context,
-      String queueName,
-      @NonNull Instant scheduledAt,
-      SystemDatabase systemDatabase,
-      DBOSSerializer serializer) {
-    var latestAppVersion = systemDatabase.getLatestApplicationVersion().versionName();
-    queueName = Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE);
-    var args = new Object[] {Objects.requireNonNull(scheduledAt), context};
-
-    var options =
-        new ExecutionOptions(
-            workflowId,
-            null,
-            null,
-            queueName,
-            null,
-            null,
-            null,
-            null,
-            latestAppVersion,
-            false,
-            false,
-            null);
-    enqueueWorkflow(
-        workflowName,
-        className,
-        null,
-        null,
-        args,
-        null,
-        options,
-        null,
-        null,
-        null,
-        null,
-        systemDatabase,
-        serializer);
-  }
-
-  public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
-    return systemDatabase.getExternalState(service, workflowName, key);
-  }
-
-  public ExternalState upsertExternalState(ExternalState state) {
-    return systemDatabase.upsertExternalState(state);
-  }
-
-  public WorkflowStatus getWorkflowStatus(String workflowId) {
-    return this.runDbosFunctionAsStep(
-        () -> systemDatabase.getWorkflowStatus(workflowId), "DBOS.getWorkflowStatus", null);
-  }
-
-  public <T, E extends Exception> T awaitWorkflowResult(String workflowId) throws E {
-    var result = systemDatabase.<T>awaitWorkflowResult(workflowId);
-    return Result.<T, E>process(result);
-  }
-
-  public <T, E extends Exception> T getResult(String workflowId) throws E {
-    return this.runDbosFunctionAsStep(
-        () -> awaitWorkflowResult(workflowId), "DBOS.getResult", workflowId);
-  }
-
-  @SuppressWarnings("unchecked")
-  public <T, E extends Exception> T getResult(String workflowId, Future<T> futureResult) throws E {
-    return this.runDbosFunctionAsStep(
-        () -> {
-          try {
-            return futureResult.get();
-          } catch (DBOSWorkflowExecutionConflictException e) {
-            return awaitWorkflowResult(workflowId);
-          } catch (CancellationException e) {
-            throw new DBOSAwaitedWorkflowCancelledException(workflowId);
-          } catch (ExecutionException e) {
-            if (e.getCause() instanceof Exception cause) {
-              if (cause instanceof DBOSWorkflowExecutionConflictException) {
-                return awaitWorkflowResult(workflowId);
-              }
-              throw (E) cause;
-            }
-            throw new RuntimeException("Future threw non-exception", e.getCause());
-          } catch (Exception e) {
-            throw (E) e;
-          }
-        },
-        "DBOS.getResult",
-        workflowId);
-  }
-
-  public boolean patch(String patchName) {
-    if (!config.enablePatching()) {
-      throw new IllegalStateException("Patching must be enabled in DBOS Config");
-    }
-
-    DBOSContext ctx = DBOSContextHolder.get();
-    if (ctx == null || !ctx.isInWorkflow()) {
-      throw new IllegalStateException("DBOS.patch must be called from a workflow");
-    }
-
-    var workflowId = ctx.getWorkflowId();
-    var functionId = ctx.getCurrentFunctionId();
-    patchName = "DBOS.patch-%s".formatted(patchName);
-    var patched = systemDatabase.patch(workflowId, functionId, patchName);
-    if (patched) {
-      ctx.getAndIncrementFunctionId();
-    }
-    return patched;
-  }
-
-  public boolean deprecatePatch(String patchName) {
-    if (!config.enablePatching()) {
-      throw new IllegalStateException("Patching must be enabled in DBOS Config");
-    }
-
-    DBOSContext ctx = DBOSContextHolder.get();
-    if (ctx == null || !ctx.isInWorkflow()) {
-      throw new IllegalStateException("DBOS.deprecatePatch must be called from a workflow");
-    }
-
-    var workflowId = ctx.getWorkflowId();
-    var functionId = ctx.getCurrentFunctionId();
-    patchName = "DBOS.patch-%s".formatted(patchName);
-    var patchExists = systemDatabase.deprecatePatch(workflowId, functionId, patchName);
-    if (patchExists) {
-      ctx.getAndIncrementFunctionId();
-    }
-    return true;
-  }
+  // Workflow Execution Methods
 
   private static <T, E extends Exception> Invocation captureInvocation(
       ThrowingSupplier<T, E> supplier) {
@@ -1211,129 +1164,6 @@ public class DBOSExecutor implements AutoCloseable {
       return new WorkflowInfo(workflowId, functionId);
     }
     return null;
-  }
-
-  public record ExecutionOptions(
-      String workflowId,
-      Timeout timeout,
-      Instant deadline,
-      String queueName,
-      String deduplicationId,
-      Integer priority,
-      String queuePartitionKey,
-      Duration delay,
-      String appVersion,
-      boolean isRecoveryRequest,
-      boolean isDequeuedRequest,
-      String serialization) {
-    public ExecutionOptions {
-      if (nullableIsEmpty(workflowId)) {
-        throw new IllegalArgumentException("workflowId must not be empty");
-      }
-
-      if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
-        throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
-      }
-
-      if (nullableIsEmpty(queueName)) {
-        throw new IllegalArgumentException("queueName must not be empty");
-      }
-
-      if (nullableIsEmpty(deduplicationId)) {
-        throw new IllegalArgumentException("deduplicationId must not be empty");
-      }
-
-      if (nullableIsEmpty(queuePartitionKey)) {
-        throw new IllegalArgumentException("queuePartitionKey must not be empty");
-      }
-
-      if (nullableIsNotPositive(delay)) {
-        throw new IllegalArgumentException("delay must be a positive non-zero duration");
-      }
-
-      if (nullableIsEmpty(appVersion)) {
-        throw new IllegalArgumentException("appVersion must not be empty");
-      }
-
-      if (nullableIsEmpty(serialization)) {
-        throw new IllegalArgumentException("serialization must not be empty");
-      }
-    }
-
-    public ExecutionOptions(String workflowId) {
-      this(workflowId, null, null, null, null, null, null, null, null, false, false, null);
-    }
-
-    public ExecutionOptions(String workflowId, Duration timeout, Instant deadline) {
-      this(
-          workflowId,
-          Timeout.of(timeout),
-          deadline,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          false,
-          false,
-          null);
-    }
-
-    public ExecutionOptions asRecoveryRequest() {
-      return new ExecutionOptions(
-          this.workflowId,
-          this.timeout,
-          this.deadline,
-          this.queueName,
-          this.deduplicationId,
-          this.priority,
-          this.queuePartitionKey,
-          this.delay,
-          this.appVersion,
-          true,
-          false,
-          this.serialization);
-    }
-
-    public ExecutionOptions asDequeuedRequest() {
-      return new ExecutionOptions(
-          this.workflowId,
-          this.timeout,
-          this.deadline,
-          this.queueName,
-          this.deduplicationId,
-          this.priority,
-          this.queuePartitionKey,
-          this.delay,
-          this.appVersion,
-          false,
-          true,
-          this.serialization);
-    }
-
-    public ExecutionOptions withSerialization(String serialization) {
-      return new ExecutionOptions(
-          this.workflowId,
-          this.timeout,
-          this.deadline,
-          this.queueName,
-          this.deduplicationId,
-          this.priority,
-          this.queuePartitionKey,
-          this.delay,
-          this.appVersion,
-          this.isRecoveryRequest,
-          this.isDequeuedRequest,
-          serialization);
-    }
-
-    public Duration timeoutDuration() {
-      if (timeout instanceof Timeout.Explicit e) {
-        return e.value();
-      }
-      return null;
-    }
   }
 
   public <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
@@ -1627,8 +1457,8 @@ public class DBOSExecutor implements AutoCloseable {
             parent,
             options.timeoutDuration(),
             options.deadline(),
-            options.isRecoveryRequest,
-            options.isDequeuedRequest,
+            options.isRecoveryRequest(),
+            options.isDequeuedRequest(),
             options.serialization(),
             this.serializer);
     if (!initResult.shouldExecuteOnThisExecutor()) {
@@ -1752,7 +1582,7 @@ public class DBOSExecutor implements AutoCloseable {
     if (Objects.requireNonNull(options.queueName(), "queueName must not be null").isEmpty()) {
       throw new IllegalArgumentException("queueName cannot be empty");
     }
-    if (options.queuePartitionKey != null && options.deduplicationId != null) {
+    if (options.queuePartitionKey() != null && options.deduplicationId() != null) {
       throw new IllegalArgumentException(
           "queuePartitionKey and deduplicationId cannot both be set");
     }
@@ -1780,26 +1610,26 @@ public class DBOSExecutor implements AutoCloseable {
           maxRetries,
           positionalArgs,
           namedArgs,
-          options.workflowId,
-          options.queueName,
-          options.deduplicationId,
-          options.priority,
-          options.queuePartitionKey,
-          options.delay,
+          options.workflowId(),
+          options.queueName(),
+          options.deduplicationId(),
+          options.priority(),
+          options.queuePartitionKey(),
+          options.delay(),
           executorId,
           appVersion,
           appId,
           parent,
           options.timeoutDuration(),
-          options.deadline,
-          options.isRecoveryRequest,
-          options.isDequeuedRequest,
-          options.serialization,
+          options.deadline(),
+          options.isRecoveryRequest(),
+          options.isDequeuedRequest(),
+          options.serialization(),
           serializer);
-      return options.workflowId;
+      return options.workflowId();
     } catch (DBOSWorkflowExecutionConflictException e) {
-      logger.debug("Workflow execution conflict for workflowId {}", options.workflowId);
-      return options.workflowId;
+      logger.debug("Workflow execution conflict for workflowId {}", options.workflowId());
+      return options.workflowId();
     } catch (DBOSQueueDuplicatedException e) {
       logger.debug(
           "Workflow queue {} reused deduplicationId {}", e.queueName(), e.deduplicationId());
@@ -1890,5 +1720,38 @@ public class DBOSExecutor implements AutoCloseable {
     }
 
     return initResult[0];
+  }
+
+  private void postInvokeWorkflowResult(
+      SystemDatabase systemDatabase, String workflowId, Object result, String serialization) {
+
+    var serialized = SerializationUtil.serializeValue(result, serialization, this.serializer);
+    systemDatabase.recordWorkflowOutput(workflowId, serialized.serializedValue());
+  }
+
+  private void postInvokeWorkflowError(
+      SystemDatabase systemDatabase, String workflowId, Throwable error, String serialization) {
+
+    var serialized = SerializationUtil.serializeError(error, serialization, this.serializer);
+    systemDatabase.recordWorkflowError(workflowId, serialized.serializedValue());
+  }
+
+  private void validateWorkflow(String workflowName, String className) {
+    validateWorkflow(workflowName, className, "");
+  }
+
+  private void validateWorkflow(String workflowName, String className, String instanceName) {
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
+    if (!workflowMap.containsKey(fqName)) {
+      throw new IllegalStateException("Workflow function %s is not registered".formatted(fqName));
+    }
+  }
+
+  private void validateQueue(String queueName) {
+    if (queueName != null) {
+      getQueue(queueName)
+          .orElseThrow(
+              () -> new IllegalStateException("Queue %s is not registered".formatted(queueName)));
+    }
   }
 }

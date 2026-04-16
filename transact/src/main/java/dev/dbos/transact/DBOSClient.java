@@ -7,6 +7,7 @@ import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.ExecutionOptions;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
@@ -544,7 +545,7 @@ public class DBOSClient implements AutoCloseable {
             null,
             positionalArgs,
             namedArgs,
-            new DBOSExecutor.ExecutionOptions(
+            new ExecutionOptions(
                 Objects.requireNonNullElseGet(
                     options.workflowId(), () -> UUID.randomUUID().toString()),
                 Timeout.of(options.timeout()),
