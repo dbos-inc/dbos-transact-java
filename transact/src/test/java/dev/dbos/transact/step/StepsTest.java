@@ -8,6 +8,7 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.*;
 
+import java.time.Duration;
 import java.util.List;
 
 import org.junit.jupiter.api.*;
@@ -290,9 +291,8 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
                     throw new Exception("Will not ever run");
                   },
                   new StepOptions("inlineStepWithRetries")
-                      .withRetriesAllowed(true)
                       .withMaxAttempts(2)
-                      .withIntervalSeconds(0.01)
+                      .withRetryInterval(Duration.ofMillis(100))
                       .withBackoffRate(2.0));
       ;
     } catch (Exception e) {

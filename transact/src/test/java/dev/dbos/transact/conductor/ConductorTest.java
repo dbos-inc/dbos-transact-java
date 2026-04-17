@@ -41,7 +41,6 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.WorkflowStream;
-import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
@@ -1540,12 +1539,13 @@ public class ConductorTest {
     testServer.setListener(listener);
     String executorId = "exec-id";
     String appVersion = "app-version";
+    var executorIds = List.of(executorId);
 
-    List<GetPendingWorkflowsOutput> outputs = new ArrayList<>();
-    outputs.add(new GetPendingWorkflowsOutput("wf-1", null));
-    outputs.add(new GetPendingWorkflowsOutput("wf-2", "queue"));
+    List<WorkflowStatus> outputs = new ArrayList<>();
+    outputs.add(new WorkflowStatusBuilder("wf-1").build());
+    outputs.add(new WorkflowStatusBuilder("wf-2").queueName("queue").build());
 
-    when(mockDB.getPendingWorkflows(executorId, appVersion)).thenReturn(outputs);
+    when(mockDB.getPendingWorkflows(executorIds, appVersion)).thenReturn(outputs);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1557,7 +1557,7 @@ public class ConductorTest {
       listener.send(MessageType.EXIST_PENDING_WORKFLOWS, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getPendingWorkflows(executorId, appVersion);
+      verify(mockDB).getPendingWorkflows(executorIds, appVersion);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1573,9 +1573,9 @@ public class ConductorTest {
     testServer.setListener(listener);
     String executorId = "exec-id";
     String appVersion = "app-version";
+    var executorIds = List.of(executorId);
 
-    List<GetPendingWorkflowsOutput> outputs = new ArrayList<>();
-    when(mockDB.getPendingWorkflows(executorId, appVersion)).thenReturn(outputs);
+    when(mockDB.getPendingWorkflows(executorIds, appVersion)).thenReturn(List.of());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1593,7 +1593,7 @@ public class ConductorTest {
       listener.send(MessageType.EXIST_PENDING_WORKFLOWS, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getPendingWorkflows(executorId, appVersion);
+      verify(mockDB).getPendingWorkflows(executorIds, appVersion);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);

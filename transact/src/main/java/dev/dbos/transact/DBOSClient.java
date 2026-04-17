@@ -7,6 +7,7 @@ import dev.dbos.transact.database.Result;
 import dev.dbos.transact.database.StreamIterator;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.execution.ExecutionOptions;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.PortableWorkflowException;
 import dev.dbos.transact.json.SerializationUtil;
@@ -537,33 +538,34 @@ public class DBOSClient implements AutoCloseable {
     }
 
     var workflowId =
-        DBOSExecutor.enqueueWorkflow(
-            options.workflowName(),
-            options.className(),
-            options.instanceName(),
-            null,
-            positionalArgs,
-            namedArgs,
-            new DBOSExecutor.ExecutionOptions(
-                Objects.requireNonNullElseGet(
-                    options.workflowId(), () -> UUID.randomUUID().toString()),
-                Timeout.of(options.timeout()),
-                options.deadline,
-                options.queueName(),
-                options.deduplicationId,
-                options.priority,
-                options.queuePartitionKey,
-                options.delay,
-                options.appVersion,
-                false,
-                false,
-                serializationFormat),
-            null,
-            null,
-            null,
-            null,
-            systemDatabase,
-            this.serializer);
+        Objects.requireNonNullElseGet(options.workflowId(), () -> UUID.randomUUID().toString());
+
+    DBOSExecutor.enqueueWorkflow(
+        options.workflowName(),
+        options.className(),
+        options.instanceName(),
+        null,
+        positionalArgs,
+        namedArgs,
+        new ExecutionOptions(
+            workflowId,
+            Timeout.of(options.timeout()),
+            options.deadline,
+            options.queueName(),
+            options.deduplicationId,
+            options.priority,
+            options.queuePartitionKey,
+            options.delay,
+            options.appVersion,
+            false,
+            false,
+            serializationFormat),
+        null,
+        null,
+        null,
+        null,
+        systemDatabase,
+        this.serializer);
 
     return new WorkflowHandleClient<>(workflowId);
   }

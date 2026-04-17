@@ -12,7 +12,6 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
-import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.sql.*;
 import java.time.Instant;
@@ -97,13 +96,15 @@ class RecoveryServiceTest {
 
       setWorkflowStateToPending(dataSource);
 
-      List<GetPendingWorkflowsOutput> pending =
-          systemDatabase.getPendingWorkflows(dbosExecutor.executorId(), dbosExecutor.appVersion());
+      var pending =
+          systemDatabase.getPendingWorkflows(
+              List.of(dbosExecutor.executorId()), dbosExecutor.appVersion());
 
       assertEquals(5, pending.size());
 
-      for (GetPendingWorkflowsOutput output : pending) {
-        WorkflowHandle<?, ?> handle = dbosExecutor.recoverWorkflow(output);
+      for (var output : pending) {
+        WorkflowHandle<?, ?> handle =
+            dbosExecutor.recoverWorkflow(output.workflowId(), output.queueName());
         handle.getResult();
         assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
       }
