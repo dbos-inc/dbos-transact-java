@@ -1161,9 +1161,8 @@ public class DBOSExecutor implements AutoCloseable {
     var className = WorkflowRegistry.getWorkflowClassName(target);
     var workflowName = WorkflowRegistry.getWorkflowName(wfTag, method);
 
-    // If the hook holder is set, we're invoking the workflow from startWorkflow.
-    // In this case, we provide the workflow invocation info and return a default value without
-    // execution
+    // If the hook holder is set, we're invoking the workflow from startWorkflow. In this case,
+    // provide the workflow invocation info and return a default value without execution
     var hook = hookHolder.get();
     if (hook != null) {
       hook.accept(new Invocation(this, workflowName, className, instanceName, args));
@@ -1179,7 +1178,6 @@ public class DBOSExecutor implements AutoCloseable {
         if (type == double.class) return 0d;
         if (type == char.class) return '\0';
       }
-
       return null;
     }
 
@@ -1267,6 +1265,12 @@ public class DBOSExecutor implements AutoCloseable {
                     new IllegalStateException(
                         "No registered workflow found for %s".formatted(invocation.fqName())));
 
+    return startRegisteredWorkflow(workflow, invocation.args, options);
+  }
+
+  // start a registered workflow, separated out so it can be used by event listeners
+  public <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
+      RegisteredWorkflow workflow, Object[] args, StartWorkflowOptions options) {
     var ctx = DBOSContextHolder.get();
     var parent = getParent(ctx);
     var childWorkflowId =
@@ -1299,27 +1303,7 @@ public class DBOSExecutor implements AutoCloseable {
             false,
             false,
             null);
-    return executeWorkflow(workflow, invocation.args(), execOptions, parent);
-  }
-
-  // start a registered workflow, used by event listeners
-  public <T, E extends Exception> WorkflowHandle<T, E> startRegisteredWorkflow(
-      RegisteredWorkflow regWorkflow, Object[] args, StartWorkflowOptions options) {
-    var execOptions =
-        new ExecutionOptions(
-            options != null ? options.workflowId() : null,
-            options != null ? options.timeout() : null,
-            options != null ? options.deadline() : null,
-            options != null ? options.queueName() : null,
-            options != null ? options.deduplicationId() : null,
-            options != null ? options.priority() : null,
-            options != null ? options.queuePartitionKey() : null,
-            options != null ? options.delay() : null,
-            options != null ? options.appVersion() : null,
-            false,
-            false,
-            null);
-    return executeWorkflow(regWorkflow, args, execOptions, null);
+    return executeWorkflow(workflow, args, execOptions, parent);
   }
 
   // run an existing workflow via its workflow ID
