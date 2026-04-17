@@ -4,6 +4,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 
 import java.util.List;
+import java.util.Objects;
 
 import javax.sql.DataSource;
 
@@ -86,6 +87,7 @@ public class DBOSAutoConfiguration {
 
   private DBOSConfig buildConfig(DBOSProperties props, String springAppName) {
     String appName = props.getAppName() != null ? props.getAppName() : springAppName;
+    Objects.requireNonNull(appName, "netiher dbos.app-name nor spring.application.name are set");
     DBOSConfig config = DBOSConfig.defaults(appName);
 
     DBOSProperties.Datasource ds = props.getDatasource();

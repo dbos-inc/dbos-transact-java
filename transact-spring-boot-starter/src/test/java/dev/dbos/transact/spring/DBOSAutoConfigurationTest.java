@@ -146,6 +146,67 @@ class DBOSAutoConfigurationTest {
   }
 
   @Test
+  void springApplicationNameUsedWhenDbosAppNameAbsent() {
+    new ApplicationContextRunner()
+        .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
+        .withPropertyValues("spring.application.name=my-spring-app")
+        .withBean(DBOS.class, () -> mock(DBOS.class))
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              assertThat(context.getBean(DBOSConfig.class).appName()).isEqualTo("my-spring-app");
+            });
+  }
+
+  @Test
+  void dbosAppNameTakesPrecedenceOverSpringApplicationName() {
+    new ApplicationContextRunner()
+        .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
+        .withPropertyValues("dbos.app-name=dbos-app", "spring.application.name=spring-app")
+        .withBean(DBOS.class, () -> mock(DBOS.class))
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              assertThat(context.getBean(DBOSConfig.class).appName()).isEqualTo("dbos-app");
+            });
+  }
+
+  @Test
+  void appNameNullFails() {
+    new ApplicationContextRunner()
+        .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
+        .withBean(DBOS.class, () -> mock(DBOS.class))
+        // no dbos.app-name, no spring.application.name
+        .run(context -> assertThat(context).hasFailed());
+  }
+
+  @Test
+  void datasourceUrlTakesPrecedenceOverDataSourceBean() {
+    runner
+        .withPropertyValues("dbos.datasource.url=jdbc:postgresql://localhost/db")
+        .withBean(DataSource.class, () -> mock(DataSource.class))
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              var config = context.getBean(DBOSConfig.class);
+              assertThat(config.databaseUrl()).isEqualTo("jdbc:postgresql://localhost/db");
+              assertThat(config.dataSource()).isNull();
+            });
+  }
+
+  @Test
+  void customizerThatThrowsFails() {
+    runner
+        .withBean(
+            DBOSConfigCustomizer.class,
+            () ->
+                config -> {
+                  throw new RuntimeException("customizer failed");
+                })
+        .run(context -> assertThat(context).hasFailed());
+  }
+
+  @Test
   void dataSourceBeanIsUsedWhenNoDatasourceUrlConfigured() {
     // When a DataSource bean is present and no dbos.datasource.url is set,
     // the DBOS instance should be created using that DataSource (no databaseUrl required).

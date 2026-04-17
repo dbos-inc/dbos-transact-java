@@ -1,7 +1,6 @@
 package dev.dbos.transact.spring;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.StepOptions;
 import dev.dbos.transact.workflow.Workflow;
@@ -61,8 +60,6 @@ public class DBOSAspect {
 
   private final DBOS dbos;
   private final ApplicationContext applicationContext;
-  private final ConcurrentHashMap<Method, RegisteredWorkflow> workflowCache =
-      new ConcurrentHashMap<>();
   private final ConcurrentHashMap<Method, StepOptions> stepCache = new ConcurrentHashMap<>();
 
   public DBOSAspect(DBOS dbos, ApplicationContext applicationContext) {

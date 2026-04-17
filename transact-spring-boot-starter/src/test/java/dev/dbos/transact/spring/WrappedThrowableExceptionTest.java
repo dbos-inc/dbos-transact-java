@@ -1,7 +1,6 @@
 package dev.dbos.transact.spring;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -26,8 +25,8 @@ class WrappedThrowableExceptionTest {
   @Test
   void rejectsException() {
     var ex = new RuntimeException("not an error");
-    var thrown =
-        assertThrows(IllegalArgumentException.class, () -> new WrappedThrowableException(ex));
-    assertNotNull(thrown);
+    // assertThrows(IllegalArgumentException.class, ...) is itself proof the guard fired before
+    // construction — a WrappedThrowableException would not satisfy this assertion.
+    assertThrows(IllegalArgumentException.class, () -> new WrappedThrowableException(ex));
   }
 }

@@ -6,10 +6,13 @@ import dev.dbos.transact.workflow.Workflow;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,13 +64,23 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
       try {
         bean = applicationContext.getBean(beanName);
       } catch (Exception e) {
-        logger.debug("Skipping bean '{}' during DBOS workflow scan: {}", beanName, e.getMessage());
+        logger.warn("Skipping bean '{}' during DBOS workflow scan: {}", beanName, e.getMessage());
         continue;
       }
 
       Class<?> targetClass = AopUtils.getTargetClass(bean);
       if (!hasWorkflowsOrSteps(targetClass)) {
         continue;
+      }
+
+      if (!applicationContext.isSingleton(beanName)) {
+        throw new IllegalStateException(
+            "Bean '"
+                + beanName
+                + "' ("
+                + targetClass.getName()
+                + ") has @Workflow or @Step methods but is not a singleton. "
+                + "DBOS requires singleton beans for durable execution and workflow recovery.");
       }
 
       // Unwrap the Spring AOP proxy to obtain the raw target. DBOS stores this reference and
@@ -106,10 +119,17 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
             targetClass.getName(),
             registerName);
 
-        for (var method : targetClass.getDeclaredMethods()) {
-          var wfTag = method.getAnnotation(Workflow.class);
-          if (wfTag != null) {
-            dbos.registerWorkflow(wfTag, rawTarget, method, registerName);
+        Set<String> seen = new HashSet<>();
+        for (Class<?> c = targetClass; c != null && c != Object.class; c = c.getSuperclass()) {
+          for (var method : c.getDeclaredMethods()) {
+            String sig = method.getName() + Arrays.toString(method.getParameterTypes());
+            if (!seen.add(sig)) {
+              continue;
+            }
+            var wfTag = method.getAnnotation(Workflow.class);
+            if (wfTag != null) {
+              dbos.registerWorkflow(wfTag, rawTarget, method, registerName);
+            }
           }
         }
       }
@@ -142,9 +162,13 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
   }
 
   private static boolean hasWorkflowsOrSteps(Class<?> targetClass) {
-    for (Method method : Objects.requireNonNull(targetClass).getDeclaredMethods()) {
-      if (method.isAnnotationPresent(Workflow.class) || method.isAnnotationPresent(Step.class)) {
-        return true;
+    for (Class<?> c = Objects.requireNonNull(targetClass);
+        c != null && c != Object.class;
+        c = c.getSuperclass()) {
+      for (Method method : c.getDeclaredMethods()) {
+        if (method.isAnnotationPresent(Workflow.class) || method.isAnnotationPresent(Step.class)) {
+          return true;
+        }
       }
     }
     return false;

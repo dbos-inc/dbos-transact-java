@@ -20,12 +20,15 @@ public class WrappedThrowableException extends RuntimeException {
    */
   public WrappedThrowableException(Throwable wrappedThrowable) {
     super(
-        "Wrapped non-Exception throwable: " + wrappedThrowable.getClass().getSimpleName(),
+        "Wrapped non-Exception throwable: " + validate(wrappedThrowable).getClass().getSimpleName(),
         wrappedThrowable);
+  }
 
-    if (wrappedThrowable instanceof Exception) {
+  private static Throwable validate(Throwable t) {
+    if (t instanceof Exception) {
       throw new IllegalArgumentException("Should not wrap Exception types, only Error types");
     }
+    return t;
   }
 
   /**
