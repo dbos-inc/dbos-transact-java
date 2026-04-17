@@ -169,16 +169,7 @@ public class DBOSAspect {
    */
   @Around("@annotation(step)")
   public Object aroundStep(ProceedingJoinPoint pjp, Step step) throws Throwable {
-    var stepOptions =
-        stepCache.computeIfAbsent(
-            getMethod(pjp),
-            m ->
-                new StepOptions(
-                    step.name().isEmpty() ? getMethodName(pjp) : step.name(),
-                    step.retriesAllowed(),
-                    step.maxAttempts(),
-                    step.intervalSeconds(),
-                    step.backOffRate()));
+    var stepOptions = stepCache.computeIfAbsent(getMethod(pjp), m -> StepOptions.create(step, m));
 
     logger.debug("Intercepting @Step {}", stepOptions.name());
     try {
