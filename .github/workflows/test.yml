@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        jdk-version: ['17', '21', '25']
+        jdk-version: ['17', '21', '25', '26']
         jdk-distro: ['graalvm', 'microsoft', 'oracle', 'temurin' ]
         exclude:
           - jdk-distro: graalvm
