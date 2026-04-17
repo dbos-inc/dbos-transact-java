@@ -9,6 +9,7 @@ import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
+import dev.dbos.transact.internal.DBOSIntegration;
 import dev.dbos.transact.internal.DBOSInvocationHandler;
 import dev.dbos.transact.internal.QueueRegistry;
 import dev.dbos.transact.internal.WorkflowRegistry;
@@ -64,6 +65,7 @@ public class DBOS implements AutoCloseable {
   private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
   private final DBOSConfig config;
   private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
+  private final DBOSIntegration integration = new DBOSIntegration(dbosExecutor::get);
 
   private AlertHandler alertHandler;
 
@@ -418,20 +420,17 @@ public class DBOS implements AutoCloseable {
   }
 
   /**
-   * Execute a workflow based on registration and arguments. This is expected to be used by event
-   * listeners, not app code.
+   * Returns the DBOS integration APIs for use by specialized integrations such as AOP aspects and
+   * event listeners.
    *
-   * @param regWorkflow Registration of the workflow. @see getRegisteredWorkflows
-   * @param args Workflow function arguments
-   * @param options Execution options, such as ID, queue, and timeout/deadline
-   * @return WorkflowHandle to the executed workflow
+   * <p>The returned {@link DBOSIntegration} instance is <strong>not part of the primary public
+   * API</strong> and may change without notice. Application code should use the methods on this
+   * class directly instead.
+   *
+   * @return the {@link DBOSIntegration} accessor for this DBOS instance
    */
-  public WorkflowHandle<?, ?> startRegisteredWorkflow(
-      @NonNull RegisteredWorkflow regWorkflow,
-      @NonNull Object[] args,
-      @Nullable StartWorkflowOptions options) {
-    return ensureLaunched("startRegisteredWorkflow")
-        .startRegisteredWorkflow(regWorkflow, args, options);
+  public @NonNull DBOSIntegration integration() {
+    return integration;
   }
 
   /**

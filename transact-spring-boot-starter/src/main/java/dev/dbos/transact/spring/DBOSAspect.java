@@ -1,7 +1,6 @@
 package dev.dbos.transact.spring;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.StepOptions;
@@ -9,7 +8,6 @@ import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 
 import java.lang.reflect.Method;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -132,34 +130,10 @@ public class DBOSAspect {
    */
   @Around("@annotation(workflow)")
   public Object aroundWorkflow(ProceedingJoinPoint pjp, Workflow workflow) throws Throwable {
-    var regWf =
-        workflowCache.computeIfAbsent(
-            getMethod(pjp),
-            m -> {
-              var target = pjp.getTarget();
-              var klass = target.getClass();
-              var classTag = klass.getAnnotation(WorkflowClassName.class);
-              var className =
-                  (classTag == null || classTag.value().isEmpty())
-                      ? klass.getName()
-                      : classTag.value();
-              var instanceName = resolveInstanceName(klass, target);
-              var workflowName = workflow.name().isEmpty() ? getMethodName(pjp) : workflow.name();
-              // TODO: pass instanceName to getRegisteredWorkflow once that API is updated
-              return dbos.getRegisteredWorkflow(workflowName, className, instanceName)
-                  .orElseThrow(
-                      () ->
-                          new IllegalStateException(
-                              "No registered workflow found for %s.%s (instance='%s')"
-                                  .formatted(className, workflowName, instanceName)));
-            });
-
-    logger.debug("Intercepting @Workflow {}", regWf.fullyQualifiedName());
-    // TODO: WorkflowOptions support for DBOSAspect
-    var handle =
-        dbos.startRegisteredWorkflow(
-            regWf, pjp.getArgs(), new StartWorkflowOptions(UUID.randomUUID().toString()));
-    return handle.getResult();
+    var target = pjp.getTarget();
+    var instanceName = resolveInstanceName(target.getClass(), target);
+    return dbos.integration()
+        .runWorkflow(target, instanceName, getMethod(pjp), pjp.getArgs(), workflow);
   }
 
   /**
