@@ -16,6 +16,10 @@ jobs:
         exclude:
           - jdk-distro: graalvm
             jdk-version: 17
+          - jdk-distro: graalvm
+            jdk-version: 26
+          - jdk-distro: microsoft
+            jdk-version: 26
         include:
           - jdk-distro: graalvm
             jdk-version: 17.0.12
