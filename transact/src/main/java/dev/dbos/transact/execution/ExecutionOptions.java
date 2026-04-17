@@ -8,6 +8,9 @@ import dev.dbos.transact.workflow.Timeout;
 import java.time.Duration;
 import java.time.Instant;
 
+// Internal execution options record. External API specific records such as StartWorkflowOptions,
+// WorkflowOptions and DBOSClient.EnqueueOptions are converted to ExecutionOptions before execution.
+
 public record ExecutionOptions(
     String workflowId,
     Timeout timeout,

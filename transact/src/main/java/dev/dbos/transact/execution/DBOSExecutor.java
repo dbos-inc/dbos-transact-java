@@ -75,6 +75,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -89,7 +90,7 @@ public class DBOSExecutor implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(DBOSExecutor.class);
 
-  // Invocation, StartWorkflowHook and hookHolder all used by startWorkflow to capture
+  // Invocation and hookHolder are used by startWorkflow to capture
   // workflow information w/o executing workflow function
 
   record Invocation(
@@ -104,12 +105,7 @@ public class DBOSExecutor implements AutoCloseable {
     }
   }
 
-  @FunctionalInterface
-  interface StartWorkflowHook {
-    void invoke(Invocation invocation);
-  }
-
-  private static final ThreadLocal<StartWorkflowHook> hookHolder = new ThreadLocal<>();
+  private static final ThreadLocal<Consumer<Invocation>> hookHolder = new ThreadLocal<>();
 
   private final DBOSConfig config;
   private final DBOSSerializer serializer;
@@ -1170,7 +1166,7 @@ public class DBOSExecutor implements AutoCloseable {
     // execution
     var hook = hookHolder.get();
     if (hook != null) {
-      hook.invoke(new Invocation(this, workflowName, className, instanceName, args));
+      hook.accept(new Invocation(this, workflowName, className, instanceName, args));
       var type = method.getReturnType();
       if (type.isPrimitive()) {
         if (type == void.class) return null;

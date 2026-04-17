@@ -9,8 +9,7 @@ public class DBOSContextHolder {
       ThreadLocal.withInitial(DBOSContext::new);
 
   public static @NonNull DBOSContext get() {
-    // contextHolder should always be non null. Even if cleared, it should be set to the initial
-    // value.
+    // contextHolder is never null. Even if cleared, it gets set back to the initial value.
     return Objects.requireNonNull(contextHolder.get());
   }
 
