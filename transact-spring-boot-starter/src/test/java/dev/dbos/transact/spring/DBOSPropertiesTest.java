@@ -74,24 +74,21 @@ class DBOSPropertiesTest {
 
   @Test
   void bindsAdminServerProperties() {
-    var props =
-        bind(Map.of("dbos.admin-server.enabled", "true", "dbos.admin-server.port", "9090"));
+    var props = bind(Map.of("dbos.admin-server.enabled", "true", "dbos.admin-server.port", "9090"));
     assertTrue(props.getAdminServer().isEnabled());
     assertEquals(9090, props.getAdminServer().getPort());
   }
 
   @Test
   void bindsMigrateAndPatching() {
-    var props =
-        bind(Map.of("dbos.datasource.migrate", "false", "dbos.enable-patching", "true"));
+    var props = bind(Map.of("dbos.datasource.migrate", "false", "dbos.enable-patching", "true"));
     assertFalse(props.getDatasource().isMigrate());
     assertTrue(props.isEnablePatching());
   }
 
   @Test
   void bindsConductorProperties() {
-    var props =
-        bind(Map.of("dbos.conductor.key", "my-key", "dbos.conductor.domain", "my-domain"));
+    var props = bind(Map.of("dbos.conductor.key", "my-key", "dbos.conductor.domain", "my-domain"));
     assertEquals("my-key", props.getConductor().getKey());
     assertEquals("my-domain", props.getConductor().getDomain());
   }

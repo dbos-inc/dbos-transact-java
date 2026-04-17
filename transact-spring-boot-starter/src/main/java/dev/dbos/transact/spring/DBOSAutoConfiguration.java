@@ -87,9 +87,7 @@ public class DBOSAutoConfiguration {
 
   private DBOSConfig buildConfig(DBOSProperties props, String springAppName) {
     String appName =
-        props.getApplication().getName() != null
-            ? props.getApplication().getName()
-            : springAppName;
+        props.getApplication().getName() != null ? props.getApplication().getName() : springAppName;
     Objects.requireNonNull(
         appName, "neither dbos.application.name nor spring.application.name are set");
     DBOSConfig config = DBOSConfig.defaults(appName);
