@@ -10,8 +10,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "dbos")
 public class DBOSProperties {
 
-  /** Application name. Required. */
-  private String appName;
+  /** Application identity: name (required) and version. */
+  private Application application = new Application();
 
   /**
    * Dedicated datasource for the DBOS system database. When not set, DBOS will use the
@@ -19,29 +19,14 @@ public class DBOSProperties {
    */
   private Datasource datasource = new Datasource();
 
-  /** Whether to enable the DBOS admin HTTP server. Defaults to {@code false}. */
-  private boolean adminServer = false;
+  /** DBOS Cloud conductor connection settings. */
+  private Conductor conductor = new Conductor();
 
-  /** Port for the DBOS admin HTTP server. Defaults to {@code 3001}. */
-  private int adminServerPort = 3001;
-
-  /** Whether to run database migrations on startup. Defaults to {@code true}. */
-  private boolean migrate = true;
-
-  /** DBOS Cloud conductor API key. */
-  private String conductorKey;
-
-  /** DBOS Cloud conductor domain. */
-  private String conductorDomain;
-
-  /** Application version string. */
-  private String appVersion;
+  /** Admin HTTP server settings. */
+  private AdminServer adminServer = new AdminServer();
 
   /** Executor ID for this instance. */
   private String executorId;
-
-  /** Database schema name for DBOS system tables. */
-  private String databaseSchema;
 
   /** Whether to enable workflow patching. Defaults to {@code false}. */
   private boolean enablePatching = false;
@@ -51,6 +36,84 @@ public class DBOSProperties {
 
   /** Polling interval for the workflow scheduler. */
   private Duration schedulerPollingInterval;
+
+  /** Admin HTTP server properties. */
+  public static class AdminServer {
+
+    /** Whether to enable the admin HTTP server. Defaults to {@code false}. */
+    private boolean enabled;
+
+    /** Port for the admin HTTP server. Defaults to {@code 3001}. */
+    private int port = 3001;
+
+    public boolean isEnabled() {
+      return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+      this.enabled = enabled;
+    }
+
+    public int getPort() {
+      return port;
+    }
+
+    public void setPort(int port) {
+      this.port = port;
+    }
+  }
+
+  /** Application identity properties. */
+  public static class Application {
+
+    /** Application name. Required if {@code spring.application.name} is not set. */
+    private String name;
+
+    /** Application version string. */
+    private String version;
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+
+    public String getVersion() {
+      return version;
+    }
+
+    public void setVersion(String version) {
+      this.version = version;
+    }
+  }
+
+  /** DBOS Cloud conductor connection properties. */
+  public static class Conductor {
+
+    /** Conductor API key. */
+    private String key;
+
+    /** Conductor domain. */
+    private String domain;
+
+    public String getKey() {
+      return key;
+    }
+
+    public void setKey(String key) {
+      this.key = key;
+    }
+
+    public String getDomain() {
+      return domain;
+    }
+
+    public void setDomain(String domain) {
+      this.domain = domain;
+    }
+  }
 
   /** Dedicated datasource configuration for the DBOS system database. */
   public static class Datasource {
@@ -63,6 +126,12 @@ public class DBOSProperties {
 
     /** Database password. */
     private String password;
+
+    /** Database schema name for DBOS system tables. */
+    private String schema;
+
+    /** Whether to run database migrations on startup. Defaults to {@code true}. */
+    private boolean migrate = true;
 
     public String getUrl() {
       return url;
@@ -87,14 +156,30 @@ public class DBOSProperties {
     public void setPassword(String password) {
       this.password = password;
     }
+
+    public String getSchema() {
+      return schema;
+    }
+
+    public void setSchema(String schema) {
+      this.schema = schema;
+    }
+
+    public boolean isMigrate() {
+      return migrate;
+    }
+
+    public void setMigrate(boolean migrate) {
+      this.migrate = migrate;
+    }
   }
 
-  public String getAppName() {
-    return appName;
+  public Application getApplication() {
+    return application;
   }
 
-  public void setAppName(String appName) {
-    this.appName = appName;
+  public void setApplication(Application application) {
+    this.application = application;
   }
 
   public Datasource getDatasource() {
@@ -105,52 +190,20 @@ public class DBOSProperties {
     this.datasource = datasource;
   }
 
-  public boolean isAdminServer() {
+  public AdminServer getAdminServer() {
     return adminServer;
   }
 
-  public void setAdminServer(boolean adminServer) {
+  public void setAdminServer(AdminServer adminServer) {
     this.adminServer = adminServer;
   }
 
-  public int getAdminServerPort() {
-    return adminServerPort;
+  public Conductor getConductor() {
+    return conductor;
   }
 
-  public void setAdminServerPort(int adminServerPort) {
-    this.adminServerPort = adminServerPort;
-  }
-
-  public boolean isMigrate() {
-    return migrate;
-  }
-
-  public void setMigrate(boolean migrate) {
-    this.migrate = migrate;
-  }
-
-  public String getConductorKey() {
-    return conductorKey;
-  }
-
-  public void setConductorKey(String conductorKey) {
-    this.conductorKey = conductorKey;
-  }
-
-  public String getConductorDomain() {
-    return conductorDomain;
-  }
-
-  public void setConductorDomain(String conductorDomain) {
-    this.conductorDomain = conductorDomain;
-  }
-
-  public String getAppVersion() {
-    return appVersion;
-  }
-
-  public void setAppVersion(String appVersion) {
-    this.appVersion = appVersion;
+  public void setConductor(Conductor conductor) {
+    this.conductor = conductor;
   }
 
   public String getExecutorId() {
@@ -159,14 +212,6 @@ public class DBOSProperties {
 
   public void setExecutorId(String executorId) {
     this.executorId = executorId;
-  }
-
-  public String getDatabaseSchema() {
-    return databaseSchema;
-  }
-
-  public void setDatabaseSchema(String databaseSchema) {
-    this.databaseSchema = databaseSchema;
   }
 
   public boolean isEnablePatching() {

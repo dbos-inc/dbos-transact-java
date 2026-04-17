@@ -20,7 +20,7 @@ class DBOSAutoConfigurationTest {
   private final ApplicationContextRunner runner =
       new ApplicationContextRunner()
           .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
-          .withPropertyValues("dbos.app-name=test-app")
+          .withPropertyValues("dbos.application.name=test-app")
           .withBean(DBOS.class, () -> mock(DBOS.class));
 
   @Test
@@ -64,14 +64,14 @@ class DBOSAutoConfigurationTest {
   void dbosConfigReflectsOptionalProperties() {
     runner
         .withPropertyValues(
-            "dbos.conductor-key=my-key",
-            "dbos.conductor-domain=my-domain",
-            "dbos.app-version=1.2.3",
+            "dbos.conductor.key=my-key",
+            "dbos.conductor.domain=my-domain",
+            "dbos.application.version=1.2.3",
             "dbos.executor-id=exec-1",
-            "dbos.database-schema=my_schema",
-            "dbos.admin-server=true",
-            "dbos.admin-server-port=9090",
-            "dbos.migrate=false",
+            "dbos.datasource.schema=my_schema",
+            "dbos.admin-server.enabled=true",
+            "dbos.admin-server.port=9090",
+            "dbos.datasource.migrate=false",
             "dbos.enable-patching=true",
             "dbos.listen-queues[0]=q1",
             "dbos.listen-queues[1]=q2")
@@ -108,7 +108,7 @@ class DBOSAutoConfigurationTest {
     var customDbos = mock(DBOS.class);
     new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
-        .withPropertyValues("dbos.app-name=test-app")
+        .withPropertyValues("dbos.application.name=test-app")
         .withBean("customDbos", DBOS.class, () -> customDbos)
         .run(
             context -> {
@@ -162,7 +162,7 @@ class DBOSAutoConfigurationTest {
   void dbosAppNameTakesPrecedenceOverSpringApplicationName() {
     new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
-        .withPropertyValues("dbos.app-name=dbos-app", "spring.application.name=spring-app")
+        .withPropertyValues("dbos.application.name=dbos-app", "spring.application.name=spring-app")
         .withBean(DBOS.class, () -> mock(DBOS.class))
         .run(
             context -> {
@@ -214,7 +214,7 @@ class DBOSAutoConfigurationTest {
     var mockDs = mock(DataSource.class);
     new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
-        .withPropertyValues("dbos.app-name=test-app")
+        .withPropertyValues("dbos.application.name=test-app")
         .withBean(DataSource.class, () -> mockDs)
         .withBean(
             DBOSAutoConfiguration.DBOSLifecycle.class,

@@ -86,8 +86,12 @@ public class DBOSAutoConfiguration {
   }
 
   private DBOSConfig buildConfig(DBOSProperties props, String springAppName) {
-    String appName = props.getAppName() != null ? props.getAppName() : springAppName;
-    Objects.requireNonNull(appName, "netiher dbos.app-name nor spring.application.name are set");
+    String appName =
+        props.getApplication().getName() != null
+            ? props.getApplication().getName()
+            : springAppName;
+    Objects.requireNonNull(
+        appName, "neither dbos.application.name nor spring.application.name are set");
     DBOSConfig config = DBOSConfig.defaults(appName);
 
     DBOSProperties.Datasource ds = props.getDatasource();
@@ -100,28 +104,28 @@ public class DBOSAutoConfiguration {
     if (ds.getPassword() != null) {
       config = config.withDbPassword(ds.getPassword());
     }
-    if (props.getConductorKey() != null) {
-      config = config.withConductorKey(props.getConductorKey());
+    if (props.getConductor().getKey() != null) {
+      config = config.withConductorKey(props.getConductor().getKey());
     }
-    if (props.getConductorDomain() != null) {
-      config = config.withConductorDomain(props.getConductorDomain());
+    if (props.getConductor().getDomain() != null) {
+      config = config.withConductorDomain(props.getConductor().getDomain());
     }
-    if (props.getAppVersion() != null) {
-      config = config.withAppVersion(props.getAppVersion());
+    if (props.getApplication().getVersion() != null) {
+      config = config.withAppVersion(props.getApplication().getVersion());
     }
     if (props.getExecutorId() != null) {
       config = config.withExecutorId(props.getExecutorId());
     }
-    if (props.getDatabaseSchema() != null) {
-      config = config.withDatabaseSchema(props.getDatabaseSchema());
+    if (props.getDatasource().getSchema() != null) {
+      config = config.withDatabaseSchema(props.getDatasource().getSchema());
     }
     if (props.getSchedulerPollingInterval() != null) {
       config = config.withSchedulerPollingInterval(props.getSchedulerPollingInterval());
     }
 
-    config = config.withAdminServer(props.isAdminServer());
-    config = config.withAdminServerPort(props.getAdminServerPort());
-    config = config.withMigrate(props.isMigrate());
+    config = config.withAdminServer(props.getAdminServer().isEnabled());
+    config = config.withAdminServerPort(props.getAdminServer().getPort());
+    config = config.withMigrate(props.getDatasource().isMigrate());
     config = config.withEnablePatching(props.isEnablePatching());
 
     List<String> listenQueues = props.getListenQueues();

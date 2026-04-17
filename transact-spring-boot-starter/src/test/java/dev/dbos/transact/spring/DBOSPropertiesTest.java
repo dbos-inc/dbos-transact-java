@@ -24,28 +24,39 @@ class DBOSPropertiesTest {
   @Test
   void defaults() {
     var props = new DBOSProperties();
-    assertNull(props.getAppName());
-    assertFalse(props.isAdminServer());
-    assertEquals(3001, props.getAdminServerPort());
-    assertTrue(props.isMigrate());
+    assertNotNull(props.getApplication());
+    assertNull(props.getApplication().getName());
+    assertNull(props.getApplication().getVersion());
+    assertNotNull(props.getAdminServer());
+    assertFalse(props.getAdminServer().isEnabled());
+    assertEquals(3001, props.getAdminServer().getPort());
+    assertTrue(props.getDatasource().isMigrate());
     assertFalse(props.isEnablePatching());
     assertTrue(props.getListenQueues().isEmpty());
-    assertNull(props.getConductorKey());
-    assertNull(props.getConductorDomain());
-    assertNull(props.getAppVersion());
+    assertNotNull(props.getConductor());
+    assertNull(props.getConductor().getKey());
+    assertNull(props.getConductor().getDomain());
     assertNull(props.getExecutorId());
-    assertNull(props.getDatabaseSchema());
+    assertNull(props.getDatasource().getSchema());
     assertNull(props.getSchedulerPollingInterval());
     assertNotNull(props.getDatasource());
     assertNull(props.getDatasource().getUrl());
     assertNull(props.getDatasource().getUsername());
     assertNull(props.getDatasource().getPassword());
+    assertNull(props.getDatasource().getSchema());
+    assertTrue(props.getDatasource().isMigrate());
   }
 
   @Test
-  void bindsAppName() {
-    var props = bind(Map.of("dbos.app-name", "my-app"));
-    assertEquals("my-app", props.getAppName());
+  void bindsApplicationName() {
+    var props = bind(Map.of("dbos.application.name", "my-app"));
+    assertEquals("my-app", props.getApplication().getName());
+  }
+
+  @Test
+  void bindsApplicationVersion() {
+    var props = bind(Map.of("dbos.application.version", "1.2.3"));
+    assertEquals("1.2.3", props.getApplication().getVersion());
   }
 
   @Test
@@ -63,36 +74,38 @@ class DBOSPropertiesTest {
 
   @Test
   void bindsAdminServerProperties() {
-    var props = bind(Map.of("dbos.admin-server", "true", "dbos.admin-server-port", "9090"));
-    assertTrue(props.isAdminServer());
-    assertEquals(9090, props.getAdminServerPort());
+    var props =
+        bind(Map.of("dbos.admin-server.enabled", "true", "dbos.admin-server.port", "9090"));
+    assertTrue(props.getAdminServer().isEnabled());
+    assertEquals(9090, props.getAdminServer().getPort());
   }
 
   @Test
   void bindsMigrateAndPatching() {
-    var props = bind(Map.of("dbos.migrate", "false", "dbos.enable-patching", "true"));
-    assertFalse(props.isMigrate());
+    var props =
+        bind(Map.of("dbos.datasource.migrate", "false", "dbos.enable-patching", "true"));
+    assertFalse(props.getDatasource().isMigrate());
     assertTrue(props.isEnablePatching());
   }
 
   @Test
   void bindsConductorProperties() {
-    var props = bind(Map.of("dbos.conductor-key", "my-key", "dbos.conductor-domain", "my-domain"));
-    assertEquals("my-key", props.getConductorKey());
-    assertEquals("my-domain", props.getConductorDomain());
+    var props =
+        bind(Map.of("dbos.conductor.key", "my-key", "dbos.conductor.domain", "my-domain"));
+    assertEquals("my-key", props.getConductor().getKey());
+    assertEquals("my-domain", props.getConductor().getDomain());
   }
 
   @Test
   void bindsIdentityProperties() {
-    var props =
-        bind(
-            Map.of(
-                "dbos.app-version", "1.2.3",
-                "dbos.executor-id", "exec-1",
-                "dbos.database-schema", "my_schema"));
-    assertEquals("1.2.3", props.getAppVersion());
+    var props = bind(Map.of("dbos.executor-id", "exec-1"));
     assertEquals("exec-1", props.getExecutorId());
-    assertEquals("my_schema", props.getDatabaseSchema());
+  }
+
+  @Test
+  void bindsDatasourceSchema() {
+    var props = bind(Map.of("dbos.datasource.schema", "my_schema"));
+    assertEquals("my_schema", props.getDatasource().getSchema());
   }
 
   @Test
