@@ -2,7 +2,7 @@ import com.vanniktech.maven.publish.DeploymentValidation
 
 plugins {
   id("java-library")
-  id("com.vanniktech.maven.publish") version "0.36.0"
+  id("com.vanniktech.maven.publish")
 }
 
 tasks.withType<JavaCompile> {

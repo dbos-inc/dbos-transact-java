@@ -5,8 +5,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
   id("java")
   id("java-library")
-  kotlin("jvm") version "2.3.10"
-  id("com.vanniktech.maven.publish") version "0.36.0"
+  kotlin("jvm")
+  id("com.vanniktech.maven.publish")
 }
 
 tasks.withType<JavaCompile> {
