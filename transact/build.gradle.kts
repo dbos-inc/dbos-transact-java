@@ -5,8 +5,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
   id("java")
   id("java-library")
-  kotlin("jvm")
-  id("com.vanniktech.maven.publish")
+  alias(libs.plugins.kotlin.jvm)
+  alias(libs.plugins.maven.publish)
 }
 
 tasks.withType<JavaCompile> {
@@ -26,27 +26,26 @@ tasks.withType<Javadoc> {
 tasks.named("build") { dependsOn("javadoc") }
 
 dependencies {
-  api("org.slf4j:slf4j-api:2.0.17") // logging api
-  api("org.jspecify:jspecify:1.0.0")
+  api(libs.slf4j.api)
+  api(libs.jspecify)
 
-  implementation("org.postgresql:postgresql:42.7.10")
-  implementation("com.zaxxer:HikariCP:7.0.2") // Connection pool
-  implementation("com.fasterxml.jackson.core:jackson-databind:2.21.1") // json
-  implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.1")
-  implementation("com.cronutils:cron-utils:9.2.1") // cron for scheduled wf
+  implementation(libs.postgresql)
+  implementation(libs.hikaricp)
+  implementation(libs.bundles.jackson)
+  implementation(libs.cron.utils)
 
-  testImplementation(platform("org.junit:junit-bom:6.0.3"))
-  testImplementation("org.junit.jupiter:junit-jupiter")
-  testImplementation("org.junit-pioneer:junit-pioneer:2.3.0")
-  testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.8")
-  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+  testImplementation(platform(libs.junit.bom))
+  testImplementation(libs.junit.jupiter)
+  testImplementation(libs.junit.pioneer)
+  testImplementation(libs.system.stubs.jupiter)
+  testRuntimeOnly(libs.junit.platform.launcher)
 
-  testImplementation("org.java-websocket:Java-WebSocket:1.6.0")
-  testImplementation("ch.qos.logback:logback-classic:1.5.32")
-  testImplementation("org.mockito:mockito-core:5.22.0")
-  testImplementation("io.rest-assured:rest-assured:6.0.0")
-  testImplementation("org.apache.maven:maven-artifact:3.9.13")
-  testImplementation("org.testcontainers:testcontainers-postgresql:2.0.3")
+  testImplementation(libs.java.websocket)
+  testImplementation(libs.logback.classic)
+  testImplementation(libs.mockito.core)
+  testImplementation(libs.rest.assured)
+  testImplementation(libs.maven.artifact)
+  testImplementation(libs.testcontainers.postgresql)
 }
 
 val projectVersion = project.version.toString()

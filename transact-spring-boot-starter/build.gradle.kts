@@ -2,7 +2,7 @@ import com.vanniktech.maven.publish.DeploymentValidation
 
 plugins {
   id("java-library")
-  id("com.vanniktech.maven.publish")
+  alias(libs.plugins.maven.publish)
 }
 
 tasks.withType<JavaCompile> {
@@ -23,22 +23,22 @@ tasks.named("build") { dependsOn("javadoc") }
 
 dependencies {
   api(project(":transact"))
-  compileOnly("org.springframework.boot:spring-boot-autoconfigure:3.4.4")
-  compileOnly("org.springframework:spring-aop:6.2.5")
-  compileOnly("org.aspectj:aspectjweaver:1.9.22.1")
-  annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
+  compileOnly(libs.spring.boot.autoconfigure)
+  compileOnly(libs.spring.aop)
+  compileOnly(libs.aspectjweaver)
+  annotationProcessor(libs.spring.boot.configuration.processor)
 
-  testImplementation(platform("org.junit:junit-bom:6.0.3"))
-  testImplementation("org.junit.jupiter:junit-jupiter")
-  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+  testImplementation(platform(libs.junit.bom))
+  testImplementation(libs.junit.jupiter)
+  testRuntimeOnly(libs.junit.platform.launcher)
 
-  testImplementation("org.springframework.boot:spring-boot-test:3.4.4")
-  testImplementation("org.assertj:assertj-core:3.27.3")
-  testImplementation("org.springframework.boot:spring-boot-autoconfigure:3.4.4")
-  testImplementation("org.springframework:spring-aop:6.2.5")
-  testImplementation("org.aspectj:aspectjweaver:1.9.22.1")
-  testImplementation("org.mockito:mockito-core:5.22.0")
-  testRuntimeOnly("ch.qos.logback:logback-classic:1.5.32")
+  testImplementation(libs.spring.boot.test)
+  testImplementation(libs.assertj.core)
+  testImplementation(libs.spring.boot.autoconfigure)
+  testImplementation(libs.spring.aop)
+  testImplementation(libs.aspectjweaver)
+  testImplementation(libs.mockito.core)
+  testRuntimeOnly(libs.logback.classic)
 }
 
 val publishingToMavenCentral =

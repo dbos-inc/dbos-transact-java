@@ -1,9 +1,9 @@
 plugins {
   id("pmd")
-  id("com.diffplug.spotless") version "8.3.0"
-  id("com.github.ben-manes.versions") version "0.53.0"
-  id("com.vanniktech.maven.publish") version "0.36.0" apply false
-  kotlin("jvm") version "2.3.10" apply false
+  alias(libs.plugins.spotless)
+  alias(libs.plugins.versions)
+  alias(libs.plugins.maven.publish) apply false
+  alias(libs.plugins.kotlin.jvm) apply false
 }
 
 fun runCommand(vararg args: String): String {

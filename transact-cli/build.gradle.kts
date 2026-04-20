@@ -1,21 +1,20 @@
 plugins {
   application
-  id("com.gradleup.shadow") version "9.3.2"
+  alias(libs.plugins.shadow)
 }
 
 application { mainClass.set("dev.dbos.transact.cli.Main") }
 
 dependencies {
   implementation(project(":transact"))
-  implementation("com.fasterxml.jackson.core:jackson-databind:2.21.1")
-  implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.1")
-  implementation("info.picocli:picocli:4.7.7")
-  runtimeOnly("org.slf4j:slf4j-simple:2.0.17")
+  implementation(libs.bundles.jackson)
+  implementation(libs.picocli)
+  runtimeOnly(libs.slf4j.simple)
 
-  testImplementation(platform("org.junit:junit-bom:6.0.3"))
-  testImplementation("org.junit.jupiter:junit-jupiter")
-  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-  testImplementation("org.testcontainers:testcontainers-postgresql:2.0.3")
+  testImplementation(platform(libs.junit.bom))
+  testImplementation(libs.junit.jupiter)
+  testRuntimeOnly(libs.junit.platform.launcher)
+  testImplementation(libs.testcontainers.postgresql)
 }
 
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {

@@ -1,0 +1,64 @@
+[versions]
+aspectj = "1.9.22.1"
+assertj = "3.27.3"
+cron-utils = "9.2.1"
+hikaricp = "7.0.2"
+jackson = "2.21.2"
+java-websocket = "1.6.0"
+jspecify = "1.0.0"
+junit = "6.0.3"
+junit-pioneer = "2.3.0"
+kotlin = "2.3.10"
+logback = "1.5.32"
+maven-artifact = "3.9.13"
+maven-publish = "0.36.0"
+mockito = "5.23.0"
+picocli = "4.7.7"
+postgresql = "42.7.10"
+rest-assured = "6.0.0"
+shadow = "9.4.1"
+slf4j = "2.0.17"
+spotless = "8.4.0"
+spring-boot = "3.4.4"
+spring-framework = "6.2.5"
+system-stubs = "2.1.8"
+testcontainers = "2.0.4"
+versions = "0.53.0"
+
+[libraries]
+aspectjweaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj" }
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+cron-utils = { module = "com.cronutils:cron-utils", version.ref = "cron-utils" }
+hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
+java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "java-websocket" }
+jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-pioneer = { module = "org.junit-pioneer:junit-pioneer", version.ref = "junit-pioneer" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+maven-artifact = { module = "org.apache.maven:maven-artifact", version.ref = "maven-artifact" }
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
+picocli = { module = "info.picocli:picocli", version.ref = "picocli" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+rest-assured = { module = "io.rest-assured:rest-assured", version.ref = "rest-assured" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+spring-aop = { module = "org.springframework:spring-aop", version.ref = "spring-framework" }
+spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot" }
+spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "spring-boot" }
+spring-boot-test = { module = "org.springframework.boot:spring-boot-test", version.ref = "spring-boot" }
+system-stubs-jupiter = { module = "uk.org.webcompere:system-stubs-jupiter", version.ref = "system-stubs" }
+testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
+
+[bundles]
+jackson = ["jackson-databind", "jackson-jsr310"]
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "maven-publish" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+versions = { id = "com.github.ben-manes.versions", version.ref = "versions" }
