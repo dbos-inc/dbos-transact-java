@@ -10,9 +10,8 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 
-import java.time.OffsetDateTime;
-
 import java.time.Duration;
+import java.time.OffsetDateTime;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
@@ -130,8 +129,7 @@ class AnnotatedWorkflowScheduleTest {
       // last '/' (skipping the trailing '-' separator).
       var suffix = id.substring(id.lastIndexOf('/') + 2);
       assertDoesNotThrow(
-          () -> OffsetDateTime.parse(suffix),
-          "Date suffix must be a valid OffsetDateTime: " + id);
+          () -> OffsetDateTime.parse(suffix), "Date suffix must be a valid OffsetDateTime: " + id);
     }
   }
 

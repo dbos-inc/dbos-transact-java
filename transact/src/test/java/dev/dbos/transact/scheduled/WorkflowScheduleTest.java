@@ -612,8 +612,7 @@ class WorkflowScheduleTest {
     assertTrue(impl.latch.await(15, TimeUnit.SECONDS));
 
     var prefix = "sched-id-fmt-sched-";
-    var workflows =
-        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix(prefix));
+    var workflows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix(prefix));
     assertFalse(workflows.isEmpty());
     for (var wf : workflows) {
       var id = wf.workflowId();
@@ -636,8 +635,7 @@ class WorkflowScheduleTest {
     assertTrue(impl.latch.await(15, TimeUnit.SECONDS));
 
     var prefix = "sched-tz-sched-";
-    var workflows =
-        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix(prefix));
+    var workflows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix(prefix));
     assertFalse(workflows.isEmpty());
     for (var wf : workflows) {
       var id = wf.workflowId();
