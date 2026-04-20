@@ -242,7 +242,14 @@ class SchedulesDAO {
       try {
         for (WorkflowSchedule schedule : schedules) {
           deleteSchedule(conn, schema, schedule.scheduleName());
-          createSchedule(conn, schema, serializer, schedule);
+          createSchedule(
+              conn,
+              schema,
+              serializer,
+              schedule
+                  .withScheduleId(UUID.randomUUID().toString())
+                  .withStatus(ScheduleStatus.ACTIVE)
+                  .withLastFiredAt(null));
         }
         conn.commit();
       } catch (SQLException e) {

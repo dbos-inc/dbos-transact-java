@@ -34,6 +34,7 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -881,8 +882,18 @@ public class DBOS implements AutoCloseable {
    *
    * @param schedules the schedules to apply
    */
-  public void applySchedules(@NonNull List<WorkflowSchedule> schedules) {
+  public void applySchedules(@NonNull List<@NonNull WorkflowSchedule> schedules) {
     ensureLaunched("applySchedules").applySchedules(schedules);
+  }
+
+  /**
+   * Atomically create or replace a set of schedules. Each schedule is deleted (if it exists) and
+   * re-created in a single transaction.
+   *
+   * @param schedules the schedules to apply
+   */
+  public void applySchedules(@NonNull WorkflowSchedule... schedules) {
+    ensureLaunched("applySchedules").applySchedules(Arrays.asList(schedules));
   }
 
   // /**

@@ -232,6 +232,7 @@ class WorkflowScheduleTest {
 
     dbos.createSchedule(
         new WorkflowSchedule("apply-1", workflowName(), className(), "0/5 * * * * *"));
+    var originalId = dbos.getSchedule("apply-1").orElseThrow().id();
     assertEquals(1, dbos.listSchedules(null, null, null).size());
 
     // apply-1 is replaced (new cron) and apply-2 is created — applySchedules upserts, it does
@@ -242,8 +243,14 @@ class WorkflowScheduleTest {
             new WorkflowSchedule("apply-2", workflowName(), className(), "0/5 * * * * *")));
 
     assertEquals(2, dbos.listSchedules(null, null, null).size());
-    assertEquals("0/10 * * * * *", dbos.getSchedule("apply-1").orElseThrow().cron());
-    assertTrue(dbos.getSchedule("apply-2").isPresent());
+    var replaced = dbos.getSchedule("apply-1").orElseThrow();
+    assertEquals("0/10 * * * * *", replaced.cron());
+    assertNotNull(replaced.id());
+    assertNotEquals(originalId, replaced.id()); // new UUID assigned
+    assertNull(replaced.lastFiredAt());
+    var created = dbos.getSchedule("apply-2").orElseThrow();
+    assertNotNull(created.id());
+    assertNull(created.lastFiredAt());
   }
 
   @Test
@@ -257,6 +264,116 @@ class WorkflowScheduleTest {
                 .withStatus(ScheduleStatus.PAUSED)));
 
     assertEquals(ScheduleStatus.ACTIVE, dbos.getSchedule("apply-paused").orElseThrow().status());
+  }
+
+  @Test
+  public void applySchedulesVarargsCreatesAndReplaces() {
+    registerAndLaunch();
+
+    dbos.createSchedule(
+        new WorkflowSchedule("vargs-1", workflowName(), className(), "0/5 * * * * *"));
+
+    dbos.applySchedules(
+        new WorkflowSchedule("vargs-1", workflowName(), className(), "0/10 * * * * *"),
+        new WorkflowSchedule("vargs-2", workflowName(), className(), "0/5 * * * * *"));
+
+    assertEquals(2, dbos.listSchedules(null, null, null).size());
+    assertEquals("0/10 * * * * *", dbos.getSchedule("vargs-1").orElseThrow().cron());
+    assertTrue(dbos.getSchedule("vargs-2").isPresent());
+  }
+
+  @Test
+  public void applySchedulesVarargsSingle() {
+    registerAndLaunch();
+
+    dbos.applySchedules(
+        new WorkflowSchedule("single-varg", workflowName(), className(), "0/5 * * * * *"));
+
+    assertEquals(1, dbos.listSchedules(null, null, null).size());
+    assertEquals(ScheduleStatus.ACTIVE, dbos.getSchedule("single-varg").orElseThrow().status());
+  }
+
+  @Test
+  public void applySchedulesVarargsEmpty() {
+    registerAndLaunch();
+
+    dbos.createSchedule(
+        new WorkflowSchedule("pre-existing", workflowName(), className(), "0/5 * * * * *"));
+
+    dbos.applySchedules(); // no-op — does not delete pre-existing schedules
+
+    assertEquals(1, dbos.listSchedules(null, null, null).size());
+  }
+
+  @Test
+  public void applySchedulesInvalidCron() {
+    registerAndLaunch();
+    assertThrows(
+        RuntimeException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("bad-cron", workflowName(), className(), "not-a-cron")));
+  }
+
+  @Test
+  public void applySchedulesNullScheduleName() {
+    registerAndLaunch();
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule(null, workflowName(), className(), "0/5 * * * * *")));
+  }
+
+  @Test
+  public void applySchedulesNullWorkflowName() {
+    registerAndLaunch();
+    assertThrows(
+        RuntimeException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("null-wf", null, className(), "0/5 * * * * *")));
+  }
+
+  @Test
+  public void applySchedulesNullClassName() {
+    registerAndLaunch();
+    assertThrows(
+        RuntimeException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("null-class", workflowName(), null, "0/5 * * * * *")));
+  }
+
+  @Test
+  public void applySchedulesNullCron() {
+    registerAndLaunch();
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("null-cron", workflowName(), className(), null)));
+  }
+
+  @Test
+  public void applySchedulesUnknownWorkflow() {
+    registerAndLaunch();
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("bad-wf", "noSuchMethod", className(), "0/5 * * * * *")));
+  }
+
+  @Test
+  public void applySchedulesUnknownQueue() {
+    registerAndLaunch();
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("bad-q", workflowName(), className(), "0/5 * * * * *")
+                    .withQueueName("no-such-queue")));
   }
 
   // ── triggerSchedule ───────────────────────────────────────────────────────

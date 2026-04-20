@@ -166,6 +166,127 @@ public class ClientScheduleTest {
     }
   }
 
+  // ── applySchedules ────────────────────────────────────────────────────────
+
+  @Test
+  public void clientApplySchedulesList() {
+    try (var client = pgContainer.dbosClient()) {
+      client.createSchedule(
+          new WorkflowSchedule("apply-1", workflowName(), className(), "0/5 * * * * *"));
+      var originalId = client.getSchedule("apply-1").orElseThrow().id();
+
+      client.applySchedules(
+          List.of(
+              new WorkflowSchedule("apply-1", workflowName(), className(), "0/10 * * * * *"),
+              new WorkflowSchedule("apply-2", workflowName(), className(), "0/5 * * * * *")));
+
+      assertEquals(2, client.listSchedules(null, null, null).size());
+      var replaced = client.getSchedule("apply-1").orElseThrow();
+      assertEquals("0/10 * * * * *", replaced.cron());
+      assertNotNull(replaced.id());
+      assertNotEquals(originalId, replaced.id()); // new UUID assigned
+      assertNull(replaced.lastFiredAt());
+      var created = client.getSchedule("apply-2").orElseThrow();
+      assertNotNull(created.id());
+      assertNull(created.lastFiredAt());
+    }
+  }
+
+  @Test
+  public void clientApplySchedulesVarargs() {
+    try (var client = pgContainer.dbosClient()) {
+      client.createSchedule(
+          new WorkflowSchedule("vargs-1", workflowName(), className(), "0/5 * * * * *"));
+
+      client.applySchedules(
+          new WorkflowSchedule("vargs-1", workflowName(), className(), "0/10 * * * * *"),
+          new WorkflowSchedule("vargs-2", workflowName(), className(), "0/5 * * * * *"));
+
+      assertEquals(2, client.listSchedules(null, null, null).size());
+      assertEquals("0/10 * * * * *", client.getSchedule("vargs-1").orElseThrow().cron());
+      assertTrue(client.getSchedule("vargs-2").isPresent());
+    }
+  }
+
+  @Test
+  public void clientApplySchedulesVarargsSingle() {
+    try (var client = pgContainer.dbosClient()) {
+      client.applySchedules(
+          new WorkflowSchedule("single-varg", workflowName(), className(), "0/5 * * * * *"));
+
+      assertEquals(1, client.listSchedules(null, null, null).size());
+      assertEquals(ScheduleStatus.ACTIVE, client.getSchedule("single-varg").orElseThrow().status());
+    }
+  }
+
+  @Test
+  public void clientApplySchedulesVarargsEmpty() {
+    try (var client = pgContainer.dbosClient()) {
+      client.createSchedule(
+          new WorkflowSchedule("pre-existing", workflowName(), className(), "0/5 * * * * *"));
+
+      client.applySchedules(); // no-op — does not delete pre-existing schedules
+
+      assertEquals(1, client.listSchedules(null, null, null).size());
+    }
+  }
+
+  @Test
+  public void clientApplySchedulesAlwaysCreatesActive() {
+    try (var client = pgContainer.dbosClient()) {
+      client.applySchedules(
+          new WorkflowSchedule("apply-paused", workflowName(), className(), "0/5 * * * * *")
+              .withStatus(ScheduleStatus.PAUSED));
+
+      assertEquals(
+          ScheduleStatus.ACTIVE, client.getSchedule("apply-paused").orElseThrow().status());
+    }
+  }
+
+  @Test
+  public void clientApplySchedulesInvalidCron() {
+    try (var client = pgContainer.dbosClient()) {
+      assertThrows(
+          RuntimeException.class,
+          () ->
+              client.applySchedules(
+                  new WorkflowSchedule("bad-cron", workflowName(), className(), "not-a-cron")));
+    }
+  }
+
+  @Test
+  public void clientApplySchedulesNullScheduleName() {
+    try (var client = pgContainer.dbosClient()) {
+      assertThrows(
+          NullPointerException.class,
+          () ->
+              client.applySchedules(
+                  new WorkflowSchedule(null, workflowName(), className(), "0/5 * * * * *")));
+    }
+  }
+
+  @Test
+  public void clientApplySchedulesNullWorkflowName() {
+    try (var client = pgContainer.dbosClient()) {
+      assertThrows(
+          NullPointerException.class,
+          () ->
+              client.applySchedules(
+                  new WorkflowSchedule("null-wf", null, className(), "0/5 * * * * *")));
+    }
+  }
+
+  @Test
+  public void clientApplySchedulesNullCron() {
+    try (var client = pgContainer.dbosClient()) {
+      assertThrows(
+          NullPointerException.class,
+          () ->
+              client.applySchedules(
+                  new WorkflowSchedule("null-cron", workflowName(), className(), null)));
+    }
+  }
+
   // ── triggerSchedule ───────────────────────────────────────────────────────
 
   @Test

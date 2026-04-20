@@ -727,12 +727,6 @@ public class DBOSExecutor implements AutoCloseable {
         schedules.stream()
             .map(
                 s -> {
-                  Objects.requireNonNull(s.scheduleName(), "scheduleName cannot be null");
-                  Objects.requireNonNull(s.workflowName(), "workflowName cannot be null");
-                  Objects.requireNonNull(s.className(), "className cannot be null");
-                  SchedulerService.CRON_PARSER.parse(
-                      Objects.requireNonNull(s.cron(), "cron cannot be null"));
-
                   return s.withScheduleId(UUID.randomUUID().toString())
                       .withStatus(ScheduleStatus.ACTIVE)
                       .withLastFiredAt(null);

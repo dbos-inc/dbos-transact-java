@@ -25,6 +25,7 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -990,8 +991,17 @@ public class DBOSClient implements AutoCloseable {
    *
    * @param schedules the schedules to apply
    */
-  public void applySchedules(@NonNull List<WorkflowSchedule> schedules) {
+  public void applySchedules(@NonNull List<@NonNull WorkflowSchedule> schedules) {
     systemDatabase.applySchedules(schedules);
+  }
+
+  /**
+   * Atomically create or replace a set of schedules.
+   *
+   * @param schedules the schedules to apply
+   */
+  public void applySchedules(@NonNull WorkflowSchedule... schedules) {
+    systemDatabase.applySchedules(Arrays.asList(schedules));
   }
 
   // /**
