@@ -6,11 +6,13 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -595,6 +597,56 @@ class WorkflowScheduleTest {
     // At least 1 execution from trigger
     assertTrue(impl.counter >= 1, "Expected at least 1, got " + impl.counter);
     assertEquals("test-context", impl.lastContext);
+  }
+
+  // ── Workflow ID format ────────────────────────────────────────────────────
+
+  @Test
+  public void workflowIdUsesOffsetDateTimeFormat() throws Exception {
+    // Scheduler-generated IDs must use OffsetDateTime (e.g. 2026-04-20T10:15:30+00:00),
+    // not ZonedDateTime which appends zone name in brackets (e.g. [UTC]).
+    var impl = registerAndLaunch();
+    dbos.createSchedule(
+        new WorkflowSchedule("id-fmt-sched", "latchedRun", className(), "0/1 * * * * *"));
+
+    assertTrue(impl.latch.await(15, TimeUnit.SECONDS));
+
+    var prefix = "sched-id-fmt-sched-";
+    var workflows =
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix(prefix));
+    assertFalse(workflows.isEmpty());
+    for (var wf : workflows) {
+      var id = wf.workflowId();
+      assertFalse(id.contains("["), "Workflow ID must not contain zone name brackets: " + id);
+      assertDoesNotThrow(
+          () -> OffsetDateTime.parse(id.substring(prefix.length())),
+          "Date suffix must be a valid OffsetDateTime: " + id);
+    }
+  }
+
+  @Test
+  public void workflowIdIncludesTimezoneOffsetNotZoneName() throws Exception {
+    // When cronTimezone is a named zone (e.g. America/New_York), the ID must include the
+    // numeric offset (e.g. -04:00) but not the zone name in brackets.
+    var impl = registerAndLaunch();
+    dbos.createSchedule(
+        new WorkflowSchedule("tz-sched", "latchedRun", className(), "0/1 * * * * *")
+            .withCronTimezone(ZoneId.of("America/New_York")));
+
+    assertTrue(impl.latch.await(15, TimeUnit.SECONDS));
+
+    var prefix = "sched-tz-sched-";
+    var workflows =
+        dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix(prefix));
+    assertFalse(workflows.isEmpty());
+    for (var wf : workflows) {
+      var id = wf.workflowId();
+      assertFalse(id.contains("["), "Workflow ID must not contain zone name brackets: " + id);
+      assertFalse(id.contains("America"), "Workflow ID must not contain zone name: " + id);
+      assertDoesNotThrow(
+          () -> OffsetDateTime.parse(id.substring(prefix.length())),
+          "Date suffix must be a valid OffsetDateTime: " + id);
+    }
   }
 
   // ── End-to-end ────────────────────────────────────────────────────────────

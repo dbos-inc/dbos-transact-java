@@ -248,7 +248,7 @@ public class SchedulerService implements AutoCloseable {
                     return;
                   }
                   var args = new Object[] {nextTime.toInstant(), wfSchedule.context()};
-                  var workflowId = "sched-%s-%s".formatted(wfSchedule.scheduleName(), nextTime);
+                  var workflowId = "sched-%s-%s".formatted(wfSchedule.scheduleName(), nextTime.toOffsetDateTime());
                   logger.debug(
                       "Queuing scheduled workflow {} schedule {} workflowId {}",
                       regWorkflow.fullyQualifiedName(),
@@ -320,7 +320,7 @@ public class SchedulerService implements AutoCloseable {
                   return;
                 }
                 var args = new Object[] {scheduledTime.toInstant(), Instant.now()};
-                var workflowId = "sched-%s-%s".formatted(workflowName, scheduledTime);
+                var workflowId = "sched-%s-%s".formatted(workflowName, scheduledTime.toOffsetDateTime());
                 logger.debug(
                     "Triggering annotated workflow {} at {} workflowId {}",
                     workflowName,

@@ -10,6 +10,8 @@ import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Queue;
 
+import java.time.OffsetDateTime;
+
 import java.time.Duration;
 
 import com.zaxxer.hikari.HikariDataSource;
@@ -104,6 +106,33 @@ class AnnotatedWorkflowScheduleTest {
     System.out.println("Final count (1s do not ignore missed, after resume): " + count1dimb);
     assertTrue(count1dimb >= 10);
     assertTrue(count1dimb <= 14);
+  }
+
+  @Test
+  public void annotatedWorkflowIdUsesOffsetDateTimeFormat() throws Exception {
+    // Annotated scheduler IDs must use OffsetDateTime, not ZonedDateTime with zone brackets.
+    var q = new Queue("q2").withConcurrency(1);
+    dbos.registerQueue(q);
+    var impl = new AnnotatedScheduledServiceImpl(dbos);
+    dbos.registerProxy(AnnotatedScheduledService.class, impl);
+    dbos.launch();
+
+    Thread.sleep(3000);
+    DBOSTestAccess.getSchedulerService(dbos).close();
+
+    var workflows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowName("everySecond"));
+    assertFalse(workflows.isEmpty(), "Expected at least one everySecond execution");
+    for (var wf : workflows) {
+      var id = wf.workflowId();
+      assertFalse(id.contains("["), "Annotated workflow ID must not contain zone brackets: " + id);
+      // ID format: sched-{name}/{class}/-{offsetDateTime}
+      // The fully-qualified name ends with '/', so the timestamp starts two chars after the
+      // last '/' (skipping the trailing '-' separator).
+      var suffix = id.substring(id.lastIndexOf('/') + 2);
+      assertDoesNotThrow(
+          () -> OffsetDateTime.parse(suffix),
+          "Date suffix must be a valid OffsetDateTime: " + id);
+    }
   }
 
   @Test
