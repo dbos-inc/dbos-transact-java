@@ -350,7 +350,9 @@ class WorkflowScheduleTest {
     registerAndLaunch();
     assertThrows(
         NullPointerException.class,
-        () -> dbos.applySchedules(new WorkflowSchedule("null-cron", workflowName(), className(), null)));
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("null-cron", workflowName(), className(), null)));
   }
 
   @Test
