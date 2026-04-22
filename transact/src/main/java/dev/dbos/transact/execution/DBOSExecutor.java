@@ -1484,6 +1484,29 @@ public class DBOSExecutor implements AutoCloseable {
       return new WorkflowHandleDBPoll<>(this, workflowId);
     }
 
+    var badOptionList = new ArrayList<String>();
+    if (options.deduplicationId() != null) {
+      badOptionList.add("deduplicationId");
+    }
+
+    if (options.priority() != null) {
+      badOptionList.add("priority");
+    }
+
+    if (options.queuePartitionKey() != null) {
+      badOptionList.add("queuePartitionKey");
+    }
+
+    if (options.delay() != null) {
+      badOptionList.add("delay");
+    }
+
+    if (!badOptionList.isEmpty()) {
+      throw new IllegalArgumentException(
+          "%s invalid options without a queue name: %s"
+              .formatted(workflow.fullyQualifiedName(), String.join(", ", badOptionList)));
+    }
+
     logger.debug("executeWorkflow {}({}) {}", workflow.fullyQualifiedName(), args, options);
 
     WorkflowInitResult initResult =

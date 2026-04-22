@@ -558,31 +558,6 @@ public class QueuesTest {
   }
 
   @Test
-  public void testQueueOptionsNotWrittenWhenNotEnqueued() throws Exception {
-    var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
-    dbos.launch();
-
-    var options =
-        new StartWorkflowOptions()
-            .withDeduplicationId("dedupe")
-            .withDelay(Duration.ofSeconds(10))
-            .withPriority(100)
-            .withQueuePartitionKey("partition-1");
-    var handle = dbos.startWorkflow(() -> proxy.normalWorkflow(), options);
-    var result = handle.getResult();
-    assertEquals(handle.workflowId(), result);
-
-    var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
-    assertNotNull(row);
-    assertNull(row.queueName());
-    assertNull(row.deduplicationId());
-    assertNull(row.queuePartitionKey());
-    assertEquals(0, row.priority());
-    assertNull(row.delayUntilEpochMs());
-  }
-
-  @Test
   public void testenQueueWF() throws Exception {
 
     Queue firstQ = new Queue("firstQueue");
