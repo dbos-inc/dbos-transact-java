@@ -1,10 +1,10 @@
 package dev.dbos.transact.database;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.workflow.Workflow;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -12,8 +12,6 @@ import java.time.Duration;
 import javax.sql.DataSource;
 
 import eu.rekawek.toxiproxy.ToxiproxyClient;
-import eu.rekawek.toxiproxy.model.ToxicDirection;
-
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -93,8 +91,10 @@ class ChaosServiceImpl implements ChaosService {
   }
 
   static void causeChaos(DataSource ds) {
-    if (ds == null) { return; }
-    
+    if (ds == null) {
+      return;
+    }
+
     try (var conn = ds.getConnection();
         var st = conn.createStatement()) {
 
@@ -125,7 +125,10 @@ public class ChaosTest {
 
   @AutoClose
   public ToxiproxyContainer tp =
-      new ToxiproxyContainer("ghcr.io/shopify/toxiproxy:latest").withNetwork(network).withExposedPorts(8474,2345).waitingFor(Wait.forHttp("/proxies").forPort(8474));
+      new ToxiproxyContainer("ghcr.io/shopify/toxiproxy:latest")
+          .withNetwork(network)
+          .withExposedPorts(8474, 2345)
+          .waitingFor(Wait.forHttp("/proxies").forPort(8474));
 
   @Test
   public void chaosTest() throws Exception {
@@ -145,17 +148,19 @@ public class ChaosTest {
             .withDbUser(pg.getUsername())
             .withDbPassword(pg.getPassword());
 
-      try (var dataSource = SystemDatabase.createDataSource(jdbcUrl, pg.getUsername(), pg.getPassword());
+    try (var dataSource =
+            SystemDatabase.createDataSource(jdbcUrl, pg.getUsername(), pg.getPassword());
         var dbos = new DBOS(dbosConfig)) {
-        var impl = new ChaosServiceImpl(dbos, null);
-        var proxy = dbos.registerProxy(ChaosService.class, impl);
-        impl.setSelf(proxy);
+      var impl = new ChaosServiceImpl(dbos, null);
+      var proxy = dbos.registerProxy(ChaosService.class, impl);
+      impl.setSelf(proxy);
 
-        dbos.launch();;
+      dbos.launch();
+      ;
 
-        assertEquals("Hehehe", proxy.dbLossBetweenSteps());
-        assertEquals("Hehehe", proxy.runChildWf());
-      }
+      assertEquals("Hehehe", proxy.dbLossBetweenSteps());
+      assertEquals("Hehehe", proxy.runChildWf());
+    }
   }
   // @Test
   // // @EnabledIfEnvironmentVariable(named = "SCALE_TEST", matches = "^true$")
