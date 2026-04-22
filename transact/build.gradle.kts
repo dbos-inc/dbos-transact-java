@@ -46,6 +46,7 @@ dependencies {
   testImplementation(libs.rest.assured)
   testImplementation(libs.maven.artifact)
   testImplementation(libs.testcontainers.postgresql)
+  testImplementation(libs.testcontainers.toxiproxy)
 }
 
 val projectVersion = project.version.toString()
