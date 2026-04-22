@@ -433,7 +433,8 @@ public class SchedulerService implements AutoCloseable {
 
               try {
                 var cron = CRON_PARSER.parse(schedTag.cron()).validate();
-                return new AnnotatedScheduledWorkflow(wf, cron, queueName, schedTag.automaticBackfill());
+                return new AnnotatedScheduledWorkflow(
+                    wf, cron, queueName, schedTag.automaticBackfill());
               } catch (Exception e) {
                 logger.error(
                     "Annotated workflow schedule {} has invalid cron expression {}",
