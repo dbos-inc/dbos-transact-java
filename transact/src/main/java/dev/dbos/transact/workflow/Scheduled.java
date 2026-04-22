@@ -12,5 +12,5 @@ public @interface Scheduled {
 
   String queue() default "";
 
-  boolean ignoreMissed() default true;
+  boolean automaticBackfill() default false;
 }
