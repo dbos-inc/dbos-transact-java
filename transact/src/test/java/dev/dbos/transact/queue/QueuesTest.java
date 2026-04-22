@@ -2,7 +2,6 @@ package dev.dbos.transact.queue;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -555,31 +554,6 @@ public class QueuesTest {
             appVersion,
             null);
     assertEquals(2, idsToRun.size());
-  }
-
-  @Test
-  public void testQueueOptionsNotWrittenWhenNotEnqueued() throws Exception {
-    var impl = new PartitionsTestServiceImpl();
-    var proxy = dbos.registerProxy(PartitionsTestService.class, impl);
-    dbos.launch();
-
-    var options =
-        new StartWorkflowOptions()
-            .withDeduplicationId("dedupe")
-            .withDelay(Duration.ofSeconds(10))
-            .withPriority(100)
-            .withQueuePartitionKey("partition-1");
-    var handle = dbos.startWorkflow(() -> proxy.normalWorkflow(), options);
-    var result = handle.getResult();
-    assertEquals(handle.workflowId(), result);
-
-    var row = DBUtils.getWorkflowRow(dataSource, handle.workflowId());
-    assertNotNull(row);
-    assertNull(row.queueName());
-    assertNull(row.deduplicationId());
-    assertNull(row.queuePartitionKey());
-    assertEquals(0, row.priority());
-    assertNull(row.delayUntilEpochMs());
   }
 
   @Test

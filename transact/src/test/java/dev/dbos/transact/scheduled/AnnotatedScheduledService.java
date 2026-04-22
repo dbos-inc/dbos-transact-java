@@ -84,7 +84,7 @@ class AnnotatedScheduledServiceImpl implements AnnotatedScheduledService {
 
   @Override
   @Workflow
-  @Scheduled(cron = "0/1 * * * * *", ignoreMissed = true)
+  @Scheduled(cron = "0/1 * * * * *", automaticBackfill = false)
   public void everySecondIgnoreMissed(Instant scheduled, Instant actual) {
     if (everySecondCounterIgnoreMissed++ == 0) {
       try {
@@ -98,7 +98,7 @@ class AnnotatedScheduledServiceImpl implements AnnotatedScheduledService {
 
   @Override
   @Workflow
-  @Scheduled(cron = "0/1 * * * * *", ignoreMissed = false)
+  @Scheduled(cron = "0/1 * * * * *", automaticBackfill = true)
   public void everySecondDontIgnoreMissed(Instant scheduled, Instant actual) {
     if (everySecondCounterDontIgnoreMissed++ == 0) {
       try {

@@ -39,7 +39,7 @@ public class SchedulerService implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(SchedulerService.class);
 
   record AnnotatedScheduledWorkflow(
-      RegisteredWorkflow workflow, Cron cron, String queue, boolean ignoreMissed) {}
+      RegisteredWorkflow workflow, Cron cron, String queue, boolean automaticBackfill) {}
 
   public static final CronParser CRON_PARSER =
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING53));
@@ -374,7 +374,7 @@ public class SchedulerService implements AutoCloseable {
 
   private static ZonedDateTime getLastTime(
       DBOSExecutor dbosExecutor, AnnotatedScheduledWorkflow swf) {
-    if (!swf.ignoreMissed()) {
+    if (swf.automaticBackfill()) {
       var state =
           dbosExecutor.getExternalState(
               "DBOS.SchedulerService", swf.workflow().fullyQualifiedName(), "lastTime");
@@ -387,7 +387,7 @@ public class SchedulerService implements AutoCloseable {
 
   private static ZonedDateTime setLastTime(
       DBOSExecutor dbosExecutor, AnnotatedScheduledWorkflow swf, ZonedDateTime lastTime) {
-    if (swf.ignoreMissed()) {
+    if (!swf.automaticBackfill()) {
       return ZonedDateTime.now();
     }
 
@@ -433,7 +433,8 @@ public class SchedulerService implements AutoCloseable {
 
               try {
                 var cron = CRON_PARSER.parse(schedTag.cron()).validate();
-                return new AnnotatedScheduledWorkflow(wf, cron, queueName, schedTag.ignoreMissed());
+                return new AnnotatedScheduledWorkflow(
+                    wf, cron, queueName, schedTag.automaticBackfill());
               } catch (Exception e) {
                 logger.error(
                     "Annotated workflow schedule {} has invalid cron expression {}",

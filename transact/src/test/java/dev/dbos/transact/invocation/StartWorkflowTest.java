@@ -148,6 +148,54 @@ public class StartWorkflowTest {
   }
 
   @Test
+  void deduplicationIdWithoutQueue() {
+    var options = new StartWorkflowOptions().withDeduplicationId("dedupe-id");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
+  }
+
+  @Test
+  void priorityWithoutQueue() {
+    var options = new StartWorkflowOptions().withPriority(5);
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
+  }
+
+  @Test
+  void queuePartitionKeyWithoutQueue() {
+    var options = new StartWorkflowOptions().withQueuePartitionKey("partition-key");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
+  }
+
+  @Test
+  void delayWithoutQueue() {
+    var options = new StartWorkflowOptions().withDelay(Duration.ofSeconds(5));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
+  }
+
+  @Test
+  void multipleQueueOptionsWithoutQueue() {
+    var options =
+        new StartWorkflowOptions()
+            .withDeduplicationId("dedupe-id")
+            .withPriority(1)
+            .withDelay(Duration.ofSeconds(5));
+    var ex =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> dbos.startWorkflow(() -> proxy.simpleWorkflow(), options));
+    assertTrue(ex.getMessage().contains("deduplicationId"));
+    assertTrue(ex.getMessage().contains("priority"));
+    assertTrue(ex.getMessage().contains("delay"));
+  }
+
+  @Test
   void startWorkflowWithDelayManualTransition() throws Exception {
     var qs = DBOSTestAccess.getQueueService(dbos);
     qs.pause();
