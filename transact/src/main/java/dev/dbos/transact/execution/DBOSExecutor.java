@@ -177,11 +177,8 @@ public class DBOSExecutor implements AutoCloseable {
       this.alertHandler = alertHandler;
 
       if (this.appVersion == null || this.appVersion.isEmpty()) {
-        List<Class<?>> registeredClasses =
-            workflowMap.values().stream()
-                .map(wrapper -> wrapper.target().getClass())
-                .collect(Collectors.toList());
-        this.appVersion = AppVersionComputer.computeAppVersion(registeredClasses);
+        this.appVersion =
+            AppVersionComputer.computeAppVersion(DBOS.version(), workflowMap.values());
       }
 
       if (config.conductorKey() != null) {

@@ -3,6 +3,7 @@ package dev.dbos.transact.config;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,12 +14,12 @@ import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.database.DBTestAccess;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.Workflow;
+import dev.dbos.transact.workflow.WorkflowClassName;
 import dev.dbos.transact.workflow.WorkflowState;
 
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -27,6 +28,80 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
+
+interface ConfigTestService {
+  String exampleWorklow();
+
+  int addTwoPlusTwo();
+}
+
+@WorkflowClassName("ConfigTestService")
+class ConfigTestServiceImpl implements ConfigTestService {
+  @Override
+  @Workflow
+  public String exampleWorklow() {
+    return String.valueOf(System.currentTimeMillis());
+  }
+
+  @Override
+  @Workflow
+  public int addTwoPlusTwo() {
+    return 2 + 2;
+  }
+
+  public String question() {
+    return "What do you get if you multiply six by nine?";
+  }
+}
+
+@WorkflowClassName("ConfigTestService")
+class ConfigTestServiceImplAgain implements ConfigTestService {
+  @Override
+  @Workflow
+  public String exampleWorklow() {
+    return String.valueOf(System.currentTimeMillis());
+  }
+
+  @Override
+  @Workflow
+  public int addTwoPlusTwo() {
+    return 2 + 2;
+  }
+
+  public String answer() {
+    return "42";
+  }
+}
+
+@WorkflowClassName("ConfigTestService")
+class ConfigTestServiceImplDifferentCode implements ConfigTestService {
+  @Override
+  @Workflow
+  public String exampleWorklow() {
+    return "%s".formatted(System.currentTimeMillis());
+  }
+
+  @Override
+  @Workflow
+  public int addTwoPlusTwo() {
+    return 2 + 2;
+  }
+}
+
+@WorkflowClassName("ConfigTestServiceFoo")
+class ConfigTestServiceImplDifferentName implements ConfigTestService {
+  @Override
+  @Workflow
+  public String exampleWorklow() {
+    return String.valueOf(System.currentTimeMillis());
+  }
+
+  @Override
+  @Workflow
+  public int addTwoPlusTwo() {
+    return 2 + 2;
+  }
+}
 
 @org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ConfigTest {
@@ -99,18 +174,103 @@ public class ConfigTest {
   @Test
   public void calcAppVersion() throws Exception {
     var config = pgContainer.dbosConfig();
-    var dbos = new DBOS(config);
-    try {
+    try (var dbos = new DBOS(config)) {
+      dbos.registerProxy(ConfigTestService.class, new ConfigTestServiceImpl());
       dbos.launch();
+
       var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
-      List<Class<?>> workflowClasses =
-          dbosExecutor.getRegisteredWorkflows().stream()
-              .map(r -> r.target().getClass())
-              .collect(Collectors.toList());
-      var version = assertDoesNotThrow(() -> AppVersionComputer.computeAppVersion(workflowClasses));
+      var version =
+          assertDoesNotThrow(
+              () ->
+                  AppVersionComputer.computeAppVersion(
+                      DBOS.version(), dbosExecutor.getRegisteredWorkflows()));
+      assertFalse(version.startsWith("unknown"));
       assertEquals(version, dbosExecutor.appVersion());
-    } finally {
-      dbos.shutdown();
+    }
+  }
+
+  @Test
+  public void calcAppVersionNotMatchAcrossDbosVersions() throws Exception {
+    var config = pgContainer.dbosConfig();
+    try (var dbos = new DBOS(config)) {
+      dbos.registerProxy(ConfigTestService.class, new ConfigTestServiceImpl());
+      dbos.launch();
+
+      var dbosExecutor = DBOSTestAccess.getDbosExecutor(dbos);
+      var version =
+          assertDoesNotThrow(
+              () ->
+                  AppVersionComputer.computeAppVersion(
+                      "foo" + DBOS.version(), dbosExecutor.getRegisteredWorkflows()));
+      assertFalse(version.startsWith("unknown"));
+      assertNotEquals(version, dbosExecutor.appVersion());
+    }
+  }
+
+  @Test
+  public void calcAppVersionMatch() throws Exception {
+    var config = pgContainer.dbosConfig();
+    String appVer1;
+    // calculate the baseline app version
+    try (var dbos = new DBOS(config)) {
+      dbos.registerProxy(ConfigTestService.class, new ConfigTestServiceImpl());
+      dbos.launch();
+      var exec = DBOSTestAccess.getDbosExecutor(dbos);
+      appVer1 = exec.appVersion();
+    }
+
+    // ensure app version calculation matches when using the same impl class
+    try (var dbos = new DBOS(config)) {
+      dbos.registerProxy(ConfigTestService.class, new ConfigTestServiceImpl());
+      dbos.launch();
+      var exec = DBOSTestAccess.getDbosExecutor(dbos);
+      assertEquals(appVer1, exec.appVersion());
+    }
+
+    // ensure app version calculation matches when using the different impl class but with the same
+    // class name & workflow function
+    try (var dbos = new DBOS(config)) {
+      dbos.registerProxy(ConfigTestService.class, new ConfigTestServiceImplAgain());
+      dbos.launch();
+      var exec = DBOSTestAccess.getDbosExecutor(dbos);
+      assertEquals(appVer1, exec.appVersion());
+    }
+  }
+
+  @Test
+  public void calcAppVersionNotMatch() throws Exception {
+    var config = pgContainer.dbosConfig();
+    String appVer1;
+    // calculate the baseline app version
+    try (var dbos = new DBOS(config)) {
+      dbos.registerProxy(ConfigTestService.class, new ConfigTestServiceImpl());
+      dbos.launch();
+      var exec = DBOSTestAccess.getDbosExecutor(dbos);
+      appVer1 = exec.appVersion();
+    }
+
+    // ensure app version for same class but with instance name is different
+    try (var dbos = new DBOS(config)) {
+      dbos.registerProxy(ConfigTestService.class, new ConfigTestServiceImpl(), "instance-name");
+      dbos.launch();
+      var exec = DBOSTestAccess.getDbosExecutor(dbos);
+      assertNotEquals(appVer1, exec.appVersion());
+    }
+
+    // ensure app version for class with same name but different @Workflow function is different
+    try (var dbos = new DBOS(config)) {
+      dbos.registerProxy(ConfigTestService.class, new ConfigTestServiceImplDifferentCode());
+      dbos.launch();
+      var exec = DBOSTestAccess.getDbosExecutor(dbos);
+      assertNotEquals(appVer1, exec.appVersion());
+    }
+
+    // ensure app version for class with same @Workflow function but different name is different
+    try (var dbos = new DBOS(config)) {
+      dbos.registerProxy(ConfigTestService.class, new ConfigTestServiceImplDifferentName());
+      dbos.launch();
+      var exec = DBOSTestAccess.getDbosExecutor(dbos);
+      assertNotEquals(appVer1, exec.appVersion());
     }
   }
 

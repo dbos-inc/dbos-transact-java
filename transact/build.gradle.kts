@@ -29,6 +29,7 @@ dependencies {
   api(libs.slf4j.api)
   api(libs.jspecify)
 
+  implementation(libs.asm)
   implementation(libs.postgresql)
   implementation(libs.hikaricp)
   implementation(libs.bundles.jackson)
