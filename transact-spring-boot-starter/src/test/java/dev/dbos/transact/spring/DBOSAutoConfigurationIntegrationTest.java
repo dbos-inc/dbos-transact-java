@@ -9,15 +9,16 @@ import javax.sql.DataSource;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Test;
-import org.sqlite.SQLiteDataSource;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.sqlite.SQLiteDataSource;
 
 class DBOSAutoConfigurationIntegrationTest {
 
   @Test
   void realPostgresDataSourceIsAccepted() {
-    try (var pg = new PgContainer(); var ds = hikariDataSource(pg)) {
+    try (var pg = new PgContainer();
+        var ds = hikariDataSource(pg)) {
       new ApplicationContextRunner()
           .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
           .withPropertyValues("dbos.application.name=test-app")
@@ -32,7 +33,8 @@ class DBOSAutoConfigurationIntegrationTest {
 
   @Test
   void realPostgresDataSourceRunsMigrations() {
-    try (var pg = new PgContainer(); var ds = hikariDataSource(pg)) {
+    try (var pg = new PgContainer();
+        var ds = hikariDataSource(pg)) {
       new ApplicationContextRunner()
           .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
           .withPropertyValues("dbos.application.name=test-app")
