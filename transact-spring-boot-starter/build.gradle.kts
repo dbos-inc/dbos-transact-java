@@ -38,6 +38,10 @@ dependencies {
   testImplementation(libs.spring.aop)
   testImplementation(libs.aspectjweaver)
   testImplementation(libs.mockito.core)
+  testImplementation(libs.testcontainers.postgresql)
+  testImplementation(libs.postgresql)
+  testImplementation(libs.hikaricp)
+  testImplementation(libs.sqlite.jdbc)
   testRuntimeOnly(libs.logback.classic)
 }
 
