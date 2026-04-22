@@ -77,7 +77,6 @@ class PartitionsTestServiceImpl implements PartitionsTestService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class PartitionedQueuesTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

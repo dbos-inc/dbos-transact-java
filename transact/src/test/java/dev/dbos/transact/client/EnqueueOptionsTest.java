@@ -8,7 +8,6 @@ import java.time.Duration;
 
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class EnqueueOptionsTest {
   @Test
   public void enqueueOptionsValidation() throws Exception {

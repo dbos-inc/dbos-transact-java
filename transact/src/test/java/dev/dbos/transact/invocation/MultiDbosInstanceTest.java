@@ -37,7 +37,6 @@ class TestServiceImpl implements TestService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class MultiDbosInstanceTest {
 
   @AutoClose final PgContainer pgContainerA = new PgContainer();

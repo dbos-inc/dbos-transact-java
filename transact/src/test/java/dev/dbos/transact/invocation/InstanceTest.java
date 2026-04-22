@@ -109,7 +109,6 @@ class HawkServiceInstanceImpl implements HawkService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class InstanceTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOS dbos;

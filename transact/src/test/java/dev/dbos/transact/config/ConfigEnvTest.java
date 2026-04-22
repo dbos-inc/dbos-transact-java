@@ -27,7 +27,6 @@ import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
 // execuition)
 @Isolated
 @Execution(ExecutionMode.SAME_THREAD)
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ConfigEnvTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

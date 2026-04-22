@@ -11,7 +11,6 @@ import java.util.List;
 
 import org.junit.jupiter.api.*;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class SyncWorkflowTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

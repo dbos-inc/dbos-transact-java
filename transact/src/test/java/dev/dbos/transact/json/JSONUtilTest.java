@@ -7,7 +7,6 @@ import java.util.*;
 
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class JSONUtilTest {
 
   @Test

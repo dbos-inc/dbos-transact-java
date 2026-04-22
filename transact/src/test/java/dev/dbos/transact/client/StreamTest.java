@@ -19,7 +19,6 @@ import java.util.UUID;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class StreamTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

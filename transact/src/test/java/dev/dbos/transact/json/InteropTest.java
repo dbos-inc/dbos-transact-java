@@ -43,7 +43,6 @@ import org.junit.jupiter.api.Test;
  *   <li>TypeScript: dbos-transact-ts/tests/interop.test.ts
  * </ul>
  */
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class InteropTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

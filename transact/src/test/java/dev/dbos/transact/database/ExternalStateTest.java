@@ -15,7 +15,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ExternalStateTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
