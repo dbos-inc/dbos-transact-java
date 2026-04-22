@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
@@ -27,6 +29,11 @@ import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
 
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.SQLException;
+
+import javax.sql.DataSource;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -1081,6 +1088,51 @@ public class SystemDatabaseTest {
     assertEquals("TestWorkflow", retrievedStatus.workflowName());
     assertEquals("com.example.TestWorkflow", retrievedStatus.className());
     assertEquals("test-instance", retrievedStatus.instanceName());
+  }
+
+  // ── Postgres validation ──────────────────────────────────────────────────
+
+  @Test
+  public void testNonPostgresDataSourceThrows() throws SQLException {
+    var ds = mockDataSource("MySQL");
+    var ex = assertThrows(IllegalStateException.class, () -> new SystemDatabase(ds, "dbos"));
+    assertTrue(ex.getMessage().contains("PostgreSQL"));
+    assertTrue(ex.getMessage().contains("MySQL"));
+  }
+
+  @Test
+  public void testNonPostgresDataSourceViaCreateThrows() throws SQLException {
+    var ds = mockDataSource("SQLite");
+    var config = DBOSConfig.defaults("test-app").withDataSource(ds);
+    var ex = assertThrows(IllegalStateException.class, () -> SystemDatabase.create(config));
+    assertTrue(ex.getMessage().contains("PostgreSQL"));
+    assertTrue(ex.getMessage().contains("SQLite"));
+  }
+
+  @Test
+  public void testSqliteDataSourceThrows() {
+    var ds = new org.sqlite.SQLiteDataSource();
+    ds.setUrl("jdbc:sqlite::memory:");
+    var ex = assertThrows(IllegalStateException.class, () -> new SystemDatabase(ds, "dbos"));
+    assertTrue(ex.getMessage().contains("PostgreSQL"));
+    assertTrue(ex.getMessage().contains("SQLite"));
+  }
+
+  @Test
+  public void testPostgresDataSourceIsAccepted() {
+    // The @BeforeEach sysdb was created successfully from a real Postgres datasource —
+    // just confirm it is non-null as evidence that validation passed.
+    assertNotNull(sysdb);
+  }
+
+  private static DataSource mockDataSource(String productName) throws SQLException {
+    var meta = mock(DatabaseMetaData.class);
+    when(meta.getDatabaseProductName()).thenReturn(productName);
+    var conn = mock(Connection.class);
+    when(conn.getMetaData()).thenReturn(meta);
+    var ds = mock(DataSource.class);
+    when(ds.getConnection()).thenReturn(conn);
+    return ds;
   }
 
   private static ExportedWorkflow buildEmptyWorkflow(String wfId) {
