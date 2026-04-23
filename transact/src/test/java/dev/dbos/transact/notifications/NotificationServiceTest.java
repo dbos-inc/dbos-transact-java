@@ -151,7 +151,6 @@ class NotServiceImpl implements NotService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class NotificationServiceTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

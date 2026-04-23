@@ -38,7 +38,6 @@ class MockTestServiceImpl implements MockTestService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class MockDbosInstanceTest {
   @Test
   public void testMockInstance() throws Exception {

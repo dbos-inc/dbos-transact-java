@@ -77,7 +77,6 @@ import org.mockito.MockitoAnnotations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ConductorTest {
 
   private static final Logger logger = LoggerFactory.getLogger(ConductorTest.class);

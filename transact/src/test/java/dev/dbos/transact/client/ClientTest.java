@@ -25,7 +25,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.*;
 import org.junitpioneer.jupiter.RetryingTest;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ClientTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

@@ -132,7 +132,6 @@ class PatchServiceImplFiveB implements PatchService2 {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class PatchTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

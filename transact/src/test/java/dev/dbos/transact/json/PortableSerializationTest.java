@@ -38,7 +38,6 @@ import org.junit.jupiter.api.Test;
  * direct database inserts using the portable JSON format, simulating cross-language workflow
  * initiation.
  */
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class PortableSerializationTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

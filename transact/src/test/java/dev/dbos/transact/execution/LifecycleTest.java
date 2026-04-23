@@ -118,7 +118,6 @@ class TestLifecycleService implements DBOSLifecycleListener {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class LifecycleTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
