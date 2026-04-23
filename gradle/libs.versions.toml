@@ -19,6 +19,7 @@ postgresql = "42.7.10"
 rest-assured = "6.0.0"
 shadow = "9.4.1"
 slf4j = "2.0.17"
+sqlite-jdbc = "3.49.1.0"
 spotless = "8.4.0"
 spring-boot = "3.4.4"
 spring-framework = "6.2.5"
@@ -48,6 +49,7 @@ postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" 
 rest-assured = { module = "io.rest-assured:rest-assured", version.ref = "rest-assured" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 spring-aop = { module = "org.springframework:spring-aop", version.ref = "spring-framework" }
 spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot" }
 spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "spring-boot" }

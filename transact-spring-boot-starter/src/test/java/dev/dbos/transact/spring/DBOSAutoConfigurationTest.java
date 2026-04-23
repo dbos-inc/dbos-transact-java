@@ -2,9 +2,14 @@ package dev.dbos.transact.spring;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
+
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.SQLException;
 
 import javax.sql.DataSource;
 
@@ -208,10 +213,23 @@ class DBOSAutoConfigurationTest {
 
   @Test
   void dataSourceBeanIsUsedWhenNoDatasourceUrlConfigured() {
-    // When a DataSource bean is present and no dbos.datasource.url is set,
-    // the DBOS instance should be created using that DataSource (no databaseUrl required).
-    // We provide a mock DBOSLifecycle to prevent dbos.launch() from running.
-    var mockDs = mock(DataSource.class);
+    new ApplicationContextRunner()
+        .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
+        .withPropertyValues("dbos.application.name=test-app")
+        .withBean(DataSource.class, () -> mockPostgresDataSource())
+        .withBean(
+            DBOSAutoConfiguration.DBOSLifecycle.class,
+            () -> mock(DBOSAutoConfiguration.DBOSLifecycle.class))
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              assertThat(context).hasSingleBean(DBOS.class);
+            });
+  }
+
+  @Test
+  void nonPostgresSpringDataSourceFails() {
+    var mockDs = mockDataSource("MySQL");
     new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
         .withPropertyValues("dbos.application.name=test-app")
@@ -221,8 +239,40 @@ class DBOSAutoConfigurationTest {
             () -> mock(DBOSAutoConfiguration.DBOSLifecycle.class))
         .run(
             context -> {
-              assertThat(context).hasNotFailed();
-              assertThat(context).hasSingleBean(DBOS.class);
+              assertThat(context).hasFailed();
+              assertThat(context.getStartupFailure())
+                  .hasMessageContaining("PostgreSQL")
+                  .hasMessageContaining("MySQL");
             });
+  }
+
+  @Test
+  void postgresSpringDataSourceSucceeds() {
+    new ApplicationContextRunner()
+        .withConfiguration(AutoConfigurations.of(DBOSAutoConfiguration.class))
+        .withPropertyValues("dbos.application.name=test-app")
+        .withBean(DataSource.class, () -> mockPostgresDataSource())
+        .withBean(
+            DBOSAutoConfiguration.DBOSLifecycle.class,
+            () -> mock(DBOSAutoConfiguration.DBOSLifecycle.class))
+        .run(context -> assertThat(context).hasNotFailed());
+  }
+
+  private static DataSource mockPostgresDataSource() {
+    return mockDataSource("PostgreSQL");
+  }
+
+  private static DataSource mockDataSource(String productName) {
+    try {
+      var meta = mock(DatabaseMetaData.class);
+      when(meta.getDatabaseProductName()).thenReturn(productName);
+      var conn = mock(Connection.class);
+      when(conn.getMetaData()).thenReturn(meta);
+      var ds = mock(DataSource.class);
+      when(ds.getConnection()).thenReturn(conn);
+      return ds;
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
   }
 }

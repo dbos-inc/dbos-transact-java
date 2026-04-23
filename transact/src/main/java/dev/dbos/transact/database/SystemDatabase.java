@@ -61,8 +61,22 @@ public class SystemDatabase implements AutoCloseable {
   private final SchedulesDAO schedulesDAO;
   private final StreamsDAO streamsDAO;
 
+  private static void validatePostgresDataSource(DataSource dataSource) {
+    try (Connection conn = dataSource.getConnection()) {
+      String productName = conn.getMetaData().getDatabaseProductName();
+      if (!productName.toLowerCase().contains("postgresql")) {
+        throw new IllegalStateException(
+            "DBOS requires a PostgreSQL datasource, but the provided datasource reports: "
+                + productName);
+      }
+    } catch (SQLException e) {
+      throw new IllegalStateException("Failed to validate DBOS datasource", e);
+    }
+  }
+
   private SystemDatabase(
       DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
+    validatePostgresDataSource(dataSource);
     schema = sanitizeSchema(schema);
     if (schema.contains("\"")) {
       throw new IllegalArgumentException("Schema name must not contain double quotes");

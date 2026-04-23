@@ -3,6 +3,8 @@ package dev.dbos.transact.spring;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.config.DBOSConfig;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
 
@@ -60,10 +62,26 @@ public class DBOSAutoConfiguration {
     if (config.databaseUrl() == null && config.dataSource() == null) {
       DataSource dataSource = dataSourceProvider.getIfAvailable();
       if (dataSource != null) {
+        validatePostgresDataSource(dataSource);
         config = config.withDataSource(dataSource);
       }
+    } else if (config.dataSource() != null) {
+      validatePostgresDataSource(config.dataSource());
     }
     return new DBOS(config);
+  }
+
+  private static void validatePostgresDataSource(DataSource dataSource) {
+    try (Connection conn = dataSource.getConnection()) {
+      String productName = conn.getMetaData().getDatabaseProductName();
+      if (!productName.toLowerCase().contains("postgresql")) {
+        throw new IllegalStateException(
+            "DBOS requires a PostgreSQL datasource, but the provided datasource reports: "
+                + productName);
+      }
+    } catch (SQLException e) {
+      throw new IllegalStateException("Failed to validate DBOS datasource", e);
+    }
   }
 
   @Bean
