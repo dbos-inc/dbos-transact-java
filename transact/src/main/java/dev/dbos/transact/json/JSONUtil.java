@@ -39,16 +39,6 @@ public class JSONUtil {
 
   private static final ObjectMapper mapper = new ObjectMapper();
 
-  public static class JsonRuntimeException extends RuntimeException {
-    public JsonRuntimeException(Exception cause) {
-      super(cause.getMessage(), cause);
-      setStackTrace(cause.getStackTrace());
-      for (Throwable suppressed : cause.getSuppressed()) {
-        addSuppressed(suppressed);
-      }
-    }
-  }
-
   static {
     mapper.registerModule(new JavaTimeModule());
     mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional

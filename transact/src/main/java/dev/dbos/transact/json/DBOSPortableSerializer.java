@@ -45,7 +45,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
     try {
       return mapper.writeValueAsString(toPortable(value));
     } catch (JsonProcessingException e) {
-      throw new JSONUtil.JsonRuntimeException(e);
+      throw new JsonRuntimeException(e);
     }
   }
 
@@ -57,7 +57,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
     try {
       return mapper.readValue(text, Object.class);
     } catch (JsonProcessingException e) {
-      throw new JSONUtil.JsonRuntimeException(e);
+      throw new JsonRuntimeException(e);
     }
   }
 
@@ -68,7 +68,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
     try {
       return mapper.writeValueAsString(args);
     } catch (JsonProcessingException e) {
-      throw new JSONUtil.JsonRuntimeException(e);
+      throw new JsonRuntimeException(e);
     }
   }
 
@@ -80,7 +80,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
     try {
       return mapper.readValue(text, JsonWorkflowArgs.class);
     } catch (JsonProcessingException e) {
-      throw new JSONUtil.JsonRuntimeException(e);
+      throw new JsonRuntimeException(e);
     }
   }
 
@@ -95,7 +95,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
     try {
       return mapper.writeValueAsString(errorData);
     } catch (JsonProcessingException e) {
-      throw new JSONUtil.JsonRuntimeException(e);
+      throw new JsonRuntimeException(e);
     }
   }
 
@@ -108,7 +108,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
       JsonWorkflowErrorData errorData = mapper.readValue(text, JsonWorkflowErrorData.class);
       return PortableWorkflowException.fromErrorData(errorData);
     } catch (JsonProcessingException e) {
-      throw new JSONUtil.JsonRuntimeException(e);
+      throw new JsonRuntimeException(e);
     }
   }
 

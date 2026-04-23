@@ -1,6 +1,6 @@
 package dev.dbos.transact.cli;
 
-import dev.dbos.transact.json.JSONUtil.JsonRuntimeException;
+import dev.dbos.transact.json.JsonRuntimeException;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowState;
