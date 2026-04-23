@@ -93,7 +93,7 @@ public class DBOS implements AutoCloseable {
    * {@link #shutdown()}.
    */
   @Override
-  public void close() throws Exception {
+  public void close() {
     shutdown();
   }
 
