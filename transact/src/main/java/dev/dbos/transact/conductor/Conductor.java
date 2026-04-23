@@ -3,7 +3,6 @@ package dev.dbos.transact.conductor;
 import dev.dbos.transact.conductor.protocol.*;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -50,13 +49,22 @@ import javax.net.ssl.X509TrustManager;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class Conductor implements AutoCloseable {
 
+  static {
+    // extend max JSON string length to handle large workflow import/export JSON
+    StreamReadConstraints.overrideDefaultStreamReadConstraints(
+        StreamReadConstraints.builder().maxStringLength(1_000_000_000).build());
+  }
+
   private static final Logger logger = LoggerFactory.getLogger(Conductor.class);
+  private static final ObjectMapper mapper = new ObjectMapper();
 
   private final int pingPeriodMs;
   private final int pingTimeoutMs;
@@ -209,7 +217,7 @@ public class Conductor implements AutoCloseable {
       BaseMessage request;
       try (InputStream is =
           new ByteArrayInputStream(messageText.getBytes(StandardCharsets.UTF_8))) {
-        request = JSONUtil.fromJson(is, BaseMessage.class);
+        request = mapper.readValue(is, BaseMessage.class);
       } catch (Exception e) {
         logger.error("Conductor JSON Parsing error for {} char message", messageSize, e);
         return null;
@@ -377,7 +385,7 @@ public class Conductor implements AutoCloseable {
         response.request_id);
     synchronized (ws) {
       try (OutputStream out = new FragmentingOutputStream(ws, fragmentSize)) {
-        JSONUtil.toJsonStream(response, out);
+        mapper.writeValue(out, response);
       }
     }
     logger.debug(
@@ -1079,7 +1087,7 @@ public class Conductor implements AutoCloseable {
           long startTime = System.currentTimeMillis();
           logger.info("Starting streaming import workflow");
           String requestId = null;
-          try (JsonParser parser = JSONUtil.createParser(pipeReader)) {
+          try (JsonParser parser = mapper.createParser(pipeReader)) {
             if (parser.nextToken() != JsonToken.START_OBJECT) {
               throw new IOException("Expected JSON object at start of import message");
             }
@@ -1100,7 +1108,7 @@ public class Conductor implements AutoCloseable {
                   byte[] decoded = parser.getBinaryValue();
                   try (GZIPInputStream gzip =
                       new GZIPInputStream(new ByteArrayInputStream(decoded))) {
-                    workflows = JSONUtil.fromJson(gzip, typeRef);
+                    workflows = mapper.readValue(gzip, typeRef);
                   }
                   break;
                 default:
@@ -1222,11 +1230,11 @@ public class Conductor implements AutoCloseable {
     logger.debug(
         "Starting to stream export response: type={}, id={}", message.type, message.request_id);
 
-    // Build the JSON prefix manually. JSONUtil.toJson(String) produces a properly
+    // Build the JSON prefix manually. mapper.writeValueAsString(String) produces a properly
     // escaped, double-quoted JSON string value for the request_id field.
     String prefix =
         "{\"type\":\"export_workflow\",\"request_id\":"
-            + JSONUtil.toJson(message.request_id)
+            + mapper.writeValueAsString(message.request_id)
             + ",\"serialized_workflow\":\"";
     String suffix = "\"}";
 
@@ -1262,7 +1270,7 @@ public class Conductor implements AutoCloseable {
         // Note: When the base64Out wrapper closes at the end of the try block, it flushes padding
         // into nonClosingFragOut (and into fragOut), but does NOT close fragOut because of the
         // non-closing delegate.
-        JSONUtil.toJson(gzipOut, workflows);
+        mapper.writeValue(gzipOut, workflows);
       }
 
       // Write the closing JSON characters; fragOut.close() sends the final WebSocket frame.
@@ -1278,7 +1286,7 @@ public class Conductor implements AutoCloseable {
     var compressed = Base64.getDecoder().decode(serializedWorkflow);
     try (var gis = new GZIPInputStream(new ByteArrayInputStream(compressed))) {
       var typeRef = new TypeReference<List<ExportedWorkflow>>() {};
-      return JSONUtil.fromJson(gis, typeRef);
+      return mapper.readValue(gis, typeRef);
     }
   }
 
@@ -1286,7 +1294,7 @@ public class Conductor implements AutoCloseable {
   static String serializeExportedWorkflows(List<ExportedWorkflow> workflows) throws IOException {
     var out = new ByteArrayOutputStream();
     try (var gOut = new GZIPOutputStream(out)) {
-      JSONUtil.toJson(gOut, workflows);
+      mapper.writeValue(gOut, workflows);
     }
     return Base64.getEncoder().encodeToString(out.toByteArray());
   }
