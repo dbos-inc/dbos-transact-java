@@ -3,7 +3,6 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
-import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.StepInfo;
@@ -342,9 +341,18 @@ class StepsDAO {
       endTime = System.currentTimeMillis() + duration.toMillis();
 
       try {
+        var serializedValue =
+            SerializationUtil.serializeValue(
+                endTime, serializer != null ? serializer.name() : null, serializer);
         StepResult output =
-            new StepResult(workflowUuid, functionId, functionName, null, null, null, null)
-                .withOutput(JSONUtil.serialize(endTime));
+            new StepResult(
+                workflowUuid,
+                functionId,
+                functionName,
+                serializedValue.serializedValue(),
+                null,
+                null,
+                serializedValue.serialization());
         recordStepResultTxn(dataSource, output, startTime, (long) endTime, schema);
       } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
