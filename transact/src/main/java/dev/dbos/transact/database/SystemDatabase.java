@@ -4,7 +4,7 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.DBOSSerializer;
-import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -1012,7 +1012,7 @@ public class SystemDatabase implements AutoCloseable {
                     8,
                     status.authenticatedRoles() == null
                         ? null
-                        : JSONUtil.serializeArray(status.authenticatedRoles()));
+                        : JsonUtility.toJson(status.authenticatedRoles()));
                 wfStmt.setString(
                     9,
                     status.output() == null

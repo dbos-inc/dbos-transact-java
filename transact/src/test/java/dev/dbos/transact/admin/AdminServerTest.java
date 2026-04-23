@@ -14,7 +14,7 @@ import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -531,7 +531,8 @@ class AdminServerTest {
         if (i == 4) {
           assertNull(step.get("output"));
           assertNotNull(step.get("error"));
-          var result = JSONUtil.fromJson((String) step.get("error"), ErrorResult.class);
+          // TODO: review
+          var result = JsonUtility.fromJson((String) step.get("error"), ErrorResult.class);
           assertEquals("error-4", result.message());
           assertNull(step.get("child_workflow_id"));
         }

@@ -1,6 +1,6 @@
 package dev.dbos.transact.conductor.protocol;
 
-import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.JsonUtility;
 
 import java.util.Collections;
 import java.util.List;
@@ -10,7 +10,7 @@ public class GetWorkflowEventsResponse extends BaseResponse {
 
   public record EventOutput(String key, String value) {
     public static EventOutput from(Map.Entry<String, Object> entry) {
-      return new EventOutput(entry.getKey(), JSONUtil.toJson(entry.getValue()));
+      return new EventOutput(entry.getKey(), JsonUtility.toJson(entry.getValue()));
     }
   }
 
