@@ -1,10 +1,5 @@
 package dev.dbos.transact.json;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Type;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
@@ -12,13 +7,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JavaType;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 /**
  * Portable JSON serializer that produces output compatible with any language. Does not include
@@ -33,11 +21,6 @@ public class DBOSPortableSerializer implements DBOSSerializer {
 
   public static final DBOSPortableSerializer INSTANCE = new DBOSPortableSerializer();
 
-  private static final ObjectMapper mapper =
-      new ObjectMapper()
-          .registerModule(new JavaTimeModule())
-          .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
   public DBOSPortableSerializer() {}
 
   @Override
@@ -47,11 +30,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
 
   @Override
   public String stringify(Object value) {
-    try {
-      return mapper.writeValueAsString(toPortable(value));
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return JsonUtility.toJson(toPortable(value));
   }
 
   @Override
@@ -59,22 +38,14 @@ public class DBOSPortableSerializer implements DBOSSerializer {
     if (text == null) {
       return null;
     }
-    try {
-      return mapper.readValue(text, Object.class);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return JsonUtility.fromJson(text, Object.class);
   }
 
   /** Serialize workflow arguments in portable format. */
   public String stringifyArgs(Object[] positionalArgs, Map<String, Object> namedArgs) {
     JsonWorkflowArgs args =
         new JsonWorkflowArgs(positionalArgs, namedArgs != null ? toPortableMap(namedArgs) : null);
-    try {
-      return mapper.writeValueAsString(args);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return JsonUtility.toJson(args);
   }
 
   /** Deserialize workflow arguments from portable format. */
@@ -82,26 +53,22 @@ public class DBOSPortableSerializer implements DBOSSerializer {
     if (text == null) {
       return null;
     }
-    try {
-      return mapper.readValue(text, JsonWorkflowArgs.class);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    return JsonUtility.fromJson(text, JsonWorkflowArgs.class);
   }
 
   /** Serialize an error in portable format. */
   public String stringifyThrowable(Throwable error) {
-    JsonWorkflowErrorData errorData =
-        new JsonWorkflowErrorData(
-            error.getClass().getSimpleName(),
-            error.getMessage(),
-            error instanceof PortableWorkflowException pwe ? pwe.getCode() : null,
-            error instanceof PortableWorkflowException pwe ? pwe.getData() : null);
-    try {
-      return mapper.writeValueAsString(errorData);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
+    String name;
+    Object code = null;
+    Object data = null;
+    if (error instanceof PortableWorkflowException pwe) {
+      name = pwe.getErrorName();
+      code = pwe.getCode();
+      data = pwe.getData();
+    } else {
+      name = error.getClass().getSimpleName();
     }
+    return JsonUtility.toJson(new JsonWorkflowErrorData(name, error.getMessage(), code, data));
   }
 
   /** Deserialize an error from portable format. */
@@ -109,12 +76,8 @@ public class DBOSPortableSerializer implements DBOSSerializer {
     if (text == null) {
       return null;
     }
-    try {
-      JsonWorkflowErrorData errorData = mapper.readValue(text, JsonWorkflowErrorData.class);
-      return PortableWorkflowException.fromErrorData(errorData);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
+    JsonWorkflowErrorData errorData = JsonUtility.fromJson(text, JsonWorkflowErrorData.class);
+    return PortableWorkflowException.fromErrorData(errorData);
   }
 
   /**
@@ -178,81 +141,5 @@ public class DBOSPortableSerializer implements DBOSSerializer {
       result.put(entry.getKey(), toPortable(entry.getValue()));
     }
     return result;
-  }
-
-  public static String toJson(Object obj) {
-    try {
-      return mapper.writeValueAsString(obj);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
-  }
-
-  public static <T> T fromJson(String content, Class<T> valueType) {
-    try {
-      return mapper.readValue(content, valueType);
-    } catch (JsonProcessingException e) {
-      throw new JsonRuntimeException(e);
-    }
-  }
-
-  public static <T> T fromJson(InputStream in, Class<T> valueType) {
-    try {
-      return mapper.readValue(in, valueType);
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
-  }
-
-  public static <T> T fromJson(InputStream in, TypeReference<T> valueType) {
-    try {
-      return mapper.readValue(in, valueType);
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
-  }
-
-  public static Object[] coerceArguments(Object[] args, Method method) {
-    int expected = method.getParameterCount();
-    if (args.length != expected) {
-      throw new IllegalArgumentException(
-          "Expected "
-              + expected
-              + " argument(s) but got "
-              + args.length
-              + " for method "
-              + method.getName());
-    }
-
-    Type[] genericTypes = method.getGenericParameterTypes();
-    Object[] coerced = new Object[args.length];
-    for (int i = 0; i < args.length; i++) {
-      if (args[i] == null) {
-        coerced[i] = null;
-        continue;
-      }
-      try {
-        JavaType targetType = mapper.getTypeFactory().constructType(genericTypes[i]);
-        if (targetType.getRawClass().isInstance(args[i])) {
-          coerced[i] = args[i];
-          continue;
-        }
-        coerced[i] = mapper.convertValue(args[i], targetType);
-      } catch (IllegalArgumentException e) {
-        throw new IllegalArgumentException(
-            "Cannot convert argument "
-                + i
-                + " from "
-                + args[i].getClass().getSimpleName()
-                + " to "
-                + genericTypes[i].getTypeName()
-                + " for method "
-                + method.getName()
-                + ": "
-                + e.getMessage(),
-            e);
-      }
-    }
-    return coerced;
   }
 }

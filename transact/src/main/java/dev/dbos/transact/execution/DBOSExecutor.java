@@ -24,8 +24,8 @@ import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.exceptions.DBOSWorkflowFunctionNotFoundException;
 import dev.dbos.transact.internal.AppVersionComputer;
 import dev.dbos.transact.internal.WorkflowRegistry;
-import dev.dbos.transact.json.DBOSPortableSerializer;
 import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
@@ -1342,7 +1342,7 @@ public class DBOSExecutor implements AutoCloseable {
     // which may not match the method signature (long, String[], custom POJOs).
     // Other serializers may have similar issues (e.g., dates as strings).
     try {
-      inputs = DBOSPortableSerializer.coerceArguments(inputs, workflow.workflowMethod());
+      inputs = JsonUtility.coerceArguments(inputs, workflow.workflowMethod());
     } catch (IllegalArgumentException e) {
       logger.error("Argument coercion failed for workflow {}", workflowId, e);
       persistWorkflowError(workflowId, e, status.serialization());

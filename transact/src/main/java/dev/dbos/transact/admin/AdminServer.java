@@ -2,7 +2,7 @@ package dev.dbos.transact.admin;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.json.DBOSPortableSerializer;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -120,7 +120,7 @@ public class AdminServer implements AutoCloseable {
     if (!ensurePostJson(exchange)) return;
 
     List<String> executorIds =
-        DBOSPortableSerializer.fromJson(exchange.getRequestBody(), new TypeReference<>() {});
+        JsonUtility.fromJson(exchange.getRequestBody(), new TypeReference<>() {});
     logger.debug("workflowRecovery executors {}", executorIds);
     var handles = dbosExecutor.recoverPendingWorkflows(executorIds);
     List<String> workflowIds =
@@ -147,8 +147,7 @@ public class AdminServer implements AutoCloseable {
   private void garbageCollect(HttpExchange exchange) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request =
-        DBOSPortableSerializer.fromJson(exchange.getRequestBody(), GarbageCollectRequest.class);
+    var request = JsonUtility.fromJson(exchange.getRequestBody(), GarbageCollectRequest.class);
 
     systemDatabase.garbageCollect(
         Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms), (long) request.rows_threshold);
@@ -159,8 +158,7 @@ public class AdminServer implements AutoCloseable {
   private void globalTimeout(HttpExchange exchange) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request =
-        DBOSPortableSerializer.fromJson(exchange.getRequestBody(), GlobalTimeoutRequest.class);
+    var request = JsonUtility.fromJson(exchange.getRequestBody(), GlobalTimeoutRequest.class);
     dbosExecutor.globalTimeout(Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms));
 
     exchange.sendResponseHeaders(204, 0);
@@ -169,8 +167,7 @@ public class AdminServer implements AutoCloseable {
   private void listWorkflows(HttpExchange exchange) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request =
-        DBOSPortableSerializer.fromJson(exchange.getRequestBody(), ListWorkflowsRequest.class);
+    var request = JsonUtility.fromJson(exchange.getRequestBody(), ListWorkflowsRequest.class);
     var input = request.asInput();
     var workflows = systemDatabase.listWorkflows(input);
     var response = workflows.stream().map(WorkflowsOutput::of).collect(Collectors.toList());
@@ -180,9 +177,7 @@ public class AdminServer implements AutoCloseable {
   private void listQueuedWorkflows(HttpExchange exchange) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request =
-        DBOSPortableSerializer.fromJson(
-            exchange.getRequestBody(), ListQueuedWorkflowsRequest.class);
+    var request = JsonUtility.fromJson(exchange.getRequestBody(), ListQueuedWorkflowsRequest.class);
     var input = request.asInput();
     var workflows = systemDatabase.listWorkflows(input);
     var response = workflows.stream().map(WorkflowsOutput::of).collect(Collectors.toList());
@@ -228,7 +223,7 @@ public class AdminServer implements AutoCloseable {
   private void fork(HttpExchange exchange, String wfid) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request = DBOSPortableSerializer.fromJson(exchange.getRequestBody(), ForkRequest.class);
+    var request = JsonUtility.fromJson(exchange.getRequestBody(), ForkRequest.class);
     int startStep = request.start_step == null ? 0 : request.start_step;
     var options =
         new ForkOptions(request.new_workflow_id)
@@ -262,7 +257,7 @@ public class AdminServer implements AutoCloseable {
 
   private static void sendMappedJson(HttpExchange exchange, int statusCode, Object object)
       throws IOException {
-    var json = DBOSPortableSerializer.toJson(object);
+    var json = JsonUtility.toJson(object);
     sendJson(exchange, statusCode, json);
   }
 

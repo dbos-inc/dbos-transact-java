@@ -1,6 +1,6 @@
 package dev.dbos.transact.conductor.protocol;
 
-import dev.dbos.transact.json.DBOSPortableSerializer;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 
 public record ScheduleOutput(
@@ -24,7 +24,7 @@ public record ScheduleOutput(
         s.className(),
         s.cron(),
         s.status().name(),
-        loadContext && s.context() != null ? DBOSPortableSerializer.toJson(s.context()) : null,
+        loadContext && s.context() != null ? JsonUtility.toJson(s.context()) : null,
         s.lastFiredAt() != null ? s.lastFiredAt().toString() : null,
         s.automaticBackfill(),
         s.cronTimezone() != null ? s.cronTimezone().getId() : null,

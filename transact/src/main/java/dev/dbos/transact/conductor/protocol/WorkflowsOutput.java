@@ -1,6 +1,6 @@
 package dev.dbos.transact.conductor.protocol;
 
-import dev.dbos.transact.json.DBOSPortableSerializer;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.util.Objects;
@@ -50,10 +50,10 @@ public class WorkflowsOutput {
     this.AssumedRole = status.assumedRole();
     this.AuthenticatedRoles =
         authenticatedRoles != null && authenticatedRoles.length > 0
-            ? DBOSPortableSerializer.toJson(authenticatedRoles)
+            ? JsonUtility.toJson(authenticatedRoles)
             : null;
-    this.Input = input != null ? DBOSPortableSerializer.toJson(input) : null;
-    this.Output = output != null ? DBOSPortableSerializer.toJson(output) : null;
+    this.Input = input != null ? JsonUtility.toJson(input) : null;
+    this.Output = output != null ? JsonUtility.toJson(output) : null;
     this.Request = null; // not used in Java TX
     this.Error =
         status.error() != null
