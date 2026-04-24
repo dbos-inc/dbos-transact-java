@@ -3,8 +3,8 @@ package dev.dbos.transact.json;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.time.Instant;
 import java.util.Arrays;
@@ -221,7 +221,8 @@ public class JavaSerializerTest {
 
   @Test
   public void testPortableStringifyParsePortableWorkflowException() throws Exception {
-    var original = new PortableWorkflowException("not found", "WorkflowError", 404, Map.of("id", "abc"));
+    var original =
+        new PortableWorkflowException("not found", "WorkflowError", 404, Map.of("id", "abc"));
     var serialized = DBOSPortableSerializer.INSTANCE.stringifyThrowable(original);
     var deserialized = DBOSPortableSerializer.INSTANCE.parseThrowable(serialized);
     assertInstanceOf(PortableWorkflowException.class, deserialized);

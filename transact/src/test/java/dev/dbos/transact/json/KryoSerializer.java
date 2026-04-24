@@ -1,10 +1,11 @@
 package dev.dbos.transact.json;
 
+import java.io.ByteArrayOutputStream;
+import java.util.Base64;
+
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import java.io.ByteArrayOutputStream;
-import java.util.Base64;
 
 /**
  * Example custom DBOSSerializer implementation using Kryo.
