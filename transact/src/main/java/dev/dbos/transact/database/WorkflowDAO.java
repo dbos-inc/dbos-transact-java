@@ -7,8 +7,8 @@ import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
 import dev.dbos.transact.internal.DebugTriggers;
+import dev.dbos.transact.json.DBOSPortableSerializer;
 import dev.dbos.transact.json.DBOSSerializer;
-import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -239,7 +239,7 @@ class WorkflowDAO {
 
     var authenticatedRolesJson =
         status.authenticatedRoles() != null
-            ? JsonUtility.toJson(status.authenticatedRoles())
+            ? DBOSPortableSerializer.toJson(status.authenticatedRoles())
             : null;
     try (PreparedStatement stmt = connection.prepareStatement(insertSQL)) {
 
@@ -778,7 +778,7 @@ class WorkflowDAO {
             rs.getString("authenticated_user"),
             rs.getString("assumed_role"),
             (authenticatedRolesJson != null)
-                ? JsonUtility.fromJson(authenticatedRolesJson, String[].class)
+                ? DBOSPortableSerializer.fromJson(authenticatedRolesJson, String[].class)
                 : null,
             loadInput
                 ? SerializationUtil.deserializePositionalArgs(
@@ -1154,7 +1154,7 @@ class WorkflowDAO {
           9,
           originalStatus.authenticatedRoles() == null
               ? null
-              : JsonUtility.toJson(originalStatus.authenticatedRoles()));
+              : DBOSPortableSerializer.toJson(originalStatus.authenticatedRoles()));
       stmt.setString(10, originalStatus.assumedRole());
       stmt.setString(11, Objects.requireNonNullElse(queueName, Constants.DBOS_INTERNAL_QUEUE));
       stmt.setString(12, queuePartitionKey);

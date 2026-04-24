@@ -34,9 +34,11 @@ public class DBOSJavaSerializer implements DBOSSerializer {
     typer.init(JsonTypeInfo.Id.CLASS, null);
     typer.inclusion(JsonTypeInfo.As.PROPERTY);
 
-    this.mapper = new ObjectMapper().setDefaultTyping(typer);
-    this.mapper.registerModule(new JavaTimeModule());
-    this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    this.mapper =
+        new ObjectMapper()
+            .setDefaultTyping(typer)
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
   }
 
   @Override

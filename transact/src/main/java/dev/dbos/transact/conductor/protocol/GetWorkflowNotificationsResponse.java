@@ -1,6 +1,6 @@
 package dev.dbos.transact.conductor.protocol;
 
-import dev.dbos.transact.json.JsonUtility;
+import dev.dbos.transact.json.DBOSPortableSerializer;
 import dev.dbos.transact.workflow.NotificationInfo;
 
 import java.util.Collections;
@@ -13,7 +13,7 @@ public class GetWorkflowNotificationsResponse extends BaseResponse {
     public static NotificationOutput from(NotificationInfo info) {
       return new NotificationOutput(
           info.topic(),
-          JsonUtility.toJson(info.message()),
+          DBOSPortableSerializer.toJson(info.message()),
           info.createdAtEpochMs(),
           info.consumed());
     }

@@ -1,6 +1,6 @@
 package dev.dbos.transact.conductor.protocol;
 
-import dev.dbos.transact.json.JsonUtility;
+import dev.dbos.transact.json.DBOSPortableSerializer;
 import dev.dbos.transact.workflow.StepInfo;
 
 import java.util.Collections;
@@ -24,7 +24,7 @@ public class ListStepsResponse extends BaseResponse {
 
       this.function_id = info.functionId();
       this.function_name = info.functionName();
-      this.output = output != null ? JsonUtility.toJson(output) : null;
+      this.output = output != null ? DBOSPortableSerializer.toJson(output) : null;
       this.error = error != null ? "%s: %s".formatted(error.className(), error.message()) : null;
       this.child_workflow_id = info.childWorkflowId();
       this.started_at_epoch_ms =

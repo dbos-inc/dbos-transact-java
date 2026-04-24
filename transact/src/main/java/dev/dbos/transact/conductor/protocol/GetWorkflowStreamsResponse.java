@@ -1,6 +1,6 @@
 package dev.dbos.transact.conductor.protocol;
 
-import dev.dbos.transact.json.JsonUtility;
+import dev.dbos.transact.json.DBOSPortableSerializer;
 
 import java.util.Collections;
 import java.util.List;
@@ -10,7 +10,8 @@ public class GetWorkflowStreamsResponse extends BaseResponse {
 
   public record StreamEntryOutput(String key, List<String> values) {
     public static StreamEntryOutput from(String key, List<Object> values) {
-      return new StreamEntryOutput(key, values.stream().map(JsonUtility::toJson).toList());
+      return new StreamEntryOutput(
+          key, values.stream().map(DBOSPortableSerializer::toJson).toList());
     }
   }
 

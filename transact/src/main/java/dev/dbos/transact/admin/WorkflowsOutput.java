@@ -1,6 +1,6 @@
 package dev.dbos.transact.admin;
 
-import dev.dbos.transact.json.JsonUtility;
+import dev.dbos.transact.json.DBOSPortableSerializer;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 /**
@@ -31,10 +31,10 @@ record WorkflowsOutput(
     var roles =
         status.authenticatedRoles() == null
             ? "[]"
-            : JsonUtility.toJson(status.authenticatedRoles());
-    var input = status.input() == null ? "[]" : JsonUtility.toJson(status.input());
-    var output = status.output() == null ? null : JsonUtility.toJson(status.output());
-    var error = status.error() == null ? null : JsonUtility.toJson(status.error());
+            : DBOSPortableSerializer.toJson(status.authenticatedRoles());
+    var input = status.input() == null ? "[]" : DBOSPortableSerializer.toJson(status.input());
+    var output = status.output() == null ? null : DBOSPortableSerializer.toJson(status.output());
+    var error = status.error() == null ? null : DBOSPortableSerializer.toJson(status.error());
 
     return new WorkflowsOutput(
         status.workflowId(),

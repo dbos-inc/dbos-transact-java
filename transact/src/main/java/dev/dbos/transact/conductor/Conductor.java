@@ -115,12 +115,13 @@ public class Conductor implements AutoCloseable {
   }
 
   static ObjectMapper buildObjectMapper() {
-    var constraints = StreamReadConstraints.builder().maxStringLength(1_000_000_000).build();
-    var factory = JsonFactory.builder().streamReadConstraints(constraints).build();
-    var mapper = new ObjectMapper(factory);
-    mapper.registerModule(new JavaTimeModule());
-    mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-    return mapper;
+    return new ObjectMapper(
+            JsonFactory.builder()
+                .streamReadConstraints(
+                    StreamReadConstraints.builder().maxStringLength(1_000_000_000).build())
+                .build())
+        .registerModule(new JavaTimeModule())
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
   }
 
   // TODO: do we need the insecure connection?
