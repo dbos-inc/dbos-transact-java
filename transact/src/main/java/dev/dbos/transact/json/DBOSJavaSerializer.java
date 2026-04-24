@@ -28,9 +28,8 @@ public class DBOSJavaSerializer implements DBOSSerializer {
             .activateDefaultTyping(
                 ptv, ObjectMapper.DefaultTyping.NON_FINAL_AND_ENUMS, JsonTypeInfo.As.PROPERTY);
 
-this.mapper.registerModule(new JavaTimeModule());
+    this.mapper.registerModule(new JavaTimeModule());
     this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional
-
   }
 
   @Override
