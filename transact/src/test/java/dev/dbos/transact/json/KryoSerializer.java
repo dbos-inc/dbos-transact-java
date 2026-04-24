@@ -38,7 +38,7 @@ public class KryoSerializer implements DBOSSerializer {
   }
 
   @Override
-  public String stringify(Object value) {
+  public String serialize(Object value) {
     Kryo kryo = kryoLocal.get();
     try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
         Output output = new Output(baos)) {
@@ -51,7 +51,7 @@ public class KryoSerializer implements DBOSSerializer {
   }
 
   @Override
-  public Object parse(String text) {
+  public Object deserialize(String text) {
     if (text == null) {
       return null;
     }
@@ -66,7 +66,7 @@ public class KryoSerializer implements DBOSSerializer {
   // strong module encapsulation, so throwables use Java's built-in serialization instead.
 
   @Override
-  public String stringifyThrowable(Throwable throwable) {
+  public String serializeThrowable(Throwable throwable) {
     try (var baos = new ByteArrayOutputStream();
         var oos = new ObjectOutputStream(baos)) {
       oos.writeObject(throwable);
@@ -77,7 +77,7 @@ public class KryoSerializer implements DBOSSerializer {
   }
 
   @Override
-  public Throwable parseThrowable(String text) {
+  public Throwable deserializeThrowable(String text) {
     if (text == null) {
       return null;
     }

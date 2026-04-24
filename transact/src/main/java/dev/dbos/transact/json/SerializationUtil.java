@@ -40,12 +40,12 @@ public final class SerializationUtil {
       Object value, String format, DBOSSerializer customSerializer) {
 
     if (PORTABLE.equals(format)) {
-      String serialized = DBOSPortableSerializer.INSTANCE.stringify(value);
+      String serialized = DBOSPortableSerializer.INSTANCE.serialize(value);
       return new SerializedResult(serialized, DBOSPortableSerializer.NAME);
     }
 
     if (NATIVE.equals(format)) {
-      String serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
+      String serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
       return new SerializedResult(serialized, DBOSJavaSerializer.NAME);
     }
 
@@ -55,7 +55,7 @@ public final class SerializationUtil {
     if (format != null && !serializer.name().equals(format)) {
       throw new IllegalArgumentException("Serializer is not available");
     }
-    String serialized = serializer.stringify(value);
+    String serialized = serializer.serialize(value);
     return new SerializedResult(serialized, serializer.name());
   }
 
@@ -75,11 +75,11 @@ public final class SerializationUtil {
     }
 
     if (DBOSPortableSerializer.NAME.equals(serialization)) {
-      return DBOSPortableSerializer.INSTANCE.parse(serializedValue);
+      return DBOSPortableSerializer.INSTANCE.deserialize(serializedValue);
     }
 
     if (DBOSJavaSerializer.NAME.equals(serialization)) {
-      return DBOSJavaSerializer.INSTANCE.parse(serializedValue);
+      return DBOSJavaSerializer.INSTANCE.deserialize(serializedValue);
     }
 
     DBOSSerializer serializer = customSerializer;
@@ -88,7 +88,7 @@ public final class SerializationUtil {
       throw new IllegalArgumentException("Serialization is not available");
     }
 
-    return serializer.parse(serializedValue);
+    return serializer.deserialize(serializedValue);
   }
 
   // ============ Arguments Serialization ============
@@ -109,7 +109,7 @@ public final class SerializationUtil {
       DBOSSerializer customSerializer) {
 
     if (PORTABLE.equals(serialization)) {
-      String serialized = DBOSPortableSerializer.INSTANCE.stringifyArgs(positionalArgs, namedArgs);
+      String serialized = DBOSPortableSerializer.INSTANCE.serializeArgs(positionalArgs, namedArgs);
       return new SerializedResult(serialized, DBOSPortableSerializer.NAME);
     }
 
@@ -119,7 +119,7 @@ public final class SerializationUtil {
     }
 
     if (NATIVE.equals(serialization)) {
-      String serialized = DBOSJavaSerializer.INSTANCE.stringify(positionalArgs);
+      String serialized = DBOSJavaSerializer.INSTANCE.serialize(positionalArgs);
       return new SerializedResult(serialized, DBOSJavaSerializer.NAME);
     }
 
@@ -129,7 +129,7 @@ public final class SerializationUtil {
       throw new IllegalArgumentException("Serialization is not available");
     }
 
-    String serialized = serializer.stringify(positionalArgs);
+    String serialized = serializer.serialize(positionalArgs);
     return new SerializedResult(serialized, serializer.name());
   }
 
@@ -149,7 +149,7 @@ public final class SerializationUtil {
     }
 
     if (DBOSPortableSerializer.NAME.equals(serialization)) {
-      JsonWorkflowArgs args = DBOSPortableSerializer.INSTANCE.parseArgs(serializedValue);
+      JsonWorkflowArgs args = DBOSPortableSerializer.INSTANCE.deserializeArgs(serializedValue);
       if (args == null || args.positionalArgs() == null) {
         return new Object[0];
       }
@@ -157,7 +157,7 @@ public final class SerializationUtil {
     }
 
     if (DBOSJavaSerializer.NAME.equals(serialization) || serialization == null) {
-      return (Object[]) DBOSJavaSerializer.INSTANCE.parse(serializedValue);
+      return (Object[]) DBOSJavaSerializer.INSTANCE.deserialize(serializedValue);
     }
 
     DBOSSerializer serializer = customSerializer;
@@ -166,7 +166,7 @@ public final class SerializationUtil {
       throw new IllegalArgumentException("Serialization is not available");
     }
 
-    Object parsed = serializer.parse(serializedValue);
+    Object parsed = serializer.deserialize(serializedValue);
     if (parsed instanceof List<?> list) {
       return list.toArray();
     }
@@ -187,13 +187,13 @@ public final class SerializationUtil {
       Throwable error, String serialization, DBOSSerializer customSerializer) {
 
     if (PORTABLE.equals(serialization)) {
-      String serialized = DBOSPortableSerializer.INSTANCE.stringifyThrowable(error);
+      String serialized = DBOSPortableSerializer.INSTANCE.serializeThrowable(error);
       return new SerializedResult(serialized, DBOSPortableSerializer.NAME);
     }
 
     if (NATIVE.equals(serialization)) {
       // Use the existing Java error serialization
-      String serialized = DBOSJavaSerializer.INSTANCE.stringifyThrowable(error);
+      String serialized = DBOSJavaSerializer.INSTANCE.serializeThrowable(error);
       return new SerializedResult(serialized, DBOSJavaSerializer.NAME);
     }
 
@@ -204,7 +204,7 @@ public final class SerializationUtil {
     }
 
     // Custom serializer - use native Java format
-    String serialized = serializer.stringifyThrowable(error);
+    String serialized = serializer.serializeThrowable(error);
     return new SerializedResult(serialized, serializer.name());
   }
 
@@ -224,11 +224,11 @@ public final class SerializationUtil {
     }
 
     if (DBOSPortableSerializer.NAME.equals(serialization)) {
-      return DBOSPortableSerializer.INSTANCE.parseThrowable(serializedValue);
+      return DBOSPortableSerializer.INSTANCE.deserializeThrowable(serializedValue);
     }
 
     if (DBOSJavaSerializer.NAME.equals(serialization) || serialization == null) {
-      return DBOSJavaSerializer.INSTANCE.parseThrowable(serializedValue);
+      return DBOSJavaSerializer.INSTANCE.deserializeThrowable(serializedValue);
     }
 
     DBOSSerializer serializer = customSerializer;
@@ -237,7 +237,7 @@ public final class SerializationUtil {
       throw new IllegalArgumentException("Serialization is not available");
     }
 
-    return serializer.parseThrowable(serializedValue);
+    return serializer.deserializeThrowable(serializedValue);
   }
 
   /**

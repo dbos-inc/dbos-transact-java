@@ -29,35 +29,20 @@ public class DBOSPortableSerializer implements DBOSSerializer {
   }
 
   @Override
-  public String stringify(Object value) {
+  public String serialize(Object value) {
     return JsonUtility.toJson(toPortable(value));
   }
 
   @Override
-  public Object parse(String text) {
+  public Object deserialize(String text) {
     if (text == null) {
       return null;
     }
     return JsonUtility.fromJson(text, Object.class);
   }
 
-  /** Serialize workflow arguments in portable format. */
-  public String stringifyArgs(Object[] positionalArgs, Map<String, Object> namedArgs) {
-    JsonWorkflowArgs args =
-        new JsonWorkflowArgs(positionalArgs, namedArgs != null ? toPortableMap(namedArgs) : null);
-    return JsonUtility.toJson(args);
-  }
-
-  /** Deserialize workflow arguments from portable format. */
-  public JsonWorkflowArgs parseArgs(String text) {
-    if (text == null) {
-      return null;
-    }
-    return JsonUtility.fromJson(text, JsonWorkflowArgs.class);
-  }
-
-  /** Serialize an error in portable format. */
-  public String stringifyThrowable(Throwable error) {
+  @Override
+  public String serializeThrowable(Throwable error) {
     String name;
     Object code = null;
     Object data = null;
@@ -71,13 +56,28 @@ public class DBOSPortableSerializer implements DBOSSerializer {
     return JsonUtility.toJson(new JsonWorkflowErrorData(name, error.getMessage(), code, data));
   }
 
-  /** Deserialize an error from portable format. */
-  public Throwable parseThrowable(String text) {
+  @Override
+  public Throwable deserializeThrowable(String text) {
     if (text == null) {
       return null;
     }
     JsonWorkflowErrorData errorData = JsonUtility.fromJson(text, JsonWorkflowErrorData.class);
     return PortableWorkflowException.fromErrorData(errorData);
+  }
+
+  /** Serialize workflow arguments in portable format. */
+  public String serializeArgs(Object[] positionalArgs, Map<String, Object> namedArgs) {
+    JsonWorkflowArgs args =
+        new JsonWorkflowArgs(positionalArgs, namedArgs != null ? toPortableMap(namedArgs) : null);
+    return JsonUtility.toJson(args);
+  }
+
+  /** Deserialize workflow arguments from portable format. */
+  public JsonWorkflowArgs deserializeArgs(String text) {
+    if (text == null) {
+      return null;
+    }
+    return JsonUtility.fromJson(text, JsonWorkflowArgs.class);
   }
 
   /**

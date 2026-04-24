@@ -23,8 +23,8 @@ public class JavaSerializerTest {
   @Test
   public void testFloat() throws Exception {
     float value = 3.3f;
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Float.class, deserialized.getClass());
     assertEquals(value, deserialized);
   }
@@ -32,8 +32,8 @@ public class JavaSerializerTest {
   @Test
   public void testPrimitiveObjectArray() throws Exception {
     Object[] values = {42, 1234567890123L, 3.3f, 3.14159, true, false};
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(values);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(values);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     // Should deserialize to Object[]
     assertEquals(Object[].class, deserialized.getClass());
     Object[] arr = (Object[]) deserialized;
@@ -52,8 +52,8 @@ public class JavaSerializerTest {
   @Test
   public void testInt() throws Exception {
     int value = 42;
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Integer.class, deserialized.getClass());
     assertEquals(value, deserialized);
   }
@@ -61,8 +61,8 @@ public class JavaSerializerTest {
   @Test
   public void testLong() throws Exception {
     long value = 1234567890123L;
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Long.class, deserialized.getClass());
     assertEquals(value, deserialized);
   }
@@ -70,8 +70,8 @@ public class JavaSerializerTest {
   @Test
   public void testDouble() throws Exception {
     double value = 3.14159;
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Double.class, deserialized.getClass());
     assertEquals(value, deserialized);
   }
@@ -79,8 +79,8 @@ public class JavaSerializerTest {
   @Test
   public void testBooleanTrue() throws Exception {
     boolean value = true;
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Boolean.class, deserialized.getClass());
     assertEquals(value, deserialized);
   }
@@ -88,24 +88,24 @@ public class JavaSerializerTest {
   @Test
   public void testBooleanFalse() throws Exception {
     boolean value = false;
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(Boolean.class, deserialized.getClass());
     assertEquals(value, deserialized);
   }
 
   @Test
   public void testNull() throws Exception {
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(null);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(null);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertNull(deserialized);
   }
 
   @Test
   public void testString() throws Exception {
     String value = "hello world";
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(String.class, deserialized.getClass());
     assertEquals(value, deserialized);
   }
@@ -113,8 +113,8 @@ public class JavaSerializerTest {
   @Test
   public void testList() throws Exception {
     List<String> value = Arrays.asList("apple", "banana", "cherry");
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertInstanceOf(List.class, deserialized);
     assertEquals(value, deserialized);
   }
@@ -124,8 +124,8 @@ public class JavaSerializerTest {
     Map<String, Integer> value = new HashMap<>();
     value.put("one", 1);
     value.put("two", 2);
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertInstanceOf(Map.class, deserialized);
     assertEquals(value, deserialized);
   }
@@ -133,8 +133,8 @@ public class JavaSerializerTest {
   @Test
   public void testNestedPojo() throws Exception {
     Person value = new Person("Alice", 30, new Address("Seattle", "98101"));
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertInstanceOf(Person.class, deserialized);
     assertEquals(value, deserialized);
   }
@@ -142,8 +142,8 @@ public class JavaSerializerTest {
   @Test
   public void testIntArray() throws Exception {
     int[] value = {1, 2, 3, 4};
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertInstanceOf(int[].class, deserialized);
     assertArrayEquals(value, (int[]) deserialized);
   }
@@ -151,8 +151,8 @@ public class JavaSerializerTest {
   @Test
   public void testInstantInObjectArray() throws Exception {
     Object[] value = {Instant.parse("2024-01-01T00:00:00Z"), Instant.parse("2024-01-02T00:00:00Z")};
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = (Object[]) DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = (Object[]) DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertEquals(2, deserialized.length);
     assertInstanceOf(Instant.class, deserialized[0]);
     assertInstanceOf(Instant.class, deserialized[1]);
@@ -166,8 +166,8 @@ public class JavaSerializerTest {
     m1.put("name", "Alice");
     m1.put("age", 30);
     List<Map<String, Object>> value = List.of(m1);
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertInstanceOf(List.class, deserialized);
     assertEquals(value, deserialized);
   }
@@ -175,16 +175,16 @@ public class JavaSerializerTest {
   @Test
   public void testMixedObjectArrayWithList() throws Exception {
     Object[] value = {"abc", 123, true, Arrays.asList("x", "y")};
-    var serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
-    var deserialized = (Object[]) DBOSJavaSerializer.INSTANCE.parse(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serialize(value);
+    var deserialized = (Object[]) DBOSJavaSerializer.INSTANCE.deserialize(serialized);
     assertArrayEquals(value, deserialized);
   }
 
   @Test
   public void testStringifyParseThrowable() throws Exception {
     var original = new RuntimeException("something went wrong");
-    var serialized = DBOSJavaSerializer.INSTANCE.stringifyThrowable(original);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parseThrowable(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serializeThrowable(original);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserializeThrowable(serialized);
     assertInstanceOf(RuntimeException.class, deserialized);
     assertEquals(original.getMessage(), deserialized.getMessage());
   }
@@ -193,8 +193,8 @@ public class JavaSerializerTest {
   public void testStringifyParseThrowableWithCause() throws Exception {
     var cause = new IllegalArgumentException("bad input");
     var original = new RuntimeException("wrapper", cause);
-    var serialized = DBOSJavaSerializer.INSTANCE.stringifyThrowable(original);
-    var deserialized = DBOSJavaSerializer.INSTANCE.parseThrowable(serialized);
+    var serialized = DBOSJavaSerializer.INSTANCE.serializeThrowable(original);
+    var deserialized = DBOSJavaSerializer.INSTANCE.deserializeThrowable(serialized);
     assertInstanceOf(RuntimeException.class, deserialized);
     assertEquals(original.getMessage(), deserialized.getMessage());
     assertInstanceOf(IllegalArgumentException.class, deserialized.getCause());
@@ -203,7 +203,7 @@ public class JavaSerializerTest {
 
   @Test
   public void testParseThrowableNull() throws Exception {
-    assertNull(DBOSJavaSerializer.INSTANCE.parseThrowable(null));
+    assertNull(DBOSJavaSerializer.INSTANCE.deserializeThrowable(null));
   }
 
   // DBOSPortableSerializer throwable tests
@@ -211,8 +211,8 @@ public class JavaSerializerTest {
   @Test
   public void testPortableStringifyParseThrowable() throws Exception {
     var original = new RuntimeException("something went wrong");
-    var serialized = DBOSPortableSerializer.INSTANCE.stringifyThrowable(original);
-    var deserialized = DBOSPortableSerializer.INSTANCE.parseThrowable(serialized);
+    var serialized = DBOSPortableSerializer.INSTANCE.serializeThrowable(original);
+    var deserialized = DBOSPortableSerializer.INSTANCE.deserializeThrowable(serialized);
     assertInstanceOf(PortableWorkflowException.class, deserialized);
     var pwe = (PortableWorkflowException) deserialized;
     assertEquals("RuntimeException", pwe.getErrorName());
@@ -223,8 +223,8 @@ public class JavaSerializerTest {
   public void testPortableStringifyParsePortableWorkflowException() throws Exception {
     var original =
         new PortableWorkflowException("not found", "WorkflowError", 404, Map.of("id", "abc"));
-    var serialized = DBOSPortableSerializer.INSTANCE.stringifyThrowable(original);
-    var deserialized = DBOSPortableSerializer.INSTANCE.parseThrowable(serialized);
+    var serialized = DBOSPortableSerializer.INSTANCE.serializeThrowable(original);
+    var deserialized = DBOSPortableSerializer.INSTANCE.deserializeThrowable(serialized);
     assertInstanceOf(PortableWorkflowException.class, deserialized);
     var pwe = (PortableWorkflowException) deserialized;
     assertEquals("WorkflowError", pwe.getErrorName());
@@ -235,28 +235,28 @@ public class JavaSerializerTest {
 
   @Test
   public void testPortableParseThrowableNull() throws Exception {
-    assertNull(DBOSPortableSerializer.INSTANCE.parseThrowable(null));
+    assertNull(DBOSPortableSerializer.INSTANCE.deserializeThrowable(null));
   }
 
   // KryoSerializer tests
 
   @Test
   public void testKryoNull() throws Exception {
-    assertNull(KryoSerializer.INSTANCE.parse(null));
+    assertNull(KryoSerializer.INSTANCE.deserialize(null));
   }
 
   @Test
   public void testKryoString() throws Exception {
     String value = "hello kryo";
-    var serialized = KryoSerializer.INSTANCE.stringify(value);
-    assertEquals(value, KryoSerializer.INSTANCE.parse(serialized));
+    var serialized = KryoSerializer.INSTANCE.serialize(value);
+    assertEquals(value, KryoSerializer.INSTANCE.deserialize(serialized));
   }
 
   @Test
   public void testKryoPrimitives() throws Exception {
     Object[] values = {42, 1234567890123L, 3.3f, 3.14159, true};
-    var serialized = KryoSerializer.INSTANCE.stringify(values);
-    var deserialized = (Object[]) KryoSerializer.INSTANCE.parse(serialized);
+    var serialized = KryoSerializer.INSTANCE.serialize(values);
+    var deserialized = (Object[]) KryoSerializer.INSTANCE.deserialize(serialized);
     assertEquals(values.length, deserialized.length);
     for (int i = 0; i < values.length; i++) {
       assertEquals(values[i], deserialized[i]);
@@ -266,21 +266,21 @@ public class JavaSerializerTest {
   @Test
   public void testKryoNestedPojo() throws Exception {
     Person value = new Person("Alice", 30, new Address("Seattle", "98101"));
-    var serialized = KryoSerializer.INSTANCE.stringify(value);
-    assertEquals(value, KryoSerializer.INSTANCE.parse(serialized));
+    var serialized = KryoSerializer.INSTANCE.serialize(value);
+    assertEquals(value, KryoSerializer.INSTANCE.deserialize(serialized));
   }
 
   @Test
   public void testKryoThrowable() throws Exception {
     var original = new RuntimeException("kryo error");
-    var serialized = KryoSerializer.INSTANCE.stringifyThrowable(original);
-    var deserialized = KryoSerializer.INSTANCE.parseThrowable(serialized);
+    var serialized = KryoSerializer.INSTANCE.serializeThrowable(original);
+    var deserialized = KryoSerializer.INSTANCE.deserializeThrowable(serialized);
     assertInstanceOf(RuntimeException.class, deserialized);
     assertEquals(original.getMessage(), deserialized.getMessage());
   }
 
   @Test
   public void testKryoParseThrowableNull() throws Exception {
-    assertNull(KryoSerializer.INSTANCE.parseThrowable(null));
+    assertNull(KryoSerializer.INSTANCE.deserializeThrowable(null));
   }
 }

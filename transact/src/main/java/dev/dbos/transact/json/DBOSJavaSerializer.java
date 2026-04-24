@@ -47,7 +47,7 @@ public class DBOSJavaSerializer implements DBOSSerializer {
   }
 
   @Override
-  public String stringify(Object value) {
+  public String serialize(Object value) {
     try {
       return mapper.writeValueAsString(value);
     } catch (JsonProcessingException e) {
@@ -56,7 +56,7 @@ public class DBOSJavaSerializer implements DBOSSerializer {
   }
 
   @Override
-  public Object parse(String text) {
+  public Object deserialize(String text) {
     if (text == null) {
       return null;
     }
@@ -68,16 +68,16 @@ public class DBOSJavaSerializer implements DBOSSerializer {
   }
 
   @Override
-  public String stringifyThrowable(Throwable throwable) {
+  public String serializeThrowable(Throwable throwable) {
     if (throwable == null) {
       return null;
     }
     var wt = WireThrowable.fromThrowable(throwable, null, null);
-    return stringify(wt);
+    return serialize(wt);
   }
 
   @Override
-  public Throwable parseThrowable(String text) {
+  public Throwable deserializeThrowable(String text) {
     if (text == null) {
       return null;
     }
