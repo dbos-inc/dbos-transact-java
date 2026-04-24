@@ -24,7 +24,7 @@ public class DBOSJavaSerializer implements DBOSSerializer {
   public DBOSJavaSerializer() {
     PolymorphicTypeValidator ptv =
         BasicPolymorphicTypeValidator.builder().allowIfBaseType(Object.class).build();
-    ObjectMapper.DefaultTypeResolverBuilder typer =
+    var typer =
         new ObjectMapper.DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.NON_FINAL, ptv) {
           @Override
           public boolean useForType(JavaType t) {
