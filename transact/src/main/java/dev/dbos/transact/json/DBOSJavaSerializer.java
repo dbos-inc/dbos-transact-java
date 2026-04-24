@@ -1,5 +1,13 @@
 package dev.dbos.transact.json;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
 /**
  * Native Java serializer using Jackson with type information. This is the default serializer for
  * Java DBOS applications.
@@ -10,7 +18,20 @@ public class DBOSJavaSerializer implements DBOSSerializer {
 
   public static final DBOSJavaSerializer INSTANCE = new DBOSJavaSerializer();
 
-  public DBOSJavaSerializer() {}
+  private final ObjectMapper mapper;
+
+  public DBOSJavaSerializer() {
+    PolymorphicTypeValidator ptv =
+        BasicPolymorphicTypeValidator.builder().allowIfBaseType(Object.class).build();
+    this.mapper =
+        new ObjectMapper()
+            .activateDefaultTyping(
+                ptv, ObjectMapper.DefaultTyping.NON_FINAL_AND_ENUMS, JsonTypeInfo.As.PROPERTY);
+
+this.mapper.registerModule(new JavaTimeModule());
+    this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional
+
+  }
 
   @Override
   public String name() {
@@ -19,8 +40,11 @@ public class DBOSJavaSerializer implements DBOSSerializer {
 
   @Override
   public String stringify(Object value, boolean noHistoricalWrapper) {
-    if (noHistoricalWrapper) return JSONUtil.serializeArray((Object[]) value);
-    return JSONUtil.serialize(value);
+    try {
+      return mapper.writeValueAsString(value);
+    } catch (JsonProcessingException e) {
+      throw new JsonRuntimeException(e);
+    }
   }
 
   @Override
@@ -28,9 +52,11 @@ public class DBOSJavaSerializer implements DBOSSerializer {
     if (text == null) {
       return null;
     }
-    var vi = JSONUtil.deserializeToArray(text);
-    if (noHistoricalWrapper) return vi;
-    return vi[0];
+    try {
+      return mapper.readValue(text, Object.class);
+    } catch (JsonProcessingException e) {
+      throw new JsonRuntimeException(e);
+    }
   }
 
   @Override
@@ -38,7 +64,8 @@ public class DBOSJavaSerializer implements DBOSSerializer {
     if (throwable == null) {
       return null;
     }
-    return JSONUtil.serializeAppException(throwable);
+    var wt = WireThrowable.fromThrowable(throwable, null, null);
+    return stringify(wt, false);
   }
 
   @Override
@@ -46,6 +73,11 @@ public class DBOSJavaSerializer implements DBOSSerializer {
     if (text == null) {
       return null;
     }
-    return JSONUtil.deserializeAppException(text);
+    try {
+      var wt = mapper.readValue(text, WireThrowable.class);
+      return wt.toThrowable();
+    } catch (JsonProcessingException e) {
+      throw new JsonRuntimeException(e);
+    }
   }
 }

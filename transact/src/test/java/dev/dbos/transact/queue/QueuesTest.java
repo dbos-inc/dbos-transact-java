@@ -429,9 +429,7 @@ public class QueuesTest {
       logger.info("Waiting for queueService to stop");
     }
 
-    var args = new Object[] {"ORD-12345"};
-    var ser = SerializationUtil.serializeValue(args, null, null);
-
+    var serArgs = SerializationUtil.serializeValue(new Object[] {"ORD-12345"}, null, null);
     var builder =
         new WorkflowStatusInternalBuilder()
             .workflowName("OrderProcessingWorkflow")
@@ -447,7 +445,7 @@ public class QueuesTest {
             .timeout(Duration.ofMillis(300000))
             .deadline(Instant.ofEpochMilli(System.currentTimeMillis() + 2400000))
             .priority(1)
-            .inputs(ser.serializedValue());
+            .inputs(serArgs.serializedValue());
 
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;
