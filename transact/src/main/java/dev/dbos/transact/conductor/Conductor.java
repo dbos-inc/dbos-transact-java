@@ -47,6 +47,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.StreamReadConstraints;
@@ -60,20 +61,6 @@ import org.slf4j.LoggerFactory;
 public class Conductor implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(Conductor.class);
-  private static final ObjectMapper mapper = new ObjectMapper();
-
-  static {
-    mapper.registerModule(new JavaTimeModule());
-    mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
-    // extend max JSON string length to handle large workflow import/export JSON
-    StreamReadConstraints.overrideDefaultStreamReadConstraints(
-        StreamReadConstraints.builder().maxStringLength(1_000_000_000).build());
-  }
-
-  private final int pingPeriodMs;
-  private final int pingTimeoutMs;
-  private final int reconnectDelayMs;
 
   private final String url;
   private final SystemDatabase systemDatabase;
@@ -81,6 +68,10 @@ public class Conductor implements AutoCloseable {
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
   private final AtomicBoolean isShutdown = new AtomicBoolean(false);
   private final HttpClient httpClient;
+  private final ObjectMapper mapper;
+  private final int pingPeriodMs;
+  private final int pingTimeoutMs;
+  private final int reconnectDelayMs;
 
   private final AtomicReference<WebSocket> webSocket = new AtomicReference<>();
   private final AtomicReference<CompletableFuture<WebSocket>> connectFuture =
@@ -120,6 +111,16 @@ public class Conductor implements AutoCloseable {
     this.pingTimeoutMs = builder.pingTimeoutMs;
     this.reconnectDelayMs = builder.reconnectDelayMs;
     this.httpClient = buildHttpClient();
+    this.mapper = buildObjectMapper();
+  }
+
+  static ObjectMapper buildObjectMapper() {
+    var constraints = StreamReadConstraints.builder().maxStringLength(1_000_000_000).build();
+    var factory = JsonFactory.builder().streamReadConstraints(constraints).build();
+    var mapper = new ObjectMapper(factory);
+    mapper.registerModule(new JavaTimeModule());
+    mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    return mapper;
   }
 
   // TODO: do we need the insecure connection?
@@ -251,7 +252,7 @@ public class Conductor implements AutoCloseable {
                       BaseResponse errorResponse =
                           new BaseResponse(
                               finalRequest.type, finalRequest.request_id, throwable.getMessage());
-                      writeFragmentedResponse(ws, errorResponse);
+                      writeFragmentedResponse(ws, errorResponse, mapper);
                     } else if (response != null) {
                       // null response means the handler already sent the response directly
                       logger.info(
@@ -259,7 +260,7 @@ public class Conductor implements AutoCloseable {
                           finalRequest.type,
                           finalRequest.request_id,
                           processingTime);
-                      writeFragmentedResponse(ws, response);
+                      writeFragmentedResponse(ws, response, mapper);
                     }
                   } catch (Exception e) {
                     logger.error(
@@ -381,7 +382,7 @@ public class Conductor implements AutoCloseable {
     }
   }
 
-  private static void writeFragmentedResponse(WebSocket ws, BaseResponse response)
+  private static void writeFragmentedResponse(WebSocket ws, BaseResponse response, ObjectMapper mapper)
       throws Exception {
     int fragmentSize = 128 * 1024; // 128k
     logger.debug(
@@ -1092,7 +1093,7 @@ public class Conductor implements AutoCloseable {
           long startTime = System.currentTimeMillis();
           logger.info("Starting streaming import workflow");
           String requestId = null;
-          try (JsonParser parser = mapper.createParser(pipeReader)) {
+          try (JsonParser parser = conductor.mapper.createParser(pipeReader)) {
             if (parser.nextToken() != JsonToken.START_OBJECT) {
               throw new IOException("Expected JSON object at start of import message");
             }
@@ -1113,7 +1114,7 @@ public class Conductor implements AutoCloseable {
                   byte[] decoded = parser.getBinaryValue();
                   try (GZIPInputStream gzip =
                       new GZIPInputStream(new ByteArrayInputStream(decoded))) {
-                    workflows = mapper.readValue(gzip, typeRef);
+                    workflows = conductor.mapper.readValue(gzip, typeRef);
                   }
                   break;
                 default:
@@ -1132,13 +1133,13 @@ public class Conductor implements AutoCloseable {
                 workflows.size(),
                 duration);
             var req = new ImportWorkflowRequest(requestId, null);
-            writeFragmentedResponse(ws, new SuccessResponse(req, true));
+            writeFragmentedResponse(ws, new SuccessResponse(req, true), conductor.mapper);
           } catch (Exception e) {
             logger.error("Exception during streaming import workflow", e);
             if (requestId != null) {
               try {
                 var req = new ImportWorkflowRequest(requestId, null);
-                writeFragmentedResponse(ws, new SuccessResponse(req, e));
+                writeFragmentedResponse(ws, new SuccessResponse(req, e), conductor.mapper);
               } catch (Exception ex) {
                 logger.error("Failed to send error response for streaming import", ex);
               }
@@ -1156,7 +1157,7 @@ public class Conductor implements AutoCloseable {
           logger.info("Starting import workflow");
 
           try {
-            var exportedWorkflows = deserializeExportedWorkflows(request.serialized_workflow);
+            var exportedWorkflows = deserializeExportedWorkflows(request.serialized_workflow, conductor.mapper);
             logger.info("deserialization completed workflow count={}", exportedWorkflows.size());
             conductor.systemDatabase.importWorkflow(exportedWorkflows);
             long duration = System.currentTimeMillis() - startTime;
@@ -1193,7 +1194,7 @@ public class Conductor implements AutoCloseable {
                 request.workflow_id,
                 workflows.size());
 
-            streamExportResponse(ws, message, workflows);
+            streamExportResponse(ws, message, workflows, conductor.mapper);
 
             long duration = System.currentTimeMillis() - startTime;
             logger.info(
@@ -1230,7 +1231,7 @@ public class Conductor implements AutoCloseable {
    * through GZIPOutputStream and Base64 encoding into 128 KB WebSocket frames.
    */
   private static void streamExportResponse(
-      WebSocket ws, BaseMessage message, List<ExportedWorkflow> workflows) throws IOException {
+      WebSocket ws, BaseMessage message, List<ExportedWorkflow> workflows, ObjectMapper mapper) throws IOException {
     int fragmentSize = 128 * 1024; // 128k
     logger.debug(
         "Starting to stream export response: type={}, id={}", message.type, message.request_id);
@@ -1286,7 +1287,7 @@ public class Conductor implements AutoCloseable {
         "Completed streaming export response: type={}, id={}", message.type, message.request_id);
   }
 
-  static List<ExportedWorkflow> deserializeExportedWorkflows(String serializedWorkflow)
+  static List<ExportedWorkflow> deserializeExportedWorkflows(String serializedWorkflow, ObjectMapper mapper)
       throws IOException {
     var compressed = Base64.getDecoder().decode(serializedWorkflow);
     try (var gis = new GZIPInputStream(new ByteArrayInputStream(compressed))) {
@@ -1296,7 +1297,7 @@ public class Conductor implements AutoCloseable {
   }
 
   // Used by tests to create import payloads and verify export output
-  static String serializeExportedWorkflows(List<ExportedWorkflow> workflows) throws IOException {
+  static String serializeExportedWorkflows(List<ExportedWorkflow> workflows, ObjectMapper mapper) throws IOException {
     var out = new ByteArrayOutputStream();
     try (var gOut = new GZIPOutputStream(out)) {
       mapper.writeValue(gOut, workflows);
