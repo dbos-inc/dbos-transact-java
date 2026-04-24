@@ -1941,7 +1941,8 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     var workflows = createTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1974,7 +1975,8 @@ public class ConductorTest {
     doThrow(new RuntimeException(errorMessage)).when(mockDB).importWorkflow(any());
 
     var workflows = createTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -2040,7 +2042,8 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     var workflows = createTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
 
     when(mockDB.exportWorkflow(anyString(), anyBoolean())).thenReturn(workflows);
 
@@ -2076,7 +2079,9 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     var workflows = createLargeTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
+
     assertTrue(
         serialized.length() > 256 * 1024,
         "Expected serialized payload >256KB for meaningful streaming test, got "
@@ -2141,7 +2146,8 @@ public class ConductorTest {
         .importWorkflow(any());
 
     var workflows = createLargeTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
 
     Listener listener = new Listener();
     testServer.setListener(listener);
@@ -2182,7 +2188,9 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     var workflows = createLargeTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
+
     assertTrue(
         serialized.length() > 256 * 1024,
         "Expected serialized payload >256KB for meaningful streaming test, got "

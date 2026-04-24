@@ -11,7 +11,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.StartWorkflowOptions;
 import dev.dbos.transact.config.DBOSConfig;
-import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
@@ -429,6 +429,7 @@ public class QueuesTest {
       logger.info("Waiting for queueService to stop");
     }
 
+    var serArgs = SerializationUtil.serializeValue(new Object[] {"ORD-12345"}, null, null);
     var builder =
         new WorkflowStatusInternalBuilder()
             .workflowName("OrderProcessingWorkflow")
@@ -444,7 +445,7 @@ public class QueuesTest {
             .timeout(Duration.ofMillis(300000))
             .deadline(Instant.ofEpochMilli(System.currentTimeMillis() + 2400000))
             .priority(1)
-            .inputs(JSONUtil.serializeArray(new Object[] {"ORD-12345"}));
+            .inputs(serArgs.serializedValue());
 
     for (int i = 0; i < 4; i++) {
       String wfid = "id" + i;

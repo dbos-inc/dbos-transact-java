@@ -1,6 +1,6 @@
 package dev.dbos.transact.admin;
 
-import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 /**
@@ -29,10 +29,12 @@ record WorkflowsOutput(
   static WorkflowsOutput of(WorkflowStatus status) {
 
     var roles =
-        status.authenticatedRoles() == null ? "[]" : JSONUtil.toJson(status.authenticatedRoles());
-    var input = status.input() == null ? "[]" : JSONUtil.toJson(status.input());
-    var output = status.output() == null ? null : JSONUtil.toJson(status.output());
-    var error = status.error() == null ? null : JSONUtil.toJson(status.error());
+        status.authenticatedRoles() == null
+            ? "[]"
+            : JsonUtility.toJson(status.authenticatedRoles());
+    var input = status.input() == null ? "[]" : JsonUtility.toJson(status.input());
+    var output = status.output() == null ? null : JsonUtility.toJson(status.output());
+    var error = status.error() == null ? null : JsonUtility.toJson(status.error());
 
     return new WorkflowsOutput(
         status.workflowId(),
