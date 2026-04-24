@@ -18,7 +18,7 @@ public interface DBOSSerializer {
    * @param noHistoricalWrapper The value is not expected to have a wrapper enclosing array
    * @return The serialized string representation
    */
-  String stringify(Object value, boolean noHistoricalWrapper);
+  String stringify(Object value);
 
   /**
    * Deserialize a string back to a value.
@@ -27,7 +27,7 @@ public interface DBOSSerializer {
    * @param noHistoricalWrapper The value is not expected to have a wrapper enclosing array
    * @return The deserialized value, or null if the input was null
    */
-  Object parse(String text, boolean noHistoricalWrapper);
+  Object parse(String text);
 
   /**
    * Serialize a Throwable to a string.

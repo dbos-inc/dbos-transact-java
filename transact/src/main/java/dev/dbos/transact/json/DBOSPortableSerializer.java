@@ -41,7 +41,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
   }
 
   @Override
-  public String stringify(Object value, boolean _noHistoricalWrapper) {
+  public String stringify(Object value) {
     try {
       return mapper.writeValueAsString(toPortable(value));
     } catch (JsonProcessingException e) {
@@ -50,7 +50,7 @@ public class DBOSPortableSerializer implements DBOSSerializer {
   }
 
   @Override
-  public Object parse(String text, boolean _noHistoricalWrapper) {
+  public Object parse(String text) {
     if (text == null) {
       return null;
     }

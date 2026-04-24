@@ -2,6 +2,7 @@ package dev.dbos.transact.json;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
@@ -23,13 +24,19 @@ public class DBOSJavaSerializer implements DBOSSerializer {
   public DBOSJavaSerializer() {
     PolymorphicTypeValidator ptv =
         BasicPolymorphicTypeValidator.builder().allowIfBaseType(Object.class).build();
-    this.mapper =
-        new ObjectMapper()
-            .activateDefaultTyping(
-                ptv, ObjectMapper.DefaultTyping.NON_FINAL_AND_ENUMS, JsonTypeInfo.As.PROPERTY);
+    ObjectMapper.DefaultTypeResolverBuilder typer =
+        new ObjectMapper.DefaultTypeResolverBuilder(ObjectMapper.DefaultTyping.NON_FINAL, ptv) {
+          @Override
+          public boolean useForType(JavaType t) {
+            return !t.isPrimitive();
+          }
+        };
+    typer.init(JsonTypeInfo.Id.CLASS, null);
+    typer.inclusion(JsonTypeInfo.As.PROPERTY);
 
+    this.mapper = new ObjectMapper().setDefaultTyping(typer);
     this.mapper.registerModule(new JavaTimeModule());
-    this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Optional
+    this.mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
   }
 
   @Override
@@ -38,7 +45,7 @@ public class DBOSJavaSerializer implements DBOSSerializer {
   }
 
   @Override
-  public String stringify(Object value, boolean noHistoricalWrapper) {
+  public String stringify(Object value) {
     try {
       return mapper.writeValueAsString(value);
     } catch (JsonProcessingException e) {
@@ -47,7 +54,7 @@ public class DBOSJavaSerializer implements DBOSSerializer {
   }
 
   @Override
-  public Object parse(String text, boolean noHistoricalWrapper) {
+  public Object parse(String text) {
     if (text == null) {
       return null;
     }
@@ -64,7 +71,7 @@ public class DBOSJavaSerializer implements DBOSSerializer {
       return null;
     }
     var wt = WireThrowable.fromThrowable(throwable, null, null);
-    return stringify(wt, false);
+    return stringify(wt);
   }
 
   @Override

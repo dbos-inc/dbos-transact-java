@@ -40,12 +40,12 @@ public final class SerializationUtil {
       Object value, String format, DBOSSerializer customSerializer) {
 
     if (PORTABLE.equals(format)) {
-      String serialized = DBOSPortableSerializer.INSTANCE.stringify(value, false);
+      String serialized = DBOSPortableSerializer.INSTANCE.stringify(value);
       return new SerializedResult(serialized, DBOSPortableSerializer.NAME);
     }
 
     if (NATIVE.equals(format)) {
-      String serialized = DBOSJavaSerializer.INSTANCE.stringify(value, false);
+      String serialized = DBOSJavaSerializer.INSTANCE.stringify(value);
       return new SerializedResult(serialized, DBOSJavaSerializer.NAME);
     }
 
@@ -55,7 +55,7 @@ public final class SerializationUtil {
     if (format != null && !serializer.name().equals(format)) {
       throw new IllegalArgumentException("Serializer is not available");
     }
-    String serialized = serializer.stringify(value, false);
+    String serialized = serializer.stringify(value);
     return new SerializedResult(serialized, serializer.name());
   }
 
@@ -75,11 +75,11 @@ public final class SerializationUtil {
     }
 
     if (DBOSPortableSerializer.NAME.equals(serialization)) {
-      return DBOSPortableSerializer.INSTANCE.parse(serializedValue, false);
+      return DBOSPortableSerializer.INSTANCE.parse(serializedValue);
     }
 
     if (DBOSJavaSerializer.NAME.equals(serialization)) {
-      return DBOSJavaSerializer.INSTANCE.parse(serializedValue, false);
+      return DBOSJavaSerializer.INSTANCE.parse(serializedValue);
     }
 
     DBOSSerializer serializer = customSerializer;
@@ -88,7 +88,7 @@ public final class SerializationUtil {
       throw new IllegalArgumentException("Serialization is not available");
     }
 
-    return serializer.parse(serializedValue, false);
+    return serializer.parse(serializedValue);
   }
 
   // ============ Arguments Serialization ============
@@ -119,7 +119,7 @@ public final class SerializationUtil {
     }
 
     if (NATIVE.equals(serialization)) {
-      String serialized = DBOSJavaSerializer.INSTANCE.stringify(positionalArgs, true);
+      String serialized = DBOSJavaSerializer.INSTANCE.stringify(positionalArgs);
       return new SerializedResult(serialized, DBOSJavaSerializer.NAME);
     }
 
@@ -129,7 +129,7 @@ public final class SerializationUtil {
       throw new IllegalArgumentException("Serialization is not available");
     }
 
-    String serialized = serializer.stringify(positionalArgs, true);
+    String serialized = serializer.stringify(positionalArgs);
     return new SerializedResult(serialized, serializer.name());
   }
 
@@ -157,7 +157,7 @@ public final class SerializationUtil {
     }
 
     if (DBOSJavaSerializer.NAME.equals(serialization) || serialization == null) {
-      return (Object[]) DBOSJavaSerializer.INSTANCE.parse(serializedValue, true);
+      return (Object[]) DBOSJavaSerializer.INSTANCE.parse(serializedValue);
     }
 
     DBOSSerializer serializer = customSerializer;
@@ -166,7 +166,7 @@ public final class SerializationUtil {
       throw new IllegalArgumentException("Serialization is not available");
     }
 
-    Object parsed = serializer.parse(serializedValue, true);
+    Object parsed = serializer.parse(serializedValue);
     if (parsed instanceof List<?> list) {
       return list.toArray();
     }
