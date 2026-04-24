@@ -236,4 +236,50 @@ public class JavaSerializerTest {
   public void testPortableParseThrowableNull() throws Exception {
     assertNull(DBOSPortableSerializer.INSTANCE.parseThrowable(null));
   }
+
+  // KryoSerializer tests
+
+  @Test
+  public void testKryoNull() throws Exception {
+    assertNull(KryoSerializer.INSTANCE.parse(null));
+  }
+
+  @Test
+  public void testKryoString() throws Exception {
+    String value = "hello kryo";
+    var serialized = KryoSerializer.INSTANCE.stringify(value);
+    assertEquals(value, KryoSerializer.INSTANCE.parse(serialized));
+  }
+
+  @Test
+  public void testKryoPrimitives() throws Exception {
+    Object[] values = {42, 1234567890123L, 3.3f, 3.14159, true};
+    var serialized = KryoSerializer.INSTANCE.stringify(values);
+    var deserialized = (Object[]) KryoSerializer.INSTANCE.parse(serialized);
+    assertEquals(values.length, deserialized.length);
+    for (int i = 0; i < values.length; i++) {
+      assertEquals(values[i], deserialized[i]);
+    }
+  }
+
+  @Test
+  public void testKryoNestedPojo() throws Exception {
+    Person value = new Person("Alice", 30, new Address("Seattle", "98101"));
+    var serialized = KryoSerializer.INSTANCE.stringify(value);
+    assertEquals(value, KryoSerializer.INSTANCE.parse(serialized));
+  }
+
+  @Test
+  public void testKryoThrowable() throws Exception {
+    var original = new RuntimeException("kryo error");
+    var serialized = KryoSerializer.INSTANCE.stringifyThrowable(original);
+    var deserialized = KryoSerializer.INSTANCE.parseThrowable(serialized);
+    assertInstanceOf(RuntimeException.class, deserialized);
+    assertEquals(original.getMessage(), deserialized.getMessage());
+  }
+
+  @Test
+  public void testKryoParseThrowableNull() throws Exception {
+    assertNull(KryoSerializer.INSTANCE.parseThrowable(null));
+  }
 }

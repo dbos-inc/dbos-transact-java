@@ -46,6 +46,7 @@ dependencies {
   testImplementation(libs.mockito.core)
   testImplementation(libs.sqlite.jdbc)
   testImplementation(libs.rest.assured)
+  testImplementation(libs.kryo)
   testImplementation(libs.maven.artifact)
   testImplementation(libs.testcontainers.postgresql)
 }
