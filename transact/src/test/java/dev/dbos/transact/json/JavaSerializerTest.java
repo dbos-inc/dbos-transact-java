@@ -79,6 +79,4 @@ public class JavaSerializerTest {
     assertEquals(Boolean.class, deserialized.getClass());
     assertEquals(value, deserialized);
   }
-
-  
 }
