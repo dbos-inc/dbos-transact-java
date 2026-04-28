@@ -12,7 +12,6 @@ import dev.dbos.transact.workflow.WorkflowHandle
 // interfaces (like ThrowingSupplier), so such an extension would be unreachable — the Java member
 // wins before the extension is considered. This does not affect overloads that also take a
 // StartWorkflowOptions parameter, since those signatures are distinct from any Java member.
-// For the no-options case, we provide beginWorkflow as a uniquely-named alternative.
 
 /**
  * Starts a workflow using trailing lambda syntax, with the given [options].
