@@ -176,12 +176,7 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
   int stepWithRetryRuns = 0;
 
   @Override
-  @Step(
-      name = "stepWith2Retries",
-      retriesAllowed = true,
-      maxAttempts = 2,
-      intervalSeconds = .01,
-      backOffRate = 1)
+  @Step(name = "stepWith2Retries", maxAttempts = 2, intervalSeconds = .01, backOffRate = 1)
   public String stepWith2Retries(String input) throws Exception {
     ++this.stepWithRetryRuns;
     throw new Exception("Will not ever run");
@@ -190,7 +185,7 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
   int stepWithNoRetryRuns = 0;
 
   @Override
-  @Step(name = "stepWithNoRetriesAllowed", retriesAllowed = false)
+  @Step(name = "stepWithNoRetriesAllowed")
   public String stepWithNoRetriesAllowed(String input) throws Exception {
     ++stepWithNoRetryRuns;
     throw new Exception("No retries");
@@ -200,12 +195,7 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
   int stepWithLongRetryRuns = 0;
 
   @Override
-  @Step(
-      name = "stepWithLongRetry",
-      maxAttempts = 3,
-      retriesAllowed = true,
-      intervalSeconds = 1,
-      backOffRate = 10)
+  @Step(name = "stepWithLongRetry", maxAttempts = 3, intervalSeconds = 1, backOffRate = 10)
   public String stepWithLongRetry(String input) throws Exception {
     ++stepWithLongRetryRuns;
     if (startedTime == 0) {

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.internal.DBOSIntegration;
 import dev.dbos.transact.workflow.Step;
 import dev.dbos.transact.workflow.Workflow;
 
@@ -73,6 +74,9 @@ class DBOSWorkflowRegistrarTest {
   @Test
   void registersBeansWithWorkflowMethods() throws Exception {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "workflowBean");
     var bean = new BeanWithWorkflow();
@@ -86,12 +90,15 @@ class DBOSWorkflowRegistrarTest {
     var wfTag = method.getAnnotation(Workflow.class);
     assertNotNull(wfTag);
 
-    verify(mockDbos).registerWorkflow(eq(wfTag), eq(bean), eq(method), eq(null));
+    verify(mockIntegration).registerWorkflow(eq(wfTag), eq(bean), eq(method), eq(null));
   }
 
   @Test
   void skipsBeansWithoutWorkflowMethods() {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "plainBean");
 
@@ -99,12 +106,15 @@ class DBOSWorkflowRegistrarTest {
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    verify(mockDbos, never()).registerWorkflow(any(), any(), any(), any());
+    verify(mockIntegration, never()).registerWorkflow(any(), any(), any(), any());
   }
 
   @Test
   void skipsBeansThatThrowOnLookup() {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "badBean");
 
@@ -113,12 +123,15 @@ class DBOSWorkflowRegistrarTest {
     // should complete without throwing
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    verify(mockDbos, never()).registerWorkflow(any(), any(), any(), any());
+    verify(mockIntegration, never()).registerWorkflow(any(), any(), any(), any());
   }
 
   @Test
   void processesMultipleBeans() {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "wfBean", "plainBean");
     var wfBean = new BeanWithWorkflow();
@@ -129,13 +142,16 @@ class DBOSWorkflowRegistrarTest {
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    verify(mockDbos).registerWorkflow(any(), eq(wfBean), any(), eq(null));
-    verify(mockDbos, never()).registerWorkflow(any(), eq(plainBean), any(), any());
+    verify(mockIntegration).registerWorkflow(any(), eq(wfBean), any(), eq(null));
+    verify(mockIntegration, never()).registerWorkflow(any(), eq(plainBean), any(), any());
   }
 
   @Test
   void registersMultipleBeansOfSameClassUsingBeanNames() {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "primaryBean", "secondaryBean");
     var primaryBean = new BeanWithWorkflow();
@@ -153,13 +169,16 @@ class DBOSWorkflowRegistrarTest {
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    verify(mockDbos).registerWorkflow(any(), eq(primaryBean), any(), eq(null));
-    verify(mockDbos).registerWorkflow(any(), eq(secondaryBean), any(), eq("secondaryBean"));
+    verify(mockIntegration).registerWorkflow(any(), eq(primaryBean), any(), eq(null));
+    verify(mockIntegration).registerWorkflow(any(), eq(secondaryBean), any(), eq("secondaryBean"));
   }
 
   @Test
   void beanWithBothWorkflowAndStep_onlyRegistersWorkflow() throws Exception {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "mixedBean");
     var bean = new BeanWithWorkflowAndStep();
@@ -169,8 +188,8 @@ class DBOSWorkflowRegistrarTest {
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
     var method = BeanWithWorkflowAndStep.class.getMethod("myWorkflow");
-    verify(mockDbos).registerWorkflow(any(), eq(bean), eq(method), eq(null));
-    verify(mockDbos, never())
+    verify(mockIntegration).registerWorkflow(any(), eq(bean), eq(method), eq(null));
+    verify(mockIntegration, never())
         .registerWorkflow(
             any(), any(), eq(BeanWithWorkflowAndStep.class.getMethod("myStep")), any());
   }
@@ -178,6 +197,9 @@ class DBOSWorkflowRegistrarTest {
   @Test
   void beanLookupFailureMidScan_doesNotPreventOtherBeanRegistration() {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "badBean", "goodBean");
     var goodBean = new BeanWithWorkflow();
@@ -187,12 +209,15 @@ class DBOSWorkflowRegistrarTest {
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    verify(mockDbos).registerWorkflow(any(), eq(goodBean), any(), eq(null));
+    verify(mockIntegration).registerWorkflow(any(), eq(goodBean), any(), eq(null));
   }
 
   @Test
   void inheritedWorkflowMethods_areDetectedAndRegistered() throws Exception {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "derivedBean");
     var bean = new DerivedWorkflowBean();
@@ -202,12 +227,15 @@ class DBOSWorkflowRegistrarTest {
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
     var method = BaseWorkflowBean.class.getDeclaredMethod("baseWorkflow");
-    verify(mockDbos).registerWorkflow(any(), eq(bean), eq(method), eq(null));
+    verify(mockIntegration).registerWorkflow(any(), eq(bean), eq(method), eq(null));
   }
 
   @Test
   void nonSingletonBeanWithWorkflow_throwsIllegalStateException() {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "prototypeBean");
 
@@ -222,6 +250,9 @@ class DBOSWorkflowRegistrarTest {
   @Test
   void nonSingletonBeanWithStep_throwsIllegalStateException() {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "prototypeBean");
 
@@ -236,6 +267,9 @@ class DBOSWorkflowRegistrarTest {
   @Test
   void registersMultipleBeansOfSameClassWithBeanNamesWhenNoneIsPrimary() {
     var mockDbos = mock(DBOS.class);
+    var mockIntegration = mock(DBOSIntegration.class);
+    when(mockDbos.integration()).thenReturn(mockIntegration);
+
     var mockBeanFactory = mock(ConfigurableListableBeanFactory.class);
     var mockCtx = mockCtx(mockBeanFactory, "beanA", "beanB");
     var beanA = new BeanWithWorkflow();
@@ -253,7 +287,7 @@ class DBOSWorkflowRegistrarTest {
 
     new DBOSWorkflowRegistrar(mockDbos, mockCtx).afterSingletonsInstantiated();
 
-    verify(mockDbos).registerWorkflow(any(), eq(beanA), any(), eq("beanA"));
-    verify(mockDbos).registerWorkflow(any(), eq(beanB), any(), eq("beanB"));
+    verify(mockIntegration).registerWorkflow(any(), eq(beanA), any(), eq("beanA"));
+    verify(mockIntegration).registerWorkflow(any(), eq(beanB), any(), eq("beanB"));
   }
 }

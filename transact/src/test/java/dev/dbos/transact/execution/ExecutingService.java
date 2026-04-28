@@ -97,7 +97,7 @@ class ExecutingServiceImpl implements ExecutingService {
   public int callsToThrowStep = 0;
 
   @Override
-  @Step(name = "throws", retriesAllowed = false)
+  @Step(name = "throws")
   public void stepThatThrows() throws MyAppException {
     ++callsToThrowStep;
     throw new MyAppException();
