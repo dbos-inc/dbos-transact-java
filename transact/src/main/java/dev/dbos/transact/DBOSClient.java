@@ -161,9 +161,36 @@ public class DBOSClient implements AutoCloseable {
   }
 
   /**
-   * Options for enqueuing a workflow. It is necessary to specify the class and name of the workflow
-   * to enqueue, as well as the queue to use. Other options, such as the workflow ID, queue options,
-   * and app version, are optional, and should be set with `with` functions.
+   * Options for enqueuing a workflow instance for execution.
+   *
+   * <p>This record encapsulates all configuration required to enqueue a workflow, including:
+   *
+   * <ul>
+   *   <li>Workflow name and (optionally) class and instance name
+   *   <li>Target queue and queue-related options (priority, partitioning, deduplication, delay)
+   *   <li>Workflow idempotency and versioning
+   *   <li>Timeout and deadline management
+   *   <li>Serialization strategy for workflow arguments
+   * </ul>
+   *
+   * <p>Required fields: {@code workflowName}, {@code queueName}. All other fields are optional and
+   * can be set using the provided {@code with} methods.
+   *
+   * @param workflowName The name of the workflow function to enqueue. Required.
+   * @param className The Java class containing the workflow function. Optional.
+   * @param instanceName The instance name for object-based workflows. Optional.
+   * @param queueName The name of the queue to enqueue the workflow to. Required.
+   * @param workflowId The idempotency key for the workflow instance. Optional; if not set, a random
+   *     UUID will be generated.
+   * @param appVersion The application version to target for execution. Optional.
+   * @param timeout The maximum duration the workflow may run before being canceled. Optional.
+   * @param deadline The absolute time by which the workflow must start or complete. Optional.
+   * @param deduplicationId An optional ID to prevent duplicate enqueued workflows. Optional.
+   * @param priority The priority to assign if the queue supports prioritization. Optional.
+   * @param queuePartitionKey The partition key for distributing workflows across queue partitions.
+   *     Optional.
+   * @param delay The delay before the workflow starts executing. Optional.
+   * @param serialization The serialization strategy for workflow arguments. Optional.
    */
   public record EnqueueOptions(
       @NonNull String workflowName,
@@ -1004,28 +1031,27 @@ public class DBOSClient implements AutoCloseable {
     systemDatabase.applySchedules(Arrays.asList(schedules));
   }
 
-  // /**
-  //  * Enqueue all executions of a schedule that would have run between {@code start} (exclusive)
-  // and
-  //  * {@code end} (exclusive).
-  //  *
-  //  * @param scheduleName name of an existing schedule
-  //  * @param start start of the backfill window (exclusive)
-  //  * @param end end of the backfill window (exclusive)
-  //  * @return handles to the enqueued executions
-  //  */
+  /**
+   * Enqueue all executions of a schedule that would have run between {@code start} (exclusive) and
+   * {@code end} (exclusive).
+   *
+   * @param scheduleName name of an existing schedule
+   * @param start start of the backfill window (exclusive)
+   * @param end end of the backfill window (exclusive)
+   * @return handles to the enqueued executions
+   */
   public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
       @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
     var ids = DBOSExecutor.backfillSchedule(scheduleName, start, end, systemDatabase, serializer);
     return ids.stream().<WorkflowHandle<Object, Exception>>map(this::retrieveWorkflow).toList();
   }
 
-  // /**
-  //  * Immediately enqueue the scheduled workflow at the current time.
-  //  *
-  //  * @param scheduleName name of an existing schedule
-  //  * @return handle to the enqueued execution
-  //  */
+  /**
+   * Immediately enqueue the scheduled workflow at the current time.
+   *
+   * @param scheduleName name of an existing schedule
+   * @return handle to the enqueued execution
+   */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(
       @NonNull String scheduleName) {
     var id = DBOSExecutor.triggerSchedule(scheduleName, systemDatabase, serializer);
