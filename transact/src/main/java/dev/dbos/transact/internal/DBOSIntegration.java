@@ -90,7 +90,7 @@ public class DBOSIntegration {
    * by direct invocation.
    *
    * @param regWorkflow the registered workflow to start; see {@link
-   *     dev.dbos.transact.DBOS#getRegisteredWorkflows()}
+   *     dev.dbos.transact.internal.DBOSIntegration#getRegisteredWorkflows()}
    * @param args arguments to pass to the workflow function
    * @param options execution options such as workflow ID, queue, and timeout; may be {@code null}
    *     to use defaults
