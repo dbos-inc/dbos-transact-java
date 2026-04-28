@@ -101,6 +101,7 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
       beanFactory = configurableCtx.getBeanFactory();
     }
 
+    var integration = dbos.integration();
     for (Map.Entry<Class<?>, List<String>> entry : beanNamesByClass.entrySet()) {
       Class<?> targetClass = entry.getKey();
       List<String> beanNames = entry.getValue();
@@ -128,7 +129,7 @@ public class DBOSWorkflowRegistrar implements SmartInitializingSingleton {
             }
             var wfTag = method.getAnnotation(Workflow.class);
             if (wfTag != null) {
-              dbos.registerWorkflow(wfTag, rawTarget, method, registerName);
+              integration.registerWorkflow(wfTag, rawTarget, method, registerName);
             }
           }
         }

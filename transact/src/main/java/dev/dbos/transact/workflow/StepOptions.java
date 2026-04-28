@@ -12,6 +12,18 @@ public record StepOptions(
   public static final double DEFAULT_INTERVAL_SECONDS = 1.0;
   public static final double DEFAULT_BACKOFF = 2.0;
 
+  public StepOptions {
+    if (maxAttempts < 1) {
+      throw new IllegalArgumentException("maxAttempts must be greater than or equal to one");
+    }
+    if (retryInterval.isNegative() || retryInterval.isZero()) {
+      throw new IllegalArgumentException("retryInterval must be positive");
+    }
+    if (backOffRate < 1.0) {
+      throw new IllegalArgumentException("backOffRate must be greater than or equal to 1.0");
+    }
+  }
+
   public StepOptions(String name) {
     this(
         name,
@@ -22,7 +34,7 @@ public record StepOptions(
 
   public static StepOptions create(Step stepTag, Method method) {
     var name = stepTag.name().isEmpty() ? method.getName() : stepTag.name();
-    var maxAttempts = stepTag.retriesAllowed() ? stepTag.maxAttempts() : 1;
+    var maxAttempts = stepTag.maxAttempts() < 1 ? 1 : stepTag.maxAttempts();
     var interval = Duration.ofMillis((long) (stepTag.intervalSeconds() * 1000));
     return new StepOptions(name, maxAttempts, interval, stepTag.backOffRate());
   }

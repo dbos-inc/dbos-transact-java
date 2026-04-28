@@ -2,11 +2,8 @@ package dev.dbos.transact;
 
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
-import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
-import dev.dbos.transact.execution.RegisteredWorkflow;
-import dev.dbos.transact.execution.RegisteredWorkflowInstance;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSIntegration;
@@ -35,7 +32,6 @@ import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -66,7 +62,9 @@ public class DBOS implements AutoCloseable {
   private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
   private final DBOSConfig config;
   private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
-  private final DBOSIntegration integration = new DBOSIntegration(dbosExecutor::get);
+  private final DBOSIntegration integration =
+      new DBOSIntegration(
+          dbosExecutor::get, this::registerLifecycleListener, this::registerWorkflow);
 
   private AlertHandler alertHandler;
 
@@ -132,7 +130,7 @@ public class DBOS implements AutoCloseable {
    *
    * @param listener
    */
-  public void registerLifecycleListener(@NonNull DBOSLifecycleListener listener) {
+  private void registerLifecycleListener(@NonNull DBOSLifecycleListener listener) {
     if (dbosExecutor.get() != null) {
       throw new IllegalStateException("Cannot register lifecycle listener after DBOS is launched");
     }
@@ -226,7 +224,7 @@ public class DBOS implements AutoCloseable {
    * @param instanceName optional instance name for the workflow (can be null)
    * @throws IllegalStateException if called after DBOS is launched
    */
-  public void registerWorkflow(
+  private void registerWorkflow(
       @NonNull Workflow wfTag,
       @NonNull Object target,
       @NonNull Method method,
@@ -345,13 +343,7 @@ public class DBOS implements AutoCloseable {
    * @param duration amount of time to sleep
    */
   public void sleep(@NonNull Duration duration) {
-    if (!DBOSContext.inWorkflow()) {
-      try {
-        Thread.sleep(duration.toMillis());
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      }
-    } else if (DBOSContext.inStep()) {
+    if (!DBOSContext.inWorkflow() || DBOSContext.inStep()) {
       try {
         Thread.sleep(duration.toMillis());
       } catch (InterruptedException e) {
@@ -896,28 +888,29 @@ public class DBOS implements AutoCloseable {
     ensureLaunched("applySchedules").applySchedules(Arrays.asList(schedules));
   }
 
-  // /**
-  //  * Enqueue all executions of a schedule that would have run between {@code start} (exclusive)
-  // and
-  //  * {@code end} (exclusive). Uses the same deterministic workflow IDs as the live scheduler, so
-  //  * already-executed times are skipped.
-  //  *
-  //  * @param scheduleName name of an existing schedule
-  //  * @param start start of the backfill window (exclusive)
-  //  * @param end end of the backfill window (exclusive)
-  //  * @return handles to the enqueued executions
-  //  */
+  /**
+   * Enqueue all executions of a schedule that would have run between {@code start} (exclusive) and
+   * {@code end} (exclusive).
+   *
+   * <p>Uses the same deterministic workflow IDs as the live scheduler, so already-executed times
+   * are skipped.
+   *
+   * @param scheduleName name of an existing schedule
+   * @param start start of the backfill window (exclusive)
+   * @param end end of the backfill window (exclusive)
+   * @return handles to the enqueued executions
+   */
   public @NonNull List<WorkflowHandle<Object, Exception>> backfillSchedule(
       @NonNull String scheduleName, @NonNull Instant start, @NonNull Instant end) {
     return ensureLaunched("backfillSchedule").backfillSchedule(scheduleName, start, end);
   }
 
-  // /**
-  //  * Immediately enqueue the scheduled workflow at the current time.
-  //  *
-  //  * @param scheduleName name of an existing schedule
-  //  * @return handle to the enqueued execution
-  //  */
+  /**
+   * Immediately enqueue the scheduled workflow at the current time.
+   *
+   * @param scheduleName name of an existing schedule
+   * @return handle to the enqueued execution
+   */
   public <T, E extends Exception> @NonNull WorkflowHandle<T, E> triggerSchedule(
       @NonNull String scheduleName) {
     return ensureLaunched("triggerSchedule").triggerSchedule(scheduleName);
@@ -1014,76 +1007,6 @@ public class DBOS implements AutoCloseable {
   public @NonNull List<StepInfo> listWorkflowSteps(
       @NonNull String workflowId, Integer limit, Integer offset) {
     return ensureLaunched("listWorkflowSteps").listWorkflowSteps(workflowId, true, limit, offset);
-  }
-
-  /**
-   * Get all workflows registered with DBOS.
-   *
-   * @return list of all registered workflow methods
-   */
-  public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
-    return ensureLaunched("getRegisteredWorkflows").getRegisteredWorkflows();
-  }
-
-  /**
-   * Finds a registered workflow by its workflow name, class name, and instance name.
-   *
-   * @param workflowName the name of the workflow
-   * @param className the name of the class containing the workflow
-   * @return an Optional containing the RegisteredWorkflow if found, otherwise empty
-   */
-  public Optional<RegisteredWorkflow> getRegisteredWorkflow(
-      @NonNull String workflowName, @NonNull String className) {
-    return getRegisteredWorkflow(workflowName, className, "");
-  }
-
-  /**
-   * Finds a registered workflow by its workflow name, class name, and instance name.
-   *
-   * @param workflowName the name of the workflow
-   * @param className the name of the class containing the workflow
-   * @param instanceName the name of the workflow instance
-   * @return an Optional containing the RegisteredWorkflow if found, otherwise empty
-   */
-  public Optional<RegisteredWorkflow> getRegisteredWorkflow(
-      @NonNull String workflowName, @NonNull String className, @NonNull String instanceName) {
-    return ensureLaunched("getRegisteredWorkflow")
-        .getRegisteredWorkflow(workflowName, className, instanceName);
-  }
-
-  /**
-   * Get all workflow classes registered with DBOS.
-   *
-   * @return list of all class instances containing registered workflow methods
-   */
-  public @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
-    return ensureLaunched("getRegisteredWorkflowInstances").getRegisteredWorkflowInstances();
-  }
-
-  /**
-   * Get a system database record stored by an external service A unique value is stored per
-   * combination of service, workflowName, and key
-   *
-   * @param service Identity of the service maintaining the record
-   * @param workflowName Fully qualified name of the workflow
-   * @param key Key assigned within the service+workflow
-   * @return Optional containing the value associated with the service+workflow+key combination, or
-   *     empty if not found
-   */
-  public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
-    return ensureLaunched("getExternalState").getExternalState(service, workflowName, key);
-  }
-
-  /**
-   * Insert or update a system database record stored by an external service A timestamped unique
-   * value is stored per combination of service, workflowName, and key
-   *
-   * @param state ExternalState containing the service, workflow, key, and value to store
-   * @return Value associated with the service+workflow+key combination, in case the stored value
-   *     already had a higher version or timestamp
-   */
-  public ExternalState upsertExternalState(ExternalState state) {
-    return ensureLaunched("upsertExternalState").upsertExternalState(state);
   }
 
   /**
