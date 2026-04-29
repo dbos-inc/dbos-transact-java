@@ -14,3 +14,5 @@ on:
 jobs:
   test:
     uses: ./.github/workflows/test.yml
+  test-demo-apps:
+    uses: ./.github/workflows/test_demo_apps.yml
