@@ -98,7 +98,7 @@ jobs:
         run: |
           VERSION="${{ needs.publish.outputs.version }}"
           sed -i "s|dev\.dbos:\([^:]*\):[^\"']*|dev.dbos:\1:${VERSION}|g" "${{ matrix.build_file }}"
-          sed -i 's/repositories {/repositories {\n  mavenLocal()/' "${{ matrix.build_file }}"
+          sed -i 's/repositories {/repositories { mavenLocal();/' "${{ matrix.build_file }}"
 
       - name: Build and test ${{ matrix.app }}
         working-directory: dbos-demo-apps/${{ matrix.app }}
