@@ -2,19 +2,15 @@ package dev.dbos.transact.execution;
 
 import dev.dbos.transact.Constants;
 import dev.dbos.transact.StartWorkflowOptions;
-import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.workflow.Scheduled;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 
-import java.math.BigInteger;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -38,31 +34,11 @@ public class SchedulerService implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(SchedulerService.class);
 
-  record AnnotatedScheduledWorkflow(
-      RegisteredWorkflow workflow, Cron cron, String queue, boolean automaticBackfill) {}
-
   public static final CronParser CRON_PARSER =
       new CronParser(CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING53));
-  private static final Class<?>[] ANNOTATED_EXPECTED_PARAMETERS =
-      new Class<?>[] {Instant.class, Instant.class};
   private static final Class<?>[] EXPECTED_PARAMETERS =
       new Class<?>[] {Instant.class, Object.class};
   private static final Duration MAX_JITTER = Duration.ofSeconds(10);
-
-  public static void validateAnnotatedWorkflowSchedule(RegisteredWorkflow workflow) {
-    var method = workflow.workflowMethod();
-    var skedTag = method.getAnnotation(Scheduled.class);
-    if (skedTag != null) {
-      var paramTypes = method.getParameterTypes();
-      if (!Arrays.equals(paramTypes, ANNOTATED_EXPECTED_PARAMETERS)) {
-        throw new IllegalArgumentException(
-            "Invalid signature for annotated workflow schedule %s. Signature must be (Instant, Instant)"
-                .formatted(workflow.fullyQualifiedName()));
-      }
-
-      CRON_PARSER.parse(skedTag.cron()).validate();
-    }
-  }
 
   private final DBOSExecutor dbosExecutor;
   private final SystemDatabase systemDatabase;
@@ -86,7 +62,6 @@ public class SchedulerService implements AutoCloseable {
       if (this.execServiceRef.compareAndSet(null, scheduler)) {
         scheduler.scheduleAtFixedRate(
             this::pollWorkflowSchedules, 0, pollingInterval.toMillis(), TimeUnit.MILLISECONDS);
-        startAnnotatedSchedules();
       }
     }
   }
@@ -277,76 +252,6 @@ public class SchedulerService implements AutoCloseable {
     }
   }
 
-  private void startAnnotatedSchedules() {
-    var annotatedSchedules = getAnnotatedWorkflowSchedules();
-    logger.debug("startAnnotatedSchedules found {} annotated schedules", annotatedSchedules.size());
-
-    for (var swf : annotatedSchedules) {
-      logger.debug(
-          "Registering annotated schedule {} with cron {}",
-          swf.workflow().fullyQualifiedName(),
-          swf.cron());
-      var task =
-          new Runnable() {
-
-            final ExecutionTime executionTime = ExecutionTime.forCron(swf.cron());
-            final String workflowName = swf.workflow().fullyQualifiedName();
-
-            ZonedDateTime nextTime = getLastTime(dbosExecutor, swf);
-
-            public void schedule() {
-              executionTime
-                  .nextExecution(nextTime)
-                  .ifPresent(
-                      cronTime -> {
-                        this.nextTime = cronTime.truncatedTo(ChronoUnit.SECONDS);
-                        scheduleTask(this.nextTime, this);
-                      });
-            }
-
-            @Override
-            public void run() {
-              // if execServiceRef is null, the scheduler service was shut down so don't start the
-              // workflow or schedule the next execution
-              if (execServiceRef.get() == null) {
-                return;
-              }
-
-              var scheduledTime = nextTime;
-              try {
-                if (paused.get()) {
-                  logger.debug(
-                      "Skipping annotated workflow {} schedule {} because scheduler is paused",
-                      workflowName,
-                      swf.cron());
-                  return;
-                }
-                var args = new Object[] {scheduledTime.toInstant(), Instant.now()};
-                var workflowId =
-                    "sched-%s-%s".formatted(workflowName, scheduledTime.toOffsetDateTime());
-                logger.debug(
-                    "Triggering annotated workflow {} at {} workflowId {}",
-                    workflowName,
-                    args[1],
-                    workflowId);
-                var appVersion = dbosExecutor.getLatestApplicationVersion().versionName();
-                var options =
-                    new StartWorkflowOptions(workflowId)
-                        .withQueue(swf.queue())
-                        .withAppVersion(appVersion);
-                dbosExecutor.startRegisteredWorkflow(swf.workflow(), args, options);
-                nextTime = setLastTime(dbosExecutor, swf, scheduledTime);
-              } catch (Exception e) {
-                logger.error("Annotated scheduled task exception {}", workflowName, e);
-              } finally {
-                schedule();
-              }
-            }
-          };
-      task.schedule();
-    }
-  }
-
   private ScheduledFuture<?> scheduleTask(ZonedDateTime nextTime, Runnable task) {
     // to prevent the "thundering herd" problem in a distributed setting,
     // apply a jitter of up to 10% of the sleep time, capped at 10 seconds
@@ -370,81 +275,5 @@ public class SchedulerService implements AutoCloseable {
     if (future != null) {
       future.cancel(false);
     }
-  }
-
-  private static ZonedDateTime getLastTime(
-      DBOSExecutor dbosExecutor, AnnotatedScheduledWorkflow swf) {
-    if (swf.automaticBackfill()) {
-      var state =
-          dbosExecutor.getExternalState(
-              "DBOS.SchedulerService", swf.workflow().fullyQualifiedName(), "lastTime");
-      if (state.isPresent()) {
-        return ZonedDateTime.parse(state.get().value());
-      }
-    }
-    return ZonedDateTime.now();
-  }
-
-  private static ZonedDateTime setLastTime(
-      DBOSExecutor dbosExecutor, AnnotatedScheduledWorkflow swf, ZonedDateTime lastTime) {
-    if (!swf.automaticBackfill()) {
-      return ZonedDateTime.now();
-    }
-
-    var state =
-        dbosExecutor.upsertExternalState(
-            new ExternalState(
-                "DBOS.SchedulerService",
-                swf.workflow().fullyQualifiedName(),
-                "lastTime",
-                lastTime.toString(),
-                null,
-                BigInteger.valueOf(lastTime.toInstant().toEpochMilli())));
-
-    return ZonedDateTime.parse(state.value()).plus(1, ChronoUnit.MILLIS);
-  }
-
-  private List<AnnotatedScheduledWorkflow> getAnnotatedWorkflowSchedules() {
-    return dbosExecutor.getRegisteredWorkflows().stream()
-        .map(
-            wf -> {
-              var method = wf.workflowMethod();
-              var schedTag = method.getAnnotation(Scheduled.class);
-              if (schedTag == null) {
-                return null;
-              }
-
-              if (!Arrays.equals(method.getParameterTypes(), ANNOTATED_EXPECTED_PARAMETERS)) {
-                logger.error(
-                    "Annotated workflow schedule {} has invalid signature, signature must be (Instant, Instant)",
-                    wf.fullyQualifiedName());
-                return null;
-              }
-
-              var queueName =
-                  schedTag.queue().isEmpty() ? Constants.DBOS_INTERNAL_QUEUE : schedTag.queue();
-              if (dbosExecutor.getQueue(queueName).isEmpty()) {
-                logger.error(
-                    "Annotated workflow schedule {} refers to undefined queue {}",
-                    wf.fullyQualifiedName(),
-                    queueName);
-                return null;
-              }
-
-              try {
-                var cron = CRON_PARSER.parse(schedTag.cron()).validate();
-                return new AnnotatedScheduledWorkflow(
-                    wf, cron, queueName, schedTag.automaticBackfill());
-              } catch (Exception e) {
-                logger.error(
-                    "Annotated workflow schedule {} has invalid cron expression {}",
-                    wf.fullyQualifiedName(),
-                    schedTag.cron(),
-                    e);
-                return null;
-              }
-            })
-        .filter(Objects::nonNull)
-        .toList();
   }
 }
