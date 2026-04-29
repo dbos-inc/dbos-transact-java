@@ -1,105 +1,59 @@
-name: Test Demo Apps
+name: Test
 
 on:
+  workflow_call:
   workflow_dispatch:
 
 jobs:
-  publish:
+  test:
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - name: Checkout java-transact
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
-
-      - name: Remove local DBOS Maven artifacts
-        run: rm -rf ~/.m2/repository/dev/dbos
-
-      - name: Publish to Maven Local
-        run: ./gradlew publishToMavenLocal
-
-      - name: Get version
-        id: version
-        run: echo "version=$(./gradlew properties -q | grep '^version:' | awk '{print $2}')" >> $GITHUB_OUTPUT
-
-      - name: Upload Maven Local artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: dbos-maven-local
-          path: ~/.m2/repository/dev/dbos
-
-  test-demo-apps:
-    needs: publish
-    runs-on: ubuntu-latest
-
-    env:
-      PGPASSWORD: dbos
-      PGUSER: postgres
 
     strategy:
       fail-fast: false
       matrix:
+        jdk-version: ['17', '21', '25']
+        jdk-distro: ['graalvm', 'microsoft', 'oracle', 'temurin' ]
+        exclude:
+          - jdk-distro: graalvm
+            jdk-version: 17
         include:
-          - app: java/dbos-starter
-            build_file: app/build.gradle.kts
-          - app: java/widget-store
-            build_file: build.gradle.kts
-          - app: kotlin/dbos-starter
-            build_file: app/build.gradle.kts
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: dbos
-          POSTGRES_USER: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          - jdk-distro: graalvm
+            jdk-version: 17.0.12
 
     steps:
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Checkout dbos-demo-apps
+      - name: Checkout code
         uses: actions/checkout@v6
         with:
-          repository: dbos-inc/dbos-demo-apps
-          ref: devhawk/java-0.8
-          path: dbos-demo-apps
+          fetch-depth: 0 # fetch-depth 0 needed for version calculation
 
-      - name: Download Maven Local artifacts
-        uses: actions/download-artifact@v7
+      - name: Set up JDK ${{ matrix.jdk-distro }} ${{ matrix.jdk-version }}
+        uses: actions/setup-java@v5
         with:
-          name: dbos-maven-local
-          path: ~/.m2/repository/dev/dbos
+          java-version: ${{ matrix.jdk-version }}
+          distribution: ${{ matrix.jdk-distro }}
 
-      - name: Patch ${{ matrix.app }}
-        working-directory: dbos-demo-apps/${{ matrix.app }}
-        run: |
-          VERSION="${{ needs.publish.outputs.version }}"
-          sed -i "s|dev\.dbos:\([^:]*\):[^\"']*|dev.dbos:\1:${VERSION}|g" "${{ matrix.build_file }}"
-          sed -i 's/repositories {/repositories { mavenLocal();/' "${{ matrix.build_file }}"
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
 
-      - name: Build and test ${{ matrix.app }}
-        working-directory: dbos-demo-apps/${{ matrix.app }}
-        run: ./gradlew build
+      - name: Run tests
+        run: ./gradlew clean build
+        env:
+          PGPASSWORD: dbos
+          JDKVERSION: ${{ matrix.jdk-version }}
+          SCALE_TEST: "true"
+
+      - name: Test Summary
+        uses: test-summary/action@v2
+        with:
+          paths: "transact/build/test-results/test/TEST-*.xml"
+          show: "fail, skip"
+        if: always()
+
+      - name: Upload JDK ${{ matrix.jdk-distro }} ${{ matrix.jdk-version }} test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-${{ matrix.jdk-version }}-${{ matrix.jdk-distro }}
+          path: |
+            transact/build/reports/tests/
+            transact/build/test-results/
