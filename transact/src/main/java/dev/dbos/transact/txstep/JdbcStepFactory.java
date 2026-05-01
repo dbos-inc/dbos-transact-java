@@ -42,8 +42,7 @@ public class JdbcStepFactory {
     createTxOutputTable(dataSource, this.schema);
   }
 
-  public static void createTxOutputTable(DataSource dataSource, String schema)
-      throws SQLException {
+  public static void createTxOutputTable(DataSource dataSource, String schema) throws SQLException {
     try (var conn = dataSource.getConnection()) {
       ensureSchema(conn, schema);
       ensureTxOutputTable(conn, schema);
