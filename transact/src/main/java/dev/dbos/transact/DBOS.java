@@ -62,9 +62,7 @@ public class DBOS implements AutoCloseable {
   private final Set<DBOSLifecycleListener> lifecycleRegistry = ConcurrentHashMap.newKeySet();
   private final DBOSConfig config;
   private final AtomicReference<DBOSExecutor> dbosExecutor = new AtomicReference<>();
-  private final DBOSIntegration integration =
-      new DBOSIntegration(
-          dbosExecutor::get, this::registerLifecycleListener, this::registerWorkflow);
+  private final DBOSIntegration integration;
 
   private AlertHandler alertHandler;
 
@@ -83,7 +81,13 @@ public class DBOS implements AutoCloseable {
       Objects.requireNonNull(config.dbPassword(), "DBOSConfig.dbPassword must not be null");
     }
 
-    this.config = config;
+    this.config = new DBOSConfig(config);
+    this.integration =
+        new DBOSIntegration(
+            this.config,
+            dbosExecutor::get,
+            this::registerLifecycleListener,
+            this::registerWorkflow);
   }
 
   /**
