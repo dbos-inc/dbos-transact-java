@@ -15,7 +15,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.sql.DataSource;
 
@@ -443,5 +446,64 @@ public class DBUtils {
         return rows;
       }
     }
+  }
+
+  public static List<TxStepOutputRow> getTxStepRows(DataSource ds) throws SQLException {
+    return getTxStepRows(ds, null);
+  }
+
+  public static List<TxStepOutputRow> getTxStepRows(DataSource ds, String schema)
+      throws SQLException {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    var sql = "SELECT * FROM \"%s\".tx_step_outputs ORDER BY created_at".formatted(schema);
+    try (var conn = ds.getConnection();
+        var stmt = conn.createStatement();
+        var rs = stmt.executeQuery(sql)) {
+      List<TxStepOutputRow> rows = new ArrayList<>();
+      while (rs.next()) {
+        rows.add(new TxStepOutputRow(rs));
+      }
+      return rows;
+    }
+  }
+
+  public static List<Map<String, Object>> dumpResultSet(ResultSet rs) throws SQLException {
+    List<Map<String, Object>> results = new ArrayList<>();
+    var metaData = rs.getMetaData();
+    var columnCount = metaData.getColumnCount();
+    while (rs.next()) {
+      Map<String, Object> map = new HashMap<>();
+      for (var i = 1; i <= columnCount; i++) {
+        map.put(metaData.getColumnLabel(i), rs.getObject(i));
+      }
+      results.add(map);
+    }
+    return results;
+  }
+
+  public static Collection<String> getTables(PgContainer pg, String schema) throws SQLException {
+    try (var ds = pg.dataSource()) {
+      return getTables(ds, schema);
+    }
+  }
+
+  public static Collection<String> getTables(DataSource ds, String schema) throws SQLException {
+    try (var conn = ds.getConnection()) {
+      return getTables(conn, schema);
+    }
+  }
+
+  public static Collection<String> getTables(Connection conn, String schema) throws SQLException {
+    List<String> tables = new ArrayList<>();
+    try (var rs = conn.getMetaData().getTables(null, schema, null, null)) {
+      while (rs.next()) {
+        var name = rs.getString("TABLE_NAME");
+        var type = rs.getString("TABLE_TYPE");
+        if ("TABLE".equals(type)) {
+          tables.add(name);
+        }
+      }
+    }
+    return tables;
   }
 }

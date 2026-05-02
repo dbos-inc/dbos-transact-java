@@ -27,12 +27,20 @@ public class JdbcStepFactory {
   private final String schema;
   private final DBOSSerializer serializer;
 
-  public JdbcStepFactory(DBOS dbos, DataSource dataSource) throws SQLException {
+  public JdbcStepFactory(DBOS dbos, DataSource dataSource) {
     this(dbos, dataSource, null, null);
   }
 
-  public JdbcStepFactory(DBOS dbos, DataSource dataSource, String schema, DBOSSerializer serializer)
-      throws SQLException {
+  public JdbcStepFactory(DBOS dbos, DataSource dataSource, String schema) {
+    this(dbos, dataSource, schema, null);
+  }
+
+  public JdbcStepFactory(DBOS dbos, DataSource dataSource, DBOSSerializer serializer) {
+    this(dbos, dataSource, null, serializer);
+  }
+
+  public JdbcStepFactory(
+      DBOS dbos, DataSource dataSource, String schema, DBOSSerializer serializer) {
     this.dbos = Objects.requireNonNull(dbos);
     this.dataSource = Objects.requireNonNull(dataSource);
     var config = dbos.integration().config();
@@ -42,43 +50,54 @@ public class JdbcStepFactory {
     createTxOutputTable(dataSource, this.schema);
   }
 
-  public static void createTxOutputTable(DataSource dataSource, String schema) throws SQLException {
+  public static void createTxOutputTable(DataSource dataSource, String schema) {
     try (var conn = dataSource.getConnection()) {
       ensureSchema(conn, schema);
       ensureTxOutputTable(conn, schema);
+    } catch (SQLException e) {
+      throw new DBOSSqlException(e);
+    }
+  }
+
+  public static boolean schemaExists(Connection conn, String schema) throws SQLException {
+    var sql = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = ?";
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, Objects.requireNonNull(schema, "schema must not be null"));
+      try (var rs = stmt.executeQuery()) {
+        if (rs.next()) {
+          return true;
+        } else {
+          return false;
+        }
+      }
     }
   }
 
   public static void ensureSchema(Connection conn, String schema) throws SQLException {
     Objects.requireNonNull(schema, "schema must not be null");
-    var sql = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = ?";
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, schema);
-      try (var rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          return;
-        }
+    if (!schemaExists(conn, schema)) {
+      try (var stmt = conn.createStatement()) {
+        stmt.execute("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(schema));
       }
     }
+  }
 
-    try (var stmt = conn.createStatement()) {
-      stmt.execute("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(schema));
+  public static boolean tableExists(Connection conn, String schema) throws SQLException {
+    var sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?";
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, Objects.requireNonNull(schema, "schema must not be null"));
+      stmt.setString(2, Objects.requireNonNull("tx_step_outputs", "tableName must not be null"));
+      try (var rs = stmt.executeQuery()) {
+        return rs.next();
+      }
     }
   }
 
   public static void ensureTxOutputTable(Connection conn, String schema) throws SQLException {
     Objects.requireNonNull(schema, "schema must not be null");
-    var sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?";
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, schema);
-      stmt.setString(2, "tx_step_outputs");
-      try (var rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          return;
-        }
-      }
+    if (tableExists(conn, schema)) {
+      return;
     }
-
     try (var stmt = conn.createStatement()) {
       var ddlSql =
           """
@@ -89,7 +108,7 @@ public class JdbcStepFactory {
             error TEXT,
             serialization TEXT,
             created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())*1000)::bigint,
-            PRIMARY KEY (workflow_id, function_num)
+            PRIMARY KEY (workflow_id, step_id)
           )"""
               .formatted(schema);
       stmt.execute(ddlSql);
@@ -182,7 +201,7 @@ public class JdbcStepFactory {
         """
         INSERT INTO "%s".tx_step_outputs
             (workflow_id, step_id, output, error, serialization)
-        VALUES (?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT DO NOTHING
         """
             .formatted(schema);
