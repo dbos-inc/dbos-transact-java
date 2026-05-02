@@ -98,6 +98,5 @@ public class JdbcStepFactoryTest {
 
     var txStepRows = DBUtils.getTxStepRows(dataSource);
     assertEquals(5, txStepRows.size());
-
   }
 }
