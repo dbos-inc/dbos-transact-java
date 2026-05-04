@@ -239,25 +239,34 @@ public class JdbcStepFactory {
     var workflowId = Objects.requireNonNull(DBOS.workflowId());
     int stepId = Objects.requireNonNull(DBOS.stepId());
 
-    logger.debug("txStep starting: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
+    logger.debug(
+        "txStep starting: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
     var prevResult = this.checkExecution(workflowId, stepId, stepName);
     if (prevResult != null) {
-      logger.debug("txStep cache hit: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
+      logger.debug(
+          "txStep cache hit: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
       return prevResult.<R, E>toResult(serializer);
     }
 
-    logger.debug("txStep executing: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
+    logger.debug(
+        "txStep executing: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
     var conn = getConnection();
     try {
       var retVal = func.execute(conn);
       recordOutput(conn, workflowId, stepId, retVal);
       commit(conn);
-      logger.debug("txStep succeeded: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
+      logger.debug(
+          "txStep succeeded: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
       return retVal;
     } catch (Exception e) {
       rollback(conn);
       recordError(workflowId, stepId, e);
-      logger.debug("txStep failed: workflowId={} stepId={} stepName={} error={}", workflowId, stepId, stepName, e.getMessage());
+      logger.debug(
+          "txStep failed: workflowId={} stepId={} stepName={} error={}",
+          workflowId,
+          stepId,
+          stepName,
+          e.getMessage());
       throw e;
     } finally {
       close(conn);
