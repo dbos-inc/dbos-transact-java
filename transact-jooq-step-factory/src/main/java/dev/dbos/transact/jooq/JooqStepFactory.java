@@ -122,6 +122,7 @@ public class JooqStepFactory extends PostgresStepFactory<DSLContext> {
     if (output != null && error != null) {
       throw new IllegalArgumentException("attempted to record non null output and error result");
     }
-    ctx.execute(UPSERT_SQL_TEMPLATE.formatted(schema), workflowId, stepId, output, error, serialization);
+    ctx.execute(
+        UPSERT_SQL_TEMPLATE.formatted(schema), workflowId, stepId, output, error, serialization);
   }
 }
