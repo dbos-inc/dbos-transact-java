@@ -2,6 +2,7 @@ package dev.dbos.transact.txstep;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.dbos.transact.Constants;
@@ -124,6 +125,16 @@ public class JdbcStepFactoryInitTest {
       try (var conn = dataSource.getConnection()) {
         assertTrue(validateSchema(conn, dbosSchema));
       }
+    }
+  }
+
+  @Test
+  public void nonPostgresDataSource() throws Exception {
+    var config = pgContainer.dbosConfig();
+    try (var dbos = new DBOS(config)) {
+      var sqliteDs = new org.sqlite.SQLiteDataSource();
+      sqliteDs.setUrl("jdbc:sqlite::memory:");
+      assertThrows(IllegalArgumentException.class, () -> new JdbcStepFactory(dbos, sqliteDs));
     }
   }
 
