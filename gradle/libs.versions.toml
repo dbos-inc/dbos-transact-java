@@ -5,6 +5,8 @@ assertj = "3.27.3"
 cron-utils = "9.2.1"
 hikaricp = "7.0.2"
 jdbi = "3.47.0"
+jaxb-api = "4.0.2"
+jooq = "3.19.15"
 kryo = "5.6.2"
 jackson = "2.21.2"
 java-websocket = "1.6.0"
@@ -36,6 +38,8 @@ assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 cron-utils = { module = "com.cronutils:cron-utils", version.ref = "cron-utils" }
 hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
 jdbi-core = { module = "org.jdbi:jdbi3-core", version.ref = "jdbi" }
+jaxb-api = { module = "jakarta.xml.bind:jakarta.xml.bind-api", version.ref = "jaxb-api" }
+jooq = { module = "org.jooq:jooq", version.ref = "jooq" }
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
 java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "java-websocket" }
