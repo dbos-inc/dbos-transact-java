@@ -1,6 +1,6 @@
 rootProject.name = "dbos-transact-java"
 
-include("transact", "transact-cli", "transact-spring-boot-starter")
+include("transact", "transact-cli", "transact-spring-boot-starter", "transact-jdbi-step-provider")
 
 plugins { id("org.gradle.toolchains.foojay-resolver") version "1.0.0" }
 

@@ -4,6 +4,7 @@ aspectj = "1.9.22.1"
 assertj = "3.27.3"
 cron-utils = "9.2.1"
 hikaricp = "7.0.2"
+jdbi = "3.47.0"
 kryo = "5.6.2"
 jackson = "2.21.2"
 java-websocket = "1.6.0"
@@ -34,6 +35,7 @@ aspectjweaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj" 
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 cron-utils = { module = "com.cronutils:cron-utils", version.ref = "cron-utils" }
 hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
+jdbi-core = { module = "org.jdbi:jdbi3-core", version.ref = "jdbi" }
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
 java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "java-websocket" }
