@@ -19,6 +19,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import javax.sql.DataSource;
 
@@ -448,14 +449,15 @@ public class DBUtils {
     }
   }
 
-  public static List<TxStepOutputRow> getTxStepRows(DataSource ds) throws SQLException {
-    return getTxStepRows(ds, null);
+  public static List<TxStepOutputRow> getAllTxStepRows(DataSource ds) throws SQLException {
+    return getAllTxStepRows(ds, null);
   }
 
-  public static List<TxStepOutputRow> getTxStepRows(DataSource ds, String schema)
+  public static List<TxStepOutputRow> getAllTxStepRows(DataSource ds, String schema)
       throws SQLException {
-    schema = SystemDatabase.sanitizeSchema(schema);
-    var sql = "SELECT * FROM \"%s\".tx_step_outputs ORDER BY created_at".formatted(schema);
+    var sql =
+        "SELECT * FROM \"%s\".tx_step_outputs ORDER BY created_at"
+            .formatted(SystemDatabase.sanitizeSchema(schema));
     try (var conn = ds.getConnection();
         var stmt = conn.createStatement();
         var rs = stmt.executeQuery(sql)) {
@@ -464,6 +466,29 @@ public class DBUtils {
         rows.add(new TxStepOutputRow(rs));
       }
       return rows;
+    }
+  }
+
+  public static List<TxStepOutputRow> getTxStepRows(DataSource ds, String workflowId)
+      throws SQLException {
+    return getTxStepRows(ds, workflowId, null);
+  }
+
+  public static List<TxStepOutputRow> getTxStepRows(DataSource ds, String workflowId, String schema)
+      throws SQLException {
+    var sql =
+        "SELECT * FROM \"%s\".tx_step_outputs WHERE workflow_id = ? ORDER BY step_id"
+            .formatted(SystemDatabase.sanitizeSchema(schema));
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, Objects.requireNonNull(workflowId));
+      try (var rs = stmt.executeQuery()) {
+        List<TxStepOutputRow> rows = new ArrayList<>();
+        while (rs.next()) {
+          rows.add(new TxStepOutputRow(rs));
+        }
+        return rows;
+      }
     }
   }
 
