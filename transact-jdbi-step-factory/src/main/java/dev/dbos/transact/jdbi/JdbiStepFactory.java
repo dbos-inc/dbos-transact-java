@@ -7,7 +7,6 @@ import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.txstep.PostgresStepFactory;
 import dev.dbos.transact.workflow.internal.StepResult;
 
-import java.sql.SQLException;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -92,26 +91,21 @@ public class JdbiStepFactory {
     this.dbos = dbos;
     this.jdbi = jdbi;
     var config = dbos.integration().config();
-
     this.schema = SystemDatabase.sanitizeSchema(schema == null ? config.databaseSchema() : schema);
     this.serializer = serializer == null ? config.serializer() : serializer;
 
     try {
       jdbi.useHandle(
           handle -> {
-            try {
-              PostgresStepFactory.ensurePostgres(handle.getConnection());
-              PostgresStepFactory.ensureSchema(handle.getConnection(), this.schema);
-              PostgresStepFactory.ensureTxOutputTable(handle.getConnection(), this.schema);
-            } catch (SQLException e) {
-              throw new RuntimeException(e.getMessage(), e);
-            }
+            PostgresStepFactory.ensurePostgres(handle.getConnection());
+            PostgresStepFactory.ensureSchema(handle.getConnection(), this.schema);
+            PostgresStepFactory.ensureTxOutputTable(handle.getConnection(), this.schema);
           });
     } catch (Exception e) {
       if (e instanceof RuntimeException re) {
         throw re;
       }
-      throw new RuntimeException(e);
+      throw new RuntimeException(e.getMessage(), e);
     }
   }
 

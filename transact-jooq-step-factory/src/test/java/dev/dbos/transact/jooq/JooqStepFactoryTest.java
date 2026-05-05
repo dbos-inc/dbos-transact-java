@@ -75,26 +75,26 @@ class FactoryTestServiceImpl implements FactoryTestService {
   @Override
   @Workflow
   public FactoryTestService.TestResult insertWorkflow(String user) {
-    return stepFactory.txStep((DSLContext ctx) -> insertGreeting(ctx, user), "insertGreeting");
+    return stepFactory.txStepResult(ctx -> insertGreeting(ctx.dsl(), user), "insertGreeting");
   }
 
   @Override
   @Workflow
   public FactoryTestService.TestResult errorWorkflow(String user) {
-    return stepFactory.txStep((DSLContext ctx) -> errorGreeting(ctx, user), "errorGreeting");
+    return stepFactory.txStepResult(ctx -> errorGreeting(ctx.dsl(), user), "errorGreeting");
   }
 
   @Override
   @Workflow
   public FactoryTestService.TestResult readWorkflow(String user) {
-    return stepFactory.txStep((DSLContext ctx) -> readGreeting(ctx, user), "readGreeting");
+    return stepFactory.txStepResult(ctx -> readGreeting(ctx.dsl(), user), "readGreeting");
   }
 
   @Override
   @Workflow
   public FactoryTestService.TestResult insertThenReadWorkflow(String user) {
-    stepFactory.txStep((DSLContext ctx) -> insertGreeting(ctx, user), "insertGreeting");
-    return stepFactory.txStep((DSLContext ctx) -> readGreeting(ctx, user), "readGreeting");
+    stepFactory.txStep(ctx -> insertGreeting(ctx.dsl(), user), "insertGreeting");
+    return stepFactory.txStepResult(ctx -> readGreeting(ctx.dsl(), user), "readGreeting");
   }
 }
 

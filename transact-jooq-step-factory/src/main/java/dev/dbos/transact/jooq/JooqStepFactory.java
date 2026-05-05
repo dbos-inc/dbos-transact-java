@@ -1,39 +1,26 @@
 package dev.dbos.transact.jooq;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.txstep.PostgresStepFactory;
 import dev.dbos.transact.workflow.internal.StepResult;
 
-import java.sql.SQLException;
+import java.util.Objects;
+import java.util.Optional;
 
+import org.jooq.Configuration;
 import org.jooq.DSLContext;
-import org.jooq.SQLDialect;
-import org.jooq.impl.DSL;
-import org.jspecify.annotations.Nullable;
+import org.jooq.TransactionalCallable;
+import org.jooq.TransactionalRunnable;
 
-/**
- * A {@link PostgresStepFactory} implementation backed by jOOQ {@link DSLContext} objects.
- *
- * <p>Construct one with a pool-backed {@link DSLContext} pointing at a PostgreSQL database. The
- * constructor verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table
- * if needed. User lambdas passed to {@code txStep} receive a per-transaction {@link DSLContext}
- * backed by a single connection with a transaction already started; they should not call {@code
- * commit} or {@code close} themselves.
- *
- * <pre>{@code
- * DSLContext dsl = DSL.using(dataSource, SQLDialect.POSTGRES);
- * JooqStepFactory factory = new JooqStepFactory(dbos, dsl);
- *
- * // inside a @Workflow method:
- * int count = factory.txStep(ctx -> {
- *     return ctx.execute("INSERT INTO ...");
- * }, "myStep");
- * }</pre>
- */
-public class JooqStepFactory extends PostgresStepFactory<DSLContext> {
+public class JooqStepFactory {
 
+  private final DBOS dbos;
   private final DSLContext dsl;
+  private final String schema;
+  private final DBOSSerializer serializer;
 
   /** Creates a factory using the schema from the DBOS config. */
   public JooqStepFactory(DBOS dbos, DSLContext dsl) {
@@ -52,18 +39,17 @@ public class JooqStepFactory extends PostgresStepFactory<DSLContext> {
 
   /** Creates a factory with a custom schema and serializer. */
   public JooqStepFactory(DBOS dbos, DSLContext dsl, String schema, DBOSSerializer serializer) {
-    super(dbos, schema, serializer);
+    this.dbos = dbos;
     this.dsl = dsl;
+    var config = dbos.integration().config();
+    this.schema = SystemDatabase.sanitizeSchema(schema == null ? config.databaseSchema() : schema);
+    this.serializer = serializer == null ? config.serializer() : serializer;
     try {
       dsl.connection(
           conn -> {
-            try {
-              ensurePostgres(conn);
-              ensureSchema(conn, this.schema);
-              ensureTxOutputTable(conn, this.schema);
-            } catch (SQLException e) {
-              throw new RuntimeException(e.getMessage(), e);
-            }
+            PostgresStepFactory.ensurePostgres(conn);
+            PostgresStepFactory.ensureSchema(conn, this.schema);
+            PostgresStepFactory.ensureTxOutputTable(conn, this.schema);
           });
     } catch (Exception e) {
       if (e instanceof RuntimeException re) {
@@ -73,53 +59,43 @@ public class JooqStepFactory extends PostgresStepFactory<DSLContext> {
     }
   }
 
-  @Override
-  protected DSLContext openTransaction() {
-    try {
-      var conn = dsl.configuration().connectionProvider().acquire();
-      conn.setAutoCommit(false);
-      return DSL.using(conn, SQLDialect.POSTGRES);
-    } catch (SQLException e) {
-      throw new RuntimeException(e.getMessage(), e);
-    }
+  public <T> T txStepResult(TransactionalCallable<T> callback, String stepName) {
+    return dbos.runStep(
+        () -> {
+          var workflowId = Objects.requireNonNull(DBOS.workflowId());
+          int stepId = Objects.requireNonNull(DBOS.stepId());
+
+          var prevResult = checkExecution(workflowId, stepId, stepName);
+          if (prevResult.isPresent()) {
+            return prevResult.get().toResult(serializer);
+          }
+
+          try {
+            return dsl.transactionResult(
+                trx -> {
+                  var result = callback.run(trx);
+                  recordOutput(trx, workflowId, stepId, result);
+                  return result;
+                });
+          } catch (Exception e) {
+            recordError(workflowId, stepId, e);
+            throw e;
+          }
+        },
+        stepName);
   }
 
-  @Override
-  protected DSLContext openConnection() {
-    var conn = dsl.configuration().connectionProvider().acquire();
-    return DSL.using(conn, SQLDialect.POSTGRES);
+  public void txStep(TransactionalRunnable transactional, String stepName) {
+    txStepResult(
+        c -> {
+          transactional.run(c);
+          return null;
+        },
+        stepName);
   }
 
-  @Override
-  protected void commit(DSLContext ctx) {
-    try {
-      ctx.connection(conn -> conn.commit());
-    } catch (Exception e) {
-      throw new RuntimeException(e.getMessage(), e);
-    }
-  }
-
-  @Override
-  protected void rollback(DSLContext ctx) {
-    try {
-      ctx.connection(conn -> conn.rollback());
-    } catch (Exception e) {
-      throw new RuntimeException(e.getMessage(), e);
-    }
-  }
-
-  @Override
-  protected void close(DSLContext ctx) {
-    try {
-      ctx.connection(conn -> conn.close());
-    } catch (Exception e) {
-      throw new RuntimeException(e.getMessage(), e);
-    }
-  }
-
-  @Override
-  protected @Nullable StepResult checkExecution(String workflowId, int stepId, String stepName) {
-    var sql = CHECK_SQL_TEMPLATE.formatted(this.schema);
+  private Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
+    var sql = PostgresStepFactory.CHECK_SQL_TEMPLATE.formatted(this.schema);
     return dsl.fetchOptional(sql, workflowId, stepId)
         .map(
             r ->
@@ -130,13 +106,24 @@ public class JooqStepFactory extends PostgresStepFactory<DSLContext> {
                     r.get("output", String.class),
                     r.get("error", String.class),
                     null,
-                    r.get("serialization", String.class)))
-        .orElse(null);
+                    r.get("serialization", String.class)));
   }
 
-  @Override
-  protected void recordResult(
-      DSLContext ctx,
+  private <R> void recordOutput(Configuration trx, String workflowId, int stepId, R result) {
+    var value = SerializationUtil.serializeValue(result, null, serializer);
+    recordResult(trx, workflowId, stepId, value.serializedValue(), null, value.serialization());
+  }
+
+  private <X extends Exception> void recordError(String workflowId, int stepId, X exception) {
+    var value = SerializationUtil.serializeError(exception, null, serializer);
+    dsl.transaction(
+        trx ->
+            recordResult(
+                trx, workflowId, stepId, null, value.serializedValue(), value.serialization()));
+  }
+
+  private void recordResult(
+      Configuration trx,
       String workflowId,
       int stepId,
       String output,
@@ -145,7 +132,7 @@ public class JooqStepFactory extends PostgresStepFactory<DSLContext> {
     if (output != null && error != null) {
       throw new IllegalArgumentException("attempted to record non null output and error result");
     }
-    ctx.execute(
-        UPSERT_SQL_TEMPLATE.formatted(schema), workflowId, stepId, output, error, serialization);
+    var sql = PostgresStepFactory.UPSERT_SQL_TEMPLATE.formatted(schema);
+    trx.dsl().execute(sql, workflowId, stepId, output, error, serialization);
   }
 }
