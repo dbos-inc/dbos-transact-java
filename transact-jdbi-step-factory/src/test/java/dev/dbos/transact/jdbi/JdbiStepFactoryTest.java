@@ -85,26 +85,26 @@ class FactoryTestServiceImpl implements FactoryTestService {
   @Override
   @Workflow
   public FactoryTestService.TestResult insertWorkflow(String user) {
-    return stepFactory.txStep((Handle h) -> insertGreeting(h, user), "insertGreeting");
+    return stepFactory.inStep((Handle h) -> insertGreeting(h, user), "insertGreeting");
   }
 
   @Override
   @Workflow
   public FactoryTestService.TestResult errorWorkflow(String user) {
-    return stepFactory.txStep((Handle h) -> errorGreeting(h, user), "errorGreeting");
+    return stepFactory.inStep((Handle h) -> errorGreeting(h, user), "errorGreeting");
   }
 
   @Override
   @Workflow
   public FactoryTestService.TestResult readWorkflow(String user) {
-    return stepFactory.txStep((Handle h) -> readGreeting(h, user), "readGreeting");
+    return stepFactory.inStep((Handle h) -> readGreeting(h, user), "readGreeting");
   }
 
   @Override
   @Workflow
   public FactoryTestService.TestResult insertThenReadWorkflow(String user) {
-    stepFactory.txStep((Handle h) -> insertGreeting(h, user), "insertGreeting");
-    return stepFactory.txStep((Handle h) -> readGreeting(h, user), "readGreeting");
+    stepFactory.useStep((Handle h) -> insertGreeting(h, user), "insertGreeting");
+    return stepFactory.inStep((Handle h) -> readGreeting(h, user), "readGreeting");
   }
 }
 

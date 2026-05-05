@@ -46,14 +46,14 @@ public abstract class PostgresStepFactory<C> {
   protected final String schema;
   protected final DBOSSerializer serializer;
 
-  protected static final String CHECK_SQL_TEMPLATE =
+  public static final String CHECK_SQL_TEMPLATE =
       """
       SELECT output, error, serialization
       FROM "%s".tx_step_outputs
       WHERE workflow_id = ? AND step_id = ?
       """;
 
-  protected static final String UPSERT_SQL_TEMPLATE =
+  public static final String UPSERT_SQL_TEMPLATE =
       """
       INSERT INTO "%s".tx_step_outputs
         (workflow_id, step_id, output, error, serialization)
