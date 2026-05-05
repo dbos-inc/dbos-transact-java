@@ -12,22 +12,44 @@ import javax.sql.DataSource;
 
 import org.jspecify.annotations.Nullable;
 
+/**
+ * A {@link PostgresStepFactory} implementation backed by plain JDBC {@link Connection} objects.
+ *
+ * <p>Construct one with a {@link DataSource} pointing at a PostgreSQL database. The constructor
+ * verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if needed.
+ * User lambdas passed to {@code txStep} receive a {@link Connection} with a transaction already
+ * started; they should not call {@code commit} or {@code close} themselves.
+ *
+ * <pre>{@code
+ * JdbcStepFactory factory = new JdbcStepFactory(dbos, dataSource);
+ *
+ * // inside a @Workflow method:
+ * int count = factory.txStep(conn -> {
+ *     try (var stmt = conn.prepareStatement("INSERT INTO ...")) { ... }
+ *     return rowCount;
+ * }, "myStep");
+ * }</pre>
+ */
 public class JdbcStepFactory extends PostgresStepFactory<Connection> {
 
   private final DataSource dataSource;
 
+  /** Creates a factory using the schema from the DBOS config. */
   public JdbcStepFactory(DBOS dbos, DataSource dataSource) {
     this(dbos, dataSource, null, null);
   }
 
+  /** Creates a factory using a custom schema for {@code tx_step_outputs}. */
   public JdbcStepFactory(DBOS dbos, DataSource dataSource, String schema) {
     this(dbos, dataSource, schema, null);
   }
 
+  /** Creates a factory using a custom serializer. */
   public JdbcStepFactory(DBOS dbos, DataSource dataSource, DBOSSerializer serializer) {
     this(dbos, dataSource, null, serializer);
   }
 
+  /** Creates a factory with a custom schema and serializer. */
   public JdbcStepFactory(
       DBOS dbos, DataSource dataSource, String schema, DBOSSerializer serializer) {
     super(dbos, schema, serializer);
@@ -35,6 +57,10 @@ public class JdbcStepFactory extends PostgresStepFactory<Connection> {
     createTxOutputTable(dataSource, this.schema);
   }
 
+  /**
+   * Verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if it does
+   * not exist. Useful when the {@code DataSource} is managed separately from the factory lifecycle.
+   */
   public static void createTxOutputTable(DataSource dataSource, String schema) {
     try (var conn = dataSource.getConnection()) {
       ensurePostgres(conn);

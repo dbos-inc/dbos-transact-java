@@ -11,22 +11,43 @@ import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * A {@link PostgresStepFactory} implementation backed by Jdbi3 {@link Handle} objects.
+ *
+ * <p>Construct one with a {@link Jdbi} instance pointing at a PostgreSQL database. The constructor
+ * verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if needed.
+ * User lambdas passed to {@code txStep} receive a {@link Handle} with a transaction already
+ * started; they should not call {@code commit} or {@code close} themselves.
+ *
+ * <pre>{@code
+ * JdbiStepFactory factory = new JdbiStepFactory(dbos, Jdbi.create(dataSource));
+ *
+ * // inside a @Workflow method:
+ * int count = factory.txStep(handle -> {
+ *     return handle.createUpdate("INSERT INTO ...").execute();
+ * }, "myStep");
+ * }</pre>
+ */
 public class JdbiStepFactory extends PostgresStepFactory<Handle> {
 
   private final Jdbi jdbi;
 
+  /** Creates a factory using the schema from the DBOS config. */
   public JdbiStepFactory(DBOS dbos, Jdbi jdbi) {
     this(dbos, jdbi, null, null);
   }
 
+  /** Creates a factory using a custom schema for {@code tx_step_outputs}. */
   public JdbiStepFactory(DBOS dbos, Jdbi jdbi, String schema) {
     this(dbos, jdbi, schema, null);
   }
 
+  /** Creates a factory using a custom serializer. */
   public JdbiStepFactory(DBOS dbos, Jdbi jdbi, DBOSSerializer serializer) {
     this(dbos, jdbi, null, serializer);
   }
 
+  /** Creates a factory with a custom schema and serializer. */
   public JdbiStepFactory(DBOS dbos, Jdbi jdbi, String schema, DBOSSerializer serializer) {
     super(dbos, schema, serializer);
     this.jdbi = jdbi;

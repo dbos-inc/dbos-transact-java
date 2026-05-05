@@ -4,16 +4,16 @@ aspectj = "1.9.22.1"
 assertj = "3.27.3"
 cron-utils = "9.2.1"
 hikaricp = "7.0.2"
-jdbi = "3.47.0"
-jaxb-api = "4.0.2"
-jooq = "3.19.15"
-kryo = "5.6.2"
 jackson = "2.21.2"
 java-websocket = "1.6.0"
+jaxb-api = "4.0.2"
+jdbi = "3.47.0"
+jooq = "3.19.15"
 jspecify = "1.0.0"
 junit = "6.0.3"
 junit-pioneer = "2.3.0"
 kotlin = "2.3.10"
+kryo = "5.6.2"
 logback = "1.5.32"
 maven-artifact = "3.9.13"
 maven-publish = "0.36.0"
@@ -23,10 +23,10 @@ postgresql = "42.7.10"
 rest-assured = "6.0.0"
 shadow = "9.4.1"
 slf4j = "2.0.17"
-sqlite-jdbc = "3.49.1.0"
 spotless = "8.4.0"
 spring-boot = "3.4.4"
 spring-framework = "6.2.5"
+sqlite-jdbc = "3.49.1.0"
 system-stubs = "2.1.8"
 testcontainers = "2.0.4"
 versions = "0.53.0"
@@ -37,12 +37,12 @@ aspectjweaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj" 
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 cron-utils = { module = "com.cronutils:cron-utils", version.ref = "cron-utils" }
 hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
-jdbi-core = { module = "org.jdbi:jdbi3-core", version.ref = "jdbi" }
-jaxb-api = { module = "jakarta.xml.bind:jakarta.xml.bind-api", version.ref = "jaxb-api" }
-jooq = { module = "org.jooq:jooq", version.ref = "jooq" }
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
 java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "java-websocket" }
+jaxb-api = { module = "jakarta.xml.bind:jakarta.xml.bind-api", version.ref = "jaxb-api" }
+jdbi-core = { module = "org.jdbi:jdbi3-core", version.ref = "jdbi" }
+jooq = { module = "org.jooq:jooq", version.ref = "jooq" }
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
@@ -57,11 +57,11 @@ postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" 
 rest-assured = { module = "io.rest-assured:rest-assured", version.ref = "rest-assured" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
-sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 spring-aop = { module = "org.springframework:spring-aop", version.ref = "spring-framework" }
 spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot" }
 spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "spring-boot" }
 spring-boot-test = { module = "org.springframework.boot:spring-boot-test", version.ref = "spring-boot" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 system-stubs-jupiter = { module = "uk.org.webcompere:system-stubs-jupiter", version.ref = "system-stubs" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
 

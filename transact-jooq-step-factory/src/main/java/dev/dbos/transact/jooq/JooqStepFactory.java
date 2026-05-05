@@ -12,22 +12,45 @@ import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * A {@link PostgresStepFactory} implementation backed by jOOQ {@link DSLContext} objects.
+ *
+ * <p>Construct one with a pool-backed {@link DSLContext} pointing at a PostgreSQL database. The
+ * constructor verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table
+ * if needed. User lambdas passed to {@code txStep} receive a per-transaction {@link DSLContext}
+ * backed by a single connection with a transaction already started; they should not call {@code
+ * commit} or {@code close} themselves.
+ *
+ * <pre>{@code
+ * DSLContext dsl = DSL.using(dataSource, SQLDialect.POSTGRES);
+ * JooqStepFactory factory = new JooqStepFactory(dbos, dsl);
+ *
+ * // inside a @Workflow method:
+ * int count = factory.txStep(ctx -> {
+ *     return ctx.execute("INSERT INTO ...");
+ * }, "myStep");
+ * }</pre>
+ */
 public class JooqStepFactory extends PostgresStepFactory<DSLContext> {
 
   private final DSLContext dsl;
 
+  /** Creates a factory using the schema from the DBOS config. */
   public JooqStepFactory(DBOS dbos, DSLContext dsl) {
     this(dbos, dsl, null, null);
   }
 
+  /** Creates a factory using a custom schema for {@code tx_step_outputs}. */
   public JooqStepFactory(DBOS dbos, DSLContext dsl, String schema) {
     this(dbos, dsl, schema, null);
   }
 
+  /** Creates a factory using a custom serializer. */
   public JooqStepFactory(DBOS dbos, DSLContext dsl, DBOSSerializer serializer) {
     this(dbos, dsl, null, serializer);
   }
 
+  /** Creates a factory with a custom schema and serializer. */
   public JooqStepFactory(DBOS dbos, DSLContext dsl, String schema, DBOSSerializer serializer) {
     super(dbos, schema, serializer);
     this.dsl = dsl;
