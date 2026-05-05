@@ -21,8 +21,8 @@ import org.jdbi.v3.core.Jdbi;
  *
  * <p>Construct one with a {@link Jdbi} instance pointing at a PostgreSQL database. The constructor
  * verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if needed.
- * Lambdas passed to {@link #inStep} or {@link #useStep} receive a {@link Handle} with a
- * transaction already open; they must not call {@code commit} or {@code close} themselves.
+ * Lambdas passed to {@link #inStep} or {@link #useStep} receive a {@link Handle} with a transaction
+ * already open; they must not call {@code commit} or {@code close} themselves.
  *
  * <pre>{@code
  * JdbiStepFactory factory = new JdbiStepFactory(dbos, Jdbi.create(dataSource));
@@ -164,8 +164,8 @@ public class JdbiStepFactory {
    * Executes {@code callback} as an idempotent DBOS step inside a Jdbi transaction, with no return
    * value.
    *
-   * <p>Behaves identically to {@link #inStep} but accepts a {@link HandleConsumer} for callers
-   * that do not need to return a result.
+   * <p>Behaves identically to {@link #inStep} but accepts a {@link HandleConsumer} for callers that
+   * do not need to return a result.
    *
    * @param <X> the checked exception type the callback may throw
    * @param callback the database work to perform; receives an open {@link Handle} and must not
