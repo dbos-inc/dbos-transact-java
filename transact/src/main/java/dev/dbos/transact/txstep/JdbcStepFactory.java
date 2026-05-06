@@ -4,7 +4,6 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.txstep.TransactionalRunnable.WrappedSqlException;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -18,8 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A {@link PostgresStepFactoryHelpers} implementation backed by plain JDBC {@link Connection}
- * objects.
+ * A StepFactory implementation backed by plain JDBC {@link Connection} objects.
  *
  * <p>Construct one with a {@link DataSource} pointing at a PostgreSQL database. The constructor
  * verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if needed.
