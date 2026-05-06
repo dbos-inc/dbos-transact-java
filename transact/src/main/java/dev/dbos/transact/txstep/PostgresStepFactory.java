@@ -175,8 +175,8 @@ public abstract class PostgresStepFactory {
   }
 
   @SuppressWarnings("unchecked")
-  protected <R, X extends Exception> R runTxStep(
-      TxStepFunction<R, X> execute, String stepName) throws X {
+  protected <R, X extends Exception> R runTxStep(TxStepFunction<R, X> execute, String stepName)
+      throws X {
     return dbos.<R, X>runStep(
         () -> {
           var workflowId = Objects.requireNonNull(DBOS.workflowId());
