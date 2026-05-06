@@ -14,7 +14,7 @@ import java.util.Optional;
 import javax.sql.DataSource;
 
 /**
- * A {@link PostgresStepFactory} implementation backed by plain JDBC {@link Connection} objects.
+ * A {@link PostgresStepFactoryHelpers} implementation backed by plain JDBC {@link Connection} objects.
  *
  * <p>Construct one with a {@link DataSource} pointing at a PostgreSQL database. The constructor
  * verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if needed.
@@ -64,9 +64,9 @@ public class JdbcStepFactory {
     this.serializer = serializer == null ? config.serializer() : serializer;
 
     try (var conn = dataSource.getConnection()) {
-      PostgresStepFactory.ensurePostgres(conn);
-      PostgresStepFactory.ensureSchema(conn, this.schema);
-      PostgresStepFactory.ensureTxOutputTable(conn, this.schema);
+      PostgresStepFactoryHelpers.ensurePostgres(conn);
+      PostgresStepFactoryHelpers.ensureSchema(conn, this.schema);
+      PostgresStepFactoryHelpers.ensureTxOutputTable(conn, this.schema);
     }
   }
 
@@ -182,7 +182,7 @@ public class JdbcStepFactory {
   }
 
   private Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
-    var sql = PostgresStepFactory.CHECK_SQL_TEMPLATE.formatted(this.schema);
+    var sql = PostgresStepFactoryHelpers.CHECK_SQL_TEMPLATE.formatted(this.schema);
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -232,7 +232,7 @@ public class JdbcStepFactory {
     if (output != null && error != null) {
       throw new IllegalArgumentException("attempted to record non null output and error result");
     }
-    var sql = PostgresStepFactory.UPSERT_SQL_TEMPLATE.formatted(schema);
+    var sql = PostgresStepFactoryHelpers.UPSERT_SQL_TEMPLATE.formatted(schema);
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
       stmt.setInt(2, stepId);

@@ -4,7 +4,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.txstep.PostgresStepFactory;
+import dev.dbos.transact.txstep.PostgresStepFactoryHelpers;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.util.Objects;
@@ -47,9 +47,9 @@ public class JooqStepFactory {
     try {
       dsl.connection(
           conn -> {
-            PostgresStepFactory.ensurePostgres(conn);
-            PostgresStepFactory.ensureSchema(conn, this.schema);
-            PostgresStepFactory.ensureTxOutputTable(conn, this.schema);
+            PostgresStepFactoryHelpers.ensurePostgres(conn);
+            PostgresStepFactoryHelpers.ensureSchema(conn, this.schema);
+            PostgresStepFactoryHelpers.ensureTxOutputTable(conn, this.schema);
           });
     } catch (Exception e) {
       if (e instanceof RuntimeException re) {
@@ -95,7 +95,7 @@ public class JooqStepFactory {
   }
 
   private Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
-    var sql = PostgresStepFactory.CHECK_SQL_TEMPLATE.formatted(this.schema);
+    var sql = PostgresStepFactoryHelpers.CHECK_SQL_TEMPLATE.formatted(this.schema);
     return dsl.fetchOptional(sql, workflowId, stepId)
         .map(
             r ->
@@ -132,7 +132,7 @@ public class JooqStepFactory {
     if (output != null && error != null) {
       throw new IllegalArgumentException("attempted to record non null output and error result");
     }
-    var sql = PostgresStepFactory.UPSERT_SQL_TEMPLATE.formatted(schema);
+    var sql = PostgresStepFactoryHelpers.UPSERT_SQL_TEMPLATE.formatted(schema);
     trx.dsl().execute(sql, workflowId, stepId, output, error, serialization);
   }
 }

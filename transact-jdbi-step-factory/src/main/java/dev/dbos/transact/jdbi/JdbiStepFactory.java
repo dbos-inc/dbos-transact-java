@@ -4,7 +4,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.txstep.PostgresStepFactory;
+import dev.dbos.transact.txstep.PostgresStepFactoryHelpers;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.util.Objects;
@@ -97,9 +97,9 @@ public class JdbiStepFactory {
     try {
       jdbi.useHandle(
           handle -> {
-            PostgresStepFactory.ensurePostgres(handle.getConnection());
-            PostgresStepFactory.ensureSchema(handle.getConnection(), this.schema);
-            PostgresStepFactory.ensureTxOutputTable(handle.getConnection(), this.schema);
+            PostgresStepFactoryHelpers.ensurePostgres(handle.getConnection());
+            PostgresStepFactoryHelpers.ensureSchema(handle.getConnection(), this.schema);
+            PostgresStepFactoryHelpers.ensureTxOutputTable(handle.getConnection(), this.schema);
           });
     } catch (Exception e) {
       if (e instanceof RuntimeException re) {
@@ -178,7 +178,7 @@ public class JdbiStepFactory {
   }
 
   private Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
-    var sql = PostgresStepFactory.CHECK_SQL_TEMPLATE.formatted(schema);
+    var sql = PostgresStepFactoryHelpers.CHECK_SQL_TEMPLATE.formatted(schema);
     return jdbi.withHandle(
         h ->
             h.createQuery(sql)
@@ -220,7 +220,7 @@ public class JdbiStepFactory {
     if (output != null && error != null) {
       throw new IllegalArgumentException("attempted to record non null output and error result");
     }
-    var sql = PostgresStepFactory.UPSERT_SQL_TEMPLATE.formatted(schema);
+    var sql = PostgresStepFactoryHelpers.UPSERT_SQL_TEMPLATE.formatted(schema);
     handle
         .createUpdate(sql)
         .bind(0, workflowId)
