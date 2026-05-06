@@ -1,26 +1,25 @@
 package dev.dbos.transact.jooq;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.txstep.JdbcStepFactory;
-import dev.dbos.transact.workflow.internal.StepResult;
+import dev.dbos.transact.txstep.AbstractTxStepFactory;
 
 import java.util.Objects;
-import java.util.Optional;
 
 import org.jooq.Configuration;
 import org.jooq.DSLContext;
 import org.jooq.TransactionalCallable;
 import org.jooq.TransactionalRunnable;
 
-public class JooqStepFactory {
+public class JooqStepFactory extends AbstractTxStepFactory {
 
-  private final DBOS dbos;
   private final DSLContext dsl;
-  private final String schema;
-  private final DBOSSerializer serializer;
+
+  @Override
+  protected <T> T withConnection(ConnectionFn<T> fn) {
+    return dsl.connectionResult(conn -> fn.apply(conn));
+  }
 
   /** Creates a factory using the schema from the DBOS config. */
   public JooqStepFactory(DBOS dbos, DSLContext dsl) {
@@ -39,49 +38,20 @@ public class JooqStepFactory {
 
   /** Creates a factory with a custom schema and serializer. */
   public JooqStepFactory(DBOS dbos, DSLContext dsl, String schema, DBOSSerializer serializer) {
-    this.dbos = dbos;
-    this.dsl = dsl;
-    var config = dbos.integration().config();
-    this.schema = SystemDatabase.sanitizeSchema(schema == null ? config.databaseSchema() : schema);
-    this.serializer = serializer == null ? config.serializer() : serializer;
-    try {
-      dsl.connection(
-          conn -> {
-            JdbcStepFactory.ensurePostgres(conn);
-            JdbcStepFactory.ensureSchema(conn, this.schema);
-            JdbcStepFactory.ensureTxOutputTable(conn, this.schema);
-          });
-    } catch (Exception e) {
-      if (e instanceof RuntimeException re) {
-        throw re;
-      }
-      throw new RuntimeException(e);
-    }
+    super(dbos, schema, serializer, () -> dsl.configuration().connectionProvider().acquire());
+    this.dsl = Objects.requireNonNull(dsl);
   }
 
   public <T> T txStepResult(TransactionalCallable<T> callback, String stepName) {
-    return dbos.runStep(
-        () -> {
-          var workflowId = Objects.requireNonNull(DBOS.workflowId());
-          int stepId = Objects.requireNonNull(DBOS.stepId());
-
-          var prevResult = checkExecution(workflowId, stepId, stepName);
-          if (prevResult.isPresent()) {
-            return prevResult.get().toResult(serializer);
-          }
-
-          try {
-            return dsl.transactionResult(
+    return runTxStep(
+        (wfId, stepId) ->
+            dsl.transactionResult(
                 trx -> {
                   var result = callback.run(trx);
-                  recordOutput(trx, workflowId, stepId, result);
+                  recordOutput(trx, wfId, stepId, result);
                   return result;
-                });
-          } catch (Exception e) {
-            recordError(workflowId, stepId, e);
-            throw e;
-          }
-        },
+                }),
+        this::recordError,
         stepName);
   }
 
@@ -94,45 +64,35 @@ public class JooqStepFactory {
         stepName);
   }
 
-  private Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
-    var sql = JdbcStepFactory.CHECK_SQL_TEMPLATE.formatted(this.schema);
-    return dsl.fetchOptional(sql, workflowId, stepId)
-        .map(
-            r ->
-                new StepResult(
-                    workflowId,
-                    stepId,
-                    stepName,
-                    r.get("output", String.class),
-                    r.get("error", String.class),
-                    null,
-                    r.get("serialization", String.class)));
-  }
-
   private <R> void recordOutput(Configuration trx, String workflowId, int stepId, R result) {
     var value = SerializationUtil.serializeValue(result, null, serializer);
-    recordResult(trx, workflowId, stepId, value.serializedValue(), null, value.serialization());
+    trx.dsl()
+        .connection(
+            conn ->
+                upsertResult(
+                    conn,
+                    schema,
+                    workflowId,
+                    stepId,
+                    value.serializedValue(),
+                    null,
+                    value.serialization()));
   }
 
   private <X extends Exception> void recordError(String workflowId, int stepId, X exception) {
     var value = SerializationUtil.serializeError(exception, null, serializer);
     dsl.transaction(
         trx ->
-            recordResult(
-                trx, workflowId, stepId, null, value.serializedValue(), value.serialization()));
-  }
-
-  private void recordResult(
-      Configuration trx,
-      String workflowId,
-      int stepId,
-      String output,
-      String error,
-      String serialization) {
-    if (output != null && error != null) {
-      throw new IllegalArgumentException("attempted to record non null output and error result");
-    }
-    var sql = JdbcStepFactory.UPSERT_SQL_TEMPLATE.formatted(schema);
-    trx.dsl().execute(sql, workflowId, stepId, output, error, serialization);
+            trx.dsl()
+                .connection(
+                    conn ->
+                        upsertResult(
+                            conn,
+                            schema,
+                            workflowId,
+                            stepId,
+                            null,
+                            value.serializedValue(),
+                            value.serialization())));
   }
 }

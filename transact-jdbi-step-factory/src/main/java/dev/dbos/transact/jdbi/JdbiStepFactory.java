@@ -1,14 +1,12 @@
 package dev.dbos.transact.jdbi;
 
 import dev.dbos.transact.DBOS;
-import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.txstep.JdbcStepFactory;
-import dev.dbos.transact.workflow.internal.StepResult;
+import dev.dbos.transact.txstep.AbstractTxStepFactory;
 
+import java.sql.SQLException;
 import java.util.Objects;
-import java.util.Optional;
 
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.HandleCallback;
@@ -32,12 +30,18 @@ import org.jdbi.v3.core.Jdbi;
  * }, "myStep");
  * }</pre>
  */
-public class JdbiStepFactory {
+public class JdbiStepFactory extends AbstractTxStepFactory {
 
-  private final DBOS dbos;
   private final Jdbi jdbi;
-  private final String schema;
-  private final DBOSSerializer serializer;
+
+  @Override
+  protected <T> T withConnection(ConnectionFn<T> fn) {
+    try {
+      return jdbi.withHandle(h -> fn.apply(h.getConnection()));
+    } catch (SQLException e) {
+      throw new WrappedSqlException(e);
+    }
+  }
 
   /**
    * Creates a factory using the schema and serializer from {@code dbos} configuration.
@@ -88,25 +92,8 @@ public class JdbiStepFactory {
    * @throws RuntimeException if the datasource is not PostgreSQL or the schema setup fails
    */
   public JdbiStepFactory(DBOS dbos, Jdbi jdbi, String schema, DBOSSerializer serializer) {
-    this.dbos = dbos;
-    this.jdbi = jdbi;
-    var config = dbos.integration().config();
-    this.schema = SystemDatabase.sanitizeSchema(schema == null ? config.databaseSchema() : schema);
-    this.serializer = serializer == null ? config.serializer() : serializer;
-
-    try {
-      jdbi.useHandle(
-          handle -> {
-            JdbcStepFactory.ensurePostgres(handle.getConnection());
-            JdbcStepFactory.ensureSchema(handle.getConnection(), this.schema);
-            JdbcStepFactory.ensureTxOutputTable(handle.getConnection(), this.schema);
-          });
-    } catch (Exception e) {
-      if (e instanceof RuntimeException re) {
-        throw re;
-      }
-      throw new RuntimeException(e.getMessage(), e);
-    }
+    super(dbos, schema, serializer, () -> jdbi.open().getConnection());
+    this.jdbi = Objects.requireNonNull(jdbi);
   }
 
   /**
@@ -125,32 +112,17 @@ public class JdbiStepFactory {
    * @return the value returned by {@code callback}
    * @throws X if the callback throws
    */
-  @SuppressWarnings("unchecked")
   public <R, X extends Exception> R inStep(final HandleCallback<R, X> callback, String stepName)
       throws X {
-
-    return dbos.<R, X>runStep(
-        () -> {
-          var workflowId = Objects.requireNonNull(DBOS.workflowId());
-          int stepId = Objects.requireNonNull(DBOS.stepId());
-
-          var prevResult = checkExecution(workflowId, stepId, stepName);
-          if (prevResult.isPresent()) {
-            return prevResult.get().<R, X>toResult(serializer);
-          }
-
-          try {
-            return jdbi.inTransaction(
+    return runTxStep(
+        (wfId, stepId) ->
+            jdbi.inTransaction(
                 h -> {
                   var result = callback.withHandle(h);
-                  recordOutput(h, workflowId, stepId, result);
+                  recordOutput(h, wfId, stepId, result);
                   return result;
-                });
-          } catch (Exception e) {
-            recordError(workflowId, stepId, e);
-            throw (X) e;
-          }
-        },
+                }),
+        this::recordError,
         stepName);
   }
 
@@ -177,57 +149,29 @@ public class JdbiStepFactory {
         stepName);
   }
 
-  private Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
-    var sql = JdbcStepFactory.CHECK_SQL_TEMPLATE.formatted(schema);
-    return jdbi.withHandle(
-        h ->
-            h.createQuery(sql)
-                .bind(0, workflowId)
-                .bind(1, stepId)
-                .map(
-                    (rs, ctx) ->
-                        new StepResult(
-                            workflowId,
-                            stepId,
-                            stepName,
-                            rs.getString("output"),
-                            rs.getString("error"),
-                            null,
-                            rs.getString("serialization")))
-                .findOne());
-  }
-
   private <R> void recordOutput(Handle handle, String workflowId, int stepId, R result) {
     var value = SerializationUtil.serializeValue(result, null, serializer);
-    recordResult(handle, workflowId, stepId, value.serializedValue(), null, value.serialization());
+    upsertResult(
+        handle.getConnection(),
+        schema,
+        workflowId,
+        stepId,
+        value.serializedValue(),
+        null,
+        value.serialization());
   }
 
   private <X extends Exception> void recordError(String workflowId, int stepId, X exception) {
     var value = SerializationUtil.serializeError(exception, null, serializer);
     jdbi.useTransaction(
-        h -> {
-          recordResult(h, workflowId, stepId, null, value.serializedValue(), value.serialization());
-        });
-  }
-
-  private void recordResult(
-      Handle handle,
-      String workflowId,
-      int stepId,
-      String output,
-      String error,
-      String serialization) {
-    if (output != null && error != null) {
-      throw new IllegalArgumentException("attempted to record non null output and error result");
-    }
-    var sql = JdbcStepFactory.UPSERT_SQL_TEMPLATE.formatted(schema);
-    handle
-        .createUpdate(sql)
-        .bind(0, workflowId)
-        .bind(1, stepId)
-        .bind(2, output)
-        .bind(3, error)
-        .bind(4, serialization)
-        .execute();
+        h ->
+            upsertResult(
+                h.getConnection(),
+                schema,
+                workflowId,
+                stepId,
+                null,
+                value.serializedValue(),
+                value.serialization()));
   }
 }
