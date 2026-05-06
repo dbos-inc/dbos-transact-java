@@ -13,22 +13,9 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public abstract class AbstractTxStepFactory {
+public abstract class PostgresStepFactory {
 
-  private static final Logger logger = LoggerFactory.getLogger(AbstractTxStepFactory.class);
-
-  protected static class WrappedSqlException extends RuntimeException {
-    private final SQLException wrappedException;
-
-    public WrappedSqlException(SQLException wrappedException) {
-      super(wrappedException.getMessage(), wrappedException);
-      this.wrappedException = wrappedException;
-    }
-
-    public SQLException wrappedException() {
-      return this.wrappedException;
-    }
-  }
+  private static final Logger logger = LoggerFactory.getLogger(PostgresStepFactory.class);
 
   protected static void ensurePostgres(Connection conn) throws SQLException {
     var productName = conn.getMetaData().getDatabaseProductName();
@@ -94,7 +81,7 @@ public abstract class AbstractTxStepFactory {
     Connection open() throws Exception;
   }
 
-  protected AbstractTxStepFactory(
+  protected PostgresStepFactory(
       DBOS dbos, String schema, DBOSSerializer serializer, ConnectionOpener opener) {
     this.dbos = Objects.requireNonNull(dbos);
     var config = dbos.integration().config();
@@ -176,7 +163,7 @@ public abstract class AbstractTxStepFactory {
       stmt.setString(5, serialization);
       stmt.executeUpdate();
     } catch (SQLException e) {
-      throw new WrappedSqlException(e);
+      throw new RuntimeException(e);
     }
   }
 

@@ -28,7 +28,7 @@ import javax.sql.DataSource;
  * }, "myStep");
  * }</pre>
  */
-public class JdbcStepFactory extends AbstractTxStepFactory {
+public class JdbcStepFactory extends PostgresStepFactory {
 
   private final DataSource dataSource;
 
@@ -37,7 +37,7 @@ public class JdbcStepFactory extends AbstractTxStepFactory {
     try (var conn = dataSource.getConnection()) {
       return fn.apply(conn);
     } catch (SQLException e) {
-      throw new WrappedSqlException(e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -120,7 +120,7 @@ public class JdbcStepFactory extends AbstractTxStepFactory {
       conn.setAutoCommit(false);
       return conn;
     } catch (SQLException e) {
-      throw new WrappedSqlException(e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -128,7 +128,7 @@ public class JdbcStepFactory extends AbstractTxStepFactory {
     try {
       conn.commit();
     } catch (SQLException e) {
-      throw new WrappedSqlException(e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -136,7 +136,7 @@ public class JdbcStepFactory extends AbstractTxStepFactory {
     try {
       conn.rollback();
     } catch (SQLException e) {
-      throw new WrappedSqlException(e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -144,7 +144,7 @@ public class JdbcStepFactory extends AbstractTxStepFactory {
     try {
       conn.close();
     } catch (SQLException e) {
-      throw new WrappedSqlException(e);
+      throw new RuntimeException(e);
     }
   }
 

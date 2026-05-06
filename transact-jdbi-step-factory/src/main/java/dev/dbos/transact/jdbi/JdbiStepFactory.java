@@ -3,7 +3,7 @@ package dev.dbos.transact.jdbi;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.txstep.AbstractTxStepFactory;
+import dev.dbos.transact.txstep.PostgresStepFactory;
 
 import java.sql.SQLException;
 import java.util.Objects;
@@ -30,7 +30,7 @@ import org.jdbi.v3.core.Jdbi;
  * }, "myStep");
  * }</pre>
  */
-public class JdbiStepFactory extends AbstractTxStepFactory {
+public class JdbiStepFactory extends PostgresStepFactory {
 
   private final Jdbi jdbi;
 
@@ -39,7 +39,7 @@ public class JdbiStepFactory extends AbstractTxStepFactory {
     try {
       return jdbi.withHandle(h -> fn.apply(h.getConnection()));
     } catch (SQLException e) {
-      throw new WrappedSqlException(e);
+      throw new RuntimeException(e);
     }
   }
 

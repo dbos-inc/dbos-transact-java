@@ -3,7 +3,7 @@ package dev.dbos.transact.jooq;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.txstep.AbstractTxStepFactory;
+import dev.dbos.transact.txstep.PostgresStepFactory;
 
 import java.util.Objects;
 
@@ -12,7 +12,7 @@ import org.jooq.DSLContext;
 import org.jooq.TransactionalCallable;
 import org.jooq.TransactionalRunnable;
 
-public class JooqStepFactory extends AbstractTxStepFactory {
+public class JooqStepFactory extends PostgresStepFactory {
 
   private final DSLContext dsl;
 
