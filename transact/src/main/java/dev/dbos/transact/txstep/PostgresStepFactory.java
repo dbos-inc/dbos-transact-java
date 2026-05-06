@@ -1,18 +1,9 @@
 package dev.dbos.transact.txstep;
 
-import dev.dbos.transact.DBOS;
-import dev.dbos.transact.database.SystemDatabase;
-import dev.dbos.transact.execution.ThrowingConsumer;
-import dev.dbos.transact.execution.ThrowingFunction;
-import dev.dbos.transact.json.DBOSSerializer;
-import dev.dbos.transact.json.SerializationUtil;
-import dev.dbos.transact.workflow.internal.StepResult;
-
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Objects;
 
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,11 +31,11 @@ import org.slf4j.LoggerFactory;
 public abstract class PostgresStepFactory<C> {
 
   private static final Logger DDL_LOGGER = LoggerFactory.getLogger(PostgresStepFactory.class);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  // private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  protected final DBOS dbos;
-  protected final String schema;
-  protected final DBOSSerializer serializer;
+  // protected final DBOS dbos;
+  // protected final String schema;
+  // protected final DBOSSerializer serializer;
 
   public static final String CHECK_SQL_TEMPLATE =
       """
@@ -148,141 +139,140 @@ public abstract class PostgresStepFactory<C> {
     }
   }
 
-  /**
-   * Constructs a factory for the given DBOS instance.
-   *
-   * @param dbos the DBOS runtime
-   * @param rawSchema the schema for {@code tx_step_outputs}, or {@code null} to use the schema from
-   *     the DBOS config
-   * @param rawSerializer the serializer for step outputs, or {@code null} to use the serializer
-   *     from the DBOS config
-   */
-  protected PostgresStepFactory(
-      DBOS dbos, @Nullable String rawSchema, @Nullable DBOSSerializer rawSerializer) {
-    this.dbos = Objects.requireNonNull(dbos);
-    var config = dbos.integration().config();
-    this.schema =
-        SystemDatabase.sanitizeSchema(rawSchema == null ? config.databaseSchema() : rawSchema);
-    this.serializer = rawSerializer == null ? config.serializer() : rawSerializer;
-  }
+  // /**
+  //  * Constructs a factory for the given DBOS instance.
+  //  *
+  //  * @param dbos the DBOS runtime
+  //  * @param rawSchema the schema for {@code tx_step_outputs}, or {@code null} to use the schema
+  // from
+  //  *     the DBOS config
+  //  * @param rawSerializer the serializer for step outputs, or {@code null} to use the serializer
+  //  *     from the DBOS config
+  //  */
+  // protected PostgresStepFactory(
+  //     DBOS dbos, @Nullable String rawSchema, @Nullable DBOSSerializer rawSerializer) {
+  //   this.dbos = Objects.requireNonNull(dbos);
+  //   var config = dbos.integration().config();
+  //   this.schema =
+  //       SystemDatabase.sanitizeSchema(rawSchema == null ? config.databaseSchema() : rawSchema);
+  //   this.serializer = rawSerializer == null ? config.serializer() : rawSerializer;
+  // }
 
-  /** Opens a connection with a transaction already started (autoCommit off). */
-  protected abstract C openTransaction();
+  // /**
+  //  * Checks {@code tx_step_outputs} for a prior result for the given workflow step.
+  //  *
+  //  * @return the prior result, or {@code null} if the step has not been executed
+  //  */
+  // protected abstract @Nullable StepResult checkExecution(
+  //     String workflowId, int stepId, String stepName);
 
-  /** Opens a connection without starting a transaction (used for recording errors). */
-  protected abstract C openConnection();
+  // /**
+  //  * Writes a step result to {@code tx_step_outputs} using the given connection. Exactly one of
+  //  * {@code output} and {@code error} must be non-null.
+  //  */
+  // protected abstract void recordResult(
+  //     C conn, String workflowId, int stepId, String output, String error, String serialization);
 
-  /** Commits the transaction on the given connection. */
-  protected abstract void commit(C conn);
+  // // /**
+  // //  * Executes a transactional step that returns a value.
+  // //  *
+  // //  * <p>On the first call for a given {@code (workflowId, stepId)}, the step function is
+  // invoked
+  // //  * inside a database transaction. The return value is serialized and written to {@code
+  // //  * tx_step_outputs} atomically with the user's data before the transaction commits. On
+  // // subsequent
+  // //  * calls with the same IDs (idempotency or crash recovery), the cached output is
+  // deserialized
+  // // and
+  // //  * returned without re-executing the function.
+  // //  *
+  // //  * @param func the database operation to run; receives the transactional connection object
+  // //  * @param stepName a human-readable name for logging and DBOS step tracking
+  // //  * @return the value returned by {@code func}
+  // //  * @throws E if {@code func} throws, after rolling back the transaction and recording the
+  // error
+  // //  */
+  // // public <R, E extends Exception> R txStep(ThrowingFunction<R, C, E> func, String stepName)
+  // //     throws E {
+  // //   return dbos.<R, E>runStep(() -> txStepInternal(func, stepName), stepName);
+  // // }
 
-  /** Rolls back the transaction on the given connection. */
-  protected abstract void rollback(C conn);
+  // // /**
+  // //  * Executes a transactional step that returns no value.
+  // //  *
+  // //  * @param func the database operation to run; receives the transactional connection object
+  // //  * @param stepName a human-readable name for logging and DBOS step tracking
+  // //  * @throws E if {@code func} throws, after rolling back the transaction and recording the
+  // error
+  // //  */
+  // // public <E extends Exception> void txStep(ThrowingConsumer<C, E> func, String stepName)
+  // throws E
+  // // {
+  // //   txStep(
+  // //       c -> {
+  // //         func.execute(c);
+  // //         return null;
+  // //       },
+  // //       stepName);
+  // // }
 
-  /** Closes and releases the given connection. */
-  protected abstract void close(C conn);
+  // // protected final <R> void recordOutput(C conn, String workflowId, int stepId, R retVal) {
+  // //   var value = SerializationUtil.serializeValue(retVal, null, serializer);
+  // //   recordResult(conn, workflowId, stepId, value.serializedValue(), null,
+  // value.serialization());
+  // // }
 
-  /**
-   * Checks {@code tx_step_outputs} for a prior result for the given workflow step.
-   *
-   * @return the prior result, or {@code null} if the step has not been executed
-   */
-  protected abstract @Nullable StepResult checkExecution(
-      String workflowId, int stepId, String stepName);
+  // // protected final <E extends Exception> void recordError(
+  // //     String workflowId, int stepId, E exception) {
+  // //   var value = SerializationUtil.serializeError(exception, null, serializer);
+  // //   var conn = openConnection();
+  // //   try {
+  // //     recordResult(conn, workflowId, stepId, null, value.serializedValue(),
+  // // value.serialization());
+  // //   } finally {
+  // //     close(conn);
+  // //   }
+  // // }
 
-  /**
-   * Writes a step result to {@code tx_step_outputs} using the given connection. Exactly one of
-   * {@code output} and {@code error} must be non-null.
-   */
-  protected abstract void recordResult(
-      C conn, String workflowId, int stepId, String output, String error, String serialization);
+  // // protected final <R, E extends Exception> R txStepInternal(
+  // //     ThrowingFunction<R, C, E> func, String stepName) throws E {
+  // //   var workflowId = Objects.requireNonNull(DBOS.workflowId());
+  // //   int stepId = Objects.requireNonNull(DBOS.stepId());
 
-  /**
-   * Executes a transactional step that returns a value.
-   *
-   * <p>On the first call for a given {@code (workflowId, stepId)}, the step function is invoked
-   * inside a database transaction. The return value is serialized and written to {@code
-   * tx_step_outputs} atomically with the user's data before the transaction commits. On subsequent
-   * calls with the same IDs (idempotency or crash recovery), the cached output is deserialized and
-   * returned without re-executing the function.
-   *
-   * @param func the database operation to run; receives the transactional connection object
-   * @param stepName a human-readable name for logging and DBOS step tracking
-   * @return the value returned by {@code func}
-   * @throws E if {@code func} throws, after rolling back the transaction and recording the error
-   */
-  public <R, E extends Exception> R txStep(ThrowingFunction<R, C, E> func, String stepName)
-      throws E {
-    return dbos.<R, E>runStep(() -> txStepInternal(func, stepName), stepName);
-  }
+  // //   logger.debug(
+  // //       "txStep starting: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
+  // //   var prevResult = this.checkExecution(workflowId, stepId, stepName);
+  // //   if (prevResult != null) {
+  // //     logger.debug(
+  // //         "txStep cache hit: workflowId={} stepId={} stepName={}", workflowId, stepId,
+  // stepName);
+  // //     return prevResult.<R, E>toResult(serializer);
+  // //   }
 
-  /**
-   * Executes a transactional step that returns no value.
-   *
-   * @param func the database operation to run; receives the transactional connection object
-   * @param stepName a human-readable name for logging and DBOS step tracking
-   * @throws E if {@code func} throws, after rolling back the transaction and recording the error
-   */
-  public <E extends Exception> void txStep(ThrowingConsumer<C, E> func, String stepName) throws E {
-    txStep(
-        c -> {
-          func.execute(c);
-          return null;
-        },
-        stepName);
-  }
-
-  protected final <R> void recordOutput(C conn, String workflowId, int stepId, R retVal) {
-    var value = SerializationUtil.serializeValue(retVal, null, serializer);
-    recordResult(conn, workflowId, stepId, value.serializedValue(), null, value.serialization());
-  }
-
-  protected final <E extends Exception> void recordError(
-      String workflowId, int stepId, E exception) {
-    var value = SerializationUtil.serializeError(exception, null, serializer);
-    var conn = openConnection();
-    try {
-      recordResult(conn, workflowId, stepId, null, value.serializedValue(), value.serialization());
-    } finally {
-      close(conn);
-    }
-  }
-
-  protected final <R, E extends Exception> R txStepInternal(
-      ThrowingFunction<R, C, E> func, String stepName) throws E {
-    var workflowId = Objects.requireNonNull(DBOS.workflowId());
-    int stepId = Objects.requireNonNull(DBOS.stepId());
-
-    logger.debug(
-        "txStep starting: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
-    var prevResult = this.checkExecution(workflowId, stepId, stepName);
-    if (prevResult != null) {
-      logger.debug(
-          "txStep cache hit: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
-      return prevResult.<R, E>toResult(serializer);
-    }
-
-    logger.debug(
-        "txStep executing: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
-    var conn = openTransaction();
-    try {
-      var retVal = func.execute(conn);
-      recordOutput(conn, workflowId, stepId, retVal);
-      commit(conn);
-      logger.debug(
-          "txStep succeeded: workflowId={} stepId={} stepName={}", workflowId, stepId, stepName);
-      return retVal;
-    } catch (Exception e) {
-      rollback(conn);
-      recordError(workflowId, stepId, e);
-      logger.debug(
-          "txStep failed: workflowId={} stepId={} stepName={} error={}",
-          workflowId,
-          stepId,
-          stepName,
-          e.getMessage());
-      throw e;
-    } finally {
-      close(conn);
-    }
-  }
+  // //   logger.debug(
+  // //       "txStep executing: workflowId={} stepId={} stepName={}", workflowId, stepId,
+  // stepName);
+  // //   var conn = openTransaction();
+  // //   try {
+  // //     var retVal = func.execute(conn);
+  // //     recordOutput(conn, workflowId, stepId, retVal);
+  // //     commit(conn);
+  // //     logger.debug(
+  // //         "txStep succeeded: workflowId={} stepId={} stepName={}", workflowId, stepId,
+  // stepName);
+  // //     return retVal;
+  // //   } catch (Exception e) {
+  // //     rollback(conn);
+  // //     recordError(workflowId, stepId, e);
+  // //     logger.debug(
+  // //         "txStep failed: workflowId={} stepId={} stepName={} error={}",
+  // //         workflowId,
+  // //         stepId,
+  // //         stepName,
+  // //         e.getMessage());
+  // //     throw e;
+  // //   } finally {
+  // //     close(conn);
+  // //   }
+  // // }
 }
