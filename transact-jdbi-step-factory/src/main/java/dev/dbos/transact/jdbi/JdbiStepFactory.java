@@ -162,14 +162,7 @@ public class JdbiStepFactory extends PostgresStepFactory {
 
   private <R> void recordOutput(Handle handle, String workflowId, int stepId, R result) {
     var value = SerializationUtil.serializeValue(result, null, serializer);
-    upsertResult(
-        handle.getConnection(),
-        schema,
-        workflowId,
-        stepId,
-        value.serializedValue(),
-        null,
-        value.serialization());
+    recordResult(handle, workflowId, stepId, value.serializedValue(), null, value.serialization());
   }
 
   @Override
@@ -177,13 +170,24 @@ public class JdbiStepFactory extends PostgresStepFactory {
     var value = SerializationUtil.serializeError(exception, null, serializer);
     jdbi.useTransaction(
         h ->
-            upsertResult(
-                h.getConnection(),
-                schema,
-                workflowId,
-                stepId,
-                null,
-                value.serializedValue(),
-                value.serialization()));
+            recordResult(
+                h, workflowId, stepId, null, value.serializedValue(), value.serialization()));
+  }
+
+  private void recordResult(
+      Handle handle,
+      String workflowId,
+      int stepId,
+      String output,
+      String error,
+      String serialization) {
+    handle
+        .createUpdate(upsertSql())
+        .bind(0, workflowId)
+        .bind(1, stepId)
+        .bind(2, output)
+        .bind(3, error)
+        .bind(4, serialization)
+        .execute();
   }
 }

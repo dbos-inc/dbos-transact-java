@@ -165,8 +165,7 @@ public class JdbcStepFactory extends PostgresStepFactory {
 
   private <R> void recordOutput(Connection conn, String workflowId, int stepId, R result) {
     var value = SerializationUtil.serializeValue(result, null, serializer);
-    recordResult(
-        conn, schema, workflowId, stepId, value.serializedValue(), null, value.serialization());
+    recordResult(conn, workflowId, stepId, value.serializedValue(), null, value.serialization());
   }
 
   @Override
@@ -176,25 +175,27 @@ public class JdbcStepFactory extends PostgresStepFactory {
         dataSource,
         (Connection conn) -> {
           recordResult(
-              conn,
-              schema,
-              workflowId,
-              stepId,
-              null,
-              value.serializedValue(),
-              value.serialization());
+              conn, workflowId, stepId, null, value.serializedValue(), value.serialization());
           return null;
         });
   }
 
-  public static void recordResult(
+  private void recordResult(
       Connection conn,
-      String schema,
       String workflowId,
       int stepId,
       String output,
       String error,
       String serialization) {
-    upsertResult(conn, schema, workflowId, stepId, output, error, serialization);
+    try (var stmt = conn.prepareStatement(upsertSql())) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, stepId);
+      stmt.setString(3, output);
+      stmt.setString(4, error);
+      stmt.setString(5, serialization);
+      stmt.executeUpdate();
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
   }
 }

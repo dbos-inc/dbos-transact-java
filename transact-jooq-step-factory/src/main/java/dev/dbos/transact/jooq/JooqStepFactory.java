@@ -77,17 +77,8 @@ public class JooqStepFactory extends PostgresStepFactory {
 
   private <R> void recordOutput(Configuration trx, String workflowId, int stepId, R result) {
     var value = SerializationUtil.serializeValue(result, null, serializer);
-    trx.dsl()
-        .connection(
-            conn ->
-                upsertResult(
-                    conn,
-                    schema,
-                    workflowId,
-                    stepId,
-                    value.serializedValue(),
-                    null,
-                    value.serialization()));
+    recordResult(
+        trx.dsl(), workflowId, stepId, value.serializedValue(), null, value.serialization());
   }
 
   @Override
@@ -95,16 +86,22 @@ public class JooqStepFactory extends PostgresStepFactory {
     var value = SerializationUtil.serializeError(exception, null, serializer);
     dsl.transaction(
         trx ->
-            trx.dsl()
-                .connection(
-                    conn ->
-                        upsertResult(
-                            conn,
-                            schema,
-                            workflowId,
-                            stepId,
-                            null,
-                            value.serializedValue(),
-                            value.serialization())));
+            recordResult(
+                trx.dsl(),
+                workflowId,
+                stepId,
+                null,
+                value.serializedValue(),
+                value.serialization()));
+  }
+
+  private void recordResult(
+      DSLContext ctx,
+      String workflowId,
+      int stepId,
+      String output,
+      String error,
+      String serialization) {
+    ctx.execute(upsertSql(), workflowId, stepId, output, error, serialization);
   }
 }

@@ -96,6 +96,16 @@ public abstract class PostgresStepFactory {
     }
   }
 
+  protected String upsertSql() {
+    return """
+        INSERT INTO "%s".tx_step_outputs
+          (workflow_id, step_id, output, error, serialization)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT DO NOTHING
+        """
+        .formatted(schema);
+  }
+
   protected String checkSql() {
     return """
         SELECT output, error, serialization
@@ -109,38 +119,6 @@ public abstract class PostgresStepFactory {
       String workflowId, int stepId, String stepName);
 
   protected abstract void recordError(String workflowId, int stepId, Exception exception);
-
-  protected static void upsertResult(
-      Connection conn,
-      String schema,
-      String workflowId,
-      int stepId,
-      String output,
-      String error,
-      String serialization) {
-    if (output != null && error != null) {
-      throw new IllegalArgumentException("attempted to record non null output and error result");
-    }
-
-    var sql =
-        """
-        INSERT INTO "%s".tx_step_outputs
-          (workflow_id, step_id, output, error, serialization)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT DO NOTHING
-        """
-            .formatted(schema);
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      stmt.setInt(2, stepId);
-      stmt.setString(3, output);
-      stmt.setString(4, error);
-      stmt.setString(5, serialization);
-      stmt.executeUpdate();
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
-  }
 
   @FunctionalInterface
   protected interface TxStepFunction<R, X extends Exception> {
