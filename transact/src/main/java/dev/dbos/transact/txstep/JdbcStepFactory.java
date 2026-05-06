@@ -14,7 +14,8 @@ import java.util.Optional;
 import javax.sql.DataSource;
 
 /**
- * A {@link PostgresStepFactoryHelpers} implementation backed by plain JDBC {@link Connection} objects.
+ * A {@link PostgresStepFactoryHelpers} implementation backed by plain JDBC {@link Connection}
+ * objects.
  *
  * <p>Construct one with a {@link DataSource} pointing at a PostgreSQL database. The constructor
  * verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if needed.
