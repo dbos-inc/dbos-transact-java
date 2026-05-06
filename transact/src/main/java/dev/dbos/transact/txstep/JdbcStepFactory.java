@@ -1,6 +1,8 @@
 package dev.dbos.transact.txstep;
 
 import dev.dbos.transact.DBOS;
+import dev.dbos.transact.execution.ThrowingRunnable;
+import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.internal.StepResult;
@@ -116,48 +118,36 @@ public class JdbcStepFactory extends PostgresStepFactory {
 
   private static <R, X extends Exception> R executeTransaction(
       final DataSource ds, TransactionalFunction<R, X> func) throws X {
-    var conn = openTransaction(ds);
+    var conn =
+        safeGet(
+            () -> {
+              var c = ds.getConnection();
+              c.setAutoCommit(false);
+              return c;
+            });
     try {
       var result = func.execute(conn);
-      commit(conn);
+      safely(conn::commit);
       return result;
     } catch (Exception e) {
-      rollback(conn);
+      safely(conn::rollback);
       throw e;
     } finally {
-      close(conn);
+      safely(conn::close);
     }
   }
 
-  private static Connection openTransaction(DataSource ds) {
+  private static void safely(ThrowingRunnable<SQLException> op) {
     try {
-      var conn = ds.getConnection();
-      conn.setAutoCommit(false);
-      return conn;
+      op.execute();
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
   }
 
-  private static void commit(Connection conn) {
+  private static <T> T safeGet(ThrowingSupplier<T, SQLException> supplier) {
     try {
-      conn.commit();
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  private static void rollback(Connection conn) {
-    try {
-      conn.rollback();
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  private static void close(Connection conn) {
-    try {
-      conn.close();
+      return supplier.execute();
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
