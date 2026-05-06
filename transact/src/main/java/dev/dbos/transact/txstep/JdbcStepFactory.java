@@ -4,6 +4,7 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.txstep.TransactionalRunnable.WrappedSqlException;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -12,6 +13,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 import javax.sql.DataSource;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A {@link PostgresStepFactoryHelpers} implementation backed by plain JDBC {@link Connection}
@@ -33,6 +37,110 @@ import javax.sql.DataSource;
  * }</pre>
  */
 public class JdbcStepFactory {
+
+  private static final Logger logger = LoggerFactory.getLogger(JdbcStepFactory.class);
+
+  public static final String CHECK_SQL_TEMPLATE =
+      """
+      SELECT output, error, serialization
+      FROM "%s".tx_step_outputs
+      WHERE workflow_id = ? AND step_id = ?
+      """;
+
+  public static final String UPSERT_SQL_TEMPLATE =
+      """
+      INSERT INTO "%s".tx_step_outputs
+        (workflow_id, step_id, output, error, serialization)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT DO NOTHING
+      """;
+
+  /**
+   * Verifies that the given connection is to a PostgreSQL database.
+   *
+   * @throws IllegalArgumentException if the database is not PostgreSQL
+   * @throws SQLException if database metadata cannot be read
+   */
+  public static void ensurePostgres(Connection conn) throws SQLException {
+    var productName = conn.getMetaData().getDatabaseProductName();
+    if (!productName.equalsIgnoreCase("PostgreSQL")) {
+      throw new IllegalArgumentException(
+          "PostgresStepFactory requires a PostgreSQL datasource, got: " + productName);
+    }
+  }
+
+  /**
+   * Returns {@code true} if the named schema exists in the database.
+   *
+   * @throws SQLException if the query fails
+   */
+  public static boolean schemaExists(Connection conn, String schema) throws SQLException {
+    var sql = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = ?";
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, Objects.requireNonNull(schema, "schema must not be null"));
+      try (var rs = stmt.executeQuery()) {
+        return rs.next();
+      }
+    }
+  }
+
+  /**
+   * Creates the named schema if it does not already exist.
+   *
+   * @throws SQLException if the DDL fails
+   */
+  public static void ensureSchema(Connection conn, String schema) throws SQLException {
+    Objects.requireNonNull(schema, "schema must not be null");
+    if (!schemaExists(conn, schema)) {
+      try (var stmt = conn.createStatement()) {
+        stmt.execute("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(schema));
+      }
+    }
+  }
+
+  /**
+   * Returns {@code true} if the {@code tx_step_outputs} table exists in the named schema.
+   *
+   * @throws SQLException if the query fails
+   */
+  public static boolean tableExists(Connection conn, String schema) throws SQLException {
+    var sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?";
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, Objects.requireNonNull(schema, "schema must not be null"));
+      stmt.setString(2, Objects.requireNonNull("tx_step_outputs", "tableName must not be null"));
+      try (var rs = stmt.executeQuery()) {
+        return rs.next();
+      }
+    }
+  }
+
+  /**
+   * Creates the {@code tx_step_outputs} table in the named schema if it does not already exist.
+   *
+   * @throws SQLException if the DDL fails
+   */
+  public static void ensureTxOutputTable(Connection conn, String schema) throws SQLException {
+    Objects.requireNonNull(schema, "schema must not be null");
+    if (tableExists(conn, schema)) {
+      return;
+    }
+    logger.debug("Creating tx_step_outputs table in schema={}", schema);
+    try (var stmt = conn.createStatement()) {
+      var ddlSql =
+          """
+          CREATE TABLE IF NOT EXISTS "%1$s".tx_step_outputs (
+            workflow_id TEXT NOT NULL,
+            step_id INT NOT NULL,
+            output TEXT,
+            error TEXT,
+            serialization TEXT,
+            created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())*1000)::bigint,
+            PRIMARY KEY (workflow_id, step_id)
+          )"""
+              .formatted(schema);
+      stmt.execute(ddlSql);
+    }
+  }
 
   private final DBOS dbos;
   private final DataSource dataSource;
@@ -65,9 +173,9 @@ public class JdbcStepFactory {
     this.serializer = serializer == null ? config.serializer() : serializer;
 
     try (var conn = dataSource.getConnection()) {
-      PostgresStepFactoryHelpers.ensurePostgres(conn);
-      PostgresStepFactoryHelpers.ensureSchema(conn, this.schema);
-      PostgresStepFactoryHelpers.ensureTxOutputTable(conn, this.schema);
+      ensurePostgres(conn);
+      ensureSchema(conn, this.schema);
+      ensureTxOutputTable(conn, this.schema);
     }
   }
 
@@ -183,7 +291,7 @@ public class JdbcStepFactory {
   }
 
   private Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
-    var sql = PostgresStepFactoryHelpers.CHECK_SQL_TEMPLATE.formatted(this.schema);
+    var sql = CHECK_SQL_TEMPLATE.formatted(this.schema);
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -209,7 +317,8 @@ public class JdbcStepFactory {
 
   private <R> void recordOutput(Connection conn, String workflowId, int stepId, R result) {
     var value = SerializationUtil.serializeValue(result, null, serializer);
-    recordResult(conn, workflowId, stepId, value.serializedValue(), null, value.serialization());
+    recordResult(
+        conn, schema, workflowId, stepId, value.serializedValue(), null, value.serialization());
   }
 
   private <X extends Exception> void recordError(String workflowId, int stepId, X exception) {
@@ -218,13 +327,20 @@ public class JdbcStepFactory {
         dataSource,
         (Connection conn) -> {
           recordResult(
-              conn, workflowId, stepId, null, value.serializedValue(), value.serialization());
+              conn,
+              schema,
+              workflowId,
+              stepId,
+              null,
+              value.serializedValue(),
+              value.serialization());
           return null;
         });
   }
 
-  private void recordResult(
+  public static void recordResult(
       Connection conn,
+      String schema,
       String workflowId,
       int stepId,
       String output,
@@ -233,7 +349,7 @@ public class JdbcStepFactory {
     if (output != null && error != null) {
       throw new IllegalArgumentException("attempted to record non null output and error result");
     }
-    var sql = PostgresStepFactoryHelpers.UPSERT_SQL_TEMPLATE.formatted(schema);
+    var sql = UPSERT_SQL_TEMPLATE.formatted(schema);
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
       stmt.setInt(2, stepId);
