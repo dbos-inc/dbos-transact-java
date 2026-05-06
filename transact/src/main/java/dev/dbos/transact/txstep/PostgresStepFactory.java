@@ -167,19 +167,16 @@ public abstract class PostgresStepFactory {
     }
   }
 
+  protected abstract void recordError(String workflowId, int stepId, Exception exception);
+
   @FunctionalInterface
   protected interface TxStepFunction<R, X extends Exception> {
     R execute(String workflowId, int stepId) throws X;
   }
 
-  @FunctionalInterface
-  protected interface ErrorFn {
-    void record(String workflowId, int stepId, Exception e);
-  }
-
   @SuppressWarnings("unchecked")
   protected <R, X extends Exception> R runTxStep(
-      TxStepFunction<R, X> execute, ErrorFn recordError, String stepName) throws X {
+      TxStepFunction<R, X> execute, String stepName) throws X {
     return dbos.<R, X>runStep(
         () -> {
           var workflowId = Objects.requireNonNull(DBOS.workflowId());
@@ -193,7 +190,7 @@ public abstract class PostgresStepFactory {
           try {
             return execute.execute(workflowId, stepId);
           } catch (Exception e) {
-            recordError.record(workflowId, stepId, e);
+            recordError(workflowId, stepId, e);
             throw (X) e;
           }
         },

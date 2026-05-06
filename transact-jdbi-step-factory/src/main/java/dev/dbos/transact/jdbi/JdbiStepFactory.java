@@ -122,7 +122,6 @@ public class JdbiStepFactory extends PostgresStepFactory {
                   recordOutput(h, wfId, stepId, result);
                   return result;
                 }),
-        this::recordError,
         stepName);
   }
 
@@ -161,7 +160,8 @@ public class JdbiStepFactory extends PostgresStepFactory {
         value.serialization());
   }
 
-  private <X extends Exception> void recordError(String workflowId, int stepId, X exception) {
+  @Override
+  protected void recordError(String workflowId, int stepId, Exception exception) {
     var value = SerializationUtil.serializeError(exception, null, serializer);
     jdbi.useTransaction(
         h ->

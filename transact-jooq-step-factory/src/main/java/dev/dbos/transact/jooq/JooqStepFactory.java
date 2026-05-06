@@ -51,7 +51,6 @@ public class JooqStepFactory extends PostgresStepFactory {
                   recordOutput(trx, wfId, stepId, result);
                   return result;
                 }),
-        this::recordError,
         stepName);
   }
 
@@ -79,7 +78,8 @@ public class JooqStepFactory extends PostgresStepFactory {
                     value.serialization()));
   }
 
-  private <X extends Exception> void recordError(String workflowId, int stepId, X exception) {
+  @Override
+  protected void recordError(String workflowId, int stepId, Exception exception) {
     var value = SerializationUtil.serializeError(exception, null, serializer);
     dsl.transaction(
         trx ->
