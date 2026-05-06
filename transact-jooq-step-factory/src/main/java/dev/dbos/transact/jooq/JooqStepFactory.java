@@ -4,8 +4,10 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.txstep.PostgresStepFactory;
+import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.util.Objects;
+import java.util.Optional;
 
 import org.jooq.Configuration;
 import org.jooq.DSLContext;
@@ -17,8 +19,18 @@ public class JooqStepFactory extends PostgresStepFactory {
   private final DSLContext dsl;
 
   @Override
-  protected <T> T withConnection(ConnectionFn<T> fn) {
-    return dsl.connectionResult(conn -> fn.apply(conn));
+  protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
+    return dsl.fetchOptional(checkSql(), workflowId, stepId)
+        .map(
+            r ->
+                new StepResult(
+                    workflowId,
+                    stepId,
+                    stepName,
+                    r.get("output", String.class),
+                    r.get("error", String.class),
+                    null,
+                    r.get("serialization", String.class)));
   }
 
   /** Creates a factory using the schema from the DBOS config. */

@@ -3,10 +3,12 @@ package dev.dbos.transact.txstep;
 import dev.dbos.transact.DBOS;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.Optional;
 
 import javax.sql.DataSource;
 
@@ -32,15 +34,6 @@ public class JdbcStepFactory extends PostgresStepFactory {
 
   private final DataSource dataSource;
 
-  @Override
-  protected <T> T withConnection(ConnectionFn<T> fn) {
-    try (var conn = dataSource.getConnection()) {
-      return fn.apply(conn);
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   /** Creates a factory using the schema from the DBOS config. */
   public JdbcStepFactory(DBOS dbos, DataSource dataSource) throws SQLException {
     this(dbos, dataSource, null, null);
@@ -62,6 +55,29 @@ public class JdbcStepFactory extends PostgresStepFactory {
       throws SQLException {
     super(dbos, schema, serializer, dataSource::getConnection);
     this.dataSource = Objects.requireNonNull(dataSource);
+  }
+
+  @Override
+  protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(checkSql())) {
+      stmt.setString(1, workflowId);
+      stmt.setInt(2, stepId);
+      try (var rs = stmt.executeQuery()) {
+        if (!rs.next()) return Optional.empty();
+        return Optional.of(
+            new StepResult(
+                workflowId,
+                stepId,
+                stepName,
+                rs.getString("output"),
+                rs.getString("error"),
+                null,
+                rs.getString("serialization")));
+      }
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   @FunctionalInterface

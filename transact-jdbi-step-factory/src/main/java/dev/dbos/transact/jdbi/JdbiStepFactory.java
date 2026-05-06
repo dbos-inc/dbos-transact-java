@@ -4,9 +4,10 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.txstep.PostgresStepFactory;
+import dev.dbos.transact.workflow.internal.StepResult;
 
-import java.sql.SQLException;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.HandleCallback;
@@ -33,15 +34,6 @@ import org.jdbi.v3.core.Jdbi;
 public class JdbiStepFactory extends PostgresStepFactory {
 
   private final Jdbi jdbi;
-
-  @Override
-  protected <T> T withConnection(ConnectionFn<T> fn) {
-    try {
-      return jdbi.withHandle(h -> fn.apply(h.getConnection()));
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
-  }
 
   /**
    * Creates a factory using the schema and serializer from {@code dbos} configuration.
@@ -146,6 +138,26 @@ public class JdbiStepFactory extends PostgresStepFactory {
           return null;
         },
         stepName);
+  }
+
+  @Override
+  protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
+    return jdbi.withHandle(
+        h ->
+            h.createQuery(checkSql())
+                .bind(0, workflowId)
+                .bind(1, stepId)
+                .map(
+                    (rs, ctx) ->
+                        new StepResult(
+                            workflowId,
+                            stepId,
+                            stepName,
+                            rs.getString("output"),
+                            rs.getString("error"),
+                            null,
+                            rs.getString("serialization")))
+                .findFirst());
   }
 
   private <R> void recordOutput(Handle handle, String workflowId, int stepId, R result) {

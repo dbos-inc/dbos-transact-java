@@ -78,7 +78,7 @@ public abstract class PostgresStepFactory {
 
   @FunctionalInterface
   protected interface ConnectionOpener {
-    Connection open() throws Exception;
+    Connection open() throws SQLException;
   }
 
   protected PostgresStepFactory(
@@ -91,49 +91,24 @@ public abstract class PostgresStepFactory {
       ensurePostgres(conn);
       ensureSchema(conn, this.schema);
       ensureTxOutputTable(conn, this.schema);
-    } catch (Exception e) {
-      if (e instanceof RuntimeException re) {
-        throw re;
-      }
+    } catch (SQLException e) {
       throw new RuntimeException(e);
     }
   }
 
-  @FunctionalInterface
-  protected interface ConnectionFn<T> {
-    T apply(Connection conn) throws SQLException;
-  }
-
-  protected abstract <T> T withConnection(ConnectionFn<T> fn);
-
-  protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
-    var sql =
-        """
+  protected String checkSql() {
+    return """
         SELECT output, error, serialization
         FROM "%s".tx_step_outputs
         WHERE workflow_id = ? AND step_id = ?
         """
-            .formatted(schema);
-    return withConnection(
-        conn -> {
-          try (var stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, workflowId);
-            stmt.setInt(2, stepId);
-            try (var rs = stmt.executeQuery()) {
-              if (!rs.next()) return Optional.empty();
-              return Optional.of(
-                  new StepResult(
-                      workflowId,
-                      stepId,
-                      stepName,
-                      rs.getString("output"),
-                      rs.getString("error"),
-                      null,
-                      rs.getString("serialization")));
-            }
-          }
-        });
+        .formatted(schema);
   }
+
+  protected abstract Optional<StepResult> checkExecution(
+      String workflowId, int stepId, String stepName);
+
+  protected abstract void recordError(String workflowId, int stepId, Exception exception);
 
   protected static void upsertResult(
       Connection conn,
@@ -166,8 +141,6 @@ public abstract class PostgresStepFactory {
       throw new RuntimeException(e);
     }
   }
-
-  protected abstract void recordError(String workflowId, int stepId, Exception exception);
 
   @FunctionalInterface
   protected interface TxStepFunction<R, X extends Exception> {
