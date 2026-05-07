@@ -49,7 +49,7 @@ public abstract class PostgresStepFactory {
 
       // ensure provided schema and tx_step_outputs table exist
       try (var stmt = conn.createStatement()) {
-        stmt.addBatch("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(schema));
+        stmt.addBatch("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(this.schema));
         stmt.addBatch(
             """
             CREATE TABLE IF NOT EXISTS "%1$s".tx_step_outputs (
@@ -61,7 +61,7 @@ public abstract class PostgresStepFactory {
               created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())*1000)::bigint,
               PRIMARY KEY (workflow_id, step_id)
             )"""
-                .formatted(schema));
+                .formatted(this.schema));
         stmt.executeBatch();
       }
     } catch (SQLException e) {
