@@ -37,24 +37,36 @@ public class JdbcStepFactory extends PostgresStepFactory {
   private final DataSource dataSource;
 
   /** Creates a factory using the schema from the DBOS config. */
-  public JdbcStepFactory(DBOS dbos, DataSource dataSource) throws SQLException {
+  public JdbcStepFactory(DBOS dbos, DataSource dataSource) {
     this(dbos, dataSource, null, null);
   }
 
   /** Creates a factory using a custom schema for {@code tx_step_outputs}. */
-  public JdbcStepFactory(DBOS dbos, DataSource dataSource, String schema) throws SQLException {
+  public JdbcStepFactory(DBOS dbos, DataSource dataSource, String schema) {
     this(dbos, dataSource, schema, null);
   }
 
   /** Creates a factory using a custom serializer. */
-  public JdbcStepFactory(DBOS dbos, DataSource dataSource, DBOSSerializer serializer)
-      throws SQLException {
+  public JdbcStepFactory(DBOS dbos, DataSource dataSource, DBOSSerializer serializer) {
     this(dbos, dataSource, null, serializer);
   }
 
-  /** Creates a factory with a custom schema and serializer. */
-  public JdbcStepFactory(DBOS dbos, DataSource dataSource, String schema, DBOSSerializer serializer)
-      throws SQLException {
+  /**
+   * Creates a factory with a custom schema and serializer.
+   *
+   * <p>Connects to the database immediately to verify it is PostgreSQL and to create the {@code
+   * tx_step_outputs} table in the given schema if it does not already exist.
+   *
+   * @param dbos the DBOS runtime instance
+   * @param dataSource a DataSource connected to a PostgreSQL database
+   * @param schema the PostgreSQL schema to use for {@code tx_step_outputs}; {@code null} uses the
+   *     schema from {@code dbos} configuration
+   * @param serializer the serializer to use for step outputs; {@code null} uses the serializer from
+   *     {@code dbos} configuration
+   * @throws RuntimeException if the datasource is not PostgreSQL or the schema setup fails
+   */
+  public JdbcStepFactory(
+      DBOS dbos, DataSource dataSource, String schema, DBOSSerializer serializer) {
     super(dbos, schema, serializer, dataSource::getConnection);
     this.dataSource = Objects.requireNonNull(dataSource);
   }
@@ -82,11 +94,28 @@ public class JdbcStepFactory extends PostgresStepFactory {
     }
   }
 
+  /** Database work that runs inside a JDBC transaction and returns a result. */
   @FunctionalInterface
   public interface TransactionalFunction<R, X extends Exception> {
     R execute(Connection conn) throws X;
   }
 
+  /**
+   * Executes {@code callback} as an idempotent DBOS step inside a JDBC transaction.
+   *
+   * <p>If a result for this step is already recorded (e.g. on workflow retry), the callback is
+   * skipped and the cached result is returned. Otherwise the callback runs inside an open
+   * transaction; the output is recorded atomically with the database work so the step is
+   * exactly-once on success.
+   *
+   * @param <R> the return type of the callback
+   * @param <X> the checked exception type the callback may throw
+   * @param callback the database work to perform; receives an open {@link Connection} and must not
+   *     commit or close it
+   * @param stepName a stable name that identifies this step within the workflow
+   * @return the value returned by {@code callback}
+   * @throws X if the callback throws
+   */
   public <R, X extends Exception> R txStep(
       final TransactionalFunction<R, X> callback, String stepName) throws X {
     return runTxStep(
@@ -101,11 +130,25 @@ public class JdbcStepFactory extends PostgresStepFactory {
         stepName);
   }
 
+  /** Database work that runs inside a JDBC transaction without returning a result. */
   @FunctionalInterface
   public interface TransactionalRunnable<X extends Exception> {
     void execute(Connection conn) throws X;
   }
 
+  /**
+   * Executes {@code callback} as an idempotent DBOS step inside a JDBC transaction, with no return
+   * value.
+   *
+   * <p>Behaves identically to {@link #txStep(TransactionalFunction, String)} but accepts a {@link
+   * TransactionalRunnable} for callers that do not need to return a result.
+   *
+   * @param <X> the checked exception type the callback may throw
+   * @param callback the database work to perform; receives an open {@link Connection} and must not
+   *     commit or close it
+   * @param stepName a stable name that identifies this step within the workflow
+   * @throws X if the callback throws
+   */
   public <X extends Exception> void txStep(final TransactionalRunnable<X> callback, String stepName)
       throws X {
     txStep(

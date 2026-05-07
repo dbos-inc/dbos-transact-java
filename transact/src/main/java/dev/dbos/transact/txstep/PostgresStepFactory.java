@@ -10,67 +10,18 @@ import java.sql.SQLException;
 import java.util.Objects;
 import java.util.Optional;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+/**
+ * Abstract base for transactional step factories backed by a PostgreSQL database.
+ *
+ * <p>Subclasses provide a database-library-specific public API (e.g. plain JDBC {@link Connection},
+ * JDBI {@code Handle}, jOOQ {@code DSLContext}) while this class owns the shared step lifecycle:
+ * idempotency checking, error recording, and the {@link #runTxStep} template method that integrates
+ * with the DBOS runtime.
+ *
+ * <p>The constructor verifies that the datasource is PostgreSQL and creates the {@code
+ * tx_step_outputs} table (and its enclosing schema) if they do not already exist.
+ */
 public abstract class PostgresStepFactory {
-
-  private static final Logger logger = LoggerFactory.getLogger(PostgresStepFactory.class);
-
-  protected static void ensurePostgres(Connection conn) throws SQLException {
-    var productName = conn.getMetaData().getDatabaseProductName();
-    if (!productName.equalsIgnoreCase("PostgreSQL")) {
-      throw new IllegalArgumentException(
-          "TxStepFactory requires a PostgreSQL datasource, got: " + productName);
-    }
-  }
-
-  protected static void ensureSchema(Connection conn, String schema) throws SQLException {
-    Objects.requireNonNull(schema, "schema must not be null");
-    var sql = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = ?";
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, Objects.requireNonNull(schema, "schema must not be null"));
-      try (var rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          return;
-        }
-      }
-    }
-
-    try (var stmt = conn.createStatement()) {
-      stmt.execute("CREATE SCHEMA \"%s\"".formatted(schema));
-    }
-  }
-
-  protected static void ensureTxOutputTable(Connection conn, String schema) throws SQLException {
-    Objects.requireNonNull(schema, "schema must not be null");
-    var sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?";
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, Objects.requireNonNull(schema, "schema must not be null"));
-      stmt.setString(2, "tx_step_outputs");
-      try (var rs = stmt.executeQuery()) {
-        if (rs.next()) {
-          return;
-        }
-      }
-    }
-
-    logger.debug("Creating tx_step_outputs table in schema={}", schema);
-    try (var stmt = conn.createStatement()) {
-      stmt.execute(
-          """
-          CREATE TABLE "%1$s".tx_step_outputs (
-            workflow_id TEXT NOT NULL,
-            step_id INT NOT NULL,
-            output TEXT,
-            error TEXT,
-            serialization TEXT,
-            created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())*1000)::bigint,
-            PRIMARY KEY (workflow_id, step_id)
-          )"""
-              .formatted(schema));
-    }
-  }
 
   protected final DBOS dbos;
   protected final String schema;
@@ -87,23 +38,35 @@ public abstract class PostgresStepFactory {
     var config = dbos.integration().config();
     this.schema = SystemDatabase.sanitizeSchema(schema == null ? config.databaseSchema() : schema);
     this.serializer = serializer == null ? config.serializer() : serializer;
+
     try (var conn = opener.open()) {
-      ensurePostgres(conn);
-      ensureSchema(conn, this.schema);
-      ensureTxOutputTable(conn, this.schema);
+      // ensure we're running on Postgres
+      var productName = conn.getMetaData().getDatabaseProductName();
+      if (!productName.equalsIgnoreCase("PostgreSQL")) {
+        throw new IllegalArgumentException(
+            "TxStepFactory requires a PostgreSQL datasource, got: " + productName);
+      }
+
+      // ensure provided schema and tx_step_outputs table exist
+      try (var stmt = conn.createStatement()) {
+        stmt.addBatch("CREATE SCHEMA IF NOT EXISTS \"%s\"".formatted(schema));
+        stmt.addBatch(
+            """
+            CREATE TABLE IF NOT EXISTS "%1$s".tx_step_outputs (
+              workflow_id TEXT NOT NULL,
+              step_id INT NOT NULL,
+              output TEXT,
+              error TEXT,
+              serialization TEXT,
+              created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())*1000)::bigint,
+              PRIMARY KEY (workflow_id, step_id)
+            )"""
+                .formatted(schema));
+        stmt.executeBatch();
+      }
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
-  }
-
-  protected String upsertSql() {
-    return """
-        INSERT INTO "%s".tx_step_outputs
-          (workflow_id, step_id, output, error, serialization)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT DO NOTHING
-        """
-        .formatted(schema);
   }
 
   protected String checkSql() {
@@ -117,6 +80,16 @@ public abstract class PostgresStepFactory {
 
   protected abstract Optional<StepResult> checkExecution(
       String workflowId, int stepId, String stepName);
+
+  protected String upsertSql() {
+    return """
+        INSERT INTO "%s".tx_step_outputs
+          (workflow_id, step_id, output, error, serialization)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT DO NOTHING
+        """
+        .formatted(schema);
+  }
 
   protected abstract void recordError(String workflowId, int stepId, Exception exception);
 

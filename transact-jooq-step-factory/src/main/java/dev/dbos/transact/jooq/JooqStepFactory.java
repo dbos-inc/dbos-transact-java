@@ -14,24 +14,27 @@ import org.jooq.DSLContext;
 import org.jooq.TransactionalCallable;
 import org.jooq.TransactionalRunnable;
 
+/**
+ * Runs idempotent transactional steps inside DBOS workflows using jOOQ {@link DSLContext} objects.
+ *
+ * <p>Construct one with a {@link DSLContext} connected to a PostgreSQL database. The constructor
+ * verifies the datasource is PostgreSQL and creates the {@code tx_step_outputs} table if needed.
+ * Lambdas passed to {@link #txStepResult} or {@link #txStep} receive a jOOQ {@link
+ * org.jooq.Configuration} with a transaction already open; they must not commit or close the
+ * underlying connection themselves.
+ *
+ * <pre>{@code
+ * JooqStepFactory factory = new JooqStepFactory(dbos, dslContext);
+ *
+ * // inside a @Workflow method:
+ * int count = factory.txStepResult(trx -> {
+ *     return trx.dsl().insertInto(...).execute();
+ * }, "myStep");
+ * }</pre>
+ */
 public class JooqStepFactory extends PostgresStepFactory {
 
   private final DSLContext dsl;
-
-  @Override
-  protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
-    return dsl.fetchOptional(checkSql(), workflowId, stepId)
-        .map(
-            r ->
-                new StepResult(
-                    workflowId,
-                    stepId,
-                    stepName,
-                    r.get("output", String.class),
-                    r.get("error", String.class),
-                    null,
-                    r.get("serialization", String.class)));
-  }
 
   /** Creates a factory using the schema from the DBOS config. */
   public JooqStepFactory(DBOS dbos, DSLContext dsl) {
@@ -48,12 +51,39 @@ public class JooqStepFactory extends PostgresStepFactory {
     this(dbos, dsl, null, serializer);
   }
 
-  /** Creates a factory with a custom schema and serializer. */
+  /**
+   * Creates a factory with a custom schema and serializer.
+   *
+   * <p>Connects to the database immediately to verify it is PostgreSQL and to create the {@code
+   * tx_step_outputs} table in the given schema if it does not already exist.
+   *
+   * @param dbos the DBOS runtime instance
+   * @param dsl a DSLContext connected to a PostgreSQL database
+   * @param schema the PostgreSQL schema to use for {@code tx_step_outputs}; {@code null} uses the
+   *     schema from {@code dbos} configuration
+   * @param serializer the serializer to use for step outputs; {@code null} uses the serializer from
+   *     {@code dbos} configuration
+   * @throws RuntimeException if the datasource is not PostgreSQL or the schema setup fails
+   */
   public JooqStepFactory(DBOS dbos, DSLContext dsl, String schema, DBOSSerializer serializer) {
     super(dbos, schema, serializer, () -> dsl.configuration().connectionProvider().acquire());
     this.dsl = Objects.requireNonNull(dsl);
   }
 
+  /**
+   * Executes {@code callback} as an idempotent DBOS step inside a jOOQ transaction.
+   *
+   * <p>If a result for this step is already recorded (e.g. on workflow retry), the callback is
+   * skipped and the cached result is returned. Otherwise the callback runs inside an open
+   * transaction; the output is recorded atomically with the database work so the step is
+   * exactly-once on success.
+   *
+   * @param <T> the return type of the callback
+   * @param callback the database work to perform; receives a jOOQ {@link org.jooq.Configuration}
+   *     with an open transaction and must not commit or close the underlying connection
+   * @param stepName a stable name that identifies this step within the workflow
+   * @return the value returned by {@code callback}
+   */
   public <T> T txStepResult(TransactionalCallable<T> callback, String stepName) {
     return runTxStep(
         (wfId, stepId) ->
@@ -66,6 +96,18 @@ public class JooqStepFactory extends PostgresStepFactory {
         stepName);
   }
 
+  /**
+   * Executes {@code transactional} as an idempotent DBOS step inside a jOOQ transaction, with no
+   * return value.
+   *
+   * <p>Behaves identically to {@link #txStepResult} but accepts a {@link TransactionalRunnable} for
+   * callers that do not need to return a result.
+   *
+   * @param transactional the database work to perform; receives a jOOQ {@link
+   *     org.jooq.Configuration} with an open transaction and must not commit or close the
+   *     underlying connection
+   * @param stepName a stable name that identifies this step within the workflow
+   */
   public void txStep(TransactionalRunnable transactional, String stepName) {
     txStepResult(
         c -> {
@@ -73,6 +115,21 @@ public class JooqStepFactory extends PostgresStepFactory {
           return null;
         },
         stepName);
+  }
+
+  @Override
+  protected Optional<StepResult> checkExecution(String workflowId, int stepId, String stepName) {
+    return dsl.fetchOptional(checkSql(), workflowId, stepId)
+        .map(
+            r ->
+                new StepResult(
+                    workflowId,
+                    stepId,
+                    stepName,
+                    r.get("output", String.class),
+                    r.get("error", String.class),
+                    null,
+                    r.get("serialization", String.class)));
   }
 
   private <R> void recordOutput(Configuration trx, String workflowId, int stepId, R result) {

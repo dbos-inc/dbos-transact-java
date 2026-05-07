@@ -157,7 +157,7 @@ public class JdbiStepFactory extends PostgresStepFactory {
                             rs.getString("error"),
                             null,
                             rs.getString("serialization")))
-                .findFirst());
+                .findOne());
   }
 
   private <R> void recordOutput(Handle handle, String workflowId, int stepId, R result) {
