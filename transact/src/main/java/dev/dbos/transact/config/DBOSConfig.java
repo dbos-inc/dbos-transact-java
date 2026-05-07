@@ -58,6 +58,31 @@ public record DBOSConfig(
     listenQueues = (listenQueues == null) ? Set.of() : Set.copyOf(listenQueues);
   }
 
+  // Copy constructor
+  public DBOSConfig(DBOSConfig other) {
+    this(
+        other.appName,
+        other.databaseUrl,
+        other.dbUser,
+        other.dbPassword,
+        other.dataSource,
+        other.adminServer,
+        other.adminServerPort,
+        other.migrate,
+        other.conductorKey,
+        other.conductorDomain,
+        (other.conductorExecutorMetadata == null
+            ? null
+            : Map.copyOf(other.conductorExecutorMetadata)),
+        other.appVersion,
+        other.executorId,
+        other.databaseSchema,
+        other.enablePatching,
+        (other.listenQueues == null ? null : Set.copyOf(other.listenQueues)),
+        other.serializer,
+        other.schedulerPollingInterval);
+  }
+
   public static @NonNull DBOSConfig defaults(@NonNull String appName) {
     return new DBOSConfig(
         appName, null, null, null, null, false, // adminServer

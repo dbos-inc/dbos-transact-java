@@ -69,7 +69,7 @@ class StepsDAO {
     try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
       pstmt.setString(1, result.workflowId());
       pstmt.setInt(2, result.stepId());
-      pstmt.setString(3, result.functionName());
+      pstmt.setString(3, result.stepName());
 
       if (result.output() != null) {
         pstmt.setString(4, result.output());
@@ -99,7 +99,7 @@ class StepsDAO {
             logger.warn(
                 String.format(
                     "Step output for %s:%d-%s was already recorded",
-                    result.workflowId(), result.stepId(), result.functionName()));
+                    result.workflowId(), result.stepId(), result.stepName()));
             throw new DBOSWorkflowExecutionConflictException(result.workflowId());
           }
         }

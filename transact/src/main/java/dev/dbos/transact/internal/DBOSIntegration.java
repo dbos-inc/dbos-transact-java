@@ -1,6 +1,7 @@
 package dev.dbos.transact.internal;
 
 import dev.dbos.transact.StartWorkflowOptions;
+import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.database.ExternalState;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
@@ -35,14 +36,17 @@ public class DBOSIntegration {
     void register(Workflow wfTag, Object target, Method method, String instanceName);
   }
 
+  private final DBOSConfig config;
   private final Supplier<DBOSExecutor> executorSupplier;
   private final Consumer<DBOSLifecycleListener> listenerConsumer;
   private final RegisteredWorkflowConsumer workflowConsumer;
 
   public DBOSIntegration(
+      @NonNull DBOSConfig config,
       @NonNull Supplier<DBOSExecutor> executorSupplier,
       @NonNull Consumer<DBOSLifecycleListener> lifecycleConsumer,
       @NonNull RegisteredWorkflowConsumer workflowConsumer) {
+    this.config = Objects.requireNonNull(config);
     this.executorSupplier = Objects.requireNonNull(executorSupplier);
     this.listenerConsumer = Objects.requireNonNull(lifecycleConsumer);
     this.workflowConsumer = Objects.requireNonNull(workflowConsumer);
@@ -55,6 +59,10 @@ public class DBOSIntegration {
           "DBOS is not launched. Cannot call %s before launch.".formatted(caller));
     }
     return exec;
+  }
+
+  public DBOSConfig config() {
+    return this.config;
   }
 
   /**
