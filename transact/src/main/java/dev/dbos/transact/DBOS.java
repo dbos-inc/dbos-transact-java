@@ -4,6 +4,7 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSIntegration;
@@ -210,7 +211,7 @@ public class DBOS implements AutoCloseable {
       var wfTag = method.getAnnotation(Workflow.class);
       if (wfTag != null) {
         method.setAccessible(true); // In case it's not public
-        workflowRegistry.registerWorkflow(wfTag, target, method, instanceName);
+        registerWorkflow(wfTag, target, method, instanceName);
       }
     }
 
@@ -228,7 +229,7 @@ public class DBOS implements AutoCloseable {
    * @param instanceName optional instance name for the workflow (can be null)
    * @throws IllegalStateException if called after DBOS is launched
    */
-  private void registerWorkflow(
+  private RegisteredWorkflow registerWorkflow(
       @NonNull Workflow wfTag,
       @NonNull Object target,
       @NonNull Method method,
@@ -237,7 +238,36 @@ public class DBOS implements AutoCloseable {
       throw new IllegalStateException("Cannot register workflow after DBOS is launched");
     }
 
-    workflowRegistry.registerWorkflow(wfTag, target, method, instanceName);
+    var workflowName = WorkflowRegistry.getWorkflowName(wfTag, method);
+    var className = WorkflowRegistry.getWorkflowClassName(target);
+
+    return registerWorkflow(
+        workflowName,
+        className,
+        instanceName,
+        target,
+        method,
+        wfTag.maxRecoveryAttempts(),
+        wfTag.serializationStrategy());
+  }
+
+  public RegisteredWorkflow registerWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @Nullable String instanceName,
+      @NonNull Object target,
+      @NonNull Method method,
+      @Nullable Integer maxRecoveryAttempts,
+      @Nullable SerializationStrategy serializationStrategy) {
+
+    return registerWorkflow(
+        workflowName,
+        className,
+        instanceName,
+        target,
+        method,
+        maxRecoveryAttempts,
+        serializationStrategy);
   }
 
   /**
