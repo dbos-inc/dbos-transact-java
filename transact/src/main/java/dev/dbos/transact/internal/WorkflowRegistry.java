@@ -2,6 +2,7 @@ package dev.dbos.transact.internal;
 
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 
@@ -44,15 +45,16 @@ public class WorkflowRegistry {
     }
   }
 
-  public void registerWorkflow(
-      @NonNull Workflow wfTag,
+  public RegisteredWorkflow registerWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @Nullable String instanceName,
       @NonNull Object target,
       @NonNull Method method,
-      @Nullable String instanceName) {
-
-    var workflowName = getWorkflowName(wfTag, method);
-    var className = getWorkflowClassName(target);
+      @Nullable Integer maxRecoveryAttempts,
+      @Nullable SerializationStrategy serializationStrategy) {
     var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
+
     var regWorkflow =
         new RegisteredWorkflow(
             workflowName,
@@ -60,13 +62,14 @@ public class WorkflowRegistry {
             instanceName,
             target,
             method,
-            wfTag.maxRecoveryAttempts(),
-            wfTag.serializationStrategy());
+            Objects.requireNonNullElse(maxRecoveryAttempts, -1),
+            Objects.requireNonNullElse(serializationStrategy, SerializationStrategy.DEFAULT));
 
     var previous = wfRegistry.putIfAbsent(fqName, regWorkflow);
     if (previous != null) {
       throw new IllegalStateException("Workflow already registered with name: " + fqName);
     }
+    return regWorkflow;
   }
 
   public Map<String, RegisteredWorkflow> getWorkflowSnapshot() {
