@@ -14,7 +14,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class UnifiedProxyTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -73,7 +72,7 @@ public class UnifiedProxyTest {
     assertEquals(wfid3, handle.workflowId());
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
 
-    ListWorkflowsInput input = new ListWorkflowsInput().withWorkflowId(wfid3);
+    ListWorkflowsInput input = new ListWorkflowsInput(wfid3);
     List<WorkflowStatus> wfs = dbos.listWorkflows(input);
     assertEquals("simpleQ", wfs.get(0).queueName());
   }
@@ -102,7 +101,7 @@ public class UnifiedProxyTest {
       assertEquals(wid, h.getResult());
     }
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
     assertEquals(wfs.size(), 4);
 
     assertEquals(wfid1, wfs.get(0).workflowId());

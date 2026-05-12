@@ -29,20 +29,23 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowEvent;
 import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowHandle;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
 import dev.dbos.transact.workflow.WorkflowStream;
-import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -74,7 +77,6 @@ import org.mockito.MockitoAnnotations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ConductorTest {
 
   private static final Logger logger = LoggerFactory.getLogger(ConductorTest.class);
@@ -339,6 +341,7 @@ public class ConductorTest {
       assertEquals("java", jsonNode.get("language").asText());
       assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
       assertNull(jsonNode.get("error_message"));
+      assertEquals("{}", jsonNode.get("executor_metadata").toString());
     }
   }
 
@@ -361,7 +364,7 @@ public class ConductorTest {
     Random random = new Random();
     String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-    // Create a large list of steps to exceed 32KB
+    // Create a large list of steps to exceed 128KB
     List<StepInfo> steps = new ArrayList<>();
     for (int i = 0; i < 200; i++) {
       var stringBuilder = new StringBuilder(1024);
@@ -372,7 +375,7 @@ public class ConductorTest {
       steps.add(
           new StepInfo(i, "function" + i, stringBuilder.toString(), null, null, null, null, null));
     }
-    when(mockExec.listWorkflowSteps("large-wf")).thenReturn(steps);
+    when(mockExec.listWorkflowSteps("large-wf", true, null, null)).thenReturn(steps);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -383,8 +386,8 @@ public class ConductorTest {
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
 
-      // Each StepInfo is roughly 100-200 bytes. 500 steps should be > 50KB.
-      // 32KB fragment size should result in at least 2 frames.
+      // Each StepInfo is roughly 1KB. 200 steps should be ~200KB.
+      // 128KB fragment size should result in multiple frames.
       assertTrue(
           listener.frameCount > 1,
           "Should have received more than one frame, but got " + listener.frameCount);
@@ -484,6 +487,45 @@ public class ConductorTest {
       assertEquals("java", jsonNode.get("language").asText());
       assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
       assertNull(jsonNode.get("error_message"));
+      assertEquals("{}", jsonNode.get("executor_metadata").toString());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canExecutorInfoWithMetadata() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String hostname = InetAddress.getLocalHost().getHostName();
+
+    Map<String, Object> metadata = Map.of("key1", "value1", "key2", 42);
+    when(mockExec.appVersion()).thenReturn("test-app-version");
+    when(mockExec.executorId()).thenReturn("test-executor-id");
+    when(mockExec.executorMetadata()).thenReturn(metadata);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message = Map.of("unknown-field", "unknown-field-value");
+      listener.send(MessageType.EXECUTOR_INFO, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("executor_info", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(hostname, jsonNode.get("hostname").asText());
+      assertEquals("test-app-version", jsonNode.get("application_version").asText());
+      assertEquals("test-executor-id", jsonNode.get("executor_id").asText());
+      assertEquals("java", jsonNode.get("language").asText());
+      assertEquals(DBOS.version(), jsonNode.get("dbos_version").asText());
+      assertNull(jsonNode.get("error_message"));
+      JsonNode metadataNode = jsonNode.get("executor_metadata");
+      assertNotNull(metadataNode);
+      assertEquals("value1", metadataNode.get("key1").asText());
+      assertEquals(42, metadataNode.get("key2").asInt());
     }
   }
 
@@ -637,7 +679,7 @@ public class ConductorTest {
       listener.send(MessageType.RESUME, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).resumeWorkflows(List.of(workflowId));
+      verify(mockExec).resumeWorkflows(List.of(workflowId), null);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -656,7 +698,7 @@ public class ConductorTest {
     String errorMessage = "canResumeThrows error";
     String workflowId = "sample-wf-id";
 
-    doThrow(new RuntimeException(errorMessage)).when(mockExec).resumeWorkflows(anyList());
+    doThrow(new RuntimeException(errorMessage)).when(mockExec).resumeWorkflows(anyList(), any());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -668,7 +710,7 @@ public class ConductorTest {
       listener.send(MessageType.RESUME, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).resumeWorkflows(List.of(workflowId));
+      verify(mockExec).resumeWorkflows(List.of(workflowId), null);
 
       SuccessResponse resp = mapper.readValue(listener.message, SuccessResponse.class);
       assertEquals("resume", resp.type);
@@ -745,12 +787,40 @@ public class ConductorTest {
       listener.send(MessageType.RESUME, "bulk-resume-1", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).resumeWorkflows(workflowIds);
+      verify(mockExec).resumeWorkflows(workflowIds, null);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
       assertEquals("resume", jsonNode.get("type").asText());
       assertEquals("bulk-resume-1", jsonNode.get("request_id").asText());
+      assertNull(jsonNode.get("error_message"));
+      assertTrue(jsonNode.get("success").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canResumeWithCustomQueue() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+    String customQueueName = "custom-test-queue";
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "queue_name", customQueueName);
+      listener.send(MessageType.RESUME, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).resumeWorkflows(List.of(workflowId), customQueueName);
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("resume", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
       assertNull(jsonNode.get("error_message"));
       assertTrue(jsonNode.get("success").asBoolean());
     }
@@ -854,6 +924,55 @@ public class ConductorTest {
       assertEquals("appver-12345", capturedOptions.applicationVersion());
       assertEquals(newWorkflowId, capturedOptions.forkedWorkflowId());
       assertEquals(null, capturedOptions.timeout());
+
+      JsonNode jsonNode = mapper.readTree(listener.message);
+      assertNotNull(jsonNode);
+      assertEquals("fork_workflow", jsonNode.get("type").asText());
+      assertEquals("12345", jsonNode.get("request_id").asText());
+      assertEquals(newWorkflowId, jsonNode.get("new_workflow_id").asText());
+      assertNull(jsonNode.get("error_message"));
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  @RetryingTest(3)
+  public void canForkCustomQueue() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+    String newWorkflowId = "new-" + workflowId;
+
+    var mockHandle = (WorkflowHandle<Object, Exception>) mock(WorkflowHandle.class);
+    when(mockHandle.workflowId()).thenReturn(newWorkflowId);
+    when(mockExec.forkWorkflow(eq(workflowId), anyInt(), any())).thenReturn(mockHandle);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body =
+          Map.of(
+              "workflow_id",
+              workflowId,
+              "start_step",
+              2,
+              "queue_name",
+              "custom-queue",
+              "queue_partition_key",
+              "partition-key");
+      Map<String, Object> message = Map.of("body", body);
+      listener.send(MessageType.FORK_WORKFLOW, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ForkOptions> optionsCaptor = ArgumentCaptor.forClass(ForkOptions.class);
+      verify(mockExec).forkWorkflow(eq(workflowId), eq(2), optionsCaptor.capture());
+      ForkOptions capturedOptions = optionsCaptor.getValue();
+      assertNotNull(capturedOptions);
+      assertEquals("custom-queue", capturedOptions.queueName());
+      assertEquals("partition-key", capturedOptions.queuePartitionKey());
+      assertNull(capturedOptions.applicationVersion());
+      assertNull(capturedOptions.forkedWorkflowId());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1027,18 +1146,20 @@ public class ConductorTest {
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
             .workflowName("WF1")
-            .createdAt(1754936102215L)
-            .updatedAt(1754936102215L)
+            .createdAt(Instant.ofEpochMilli(1754936102215L))
+            .updatedAt(Instant.ofEpochMilli(1754936102215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
+            .wasForkedFrom(true)
+            .delayUntil(Instant.ofEpochMilli(1754999999999L))
             .build());
     statuses.add(
         new WorkflowStatusBuilder("wf-2")
             .status(WorkflowState.PENDING)
             .workflowName("WF2")
-            .createdAt(1754936722066L)
-            .updatedAt(1754936722066L)
+            .createdAt(Instant.ofEpochMilli(1754936722066L))
+            .updatedAt(Instant.ofEpochMilli(1754936722066L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -1047,8 +1168,8 @@ public class ConductorTest {
         new WorkflowStatusBuilder("wf-3")
             .status(WorkflowState.PENDING)
             .workflowName("WF3")
-            .createdAt(1754946202215L)
-            .updatedAt(1754946202215L)
+            .createdAt(Instant.ofEpochMilli(1754946202215L))
+            .updatedAt(Instant.ofEpochMilli(1754946202215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -1074,7 +1195,7 @@ public class ConductorTest {
           ArgumentCaptor.forClass(ListWorkflowsInput.class);
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
-      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.startTime());
+      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z").toInstant(), input.startTime());
       assertEquals(List.of("foobarbaz"), input.workflowName());
       assertNull(input.limit());
 
@@ -1089,6 +1210,10 @@ public class ConductorTest {
       assertTrue(outputNode.size() == 3);
 
       assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
+      assertTrue(outputNode.get(0).get("WasForkedFrom").asBoolean());
+      assertEquals("1754999999999", outputNode.get(0).get("DelayUntilEpochMS").asText());
+      assertTrue(outputNode.get(1).get("WasForkedFrom").isNull());
+      assertTrue(outputNode.get(1).get("DelayUntilEpochMS").isNull());
     }
   }
 
@@ -1101,18 +1226,20 @@ public class ConductorTest {
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
             .workflowName("WF1")
-            .createdAt(1754936102215L)
-            .updatedAt(1754936102215L)
+            .createdAt(Instant.ofEpochMilli(1754936102215L))
+            .updatedAt(Instant.ofEpochMilli(1754936102215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
+            .wasForkedFrom(true)
+            .delayUntil(Instant.ofEpochMilli(1754999999999L))
             .build());
     statuses.add(
         new WorkflowStatusBuilder("wf-2")
             .status(WorkflowState.PENDING)
             .workflowName("WF2")
-            .createdAt(1754936722066L)
-            .updatedAt(1754936722066L)
+            .createdAt(Instant.ofEpochMilli(1754936722066L))
+            .updatedAt(Instant.ofEpochMilli(1754936722066L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -1121,8 +1248,8 @@ public class ConductorTest {
         new WorkflowStatusBuilder("wf-3")
             .status(WorkflowState.PENDING)
             .workflowName("WF3")
-            .createdAt(1754946202215L)
-            .updatedAt(1754946202215L)
+            .createdAt(Instant.ofEpochMilli(1754946202215L))
+            .updatedAt(Instant.ofEpochMilli(1754946202215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -1148,7 +1275,7 @@ public class ConductorTest {
           ArgumentCaptor.forClass(ListWorkflowsInput.class);
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
-      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z"), input.startTime());
+      assertEquals(OffsetDateTime.parse("2024-06-01T12:34:56Z").toInstant(), input.startTime());
       assertEquals(List.of("foobarbaz"), input.workflowName());
       assertNull(input.limit());
 
@@ -1163,6 +1290,10 @@ public class ConductorTest {
       assertTrue(outputNode.size() == 3);
 
       assertEquals("wf-3", outputNode.get(2).get("WorkflowUUID").asText());
+      assertTrue(outputNode.get(0).get("WasForkedFrom").asBoolean());
+      assertEquals("1754999999999", outputNode.get(0).get("DelayUntilEpochMS").asText());
+      assertTrue(outputNode.get(1).get("WasForkedFrom").isNull());
+      assertTrue(outputNode.get(1).get("DelayUntilEpochMS").isNull());
     }
   }
 
@@ -1191,7 +1322,7 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertEquals(List.of("alpha", "beta"), input.workflowName());
-      assertEquals(List.of("SUCCESS", "PENDING"), input.status());
+      assertEquals(List.of(WorkflowState.SUCCESS, WorkflowState.PENDING), input.status());
       assertEquals(List.of("user-a", "user-b"), input.authenticatedUser());
       assertEquals(List.of("v1.0", "v2.0"), input.applicationVersion());
       assertEquals(List.of("exec-1", "exec-2"), input.executorIds());
@@ -1223,7 +1354,7 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertEquals(List.of("alpha"), input.workflowName());
-      assertEquals(List.of("SUCCESS"), input.status());
+      assertEquals(List.of(WorkflowState.SUCCESS), input.status());
       assertEquals(List.of("user-a"), input.authenticatedUser());
       assertEquals(List.of("v1.0"), input.applicationVersion());
       assertEquals(List.of("exec-1"), input.executorIds());
@@ -1253,7 +1384,7 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertEquals(List.of("alpha", "beta"), input.workflowName());
-      assertEquals(List.of("SUCCESS", "PENDING"), input.status());
+      assertEquals(List.of(WorkflowState.SUCCESS, WorkflowState.PENDING), input.status());
       assertEquals(List.of("q1", "q2"), input.queueName());
       assertTrue(input.queuesOnly());
     }
@@ -1282,8 +1413,31 @@ public class ConductorTest {
       verify(mockExec).listWorkflows(inputCaptor.capture());
       ListWorkflowsInput input = inputCaptor.getValue();
       assertEquals(List.of("alpha"), input.workflowName());
-      assertEquals(List.of("SUCCESS"), input.status());
+      assertEquals(List.of(WorkflowState.SUCCESS), input.status());
       assertEquals(List.of("q1"), input.queueName());
+      assertTrue(input.queuesOnly());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListQueuedWorkflowsWithHasParent() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    when(mockExec.listWorkflows(any())).thenReturn(List.of());
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> body = Map.of("has_parent", true);
+      listener.send(MessageType.LIST_QUEUED_WORKFLOWS, "12345", Map.of("body", body));
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockExec).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertTrue(input.hasParent());
       assertTrue(input.queuesOnly());
     }
   }
@@ -1298,14 +1452,16 @@ public class ConductorTest {
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
             .workflowName("WF1")
-            .createdAt(1754936102215L)
-            .updatedAt(1754936102215L)
+            .createdAt(Instant.ofEpochMilli(1754936102215L))
+            .updatedAt(Instant.ofEpochMilli(1754936102215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
+            .wasForkedFrom(true)
+            .delayUntil(Instant.ofEpochMilli(1754999999999L))
             .build();
 
-    when(mockDB.getWorkflowStatus(workflowId)).thenReturn(status);
+    when(mockDB.listWorkflows(any())).thenReturn(List.of(status));
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1316,7 +1472,13 @@ public class ConductorTest {
       listener.send(MessageType.GET_WORKFLOW, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getWorkflowStatus(workflowId);
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockDB).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(List.of(workflowId), input.workflowIds());
+      assertTrue(input.loadInput());
+      assertTrue(input.loadOutput());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1326,6 +1488,47 @@ public class ConductorTest {
       assertNotNull(outputNode);
       assertTrue(outputNode.isObject());
       assertEquals("wf-1", outputNode.get("WorkflowUUID").asText());
+      assertTrue(outputNode.get("WasForkedFrom").asBoolean());
+      assertEquals("1754999999999", outputNode.get("DelayUntilEpochMS").asText());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowWithoutInputOutput() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "sample-wf-id";
+
+    WorkflowStatus status =
+        new WorkflowStatusBuilder("wf-1")
+            .status(WorkflowState.PENDING)
+            .workflowName("WF1")
+            .createdAt(Instant.ofEpochMilli(1754936102215L))
+            .updatedAt(Instant.ofEpochMilli(1754936102215L))
+            .executorId("test-executor")
+            .appVersion("test-app-ver")
+            .appId("test-app-id")
+            .build();
+
+    when(mockDB.listWorkflows(any())).thenReturn(List.of(status));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "load_input", false, "load_output", false);
+      listener.send(MessageType.GET_WORKFLOW, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      ArgumentCaptor<ListWorkflowsInput> inputCaptor =
+          ArgumentCaptor.forClass(ListWorkflowsInput.class);
+      verify(mockDB).listWorkflows(inputCaptor.capture());
+      ListWorkflowsInput input = inputCaptor.getValue();
+      assertEquals(List.of(workflowId), input.workflowIds());
+      assertFalse(input.loadInput());
+      assertFalse(input.loadOutput());
     }
   }
 
@@ -1335,12 +1538,13 @@ public class ConductorTest {
     testServer.setListener(listener);
     String executorId = "exec-id";
     String appVersion = "app-version";
+    var executorIds = List.of(executorId);
 
-    List<GetPendingWorkflowsOutput> outputs = new ArrayList<>();
-    outputs.add(new GetPendingWorkflowsOutput("wf-1", null));
-    outputs.add(new GetPendingWorkflowsOutput("wf-2", "queue"));
+    List<WorkflowStatus> outputs = new ArrayList<>();
+    outputs.add(new WorkflowStatusBuilder("wf-1").build());
+    outputs.add(new WorkflowStatusBuilder("wf-2").queueName("queue").build());
 
-    when(mockDB.getPendingWorkflows(executorId, appVersion)).thenReturn(outputs);
+    when(mockDB.getPendingWorkflows(executorIds, appVersion)).thenReturn(outputs);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1352,7 +1556,7 @@ public class ConductorTest {
       listener.send(MessageType.EXIST_PENDING_WORKFLOWS, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getPendingWorkflows(executorId, appVersion);
+      verify(mockDB).getPendingWorkflows(executorIds, appVersion);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1368,9 +1572,9 @@ public class ConductorTest {
     testServer.setListener(listener);
     String executorId = "exec-id";
     String appVersion = "app-version";
+    var executorIds = List.of(executorId);
 
-    List<GetPendingWorkflowsOutput> outputs = new ArrayList<>();
-    when(mockDB.getPendingWorkflows(executorId, appVersion)).thenReturn(outputs);
+    when(mockDB.getPendingWorkflows(executorIds, appVersion)).thenReturn(List.of());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1388,7 +1592,7 @@ public class ConductorTest {
       listener.send(MessageType.EXIST_PENDING_WORKFLOWS, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).getPendingWorkflows(executorId, appVersion);
+      verify(mockDB).getPendingWorkflows(executorIds, appVersion);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1411,7 +1615,7 @@ public class ConductorTest {
     steps.add(new StepInfo(3, "function4", null, null, null, null, null, null));
     steps.add(new StepInfo(4, "function5", null, null, null, null, null, null));
 
-    when(mockExec.listWorkflowSteps(workflowId)).thenReturn(steps);
+    when(mockExec.listWorkflowSteps(workflowId, null, null, null)).thenReturn(steps);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1423,7 +1627,32 @@ public class ConductorTest {
       listener.send(MessageType.LIST_STEPS, "12345", message);
 
       assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockExec).listWorkflowSteps(workflowId);
+      verify(mockExec).listWorkflowSteps(workflowId, true, null, null);
+    }
+  }
+
+  @RetryingTest(3)
+  public void canListStepsWithParameters() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+    String workflowId = "workflow-id-1";
+
+    List<StepInfo> steps = new ArrayList<>();
+    steps.add(new StepInfo(0, "function1", "output1", null, null, null, null, null));
+
+    when(mockExec.listWorkflowSteps(workflowId, false, 10, 5)).thenReturn(steps);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      Map<String, Object> message =
+          Map.of("workflow_id", workflowId, "load_output", false, "limit", 10, "offset", 5);
+      listener.send(MessageType.LIST_STEPS, "12345", message);
+
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+      verify(mockExec).listWorkflowSteps(workflowId, false, 10, 5);
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1432,7 +1661,7 @@ public class ConductorTest {
       JsonNode outputNode = jsonNode.get("output");
       assertNotNull(outputNode);
       assertTrue(outputNode.isArray());
-      assertEquals(5, outputNode.size());
+      assertEquals(1, outputNode.size());
     }
   }
 
@@ -1460,8 +1689,8 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).garbageCollect(1L, 2L);
-      verify(mockExec).globalTimeout(3L);
+      verify(mockDB).garbageCollect(Instant.ofEpochMilli(1L), 2L);
+      verify(mockExec).globalTimeout(Instant.ofEpochMilli(3L));
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1493,8 +1722,8 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).garbageCollect(1L, 2L);
-      verify(mockExec, never()).globalTimeout(anyLong());
+      verify(mockDB).garbageCollect(Instant.ofEpochMilli(1L), 2L);
+      verify(mockExec, never()).globalTimeout(any());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1511,7 +1740,7 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     String errorMessage = "canRetentionGcThrows error";
-    doThrow(new RuntimeException(errorMessage)).when(mockDB).garbageCollect(anyLong(), anyLong());
+    doThrow(new RuntimeException(errorMessage)).when(mockDB).garbageCollect(any(), anyLong());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1532,8 +1761,8 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).garbageCollect(1L, 2L);
-      verify(mockExec, never()).globalTimeout(anyLong());
+      verify(mockDB).garbageCollect(Instant.ofEpochMilli(1L), 2L);
+      verify(mockExec, never()).globalTimeout(any());
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1550,7 +1779,7 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     String errorMessage = "canRetentionTimeoutThrows error";
-    doThrow(new RuntimeException(errorMessage)).when(mockExec).globalTimeout(anyLong());
+    doThrow(new RuntimeException(errorMessage)).when(mockExec).globalTimeout(any());
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1571,8 +1800,8 @@ public class ConductorTest {
       listener.send(MessageType.RETENTION, "12345", message);
 
       assertTrue(listener.messageLatch.await(5, TimeUnit.SECONDS), "message latch timed out");
-      verify(mockDB).garbageCollect(1L, 2L);
-      verify(mockExec).globalTimeout(3L);
+      verify(mockDB).garbageCollect(Instant.ofEpochMilli(1L), 2L);
+      verify(mockExec).globalTimeout(Instant.ofEpochMilli(3));
 
       JsonNode jsonNode = mapper.readTree(listener.message);
       assertNotNull(jsonNode);
@@ -1712,7 +1941,8 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     var workflows = createTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1745,7 +1975,8 @@ public class ConductorTest {
     doThrow(new RuntimeException(errorMessage)).when(mockDB).importWorkflow(any());
 
     var workflows = createTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
 
     try (Conductor conductor = builder.build()) {
       conductor.start();
@@ -1811,7 +2042,8 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     var workflows = createTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
 
     when(mockDB.exportWorkflow(anyString(), anyBoolean())).thenReturn(workflows);
 
@@ -1847,7 +2079,9 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     var workflows = createLargeTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
+
     assertTrue(
         serialized.length() > 256 * 1024,
         "Expected serialized payload >256KB for meaningful streaming test, got "
@@ -1912,7 +2146,8 @@ public class ConductorTest {
         .importWorkflow(any());
 
     var workflows = createLargeTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
 
     Listener listener = new Listener();
     testServer.setListener(listener);
@@ -1953,7 +2188,9 @@ public class ConductorTest {
     testServer.setListener(listener);
 
     var workflows = createLargeTestExportedWorkflows();
-    var serialized = Conductor.serializeExportedWorkflows(workflows);
+    var conductorMapper = Conductor.buildObjectMapper();
+    var serialized = Conductor.serializeExportedWorkflows(workflows, conductorMapper);
+
     assertTrue(
         serialized.length() > 256 * 1024,
         "Expected serialized payload >256KB for meaningful streaming test, got "
@@ -2011,15 +2248,15 @@ public class ConductorTest {
             .output("test-output" + (index > 0 ? "-" + (index + 1) : ""))
             .error(null)
             .executorId("test-executor" + (index > 0 ? "-" + (index + 1) : ""))
-            .createdAt(System.currentTimeMillis() - (5000L * (index + 1)))
-            .updatedAt(System.currentTimeMillis() - (1000L * (index + 1)))
+            .createdAt(Instant.ofEpochMilli(System.currentTimeMillis() - (5000L * (index + 1))))
+            .updatedAt(Instant.ofEpochMilli(System.currentTimeMillis() - (1000L * (index + 1))))
             .appVersion(index > 0 ? "1." + index + ".0" : "1.0.0")
             .appId("test-app" + (index > 0 ? "-" + (index + 1) : ""))
             .recoveryAttempts(index)
             .queueName("test-queue" + (index > 0 ? "-" + (index + 1) : ""))
-            .timeoutMs(30000L + (index * 5000L))
-            .deadlineEpochMs(System.currentTimeMillis() + (60000L * (index + 1)))
-            .startedAtEpochMs(System.currentTimeMillis() - (index * 1000L))
+            .timeout(Duration.ofMillis(30000L + (index * 5000L)))
+            .deadline(Instant.ofEpochMilli(System.currentTimeMillis() + (60000L * (index + 1))))
+            .startedAt(Instant.ofEpochMilli(System.currentTimeMillis() - (index * 1000L)))
             .deduplicationId("test-dedup-id" + (index > 0 ? "-" + (index + 1) : ""))
             .priority(index + 1)
             .partitionKey("test-partition" + (index > 0 ? "-" + (index + 1) : ""))
@@ -2028,7 +2265,7 @@ public class ConductorTest {
 
     int stepCount = (int) (Math.random() * 8) + 2;
     List<StepInfo> steps = new ArrayList<>();
-    long currentTime = System.currentTimeMillis() + (index * 10000L);
+    var now = Instant.now().plus(Duration.ofSeconds(index * 10));
     String prefix = index > 0 ? "wf" + (index + 1) + "_" : "";
     for (int i = 0; i < stepCount; i++) {
       steps.add(
@@ -2038,8 +2275,8 @@ public class ConductorTest {
               prefix + "result" + (i + 1),
               null,
               null,
-              currentTime + (i * 1000),
-              currentTime + ((i + 1) * 1000),
+              now.plus(Duration.ofSeconds(i)),
+              now.plus(Duration.ofSeconds(i + 1)),
               null));
     }
 
@@ -2767,6 +3004,267 @@ public class ConductorTest {
       assertEquals("trigger_schedule", json.get("type").asText());
       assertEquals("req-trigger-sched-err", json.get("request_id").asText());
       assertNotNull(json.get("error_message"));
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowAggregates() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<WorkflowAggregateRow> rows =
+        List.of(
+            new WorkflowAggregateRow(Map.of("status", "SUCCESS", "name", "myWorkflow"), 10),
+            new WorkflowAggregateRow(Map.of("status", "FAILURE", "name", "myWorkflow"), 3));
+    when(mockDB.getWorkflowAggregates(any(GetWorkflowAggregatesInput.class))).thenReturn(rows);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_AGGREGATES,
+          "req-agg",
+          Map.of(
+              "body",
+              Map.of(
+                  "group_by_status",
+                  true,
+                  "group_by_name",
+                  true,
+                  "status",
+                  List.of("SUCCESS", "FAILURE"))));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      ArgumentCaptor<GetWorkflowAggregatesInput> inputCaptor =
+          ArgumentCaptor.forClass(GetWorkflowAggregatesInput.class);
+      verify(mockDB).getWorkflowAggregates(inputCaptor.capture());
+      GetWorkflowAggregatesInput captured = inputCaptor.getValue();
+      assertTrue(captured.groupByStatus());
+      assertTrue(captured.groupByName());
+      assertEquals(List.of("SUCCESS", "FAILURE"), captured.status());
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_aggregates", json.get("type").asText());
+      assertEquals("req-agg", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+
+      JsonNode output = json.get("output");
+      assertNotNull(output);
+      assertTrue(output.isArray());
+      assertEquals(2, output.size());
+      assertEquals("SUCCESS", output.get(0).get("group").get("status").asText());
+      assertEquals("myWorkflow", output.get(0).get("group").get("name").asText());
+      assertEquals(10, output.get(0).get("count").asLong());
+      assertEquals("FAILURE", output.get(1).get("group").get("status").asText());
+      assertEquals(3, output.get(1).get("count").asLong());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowAggregatesThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    String errorMessage = "canGetWorkflowAggregatesThrows error";
+    doThrow(new RuntimeException(errorMessage))
+        .when(mockDB)
+        .getWorkflowAggregates(any(GetWorkflowAggregatesInput.class));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_AGGREGATES,
+          "req-agg-err",
+          Map.of("body", Map.of("group_by_status", true)));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_aggregates", json.get("type").asText());
+      assertEquals(errorMessage, json.get("error_message").asText());
+      assertEquals(0, json.get("output").size());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowEvents() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    when(mockDB.getAllEvents("wf-events-1")).thenReturn(Map.of("key1", "hello", "key2", 42));
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_EVENTS, "req-events", Map.of("workflow_id", "wf-events-1"));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).getAllEvents("wf-events-1");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_events", json.get("type").asText());
+      assertEquals("req-events", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+      JsonNode events = json.get("events");
+      assertNotNull(events);
+      assertTrue(events.isArray());
+      assertEquals(2, events.size());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowEventsThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    doThrow(new RuntimeException("events error")).when(mockDB).getAllEvents("wf-events-err");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_EVENTS,
+          "req-events-err",
+          Map.of("workflow_id", "wf-events-err"));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_events", json.get("type").asText());
+      assertEquals("events error", json.get("error_message").asText());
+      assertEquals(0, json.get("events").size());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowNotifications() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    List<NotificationInfo> notifications =
+        List.of(
+            new NotificationInfo("topic1", "msg1", Instant.ofEpochMilli(1000), false),
+            new NotificationInfo(null, 99, Instant.ofEpochMilli(2000), true));
+    when(mockDB.getAllNotifications("wf-notifs-1")).thenReturn(notifications);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_NOTIFICATIONS,
+          "req-notifs",
+          Map.of("workflow_id", "wf-notifs-1"));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).getAllNotifications("wf-notifs-1");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_notifications", json.get("type").asText());
+      assertEquals("req-notifs", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+      JsonNode notifs = json.get("notifications");
+      assertNotNull(notifs);
+      assertTrue(notifs.isArray());
+      assertEquals(2, notifs.size());
+      assertEquals("topic1", notifs.get(0).get("topic").asText());
+      assertEquals("\"msg1\"", notifs.get(0).get("message").asText());
+      assertEquals(1000L, notifs.get(0).get("created_at_epoch_ms").asLong());
+      assertFalse(notifs.get(0).get("consumed").asBoolean());
+      assertTrue(notifs.get(1).get("topic").isNull());
+      assertEquals("99", notifs.get(1).get("message").asText());
+      assertTrue(notifs.get(1).get("consumed").asBoolean());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowNotificationsThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    doThrow(new RuntimeException("notifs error")).when(mockDB).getAllNotifications("wf-notifs-err");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_NOTIFICATIONS,
+          "req-notifs-err",
+          Map.of("workflow_id", "wf-notifs-err"));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_notifications", json.get("type").asText());
+      assertEquals("notifs error", json.get("error_message").asText());
+      assertEquals(0, json.get("notifications").size());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowStreams() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    Map<String, List<Object>> streamData = new LinkedHashMap<>();
+    streamData.put("stream1", List.of("a", "b", "c"));
+    streamData.put("stream2", List.of(1, 2));
+    when(mockDB.getAllStreamEntries("wf-streams-1")).thenReturn(streamData);
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_STREAMS, "req-streams", Map.of("workflow_id", "wf-streams-1"));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      verify(mockDB).getAllStreamEntries("wf-streams-1");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_streams", json.get("type").asText());
+      assertEquals("req-streams", json.get("request_id").asText());
+      assertNull(json.get("error_message"));
+      JsonNode streams = json.get("streams");
+      assertNotNull(streams);
+      assertTrue(streams.isArray());
+      assertEquals(2, streams.size());
+      assertEquals("stream1", streams.get(0).get("key").asText());
+      assertEquals(3, streams.get(0).get("values").size());
+      assertEquals("\"a\"", streams.get(0).get("values").get(0).asText());
+      assertEquals("stream2", streams.get(1).get("key").asText());
+      assertEquals(2, streams.get(1).get("values").size());
+      assertEquals("1", streams.get(1).get("values").get(0).asText());
+    }
+  }
+
+  @RetryingTest(3)
+  public void canGetWorkflowStreamsThrows() throws Exception {
+    MessageListener listener = new MessageListener();
+    testServer.setListener(listener);
+
+    doThrow(new RuntimeException("streams error"))
+        .when(mockDB)
+        .getAllStreamEntries("wf-streams-err");
+
+    try (Conductor conductor = builder.build()) {
+      conductor.start();
+      assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS), "open latch timed out");
+
+      listener.send(
+          MessageType.GET_WORKFLOW_STREAMS,
+          "req-streams-err",
+          Map.of("workflow_id", "wf-streams-err"));
+      assertTrue(listener.messageLatch.await(1, TimeUnit.SECONDS), "message latch timed out");
+
+      JsonNode json = mapper.readTree(listener.message);
+      assertEquals("get_workflow_streams", json.get("type").asText());
+      assertEquals("streams error", json.get("error_message").asText());
+      assertEquals(0, json.get("streams").size());
     }
   }
 }

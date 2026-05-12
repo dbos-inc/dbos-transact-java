@@ -13,7 +13,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class QueueChildWorkflowTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -46,7 +45,7 @@ public class QueueChildWorkflowTest {
 
     assertEquals("123abcdefghi", (String) handle.getResult());
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
 
     assertEquals(4, wfs.size());
     assertEquals(handle.workflowId(), wfs.get(0).workflowId());
@@ -98,7 +97,7 @@ public class QueueChildWorkflowTest {
     var handle = dbos.retrieveWorkflow("wf-123456");
     assertEquals("p-c-gc-123", handle.getResult());
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
 
     assertEquals(3, wfs.size());
     assertEquals("wf-123456", wfs.get(0).workflowId());

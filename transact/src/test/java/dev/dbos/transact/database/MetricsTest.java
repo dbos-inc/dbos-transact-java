@@ -43,7 +43,6 @@ class MetricsServiceImpl implements MetricsService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class MetricsTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

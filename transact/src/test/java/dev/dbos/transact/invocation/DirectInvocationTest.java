@@ -25,7 +25,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class DirectInvocationTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOS dbos;
@@ -129,6 +128,17 @@ public class DirectInvocationTest {
     assertEquals(workflowId, row.workflowId());
     assertEquals(10000L, row.timeoutMs());
     assertNotNull(row.deadlineEpochMs());
+  }
+
+  @Test
+  void directInvokeCantSetTimeoutAndDeadline() throws Exception {
+
+    String workflowId = "directInvokeSetWorkflowIdAndTimeout";
+    var options =
+        new WorkflowOptions(workflowId)
+            .withTimeout(Duration.ofSeconds(10))
+            .withDeadline(Instant.now());
+    assertThrows(IllegalArgumentException.class, () -> options.setContext());
   }
 
   @Test

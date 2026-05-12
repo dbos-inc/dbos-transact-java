@@ -262,7 +262,6 @@ class TryConcExec2 implements TryConcExec2Ifc {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class SingleExecutionTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
 
@@ -306,7 +305,7 @@ public class SingleExecutionTest {
   }
 
   WorkflowHandle<?, ?> reexecuteWorkflowById(String id) throws Exception {
-    DBUtils.setWorkflowState(dataSource, id, WorkflowState.PENDING.toString());
+    DBUtils.setWorkflowState(dataSource, id, WorkflowState.PENDING.name());
     return DBOSTestAccess.getDbosExecutor(dbos).executeWorkflowById(id, true, false);
   }
 

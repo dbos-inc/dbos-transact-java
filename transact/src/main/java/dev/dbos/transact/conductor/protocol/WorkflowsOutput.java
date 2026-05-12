@@ -1,6 +1,6 @@
 package dev.dbos.transact.conductor.protocol;
 
-import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.util.Objects;
@@ -33,13 +33,12 @@ public class WorkflowsOutput {
   public String ForkedFrom;
   public String ParentWorkflowID;
   public String DequeuedAt;
+  public Boolean WasForkedFrom;
+  public String DelayUntilEpochMS;
 
   public WorkflowsOutput(WorkflowStatus status) {
     Object[] input = status.input();
     Object output = status.output();
-    Long createdAt = status.createdAt();
-    Long updatedAt = status.updatedAt();
-    Long startedAt = status.startedAtEpochMs();
     String[] authenticatedRoles = status.authenticatedRoles();
 
     this.WorkflowUUID = status.workflowId();
@@ -51,28 +50,31 @@ public class WorkflowsOutput {
     this.AssumedRole = status.assumedRole();
     this.AuthenticatedRoles =
         authenticatedRoles != null && authenticatedRoles.length > 0
-            ? JSONUtil.serializeArray(authenticatedRoles)
+            ? JsonUtility.toJson(authenticatedRoles)
             : null;
-    this.Input = input != null ? JSONUtil.toJson(input) : null;
-    this.Output = output != null ? JSONUtil.toJson(output) : null;
+    this.Input = input != null ? JsonUtility.toJson(input) : null;
+    this.Output = output != null ? JsonUtility.toJson(output) : null;
     this.Request = null; // not used in Java TX
     this.Error =
         status.error() != null
             ? String.format("%s: %s", status.error().className(), status.error().message())
             : null;
-    this.CreatedAt = createdAt != null ? Long.toString(createdAt) : null;
-    this.UpdatedAt = updatedAt != null ? Long.toString(updatedAt) : null;
+    this.CreatedAt = status.createdAt() == null ? null : String.valueOf(status.createdAtEpochMs());
+    this.UpdatedAt = status.updatedAt() == null ? null : String.valueOf(status.updatedAtEpochMs());
     this.QueueName = status.queueName();
     this.ApplicationVersion = status.appVersion();
     this.ExecutorID = status.executorId();
-    this.WorkflowTimeoutMS = status.timeoutMs() == null ? null : status.timeoutMs().toString();
+    this.WorkflowTimeoutMS = status.timeout() == null ? null : String.valueOf(status.timeoutMs());
     this.WorkflowDeadlineEpochMS =
-        status.deadlineEpochMs() == null ? null : status.deadlineEpochMs().toString();
+        status.deadline() == null ? null : String.valueOf(status.deadlineEpochMs());
     this.DeduplicationID = status.deduplicationId();
     this.Priority = Objects.requireNonNullElse(status.priority(), 0).toString();
     this.QueuePartitionKey = status.queuePartitionKey();
     this.ForkedFrom = status.forkedFrom();
     this.ParentWorkflowID = status.parentWorkflowId();
-    this.DequeuedAt = startedAt != null ? Long.toString(startedAt) : null;
+    this.DequeuedAt = status.startedAt() == null ? null : String.valueOf(status.startedAtEpochMs());
+    this.WasForkedFrom = status.wasForkedFrom();
+    this.DelayUntilEpochMS =
+        status.delayUntil() == null ? null : String.valueOf(status.delayUntilEpochMs());
   }
 }

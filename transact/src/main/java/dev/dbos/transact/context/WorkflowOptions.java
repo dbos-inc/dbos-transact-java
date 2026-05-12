@@ -1,5 +1,8 @@
 package dev.dbos.transact.context;
 
+import static dev.dbos.transact.internal.Validation.nullableIsEmpty;
+import static dev.dbos.transact.internal.Validation.nullableIsNotPositive;
+
 import dev.dbos.transact.workflow.Timeout;
 
 import java.time.Duration;
@@ -23,16 +26,12 @@ public record WorkflowOptions(
     @Nullable String workflowId, @Nullable Timeout timeout, @Nullable Instant deadline) {
 
   public WorkflowOptions {
-    if (timeout instanceof Timeout.Explicit explicit) {
-      if (explicit.value().isNegative() || explicit.value().isZero()) {
-        throw new IllegalArgumentException(
-            "WorkflowOptions explicit timeout must be a positive non-zero duration");
-      }
+    if (nullableIsEmpty(workflowId)) {
+      throw new IllegalArgumentException("workflowId must not be empty");
+    }
 
-      if (deadline != null) {
-        throw new IllegalArgumentException(
-            "WorkflowOptions explicit timeout and deadline cannot both be set");
-      }
+    if (timeout instanceof Timeout.Explicit explicit && nullableIsNotPositive(explicit.value())) {
+      throw new IllegalArgumentException("explicit timeout must be a positive non-zero duration");
     }
   }
 
@@ -94,19 +93,16 @@ public record WorkflowOptions(
   }
 
   /**
-   * @return The workflow ID that will be used
-   */
-  @Override
-  public @Nullable String workflowId() {
-    return workflowId != null && workflowId.isEmpty() ? null : workflowId;
-  }
-
-  /**
    * Set the workflow options contained in this `WorkflowOptions` into the current DBOS context.
    * Should be called as an AutoCloseable so that the context is restored at the end of the block.
    * try (var _i = new WorkflowOptions(...).setContext()) { ... }
    */
   public @NonNull Guard setContext() {
+    if (timeout instanceof Timeout.Explicit && deadline != null) {
+      throw new IllegalArgumentException(
+          "WorkflowOptions explicit timeout and deadline cannot both be set");
+    }
+
     var ctx = DBOSContextHolder.get();
     var guard = new Guard(ctx);
 

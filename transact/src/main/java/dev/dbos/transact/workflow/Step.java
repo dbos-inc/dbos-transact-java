@@ -10,11 +10,9 @@ import java.lang.annotation.Target;
 public @interface Step {
   String name() default "";
 
-  boolean retriesAllowed() default false;
+  int maxAttempts() default 1;
 
   double intervalSeconds() default StepOptions.DEFAULT_INTERVAL_SECONDS;
-
-  int maxAttempts() default 3;
 
   double backOffRate() default StepOptions.DEFAULT_BACKOFF;
 }

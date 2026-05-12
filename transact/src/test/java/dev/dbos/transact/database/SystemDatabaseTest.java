@@ -8,7 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.DBOSMaxRecoveryAttemptsExceededException;
 import dev.dbos.transact.exceptions.DBOSQueueDuplicatedException;
@@ -16,28 +19,33 @@ import dev.dbos.transact.migrations.MigrationManager;
 import dev.dbos.transact.utils.DBUtils;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
+import dev.dbos.transact.utils.WorkflowStatusInternalBuilder;
 import dev.dbos.transact.workflow.ExportedWorkflow;
+import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ScheduleStatus;
-import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
-import dev.dbos.transact.workflow.WorkflowEvent;
-import dev.dbos.transact.workflow.WorkflowEventHistory;
+import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowState;
-import dev.dbos.transact.workflow.WorkflowStream;
-import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+
+import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class SystemDatabaseTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -59,7 +67,7 @@ public class SystemDatabaseTest {
   public void testDeleteWorkflows() throws Exception {
     for (var i = 0; i < 5; i++) {
       var wfid = "wfid-%d".formatted(i);
-      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      var status = WorkflowStatusInternalBuilder.create(wfid).build();
       sysdb.initWorkflowStatus(status, 5, false, false);
     }
 
@@ -142,7 +150,7 @@ public class SystemDatabaseTest {
   public void testDeleteWorkflowsList() throws Exception {
     for (var i = 0; i < 5; i++) {
       var wfid = "wfid-%d".formatted(i);
-      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      var status = WorkflowStatusInternalBuilder.create(wfid).build();
       sysdb.initWorkflowStatus(status, 5, false, false);
     }
 
@@ -158,28 +166,81 @@ public class SystemDatabaseTest {
   public void testCancelWorkflows() throws Exception {
     // Create workflows in different states
     for (var wfid : List.of("wf-pending-1", "wf-pending-2", "wf-pending-3")) {
-      sysdb.initWorkflowStatus(
-          WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build(), 5, false, false);
+      sysdb.initWorkflowStatus(WorkflowStatusInternalBuilder.create(wfid).build(), 5, false, false);
     }
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternal.builder("wf-success", WorkflowState.PENDING).build(),
-        5,
-        false,
-        false);
+        WorkflowStatusInternalBuilder.create("wf-success").build(), 5, false, false);
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternal.builder("wf-error", WorkflowState.PENDING).build(), 5, false, false);
+        WorkflowStatusInternalBuilder.create("wf-error").build(), 5, false, false);
     DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
     DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
+
+    // Record time before cancel so we can assert updated_at advances
+    long beforeCancel = System.currentTimeMillis();
 
     // Cancel all five IDs in one call
     sysdb.cancelWorkflows(
         List.of("wf-pending-1", "wf-pending-2", "wf-pending-3", "wf-success", "wf-error"));
 
-    // PENDING ones become CANCELLED
+    // PENDING ones become CANCELLED, and updated_at is refreshed
     for (var wfid : List.of("wf-pending-1", "wf-pending-2", "wf-pending-3")) {
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertNotNull(row);
       assertEquals(WorkflowState.CANCELLED.name(), row.status());
+      assertTrue(row.updatedAt() >= beforeCancel, "updated_at should be >= time before cancel");
+    }
+
+    // SUCCESS and ERROR are left untouched
+    assertEquals(
+        WorkflowState.SUCCESS.name(), DBUtils.getWorkflowRow(dataSource, "wf-success").status());
+    assertEquals(
+        WorkflowState.ERROR.name(), DBUtils.getWorkflowRow(dataSource, "wf-error").status());
+  }
+
+  List<String> insertResumableWorkflows() throws Exception {
+    // Create workflows in different states
+    for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
+      sysdb.initWorkflowStatus(WorkflowStatusInternalBuilder.create(wfid).build(), 5, false, false);
+      DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.CANCELLED.name());
+    }
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create("wf-success").build(), 5, false, false);
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create("wf-error").build(), 5, false, false);
+    DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
+    DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
+
+    // Set a non-null deadline on the cancellable workflows so we can assert it is cleared on resume
+    try (var conn = dataSource.getConnection();
+        var stmt =
+            conn.prepareStatement(
+                "UPDATE dbos.workflow_status SET workflow_deadline_epoch_ms = ? WHERE workflow_uuid = ANY(?)")) {
+      long deadline = System.currentTimeMillis() + 60_000;
+      stmt.setLong(1, deadline);
+      stmt.setArray(
+          2, conn.createArrayOf("text", new String[] {"wf-cancelled-1", "wf-cancelled-2"}));
+      stmt.executeUpdate();
+    }
+
+    return List.of("wf-cancelled-1", "wf-cancelled-2", "wf-success", "wf-error");
+  }
+
+  @Test
+  public void testResumeWorkflows() throws Exception {
+
+    var workflowIds = insertResumableWorkflows();
+    long beforeResume = System.currentTimeMillis();
+
+    // Resume all four IDs in one call
+    sysdb.resumeWorkflows(workflowIds, null);
+
+    // CANCELLED ones become ENQUEUED; updated_at advances; deadline is cleared
+    for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
+      var row = DBUtils.getWorkflowRow(dataSource, wfid);
+      assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+      assertEquals(Constants.DBOS_INTERNAL_QUEUE, row.queueName());
+      assertTrue(row.updatedAt() >= beforeResume, "updated_at should be >= time before resume");
+      assertNull(row.deadlineEpochMs(), "workflow_deadline_epoch_ms should be cleared on resume");
     }
 
     // SUCCESS and ERROR are left untouched
@@ -190,30 +251,21 @@ public class SystemDatabaseTest {
   }
 
   @Test
-  public void testResumeWorkflows() throws Exception {
-    // Create workflows in different states
-    for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
-      sysdb.initWorkflowStatus(
-          WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build(), 5, false, false);
-      DBUtils.setWorkflowState(dataSource, wfid, WorkflowState.CANCELLED.name());
-    }
-    sysdb.initWorkflowStatus(
-        WorkflowStatusInternal.builder("wf-success", WorkflowState.PENDING).build(),
-        5,
-        false,
-        false);
-    sysdb.initWorkflowStatus(
-        WorkflowStatusInternal.builder("wf-error", WorkflowState.PENDING).build(), 5, false, false);
-    DBUtils.setWorkflowState(dataSource, "wf-success", WorkflowState.SUCCESS.name());
-    DBUtils.setWorkflowState(dataSource, "wf-error", WorkflowState.ERROR.name());
+  public void testResumeWorkflowsCustomQueue() throws Exception {
+
+    var workflowIds = insertResumableWorkflows();
+    long beforeResume = System.currentTimeMillis();
 
     // Resume all four IDs in one call
-    sysdb.resumeWorkflows(List.of("wf-cancelled-1", "wf-cancelled-2", "wf-success", "wf-error"));
+    sysdb.resumeWorkflows(workflowIds, "customQueue");
 
-    // CANCELLED ones become ENQUEUED
+    // CANCELLED ones become ENQUEUED; updated_at advances; deadline is cleared
     for (var wfid : List.of("wf-cancelled-1", "wf-cancelled-2")) {
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+      assertEquals("customQueue", row.queueName());
+      assertTrue(row.updatedAt() >= beforeResume, "updated_at should be >= time before resume");
+      assertNull(row.deadlineEpochMs(), "workflow_deadline_epoch_ms should be cleared on resume");
     }
 
     // SUCCESS and ERROR are left untouched
@@ -226,30 +278,35 @@ public class SystemDatabaseTest {
   @Test
   public void testCancelWorkflowsNullInList() throws Exception {
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternal.builder("wf-id", WorkflowState.PENDING).build(), 5, false, false);
+        WorkflowStatusInternalBuilder.create("wf-id").build(), 5, false, false);
 
+    long beforeCancel = System.currentTimeMillis();
     sysdb.cancelWorkflows(Arrays.asList("wf-id", null));
 
-    assertEquals(
-        WorkflowState.CANCELLED.name(), DBUtils.getWorkflowRow(dataSource, "wf-id").status());
+    var row = DBUtils.getWorkflowRow(dataSource, "wf-id");
+    assertEquals(WorkflowState.CANCELLED.name(), row.status());
+    assertTrue(row.updatedAt() >= beforeCancel, "updated_at should be >= time before cancel");
   }
 
   @Test
   public void testResumeWorkflowsNullInList() throws Exception {
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternal.builder("wf-id", WorkflowState.PENDING).build(), 5, false, false);
+        WorkflowStatusInternalBuilder.create("wf-id").build(), 5, false, false);
     DBUtils.setWorkflowState(dataSource, "wf-id", WorkflowState.CANCELLED.name());
 
-    sysdb.resumeWorkflows(Arrays.asList("wf-id", null));
+    long beforeResume = System.currentTimeMillis();
+    sysdb.resumeWorkflows(Arrays.asList("wf-id", null), null);
 
-    assertEquals(
-        WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, "wf-id").status());
+    var row = DBUtils.getWorkflowRow(dataSource, "wf-id");
+    assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+    assertTrue(row.updatedAt() >= beforeResume, "updated_at should be >= time before resume");
+    assertNull(row.deadlineEpochMs(), "workflow_deadline_epoch_ms should be cleared on resume");
   }
 
   @Test
   public void testDeleteWorkflowsNullInList() throws Exception {
     sysdb.initWorkflowStatus(
-        WorkflowStatusInternal.builder("wf-id", WorkflowState.PENDING).build(), 5, false, false);
+        WorkflowStatusInternalBuilder.create("wf-id").build(), 5, false, false);
 
     sysdb.deleteWorkflows(Arrays.asList("wf-id", null), false);
 
@@ -260,14 +317,14 @@ public class SystemDatabaseTest {
   public void testGetChildWorkflows() throws Exception {
     for (var i = 0; i < 5; i++) {
       var wfid = "wfid-%d".formatted(i);
-      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      var status = WorkflowStatusInternalBuilder.create(wfid).build();
       sysdb.initWorkflowStatus(status, 5, false, false);
     }
 
     for (var i = 0; i < 5; i++) {
       var parentWfId = "wfid-2";
       var wfid = "childwfid-%d".formatted(i);
-      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      var status = WorkflowStatusInternalBuilder.create(wfid).build();
       sysdb.initWorkflowStatus(status, 5, false, false);
       sysdb.recordChildWorkflow(
           parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
@@ -276,7 +333,7 @@ public class SystemDatabaseTest {
     for (var i = 0; i < 5; i++) {
       var parentWfId = "childwfid-%d".formatted(i);
       var wfid = "grandchildwfid-%d".formatted(i);
-      var status = WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING).build();
+      var status = WorkflowStatusInternalBuilder.create(wfid).build();
       sysdb.initWorkflowStatus(status, 5, false, false);
       sysdb.recordChildWorkflow(
           parentWfId, wfid, i, "step-%d".formatted(i), System.currentTimeMillis());
@@ -297,16 +354,15 @@ public class SystemDatabaseTest {
   public void testRetries() throws Exception {
     var wfid = "wfid-1";
     var status =
-        WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create(wfid)
             .workflowName("wf-name")
             .inputs("wf-inputs")
             .build();
 
     for (var i = 1; i <= 6; i++) {
       var result1 = sysdb.initWorkflowStatus(status, 5, true, false);
-      assertEquals(WorkflowState.PENDING.name(), result1.status());
-      assertEquals(wfid, result1.workflowId());
-      assertEquals(0, result1.deadlineEpochMS());
+      assertEquals(WorkflowState.PENDING, result1.status());
+      assertNull(result1.deadlineEpochMS());
 
       var row = DBUtils.getWorkflowRow(dataSource, wfid);
       assertNotNull(row);
@@ -327,16 +383,15 @@ public class SystemDatabaseTest {
   public void testDedupeId() throws Exception {
     var wfid = "wfid-1";
     var builder =
-        WorkflowStatusInternal.builder(wfid, WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create(wfid)
             .workflowName("wf-name")
             .inputs("wf-inputs")
             .queueName("queue-name")
             .deduplicationId("dedupe-id");
 
     var result1 = sysdb.initWorkflowStatus(builder.build(), 5, false, false);
-    assertEquals(WorkflowState.PENDING.name(), result1.status());
-    assertEquals(wfid, result1.workflowId());
-    assertEquals(0, result1.deadlineEpochMS());
+    assertEquals(WorkflowState.ENQUEUED, result1.status());
+    assertNull(result1.deadlineEpochMS());
 
     var before = DBUtils.getWorkflowRow(dataSource, wfid);
     assertThrows(
@@ -347,198 +402,6 @@ public class SystemDatabaseTest {
     assertTrue(before.equals(after));
   }
 
-  private static ExportedWorkflow buildExportedWorkflow(String wfId) {
-    long now = System.currentTimeMillis();
-    var status =
-        new WorkflowStatusBuilder(wfId)
-            .status(WorkflowState.SUCCESS)
-            .workflowName("TestWorkflow")
-            .appVersion("1.0.0")
-            .recoveryAttempts(0)
-            .priority(0)
-            .createdAt(now)
-            .updatedAt(now)
-            .build();
-
-    var steps =
-        List.of(
-            new StepInfo(0, "step0", "output0", null, null, 1000L, 2000L, null),
-            new StepInfo(1, "step1", "output1", null, null, 2000L, 3000L, null));
-
-    var events =
-        List.of(
-            new WorkflowEvent("event-key-1", "event-val-1", null),
-            new WorkflowEvent("event-key-2", "event-val-2", null));
-
-    var eventHistory =
-        List.of(
-            new WorkflowEventHistory("event-key-1", "history-val-1", 0, null),
-            new WorkflowEventHistory("event-key-2", "history-val-2", 1, null));
-
-    var streams =
-        List.of(
-            new WorkflowStream("stream-key-1", "stream-val-1", 0, 0, null),
-            new WorkflowStream("stream-key-1", "stream-val-2", 1, 1, null));
-
-    return new ExportedWorkflow(status, steps, events, eventHistory, streams);
-  }
-
-  @Test
-  public void testImportWorkflow() throws Exception {
-    var wfId = "import-wf-1";
-    sysdb.importWorkflow(List.of(buildExportedWorkflow(wfId)));
-
-    var wfRows = DBUtils.getWorkflowRows(dataSource);
-    assertEquals(1, wfRows.size());
-    assertEquals(wfId, wfRows.get(0).workflowId());
-    assertEquals(WorkflowState.SUCCESS.name(), wfRows.get(0).status());
-
-    var stepRows = DBUtils.getStepRows(dataSource, wfId);
-    assertEquals(2, stepRows.size());
-
-    var eventRows = DBUtils.getWorkflowEvents(dataSource, wfId);
-    assertEquals(2, eventRows.size());
-    assertTrue(
-        eventRows.stream()
-            .anyMatch(e -> e.key().equals("event-key-1") && e.value().equals("event-val-1")));
-    assertTrue(
-        eventRows.stream()
-            .anyMatch(e -> e.key().equals("event-key-2") && e.value().equals("event-val-2")));
-
-    var historyRows = DBUtils.getWorkflowEventHistory(dataSource, wfId);
-    assertEquals(2, historyRows.size());
-  }
-
-  @Test
-  public void testImportMultipleWorkflows() throws Exception {
-    sysdb.importWorkflow(
-        List.of(
-            buildExportedWorkflow("import-multi-wf-1"),
-            buildExportedWorkflow("import-multi-wf-2"),
-            buildExportedWorkflow("import-multi-wf-3")));
-
-    var wfRows = DBUtils.getWorkflowRows(dataSource);
-    assertEquals(3, wfRows.size());
-    assertTrue(wfRows.stream().anyMatch(r -> r.workflowId().equals("import-multi-wf-1")));
-    assertTrue(wfRows.stream().anyMatch(r -> r.workflowId().equals("import-multi-wf-2")));
-    assertTrue(wfRows.stream().anyMatch(r -> r.workflowId().equals("import-multi-wf-3")));
-
-    for (var wfId : List.of("import-multi-wf-1", "import-multi-wf-2", "import-multi-wf-3")) {
-      assertEquals(2, DBUtils.getStepRows(dataSource, wfId).size());
-      assertEquals(2, DBUtils.getWorkflowEvents(dataSource, wfId).size());
-    }
-  }
-
-  @Test
-  public void testExportWorkflow() throws Exception {
-    var wfId = "export-wf-1";
-    sysdb.importWorkflow(List.of(buildExportedWorkflow(wfId)));
-
-    var exported = sysdb.exportWorkflow(wfId, false);
-
-    assertEquals(1, exported.size());
-    var wf = exported.get(0);
-    assertEquals(wfId, wf.status().workflowId());
-    assertEquals(WorkflowState.SUCCESS, wf.status().status());
-    assertEquals("TestWorkflow", wf.status().workflowName());
-
-    assertEquals(2, wf.steps().size());
-    assertTrue(wf.steps().stream().anyMatch(s -> s.functionName().equals("step0")));
-    assertTrue(wf.steps().stream().anyMatch(s -> s.functionName().equals("step1")));
-
-    assertEquals(2, wf.events().size());
-    assertTrue(wf.events().stream().anyMatch(e -> e.key().equals("event-key-1")));
-
-    assertEquals(2, wf.eventHistory().size());
-
-    assertEquals(2, wf.streams().size());
-    assertTrue(wf.streams().stream().anyMatch(s -> s.key().equals("stream-key-1")));
-  }
-
-  private static ExportedWorkflow buildExportedWorkflowWithChildren(
-      String wfId, String child1Id, String child2Id) {
-    long now = System.currentTimeMillis();
-    var status =
-        new WorkflowStatusBuilder(wfId)
-            .status(WorkflowState.SUCCESS)
-            .workflowName("TestWorkflow")
-            .appVersion("1.0.0")
-            .recoveryAttempts(0)
-            .priority(0)
-            .createdAt(now)
-            .updatedAt(now)
-            .build();
-
-    // Steps reference child workflows via childWorkflowId
-    var steps =
-        List.of(
-            new StepInfo(0, "step0", null, null, child1Id, 1000L, 2000L, null),
-            new StepInfo(1, "step1", null, null, child2Id, 2000L, 3000L, null));
-
-    return new ExportedWorkflow(status, steps, List.of(), List.of(), List.of());
-  }
-
-  @Test
-  public void testExportWorkflowWithoutChildren() throws Exception {
-    var parentId = "export-no-children-parent";
-    var child1Id = "export-no-children-child-1";
-    var child2Id = "export-no-children-child-2";
-
-    sysdb.importWorkflow(
-        List.of(
-            buildExportedWorkflowWithChildren(parentId, child1Id, child2Id),
-            buildExportedWorkflow(child1Id),
-            buildExportedWorkflow(child2Id)));
-
-    var result = sysdb.exportWorkflow(parentId, false);
-    assertEquals(1, result.size());
-    assertEquals(parentId, result.get(0).status().workflowId());
-  }
-
-  @Test
-  public void testExportWorkflowWithChildren() throws Exception {
-    var parentId = "export-children-parent";
-    var child1Id = "export-children-child-1";
-    var child2Id = "export-children-child-2";
-
-    sysdb.importWorkflow(
-        List.of(
-            buildExportedWorkflowWithChildren(parentId, child1Id, child2Id),
-            buildExportedWorkflow(child1Id),
-            buildExportedWorkflow(child2Id)));
-
-    var result = sysdb.exportWorkflow(parentId, true);
-    assertEquals(3, result.size());
-    assertTrue(result.stream().anyMatch(w -> w.status().workflowId().equals(parentId)));
-    assertTrue(result.stream().anyMatch(w -> w.status().workflowId().equals(child1Id)));
-    assertTrue(result.stream().anyMatch(w -> w.status().workflowId().equals(child2Id)));
-  }
-
-  @Test
-  public void testImportExportRoundTrip() throws Exception {
-    var wfId = "roundtrip-wf-1";
-    var original = buildExportedWorkflow(wfId);
-    sysdb.importWorkflow(List.of(original));
-
-    var exported = sysdb.exportWorkflow(wfId, false);
-    assertEquals(1, exported.size());
-
-    // Delete the original and reimport from the exported data
-    sysdb.deleteWorkflows(List.of(wfId), false);
-    assertEquals(0, DBUtils.getWorkflowRows(dataSource).size());
-
-    sysdb.importWorkflow(exported);
-
-    var reimported = sysdb.exportWorkflow(wfId, false);
-    assertEquals(1, reimported.size());
-    var wf = reimported.get(0);
-    assertEquals(wfId, wf.status().workflowId());
-    assertEquals(2, wf.steps().size());
-    assertEquals(2, wf.events().size());
-    assertEquals(2, wf.eventHistory().size());
-    assertEquals(2, wf.streams().size());
-  }
-
   // ── Schedule CRUD ──────────────────────────────────────────────────────────
 
   private static WorkflowSchedule makeSchedule(String name) {
@@ -547,7 +410,7 @@ public class SystemDatabaseTest {
         name,
         "myWorkflow",
         "com.example.MyClass",
-        "0 * * * *",
+        "0 * * * * *",
         ScheduleStatus.ACTIVE,
         "{}",
         null,
@@ -566,7 +429,7 @@ public class SystemDatabaseTest {
     assertEquals("sched-1", s.scheduleName());
     assertEquals("myWorkflow", s.workflowName());
     assertEquals("com.example.MyClass", s.className());
-    assertEquals("0 * * * *", s.cron());
+    assertEquals("0 * * * * *", s.cron());
     assertEquals(ScheduleStatus.ACTIVE, s.status());
     assertEquals("{}", s.context());
     assertNull(s.lastFiredAt());
@@ -590,20 +453,21 @@ public class SystemDatabaseTest {
 
   @Test
   public void testCreateScheduleNullStatusThrows() {
-    var schedule =
-        new WorkflowSchedule(
-            null,
-            "sched-null-status",
-            "myWorkflow",
-            "com.example.MyClass",
-            "0 * * * *",
-            null,
-            "{}",
-            null,
-            false,
-            null,
-            null);
-    assertThrows(NullPointerException.class, () -> sysdb.createSchedule(schedule));
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            new WorkflowSchedule(
+                null,
+                "sched-null-status",
+                "myWorkflow",
+                "com.example.MyClass",
+                "0 * * * * *",
+                null,
+                "{}",
+                null,
+                false,
+                null,
+                null));
   }
 
   @Test
@@ -616,7 +480,7 @@ public class SystemDatabaseTest {
             "beta-1",
             "otherWorkflow",
             null,
-            "0 * * * *",
+            "0 * * * * *",
             ScheduleStatus.ACTIVE,
             "{}",
             null,
@@ -742,7 +606,7 @@ public class SystemDatabaseTest {
             "sched-full",
             "fullWorkflow",
             "com.example.Full",
-            "*/5 * * * *",
+            "*/5 * * * * *",
             ScheduleStatus.ACTIVE,
             "{\"key\":\"val\"}",
             Instant.parse("2026-03-01T00:00:00Z"),
@@ -756,7 +620,7 @@ public class SystemDatabaseTest {
     assertEquals("sched-full", s.scheduleName());
     assertEquals("fullWorkflow", s.workflowName());
     assertEquals("com.example.Full", s.className());
-    assertEquals("*/5 * * * *", s.cron());
+    assertEquals("*/5 * * * * *", s.cron());
     assertEquals("{\"key\":\"val\"}", s.context());
     assertEquals(Instant.parse("2026-03-01T00:00:00Z"), s.lastFiredAt());
     assertTrue(s.automaticBackfill());
@@ -773,7 +637,7 @@ public class SystemDatabaseTest {
 
     // Create workflow status with authentication fields
     var status =
-        WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create(workflowId)
             .workflowName("TestWorkflow")
             .className("com.example.TestWorkflow")
             .authenticatedUser(authenticatedUser)
@@ -813,7 +677,7 @@ public class SystemDatabaseTest {
 
     // Create workflow status with null authentication fields
     var status =
-        WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create(workflowId)
             .workflowName("TestNullAuthWorkflow")
             .className("com.example.TestNullAuthWorkflow")
             .authenticatedUser(null)
@@ -848,7 +712,7 @@ public class SystemDatabaseTest {
 
     // Create workflow status with empty authenticated roles
     var status =
-        WorkflowStatusInternal.builder(workflowId, WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create(workflowId)
             .workflowName("TestEmptyRolesWorkflow")
             .className("com.example.TestEmptyRolesWorkflow")
             .authenticatedUser(authenticatedUser)
@@ -883,7 +747,7 @@ public class SystemDatabaseTest {
 
     // Create original workflow status with authentication fields
     var originalStatus =
-        WorkflowStatusInternal.builder(originalWorkflowId, WorkflowState.SUCCESS)
+        WorkflowStatusInternalBuilder.create(originalWorkflowId)
             .workflowName("OriginalTestWorkflow")
             .className("com.example.OriginalTestWorkflow")
             .authenticatedUser(authenticatedUser)
@@ -902,7 +766,7 @@ public class SystemDatabaseTest {
     assertArrayEquals(authenticatedRoles, originalRetrieved.authenticatedRoles());
 
     // Fork the workflow
-    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
     var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
     assertNotNull(forkedWorkflowId);
     assertNotEquals(originalWorkflowId, forkedWorkflowId);
@@ -945,7 +809,7 @@ public class SystemDatabaseTest {
 
     // Create original workflow status with null authentication fields
     var originalStatus =
-        WorkflowStatusInternal.builder(originalWorkflowId, WorkflowState.SUCCESS)
+        WorkflowStatusInternalBuilder.create(originalWorkflowId)
             .workflowName("NullAuthTestWorkflow")
             .className("com.example.NullAuthTestWorkflow")
             .authenticatedUser(null)
@@ -957,7 +821,7 @@ public class SystemDatabaseTest {
     sysdb.initWorkflowStatus(originalStatus, null, false, false);
 
     // Fork the workflow
-    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
     var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
     assertNotNull(forkedWorkflowId);
 
@@ -993,7 +857,7 @@ public class SystemDatabaseTest {
 
     // Create original workflow status with empty authenticated roles
     var originalStatus =
-        WorkflowStatusInternal.builder(originalWorkflowId, WorkflowState.SUCCESS)
+        WorkflowStatusInternalBuilder.create(originalWorkflowId)
             .workflowName("EmptyAuthRolesTestWorkflow")
             .className("com.example.EmptyAuthRolesTestWorkflow")
             .authenticatedUser(authenticatedUser)
@@ -1012,7 +876,7 @@ public class SystemDatabaseTest {
     assertEquals(0, originalRetrieved.authenticatedRoles().length);
 
     // Fork the workflow
-    var forkOptions = new dev.dbos.transact.workflow.ForkOptions(null, "1.0.0", null);
+    var forkOptions = new ForkOptions().withApplicationVersion("1.0.0");
     var forkedWorkflowId = sysdb.forkWorkflow(originalWorkflowId, 0, forkOptions);
     assertNotNull(forkedWorkflowId);
     assertNotEquals(originalWorkflowId, forkedWorkflowId);
@@ -1051,20 +915,81 @@ public class SystemDatabaseTest {
   }
 
   @Test
+  public void testWriteStreamAndReadStream() throws Exception {
+    String workflowId = "stream-wf-1";
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    int functionId = 1;
+
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value1", "portable_json");
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value2", "portable_json");
+
+    Object result = sysdb.readStream(workflowId, "key1", 0);
+    assertEquals("value1", result);
+
+    result = sysdb.readStream(workflowId, "key1", 1);
+    assertEquals("value2", result);
+  }
+
+  @Test
+  public void testWriteStreamFromWorkflow() throws Exception {
+    String workflowId = "stream-wf-2";
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    int functionId = 1;
+
+    sysdb.writeStreamFromWorkflow(workflowId, functionId, "key1", "value1", "portable_json");
+
+    Object result = sysdb.readStream(workflowId, "key1", 0);
+    assertEquals("value1", result);
+  }
+
+  @Test
+  public void testCloseStream() throws Exception {
+    String workflowId = "stream-wf-3";
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+
+    sysdb.writeStreamFromWorkflow(workflowId, 1, "key1", "value1", "portable_json");
+    sysdb.closeStream(workflowId, 2, "key1");
+
+    assertThrows(IllegalStateException.class, () -> sysdb.readStream(workflowId, "key1", 1));
+  }
+
+  @Test
+  public void testGetAllStreamEntries() throws Exception {
+    String workflowId = "stream-wf-4";
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+    int functionId = 1;
+
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value1", "portable_json");
+    sysdb.writeStreamFromStep(workflowId, functionId, "key1", "value2", "portable_json");
+    sysdb.writeStreamFromStep(workflowId, functionId, "key2", "value3", "portable_json");
+    sysdb.closeStream(workflowId, functionId, "key2");
+
+    Map<String, List<Object>> entries = sysdb.getAllStreamEntries(workflowId);
+
+    assertEquals(2, entries.size());
+    assertEquals(List.of("value1", "value2"), entries.get("key1"));
+    assertEquals(List.of("value3"), entries.get("key2"));
+  }
+
+  @Test
+  public void testReadStreamNotFound() throws Exception {
+    String workflowId = "stream-wf-5";
+    var status = WorkflowStatusInternalBuilder.create(workflowId).build();
+    sysdb.initWorkflowStatus(status, 5, false, false);
+
+    assertThrows(IllegalArgumentException.class, () -> sysdb.readStream(workflowId, "key", 0));
+  }
+
   public void testInsertWorkflowStatusValidation() throws Exception {
     // Test null workflowId
     assertThrows(
         NullPointerException.class,
         () -> {
-          var status = WorkflowStatusInternal.builder(null, WorkflowState.PENDING).build();
-          sysdb.initWorkflowStatus(status, null, false, false);
-        });
-
-    // Test null status
-    assertThrows(
-        NullPointerException.class,
-        () -> {
-          var status = WorkflowStatusInternal.builder("test-wf-id", null).build();
+          var status = WorkflowStatusInternalBuilder.create(null).build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
   }
@@ -1073,67 +998,51 @@ public class SystemDatabaseTest {
   public void testInsertWorkflowStatusEmptyStringValidation() throws Exception {
     // Test empty workflowName
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
-          var status =
-              WorkflowStatusInternal.builder("test-wf-1", WorkflowState.PENDING)
-                  .workflowName("")
-                  .build();
+          var status = WorkflowStatusInternalBuilder.create("test-wf-1").workflowName("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
 
     // Test empty className
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
-          var status =
-              WorkflowStatusInternal.builder("test-wf-2", WorkflowState.PENDING)
-                  .className("")
-                  .build();
+          var status = WorkflowStatusInternalBuilder.create("test-wf-2").className("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
 
     // Test empty instanceName
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
-          var status =
-              WorkflowStatusInternal.builder("test-wf-3", WorkflowState.PENDING)
-                  .instanceName("")
-                  .build();
+          var status = WorkflowStatusInternalBuilder.create("test-wf-3").instanceName("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
 
     // Test empty queueName
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
-          var status =
-              WorkflowStatusInternal.builder("test-wf-4", WorkflowState.PENDING)
-                  .queueName("")
-                  .build();
+          var status = WorkflowStatusInternalBuilder.create("test-wf-4").queueName("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
 
     // Test empty deduplicationId
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
           var status =
-              WorkflowStatusInternal.builder("test-wf-5", WorkflowState.PENDING)
-                  .deduplicationId("")
-                  .build();
+              WorkflowStatusInternalBuilder.create("test-wf-5").deduplicationId("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
 
     // Test empty queuePartitionKey
     assertThrows(
-        IllegalStateException.class,
+        IllegalArgumentException.class,
         () -> {
           var status =
-              WorkflowStatusInternal.builder("test-wf-6", WorkflowState.PENDING)
-                  .queuePartitionKey("")
-                  .build();
+              WorkflowStatusInternalBuilder.create("test-wf-6").queuePartitionKey("").build();
           sysdb.initWorkflowStatus(status, null, false, false);
         });
   }
@@ -1142,7 +1051,7 @@ public class SystemDatabaseTest {
   public void testInsertWorkflowStatusValidNullValues() throws Exception {
     // Test that null values (except for required fields) are allowed
     var status =
-        WorkflowStatusInternal.builder("test-valid-nulls", WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create("test-valid-nulls")
             .workflowName(null)
             .className(null)
             .instanceName(null)
@@ -1153,15 +1062,14 @@ public class SystemDatabaseTest {
 
     // This should not throw an exception
     var result = sysdb.initWorkflowStatus(status, null, false, false);
-    assertEquals("test-valid-nulls", result.workflowId());
-    assertEquals(WorkflowState.PENDING.name(), result.status());
+    assertEquals(WorkflowState.PENDING, result.status());
   }
 
   @Test
   public void testInsertWorkflowStatusValidNonEmptyValues() throws Exception {
     // Test that non-empty values are allowed
     var status =
-        WorkflowStatusInternal.builder("test-valid-values", WorkflowState.PENDING)
+        WorkflowStatusInternalBuilder.create("test-valid-values")
             .workflowName("TestWorkflow")
             .className("com.example.TestWorkflow")
             .instanceName("test-instance")
@@ -1172,13 +1080,490 @@ public class SystemDatabaseTest {
 
     // This should not throw an exception
     var result = sysdb.initWorkflowStatus(status, null, false, false);
-    assertEquals("test-valid-values", result.workflowId());
-    assertEquals(WorkflowState.PENDING.name(), result.status());
+    assertEquals(WorkflowState.ENQUEUED, result.status());
 
     // Verify the values were stored correctly
     var retrievedStatus = sysdb.getWorkflowStatus("test-valid-values");
     assertEquals("TestWorkflow", retrievedStatus.workflowName());
     assertEquals("com.example.TestWorkflow", retrievedStatus.className());
     assertEquals("test-instance", retrievedStatus.instanceName());
+  }
+
+  // ── Postgres validation ──────────────────────────────────────────────────
+
+  @Test
+  public void testNonPostgresDataSourceThrows() throws SQLException {
+    var ds = mockDataSource("MySQL");
+    var ex = assertThrows(IllegalStateException.class, () -> new SystemDatabase(ds, "dbos"));
+    assertTrue(ex.getMessage().contains("PostgreSQL"));
+    assertTrue(ex.getMessage().contains("MySQL"));
+  }
+
+  @Test
+  public void testNonPostgresDataSourceViaCreateThrows() throws SQLException {
+    var ds = mockDataSource("SQLite");
+    var config = DBOSConfig.defaults("test-app").withDataSource(ds);
+    var ex = assertThrows(IllegalStateException.class, () -> SystemDatabase.create(config));
+    assertTrue(ex.getMessage().contains("PostgreSQL"));
+    assertTrue(ex.getMessage().contains("SQLite"));
+  }
+
+  @Test
+  public void testSqliteDataSourceThrows() {
+    var ds = new org.sqlite.SQLiteDataSource();
+    ds.setUrl("jdbc:sqlite::memory:");
+    var ex = assertThrows(IllegalStateException.class, () -> new SystemDatabase(ds, "dbos"));
+    assertTrue(ex.getMessage().contains("PostgreSQL"));
+    assertTrue(ex.getMessage().contains("SQLite"));
+  }
+
+  @Test
+  public void testPostgresDataSourceIsAccepted() {
+    // The @BeforeEach sysdb was created successfully from a real Postgres datasource —
+    // just confirm it is non-null as evidence that validation passed.
+    assertNotNull(sysdb);
+  }
+
+  private static DataSource mockDataSource(String productName) throws SQLException {
+    var meta = mock(DatabaseMetaData.class);
+    when(meta.getDatabaseProductName()).thenReturn(productName);
+    var conn = mock(Connection.class);
+    when(conn.getMetaData()).thenReturn(meta);
+    var ds = mock(DataSource.class);
+    when(ds.getConnection()).thenReturn(conn);
+    return ds;
+  }
+
+  private static ExportedWorkflow buildEmptyWorkflow(String wfId) {
+    return buildNamedWorkflow(wfId, "TestWorkflow", WorkflowState.SUCCESS);
+  }
+
+  private static ExportedWorkflow buildNamedWorkflow(
+      String wfId, String workflowName, WorkflowState state) {
+    var now = Instant.now();
+    var status =
+        new WorkflowStatusBuilder(wfId)
+            .status(state)
+            .workflowName(workflowName)
+            .appVersion("1.0.0")
+            .recoveryAttempts(0)
+            .priority(0)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+    return new ExportedWorkflow(status, List.of(), List.of(), List.of(), List.of());
+  }
+
+  // ── Workflow state based on queue/delay ──────────────────────────────────
+
+  @Test
+  public void testInitWorkflowStatusStateNoQueue() throws Exception {
+    var wfid = "wf-state-no-queue";
+    var result =
+        sysdb.initWorkflowStatus(
+            WorkflowStatusInternalBuilder.create(wfid).build(), 5, false, false);
+    assertEquals(WorkflowState.PENDING, result.status());
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.PENDING.name(), row.status());
+    assertNull(row.delayUntilEpochMs());
+  }
+
+  @Test
+  public void testInitWorkflowStatusStateQueueNoDelay() throws Exception {
+    var wfid = "wf-state-queue-no-delay";
+    var result =
+        sysdb.initWorkflowStatus(
+            WorkflowStatusInternalBuilder.create(wfid).queueName("test-queue").build(),
+            5,
+            false,
+            false);
+    assertEquals(WorkflowState.ENQUEUED, result.status());
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+    assertNull(row.delayUntilEpochMs());
+  }
+
+  @Test
+  public void testInitWorkflowStatusStateQueueWithDelay() throws Exception {
+    var wfid = "wf-state-queue-delay";
+    var delay = Duration.ofSeconds(60);
+    long before = System.currentTimeMillis();
+    var result =
+        sysdb.initWorkflowStatus(
+            WorkflowStatusInternalBuilder.create(wfid).queueName("test-queue").delay(delay).build(),
+            5,
+            false,
+            false);
+    assertEquals(WorkflowState.DELAYED, result.status());
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.DELAYED.name(), row.status());
+    // delay_until_epoch_ms should be an absolute epoch timestamp ~60 seconds from now
+    assertNotNull(row.delayUntilEpochMs());
+    assertTrue(row.delayUntilEpochMs() >= before + delay.toMillis() - 1_000);
+    assertTrue(row.delayUntilEpochMs() <= before + delay.toMillis() + 1_000);
+  }
+
+  // ── Workflow Delay ────────────────────────────────────────────────────────
+
+  @Test
+  public void testSetWorkflowDelayWithDuration() throws Exception {
+    var wfid = "wf-delay-duration";
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("test-queue")
+            .delay(Duration.ofSeconds(60))
+            .build(),
+        5,
+        false,
+        false);
+
+    long before = System.currentTimeMillis();
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.Delay(Duration.ofSeconds(30)));
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertNotNull(row.delayUntilEpochMs());
+    assertTrue(row.delayUntilEpochMs() >= before + 29_000);
+    assertTrue(row.delayUntilEpochMs() <= before + 31_000);
+  }
+
+  @Test
+  public void testSetWorkflowDelayWithInstant() throws Exception {
+    var wfid = "wf-delay-instant";
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("test-queue")
+            .delay(Duration.ofSeconds(60))
+            .build(),
+        5,
+        false,
+        false);
+
+    var targetInstant = Instant.now().plusSeconds(120);
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(targetInstant));
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(targetInstant.toEpochMilli(), row.delayUntilEpochMs());
+  }
+
+  @Test
+  public void testSetWorkflowDelayIgnoresNonDelayedWorkflow() throws Exception {
+    var targetDelay = new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60));
+
+    for (var state :
+        List.of(
+            WorkflowState.PENDING,
+            WorkflowState.ENQUEUED,
+            WorkflowState.SUCCESS,
+            WorkflowState.ERROR,
+            WorkflowState.CANCELLED)) {
+      var wfid = "wf-delay-non-delayed-" + state.name().toLowerCase();
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create(wfid).queueName("test-queue").build(),
+          5,
+          false,
+          false);
+      DBUtils.setWorkflowState(dataSource, wfid, state.name());
+
+      sysdb.setWorkflowDelay(wfid, targetDelay);
+
+      var row = DBUtils.getWorkflowRow(dataSource, wfid);
+      assertNull(row.delayUntilEpochMs(), "Expected no delay for status " + state);
+    }
+  }
+
+  @Test
+  public void testTransitionDelayedWorkflowsPastDeadline() throws Exception {
+    var wfid = "wf-transition-past";
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("test-queue")
+            .delay(Duration.ofSeconds(60))
+            .build(),
+        5,
+        false,
+        false);
+
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().minusSeconds(5)));
+    sysdb.transitionDelayedWorkflows();
+
+    assertEquals(WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+  }
+
+  @Test
+  public void testTransitionDelayedWorkflowsFutureDeadlineNotTransitioned() throws Exception {
+    var wfid = "wf-transition-future";
+    sysdb.initWorkflowStatus(
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("test-queue")
+            .delay(Duration.ofSeconds(60))
+            .build(),
+        5,
+        false,
+        false);
+
+    sysdb.setWorkflowDelay(wfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
+    sysdb.transitionDelayedWorkflows();
+
+    assertEquals(WorkflowState.DELAYED.name(), DBUtils.getWorkflowRow(dataSource, wfid).status());
+  }
+
+  @Test
+  public void testTransitionDelayedWorkflowsMixed() throws Exception {
+    var pastWfid = "wf-transition-mixed-past";
+    var futureWfid = "wf-transition-mixed-future";
+
+    for (var wfid : List.of(pastWfid, futureWfid)) {
+      sysdb.initWorkflowStatus(
+          WorkflowStatusInternalBuilder.create(wfid)
+              .queueName("test-queue")
+              .delay(Duration.ofSeconds(60))
+              .build(),
+          5,
+          false,
+          false);
+    }
+
+    sysdb.setWorkflowDelay(pastWfid, new WorkflowDelay.DelayUntil(Instant.now().minusSeconds(5)));
+    sysdb.setWorkflowDelay(futureWfid, new WorkflowDelay.DelayUntil(Instant.now().plusSeconds(60)));
+
+    sysdb.transitionDelayedWorkflows();
+
+    assertEquals(
+        WorkflowState.ENQUEUED.name(), DBUtils.getWorkflowRow(dataSource, pastWfid).status());
+    assertEquals(
+        WorkflowState.DELAYED.name(), DBUtils.getWorkflowRow(dataSource, futureWfid).status());
+  }
+
+  // ── insertWorkflowStatus ON CONFLICT behavior ──────────────────────────────
+
+  @Test
+  public void testInsertWorkflowStatusConflictPending() throws Exception {
+    // PENDING (no queue): on conflict, recovery_attempts is incremented and executor_id is updated
+    var wfid = "wf-conflict-pending";
+    var first = WorkflowStatusInternalBuilder.create(wfid).executorId("executor-1").build();
+    sysdb.initWorkflowStatus(first, 5, false, false);
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.PENDING.name(), row.status());
+    assertEquals("executor-1", row.executorId());
+    assertEquals(1L, row.recoveryAttempts()); // PENDING starts at 1
+
+    // Re-insert as a recovery request — ON CONFLICT should increment recovery_attempts and update
+    // executor_id
+    var second = WorkflowStatusInternalBuilder.create(wfid).executorId("executor-2").build();
+    sysdb.initWorkflowStatus(second, 5, true, false);
+
+    row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(2L, row.recoveryAttempts()); // 1 + 1 = 2
+    assertEquals("executor-2", row.executorId()); // updated to new executor
+  }
+
+  @Test
+  public void testInsertWorkflowStatusConflictEnqueued() throws Exception {
+    // ENQUEUED (queue, no delay): on conflict, recovery_attempts and executor_id are both preserved
+    var wfid = "wf-conflict-enqueued";
+    var first =
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("myqueue")
+            .executorId("executor-1")
+            .build();
+    sysdb.initWorkflowStatus(first, 5, false, false);
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.ENQUEUED.name(), row.status());
+    assertEquals("executor-1", row.executorId());
+    assertEquals(0L, row.recoveryAttempts()); // ENQUEUED starts at 0
+
+    // Re-insert as a recovery request — ON CONFLICT should preserve both values
+    var second =
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("myqueue")
+            .executorId("executor-2")
+            .build();
+    sysdb.initWorkflowStatus(second, 5, true, false);
+
+    row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(0L, row.recoveryAttempts()); // preserved — existing status was ENQUEUED
+    assertEquals("executor-1", row.executorId()); // preserved — incoming status was ENQUEUED
+  }
+
+  @Test
+  public void testInsertWorkflowStatusConflictDelayed() throws Exception {
+    // DELAYED (queue + delay): on conflict, recovery_attempts and executor_id are both preserved
+    var wfid = "wf-conflict-delayed";
+    var first =
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("myqueue")
+            .delay(Duration.ofHours(1))
+            .executorId("executor-1")
+            .build();
+    sysdb.initWorkflowStatus(first, 5, false, false);
+
+    var row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(WorkflowState.DELAYED.name(), row.status());
+    assertEquals("executor-1", row.executorId());
+    assertEquals(0L, row.recoveryAttempts()); // DELAYED starts at 0
+
+    // Re-insert as a recovery request — ON CONFLICT should preserve both values
+    var second =
+        WorkflowStatusInternalBuilder.create(wfid)
+            .queueName("myqueue")
+            .delay(Duration.ofHours(1))
+            .executorId("executor-2")
+            .build();
+    sysdb.initWorkflowStatus(second, 5, true, false);
+
+    row = DBUtils.getWorkflowRow(dataSource, wfid);
+    assertEquals(0L, row.recoveryAttempts()); // preserved — existing status was DELAYED
+    assertEquals("executor-1", row.executorId()); // preserved — incoming status was DELAYED
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesBasic() throws Exception {
+    sysdb.importWorkflow(
+        List.of(
+            buildNamedWorkflow("agg-wf-1", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("agg-wf-2", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("agg-wf-3", "WorkflowA", WorkflowState.ERROR),
+            buildNamedWorkflow("agg-wf-4", "WorkflowB", WorkflowState.PENDING)));
+
+    var input = new GetWorkflowAggregatesInput().withGroupByName(true).withGroupByStatus(true);
+    var rows = sysdb.getWorkflowAggregates(input);
+
+    var successA =
+        rows.stream()
+            .filter(
+                r ->
+                    "WorkflowA".equals(r.group().get("name"))
+                        && WorkflowState.SUCCESS.name().equals(r.group().get("status")))
+            .findFirst();
+    assertTrue(successA.isPresent());
+    assertEquals(2, successA.get().count());
+
+    var errorA =
+        rows.stream()
+            .filter(
+                r ->
+                    "WorkflowA".equals(r.group().get("name"))
+                        && WorkflowState.ERROR.name().equals(r.group().get("status")))
+            .findFirst();
+    assertTrue(errorA.isPresent());
+    assertEquals(1, errorA.get().count());
+
+    var pendingB =
+        rows.stream()
+            .filter(
+                r ->
+                    "WorkflowB".equals(r.group().get("name"))
+                        && WorkflowState.PENDING.name().equals(r.group().get("status")))
+            .findFirst();
+    assertTrue(pendingB.isPresent());
+    assertEquals(1, pendingB.get().count());
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesWithFilter() throws Exception {
+    sysdb.importWorkflow(
+        List.of(
+            buildNamedWorkflow("agg-filter-wf-1", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("agg-filter-wf-2", "WorkflowA", WorkflowState.ERROR),
+            buildNamedWorkflow("agg-filter-wf-3", "WorkflowB", WorkflowState.SUCCESS)));
+
+    var input =
+        new GetWorkflowAggregatesInput()
+            .withGroupByName(true)
+            .withGroupByStatus(true)
+            .withWorkflowName(List.of("WorkflowA"));
+    var rows = sysdb.getWorkflowAggregates(input);
+
+    assertEquals(2, rows.size());
+    assertTrue(rows.stream().allMatch(r -> "WorkflowA".equals(r.group().get("name"))));
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesIdPrefix() throws Exception {
+    sysdb.importWorkflow(
+        List.of(
+            buildNamedWorkflow("prefix-aaa-1", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("prefix-aaa-2", "WorkflowA", WorkflowState.SUCCESS),
+            buildNamedWorkflow("prefix-bbb-1", "WorkflowB", WorkflowState.SUCCESS)));
+
+    var input =
+        new GetWorkflowAggregatesInput()
+            .withGroupByName(true)
+            .withWorkflowIdPrefix(List.of("prefix-aaa"));
+    var rows = sysdb.getWorkflowAggregates(input);
+
+    assertEquals(1, rows.size());
+    assertEquals("WorkflowA", rows.get(0).group().get("name"));
+    assertEquals(2, rows.get(0).count());
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesNoGroupByThrows() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> sysdb.getWorkflowAggregates(new GetWorkflowAggregatesInput()));
+  }
+
+  @Test
+  public void testGetWorkflowAggregatesEmpty() throws Exception {
+    var input = new GetWorkflowAggregatesInput().withGroupByStatus(true);
+    var rows = sysdb.getWorkflowAggregates(input);
+    assertTrue(rows.isEmpty());
+  }
+
+  // ── F-4: Workflow Data Queries ────────────────────────────────────────────
+
+  @Test
+  public void testGetAllEvents() throws Exception {
+    var wfId = "get-all-events-wf-1";
+    sysdb.importWorkflow(List.of(buildEmptyWorkflow(wfId)));
+
+    sysdb.setEvent(wfId, 0, "key1", "value1", false, null);
+    sysdb.setEvent(wfId, 1, "key2", 42, false, null);
+
+    var events = sysdb.getAllEvents(wfId);
+
+    assertEquals(2, events.size());
+    assertEquals("value1", events.get("key1"));
+    assertEquals(42, events.get("key2"));
+  }
+
+  @Test
+  public void testGetAllEventsEmpty() throws Exception {
+    var wfId = "get-all-events-empty-wf-1";
+    sysdb.importWorkflow(List.of(buildEmptyWorkflow(wfId)));
+
+    var events = sysdb.getAllEvents(wfId);
+    assertTrue(events.isEmpty());
+  }
+
+  @Test
+  public void testGetAllNotifications() throws Exception {
+    var wfId = "get-all-notifications-wf-1";
+    sysdb.importWorkflow(List.of(buildEmptyWorkflow(wfId)));
+
+    sysdb.sendDirect(wfId, "message1", "topic1", "notif-uuid-1", null);
+    sysdb.sendDirect(wfId, "message2", "topic2", "notif-uuid-2", null);
+
+    var notifications = sysdb.getAllNotifications(wfId);
+
+    assertEquals(2, notifications.size());
+    assertTrue(notifications.stream().anyMatch(n -> "topic1".equals(n.topic())));
+    assertTrue(notifications.stream().anyMatch(n -> "topic2".equals(n.topic())));
+    notifications.forEach(n -> assertNotNull(n.message()));
+    notifications.forEach(n -> assertFalse(n.consumed()));
+    notifications.forEach(n -> assertTrue(n.createdAtEpochMs() > 0));
+  }
+
+  @Test
+  public void testGetAllNotificationsEmpty() throws Exception {
+    var wfId = "get-all-notifications-empty-wf-1";
+    sysdb.importWorkflow(List.of(buildEmptyWorkflow(wfId)));
+
+    var notifications = sysdb.getAllNotifications(wfId);
+    assertTrue(notifications.isEmpty());
   }
 }

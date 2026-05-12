@@ -2,7 +2,6 @@ package dev.dbos.transact.internal;
 
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
-import dev.dbos.transact.execution.SchedulerService;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowClassName;
 
@@ -63,7 +62,6 @@ public class WorkflowRegistry {
             method,
             wfTag.maxRecoveryAttempts(),
             wfTag.serializationStrategy());
-    SchedulerService.validateAnnotatedWorkflowSchedule(regWorkflow);
 
     var previous = wfRegistry.putIfAbsent(fqName, regWorkflow);
     if (previous != null) {

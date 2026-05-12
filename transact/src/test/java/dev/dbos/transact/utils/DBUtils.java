@@ -15,7 +15,11 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 import javax.sql.DataSource;
 
@@ -414,5 +418,117 @@ public class DBUtils {
       }
     }
     return success;
+  }
+
+  public record StreamRow(String key, String value, int offset) {}
+
+  public static List<StreamRow> getStreamEntries(DataSource ds, String workflowId)
+      throws SQLException {
+    return getStreamEntries(ds, workflowId, null);
+  }
+
+  public static List<StreamRow> getStreamEntries(DataSource ds, String workflowId, String schema)
+      throws SQLException {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    var sql =
+        "SELECT key, value, \"offset\" FROM \"%s\".streams WHERE workflow_uuid = ? ORDER BY \"offset\""
+            .formatted(schema);
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        List<StreamRow> rows = new ArrayList<>();
+        while (rs.next()) {
+          var key = rs.getString("key");
+          var value = rs.getString("value");
+          var offset = rs.getInt("offset");
+          rows.add(new StreamRow(key, value, offset));
+        }
+        return rows;
+      }
+    }
+  }
+
+  public static List<TxStepOutputRow> getAllTxStepRows(DataSource ds) throws SQLException {
+    return getAllTxStepRows(ds, null);
+  }
+
+  public static List<TxStepOutputRow> getAllTxStepRows(DataSource ds, String schema)
+      throws SQLException {
+    var sql =
+        "SELECT * FROM \"%s\".tx_step_outputs ORDER BY created_at"
+            .formatted(SystemDatabase.sanitizeSchema(schema));
+    try (var conn = ds.getConnection();
+        var stmt = conn.createStatement();
+        var rs = stmt.executeQuery(sql)) {
+      List<TxStepOutputRow> rows = new ArrayList<>();
+      while (rs.next()) {
+        rows.add(new TxStepOutputRow(rs));
+      }
+      return rows;
+    }
+  }
+
+  public static List<TxStepOutputRow> getTxStepRows(DataSource ds, String workflowId)
+      throws SQLException {
+    return getTxStepRows(ds, workflowId, null);
+  }
+
+  public static List<TxStepOutputRow> getTxStepRows(DataSource ds, String workflowId, String schema)
+      throws SQLException {
+    var sql =
+        "SELECT * FROM \"%s\".tx_step_outputs WHERE workflow_id = ? ORDER BY step_id"
+            .formatted(SystemDatabase.sanitizeSchema(schema));
+    try (var conn = ds.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, Objects.requireNonNull(workflowId));
+      try (var rs = stmt.executeQuery()) {
+        List<TxStepOutputRow> rows = new ArrayList<>();
+        while (rs.next()) {
+          rows.add(new TxStepOutputRow(rs));
+        }
+        return rows;
+      }
+    }
+  }
+
+  public static List<Map<String, Object>> dumpResultSet(ResultSet rs) throws SQLException {
+    List<Map<String, Object>> results = new ArrayList<>();
+    var metaData = rs.getMetaData();
+    var columnCount = metaData.getColumnCount();
+    while (rs.next()) {
+      Map<String, Object> map = new HashMap<>();
+      for (var i = 1; i <= columnCount; i++) {
+        map.put(metaData.getColumnLabel(i), rs.getObject(i));
+      }
+      results.add(map);
+    }
+    return results;
+  }
+
+  public static Collection<String> getTables(PgContainer pg, String schema) throws SQLException {
+    try (var ds = pg.dataSource()) {
+      return getTables(ds, schema);
+    }
+  }
+
+  public static Collection<String> getTables(DataSource ds, String schema) throws SQLException {
+    try (var conn = ds.getConnection()) {
+      return getTables(conn, schema);
+    }
+  }
+
+  public static Collection<String> getTables(Connection conn, String schema) throws SQLException {
+    List<String> tables = new ArrayList<>();
+    try (var rs = conn.getMetaData().getTables(null, schema, null, null)) {
+      while (rs.next()) {
+        var name = rs.getString("TABLE_NAME");
+        var type = rs.getString("TABLE_TYPE");
+        if ("TABLE".equals(type)) {
+          tables.add(name);
+        }
+      }
+    }
+    return tables;
   }
 }

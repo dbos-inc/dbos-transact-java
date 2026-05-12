@@ -15,19 +15,17 @@ public interface DBOSSerializer {
    * Serialize a value to a string.
    *
    * @param value The value to serialize
-   * @param noHistoricalWrapper The value is not expected to have a wrapper enclosing array
    * @return The serialized string representation
    */
-  String stringify(Object value, boolean noHistoricalWrapper);
+  String serialize(Object value);
 
   /**
    * Deserialize a string back to a value.
    *
    * @param text A serialized string (potentially null)
-   * @param noHistoricalWrapper The value is not expected to have a wrapper enclosing array
    * @return The deserialized value, or null if the input was null
    */
-  Object parse(String text, boolean noHistoricalWrapper);
+  Object deserialize(String text);
 
   /**
    * Serialize a Throwable to a string.
@@ -35,7 +33,7 @@ public interface DBOSSerializer {
    * @param throwable The value to serialize
    * @return The serialized string representation
    */
-  String stringifyThrowable(Throwable throwable);
+  String serializeThrowable(Throwable throwable);
 
   /**
    * Deserialize a string back to a value.
@@ -43,5 +41,5 @@ public interface DBOSSerializer {
    * @param text A serialized string (potentially null)
    * @return The deserialized Throwable, or null if the input was null
    */
-  Throwable parseThrowable(String text);
+  Throwable deserializeThrowable(String text);
 }

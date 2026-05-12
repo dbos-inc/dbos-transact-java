@@ -5,7 +5,7 @@ import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.workflow.Queue;
 
 import java.time.Duration;
-import java.util.List;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -46,7 +46,7 @@ public class QueueService implements AutoCloseable {
     paused.set(false);
   }
 
-  public void start(List<Queue> queues, Set<String> listenQueues) {
+  public void start(Collection<Queue> queues, Set<String> listenQueues) {
     if (this.execServiceRef.get() == null) {
       var procCount = Runtime.getRuntime().availableProcessors();
       var scheduler = Executors.newScheduledThreadPool(procCount);
@@ -69,13 +69,18 @@ public class QueueService implements AutoCloseable {
     return this.execServiceRef.get() == null;
   }
 
-  private void startQueueListeners(List<Queue> queues, Set<String> listenQueues) {
+  private void startQueueListeners(Collection<Queue> queues, Set<String> listenQueues) {
     logger.debug("startQueueListeners");
 
     final var executorId = dbosExecutor.executorId();
     final var appVersion = dbosExecutor.appVersion();
     final Duration minPollingInterval = Duration.ofSeconds(1);
     final Duration maxPollingInterval = Duration.ofSeconds(120);
+
+    var execService = execServiceRef.get();
+    if (execService != null) {
+      execService.scheduleAtFixedRate(this::transitionDelayedWorkflows, 1, 1, TimeUnit.SECONDS);
+    }
 
     for (var _queue : queues) {
 
@@ -134,7 +139,7 @@ public class QueueService implements AutoCloseable {
               }
 
               try {
-                if (queue.partitionedEnabled()) {
+                if (queue.partitioningEnabled()) {
                   var partitions = systemDatabase.getQueuePartitions(queue.name());
                   for (var partition : partitions) {
                     processPartition(partition);
@@ -162,6 +167,16 @@ public class QueueService implements AutoCloseable {
           };
 
       task.schedule();
+    }
+  }
+
+  private void transitionDelayedWorkflows() {
+    if (!paused.get()) {
+      try {
+        systemDatabase.transitionDelayedWorkflows();
+      } catch (Throwable e) {
+        logger.error("Exception transitioning delayed workflows", e);
+      }
     }
   }
 }

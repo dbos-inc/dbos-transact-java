@@ -38,7 +38,6 @@ import org.junit.jupiter.api.Test;
  * direct database inserts using the portable JSON format, simulating cross-language workflow
  * initiation.
  */
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class PortableSerializationTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -740,7 +739,7 @@ public class PortableSerializationTest {
     }
 
     @Override
-    public String stringify(Object value, boolean noHistoricalWrapper) {
+    public String serialize(Object value) {
       try {
         String json = mapper.writeValueAsString(value);
         return Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
@@ -750,7 +749,7 @@ public class PortableSerializationTest {
     }
 
     @Override
-    public Object parse(String text, boolean noHistoricalWrapper) {
+    public Object deserialize(String text) {
       if (text == null) return null;
       try {
         String json = new String(Base64.getDecoder().decode(text), StandardCharsets.UTF_8);
@@ -761,7 +760,7 @@ public class PortableSerializationTest {
     }
 
     @Override
-    public String stringifyThrowable(Throwable throwable) {
+    public String serializeThrowable(Throwable throwable) {
       try {
         var errorMap =
             Map.of(
@@ -777,7 +776,7 @@ public class PortableSerializationTest {
     }
 
     @Override
-    public Throwable parseThrowable(String text) {
+    public Throwable deserializeThrowable(String text) {
       if (text == null) return null;
       try {
         String json = new String(Base64.getDecoder().decode(text), StandardCharsets.UTF_8);

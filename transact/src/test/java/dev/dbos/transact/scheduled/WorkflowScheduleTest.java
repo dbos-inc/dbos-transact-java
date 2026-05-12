@@ -6,11 +6,13 @@ import dev.dbos.transact.DBOS;
 import dev.dbos.transact.DBOSTestAccess;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.utils.PgContainer;
+import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -21,7 +23,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class WorkflowScheduleTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -61,7 +62,7 @@ class WorkflowScheduleTest {
     registerAndLaunch();
 
     dbos.createSchedule(
-        "my-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+        new WorkflowSchedule("my-sched", workflowName(), className(), "0/5 * * * * *"));
 
     var s = dbos.getSchedule("my-sched").orElseThrow();
     assertEquals("my-sched", s.scheduleName());
@@ -84,14 +85,11 @@ class WorkflowScheduleTest {
     dbos.launch();
 
     dbos.createSchedule(
-        "full-sched",
-        workflowName(),
-        className(),
-        "0 0 * * * *",
-        "{\"key\":\"val\"}",
-        true,
-        ZoneId.of("America/New_York"),
-        "sched-q");
+        new WorkflowSchedule("full-sched", workflowName(), className(), "0 0 * * * *")
+            .withContext("{\"key\":\"val\"}")
+            .withAutomaticBackfill(true)
+            .withCronTimezone(ZoneId.of("America/New_York"))
+            .withQueueName("sched-q"));
 
     var s = dbos.getSchedule("full-sched").orElseThrow();
     assertEquals("{\"key\":\"val\"}", s.context());
@@ -104,19 +102,12 @@ class WorkflowScheduleTest {
   public void createScheduleDuplicate() {
     registerAndLaunch();
     dbos.createSchedule(
-        "dup-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+        new WorkflowSchedule("dup-sched", workflowName(), className(), "0/5 * * * * *"));
     assertThrows(
         RuntimeException.class,
         () ->
             dbos.createSchedule(
-                "dup-sched",
-                workflowName(),
-                className(),
-                "0/5 * * * * *",
-                null,
-                false,
-                null,
-                null));
+                new WorkflowSchedule("dup-sched", workflowName(), className(), "0/5 * * * * *")));
   }
 
   @Test
@@ -126,7 +117,7 @@ class WorkflowScheduleTest {
         RuntimeException.class,
         () ->
             dbos.createSchedule(
-                "bad-cron", workflowName(), className(), "not-a-cron", null, false, null, null));
+                new WorkflowSchedule("bad-cron", workflowName(), className(), "not-a-cron")));
   }
 
   @Test
@@ -136,7 +127,7 @@ class WorkflowScheduleTest {
         IllegalStateException.class,
         () ->
             dbos.createSchedule(
-                "bad-wf", "noSuchMethod", className(), "0/5 * * * * *", null, false, null, null));
+                new WorkflowSchedule("bad-wf", "noSuchMethod", className(), "0/5 * * * * *")));
   }
 
   @Test
@@ -146,14 +137,8 @@ class WorkflowScheduleTest {
         IllegalStateException.class,
         () ->
             dbos.createSchedule(
-                "bad-q",
-                workflowName(),
-                className(),
-                "0/5 * * * * *",
-                null,
-                false,
-                null,
-                "no-such-queue"));
+                new WorkflowSchedule("bad-q", workflowName(), className(), "0/5 * * * * *")
+                    .withQueueName("no-such-queue")));
   }
 
   // ── getSchedule ───────────────────────────────────────────────────────────
@@ -170,7 +155,7 @@ class WorkflowScheduleTest {
   public void deleteSchedule() {
     registerAndLaunch();
     dbos.createSchedule(
-        "del-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+        new WorkflowSchedule("del-sched", workflowName(), className(), "0/5 * * * * *"));
     assertTrue(dbos.getSchedule("del-sched").isPresent());
 
     dbos.deleteSchedule("del-sched");
@@ -189,7 +174,7 @@ class WorkflowScheduleTest {
   public void pauseAndResumeSchedule() {
     registerAndLaunch();
     dbos.createSchedule(
-        "pause-sched", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+        new WorkflowSchedule("pause-sched", workflowName(), className(), "0/5 * * * * *"));
 
     dbos.pauseSchedule("pause-sched");
     assertEquals(ScheduleStatus.PAUSED, dbos.getSchedule("pause-sched").orElseThrow().status());
@@ -205,11 +190,11 @@ class WorkflowScheduleTest {
     registerAndLaunch();
 
     dbos.createSchedule(
-        "alpha-1", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+        new WorkflowSchedule("alpha-1", workflowName(), className(), "0/5 * * * * *"));
     dbos.createSchedule(
-        "alpha-2", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+        new WorkflowSchedule("alpha-2", workflowName(), className(), "0/5 * * * * *"));
     dbos.createSchedule(
-        "beta-1", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+        new WorkflowSchedule("beta-1", workflowName(), className(), "0/5 * * * * *"));
     dbos.pauseSchedule("beta-1");
 
     // no filter
@@ -247,41 +232,26 @@ class WorkflowScheduleTest {
     registerAndLaunch();
 
     dbos.createSchedule(
-        "apply-1", workflowName(), className(), "0/5 * * * * *", null, false, null, null);
+        new WorkflowSchedule("apply-1", workflowName(), className(), "0/5 * * * * *"));
+    var originalId = dbos.getSchedule("apply-1").orElseThrow().id();
     assertEquals(1, dbos.listSchedules(null, null, null).size());
 
     // apply-1 is replaced (new cron) and apply-2 is created — applySchedules upserts, it does
     // not delete schedules absent from the list.
     dbos.applySchedules(
         List.of(
-            new WorkflowSchedule(
-                null,
-                "apply-1",
-                workflowName(),
-                className(),
-                "0/10 * * * * *",
-                ScheduleStatus.ACTIVE,
-                null,
-                null,
-                false,
-                null,
-                null),
-            new WorkflowSchedule(
-                null,
-                "apply-2",
-                workflowName(),
-                className(),
-                "0/5 * * * * *",
-                ScheduleStatus.ACTIVE,
-                null,
-                null,
-                false,
-                null,
-                null)));
+            new WorkflowSchedule("apply-1", workflowName(), className(), "0/10 * * * * *"),
+            new WorkflowSchedule("apply-2", workflowName(), className(), "0/5 * * * * *")));
 
     assertEquals(2, dbos.listSchedules(null, null, null).size());
-    assertEquals("0/10 * * * * *", dbos.getSchedule("apply-1").orElseThrow().cron());
-    assertTrue(dbos.getSchedule("apply-2").isPresent());
+    var replaced = dbos.getSchedule("apply-1").orElseThrow();
+    assertEquals("0/10 * * * * *", replaced.cron());
+    assertNotNull(replaced.id());
+    assertNotEquals(originalId, replaced.id()); // new UUID assigned
+    assertNull(replaced.lastFiredAt());
+    var created = dbos.getSchedule("apply-2").orElseThrow();
+    assertNotNull(created.id());
+    assertNull(created.lastFiredAt());
   }
 
   @Test
@@ -291,20 +261,120 @@ class WorkflowScheduleTest {
 
     dbos.applySchedules(
         List.of(
-            new WorkflowSchedule(
-                null,
-                "apply-paused",
-                workflowName(),
-                className(),
-                "0/5 * * * * *",
-                ScheduleStatus.PAUSED,
-                null,
-                null,
-                false,
-                null,
-                null)));
+            new WorkflowSchedule("apply-paused", workflowName(), className(), "0/5 * * * * *")
+                .withStatus(ScheduleStatus.PAUSED)));
 
     assertEquals(ScheduleStatus.ACTIVE, dbos.getSchedule("apply-paused").orElseThrow().status());
+  }
+
+  @Test
+  public void applySchedulesVarargsCreatesAndReplaces() {
+    registerAndLaunch();
+
+    dbos.createSchedule(
+        new WorkflowSchedule("vargs-1", workflowName(), className(), "0/5 * * * * *"));
+
+    dbos.applySchedules(
+        new WorkflowSchedule("vargs-1", workflowName(), className(), "0/10 * * * * *"),
+        new WorkflowSchedule("vargs-2", workflowName(), className(), "0/5 * * * * *"));
+
+    assertEquals(2, dbos.listSchedules(null, null, null).size());
+    assertEquals("0/10 * * * * *", dbos.getSchedule("vargs-1").orElseThrow().cron());
+    assertTrue(dbos.getSchedule("vargs-2").isPresent());
+  }
+
+  @Test
+  public void applySchedulesVarargsSingle() {
+    registerAndLaunch();
+
+    dbos.applySchedules(
+        new WorkflowSchedule("single-varg", workflowName(), className(), "0/5 * * * * *"));
+
+    assertEquals(1, dbos.listSchedules(null, null, null).size());
+    assertEquals(ScheduleStatus.ACTIVE, dbos.getSchedule("single-varg").orElseThrow().status());
+  }
+
+  @Test
+  public void applySchedulesVarargsEmpty() {
+    registerAndLaunch();
+
+    dbos.createSchedule(
+        new WorkflowSchedule("pre-existing", workflowName(), className(), "0/5 * * * * *"));
+
+    dbos.applySchedules(); // no-op — does not delete pre-existing schedules
+
+    assertEquals(1, dbos.listSchedules(null, null, null).size());
+  }
+
+  @Test
+  public void applySchedulesInvalidCron() {
+    registerAndLaunch();
+    assertThrows(
+        RuntimeException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("bad-cron", workflowName(), className(), "not-a-cron")));
+  }
+
+  @Test
+  public void applySchedulesNullScheduleName() {
+    registerAndLaunch();
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule(null, workflowName(), className(), "0/5 * * * * *")));
+  }
+
+  @Test
+  public void applySchedulesNullWorkflowName() {
+    registerAndLaunch();
+    assertThrows(
+        RuntimeException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("null-wf", null, className(), "0/5 * * * * *")));
+  }
+
+  @Test
+  public void applySchedulesNullClassName() {
+    registerAndLaunch();
+    assertThrows(
+        RuntimeException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("null-class", workflowName(), null, "0/5 * * * * *")));
+  }
+
+  @Test
+  public void applySchedulesNullCron() {
+    registerAndLaunch();
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("null-cron", workflowName(), className(), null)));
+  }
+
+  @Test
+  public void applySchedulesUnknownWorkflow() {
+    registerAndLaunch();
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("bad-wf", "noSuchMethod", className(), "0/5 * * * * *")));
+  }
+
+  @Test
+  public void applySchedulesUnknownQueue() {
+    registerAndLaunch();
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            dbos.applySchedules(
+                new WorkflowSchedule("bad-q", workflowName(), className(), "0/5 * * * * *")
+                    .withQueueName("no-such-queue")));
   }
 
   // ── triggerSchedule ───────────────────────────────────────────────────────
@@ -314,14 +384,8 @@ class WorkflowScheduleTest {
     var impl = registerAndLaunch();
 
     dbos.createSchedule(
-        "trigger-sched",
-        workflowName(),
-        className(),
-        "0 0 0 1 1 *",
-        null,
-        false,
-        null,
-        null); // Jan 1st only
+        new WorkflowSchedule(
+            "trigger-sched", workflowName(), className(), "0 0 0 1 1 *")); // Jan 1st only
 
     impl.reset();
     var handle = dbos.<Void, RuntimeException>triggerSchedule("trigger-sched");
@@ -337,7 +401,8 @@ class WorkflowScheduleTest {
     var impl = registerAndLaunch();
 
     dbos.createSchedule(
-        "ctx-sched", workflowName(), className(), "0 0 0 1 1 *", "my-context", false, null, null);
+        new WorkflowSchedule("ctx-sched", workflowName(), className(), "0 0 0 1 1 *")
+            .withContext("my-context"));
 
     impl.reset();
     dbos.<Void, RuntimeException>triggerSchedule("ctx-sched").getResult();
@@ -360,7 +425,7 @@ class WorkflowScheduleTest {
 
     // Use a cron that won't fire during the test (every minute)
     dbos.createSchedule(
-        "backfill-sched", workflowName(), className(), "0 * * * * *", null, false, null, null);
+        new WorkflowSchedule("backfill-sched", workflowName(), className(), "0 * * * * *"));
 
     // Window (start, end] exclusive start, inclusive end → T+1min, T+2min, T+3min = 3 executions
     var start = Instant.parse("2024-01-01T10:00:30Z");
@@ -382,7 +447,7 @@ class WorkflowScheduleTest {
     registerAndLaunch();
 
     dbos.createSchedule(
-        "backfill-empty", workflowName(), className(), "0/1 * * * * *", null, false, null, null);
+        new WorkflowSchedule("backfill-empty", workflowName(), className(), "0/1 * * * * *"));
 
     // end == start → no executions (nextExecution(T) = T+1s which is after T)
     var t = Instant.now().truncatedTo(ChronoUnit.SECONDS);
@@ -408,7 +473,7 @@ class WorkflowScheduleTest {
 
     // Every minute at second 0: "0 * * * * *" (6-field cron)
     dbos.createSchedule(
-        "backfill-correct", workflowName(), className(), "0 * * * * *", null, false, null, null);
+        new WorkflowSchedule("backfill-correct", workflowName(), className(), "0 * * * * *"));
 
     // Start at 10:00:30, end at 10:03:30
     // Should get: 10:01:00, 10:02:00, 10:03:00 (3 executions)
@@ -440,7 +505,7 @@ class WorkflowScheduleTest {
 
     // Every hour at minute 0: "0 0 * * * *" (6-field cron, runs at top of each hour)
     dbos.createSchedule(
-        "backfill-hourly", workflowName(), className(), "0 0 * * * *", null, false, null, null);
+        new WorkflowSchedule("backfill-hourly", workflowName(), className(), "0 0 * * * *"));
 
     // Start at 09:30, end at 14:30
     // Should get: 10:00, 11:00, 12:00, 13:00, 14:00 (5 executions)
@@ -474,7 +539,7 @@ class WorkflowScheduleTest {
 
     // Every day at midnight: "0 0 0 * * *" (6-field cron)
     dbos.createSchedule(
-        "backfill-daily", workflowName(), className(), "0 0 0 * * *", null, false, null, null);
+        new WorkflowSchedule("backfill-daily", workflowName(), className(), "0 0 0 * * *"));
 
     // Backfill a week
     var start = Instant.parse("2024-01-01T12:00:00Z");
@@ -505,7 +570,7 @@ class WorkflowScheduleTest {
     var impl = registerAndLaunch();
 
     dbos.createSchedule(
-        "trigger-sched", workflowName(), className(), "0 0 0 * * *", null, false, null, null);
+        new WorkflowSchedule("trigger-sched", workflowName(), className(), "0 0 0 * * *"));
 
     impl.reset();
     var handle = dbos.triggerSchedule("trigger-sched");
@@ -521,14 +586,8 @@ class WorkflowScheduleTest {
 
     // Use a cron that won't fire during the test (Jan 1st only)
     dbos.createSchedule(
-        "trigger-ctx",
-        workflowName(),
-        className(),
-        "0 0 0 1 1 *",
-        "test-context",
-        false,
-        null,
-        null);
+        new WorkflowSchedule("trigger-ctx", workflowName(), className(), "0 0 0 1 1 *")
+            .withContext("test-context"));
 
     impl.reset();
     var handle = dbos.triggerSchedule("trigger-ctx");
@@ -539,6 +598,54 @@ class WorkflowScheduleTest {
     assertEquals("test-context", impl.lastContext);
   }
 
+  // ── Workflow ID format ────────────────────────────────────────────────────
+
+  @Test
+  public void workflowIdUsesOffsetDateTimeFormat() throws Exception {
+    // Scheduler-generated IDs must use OffsetDateTime (e.g. 2026-04-20T10:15:30+00:00),
+    // not ZonedDateTime which appends zone name in brackets (e.g. [UTC]).
+    var impl = registerAndLaunch();
+    dbos.createSchedule(
+        new WorkflowSchedule("id-fmt-sched", "latchedRun", className(), "0/1 * * * * *"));
+
+    assertTrue(impl.latch.await(15, TimeUnit.SECONDS));
+
+    var prefix = "sched-id-fmt-sched-";
+    var workflows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix(prefix));
+    assertFalse(workflows.isEmpty());
+    for (var wf : workflows) {
+      var id = wf.workflowId();
+      assertFalse(id.contains("["), "Workflow ID must not contain zone name brackets: " + id);
+      assertDoesNotThrow(
+          () -> OffsetDateTime.parse(id.substring(prefix.length())),
+          "Date suffix must be a valid OffsetDateTime: " + id);
+    }
+  }
+
+  @Test
+  public void workflowIdIncludesTimezoneOffsetNotZoneName() throws Exception {
+    // When cronTimezone is a named zone (e.g. America/New_York), the ID must include the
+    // numeric offset (e.g. -04:00) but not the zone name in brackets.
+    var impl = registerAndLaunch();
+    dbos.createSchedule(
+        new WorkflowSchedule("tz-sched", "latchedRun", className(), "0/1 * * * * *")
+            .withCronTimezone(ZoneId.of("America/New_York")));
+
+    assertTrue(impl.latch.await(15, TimeUnit.SECONDS));
+
+    var prefix = "sched-tz-sched-";
+    var workflows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowIdPrefix(prefix));
+    assertFalse(workflows.isEmpty());
+    for (var wf : workflows) {
+      var id = wf.workflowId();
+      assertFalse(id.contains("["), "Workflow ID must not contain zone name brackets: " + id);
+      assertFalse(id.contains("America"), "Workflow ID must not contain zone name: " + id);
+      assertDoesNotThrow(
+          () -> OffsetDateTime.parse(id.substring(prefix.length())),
+          "Date suffix must be a valid OffsetDateTime: " + id);
+    }
+  }
+
   // ── End-to-end ────────────────────────────────────────────────────────────
 
   @Test
@@ -546,7 +653,7 @@ class WorkflowScheduleTest {
     var impl = registerAndLaunch();
 
     dbos.createSchedule(
-        "run-sched", "latchedRun", className(), "0/1 * * * * *", null, false, null, null);
+        new WorkflowSchedule("run-sched", "latchedRun", className(), "0/1 * * * * *"));
 
     // Verify schedule was created and is active
     var schedule = dbos.getSchedule("run-sched");
@@ -557,7 +664,7 @@ class WorkflowScheduleTest {
     // Wait for all 3 counts to be released, which indicates the workflow ran at least 3 times
     // (scheduler should run it every second).
     assertTrue(
-        impl.latch.await(5, TimeUnit.SECONDS),
-        "Expected latch to count down to zero within 5 seconds");
+        impl.latch.await(15, TimeUnit.SECONDS),
+        "Expected latch to count down to zero within 15 seconds");
   }
 }

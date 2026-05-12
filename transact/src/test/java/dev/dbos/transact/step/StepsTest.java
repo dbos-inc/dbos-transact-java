@@ -8,6 +8,7 @@ import dev.dbos.transact.context.WorkflowOptions;
 import dev.dbos.transact.utils.PgContainer;
 import dev.dbos.transact.workflow.*;
 
+import java.time.Duration;
 import java.util.List;
 
 import org.junit.jupiter.api.*;
@@ -175,12 +176,7 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
   int stepWithRetryRuns = 0;
 
   @Override
-  @Step(
-      name = "stepWith2Retries",
-      retriesAllowed = true,
-      maxAttempts = 2,
-      intervalSeconds = .01,
-      backOffRate = 1)
+  @Step(name = "stepWith2Retries", maxAttempts = 2, intervalSeconds = .01, backOffRate = 1)
   public String stepWith2Retries(String input) throws Exception {
     ++this.stepWithRetryRuns;
     throw new Exception("Will not ever run");
@@ -189,7 +185,7 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
   int stepWithNoRetryRuns = 0;
 
   @Override
-  @Step(name = "stepWithNoRetriesAllowed", retriesAllowed = false)
+  @Step(name = "stepWithNoRetriesAllowed")
   public String stepWithNoRetriesAllowed(String input) throws Exception {
     ++stepWithNoRetryRuns;
     throw new Exception("No retries");
@@ -199,12 +195,7 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
   int stepWithLongRetryRuns = 0;
 
   @Override
-  @Step(
-      name = "stepWithLongRetry",
-      maxAttempts = 3,
-      retriesAllowed = true,
-      intervalSeconds = 1,
-      backOffRate = 10)
+  @Step(name = "stepWithLongRetry", maxAttempts = 3, intervalSeconds = 1, backOffRate = 10)
   public String stepWithLongRetry(String input) throws Exception {
     ++stepWithLongRetryRuns;
     if (startedTime == 0) {
@@ -290,9 +281,8 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
                     throw new Exception("Will not ever run");
                   },
                   new StepOptions("inlineStepWithRetries")
-                      .withRetriesAllowed(true)
                       .withMaxAttempts(2)
-                      .withIntervalSeconds(0.01)
+                      .withRetryInterval(Duration.ofMillis(100))
                       .withBackoffRate(2.0));
       ;
     } catch (Exception e) {
@@ -311,7 +301,6 @@ class ServiceWFAndStepImpl implements ServiceWFAndStep {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class StepsTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();

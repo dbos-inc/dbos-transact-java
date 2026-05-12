@@ -14,7 +14,7 @@ import static org.mockito.Mockito.when;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
-import dev.dbos.transact.json.JSONUtil;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.utils.WorkflowStatusBuilder;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.ForkOptions;
@@ -27,6 +27,7 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +38,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class AdminServerTest {
 
   int port;
@@ -245,7 +245,7 @@ class AdminServerTest {
           .then()
           .statusCode(204);
 
-      verify(mockDB).garbageCollect(eq(42L), eq(37L));
+      verify(mockDB).garbageCollect(eq(Instant.ofEpochMilli(42L)), eq(37L));
     }
   }
 
@@ -266,20 +266,20 @@ class AdminServerTest {
           .then()
           .statusCode(204);
 
-      verify(mockExec).globalTimeout(eq(42L));
+      verify(mockExec).globalTimeout(eq(Instant.ofEpochMilli(42L)));
     }
   }
 
   @Test
   public void listWorkflows() throws IOException {
 
-    List<WorkflowStatus> statuses = new ArrayList<WorkflowStatus>();
+    List<WorkflowStatus> statuses = new ArrayList<>();
     statuses.add(
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
             .workflowName("WF1")
-            .createdAt(1754936102215L)
-            .updatedAt(1754936102215L)
+            .createdAt(Instant.ofEpochMilli(1754936102215L))
+            .updatedAt(Instant.ofEpochMilli(1754936102215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -288,8 +288,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-2")
             .status(WorkflowState.PENDING)
             .workflowName("WF2")
-            .createdAt(1754936722066L)
-            .updatedAt(1754936722066L)
+            .createdAt(Instant.ofEpochMilli(1754936722066L))
+            .updatedAt(Instant.ofEpochMilli(1754936722066L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -298,8 +298,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-3")
             .status(WorkflowState.PENDING)
             .workflowName("WF3")
-            .createdAt(1754946202215L)
-            .updatedAt(1754946202215L)
+            .createdAt(Instant.ofEpochMilli(1754946202215L))
+            .updatedAt(Instant.ofEpochMilli(1754946202215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -333,8 +333,8 @@ class AdminServerTest {
 
       verify(mockDB).listWorkflows(inputCaptor.capture());
       var input = inputCaptor.getValue();
-      assertEquals("WF", input.workflowIdPrefix());
-      assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00"), input.endTime());
+      assertEquals(List.of("WF"), input.workflowIdPrefix());
+      assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00").toInstant(), input.endTime());
     }
   }
 
@@ -346,8 +346,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-1")
             .status(WorkflowState.PENDING)
             .workflowName("WF1")
-            .createdAt(1754936102215L)
-            .updatedAt(1754936102215L)
+            .createdAt(Instant.ofEpochMilli(1754936102215L))
+            .updatedAt(Instant.ofEpochMilli(1754936102215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -357,8 +357,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-2")
             .status(WorkflowState.PENDING)
             .workflowName("WF2")
-            .createdAt(1754936722066L)
-            .updatedAt(1754936722066L)
+            .createdAt(Instant.ofEpochMilli(1754936722066L))
+            .updatedAt(Instant.ofEpochMilli(1754936722066L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -368,8 +368,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("wf-3")
             .status(WorkflowState.PENDING)
             .workflowName("WF3")
-            .createdAt(1754946202215L)
-            .updatedAt(1754946202215L)
+            .createdAt(Instant.ofEpochMilli(1754946202215L))
+            .updatedAt(Instant.ofEpochMilli(1754946202215L))
             .executorId("test-executor")
             .appVersion("test-app-ver")
             .appId("test-app-id")
@@ -407,7 +407,7 @@ class AdminServerTest {
       var input = inputCaptor.getValue();
       assertEquals(List.of("some-queue"), input.queueName());
       assertTrue(input.queuesOnly());
-      assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00"), input.endTime());
+      assertEquals(OffsetDateTime.parse("2025-10-09T11:26:05-07:00").toInstant(), input.endTime());
     }
   }
 
@@ -417,8 +417,8 @@ class AdminServerTest {
         new WorkflowStatusBuilder("test-wf-id")
             .status(WorkflowState.PENDING)
             .workflowName("WF3")
-            .createdAt(1754946202215L)
-            .updatedAt(1754946202215L)
+            .createdAt(Instant.ofEpochMilli(1754946202215L))
+            .updatedAt(Instant.ofEpochMilli(1754946202215L))
             .build();
 
     when(mockDB.listWorkflows(any())).thenReturn(List.of(status));
@@ -498,7 +498,7 @@ class AdminServerTest {
             null,
             null));
 
-    when(mockDB.listWorkflowSteps(any())).thenReturn(steps);
+    when(mockDB.listWorkflowSteps(any(), eq(null), eq(null), eq(null))).thenReturn(steps);
 
     try (var server = new AdminServer(port, mockExec, mockDB)) {
       server.start();
@@ -531,7 +531,7 @@ class AdminServerTest {
         if (i == 4) {
           assertNull(step.get("output"));
           assertNotNull(step.get("error"));
-          var result = JSONUtil.fromJson((String) step.get("error"), ErrorResult.class);
+          var result = JsonUtility.fromJson((String) step.get("error"), ErrorResult.class);
           assertEquals("error-4", result.message());
           assertNull(step.get("child_workflow_id"));
         }
@@ -559,7 +559,7 @@ class AdminServerTest {
 
       given().port(port).when().post("/workflows/test-wf-id/resume").then().statusCode(204);
 
-      verify(mockExec).resumeWorkflows(eq(List.of("test-wf-id")));
+      verify(mockExec).resumeWorkflows(eq(List.of("test-wf-id")), eq(null));
     }
   }
 

@@ -1,12 +1,20 @@
 package dev.dbos.transact.internal;
 
-import dev.dbos.transact.DBOS;
+import dev.dbos.transact.execution.RegisteredWorkflow;
 
-import java.io.InputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import java.util.stream.Collectors;
 
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.Handle;
+import org.objectweb.asm.Label;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,67 +22,170 @@ public class AppVersionComputer {
 
   private static Logger logger = LoggerFactory.getLogger(AppVersionComputer.class);
 
-  public static String computeAppVersion(List<Class<?>> registeredClasses) {
+  public static String computeAppVersion(
+      String dbosVersion, Collection<RegisteredWorkflow> workflows) {
     try {
-      MessageDigest hasher = MessageDigest.getInstance("SHA-256");
+      final var hasher = MessageDigest.getInstance("SHA-256");
+      hasher.update(dbosVersion.getBytes(StandardCharsets.UTF_8));
 
-      // Sort by class name for deterministic ordering
-      List<Class<?>> sortedClasses =
-          registeredClasses.stream()
-              .distinct()
-              .sorted(Comparator.comparing(Class::getName))
-              .collect(Collectors.toList());
+      var sortedWorkflows =
+          workflows.stream().sorted(Comparator.comparing(RegisteredWorkflow::fullyQualifiedName));
+      var it = sortedWorkflows.iterator();
 
-      // Hash each unique class
-      for (Class<?> clazz : sortedClasses) {
-        logger.debug("hashing {}", clazz.getName());
-        String classHash = getClassBytecodeHash(clazz);
-        hasher.update((clazz.getName() + ":" + classHash).getBytes("UTF-8"));
-      }
+      while (it.hasNext()) {
+        var wf = it.next();
+        hasher.update(wf.fullyQualifiedName().getBytes(StandardCharsets.UTF_8));
 
-      // Different DBOS versions should produce different app versions
-      hasher.update(DBOS.version().getBytes("UTF-8"));
+        var klass = wf.workflowMethod().getDeclaringClass();
+        var klassPath = klass.getName().replace('.', '/') + ".class";
+        var methodDesc = Type.getMethodDescriptor(wf.workflowMethod());
+        var methodName = wf.workflowMethod().getName();
 
-      return bytesToHex(hasher.digest());
-    } catch (Exception e) {
-      logger.warn("Failed to compute simplified app version", e);
-      return getFallbackVersion();
-    }
-  }
-
-  /** Gets a hash of the class bytecode. */
-  private static String getClassBytecodeHash(Class<?> clazz) {
-    try {
-      // Get the class file as a resource
-      String className = clazz.getName().replace('.', '/') + ".class";
-
-      try (InputStream is = clazz.getClassLoader().getResourceAsStream(className)) {
-        if (is != null) {
-          MessageDigest hasher = MessageDigest.getInstance("SHA-256");
-          byte[] buffer = new byte[8192];
-          int bytesRead;
-          while ((bytesRead = is.read(buffer)) != -1) {
-            hasher.update(buffer, 0, bytesRead);
-          }
-          return bytesToHex(hasher.digest());
+        try (var in = klass.getClassLoader().getResourceAsStream(klassPath)) {
+          if (in == null) throw new IOException("%s class not found".formatted(klass.getName()));
+          var reader = new ClassReader(in);
+          reader.accept(
+              new ClassVisitor(Opcodes.ASM9) {
+                @Override
+                public MethodVisitor visitMethod(
+                    int access, String name, String desc, String signature, String[] exceptions) {
+                  return (name.equals(methodName) && desc.equals(methodDesc))
+                      ? new HashingMethodVisitor(hasher)
+                      : null;
+                }
+              },
+              0);
         }
       }
 
-      // Fallback: use class hashCode and serialVersionUID if available
-      long classHash = clazz.hashCode();
-      try {
-        java.lang.reflect.Field serialVersionUID = clazz.getDeclaredField("serialVersionUID");
-        serialVersionUID.setAccessible(true);
-        classHash ^= serialVersionUID.getLong(null);
-      } catch (Exception ignored) {
-        // serialVersionUID not available, that's ok
+      return bytesToHex(hasher.digest());
+    } catch (NoSuchAlgorithmException | IOException e) {
+      logger.warn("Failed to compute app version", e);
+      return "unknown-" + System.currentTimeMillis();
+    }
+  }
+
+  static class HashingMethodVisitor extends MethodVisitor {
+    private final MessageDigest md;
+    private final Map<Label, Integer> labelOrdinals = new LinkedHashMap<>();
+    private int nextLabelOrdinal = 0;
+
+    public HashingMethodVisitor(MessageDigest md) {
+      super(Opcodes.ASM9);
+      this.md = md;
+    }
+
+    private int labelOrdinal(Label label) {
+      return labelOrdinals.computeIfAbsent(label, l -> nextLabelOrdinal++);
+    }
+
+    private void update(String... values) {
+      for (var v : values) {
+        if (v != null) md.update(v.getBytes(StandardCharsets.UTF_8));
       }
+    }
 
-      return Long.toHexString(classHash);
+    private void update(int... values) {
+      for (var v : values) {
+        md.update((byte) (v >>> 24));
+        md.update((byte) (v >>> 16));
+        md.update((byte) (v >>> 8));
+        md.update((byte) v);
+      }
+    }
 
-    } catch (Exception e) {
-      logger.debug("Error getting class bytecode hash for {}", clazz.getName(), e);
-      return Integer.toHexString(clazz.getName().hashCode());
+    @Override
+    public void visitLabel(Label label) {
+      labelOrdinal(label);
+    }
+
+    @Override
+    public void visitInsn(int opcode) {
+      update(opcode);
+    }
+
+    @Override
+    public void visitIntInsn(int opcode, int operand) {
+      update(opcode, operand);
+    }
+
+    @Override
+    public void visitVarInsn(int opcode, int varIndex) {
+      update(opcode, varIndex);
+    }
+
+    @Override
+    public void visitTypeInsn(int opcode, String type) {
+      update(opcode);
+      update(type);
+    }
+
+    @Override
+    public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
+      update(opcode);
+      update(owner, name, descriptor);
+    }
+
+    @Override
+    public void visitMethodInsn(
+        int opcode, String owner, String name, String descriptor, boolean isInterface) {
+      update(opcode);
+      update(owner, name, descriptor);
+      update(isInterface ? 1 : 0);
+    }
+
+    @Override
+    public void visitInvokeDynamicInsn(
+        String name,
+        String descriptor,
+        Handle bootstrapMethodHandle,
+        Object... bootstrapMethodArguments) {
+      update(name, descriptor);
+      update(bootstrapMethodHandle.toString());
+      for (var arg : bootstrapMethodArguments) {
+        if (arg != null) update(arg.toString());
+      }
+    }
+
+    @Override
+    public void visitJumpInsn(int opcode, Label label) {
+      update(opcode, labelOrdinal(label));
+    }
+
+    @Override
+    public void visitLdcInsn(Object value) {
+      update(Opcodes.LDC);
+      if (value != null) update(value.toString());
+    }
+
+    @Override
+    public void visitIincInsn(int varIndex, int increment) {
+      update(Opcodes.IINC, varIndex, increment);
+    }
+
+    @Override
+    public void visitTableSwitchInsn(int min, int max, Label dflt, Label... labels) {
+      update(Opcodes.TABLESWITCH, min, max, labelOrdinal(dflt));
+      for (var l : labels) update(labelOrdinal(l));
+    }
+
+    @Override
+    public void visitLookupSwitchInsn(Label dflt, int[] keys, Label[] labels) {
+      update(Opcodes.LOOKUPSWITCH, labelOrdinal(dflt));
+      update(keys);
+      for (var l : labels) update(labelOrdinal(l));
+    }
+
+    @Override
+    public void visitMultiANewArrayInsn(String descriptor, int numDimensions) {
+      update(Opcodes.MULTIANEWARRAY, numDimensions);
+      update(descriptor);
+    }
+
+    @Override
+    public void visitTryCatchBlock(Label start, Label end, Label handler, String type) {
+      update(labelOrdinal(start), labelOrdinal(end), labelOrdinal(handler));
+      update(type);
     }
   }
 
@@ -88,9 +199,5 @@ public class AppVersionComputer {
       hexString.append(hex);
     }
     return hexString.toString();
-  }
-
-  private static String getFallbackVersion() {
-    return "unknown-" + System.currentTimeMillis();
   }
 }

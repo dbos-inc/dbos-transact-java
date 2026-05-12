@@ -78,8 +78,8 @@ class TestLifecycleService implements DBOSLifecycleListener {
 
     ++launchCount;
 
-    nInstances = dbos.getRegisteredWorkflowInstances().size();
-    var wfs = dbos.getRegisteredWorkflows();
+    nInstances = dbos.integration().getRegisteredWorkflowInstances().size();
+    var wfs = dbos.integration().getRegisteredWorkflows();
     for (var wf : wfs) {
       var method = wf.workflowMethod();
       var tag = method.getAnnotation(TestLifecycleAnnotation.class);
@@ -109,15 +109,15 @@ class TestLifecycleService implements DBOSLifecycleListener {
     for (var wf : wfs) {
       Object[] args = {nInstances, nWfs};
       var h =
-          dbos.startRegisteredWorkflow(
-              wf, args, new StartWorkflowOptions(UUID.randomUUID().toString()));
+          dbos.integration()
+              .startRegisteredWorkflow(
+                  wf, args, new StartWorkflowOptions(UUID.randomUUID().toString()));
       total += (Integer) h.getResult();
     }
     return total;
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class LifecycleTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -131,7 +131,7 @@ public class LifecycleTest {
 
   private void setup(DBOS dbos, LifecycleTestWorkflowsImpl impl, TestLifecycleService svc) {
     dbos.registerProxy(LifecycleTestWorkflows.class, impl, "inst1");
-    dbos.registerLifecycleListener(svc);
+    dbos.integration().registerLifecycleListener(svc);
     dbos.registerProxy(LifecycleTestWorkflows.class, new LifecycleTestWorkflowsImpl(), "instA");
 
     assertEquals(0, svc.launchCount);

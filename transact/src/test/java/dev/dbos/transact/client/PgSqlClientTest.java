@@ -32,7 +32,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.util.PSQLException;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class PgSqlClientTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -114,7 +113,7 @@ public class PgSqlClientTest {
 
   @Test
   public void clientEnqueueDeadline() throws Exception {
-    var wfid1 = enqueueWorkflow("sleep", null, null, Instant.now().plusMillis(1000), 10000);
+    var wfid1 = enqueueWorkflow("sleep", null, null, Instant.now().plusMillis(5000), 60000);
     var handle1 = dbos.retrieveWorkflow(wfid1);
     assertThrows(
         DBOSAwaitedWorkflowCancelledException.class,

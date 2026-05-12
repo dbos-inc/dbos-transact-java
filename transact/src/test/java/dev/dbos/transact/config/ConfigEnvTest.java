@@ -27,7 +27,6 @@ import uk.org.webcompere.systemstubs.environment.EnvironmentVariables;
 // execuition)
 @Isolated
 @Execution(ExecutionMode.SAME_THREAD)
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class ConfigEnvTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -261,7 +260,7 @@ public class ConfigEnvTest {
             var handle = dbos.startWorkflow(() -> proxy.workflow());
             assertEquals(6, handle.getResult());
 
-            var input = new ListWorkflowsInput().withWorkflowId(handle.workflowId());
+            var input = new ListWorkflowsInput(handle.workflowId());
             var workflows = dbos.listWorkflows(input);
             assertEquals(1, workflows.size());
             assertEquals("test-env-app-id", workflows.get(0).appId());

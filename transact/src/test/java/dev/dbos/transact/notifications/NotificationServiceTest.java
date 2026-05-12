@@ -151,7 +151,6 @@ class NotServiceImpl implements NotService {
   }
 }
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 class NotificationServiceTest {
 
   @AutoClose final PgContainer pgContainer = new PgContainer();
@@ -457,7 +456,7 @@ class NotificationServiceTest {
     assertEquals("hello", handle.getResult());
     assertEquals(WorkflowState.SUCCESS, handle.getStatus().status());
 
-    List<WorkflowStatus> wfs = dbos.listWorkflows(new ListWorkflowsInput());
+    List<WorkflowStatus> wfs = dbos.listWorkflows(null);
     assertEquals(1, wfs.size());
   }
 

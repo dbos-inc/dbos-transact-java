@@ -2,6 +2,7 @@ package dev.dbos.transact.admin;
 
 import dev.dbos.transact.database.SystemDatabase;
 import dev.dbos.transact.execution.DBOSExecutor;
+import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.WorkflowHandle;
@@ -9,7 +10,7 @@ import dev.dbos.transact.workflow.WorkflowHandle;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,12 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializerProvider;
-import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -31,26 +27,6 @@ import org.slf4j.LoggerFactory;
 
 public class AdminServer implements AutoCloseable {
   private static final Logger logger = LoggerFactory.getLogger(AdminServer.class);
-  private static final ObjectMapper mapper = new ObjectMapper();
-
-  static class DurationSerializer extends StdSerializer<Duration> {
-
-    public DurationSerializer() {
-      super(Duration.class);
-    }
-
-    @Override
-    public void serialize(Duration value, JsonGenerator gen, SerializerProvider provider)
-        throws IOException {
-      gen.writeNumber(value.toMillis() / 1000.0);
-    }
-  }
-
-  static {
-    var module = new SimpleModule();
-    module.addSerializer(Duration.class, new DurationSerializer());
-    mapper.registerModule(module);
-  }
 
   private HttpServer server;
   private final SystemDatabase systemDatabase;
@@ -144,7 +120,7 @@ public class AdminServer implements AutoCloseable {
     if (!ensurePostJson(exchange)) return;
 
     List<String> executorIds =
-        mapper.readValue(exchange.getRequestBody(), new TypeReference<>() {});
+        JsonUtility.fromJson(exchange.getRequestBody(), new TypeReference<>() {});
     logger.debug("workflowRecovery executors {}", executorIds);
     var handles = dbosExecutor.recoverPendingWorkflows(executorIds);
     List<String> workflowIds =
@@ -171,9 +147,10 @@ public class AdminServer implements AutoCloseable {
   private void garbageCollect(HttpExchange exchange) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request = mapper.readValue(exchange.getRequestBody(), GarbageCollectRequest.class);
+    var request = JsonUtility.fromJson(exchange.getRequestBody(), GarbageCollectRequest.class);
 
-    systemDatabase.garbageCollect(request.cutoff_epoch_timestamp_ms, (long) request.rows_threshold);
+    systemDatabase.garbageCollect(
+        Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms), (long) request.rows_threshold);
 
     exchange.sendResponseHeaders(204, 0);
   }
@@ -181,8 +158,8 @@ public class AdminServer implements AutoCloseable {
   private void globalTimeout(HttpExchange exchange) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request = mapper.readValue(exchange.getRequestBody(), GlobalTimeoutRequest.class);
-    dbosExecutor.globalTimeout(request.cutoff_epoch_timestamp_ms);
+    var request = JsonUtility.fromJson(exchange.getRequestBody(), GlobalTimeoutRequest.class);
+    dbosExecutor.globalTimeout(Instant.ofEpochMilli(request.cutoff_epoch_timestamp_ms));
 
     exchange.sendResponseHeaders(204, 0);
   }
@@ -190,7 +167,7 @@ public class AdminServer implements AutoCloseable {
   private void listWorkflows(HttpExchange exchange) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request = mapper.readValue(exchange.getRequestBody(), ListWorkflowsRequest.class);
+    var request = JsonUtility.fromJson(exchange.getRequestBody(), ListWorkflowsRequest.class);
     var input = request.asInput();
     var workflows = systemDatabase.listWorkflows(input);
     var response = workflows.stream().map(WorkflowsOutput::of).collect(Collectors.toList());
@@ -200,7 +177,7 @@ public class AdminServer implements AutoCloseable {
   private void listQueuedWorkflows(HttpExchange exchange) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request = mapper.readValue(exchange.getRequestBody(), ListQueuedWorkflowsRequest.class);
+    var request = JsonUtility.fromJson(exchange.getRequestBody(), ListQueuedWorkflowsRequest.class);
     var input = request.asInput();
     var workflows = systemDatabase.listWorkflows(input);
     var response = workflows.stream().map(WorkflowsOutput::of).collect(Collectors.toList());
@@ -208,9 +185,9 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void getWorkflow(HttpExchange exchange, String wfid) throws IOException {
-    var input = new ListWorkflowsInput().withWorkflowId(wfid);
+    var input = new ListWorkflowsInput(wfid);
     var workflows = systemDatabase.listWorkflows(input);
-    if (workflows.size() == 0) {
+    if (workflows.isEmpty()) {
       sendText(exchange, 404, "Workflow not found");
       return;
     }
@@ -220,7 +197,7 @@ public class AdminServer implements AutoCloseable {
   }
 
   private void listSteps(HttpExchange exchange, String wfid) throws IOException {
-    var steps = systemDatabase.listWorkflowSteps(wfid);
+    var steps = systemDatabase.listWorkflowSteps(wfid, true, null, null);
     var response = steps.stream().map(StepOutput::of).collect(Collectors.toList());
     sendMappedJson(exchange, 200, response);
   }
@@ -239,16 +216,18 @@ public class AdminServer implements AutoCloseable {
 
     logger.info("resume workflow {}", wfid);
 
-    dbosExecutor.resumeWorkflows(List.of(wfid));
+    dbosExecutor.resumeWorkflows(List.of(wfid), null);
     exchange.sendResponseHeaders(204, 0);
   }
 
   private void fork(HttpExchange exchange, String wfid) throws IOException {
     if (!ensurePostJson(exchange)) return;
 
-    var request = mapper.readValue(exchange.getRequestBody(), ForkRequest.class);
+    var request = JsonUtility.fromJson(exchange.getRequestBody(), ForkRequest.class);
     int startStep = request.start_step == null ? 0 : request.start_step;
-    var options = new ForkOptions(request.new_workflow_id, request.application_version, null);
+    var options =
+        new ForkOptions(request.new_workflow_id)
+            .withApplicationVersion(request.application_version);
 
     logger.info("fork workflow {} step {}", wfid, startStep);
     var handle = dbosExecutor.forkWorkflow(wfid, startStep, options);
@@ -276,14 +255,10 @@ public class AdminServer implements AutoCloseable {
     }
   }
 
-  private static void sendMappedJson(HttpExchange exchange, int statusCode, Object json)
+  private static void sendMappedJson(HttpExchange exchange, int statusCode, Object object)
       throws IOException {
-    exchange.getResponseHeaders().add("Content-Type", "application/json");
-    byte[] bytes = mapper.writeValueAsBytes(json);
-    exchange.sendResponseHeaders(statusCode, bytes.length);
-    try (OutputStream os = exchange.getResponseBody()) {
-      os.write(bytes);
-    }
+    var json = JsonUtility.toJson(object);
+    sendJson(exchange, statusCode, json);
   }
 
   private static boolean ensurePost(HttpExchange exchange) throws IOException {

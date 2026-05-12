@@ -4,16 +4,20 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.DBOSSerializer;
+import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
+import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
+import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.Queue;
 import dev.dbos.transact.workflow.ScheduleStatus;
 import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
+import dev.dbos.transact.workflow.WorkflowAggregateRow;
+import dev.dbos.transact.workflow.WorkflowDelay;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.internal.GetPendingWorkflowsOutput;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
@@ -42,12 +46,28 @@ public class SystemDatabase implements AutoCloseable {
   private final boolean created;
   private final DBOSSerializer serializer;
 
+  private final StepsDAO stepsDAO;
   private final WorkflowDAO workflowDAO;
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
+  private final StreamsDAO streamsDAO;
+
+  private static void validatePostgresDataSource(DataSource dataSource) {
+    try (Connection conn = dataSource.getConnection()) {
+      String productName = conn.getMetaData().getDatabaseProductName();
+      if (!productName.toLowerCase().contains("postgresql")) {
+        throw new IllegalStateException(
+            "DBOS requires a PostgreSQL datasource, but the provided datasource reports: "
+                + productName);
+      }
+    } catch (SQLException e) {
+      throw new IllegalStateException("Failed to validate DBOS datasource", e);
+    }
+  }
 
   private SystemDatabase(
       DataSource dataSource, String schema, boolean created, DBOSSerializer serializer) {
+    validatePostgresDataSource(dataSource);
     schema = sanitizeSchema(schema);
     if (schema.contains("\"")) {
       throw new IllegalArgumentException("Schema name must not contain double quotes");
@@ -58,10 +78,12 @@ public class SystemDatabase implements AutoCloseable {
     this.created = created;
     this.serializer = serializer;
 
+    stepsDAO = new StepsDAO(dataSource, this.schema, serializer);
+    workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
+    streamsDAO = new StreamsDAO(dataSource, this.schema);
     notificationService = new NotificationService(dataSource);
     notificationsDAO =
         new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
-    workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
@@ -209,6 +231,14 @@ public class SystemDatabase implements AutoCloseable {
     }
   }
 
+  static Instant toInstant(Long epochMs) {
+    return epochMs != null ? Instant.ofEpochMilli(epochMs) : null;
+  }
+
+  static Duration toDuration(Long ms) {
+    return ms != null ? Duration.ofMillis(ms) : null;
+  }
+
   /**
    * Initializes the status of a workflow.
    *
@@ -271,8 +301,12 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> workflowDAO.listWorkflows(input));
   }
 
-  public List<GetPendingWorkflowsOutput> getPendingWorkflows(String executorId, String appVersion) {
-    return dbRetry(() -> workflowDAO.getPendingWorkflows(executorId, appVersion));
+  public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {
+    return dbRetry(() -> workflowDAO.getWorkflowAggregates(input));
+  }
+
+  public List<WorkflowStatus> getPendingWorkflows(List<String> executorIds, String appVersion) {
+    return dbRetry(() -> workflowDAO.getPendingWorkflows(executorIds, appVersion));
   }
 
   public boolean clearQueueAssignment(String workflowId) {
@@ -299,8 +333,9 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> StepsDAO.recordStepResultTxn(dataSource, result, startTime, et, this.schema));
   }
 
-  public List<StepInfo> listWorkflowSteps(String workflowId) {
-    return dbRetry(() -> StepsDAO.listWorkflowSteps(dataSource, workflowId, schema, serializer));
+  public List<StepInfo> listWorkflowSteps(
+      String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
+    return dbRetry(() -> stepsDAO.listWorkflowSteps(workflowId, loadOutput, limit, offset));
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
@@ -384,8 +419,8 @@ public class SystemDatabase implements AutoCloseable {
     dbRetry(() -> workflowDAO.cancelWorkflows(workflowIds));
   }
 
-  public void resumeWorkflows(List<String> workflowIds) {
-    dbRetry(() -> workflowDAO.resumeWorkflows(workflowIds));
+  public void resumeWorkflows(List<String> workflowIds, String queueName) {
+    dbRetry(() -> workflowDAO.resumeWorkflows(workflowIds, queueName));
   }
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
@@ -415,8 +450,16 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> ApplicationVersionDAO.getLatestApplicationVersion(dataSource, schema));
   }
 
-  public void garbageCollect(Long cutoffEpochTimestampMs, Long rowsThreshold) {
-    dbRetry(() -> workflowDAO.garbageCollect(cutoffEpochTimestampMs, rowsThreshold));
+  public void garbageCollect(Instant cutoff, Long rowsThreshold) {
+    dbRetry(() -> workflowDAO.garbageCollect(cutoff, rowsThreshold));
+  }
+
+  public void setWorkflowDelay(String workflowId, WorkflowDelay delay) {
+    dbRetry(() -> workflowDAO.setWorkflowDelay(workflowId, delay));
+  }
+
+  public void transitionDelayedWorkflows() {
+    dbRetry(() -> workflowDAO.transitionDelayedWorkflows());
   }
 
   public void createSchedule(WorkflowSchedule schedule) {
@@ -483,11 +526,99 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(() -> workflowDAO.getWorkflowChildren(workflowId));
   }
 
+  public Map<String, Object> getAllEvents(String workflowId) {
+    return dbRetry(
+        () -> {
+          try (var conn = dataSource.getConnection()) {
+            var events = workflowDAO.listWorkflowEvents(conn, workflowId);
+            var result = new LinkedHashMap<String, Object>();
+            for (var event : events) {
+              result.put(
+                  event.key(),
+                  SerializationUtil.deserializeValue(
+                      event.value(), event.serialization(), this.serializer));
+            }
+            return result;
+          }
+        });
+  }
+
+  public List<NotificationInfo> getAllNotifications(String workflowId) {
+    return dbRetry(
+        () -> {
+          var sql =
+              """
+              SELECT topic, message, serialization, created_at_epoch_ms, consumed
+              FROM "%s".notifications
+              WHERE destination_uuid = ?
+              ORDER BY created_at_epoch_ms
+              """
+                  .formatted(this.schema);
+
+          var notifications = new ArrayList<NotificationInfo>();
+          try (var conn = dataSource.getConnection();
+              var stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, workflowId);
+            try (var rs = stmt.executeQuery()) {
+              while (rs.next()) {
+                var rawTopic = rs.getString("topic");
+                var topic = Constants.DBOS_NULL_TOPIC.equals(rawTopic) ? null : rawTopic;
+                var serialization = rs.getString("serialization");
+                var message =
+                    SerializationUtil.deserializeValue(
+                        rs.getString("message"), serialization, this.serializer);
+                var createdAtEpochMs = rs.getLong("created_at_epoch_ms");
+                var consumed = rs.getBoolean("consumed");
+                notifications.add(
+                    new NotificationInfo(
+                        topic, message, SystemDatabase.toInstant(createdAtEpochMs), consumed));
+              }
+            }
+          }
+          return notifications;
+        });
+  }
+
   public List<ExportedWorkflow> exportWorkflow(String workflowId, boolean exportChildren) {
     return dbRetry(() -> workflowDAO.exportWorkflow(workflowId, exportChildren));
   }
 
   public void importWorkflow(List<ExportedWorkflow> workflows) {
     dbRetry(() -> workflowDAO.importWorkflow(workflows, this.serializer));
+  }
+
+  public void writeStreamFromStep(
+      String workflowId, int functionId, String key, Object value, String serializationFormat) {
+    dbRetry(
+        () -> {
+          streamsDAO.writeStreamFromStep(workflowId, functionId, key, value, serializationFormat);
+          return null;
+        });
+  }
+
+  public void writeStreamFromWorkflow(
+      String workflowId, int functionId, String key, Object value, String serializationFormat) {
+    dbRetry(
+        () -> {
+          streamsDAO.writeStreamFromWorkflow(
+              workflowId, functionId, key, value, serializationFormat);
+          return null;
+        });
+  }
+
+  public void closeStream(String workflowId, int functionId, String key) {
+    dbRetry(
+        () -> {
+          streamsDAO.closeStream(workflowId, functionId, key);
+          return null;
+        });
+  }
+
+  public Object readStream(String workflowId, String key, int offset) {
+    return dbRetry(() -> streamsDAO.readStream(workflowId, key, offset));
+  }
+
+  public Map<String, List<Object>> getAllStreamEntries(String workflowId) {
+    return dbRetry(() -> streamsDAO.getAllStreamEntries(workflowId));
   }
 }

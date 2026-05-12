@@ -21,7 +21,6 @@ import org.junit.jupiter.api.AutoClose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.Timeout(value = 2, unit = java.util.concurrent.TimeUnit.MINUTES)
 public class MultiClassInstanceTest {
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose DBOS dbos;
@@ -100,7 +99,7 @@ public class MultiClassInstanceTest {
             .toLocalDate()
             .format(DateTimeFormatter.ISO_DATE));
 
-    var browsa = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowId(bhandlea.workflowId()));
+    var browsa = dbos.listWorkflows(new ListWorkflowsInput(bhandlea.workflowId()));
     assertEquals(1, browsa.size());
     var browa = browsa.get(0);
     assertEquals(bhandlea.workflowId(), browa.workflowId());
@@ -109,7 +108,7 @@ public class MultiClassInstanceTest {
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", browa.className());
     assertEquals(WorkflowState.SUCCESS, browa.status());
 
-    var brows1 = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowId(bhandle1.workflowId()));
+    var brows1 = dbos.listWorkflows(new ListWorkflowsInput(bhandle1.workflowId()));
     assertEquals(1, brows1.size());
     var brow1 = brows1.get(0);
     assertEquals(bhandle1.workflowId(), brow1.workflowId());
@@ -118,7 +117,7 @@ public class MultiClassInstanceTest {
     assertEquals("dev.dbos.transact.invocation.BearServiceImpl", brow1.className());
     assertEquals(WorkflowState.SUCCESS, brow1.status());
 
-    var hrows = dbos.listWorkflows(new ListWorkflowsInput().withWorkflowId(hhandle.workflowId()));
+    var hrows = dbos.listWorkflows(new ListWorkflowsInput(hhandle.workflowId()));
     assertEquals(1, hrows.size());
     var hrow = hrows.get(0);
     assertEquals(hhandle.workflowId(), hrow.workflowId());

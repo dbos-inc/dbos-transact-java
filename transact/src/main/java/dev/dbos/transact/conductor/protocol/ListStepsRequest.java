@@ -2,6 +2,9 @@ package dev.dbos.transact.conductor.protocol;
 
 public class ListStepsRequest extends BaseMessage {
   public String workflow_id;
+  public boolean load_output = true;
+  public Integer limit;
+  public Integer offset;
 
   public ListStepsRequest() {}
 

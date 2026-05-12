@@ -3,7 +3,6 @@ package dev.dbos.transact.database;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.internal.DebugTriggers;
 import dev.dbos.transact.json.DBOSSerializer;
-import dev.dbos.transact.json.JSONUtil;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
 import dev.dbos.transact.workflow.StepInfo;
@@ -12,6 +11,7 @@ import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.*;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -24,6 +24,16 @@ import org.slf4j.LoggerFactory;
 class StepsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
+
+  private final DataSource dataSource;
+  private final String schema;
+  private final DBOSSerializer serializer;
+
+  StepsDAO(DataSource dataSource, String schema, DBOSSerializer serializer) {
+    this.dataSource = dataSource;
+    this.schema = schema;
+    this.serializer = serializer;
+  }
 
   static void recordStepResultTxn(
       DataSource dataSource,
@@ -59,7 +69,7 @@ class StepsDAO {
     try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
       pstmt.setString(1, result.workflowId());
       pstmt.setInt(2, result.stepId());
-      pstmt.setString(3, result.functionName());
+      pstmt.setString(3, result.stepName());
 
       if (result.output() != null) {
         pstmt.setString(4, result.output());
@@ -89,7 +99,7 @@ class StepsDAO {
             logger.warn(
                 String.format(
                     "Step output for %s:%d-%s was already recorded",
-                    result.workflowId(), result.stepId(), result.functionName()));
+                    result.workflowId(), result.stepId(), result.stepName()));
             throw new DBOSWorkflowExecutionConflictException(result.workflowId());
           }
         }
@@ -173,32 +183,49 @@ class StepsDAO {
     return recordedResult;
   }
 
-  static List<StepInfo> listWorkflowSteps(
-      DataSource dataSource, String workflowId, String schema, DBOSSerializer serializer)
-      throws SQLException {
+  List<StepInfo> listWorkflowSteps(
+      String workflowId, Boolean loadOutput, Integer limit, Integer offset) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      return listWorkflowSteps(connection, workflowId, schema, serializer);
+      return listWorkflowSteps(connection, workflowId, loadOutput, limit, offset);
     }
   }
 
-  static List<StepInfo> listWorkflowSteps(
-      Connection connection, String workflowId, String schema, DBOSSerializer serializer)
+  List<StepInfo> listWorkflowSteps(
+      Connection connection, String workflowId, Boolean loadOutput, Integer limit, Integer offset)
       throws SQLException {
 
-    final String sql =
-        """
+    StringBuilder sqlBuilder =
+        new StringBuilder(
+            """
           SELECT function_id, function_name, output, error, child_workflow_id, started_at_epoch_ms, completed_at_epoch_ms, serialization
           FROM "%s".operation_outputs
           WHERE workflow_uuid = ?
-          ORDER BY function_id;
+          ORDER BY function_id
         """
-            .formatted(schema);
+                .formatted(this.schema));
+
+    if (limit != null) {
+      sqlBuilder.append(" LIMIT ?");
+    }
+    if (offset != null) {
+      sqlBuilder.append(" OFFSET ?");
+    }
+
+    final String sql = sqlBuilder.toString();
 
     List<StepInfo> steps = new ArrayList<>();
 
     try (PreparedStatement stmt = connection.prepareStatement(sql)) {
 
-      stmt.setString(1, workflowId);
+      int paramIndex = 1;
+      stmt.setString(paramIndex++, workflowId);
+
+      if (limit != null) {
+        stmt.setInt(paramIndex++, limit);
+      }
+      if (offset != null) {
+        stmt.setInt(paramIndex++, offset);
+      }
 
       try (ResultSet rs = stmt.executeQuery()) {
 
@@ -212,19 +239,21 @@ class StepsDAO {
           Long completedAt = rs.getObject("completed_at_epoch_ms", Long.class);
           String serialization = rs.getString("serialization");
 
-          // Deserialize output if present
           Object outputVal = null;
-          if (outputData != null) {
-            try {
-              outputVal = SerializationUtil.deserializeValue(outputData, serialization, serializer);
-            } catch (Exception e) {
-              throw new RuntimeException(
-                  "Failed to deserialize output for function " + functionId, e);
-            }
-          }
+          ErrorResult stepError = null;
 
-          // Deserialize error if present
-          ErrorResult stepError = ErrorResult.deserialize(errorData, serialization, serializer);
+          if (Objects.requireNonNullElse(loadOutput, true)) {
+            if (outputData != null) {
+              try {
+                outputVal =
+                    SerializationUtil.deserializeValue(outputData, serialization, this.serializer);
+              } catch (Exception e) {
+                throw new RuntimeException(
+                    "Failed to deserialize output for function " + functionId, e);
+              }
+            }
+            stepError = ErrorResult.deserialize(errorData, serialization, this.serializer);
+          }
           steps.add(
               new StepInfo(
                   functionId,
@@ -232,8 +261,8 @@ class StepsDAO {
                   outputVal,
                   stepError,
                   childWorkflowId,
-                  startedAt,
-                  completedAt,
+                  startedAt == null ? null : Instant.ofEpochMilli(startedAt),
+                  completedAt == null ? null : Instant.ofEpochMilli(completedAt),
                   serialization));
         }
       }
@@ -351,9 +380,18 @@ class StepsDAO {
       endTime = System.currentTimeMillis() + duration.toMillis();
 
       try {
+        var serializedValue =
+            SerializationUtil.serializeValue(
+                endTime, serializer != null ? serializer.name() : null, serializer);
         StepResult output =
-            new StepResult(workflowUuid, functionId, functionName, null, null, null, null)
-                .withOutput(JSONUtil.serialize(endTime));
+            new StepResult(
+                workflowUuid,
+                functionId,
+                functionName,
+                serializedValue.serializedValue(),
+                null,
+                null,
+                serializedValue.serialization());
         recordStepResultTxn(dataSource, output, startTime, (long) endTime, schema);
       } catch (DBOSWorkflowExecutionConflictException e) {
         logger.error("Error recording sleep", e);
