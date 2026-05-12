@@ -106,8 +106,8 @@ class StreamsDAO {
     }
   }
 
-  private static int getNextOffsetTx(
-      Connection conn, String schema, String workflowId, String key) throws SQLException {
+  private static int getNextOffsetTx(Connection conn, String schema, String workflowId, String key)
+      throws SQLException {
     String sql =
         """
         SELECT COALESCE(MAX("offset"), -1) + 1

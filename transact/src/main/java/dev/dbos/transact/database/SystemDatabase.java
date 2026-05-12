@@ -46,8 +46,8 @@ public class SystemDatabase implements AutoCloseable {
   private final DBOSSerializer serializer;
 
   private final WorkflowDAO workflowDAO;
-  private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
+  private long dbPollingIntervalEventMs = 10000;
 
   private static void validatePostgresDataSource(DataSource dataSource) {
     try (Connection conn = dataSource.getConnection()) {
@@ -77,8 +77,6 @@ public class SystemDatabase implements AutoCloseable {
 
     workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
     notificationService = new NotificationService(dataSource);
-    notificationsDAO =
-        new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
@@ -158,7 +156,7 @@ public class SystemDatabase implements AutoCloseable {
 
   void speedUpPollingForTest() {
     workflowDAO.speedUpPollingForTest();
-    notificationsDAO.speedUpPollingForTest();
+    dbPollingIntervalEventMs = 100;
   }
 
   private static boolean isConnectionFailure(SQLException e) {
@@ -374,19 +372,49 @@ public class SystemDatabase implements AutoCloseable {
       String serialization) {
     dbRetry(
         () ->
-            notificationsDAO.send(
-                workflowId, stepId, destinationId, message, topic, messageId, serialization));
+            NotificationsDAO.send(
+                dataSource,
+                schema,
+                serializer,
+                workflowId,
+                stepId,
+                destinationId,
+                message,
+                topic,
+                messageId,
+                serialization));
   }
 
   public void sendDirect(
       String destinationId, Object message, String topic, String messageId, String serialization) {
     dbRetry(
-        () -> notificationsDAO.sendDirect(destinationId, message, topic, messageId, serialization));
+        () ->
+            NotificationsDAO.sendDirect(
+                dataSource,
+                schema,
+                serializer,
+                destinationId,
+                message,
+                topic,
+                messageId,
+                serialization));
   }
 
   public Object recv(
       String workflowId, int stepId, int timeoutStepId, String topic, Duration timeout) {
-    return dbRetry(() -> notificationsDAO.recv(workflowId, stepId, timeoutStepId, topic, timeout));
+    return dbRetry(
+        () ->
+            NotificationsDAO.recv(
+                dataSource,
+                schema,
+                serializer,
+                notificationService,
+                dbPollingIntervalEventMs,
+                workflowId,
+                stepId,
+                timeoutStepId,
+                topic,
+                timeout));
   }
 
   public void setEvent(
@@ -399,13 +427,33 @@ public class SystemDatabase implements AutoCloseable {
 
     dbRetry(
         () ->
-            notificationsDAO.setEvent(workflowId, functionId, key, message, asStep, serialization));
+            NotificationsDAO.setEvent(
+                dataSource,
+                schema,
+                serializer,
+                workflowId,
+                functionId,
+                key,
+                message,
+                asStep,
+                serialization));
   }
 
   public Object getEvent(
       String targetId, String key, Duration timeout, GetWorkflowEventContext callerCtx) {
 
-    return dbRetry(() -> notificationsDAO.getEvent(targetId, key, timeout, callerCtx));
+    return dbRetry(
+        () ->
+            NotificationsDAO.getEvent(
+                dataSource,
+                schema,
+                serializer,
+                notificationService,
+                dbPollingIntervalEventMs,
+                targetId,
+                key,
+                timeout,
+                callerCtx));
   }
 
   public void sleep(String workflowId, int functionId, Duration duration) {
@@ -528,7 +576,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public List<NotificationInfo> getAllNotifications(String workflowId) {
-    return dbRetry(() -> notificationsDAO.getAllNotifications(workflowId));
+    return dbRetry(
+        () -> NotificationsDAO.getAllNotifications(dataSource, schema, serializer, workflowId));
   }
 
   public List<ExportedWorkflow> exportWorkflow(String workflowId, boolean exportChildren) {
