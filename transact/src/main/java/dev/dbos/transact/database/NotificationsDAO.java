@@ -157,7 +157,7 @@ class NotificationsDAO {
       String schema,
       DBOSSerializer serializer,
       NotificationService notificationService,
-      long dbPollingIntervalEventMs,
+      Duration dbPollingInterval,
       String workflowId,
       int stepId,
       int timeoutFunctionId,
@@ -232,7 +232,7 @@ class NotificationsDAO {
           targetTime = nowTime + actualTimeout;
         }
         if (nowTime >= targetTime) break;
-        long timeoutMs = (long) (Math.min(targetTime - nowTime, dbPollingIntervalEventMs));
+        long timeoutMs = (long) Math.min(targetTime - nowTime, dbPollingInterval.toMillis());
 
         try {
           lockPair.condition.await(timeoutMs, TimeUnit.MILLISECONDS);
@@ -413,7 +413,7 @@ class NotificationsDAO {
       String schema,
       DBOSSerializer serializer,
       NotificationService notificationService,
-      long dbPollingIntervalEventMs,
+      Duration dbPollingInterval,
       String targetUuid,
       String key,
       Duration timeout,
@@ -504,7 +504,7 @@ class NotificationsDAO {
           long timeoutms = (long) (targetTime - nowTime);
           logger.debug("Waiting for notification {}...", timeout);
           lockConditionPair.condition.await(
-              Math.min(timeoutms, dbPollingIntervalEventMs), TimeUnit.MILLISECONDS);
+              Math.min(timeoutms, dbPollingInterval.toMillis()), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           throw new RuntimeException("Interrupted while waiting for event", e);

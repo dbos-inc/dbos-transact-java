@@ -47,7 +47,7 @@ public class SystemDatabase implements AutoCloseable {
 
   private final WorkflowDAO workflowDAO;
   private final NotificationService notificationService;
-  private long dbPollingIntervalEventMs = 10000;
+  private Duration dbPollingInterval = Duration.ofSeconds(10);
 
   private static void validatePostgresDataSource(DataSource dataSource) {
     try (Connection conn = dataSource.getConnection()) {
@@ -156,7 +156,7 @@ public class SystemDatabase implements AutoCloseable {
 
   void speedUpPollingForTest() {
     workflowDAO.speedUpPollingForTest();
-    dbPollingIntervalEventMs = 100;
+    dbPollingInterval = Duration.ofMillis(100);
   }
 
   private static boolean isConnectionFailure(SQLException e) {
@@ -409,7 +409,7 @@ public class SystemDatabase implements AutoCloseable {
                 schema,
                 serializer,
                 notificationService,
-                dbPollingIntervalEventMs,
+                dbPollingInterval,
                 workflowId,
                 stepId,
                 timeoutStepId,
@@ -449,7 +449,7 @@ public class SystemDatabase implements AutoCloseable {
                 schema,
                 serializer,
                 notificationService,
-                dbPollingIntervalEventMs,
+                dbPollingInterval,
                 targetId,
                 key,
                 timeout,
