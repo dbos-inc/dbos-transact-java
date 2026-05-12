@@ -55,7 +55,6 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -169,8 +168,8 @@ public class DBOSExecutor implements AutoCloseable {
     if (isRunning.compareAndSet(false, true)) {
       logger.info("DBOS Executor starting");
 
-      this.workflowMap = Collections.unmodifiableMap(workflowMap);
-      this.instanceMap = Collections.unmodifiableMap(instanceMap);
+      this.workflowMap = workflowMap;
+      this.instanceMap = instanceMap;
       this.queueMap =
           queues.stream().collect(Collectors.toUnmodifiableMap(Queue::name, queue -> queue));
       this.listeners = listenerSet;
