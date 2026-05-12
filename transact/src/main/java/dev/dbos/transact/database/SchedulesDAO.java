@@ -24,6 +24,8 @@ import javax.sql.DataSource;
 
 class SchedulesDAO {
 
+  private SchedulesDAO() {}
+
   static void createSchedule(
       DataSource dataSource, String schema, DBOSSerializer serializer, WorkflowSchedule schedule)
       throws SQLException {

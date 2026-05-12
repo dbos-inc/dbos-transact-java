@@ -12,6 +12,8 @@ import javax.sql.DataSource;
 
 class ApplicationVersionDAO {
 
+  private ApplicationVersionDAO() {}
+
   static void createApplicationVersion(DataSource dataSource, String schema, String versionName)
       throws SQLException {
     String sql =

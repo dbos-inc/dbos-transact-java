@@ -332,7 +332,10 @@ public class SystemDatabase implements AutoCloseable {
 
   public List<StepInfo> listWorkflowSteps(
       String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
-    return dbRetry(() -> StepsDAO.listWorkflowSteps(dataSource, workflowId, loadOutput, limit, offset, this.schema, this.serializer));
+    return dbRetry(
+        () ->
+            StepsDAO.listWorkflowSteps(
+                dataSource, workflowId, loadOutput, limit, offset, this.schema, this.serializer));
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {

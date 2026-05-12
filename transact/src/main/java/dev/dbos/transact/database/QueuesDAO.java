@@ -20,6 +20,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class QueuesDAO {
+
+  private QueuesDAO() {}
+
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
 
   static List<String> getAndStartQueuedWorkflows(

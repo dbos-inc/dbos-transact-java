@@ -10,6 +10,8 @@ import javax.sql.DataSource;
 
 class ExternalStateDAO {
 
+  private ExternalStateDAO() {}
+
   static Optional<ExternalState> getExternalState(
       DataSource dataSource, String schema, String service, String workflowName, String key)
       throws SQLException {

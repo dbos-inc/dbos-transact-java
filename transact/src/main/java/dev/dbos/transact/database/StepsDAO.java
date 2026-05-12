@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory;
 
 class StepsDAO {
 
+  private StepsDAO() {}
+
   private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
 
   static void recordStepResultTxn(
@@ -183,7 +185,8 @@ class StepsDAO {
       DBOSSerializer serializer)
       throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      return listWorkflowSteps(connection, workflowId, loadOutput, limit, offset, schema, serializer);
+      return listWorkflowSteps(
+          connection, workflowId, loadOutput, limit, offset, schema, serializer);
     }
   }
 
