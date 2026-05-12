@@ -256,7 +256,14 @@ public class SystemDatabase implements AutoCloseable {
     return dbRetry(
         () ->
             WorkflowDAO.initWorkflowStatus(
-                dataSource, schema, serializer, initStatus, maxRetries, isRecoveryRequest, isDequeuedRequest, ownerXid));
+                dataSource,
+                schema,
+                serializer,
+                initStatus,
+                maxRetries,
+                isRecoveryRequest,
+                isDequeuedRequest,
+                ownerXid));
   }
 
   /**
@@ -296,7 +303,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public List<WorkflowStatus> getPendingWorkflows(List<String> executorIds, String appVersion) {
-    return dbRetry(() -> WorkflowDAO.getPendingWorkflows(dataSource, schema, serializer, executorIds, appVersion));
+    return dbRetry(
+        () ->
+            WorkflowDAO.getPendingWorkflows(
+                dataSource, schema, serializer, executorIds, appVersion));
   }
 
   public boolean clearQueueAssignment(String workflowId) {
@@ -332,7 +342,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
-    return dbRetry(() -> WorkflowDAO.<T>awaitWorkflowResult(dataSource, schema, serializer, dbPollingInterval, workflowId));
+    return dbRetry(
+        () ->
+            WorkflowDAO.<T>awaitWorkflowResult(
+                dataSource, schema, serializer, dbPollingInterval, workflowId));
   }
 
   public List<String> getAndStartQueuedWorkflows(
@@ -356,7 +369,8 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
-    return dbRetry(() -> WorkflowDAO.checkChildWorkflow(dataSource, schema, workflowUuid, functionId));
+    return dbRetry(
+        () -> WorkflowDAO.checkChildWorkflow(dataSource, schema, workflowUuid, functionId));
   }
 
   public void send(
@@ -470,7 +484,10 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-    return dbRetry(() -> WorkflowDAO.forkWorkflow(dataSource, schema, serializer, originalWorkflowId, startStep, options));
+    return dbRetry(
+        () ->
+            WorkflowDAO.forkWorkflow(
+                dataSource, schema, serializer, originalWorkflowId, startStep, options));
   }
 
   public void createApplicationVersion(String versionName) {
@@ -578,7 +595,9 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   public List<ExportedWorkflow> exportWorkflow(String workflowId, boolean exportChildren) {
-    return dbRetry(() -> WorkflowDAO.exportWorkflow(dataSource, schema, serializer, workflowId, exportChildren));
+    return dbRetry(
+        () ->
+            WorkflowDAO.exportWorkflow(dataSource, schema, serializer, workflowId, exportChildren));
   }
 
   public void importWorkflow(List<ExportedWorkflow> workflows) {
