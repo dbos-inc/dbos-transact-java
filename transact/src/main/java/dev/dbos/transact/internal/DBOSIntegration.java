@@ -7,11 +7,13 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
 import java.lang.reflect.Method;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -31,25 +33,30 @@ import org.jspecify.annotations.Nullable;
  */
 public class DBOSIntegration {
 
+  /**
+   * Callback used during workflow registration to process each discovered workflow method.
+   * Implementations receive the {@link Workflow} annotation, the target object, the reflective
+   * {@link Method}, and the optional instance name.
+   */
   @FunctionalInterface
   public interface RegisteredWorkflowConsumer {
     void register(Workflow wfTag, Object target, Method method, String instanceName);
   }
 
   private final DBOSConfig config;
+  private final WorkflowRegistry workflowRegistry;
   private final Supplier<DBOSExecutor> executorSupplier;
   private final Consumer<DBOSLifecycleListener> listenerConsumer;
-  private final RegisteredWorkflowConsumer workflowConsumer;
 
   public DBOSIntegration(
       @NonNull DBOSConfig config,
+      @NonNull WorkflowRegistry workflowRegistry,
       @NonNull Supplier<DBOSExecutor> executorSupplier,
-      @NonNull Consumer<DBOSLifecycleListener> lifecycleConsumer,
-      @NonNull RegisteredWorkflowConsumer workflowConsumer) {
+      @NonNull Consumer<DBOSLifecycleListener> lifecycleConsumer) {
     this.config = Objects.requireNonNull(config);
+    this.workflowRegistry = Objects.requireNonNull(workflowRegistry);
     this.executorSupplier = Objects.requireNonNull(executorSupplier);
     this.listenerConsumer = Objects.requireNonNull(lifecycleConsumer);
-    this.workflowConsumer = Objects.requireNonNull(workflowConsumer);
   }
 
   private DBOSExecutor executor(String caller) {
@@ -61,14 +68,19 @@ public class DBOSIntegration {
     return exec;
   }
 
+  /**
+   * Returns the DBOS configuration supplied at construction time.
+   *
+   * @return the active {@link DBOSConfig}
+   */
   public DBOSConfig config() {
     return this.config;
   }
 
   /**
-   * Register a lifecycle listener that receives callbacks when DBOS is launched or shut down
+   * Register a lifecycle listener that receives callbacks when DBOS is launched or shut down.
    *
-   * @param listener
+   * @param listener the listener to register; must not be {@code null}
    */
   public void registerLifecycleListener(@NonNull DBOSLifecycleListener listener) {
     listenerConsumer.accept(listener);
@@ -84,12 +96,61 @@ public class DBOSIntegration {
    * @param instanceName optional instance name for the workflow (can be null)
    * @throws IllegalStateException if called after DBOS is launched
    */
-  public void registerWorkflow(
+  public RegisteredWorkflow registerWorkflow(
       @NonNull Workflow wfTag,
       @NonNull Object target,
       @NonNull Method method,
       @Nullable String instanceName) {
-    workflowConsumer.register(wfTag, target, method, instanceName);
+
+    var workflowName = WorkflowRegistry.getWorkflowName(wfTag, method);
+    var className = WorkflowRegistry.getWorkflowClassName(target);
+
+    return registerWorkflow(
+        workflowName,
+        className,
+        instanceName,
+        target,
+        method,
+        wfTag.maxRecoveryAttempts(),
+        wfTag.serializationStrategy());
+  }
+
+  /**
+   * Register a workflow method with DBOS using explicit field values rather than deriving them from
+   * a {@link Workflow} annotation. Prefer {@link #registerWorkflow(Workflow, Object, Method,
+   * String)} unless you need to supply names or options that differ from the annotation.
+   *
+   * @param workflowName logical name of the workflow
+   * @param className name of the class that declares the workflow method
+   * @param instanceName optional instance name distinguishing multiple registrations of the same
+   *     class; may be {@code null}
+   * @param target the object instance on which the method will be invoked
+   * @param method the workflow {@link Method}
+   * @param maxRecoveryAttempts maximum number of recovery attempts; {@code null} uses the default
+   * @param serializationStrategy strategy used to serialize and deserialize workflow arguments and
+   *     return values; {@code null} uses the default
+   * @throws IllegalStateException if called after DBOS is launched
+   */
+  public RegisteredWorkflow registerWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @Nullable String instanceName,
+      @NonNull Object target,
+      @NonNull Method method,
+      @Nullable Integer maxRecoveryAttempts,
+      @Nullable SerializationStrategy serializationStrategy) {
+    if (executorSupplier.get() != null) {
+      throw new IllegalStateException("Cannot register workflow after DBOS is launched");
+    }
+
+    return workflowRegistry.registerWorkflow(
+        workflowName,
+        className,
+        instanceName,
+        target,
+        method,
+        maxRecoveryAttempts,
+        serializationStrategy);
   }
 
   /**
@@ -137,7 +198,11 @@ public class DBOSIntegration {
    * @return list of all registered workflow methods
    */
   public @NonNull Collection<RegisteredWorkflow> getRegisteredWorkflows() {
-    return executor("getRegisteredWorkflows").getRegisteredWorkflows();
+    var executor = executorSupplier.get();
+    if (executor != null) {
+      return executor.getRegisteredWorkflows();
+    }
+    return Collections.unmodifiableCollection(workflowRegistry.getWorkflowSnapshot().values());
   }
 
   /**
@@ -146,15 +211,21 @@ public class DBOSIntegration {
    * @return list of all class instances containing registered workflow methods
    */
   public @NonNull Collection<RegisteredWorkflowInstance> getRegisteredWorkflowInstances() {
-    return executor("getRegisteredWorkflowInstances").getRegisteredWorkflowInstances();
+    var executor = executorSupplier.get();
+    if (executor != null) {
+      return executor.getRegisteredWorkflowInstances();
+    }
+    return Collections.unmodifiableCollection(workflowRegistry.getInstanceSnapshot().values());
   }
 
   /**
-   * Finds a registered workflow by its workflow name, class name, and instance name.
+   * Finds a registered workflow by its workflow name and class name, using the default (empty)
+   * instance name. Equivalent to calling {@link #getRegisteredWorkflow(String, String, String)}
+   * with an empty string.
    *
    * @param workflowName the name of the workflow
    * @param className the name of the class containing the workflow
-   * @return an Optional containing the RegisteredWorkflow if found, otherwise empty
+   * @return an {@link Optional} containing the {@link RegisteredWorkflow} if found, otherwise empty
    */
   public Optional<RegisteredWorkflow> getRegisteredWorkflow(
       @NonNull String workflowName, @NonNull String className) {
@@ -171,31 +242,38 @@ public class DBOSIntegration {
    */
   public Optional<RegisteredWorkflow> getRegisteredWorkflow(
       @NonNull String workflowName, @NonNull String className, @NonNull String instanceName) {
-    return executor("getRegisteredWorkflow")
-        .getRegisteredWorkflow(workflowName, className, instanceName);
+    var executor = executorSupplier.get();
+    if (executor != null) {
+      return executor.getRegisteredWorkflow(workflowName, className, instanceName);
+    }
+    var fqName = RegisteredWorkflow.fullyQualifiedName(workflowName, className, instanceName);
+    return Optional.ofNullable(workflowRegistry.getWorkflowSnapshot().get(fqName));
   }
 
   /**
-   * Get a system database record stored by an external service A unique value is stored per
-   * combination of service, workflowName, and key
+   * Get a system database record stored by an external service. A unique value is stored per
+   * combination of service, workflowName, and key.
    *
-   * @param service Identity of the service maintaining the record
-   * @param workflowName Fully qualified name of the workflow
-   * @param key Key assigned within the service+workflow
-   * @return Optional containing the value associated with the service+workflow+key combination, or
-   *     empty if not found
+   * @param service identity of the service maintaining the record
+   * @param workflowName fully qualified name of the workflow
+   * @param key key assigned within the service+workflow scope
+   * @return an {@link Optional} containing the value associated with the service+workflow+key
+   *     combination, or empty if not found
+   * @throws IllegalStateException if DBOS has not been launched
    */
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return executor("getExternalState").getExternalState(service, workflowName, key);
   }
 
   /**
-   * Insert or update a system database record stored by an external service A timestamped unique
-   * value is stored per combination of service, workflowName, and key
+   * Insert or update a system database record stored by an external service. A timestamped unique
+   * value is stored per combination of service, workflowName, and key.
    *
-   * @param state ExternalState containing the service, workflow, key, and value to store
-   * @return Value associated with the service+workflow+key combination, in case the stored value
-   *     already had a higher version or timestamp
+   * @param state the {@link ExternalState} containing the service, workflow, key, and value to
+   *     store
+   * @return the value associated with the service+workflow+key combination — may differ from the
+   *     supplied value if the existing record already had a higher version or timestamp
+   * @throws IllegalStateException if DBOS has not been launched
    */
   public ExternalState upsertExternalState(ExternalState state) {
     return executor("upsertExternalState").upsertExternalState(state);
