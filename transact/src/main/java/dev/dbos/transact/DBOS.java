@@ -4,7 +4,6 @@ import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.context.DBOSContext;
 import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
-import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.ThrowingRunnable;
 import dev.dbos.transact.execution.ThrowingSupplier;
 import dev.dbos.transact.internal.DBOSIntegration;
@@ -29,7 +28,6 @@ import dev.dbos.transact.workflow.WorkflowStatus;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
@@ -85,10 +83,7 @@ public class DBOS implements AutoCloseable {
     this.config = new DBOSConfig(config);
     this.integration =
         new DBOSIntegration(
-            this.config,
-            dbosExecutor::get,
-            this::registerLifecycleListener,
-            this::registerWorkflow);
+            this.config, this.workflowRegistry, dbosExecutor::get, this::registerLifecycleListener);
   }
 
   /**
@@ -211,63 +206,12 @@ public class DBOS implements AutoCloseable {
       var wfTag = method.getAnnotation(Workflow.class);
       if (wfTag != null) {
         method.setAccessible(true); // In case it's not public
-        registerWorkflow(wfTag, target, method, instanceName);
+        integration.registerWorkflow(wfTag, target, method, instanceName);
       }
     }
 
     return DBOSInvocationHandler.createProxy(
         interfaceClass, target, instanceName, dbosExecutor::get);
-  }
-
-  /**
-   * Register a workflow method with DBOS. This method is used internally by the proxy registration
-   * process and should not typically be called directly by application code.
-   *
-   * @param wfTag the Workflow annotation containing workflow configuration
-   * @param target the object instance containing the workflow method
-   * @param method the Method representing the workflow function
-   * @param instanceName optional instance name for the workflow (can be null)
-   * @throws IllegalStateException if called after DBOS is launched
-   */
-  private RegisteredWorkflow registerWorkflow(
-      @NonNull Workflow wfTag,
-      @NonNull Object target,
-      @NonNull Method method,
-      @Nullable String instanceName) {
-    if (dbosExecutor.get() != null) {
-      throw new IllegalStateException("Cannot register workflow after DBOS is launched");
-    }
-
-    var workflowName = WorkflowRegistry.getWorkflowName(wfTag, method);
-    var className = WorkflowRegistry.getWorkflowClassName(target);
-
-    return registerWorkflow(
-        workflowName,
-        className,
-        instanceName,
-        target,
-        method,
-        wfTag.maxRecoveryAttempts(),
-        wfTag.serializationStrategy());
-  }
-
-  public RegisteredWorkflow registerWorkflow(
-      @NonNull String workflowName,
-      @NonNull String className,
-      @Nullable String instanceName,
-      @NonNull Object target,
-      @NonNull Method method,
-      @Nullable Integer maxRecoveryAttempts,
-      @Nullable SerializationStrategy serializationStrategy) {
-
-    return registerWorkflow(
-        workflowName,
-        className,
-        instanceName,
-        target,
-        method,
-        maxRecoveryAttempts,
-        serializationStrategy);
   }
 
   /**

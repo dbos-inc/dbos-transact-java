@@ -7,6 +7,7 @@ import dev.dbos.transact.execution.DBOSExecutor;
 import dev.dbos.transact.execution.DBOSLifecycleListener;
 import dev.dbos.transact.execution.RegisteredWorkflow;
 import dev.dbos.transact.execution.RegisteredWorkflowInstance;
+import dev.dbos.transact.workflow.SerializationStrategy;
 import dev.dbos.transact.workflow.Workflow;
 import dev.dbos.transact.workflow.WorkflowHandle;
 
@@ -37,19 +38,19 @@ public class DBOSIntegration {
   }
 
   private final DBOSConfig config;
+  private final WorkflowRegistry workflowRegistry;
   private final Supplier<DBOSExecutor> executorSupplier;
   private final Consumer<DBOSLifecycleListener> listenerConsumer;
-  private final RegisteredWorkflowConsumer workflowConsumer;
 
   public DBOSIntegration(
       @NonNull DBOSConfig config,
+      @NonNull WorkflowRegistry workflowRegistry,
       @NonNull Supplier<DBOSExecutor> executorSupplier,
-      @NonNull Consumer<DBOSLifecycleListener> lifecycleConsumer,
-      @NonNull RegisteredWorkflowConsumer workflowConsumer) {
+      @NonNull Consumer<DBOSLifecycleListener> lifecycleConsumer) {
     this.config = Objects.requireNonNull(config);
+    this.workflowRegistry = Objects.requireNonNull(workflowRegistry);
     this.executorSupplier = Objects.requireNonNull(executorSupplier);
     this.listenerConsumer = Objects.requireNonNull(lifecycleConsumer);
-    this.workflowConsumer = Objects.requireNonNull(workflowConsumer);
   }
 
   private DBOSExecutor executor(String caller) {
@@ -84,12 +85,45 @@ public class DBOSIntegration {
    * @param instanceName optional instance name for the workflow (can be null)
    * @throws IllegalStateException if called after DBOS is launched
    */
-  public void registerWorkflow(
+  public RegisteredWorkflow registerWorkflow(
       @NonNull Workflow wfTag,
       @NonNull Object target,
       @NonNull Method method,
       @Nullable String instanceName) {
-    workflowConsumer.register(wfTag, target, method, instanceName);
+
+    var workflowName = WorkflowRegistry.getWorkflowName(wfTag, method);
+    var className = WorkflowRegistry.getWorkflowClassName(target);
+
+    return registerWorkflow(
+        workflowName,
+        className,
+        instanceName,
+        target,
+        method,
+        wfTag.maxRecoveryAttempts(),
+        wfTag.serializationStrategy());
+  }
+
+  public RegisteredWorkflow registerWorkflow(
+      @NonNull String workflowName,
+      @NonNull String className,
+      @Nullable String instanceName,
+      @NonNull Object target,
+      @NonNull Method method,
+      @Nullable Integer maxRecoveryAttempts,
+      @Nullable SerializationStrategy serializationStrategy) {
+    if (executorSupplier.get() != null) {
+      throw new IllegalStateException("Cannot register workflow after DBOS is launched");
+    }
+
+    return workflowRegistry.registerWorkflow(
+        workflowName,
+        className,
+        instanceName,
+        target,
+        method,
+        maxRecoveryAttempts,
+        serializationStrategy);
   }
 
   /**
