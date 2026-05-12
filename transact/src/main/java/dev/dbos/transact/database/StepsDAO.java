@@ -25,16 +25,6 @@ class StepsDAO {
 
   private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
 
-  private final DataSource dataSource;
-  private final String schema;
-  private final DBOSSerializer serializer;
-
-  StepsDAO(DataSource dataSource, String schema, DBOSSerializer serializer) {
-    this.dataSource = dataSource;
-    this.schema = schema;
-    this.serializer = serializer;
-  }
-
   static void recordStepResultTxn(
       DataSource dataSource,
       StepResult result,
@@ -183,15 +173,28 @@ class StepsDAO {
     return recordedResult;
   }
 
-  List<StepInfo> listWorkflowSteps(
-      String workflowId, Boolean loadOutput, Integer limit, Integer offset) throws SQLException {
+  static List<StepInfo> listWorkflowSteps(
+      DataSource dataSource,
+      String workflowId,
+      Boolean loadOutput,
+      Integer limit,
+      Integer offset,
+      String schema,
+      DBOSSerializer serializer)
+      throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      return listWorkflowSteps(connection, workflowId, loadOutput, limit, offset);
+      return listWorkflowSteps(connection, workflowId, loadOutput, limit, offset, schema, serializer);
     }
   }
 
-  List<StepInfo> listWorkflowSteps(
-      Connection connection, String workflowId, Boolean loadOutput, Integer limit, Integer offset)
+  static List<StepInfo> listWorkflowSteps(
+      Connection connection,
+      String workflowId,
+      Boolean loadOutput,
+      Integer limit,
+      Integer offset,
+      String schema,
+      DBOSSerializer serializer)
       throws SQLException {
 
     StringBuilder sqlBuilder =
@@ -202,7 +205,7 @@ class StepsDAO {
           WHERE workflow_uuid = ?
           ORDER BY function_id
         """
-                .formatted(this.schema));
+                .formatted(schema));
 
     if (limit != null) {
       sqlBuilder.append(" LIMIT ?");
@@ -246,13 +249,13 @@ class StepsDAO {
             if (outputData != null) {
               try {
                 outputVal =
-                    SerializationUtil.deserializeValue(outputData, serialization, this.serializer);
+                    SerializationUtil.deserializeValue(outputData, serialization, serializer);
               } catch (Exception e) {
                 throw new RuntimeException(
                     "Failed to deserialize output for function " + functionId, e);
               }
             }
-            stepError = ErrorResult.deserialize(errorData, serialization, this.serializer);
+            stepError = ErrorResult.deserialize(errorData, serialization, serializer);
           }
           steps.add(
               new StepInfo(

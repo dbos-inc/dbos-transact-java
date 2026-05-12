@@ -71,14 +71,12 @@ class WorkflowDAO {
   private final DataSource dataSource;
   private final String schema;
   private final DBOSSerializer serializer;
-  private final StepsDAO stepsDAO;
   private long getResultPollingIntervalMs = 1000;
 
   WorkflowDAO(DataSource ds, String schema, DBOSSerializer serializer) {
     this.dataSource = ds;
     this.schema = Objects.requireNonNull(schema);
     this.serializer = serializer;
-    this.stepsDAO = new StepsDAO(ds, this.schema, serializer);
   }
 
   void speedUpPollingForTest() {
@@ -1473,7 +1471,7 @@ class WorkflowDAO {
     for (var wfid : workflowIds) {
       try (var conn = dataSource.getConnection()) {
         var status = getWorkflowStatus(conn, wfid);
-        var steps = stepsDAO.listWorkflowSteps(conn, wfid, true, null, null);
+        var steps = StepsDAO.listWorkflowSteps(conn, wfid, true, null, null, schema, serializer);
         var events = listWorkflowEvents(conn, wfid);
         var eventHistory = listWorkflowEventHistory(conn, wfid);
         var streams = listWorkflowStreams(conn, wfid);

@@ -45,7 +45,6 @@ public class SystemDatabase implements AutoCloseable {
   private final boolean created;
   private final DBOSSerializer serializer;
 
-  private final StepsDAO stepsDAO;
   private final WorkflowDAO workflowDAO;
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
@@ -77,7 +76,6 @@ public class SystemDatabase implements AutoCloseable {
     this.created = created;
     this.serializer = serializer;
 
-    stepsDAO = new StepsDAO(dataSource, this.schema, serializer);
     workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
     streamsDAO = new StreamsDAO(dataSource, this.schema);
     notificationService = new NotificationService(dataSource);
@@ -334,7 +332,7 @@ public class SystemDatabase implements AutoCloseable {
 
   public List<StepInfo> listWorkflowSteps(
       String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
-    return dbRetry(() -> stepsDAO.listWorkflowSteps(workflowId, loadOutput, limit, offset));
+    return dbRetry(() -> StepsDAO.listWorkflowSteps(dataSource, workflowId, loadOutput, limit, offset, this.schema, this.serializer));
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
