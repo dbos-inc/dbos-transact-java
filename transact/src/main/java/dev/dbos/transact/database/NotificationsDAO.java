@@ -5,6 +5,7 @@ import dev.dbos.transact.exceptions.DBOSNonExistentWorkflowException;
 import dev.dbos.transact.exceptions.DBOSWorkflowExecutionConflictException;
 import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.SerializationUtil;
+import dev.dbos.transact.workflow.NotificationInfo;
 import dev.dbos.transact.workflow.internal.StepResult;
 
 import java.sql.Connection;
@@ -12,6 +13,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -526,5 +530,41 @@ class NotificationsDAO {
       lockConditionPair.lock.unlock();
       notificationService.unregisterNotificationCondition(payload);
     }
+  }
+
+  List<NotificationInfo> getAllNotifications(String workflowId) throws SQLException {
+    var sql =
+        """
+        SELECT topic, message, serialization, created_at_epoch_ms, consumed
+        FROM "%s".notifications
+        WHERE destination_uuid = ?
+        ORDER BY created_at_epoch_ms
+        """
+            .formatted(this.schema);
+
+    var notifications = new ArrayList<NotificationInfo>();
+    try (var conn = dataSource.getConnection();
+        var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          var rawTopic = rs.getString("topic");
+          var topic = Constants.DBOS_NULL_TOPIC.equals(rawTopic) ? null : rawTopic;
+          var serialization = rs.getString("serialization");
+          var message =
+              SerializationUtil.deserializeValue(
+                  rs.getString("message"), serialization, this.serializer);
+          var createdAtEpochMs = rs.getLong("created_at_epoch_ms");
+          var consumed = rs.getBoolean("consumed");
+          notifications.add(
+              new NotificationInfo(
+                  topic,
+                  message,
+                  createdAtEpochMs != 0 ? Instant.ofEpochMilli(createdAtEpochMs) : null,
+                  consumed));
+        }
+      }
+    }
+    return notifications;
   }
 }

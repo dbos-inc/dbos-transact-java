@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -1668,6 +1669,19 @@ class WorkflowDAO {
         conn.rollback();
         throw e;
       }
+    }
+  }
+
+  Map<String, Object> getAllEvents(String workflowId) throws SQLException {
+    try (var conn = dataSource.getConnection()) {
+      var events = listWorkflowEvents(conn, workflowId);
+      var result = new LinkedHashMap<String, Object>();
+      for (var event : events) {
+        result.put(
+            event.key(),
+            SerializationUtil.deserializeValue(event.value(), event.serialization(), serializer));
+      }
+      return result;
     }
   }
 }
