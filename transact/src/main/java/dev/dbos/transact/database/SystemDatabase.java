@@ -48,7 +48,6 @@ public class SystemDatabase implements AutoCloseable {
   private final WorkflowDAO workflowDAO;
   private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
-  private final StreamsDAO streamsDAO;
 
   private static void validatePostgresDataSource(DataSource dataSource) {
     try (Connection conn = dataSource.getConnection()) {
@@ -77,7 +76,6 @@ public class SystemDatabase implements AutoCloseable {
     this.serializer = serializer;
 
     workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
-    streamsDAO = new StreamsDAO(dataSource, this.schema);
     notificationService = new NotificationService(dataSource);
     notificationsDAO =
         new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
@@ -545,27 +543,27 @@ public class SystemDatabase implements AutoCloseable {
       String workflowId, int functionId, String key, Object value, String serializationFormat) {
     dbRetry(
         () ->
-            streamsDAO.writeStreamFromStep(
-                workflowId, functionId, key, value, serializationFormat));
+            StreamsDAO.writeStreamFromStep(
+                dataSource, schema, workflowId, functionId, key, value, serializationFormat));
   }
 
   public void writeStreamFromWorkflow(
       String workflowId, int functionId, String key, Object value, String serializationFormat) {
     dbRetry(
         () ->
-            streamsDAO.writeStreamFromWorkflow(
-                workflowId, functionId, key, value, serializationFormat));
+            StreamsDAO.writeStreamFromWorkflow(
+                dataSource, schema, workflowId, functionId, key, value, serializationFormat));
   }
 
   public void closeStream(String workflowId, int functionId, String key) {
-    dbRetry(() -> streamsDAO.closeStream(workflowId, functionId, key));
+    dbRetry(() -> StreamsDAO.closeStream(dataSource, schema, workflowId, functionId, key));
   }
 
   public Object readStream(String workflowId, String key, int offset) {
-    return dbRetry(() -> streamsDAO.readStream(workflowId, key, offset));
+    return dbRetry(() -> StreamsDAO.readStream(dataSource, schema, workflowId, key, offset));
   }
 
   public Map<String, List<Object>> getAllStreamEntries(String workflowId) {
-    return dbRetry(() -> streamsDAO.getAllStreamEntries(workflowId));
+    return dbRetry(() -> StreamsDAO.getAllStreamEntries(dataSource, schema, workflowId));
   }
 }
