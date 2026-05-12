@@ -590,28 +590,21 @@ public class SystemDatabase implements AutoCloseable {
   public void writeStreamFromStep(
       String workflowId, int functionId, String key, Object value, String serializationFormat) {
     dbRetry(
-        () -> {
-          streamsDAO.writeStreamFromStep(workflowId, functionId, key, value, serializationFormat);
-          return null;
-        });
+        () ->
+            streamsDAO.writeStreamFromStep(
+                workflowId, functionId, key, value, serializationFormat));
   }
 
   public void writeStreamFromWorkflow(
       String workflowId, int functionId, String key, Object value, String serializationFormat) {
     dbRetry(
-        () -> {
-          streamsDAO.writeStreamFromWorkflow(
-              workflowId, functionId, key, value, serializationFormat);
-          return null;
-        });
+        () ->
+            streamsDAO.writeStreamFromWorkflow(
+                workflowId, functionId, key, value, serializationFormat));
   }
 
   public void closeStream(String workflowId, int functionId, String key) {
-    dbRetry(
-        () -> {
-          streamsDAO.closeStream(workflowId, functionId, key);
-          return null;
-        });
+    dbRetry(() -> streamsDAO.closeStream(workflowId, functionId, key));
   }
 
   public Object readStream(String workflowId, String key, int offset) {
