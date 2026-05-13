@@ -1,34 +1,38 @@
 [versions]
-asm = "9.7.1"
+asm = "9.9.1"
 aspectj = "1.9.22.1"
-assertj = "3.27.3"
+assertj = "3.27.7"
 cron-utils = "9.2.1"
 hikaricp = "7.0.2"
-jackson = "2.21.2"
+jackson = "2.21.3"
 java-websocket = "1.6.0"
-jaxb-api = "4.0.2"
-jdbi = "3.47.0"
-jooq = "3.19.15"
+jaxb-api = "4.0.5"
+jdbi = "3.53.0"
+# jOOQ pinned to 3.19.x for JDK 17 compatibility
+jooq = "3.19.34"
 jspecify = "1.0.0"
 junit = "6.0.3"
 junit-pioneer = "2.3.0"
-kotlin = "2.3.10"
+kotlin = "2.3.21"
 kryo = "5.6.2"
 logback = "1.5.32"
-maven-artifact = "3.9.13"
+maven-artifact = "3.9.15"
 maven-publish = "0.36.0"
 mockito = "5.23.0"
 picocli = "4.7.7"
-postgresql = "42.7.10"
+postgresql = "42.7.11"
 rest-assured = "6.0.0"
 shadow = "9.4.1"
-slf4j = "2.0.17"
+slf4j = "2.0.18"
 spotless = "8.4.0"
-spring-boot = "3.4.4"
-spring-framework = "6.2.5"
-sqlite-jdbc = "3.49.1.0"
+# Spring Boot pinned to 3.5.x. Enterprise support for 3.5 lasts until 2032
+spring-boot = "3.5.14"
+# Spring Boot 4.0.x binaries for test purposes
+spring-boot4 = "4.0.6"
+spring-framework = "6.2.18"
+sqlite-jdbc = "3.53.1.0"
 system-stubs = "2.1.8"
-testcontainers = "2.0.4"
+testcontainers = "2.0.5"
 versions = "0.53.0"
 
 [libraries]
@@ -61,6 +65,9 @@ spring-aop = { module = "org.springframework:spring-aop", version.ref = "spring-
 spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot" }
 spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "spring-boot" }
 spring-boot-test = { module = "org.springframework.boot:spring-boot-test", version.ref = "spring-boot" }
+spring-boot4-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot4" }
+spring-boot4-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot4" }
+spring-boot4-test = { module = "org.springframework.boot:spring-boot-test", version.ref = "spring-boot4" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 system-stubs-jupiter = { module = "uk.org.webcompere:system-stubs-jupiter", version.ref = "system-stubs" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
