@@ -23,17 +23,9 @@ import org.slf4j.LoggerFactory;
 
 class StepsDAO {
 
+  private StepsDAO() {}
+
   private static final Logger logger = LoggerFactory.getLogger(StepsDAO.class);
-
-  private final DataSource dataSource;
-  private final String schema;
-  private final DBOSSerializer serializer;
-
-  StepsDAO(DataSource ds, String schema, DBOSSerializer serializer) {
-    this.dataSource = ds;
-    this.schema = Objects.requireNonNull(schema);
-    this.serializer = serializer;
-  }
 
   static void recordStepResultTxn(
       DataSource dataSource,
@@ -114,21 +106,6 @@ class StepsDAO {
     }
   }
 
-  /**
-   * Checks the execution status and output of a specific operation within a workflow. This method
-   * corresponds to Python's '_check_operation_execution_txn'.
-   *
-   * @param workflowId The UUID of the workflow.
-   * @param functionId The ID of the function/operation.
-   * @param functionName The expected name of the function/operation.
-   * @param connection The active JDBC connection (corresponding to Python's 'conn: sa.Connection').
-   * @return A {@link StepResult} object if the operation has completed, otherwise {@code null}.
-   * @throws DBOSNonExistentWorkflowException If the workflow does not exist in the status table.
-   * @throws DBOSWorkflowCancelledException If the workflow is in a cancelled status.
-   * @throws DBOSUnexpectedStepException If the recorded function name for the operation does not
-   *     match the provided name.
-   * @throws SQLException For other database access errors.
-   */
   static StepResult checkStepExecutionTxn(
       String workflowId, int functionId, String functionName, Connection connection, String schema)
       throws SQLException, DBOSWorkflowCancelledException, DBOSUnexpectedStepException {
@@ -198,15 +175,29 @@ class StepsDAO {
     return recordedResult;
   }
 
-  List<StepInfo> listWorkflowSteps(
-      String workflowId, Boolean loadOutput, Integer limit, Integer offset) throws SQLException {
+  static List<StepInfo> listWorkflowSteps(
+      DataSource dataSource,
+      String workflowId,
+      Boolean loadOutput,
+      Integer limit,
+      Integer offset,
+      String schema,
+      DBOSSerializer serializer)
+      throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      return listWorkflowSteps(connection, workflowId, loadOutput, limit, offset);
+      return listWorkflowSteps(
+          connection, workflowId, loadOutput, limit, offset, schema, serializer);
     }
   }
 
-  List<StepInfo> listWorkflowSteps(
-      Connection connection, String workflowId, Boolean loadOutput, Integer limit, Integer offset)
+  static List<StepInfo> listWorkflowSteps(
+      Connection connection,
+      String workflowId,
+      Boolean loadOutput,
+      Integer limit,
+      Integer offset,
+      String schema,
+      DBOSSerializer serializer)
       throws SQLException {
 
     StringBuilder sqlBuilder =
@@ -217,7 +208,7 @@ class StepsDAO {
           WHERE workflow_uuid = ?
           ORDER BY function_id
         """
-                .formatted(this.schema));
+                .formatted(schema));
 
     if (limit != null) {
       sqlBuilder.append(" LIMIT ?");
@@ -258,17 +249,16 @@ class StepsDAO {
           ErrorResult stepError = null;
 
           if (Objects.requireNonNullElse(loadOutput, true)) {
-            // Deserialize output & error if present
             if (outputData != null) {
               try {
                 outputVal =
-                    SerializationUtil.deserializeValue(outputData, serialization, this.serializer);
+                    SerializationUtil.deserializeValue(outputData, serialization, serializer);
               } catch (Exception e) {
                 throw new RuntimeException(
                     "Failed to deserialize output for function " + functionId, e);
               }
             }
-            stepError = ErrorResult.deserialize(errorData, serialization, this.serializer);
+            stepError = ErrorResult.deserialize(errorData, serialization, serializer);
           }
           steps.add(
               new StepInfo(
@@ -287,16 +277,71 @@ class StepsDAO {
     return steps;
   }
 
-  void sleep(String workflowUuid, int functionId, Duration duration) throws SQLException {
+  static void sleep(
+      DataSource dataSource,
+      String workflowUuid,
+      int functionId,
+      Duration duration,
+      String schema,
+      DBOSSerializer serializer)
+      throws SQLException {
     var sleepDuration =
-        StepsDAO.durableSleepDuration(
-            dataSource, workflowUuid, functionId, duration, this.schema, this.serializer);
+        durableSleepDuration(dataSource, workflowUuid, functionId, duration, schema, serializer);
     logger.debug("Sleeping for duration {}", sleepDuration);
     try {
       Thread.sleep(sleepDuration.toMillis());
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new RuntimeException("Sleep was interrupted for workflow " + workflowUuid, e);
+    }
+  }
+
+  static String getCheckpointName(Connection conn, String workflowId, int functionId, String schema)
+      throws SQLException {
+    var sql =
+        """
+          SELECT function_name
+          FROM "%s".operation_outputs
+          WHERE workflow_uuid = ? AND function_id = ?
+        """
+            .formatted(schema);
+
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, workflowId);
+      ps.setInt(2, functionId);
+      try (var rs = ps.executeQuery()) {
+        if (rs.next()) {
+          return rs.getString("function_name");
+        } else {
+          return null;
+        }
+      }
+    }
+  }
+
+  static boolean patch(
+      DataSource dataSource, String workflowId, int functionId, String patchName, String schema)
+      throws SQLException {
+    Objects.requireNonNull(patchName, "patchName cannot be null");
+    try (Connection conn = dataSource.getConnection()) {
+      var checkpointName = getCheckpointName(conn, workflowId, functionId, schema);
+      if (checkpointName == null) {
+        var output = new StepResult(workflowId, functionId, patchName, null, null, null, null);
+        recordStepResultTxn(output, System.currentTimeMillis(), null, conn, schema);
+        return true;
+      } else {
+        return patchName.equals(checkpointName);
+      }
+    }
+  }
+
+  static boolean deprecatePatch(
+      DataSource dataSource, String workflowId, int functionId, String patchName, String schema)
+      throws SQLException {
+    Objects.requireNonNull(patchName, "patchName cannot be null");
+    try (Connection conn = dataSource.getConnection()) {
+      var checkpointName = getCheckpointName(conn, workflowId, functionId, schema);
+      return patchName.equals(checkpointName);
     }
   }
 
