@@ -25,6 +25,7 @@ shadow = "9.4.1"
 slf4j = "2.0.18"
 spotless = "8.4.0"
 spring-boot = "3.5.14"
+spring-boot4 = "4.0.6"
 spring-framework = "6.2.18"
 sqlite-jdbc = "3.53.1.0"
 system-stubs = "2.1.8"
@@ -61,6 +62,9 @@ spring-aop = { module = "org.springframework:spring-aop", version.ref = "spring-
 spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot" }
 spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "spring-boot" }
 spring-boot-test = { module = "org.springframework.boot:spring-boot-test", version.ref = "spring-boot" }
+spring-boot4-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot4" }
+spring-boot4-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot4" }
+spring-boot4-test = { module = "org.springframework.boot:spring-boot-test", version.ref = "spring-boot4" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 system-stubs-jupiter = { module = "uk.org.webcompere:system-stubs-jupiter", version.ref = "system-stubs" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
