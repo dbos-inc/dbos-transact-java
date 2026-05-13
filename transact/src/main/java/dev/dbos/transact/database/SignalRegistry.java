@@ -5,14 +5,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 sealed interface SignalKey
-    permits SignalKey.Cancellation, SignalKey.Event,  SignalKey.Message, SignalKey.Shutdown {
+    permits SignalKey.Cancellation, SignalKey.Event, SignalKey.Message, SignalKey.Shutdown {
 
   record Cancellation(String workflowId) implements SignalKey {}
 
   record Event(String workflowId, String topic) implements SignalKey {}
-  record Message(String workflowId, String topic) implements SignalKey {}
-  record Shutdown() implements SignalKey {}
 
+  record Message(String workflowId, String topic) implements SignalKey {}
+
+  record Shutdown() implements SignalKey {}
 }
 
 class SignalRegistry {

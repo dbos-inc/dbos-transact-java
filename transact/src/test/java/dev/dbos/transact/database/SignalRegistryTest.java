@@ -19,10 +19,10 @@ class SignalRegistryTest {
   SignalRegistry registry;
 
   // Reusable keys
-  static final SignalKey KEY   = new SignalKey.Cancellation("wf-1");
+  static final SignalKey KEY = new SignalKey.Cancellation("wf-1");
   static final SignalKey KEY_A = new SignalKey.Cancellation("wf-a");
   static final SignalKey KEY_B = new SignalKey.Cancellation("wf-b");
-  static final SignalKey FOO   = new SignalKey.Cancellation("foo");
+  static final SignalKey FOO = new SignalKey.Cancellation("foo");
 
   @BeforeEach
   void setup() {
@@ -102,7 +102,7 @@ class SignalRegistryTest {
   @Test
   void testDifferentKeyTypesWithSameFieldsDoNotCollide() {
     // Event("wf-1", "wf-1") and Cancellation("wf-1") must occupy separate map entries
-    SignalKey eventKey       = new SignalKey.Event("wf-1", "wf-1");
+    SignalKey eventKey = new SignalKey.Event("wf-1", "wf-1");
     SignalKey cancellationKey = new SignalKey.Cancellation("wf-1");
 
     CompletableFuture<Void> f1 = registry.subscribe(eventKey);
@@ -306,12 +306,12 @@ class SignalRegistryTest {
 
   @Test
   void testCheckIsDone_notifyFires() throws Exception {
-    SignalKey notifyKey    = new SignalKey.Event("wf-1", "topic");
-    SignalKey cancelKey    = new SignalKey.Cancellation("wf-1");
+    SignalKey notifyKey = new SignalKey.Event("wf-1", "topic");
+    SignalKey cancelKey = new SignalKey.Cancellation("wf-1");
 
-    CompletableFuture<Void> onNotify    = registry.subscribe(notifyKey);
+    CompletableFuture<Void> onNotify = registry.subscribe(notifyKey);
     CompletableFuture<Void> onCancelled = registry.subscribe(cancelKey);
-    CompletableFuture<Void> onDbClosed  = SignalRegistry.never();
+    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
 
     registry.signal(notifyKey);
 
@@ -326,12 +326,12 @@ class SignalRegistryTest {
 
   @Test
   void testCheckIsDone_cancelledFires() throws Exception {
-    SignalKey notifyKey    = new SignalKey.Event("wf-1", "topic");
-    SignalKey cancelKey    = new SignalKey.Cancellation("wf-1");
+    SignalKey notifyKey = new SignalKey.Event("wf-1", "topic");
+    SignalKey cancelKey = new SignalKey.Cancellation("wf-1");
 
-    CompletableFuture<Void> onNotify    = registry.subscribe(notifyKey);
+    CompletableFuture<Void> onNotify = registry.subscribe(notifyKey);
     CompletableFuture<Void> onCancelled = registry.subscribe(cancelKey);
-    CompletableFuture<Void> onDbClosed  = SignalRegistry.never();
+    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
 
     registry.signal(cancelKey);
 
@@ -346,9 +346,9 @@ class SignalRegistryTest {
 
   @Test
   void testCheckIsDone_dbClosedFires() throws Exception {
-    CompletableFuture<Void> onNotify    = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    CompletableFuture<Void> onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
     CompletableFuture<Void> onCancelled = SignalRegistry.never();
-    CompletableFuture<Void> onDbClosed  = new CompletableFuture<>();
+    CompletableFuture<Void> onDbClosed = new CompletableFuture<>();
     onDbClosed.complete(null);
 
     try {
@@ -362,9 +362,9 @@ class SignalRegistryTest {
 
   @Test
   void testCheckIsDone_timeout() throws Exception {
-    CompletableFuture<Void> onNotify    = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    CompletableFuture<Void> onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
     CompletableFuture<Void> onCancelled = SignalRegistry.never();
-    CompletableFuture<Void> onDbClosed  = SignalRegistry.never();
+    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
 
     try {
       CompletableFuture.anyOf(onNotify, onCancelled, onDbClosed).get(50, TimeUnit.MILLISECONDS);
@@ -382,13 +382,17 @@ class SignalRegistryTest {
     SignalKey notifyKey = new SignalKey.Event("wf-1", "topic");
     SignalKey cancelKey = new SignalKey.Cancellation("wf-1");
 
-    CompletableFuture<Void> onNotify    = registry.subscribe(notifyKey);
+    CompletableFuture<Void> onNotify = registry.subscribe(notifyKey);
     CompletableFuture<Void> onCancelled = registry.subscribe(cancelKey);
-    CompletableFuture<Void> onDbClosed  = SignalRegistry.never();
+    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
 
     registry.signal(notifyKey);
 
-    enum WakeReason { NOTIFY, CANCELLED, DB_CLOSED }
+    enum WakeReason {
+      NOTIFY,
+      CANCELLED,
+      DB_CLOSED
+    }
     WakeReason reason =
         (WakeReason)
             CompletableFuture.anyOf(
@@ -405,13 +409,17 @@ class SignalRegistryTest {
     SignalKey notifyKey = new SignalKey.Event("wf-1", "topic");
     SignalKey cancelKey = new SignalKey.Cancellation("wf-1");
 
-    CompletableFuture<Void> onNotify    = registry.subscribe(notifyKey);
+    CompletableFuture<Void> onNotify = registry.subscribe(notifyKey);
     CompletableFuture<Void> onCancelled = registry.subscribe(cancelKey);
-    CompletableFuture<Void> onDbClosed  = SignalRegistry.never();
+    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
 
     registry.signal(cancelKey);
 
-    enum WakeReason { NOTIFY, CANCELLED, DB_CLOSED }
+    enum WakeReason {
+      NOTIFY,
+      CANCELLED,
+      DB_CLOSED
+    }
     WakeReason reason =
         (WakeReason)
             CompletableFuture.anyOf(
@@ -425,12 +433,16 @@ class SignalRegistryTest {
 
   @Test
   void testTaggedDispatch_dbClosedFires() throws Exception {
-    CompletableFuture<Void> onNotify    = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    CompletableFuture<Void> onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
     CompletableFuture<Void> onCancelled = SignalRegistry.never();
-    CompletableFuture<Void> onDbClosed  = new CompletableFuture<>();
+    CompletableFuture<Void> onDbClosed = new CompletableFuture<>();
     onDbClosed.complete(null);
 
-    enum WakeReason { NOTIFY, CANCELLED, DB_CLOSED }
+    enum WakeReason {
+      NOTIFY,
+      CANCELLED,
+      DB_CLOSED
+    }
     WakeReason reason =
         (WakeReason)
             CompletableFuture.anyOf(
@@ -444,11 +456,15 @@ class SignalRegistryTest {
 
   @Test
   void testTaggedDispatch_timeout() throws Exception {
-    CompletableFuture<Void> onNotify    = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    CompletableFuture<Void> onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
     CompletableFuture<Void> onCancelled = SignalRegistry.never();
-    CompletableFuture<Void> onDbClosed  = SignalRegistry.never();
+    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
 
-    enum WakeReason { NOTIFY, CANCELLED, DB_CLOSED }
+    enum WakeReason {
+      NOTIFY,
+      CANCELLED,
+      DB_CLOSED
+    }
     WakeReason reason = null;
     try {
       reason =
