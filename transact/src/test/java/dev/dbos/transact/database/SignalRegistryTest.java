@@ -104,14 +104,29 @@ class SignalRegistryTest {
   }
 
   @Test
-  void testUnsubscribePreventsFutureFromBeingSignalled() throws Exception {
-    CompletableFuture<Void> f = registry.subscribe("key");
-    registry.unsubscribe("key");
+  void testCloseOneSubscriberDoesNotOrphanOthers() throws Exception {
+    // Closing one subscription on a shared key must not prevent the remaining subscriber
+    // from being woken when the signal fires (ref-counting behaviour).
+    SignalRegistry.Subscription sub1 = registry.subscribe("key");
+    SignalRegistry.Subscription sub2 = registry.subscribe("key");
+
+    sub1.close(); // ref count drops to 1 — key must stay in map
+
+    registry.signal("key");
+    assertTrue(sub2.isDone());
+    assertFalse(sub2.isCompletedExceptionally());
+  }
+
+  @Test
+  void testClosePreventsFutureFromBeingSignalled() throws Exception {
+    SignalRegistry.Subscription sub = registry.subscribe("key");
+    sub.close();
     registry.signal("key"); // no entry in map — should be a no-op
 
-    // f was returned before unsubscribe so it's a copy of the (now-removed) shared future;
+    // sub was closed before signal so the shared future was removed from the map;
     // it will never complete since nothing holds a reference to complete it
-    boolean completed = f.orTimeout(100, TimeUnit.MILLISECONDS).handle((v, ex) -> ex == null).get();
+    boolean completed =
+        sub.orTimeout(100, TimeUnit.MILLISECONDS).handle((v, ex) -> ex == null).get();
     assertFalse(completed);
   }
 
