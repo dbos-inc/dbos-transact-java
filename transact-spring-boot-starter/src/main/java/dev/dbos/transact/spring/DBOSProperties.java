@@ -133,6 +133,12 @@ public class DBOSProperties {
     /** Whether to run database migrations on startup. Defaults to {@code true}. */
     private boolean migrate = true;
 
+    /**
+     * Whether to use PostgreSQL LISTEN/NOTIFY for event delivery. Defaults to {@code true}. Set to
+     * {@code false} to use polling instead
+     */
+    private boolean useListenNotify = true;
+
     public String getUrl() {
       return url;
     }
@@ -171,6 +177,14 @@ public class DBOSProperties {
 
     public void setMigrate(boolean migrate) {
       this.migrate = migrate;
+    }
+
+    public boolean isUseListenNotify() {
+      return useListenNotify;
+    }
+
+    public void setUseListenNotify(boolean useListenNotify) {
+      this.useListenNotify = useListenNotify;
     }
   }
 
