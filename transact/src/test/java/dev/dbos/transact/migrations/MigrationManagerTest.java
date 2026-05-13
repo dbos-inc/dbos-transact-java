@@ -310,7 +310,8 @@ class MigrationManagerTest {
       ps.setString(1, schema);
       ps.setString(2, triggerName);
       try (var rs = ps.executeQuery()) {
-        assertTrue(rs.next(), "Trigger %s should exist in schema %s".formatted(triggerName, schema));
+        assertTrue(
+            rs.next(), "Trigger %s should exist in schema %s".formatted(triggerName, schema));
       }
     }
   }
