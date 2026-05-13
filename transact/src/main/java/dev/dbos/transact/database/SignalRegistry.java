@@ -4,6 +4,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+sealed interface SignalKey
+    permits SignalKey.Cancellation, SignalKey.Event,  SignalKey.Message, SignalKey.Shutdown {
+
+  record Cancellation(String workflowId) implements SignalKey {}
+
+  record Event(String workflowId, String topic) implements SignalKey {}
+  record Message(String workflowId, String topic) implements SignalKey {}
+  record Shutdown() implements SignalKey {}
+
+}
+
 class SignalRegistry {
 
   private static class Entry {
@@ -24,9 +35,9 @@ class SignalRegistry {
     }
   }
 
-  private final ConcurrentHashMap<String, Entry> map = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<SignalKey, Entry> map = new ConcurrentHashMap<>();
 
-  Subscription subscribe(String key) {
+  public Subscription subscribe(SignalKey key) {
     Entry entry =
         map.compute(
             key,
@@ -50,12 +61,16 @@ class SignalRegistry {
     return sub;
   }
 
-  void signal(String key) {
+  public void signal(SignalKey key) {
     Entry e = map.remove(key);
     if (e != null) e.future.complete(null);
   }
 
-  static CompletableFuture<Void> never() {
-    return new CompletableFuture<>();
+  Iterable<SignalKey> keys() {
+    return map.keySet();
+  }
+
+  static Subscription never() {
+    return new Subscription(() -> {});
   }
 }
