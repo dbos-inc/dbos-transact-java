@@ -23,29 +23,30 @@ public class MigrationManager {
     Objects.requireNonNull(config, "DBOS Config must not be null");
 
     if (config.dataSource() != null) {
-      runMigrations(config.dataSource(), config.databaseSchema());
+      runMigrations(config.dataSource(), config.databaseSchema(), config.useListenNotify());
     } else {
       createDatabaseIfNotExists(config.databaseUrl(), config.dbUser(), config.dbPassword());
       try (var ds =
           SystemDatabase.createDataSource(
               config.databaseUrl(), config.dbUser(), config.dbPassword())) {
-        runMigrations(ds, config.databaseSchema());
+        runMigrations(ds, config.databaseSchema(), config.useListenNotify());
       }
     }
   }
 
-  public static void runMigrations(String url, String user, String password, String schema) {
+  public static void runMigrations(
+      String url, String user, String password, String schema, boolean useListenNotify) {
     Objects.requireNonNull(url, "database url must not be null");
     Objects.requireNonNull(user, "database user must not be null");
     Objects.requireNonNull(password, "database password must not be null");
 
     createDatabaseIfNotExists(url, user, password);
     try (var ds = SystemDatabase.createDataSource(url, user, password)) {
-      runMigrations(ds, schema);
+      runMigrations(ds, schema, useListenNotify);
     }
   }
 
-  private static void runMigrations(DataSource ds, String schema) {
+  private static void runMigrations(DataSource ds, String schema, boolean useListenNotify) {
     Objects.requireNonNull(ds, "Data Source must not be null");
     schema = SystemDatabase.sanitizeSchema(schema);
 
@@ -54,9 +55,23 @@ public class MigrationManager {
     }
 
     try (var conn = ds.getConnection()) {
+
+      var isCockroach = false;
+      try (var stmt = conn.createStatement();
+          var rs = stmt.executeQuery("SELECT version()")) {
+        if (rs.next()) {
+          String version = rs.getString(1).toLowerCase();
+          isCockroach = version.contains("cockroachdb");
+        }
+      }
+
+      if (isCockroach) {
+        useListenNotify = false;
+      }
+
       ensureDbosSchema(conn, schema);
       ensureMigrationTable(conn, schema);
-      var migrations = getMigrations(schema);
+      var migrations = getMigrations(schema, useListenNotify);
       runDbosMigrations(conn, schema, migrations);
     } catch (SQLException e) {
       throw new RuntimeException("Failed to run migrations", e);
@@ -212,11 +227,12 @@ public class MigrationManager {
     }
   }
 
-  public static List<String> getMigrations(String schema) {
+  public static List<String> getMigrations(String schema, boolean useListenNotify) {
     Objects.requireNonNull(schema);
+
     var migrations =
         List.of(
-            MIGRATION_1,
+            migration1(useListenNotify),
             MIGRATION_2,
             MIGRATION_3,
             MIGRATION_4,
@@ -238,8 +254,13 @@ public class MigrationManager {
     return migrations.stream().map(m -> m.formatted(schema)).toList();
   }
 
+  static String migration1(boolean useListenNotify) {
+    return useListenNotify ? MIGRATION_1 + MIGRATION_1_NOTIFY : MIGRATION_1;
+  }
+
   static final String MIGRATION_1 =
       """
+      -- Enable uuid extension for generating UUIDs
       CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
       CREATE TABLE "%1$s".workflow_status (
@@ -300,21 +321,6 @@ public class MigrationManager {
       );
       CREATE INDEX idx_workflow_topic ON "%1$s".notifications (destination_uuid, topic);
 
-      -- Create notification function
-      CREATE OR REPLACE FUNCTION "%1$s".notifications_function() RETURNS TRIGGER AS $$
-      DECLARE
-          payload text := NEW.destination_uuid || '::' || NEW.topic;
-      BEGIN
-          PERFORM pg_notify('dbos_notifications_channel', payload);
-          RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql;
-
-      -- Create notification trigger
-      CREATE TRIGGER dbos_notifications_trigger
-      AFTER INSERT ON "%1$s".notifications
-      FOR EACH ROW EXECUTE FUNCTION "%1$s".notifications_function();
-
       CREATE TABLE "%1$s".workflow_events (
           workflow_uuid TEXT NOT NULL,
           key TEXT NOT NULL,
@@ -323,21 +329,6 @@ public class MigrationManager {
           FOREIGN KEY (workflow_uuid) REFERENCES "%1$s".workflow_status(workflow_uuid)
               ON UPDATE CASCADE ON DELETE CASCADE
       );
-
-      -- Create events function
-      CREATE OR REPLACE FUNCTION "%1$s".workflow_events_function() RETURNS TRIGGER AS $$
-      DECLARE
-          payload text := NEW.workflow_uuid || '::' || NEW.key;
-      BEGIN
-          PERFORM pg_notify('dbos_workflow_events_channel', payload);
-          RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql;
-
-      -- Create events trigger
-      CREATE TRIGGER dbos_workflow_events_trigger
-      AFTER INSERT ON "%1$s".workflow_events
-      FOR EACH ROW EXECUTE FUNCTION "%1$s".workflow_events_function();
 
       CREATE TABLE "%1$s".streams (
           workflow_uuid TEXT NOT NULL,
@@ -358,6 +349,39 @@ public class MigrationManager {
           update_time NUMERIC(38,15),
           PRIMARY KEY (service_name, workflow_fn_name, key)
       );
+      """;
+
+  static final String MIGRATION_1_NOTIFY =
+      """
+      -- Create notification function
+      CREATE OR REPLACE FUNCTION "%1$s".notifications_function() RETURNS TRIGGER AS $$
+      DECLARE
+          payload text := NEW.destination_uuid || '::' || NEW.topic;
+      BEGIN
+          PERFORM pg_notify('dbos_notifications_channel', payload);
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      -- Create notification trigger
+      CREATE TRIGGER dbos_notifications_trigger
+      AFTER INSERT ON "%1$s".notifications
+      FOR EACH ROW EXECUTE FUNCTION "%1$s".notifications_function();
+
+      -- Create events function
+      CREATE OR REPLACE FUNCTION "%1$s".workflow_events_function() RETURNS TRIGGER AS $$
+      DECLARE
+          payload text := NEW.workflow_uuid || '::' || NEW.key;
+      BEGIN
+          PERFORM pg_notify('dbos_workflow_events_channel', payload);
+          RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      -- Create events trigger
+      CREATE TRIGGER dbos_workflow_events_trigger
+      AFTER INSERT ON "%1$s".workflow_events
+      FOR EACH ROW EXECUTE FUNCTION "%1$s".workflow_events_function();
       """;
 
   static final String MIGRATION_2 =

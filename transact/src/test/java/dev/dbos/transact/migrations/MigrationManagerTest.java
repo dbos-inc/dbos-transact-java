@@ -43,6 +43,11 @@ class MigrationManagerTest {
     "notifications_function", "workflow_events_function", "enqueue_workflow", "send_message"
   };
 
+  // Expected LISTEN/NOTIFY triggers after migrations (only when useListenNotify=true)
+  static final String[] EXPECTED_NOTIFY_TRIGGERS = {
+    "dbos_notifications_trigger", "dbos_workflow_events_trigger"
+  };
+
   @AutoClose final PgContainer pgContainer = new PgContainer();
   @AutoClose HikariDataSource dataSource;
 
@@ -69,10 +74,38 @@ class MigrationManagerTest {
       for (String function : EXPECTED_FUNCTIONS) {
         assertFunctionExists(metaData, function);
       }
+      for (String trigger : EXPECTED_NOTIFY_TRIGGERS) {
+        assertTriggerExists(conn, trigger);
+      }
 
-      var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
+      var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA, true));
       var version = getVersion(conn);
       assertEquals(migrations.size(), version);
+    }
+  }
+
+  @Test
+  void testRunMigrations_NoNotify_OmitsTriggersAndFunctions() throws Exception {
+    var dbosConfig = pgContainer.dbosConfig().withUseListenNotify(false);
+    MigrationManager.runMigrations(dbosConfig);
+
+    try (Connection conn = dataSource.getConnection()) {
+      DatabaseMetaData metaData = conn.getMetaData();
+
+      // All tables should still exist
+      for (String table : EXPECTED_TABLES) {
+        assertTableExists(metaData, table);
+      }
+
+      // enqueue_workflow and send_message are unaffected
+      assertFunctionExists(metaData, "enqueue_workflow");
+      assertFunctionExists(metaData, "send_message");
+
+      // LISTEN/NOTIFY functions and triggers must be absent
+      assertFunctionAbsent(conn, "notifications_function");
+      assertFunctionAbsent(conn, "workflow_events_function");
+      assertTriggerAbsent(conn, "dbos_notifications_trigger");
+      assertTriggerAbsent(conn, "dbos_workflow_events_trigger");
     }
   }
 
@@ -101,8 +134,11 @@ class MigrationManagerTest {
       for (String function : EXPECTED_FUNCTIONS) {
         assertFunctionExists(metaData, function, schema);
       }
+      for (String trigger : EXPECTED_NOTIFY_TRIGGERS) {
+        assertTriggerExists(conn, trigger, schema);
+      }
 
-      var migrations = new ArrayList<>(MigrationManager.getMigrations(schema));
+      var migrations = new ArrayList<>(MigrationManager.getMigrations(schema, true));
       var version = getVersion(conn, schema);
       assertEquals(migrations.size(), version);
     }
@@ -126,7 +162,7 @@ class MigrationManagerTest {
   void testAddingNewMigration() throws Exception {
     testRunMigrations_CreatesTables();
 
-    var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA));
+    var migrations = new ArrayList<>(MigrationManager.getMigrations(Constants.DB_SCHEMA, true));
     migrations.add("CREATE TABLE dummy_table(id SERIAL PRIMARY KEY);");
 
     try (var conn = dataSource.getConnection()) {
@@ -192,7 +228,7 @@ class MigrationManagerTest {
       assertTableExists(metaData, "notifications");
 
       // Now run all current migrations (including migration10 which ensures primary key)
-      var allMigrations = MigrationManager.getMigrations(Constants.DB_SCHEMA);
+      var allMigrations = MigrationManager.getMigrations(Constants.DB_SCHEMA, true);
       MigrationManager.runDbosMigrations(conn, Constants.DB_SCHEMA, allMigrations);
 
       // Verify that the notifications table has a primary key
@@ -243,6 +279,53 @@ class MigrationManagerTest {
       var value = rs.getInt("version");
       assertFalse(rs.next());
       return value;
+    }
+  }
+
+  static void assertFunctionAbsent(Connection conn, String functionName) throws Exception {
+    String sql =
+        "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid"
+            + " WHERE n.nspname = ? AND p.proname = ?";
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, Constants.DB_SCHEMA);
+      ps.setString(2, functionName);
+      try (var rs = ps.executeQuery()) {
+        assertFalse(rs.next(), "Function %s should not exist".formatted(functionName));
+      }
+    }
+  }
+
+  static void assertTriggerExists(Connection conn, String triggerName) throws Exception {
+    assertTriggerExists(conn, triggerName, Constants.DB_SCHEMA);
+  }
+
+  static void assertTriggerExists(Connection conn, String triggerName, String schema)
+      throws Exception {
+    schema = SystemDatabase.sanitizeSchema(schema);
+    String sql =
+        "SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid"
+            + " JOIN pg_namespace n ON c.relnamespace = n.oid"
+            + " WHERE n.nspname = ? AND t.tgname = ?";
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, schema);
+      ps.setString(2, triggerName);
+      try (var rs = ps.executeQuery()) {
+        assertTrue(rs.next(), "Trigger %s should exist in schema %s".formatted(triggerName, schema));
+      }
+    }
+  }
+
+  static void assertTriggerAbsent(Connection conn, String triggerName) throws Exception {
+    String sql =
+        "SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid"
+            + " JOIN pg_namespace n ON c.relnamespace = n.oid"
+            + " WHERE n.nspname = ? AND t.tgname = ?";
+    try (var ps = conn.prepareStatement(sql)) {
+      ps.setString(1, Constants.DB_SCHEMA);
+      ps.setString(2, triggerName);
+      try (var rs = ps.executeQuery()) {
+        assertFalse(rs.next(), "Trigger %s should not exist".formatted(triggerName));
+      }
     }
   }
 
