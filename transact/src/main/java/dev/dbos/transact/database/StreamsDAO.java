@@ -14,24 +14,30 @@ import javax.sql.DataSource;
 
 class StreamsDAO {
 
-  private final DataSource dataSource;
-  private final String schema;
+  private StreamsDAO() {}
 
-  StreamsDAO(DataSource dataSource, String schema) {
-    this.dataSource = dataSource;
-    this.schema = schema;
-  }
-
-  public void writeStreamFromStep(
-      String workflowId, int functionId, String key, Object value, String serializationFormat)
+  static void writeStreamFromStep(
+      DataSource dataSource,
+      String schema,
+      String workflowId,
+      int functionId,
+      String key,
+      Object value,
+      String serializationFormat)
       throws SQLException {
     try (Connection conn = dataSource.getConnection()) {
-      insertStream(conn, workflowId, functionId, key, value, serializationFormat);
+      insertStream(conn, schema, workflowId, functionId, key, value, serializationFormat);
     }
   }
 
-  public void writeStreamFromWorkflow(
-      String workflowId, int functionId, String key, Object value, String serializationFormat)
+  static void writeStreamFromWorkflow(
+      DataSource dataSource,
+      String schema,
+      String workflowId,
+      int functionId,
+      String key,
+      Object value,
+      String serializationFormat)
       throws SQLException {
     String functionName =
         STREAM_CLOSED_SENTINEL.equals(value) ? "DBOS.closeStream" : "DBOS.writeStream";
@@ -52,7 +58,7 @@ class StreamsDAO {
           logger.debug("Running writeStream, id: {}, key: {}", functionId, key);
         }
 
-        insertStream(conn, workflowId, functionId, key, value, serializationFormat);
+        insertStream(conn, schema, workflowId, functionId, key, value, serializationFormat);
 
         var output = new StepResult(workflowId, functionId, functionName, null, null, null, null);
         StepsDAO.recordStepResultTxn(output, startTime, System.currentTimeMillis(), conn, schema);
@@ -70,8 +76,9 @@ class StreamsDAO {
     }
   }
 
-  private void insertStream(
+  private static void insertStream(
       Connection conn,
+      String schema,
       String workflowId,
       int functionId,
       String key,
@@ -79,7 +86,7 @@ class StreamsDAO {
       String serializationFormat)
       throws SQLException {
     var serialized = SerializationUtil.serializeValue(value, serializationFormat, null);
-    int offset = getNextOffsetTx(conn, workflowId, key);
+    int offset = getNextOffsetTx(conn, schema, workflowId, key);
 
     String sql =
         """
@@ -99,7 +106,8 @@ class StreamsDAO {
     }
   }
 
-  private int getNextOffsetTx(Connection conn, String workflowId, String key) throws SQLException {
+  private static int getNextOffsetTx(Connection conn, String schema, String workflowId, String key)
+      throws SQLException {
     String sql =
         """
         SELECT COALESCE(MAX("offset"), -1) + 1
@@ -120,11 +128,16 @@ class StreamsDAO {
     }
   }
 
-  public void closeStream(String workflowId, int functionId, String key) throws SQLException {
-    writeStreamFromWorkflow(workflowId, functionId, key, STREAM_CLOSED_SENTINEL, "portable_json");
+  static void closeStream(
+      DataSource dataSource, String schema, String workflowId, int functionId, String key)
+      throws SQLException {
+    writeStreamFromWorkflow(
+        dataSource, schema, workflowId, functionId, key, STREAM_CLOSED_SENTINEL, "portable_json");
   }
 
-  public Object readStream(String workflowId, String key, int offset) throws SQLException {
+  static Object readStream(
+      DataSource dataSource, String schema, String workflowId, String key, int offset)
+      throws SQLException {
     String sql =
         """
         SELECT value, serialization
@@ -154,7 +167,8 @@ class StreamsDAO {
     }
   }
 
-  public Map<String, List<Object>> getAllStreamEntries(String workflowId) throws SQLException {
+  static Map<String, List<Object>> getAllStreamEntries(
+      DataSource dataSource, String schema, String workflowId) throws SQLException {
     String sql =
         """
         SELECT key, value, serialization

@@ -24,17 +24,11 @@ import javax.sql.DataSource;
 
 class SchedulesDAO {
 
-  private final DataSource dataSource;
-  private final String schema;
-  private final DBOSSerializer serializer;
+  private SchedulesDAO() {}
 
-  SchedulesDAO(DataSource dataSource, String schema, DBOSSerializer serializer) {
-    this.dataSource = Objects.requireNonNull(dataSource);
-    this.schema = Objects.requireNonNull(schema);
-    this.serializer = serializer;
-  }
-
-  void createSchedule(WorkflowSchedule schedule) throws SQLException {
+  static void createSchedule(
+      DataSource dataSource, String schema, DBOSSerializer serializer, WorkflowSchedule schedule)
+      throws SQLException {
     try (Connection conn = dataSource.getConnection()) {
       createSchedule(conn, schema, serializer, schedule);
     }
@@ -63,8 +57,6 @@ class SchedulesDAO {
         """
             .formatted(schema);
 
-    // https://github.com/dbos-inc/dbos-transact-java/issues/330
-    // tracking portable serialization support
     var serializedContext =
         SerializationUtil.serializeValue(
             schedule.context(), serializer != null ? serializer.name() : null, serializer);
@@ -92,8 +84,13 @@ class SchedulesDAO {
     }
   }
 
-  List<WorkflowSchedule> listSchedules(
-      List<ScheduleStatus> statuses, List<String> workflowNames, List<String> scheduleNamePrefixes)
+  static List<WorkflowSchedule> listSchedules(
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
+      List<ScheduleStatus> statuses,
+      List<String> workflowNames,
+      List<String> scheduleNamePrefixes)
       throws SQLException {
 
     StringBuilder sql =
@@ -156,7 +153,9 @@ class SchedulesDAO {
     }
   }
 
-  Optional<WorkflowSchedule> getSchedule(String name) throws SQLException {
+  static Optional<WorkflowSchedule> getSchedule(
+      DataSource dataSource, String schema, DBOSSerializer serializer, String name)
+      throws SQLException {
     String sql =
         """
         SELECT schedule_id, schedule_name, workflow_name, workflow_class_name,
@@ -179,15 +178,18 @@ class SchedulesDAO {
     }
   }
 
-  void pauseSchedule(String name) throws SQLException {
-    setScheduleStatus(name, ScheduleStatus.PAUSED);
+  static void pauseSchedule(DataSource dataSource, String schema, String name) throws SQLException {
+    setScheduleStatus(dataSource, schema, name, ScheduleStatus.PAUSED);
   }
 
-  void resumeSchedule(String name) throws SQLException {
-    setScheduleStatus(name, ScheduleStatus.ACTIVE);
+  static void resumeSchedule(DataSource dataSource, String schema, String name)
+      throws SQLException {
+    setScheduleStatus(dataSource, schema, name, ScheduleStatus.ACTIVE);
   }
 
-  private void setScheduleStatus(String name, ScheduleStatus status) throws SQLException {
+  private static void setScheduleStatus(
+      DataSource dataSource, String schema, String name, ScheduleStatus status)
+      throws SQLException {
     String sql =
         """
         UPDATE "%s".workflow_schedules SET status = ? WHERE schedule_name = ?
@@ -202,7 +204,8 @@ class SchedulesDAO {
     }
   }
 
-  void updateScheduleLastFiredAt(String name, Instant lastFiredAt) throws SQLException {
+  static void updateScheduleLastFiredAt(
+      DataSource dataSource, String schema, String name, Instant lastFiredAt) throws SQLException {
     String sql =
         """
         UPDATE "%s".workflow_schedules SET last_fired_at = ? WHERE schedule_name = ?
@@ -217,7 +220,8 @@ class SchedulesDAO {
     }
   }
 
-  void deleteSchedule(String name) throws SQLException {
+  static void deleteSchedule(DataSource dataSource, String schema, String name)
+      throws SQLException {
     try (Connection conn = dataSource.getConnection()) {
       deleteSchedule(conn, schema, name);
     }
@@ -236,7 +240,12 @@ class SchedulesDAO {
     }
   }
 
-  void applySchedules(List<WorkflowSchedule> schedules) throws SQLException {
+  static void applySchedules(
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
+      List<WorkflowSchedule> schedules)
+      throws SQLException {
     try (Connection conn = dataSource.getConnection()) {
       conn.setAutoCommit(false);
       try {
@@ -263,8 +272,6 @@ class SchedulesDAO {
 
   private static WorkflowSchedule rowToSchedule(ResultSet rs, DBOSSerializer serializer)
       throws SQLException {
-    // https://github.com/dbos-inc/dbos-transact-java/issues/330
-    // tracking portable serialization support
     Object context =
         SerializationUtil.deserializeValue(
             rs.getString(7), serializer != null ? serializer.name() : null, serializer);

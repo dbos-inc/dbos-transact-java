@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 import javax.sql.DataSource;
 
@@ -21,26 +20,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class QueuesDAO {
+
+  private QueuesDAO() {}
+
   private static final Logger logger = LoggerFactory.getLogger(QueuesDAO.class);
 
-  private final DataSource dataSource;
-  private final String schema;
-
-  QueuesDAO(DataSource ds, String schema) {
-    this.dataSource = ds;
-    this.schema = Objects.requireNonNull(schema);
-  }
-
-  /**
-   * Get queued workflows based on queue configuration and concurrency limits.
-   *
-   * @param queue The queue configuration
-   * @param executorId The executor ID
-   * @param appVersion The application version
-   * @return List of workflow UUIDs that are due for execution
-   */
-  List<String> getAndStartQueuedWorkflows(
-      Queue queue, String executorId, String appVersion, String partitionKey) throws SQLException {
+  static List<String> getAndStartQueuedWorkflows(
+      DataSource dataSource,
+      String schema,
+      Queue queue,
+      String executorId,
+      String appVersion,
+      String partitionKey)
+      throws SQLException {
 
     if (partitionKey != null && partitionKey.length() == 0) {
       partitionKey = null;
@@ -49,20 +41,16 @@ class QueuesDAO {
     try (Connection connection = dataSource.getConnection()) {
       connection.setAutoCommit(false);
 
-      // Set snapshot isolation level
       try (Statement stmt = connection.createStatement()) {
         stmt.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
       }
 
       int numRecentQueries = 0;
 
-      // First check the rate limiter
       var rateLimit = queue.rateLimit();
       if (rateLimit != null) {
-        // Calculate the cutoff time: current time minus limiter period
         var cutoffTime = Instant.now().minus(rateLimit.period());
 
-        // Count workflows that have started in the limiter period
         var limiterQuery =
             """
               SELECT COUNT(*)
@@ -71,7 +59,7 @@ class QueuesDAO {
               AND status NOT IN (?, ?)
               AND started_at_epoch_ms > ?
             """
-                .formatted(this.schema);
+                .formatted(schema);
         if (partitionKey != null) {
           limiterQuery += " AND queue_partition_key = ?";
         }
@@ -97,18 +85,16 @@ class QueuesDAO {
         }
       }
 
-      // Calculate max_tasks based on concurrency limits
       int maxTasks = 100;
 
       if (queue.workerConcurrency() != null || queue.concurrency() != null) {
-        // Count pending workflows by executor
         String pendingQuery =
             """
               SELECT executor_id, COUNT(*) as task_count
               FROM "%s".workflow_status
               WHERE queue_name = ? AND status = ?
             """
-                .formatted(this.schema);
+                .formatted(schema);
         if (partitionKey != null) {
           pendingQuery += " AND queue_partition_key = ?";
         }
@@ -133,7 +119,6 @@ class QueuesDAO {
 
         int localPendingWorkflows = pendingWorkflows.getOrDefault(executorId, 0);
 
-        // Check worker concurrency limit
         if (queue.workerConcurrency() != null) {
           if (localPendingWorkflows > queue.workerConcurrency()) {
             logger.warn(
@@ -145,7 +130,6 @@ class QueuesDAO {
           maxTasks = Math.max(queue.workerConcurrency() - localPendingWorkflows, 0);
         }
 
-        // Check global concurrency limit
         if (queue.concurrency() != null) {
           var globalPendingWorkflows = 0;
           for (var count : pendingWorkflows.values()) {
@@ -171,7 +155,6 @@ class QueuesDAO {
         return new ArrayList<>();
       }
 
-      // Build the query to select workflows for dequeueing
       var query =
           """
               SELECT workflow_uuid
@@ -180,20 +163,17 @@ class QueuesDAO {
                 AND status = ?
                 AND (application_version = ? OR application_version IS NULL)
           """
-              .formatted(this.schema);
+              .formatted(schema);
       if (partitionKey != null) {
         query += " AND queue_partition_key = ?";
       }
 
-      // Add partition key filter if provided
       if (queue.priorityEnabled()) {
         query += " ORDER BY priority ASC, created_at ASC";
       } else {
         query += " ORDER BY created_at ASC";
       }
 
-      // Use SKIP LOCKED when no global concurrency is set to avoid blocking,
-      // otherwise use NOWAIT to ensure consistent view across processes
       if (queue.concurrency() == null) {
         query += " FOR UPDATE SKIP LOCKED";
       } else {
@@ -202,7 +182,6 @@ class QueuesDAO {
 
       query += " LIMIT %d".formatted(maxTasks);
 
-      // Execute the query to get workflow IDs
       List<String> dequeuedWorkflowIds = new ArrayList<>();
       try (var ps = connection.prepareStatement(query)) {
         ps.setString(1, queue.name());
@@ -226,7 +205,6 @@ class QueuesDAO {
             queue.name());
       }
 
-      // Update workflows to PENDING status
       var now = System.currentTimeMillis();
       List<String> updatedWorkflowIds = new ArrayList<>();
       String updateQuery =
@@ -243,7 +221,7 @@ class QueuesDAO {
             END
         WHERE workflow_uuid = ?
           """
-              .formatted(this.schema);
+              .formatted(schema);
 
       try (var ps = connection.prepareStatement(updateQuery)) {
         for (var id : dequeuedWorkflowIds) {
@@ -263,7 +241,6 @@ class QueuesDAO {
         }
       }
 
-      // Commit only if workflows were dequeued. Avoids WAL bloat and XID advancement.
       if (!updatedWorkflowIds.isEmpty()) {
         connection.commit();
       } else {
@@ -274,7 +251,8 @@ class QueuesDAO {
     }
   }
 
-  boolean clearQueueAssignment(String workflowId) throws SQLException {
+  static boolean clearQueueAssignment(DataSource dataSource, String schema, String workflowId)
+      throws SQLException {
 
     final String sql =
         """
@@ -282,7 +260,7 @@ class QueuesDAO {
           SET started_at_epoch_ms = NULL, status = ?
           WHERE workflow_uuid = ? AND queue_name IS NOT NULL AND status = ?
         """
-            .formatted(this.schema);
+            .formatted(schema);
     try (Connection connection = dataSource.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, WorkflowState.ENQUEUED.name());
@@ -294,7 +272,8 @@ class QueuesDAO {
     }
   }
 
-  List<String> getQueuePartitions(String queueName) throws SQLException {
+  static List<String> getQueuePartitions(DataSource dataSource, String schema, String queueName)
+      throws SQLException {
 
     final String sql =
         """
@@ -304,7 +283,7 @@ class QueuesDAO {
             AND status = ?
             AND queue_partition_key IS NOT NULL
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     try (Connection connection = dataSource.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {

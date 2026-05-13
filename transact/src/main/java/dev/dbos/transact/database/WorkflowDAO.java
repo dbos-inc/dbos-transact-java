@@ -11,14 +11,18 @@ import dev.dbos.transact.json.DBOSSerializer;
 import dev.dbos.transact.json.JsonUtility;
 import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ErrorResult;
+import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
 import dev.dbos.transact.workflow.ListWorkflowsInput;
 import dev.dbos.transact.workflow.Timeout;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
+import dev.dbos.transact.workflow.WorkflowEvent;
+import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowState;
 import dev.dbos.transact.workflow.WorkflowStatus;
+import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
@@ -27,17 +31,20 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import javax.sql.DataSource;
 
@@ -62,22 +69,12 @@ class WorkflowDAO {
         forked_from, parent_workflow_id, was_forked_from, delay_until_epoch_ms
       """;
 
-  private final DataSource dataSource;
-  private final String schema;
-  private final DBOSSerializer serializer;
-  private long getResultPollingIntervalMs = 1000;
+  private WorkflowDAO() {}
 
-  WorkflowDAO(DataSource ds, String schema, DBOSSerializer serializer) {
-    this.dataSource = ds;
-    this.schema = Objects.requireNonNull(schema);
-    this.serializer = serializer;
-  }
-
-  void speedUpPollingForTest() {
-    getResultPollingIntervalMs = 100;
-  }
-
-  WorkflowInitResult initWorkflowStatus(
+  static WorkflowInitResult initWorkflowStatus(
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
       WorkflowStatusInternal initStatus,
       Integer maxRetries,
       boolean isRecoveryRequest,
@@ -97,7 +94,7 @@ class WorkflowDAO {
 
         InsertWorkflowResult resRow =
             insertWorkflowStatus(
-                connection, initStatus, ownerXid, isRecoveryRequest || isDequeuedRequest);
+                connection, schema, initStatus, ownerXid, isRecoveryRequest || isDequeuedRequest);
 
         if (!Objects.equals(resRow.workflowName(), initStatus.workflowName())) {
           String msg =
@@ -145,7 +142,7 @@ class WorkflowDAO {
                 SET status = ?, deduplication_id = NULL, started_at_epoch_ms = NULL, queue_name = NULL
                 WHERE workflow_uuid = ? AND status = ?
               """
-                  .formatted(this.schema);
+                  .formatted(schema);
 
           try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, WorkflowState.MAX_RECOVERY_ATTEMPTS_EXCEEDED.name());
@@ -190,8 +187,9 @@ class WorkflowDAO {
    * @return InsertWorkflowResult some of the column inserted
    * @throws SQLException
    */
-  InsertWorkflowResult insertWorkflowStatus(
+  static InsertWorkflowResult insertWorkflowStatus(
       Connection connection,
+      String schema,
       WorkflowStatusInternal status,
       String ownerXid,
       boolean incrementAttempts)
@@ -226,7 +224,7 @@ class WorkflowDAO {
               END
           RETURNING recovery_attempts, status, name, class_name, config_name, queue_name, workflow_deadline_epoch_ms, owner_xid, serialization
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     Objects.requireNonNull(status, "status must not be null");
     Objects.requireNonNull(status.workflowId(), "workflowId must not be null");
@@ -311,8 +309,13 @@ class WorkflowDAO {
     }
   }
 
-  void updateWorkflowOutcome(
-      Connection connection, String workflowId, WorkflowState status, String output, String error)
+  static void updateWorkflowOutcome(
+      Connection connection,
+      String schema,
+      String workflowId,
+      WorkflowState status,
+      String output,
+      String error)
       throws SQLException {
 
     logger.debug("updateWorkflowOutcome wfid {} status {}", workflowId, status);
@@ -324,7 +327,7 @@ class WorkflowDAO {
           SET status = ?, output = ?, error = ?, updated_at = ?, deduplication_id = NULL
           WHERE workflow_uuid = ? AND NOT (status = ? AND ? in (?, ?))
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     try (PreparedStatement stmt = connection.prepareStatement(sql)) {
       stmt.setString(1, status.name());
@@ -347,10 +350,11 @@ class WorkflowDAO {
    * @param workflowId id of the workflow
    * @param result output serialized as json
    */
-  void recordWorkflowOutput(String workflowId, String result) throws SQLException {
+  static void recordWorkflowOutput(
+      DataSource dataSource, String schema, String workflowId, String result) throws SQLException {
 
     try (Connection connection = dataSource.getConnection()) {
-      updateWorkflowOutcome(connection, workflowId, WorkflowState.SUCCESS, result, null);
+      updateWorkflowOutcome(connection, schema, workflowId, WorkflowState.SUCCESS, result, null);
     }
   }
 
@@ -360,17 +364,19 @@ class WorkflowDAO {
    * @param workflowId id of the workflow
    * @param error output serialized as json
    */
-  void recordWorkflowError(String workflowId, String error) throws SQLException {
+  static void recordWorkflowError(
+      DataSource dataSource, String schema, String workflowId, String error) throws SQLException {
 
     try (Connection connection = dataSource.getConnection()) {
-      updateWorkflowOutcome(connection, workflowId, WorkflowState.ERROR, null, error);
+      updateWorkflowOutcome(connection, schema, workflowId, WorkflowState.ERROR, null, error);
     }
   }
 
-  String getWorkflowSerialization(String workflowId) throws SQLException {
+  static String getWorkflowSerialization(DataSource dataSource, String schema, String workflowId)
+      throws SQLException {
     var sql =
         "SELECT serialization FROM \"%s\".workflow_status WHERE workflow_uuid = ?"
-            .formatted(this.schema);
+            .formatted(schema);
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
@@ -383,27 +389,31 @@ class WorkflowDAO {
     return null;
   }
 
-  WorkflowStatus getWorkflowStatus(String workflowId) throws SQLException {
+  static WorkflowStatus getWorkflowStatus(
+      DataSource dataSource, String schema, DBOSSerializer serializer, String workflowId)
+      throws SQLException {
 
     try (var conn = dataSource.getConnection()) {
-      return getWorkflowStatus(conn, workflowId);
+      return getWorkflowStatus(conn, schema, serializer, workflowId);
     }
   }
 
-  WorkflowStatus getWorkflowStatus(Connection conn, String workflowId) throws SQLException {
+  static WorkflowStatus getWorkflowStatus(
+      Connection conn, String schema, DBOSSerializer serializer, String workflowId)
+      throws SQLException {
     if (Objects.requireNonNull(workflowId, "workflowId must not be null").isEmpty()) {
       throw new IllegalArgumentException("workflowId must not be empty");
     }
 
     var sql =
         ("SELECT " + WORKFLOW_STATUS_COLUMNS + ", inputs, output, error, serialization")
-            + " FROM \"%s\".workflow_status WHERE workflow_uuid = ?".formatted(this.schema);
+            + " FROM \"%s\".workflow_status WHERE workflow_uuid = ?".formatted(schema);
 
     try (var stmt = conn.prepareStatement(sql)) {
       stmt.setString(1, workflowId);
       try (var rs = stmt.executeQuery()) {
         if (rs.next()) {
-          return resultsToWorkflowStatus(rs, true, true, this.serializer);
+          return resultsToWorkflowStatus(rs, true, true, serializer);
         }
       }
     }
@@ -411,7 +421,9 @@ class WorkflowDAO {
     return null;
   }
 
-  void setWorkflowDelay(String workflowId, WorkflowDelay delay) throws SQLException {
+  static void setWorkflowDelay(
+      DataSource dataSource, String schema, String workflowId, WorkflowDelay delay)
+      throws SQLException {
     Objects.requireNonNull(workflowId, "workflowId must not be null");
     Objects.requireNonNull(delay, "delay must not be null");
 
@@ -434,7 +446,7 @@ class WorkflowDAO {
            WHERE workflow_uuid = ?
              AND status = ?
         """
-            .formatted(this.schema);
+            .formatted(schema);
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
       stmt.setLong(1, resolved.toEpochMilli());
@@ -445,7 +457,7 @@ class WorkflowDAO {
     }
   }
 
-  void transitionDelayedWorkflows() throws SQLException {
+  static void transitionDelayedWorkflows(DataSource dataSource, String schema) throws SQLException {
     var sql =
         """
           UPDATE "%s".workflow_status
@@ -453,7 +465,7 @@ class WorkflowDAO {
            WHERE status = ?
              AND delay_until_epoch_ms <= ?
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
@@ -465,7 +477,9 @@ class WorkflowDAO {
     }
   }
 
-  List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) throws SQLException {
+  static List<WorkflowStatus> listWorkflows(
+      DataSource dataSource, String schema, DBOSSerializer serializer, ListWorkflowsInput input)
+      throws SQLException {
 
     if (input == null) {
       input = new ListWorkflowsInput();
@@ -490,7 +504,7 @@ class WorkflowDAO {
       sqlBuilder.append(", serialization");
     }
 
-    sqlBuilder.append(" FROM \"%s\".workflow_status ".formatted(this.schema));
+    sqlBuilder.append(" FROM \"%s\".workflow_status ".formatted(schema));
 
     // --- WHERE Clauses ---
     StringJoiner whereConditions = new StringJoiner(" AND ");
@@ -625,8 +639,7 @@ class WorkflowDAO {
 
         try (ResultSet rs = pstmt.executeQuery()) {
           while (rs.next()) {
-            WorkflowStatus info =
-                resultsToWorkflowStatus(rs, loadInput, loadOutput, this.serializer);
+            WorkflowStatus info = resultsToWorkflowStatus(rs, loadInput, loadOutput, serializer);
             workflows.add(info);
           }
         }
@@ -640,7 +653,11 @@ class WorkflowDAO {
     return workflows;
   }
 
-  List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input)
+  static List<WorkflowAggregateRow> getWorkflowAggregates(
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
+      GetWorkflowAggregatesInput input)
       throws SQLException {
     if (input == null) {
       input = new GetWorkflowAggregatesInput();
@@ -667,7 +684,7 @@ class WorkflowDAO {
     StringJoiner selectCols = new StringJoiner(", ");
     for (var dim : dims) selectCols.add(dim.column());
     selectCols.add("COUNT(*) AS count");
-    sqlBuilder.append(selectCols).append(" FROM \"%s\".workflow_status".formatted(this.schema));
+    sqlBuilder.append(selectCols).append(" FROM \"%s\".workflow_status".formatted(schema));
 
     // --- WHERE ---
     StringJoiner whereConditions = new StringJoiner(" AND ");
@@ -809,18 +826,29 @@ class WorkflowDAO {
     return info;
   }
 
-  List<WorkflowStatus> getPendingWorkflows(List<String> executorIds, String appVersion)
+  static List<WorkflowStatus> getPendingWorkflows(
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
+      List<String> executorIds,
+      String appVersion)
       throws SQLException {
     var input =
         new ListWorkflowsInput()
             .withStatus(WorkflowState.PENDING)
             .withExecutorIds(executorIds)
             .withApplicationVersion(appVersion);
-    return listWorkflows(input);
+    return listWorkflows(dataSource, schema, serializer, input);
   }
 
   @SuppressWarnings("unchecked")
-  <T> Result<T> awaitWorkflowResult(String workflowId) throws SQLException {
+  static <T> Result<T> awaitWorkflowResult(
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
+      Duration dbPollingInterval,
+      String workflowId)
+      throws SQLException {
 
     final String sql =
         """
@@ -828,7 +856,7 @@ class WorkflowDAO {
           FROM "%s".workflow_status
           WHERE workflow_uuid = ?
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     while (true) {
       try (Connection connection = dataSource.getConnection();
@@ -845,14 +873,13 @@ class WorkflowDAO {
               case SUCCESS -> {
                 String output = rs.getString("output");
                 Object outputValue =
-                    SerializationUtil.deserializeValue(output, serialization, this.serializer);
+                    SerializationUtil.deserializeValue(output, serialization, serializer);
                 return Result.success((T) outputValue);
               }
 
               case ERROR -> {
                 String error = rs.getString("error");
-                Throwable t =
-                    SerializationUtil.deserializeError(error, serialization, this.serializer);
+                Throwable t = SerializationUtil.deserializeError(error, serialization, serializer);
                 return Result.failure(t);
               }
               case CANCELLED -> throw new DBOSAwaitedWorkflowCancelledException(workflowId);
@@ -866,7 +893,7 @@ class WorkflowDAO {
       }
 
       try {
-        Thread.sleep(getResultPollingIntervalMs);
+        Thread.sleep(dbPollingInterval.toMillis());
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new RuntimeException("Workflow polling interrupted for " + workflowId, e);
@@ -874,7 +901,9 @@ class WorkflowDAO {
     }
   }
 
-  void recordChildWorkflow(
+  static void recordChildWorkflow(
+      DataSource dataSource,
+      String schema,
       String parentId,
       String childId, // workflowId of the child
       int functionId, // func id in the parent
@@ -890,13 +919,15 @@ class WorkflowDAO {
     }
   }
 
-  Optional<String> checkChildWorkflow(String workflowUuid, int functionId) throws SQLException {
+  static Optional<String> checkChildWorkflow(
+      DataSource dataSource, String schema, String workflowUuid, int functionId)
+      throws SQLException {
 
     final String sql =
         """
           SELECT child_workflow_id FROM "%s".operation_outputs WHERE workflow_uuid = ? AND function_id = ?
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     try (Connection connection = dataSource.getConnection();
         PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -914,14 +945,15 @@ class WorkflowDAO {
     }
   }
 
-  private List<String> filterNullsAndBlanks(List<String> workflowIds) {
+  private static List<String> filterNullsAndBlanks(List<String> workflowIds) {
     if (workflowIds == null) {
       return List.of();
     }
     return workflowIds.stream().filter(id -> id != null && !id.isBlank()).toList();
   }
 
-  void cancelWorkflows(List<String> workflowIds) throws SQLException {
+  static void cancelWorkflows(DataSource dataSource, String schema, List<String> workflowIds)
+      throws SQLException {
     List<String> filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
@@ -937,7 +969,7 @@ class WorkflowDAO {
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -954,7 +986,9 @@ class WorkflowDAO {
     }
   }
 
-  void resumeWorkflows(List<String> workflowIds, String queueName) throws SQLException {
+  static void resumeWorkflows(
+      DataSource dataSource, String schema, List<String> workflowIds, String queueName)
+      throws SQLException {
     List<String> filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
@@ -973,7 +1007,7 @@ class WorkflowDAO {
           WHERE workflow_uuid = ANY(?)
             AND status NOT IN (?, ?)
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     try (Connection conn = dataSource.getConnection();
         PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -991,7 +1025,9 @@ class WorkflowDAO {
     }
   }
 
-  void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) throws SQLException {
+  static void deleteWorkflows(
+      DataSource dataSource, String schema, List<String> workflowIds, boolean deleteChildren)
+      throws SQLException {
     List<String> filtered = filterNullsAndBlanks(workflowIds);
     if (filtered.isEmpty()) {
       return;
@@ -1000,7 +1036,7 @@ class WorkflowDAO {
     var wfIdSet = new HashSet<String>(filtered);
     if (deleteChildren) {
       for (var wfid : filtered) {
-        var children = getWorkflowChildren(wfid);
+        var children = getWorkflowChildren(dataSource, schema, wfid);
         wfIdSet.addAll(children);
       }
     }
@@ -1010,7 +1046,7 @@ class WorkflowDAO {
           DELETE FROM "%s".workflow_status
           WHERE workflow_uuid = ANY(?);
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
@@ -1024,7 +1060,8 @@ class WorkflowDAO {
     }
   }
 
-  Set<String> getWorkflowChildren(String workflowId) throws SQLException {
+  static Set<String> getWorkflowChildren(DataSource dataSource, String schema, String workflowId)
+      throws SQLException {
     var children = new HashSet<String>();
     var toProcess = new ArrayDeque<String>();
     toProcess.add(workflowId);
@@ -1035,7 +1072,7 @@ class WorkflowDAO {
           FROM "%s".operation_outputs
           WHERE workflow_uuid = ? AND child_workflow_id IS NOT NULL
         """
-            .formatted(this.schema);
+            .formatted(schema);
 
     try (var conn = dataSource.getConnection();
         var stmt = conn.prepareStatement(sql)) {
@@ -1057,12 +1094,18 @@ class WorkflowDAO {
     return children;
   }
 
-  String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options)
+  static String forkWorkflow(
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
+      String originalWorkflowId,
+      int startStep,
+      ForkOptions options)
       throws SQLException {
 
     options = Objects.requireNonNullElseGet(options, ForkOptions::new);
 
-    var status = getWorkflowStatus(originalWorkflowId);
+    var status = getWorkflowStatus(dataSource, schema, serializer, originalWorkflowId);
     if (status == null) {
       throw new DBOSNonExistentWorkflowException(originalWorkflowId);
     }
@@ -1095,17 +1138,16 @@ class WorkflowDAO {
             timeoutMS,
             options.queueName(),
             options.queuePartitionKey(),
-            this.schema,
-            this.serializer);
+            schema,
+            serializer);
 
         // Copy operation outputs if starting from step > 0
         if (startStep > 0) {
-          copyOperationOutputs(
-              connection, originalWorkflowId, forkedWorkflowId, startStep, this.schema);
+          copyOperationOutputs(connection, originalWorkflowId, forkedWorkflowId, startStep, schema);
         }
 
         // Mark the original workflow as having been forked
-        markWasForkedFrom(connection, originalWorkflowId, this.schema);
+        markWasForkedFrom(connection, originalWorkflowId, schema);
 
         connection.commit();
         return forkedWorkflowId;
@@ -1295,11 +1337,13 @@ class WorkflowDAO {
     return null;
   }
 
-  void garbageCollect(Instant cutoff, Long rowsThreshold) throws SQLException {
+  static void garbageCollect(
+      DataSource dataSource, String schema, Instant cutoff, Long rowsThreshold)
+      throws SQLException {
 
     try (Connection connection = dataSource.getConnection()) {
       if (rowsThreshold != null) {
-        var rowsCutoff = getRowsCutoff(connection, rowsThreshold, this.schema);
+        var rowsCutoff = getRowsCutoff(connection, rowsThreshold, schema);
         if (rowsCutoff != null) {
           if (cutoff == null || rowsCutoff.isAfter(cutoff)) {
             cutoff = rowsCutoff;
@@ -1312,7 +1356,7 @@ class WorkflowDAO {
             """
               DELETE FROM "%s".workflow_status WHERE created_at < ? AND status NOT IN (?, ?, ?)
             """
-                .formatted(this.schema);
+                .formatted(schema);
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
           stmt.setLong(1, cutoff.toEpochMilli());
           stmt.setString(2, WorkflowState.PENDING.name());
@@ -1322,6 +1366,375 @@ class WorkflowDAO {
           stmt.executeUpdate();
         }
       }
+    }
+  }
+
+  static List<MetricData> getMetrics(
+      DataSource dataSource, String schema, Instant startTime, Instant endTime)
+      throws SQLException {
+    final var start = Objects.requireNonNull(startTime).toEpochMilli();
+    final var end = Objects.requireNonNull(endTime).toEpochMilli();
+    logger.debug("getMetrics {} {}", start, end);
+    List<MetricData> metrics = new ArrayList<>();
+    final var wfSQL =
+        """
+          SELECT name, COUNT(workflow_uuid) as count
+          FROM "%s".workflow_status
+          WHERE created_at >= ? AND created_at < ?
+          GROUP BY name
+        """
+            .formatted(schema);
+    final var stepSQL =
+        """
+          SELECT function_name, COUNT(*) as count
+          FROM "%s".operation_outputs
+          WHERE completed_at_epoch_ms >= ? AND completed_at_epoch_ms < ?
+          GROUP BY function_name
+        """
+            .formatted(schema);
+
+    try (var conn = dataSource.getConnection();
+        var ps1 = conn.prepareStatement(wfSQL);
+        var ps2 = conn.prepareStatement(stepSQL)) {
+
+      ps1.setLong(1, start);
+      ps1.setLong(2, end);
+
+      try (var rs = ps1.executeQuery()) {
+        while (rs.next()) {
+          var name = rs.getString("name");
+          var count = rs.getInt("count");
+          metrics.add(new MetricData("workflow_count", name, count));
+        }
+      }
+
+      ps2.setLong(1, start);
+      ps2.setLong(2, end);
+
+      try (var rs = ps2.executeQuery()) {
+        while (rs.next()) {
+          var name = rs.getString("function_name");
+          var count = rs.getInt("count");
+          metrics.add(new MetricData("step_count", name, count));
+        }
+      }
+    }
+
+    return metrics;
+  }
+
+  static List<WorkflowEvent> listWorkflowEvents(Connection conn, String schema, String workflowId)
+      throws SQLException {
+    var sql =
+        """
+        SELECT key, value, serialization
+        FROM "%s".workflow_events
+        WHERE workflow_uuid = ?
+        """
+            .formatted(schema);
+
+    var events = new ArrayList<WorkflowEvent>();
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          var key = rs.getString("key");
+          var value = rs.getString("value");
+          var serialization = rs.getString("serialization");
+          events.add(new WorkflowEvent(key, value, serialization));
+        }
+      }
+    }
+    return events;
+  }
+
+  static List<WorkflowEventHistory> listWorkflowEventHistory(
+      Connection conn, String schema, String workflowId) throws SQLException {
+    var sql =
+        """
+        SELECT key, value, function_id, serialization
+        FROM "%s".workflow_events_history
+        WHERE workflow_uuid = ?
+        """
+            .formatted(schema);
+
+    var history = new ArrayList<WorkflowEventHistory>();
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          var key = rs.getString("key");
+          var value = rs.getString("value");
+          var stepId = rs.getInt("function_id");
+          var serialization = rs.getString("serialization");
+          history.add(new WorkflowEventHistory(key, value, stepId, serialization));
+        }
+      }
+    }
+    return history;
+  }
+
+  static List<WorkflowStream> listWorkflowStreams(Connection conn, String schema, String workflowId)
+      throws SQLException {
+    var sql =
+        """
+        SELECT key, value, "offset", function_id, serialization
+        FROM "%s".streams
+        WHERE workflow_uuid = ?
+        """
+            .formatted(schema);
+
+    var streams = new ArrayList<WorkflowStream>();
+    try (var stmt = conn.prepareStatement(sql)) {
+      stmt.setString(1, workflowId);
+      try (var rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          var key = rs.getString("key");
+          var value = rs.getString("value");
+          var offset = rs.getInt("offset");
+          var stepId = rs.getInt("function_id");
+          var serialization = rs.getString("serialization");
+          streams.add(new WorkflowStream(key, value, offset, stepId, serialization));
+        }
+      }
+    }
+    return streams;
+  }
+
+  static List<ExportedWorkflow> exportWorkflow(
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
+      String workflowId,
+      boolean exportChildren)
+      throws SQLException {
+    var workflowIds =
+        exportChildren
+            ? Stream.concat(
+                    getWorkflowChildren(dataSource, schema, workflowId).stream(),
+                    List.of(workflowId).stream())
+                .toList()
+            : List.of(workflowId);
+
+    var workflows = new ArrayList<ExportedWorkflow>();
+    for (var wfid : workflowIds) {
+      try (var conn = dataSource.getConnection()) {
+        var status = getWorkflowStatus(conn, schema, serializer, wfid);
+        var steps = StepsDAO.listWorkflowSteps(conn, wfid, true, null, null, schema, serializer);
+        var events = listWorkflowEvents(conn, schema, wfid);
+        var eventHistory = listWorkflowEventHistory(conn, schema, wfid);
+        var streams = listWorkflowStreams(conn, schema, wfid);
+        workflows.add(new ExportedWorkflow(status, steps, events, eventHistory, streams));
+      }
+    }
+    return workflows;
+  }
+
+  static void importWorkflow(
+      DataSource dataSource,
+      String schema,
+      DBOSSerializer serializer,
+      List<ExportedWorkflow> workflows)
+      throws SQLException {
+    var wfSQL =
+        """
+        INSERT INTO "%s".workflow_status (
+          workflow_uuid, status,
+          name, class_name, config_name,
+          authenticated_user, assumed_role, authenticated_roles,
+          output, error, inputs,
+          executor_id, application_version, application_id,
+          created_at, updated_at, started_at_epoch_ms,
+          queue_name, deduplication_id, priority, queue_partition_key,
+          workflow_timeout_ms, workflow_deadline_epoch_ms,
+          recovery_attempts, forked_from, parent_workflow_id, serialization,
+          delay_until_epoch_ms
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """
+            .formatted(schema);
+
+    var stepSQL =
+        """
+        INSERT INTO "%s".operation_outputs (
+          workflow_uuid, function_id, function_name,
+          output, error, child_workflow_id,
+          started_at_epoch_ms, completed_at_epoch_ms,
+          serialization
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """
+            .formatted(schema);
+
+    var eventSQL =
+        """
+        INSERT INTO "%s".workflow_events (
+          workflow_uuid, key, value, serialization
+        ) VALUES (
+          ?, ?, ?, ?
+        )
+        """
+            .formatted(schema);
+
+    var eventHistorySQL =
+        """
+        INSERT INTO "%s".workflow_events_history (
+          workflow_uuid, key, value, function_id, serialization
+        ) VALUES (
+          ?, ?, ?, ?, ?
+        )
+        """
+            .formatted(schema);
+
+    var streamsSQL =
+        """
+        INSERT INTO "%s".streams (
+          workflow_uuid, key, value, function_id, "offset", serialization
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?
+        )
+        """
+            .formatted(schema);
+
+    try (var conn = dataSource.getConnection()) {
+      conn.setAutoCommit(false);
+
+      try (var wfStmt = conn.prepareStatement(wfSQL);
+          var stepStmt = conn.prepareStatement(stepSQL);
+          var eventStmt = conn.prepareStatement(eventSQL);
+          var eventHistoryStmt = conn.prepareStatement(eventHistorySQL);
+          var streamsStmt = conn.prepareStatement(streamsSQL)) {
+
+        for (var workflow : workflows) {
+          var status = workflow.status();
+
+          wfStmt.setString(1, status.workflowId());
+          wfStmt.setString(2, status.status().name());
+          wfStmt.setString(3, status.workflowName());
+          wfStmt.setString(4, status.className());
+          wfStmt.setString(5, status.instanceName());
+          wfStmt.setString(6, status.authenticatedUser());
+          wfStmt.setString(7, status.assumedRole());
+          wfStmt.setString(
+              8,
+              status.authenticatedRoles() == null
+                  ? null
+                  : JsonUtility.toJson(status.authenticatedRoles()));
+          wfStmt.setString(
+              9,
+              status.output() == null
+                  ? null
+                  : SerializationUtil.serializeValue(
+                          status.output(), status.serialization(), serializer)
+                      .serializedValue());
+          wfStmt.setString(
+              10,
+              status.error() == null
+                  ? null
+                  : SerializationUtil.serializeError(
+                          status.error().throwable(), status.serialization(), serializer)
+                      .serializedValue());
+          wfStmt.setString(
+              11,
+              status.input() == null
+                  ? null
+                  : SerializationUtil.serializeArgs(
+                          status.input(), null, status.serialization(), serializer)
+                      .serializedValue());
+          wfStmt.setString(12, status.executorId());
+          wfStmt.setString(13, status.appVersion());
+          wfStmt.setString(14, status.appId());
+          wfStmt.setObject(15, status.createdAtEpochMs());
+          wfStmt.setObject(16, status.updatedAtEpochMs());
+          wfStmt.setObject(17, status.startedAtEpochMs());
+          wfStmt.setString(18, status.queueName());
+          wfStmt.setString(19, status.deduplicationId());
+          wfStmt.setObject(20, status.priority());
+          wfStmt.setString(21, status.queuePartitionKey());
+          wfStmt.setObject(22, status.timeoutMs());
+          wfStmt.setObject(23, status.deadlineEpochMs());
+          wfStmt.setObject(24, status.recoveryAttempts());
+          wfStmt.setString(25, status.forkedFrom());
+          wfStmt.setString(26, status.parentWorkflowId());
+          wfStmt.setString(27, status.serialization());
+          wfStmt.setObject(28, status.delayUntilEpochMs());
+          wfStmt.addBatch();
+
+          for (var step : workflow.steps()) {
+            stepStmt.setString(1, status.workflowId());
+            stepStmt.setInt(2, step.functionId());
+            stepStmt.setString(3, step.functionName());
+            stepStmt.setString(
+                4,
+                step.output() == null
+                    ? null
+                    : SerializationUtil.serializeValue(
+                            step.output(), step.serialization(), serializer)
+                        .serializedValue());
+            stepStmt.setString(5, step.error() == null ? null : step.error().serializedError());
+            stepStmt.setString(6, step.childWorkflowId());
+            stepStmt.setObject(7, step.startedAtEpochMs());
+            stepStmt.setObject(8, step.completedAtEpochMs());
+            stepStmt.setString(9, step.serialization());
+            stepStmt.addBatch();
+          }
+
+          for (var event : workflow.events()) {
+            eventStmt.setString(1, status.workflowId());
+            eventStmt.setString(2, event.key());
+            eventStmt.setString(3, event.value());
+            eventStmt.setString(4, event.serialization());
+            eventStmt.addBatch();
+          }
+
+          for (var history : workflow.eventHistory()) {
+            eventHistoryStmt.setString(1, status.workflowId());
+            eventHistoryStmt.setString(2, history.key());
+            eventHistoryStmt.setString(3, history.value());
+            eventHistoryStmt.setInt(4, history.stepId());
+            eventHistoryStmt.setString(5, history.serialization());
+            eventHistoryStmt.addBatch();
+          }
+
+          for (var stream : workflow.streams()) {
+            streamsStmt.setString(1, status.workflowId());
+            streamsStmt.setString(2, stream.key());
+            streamsStmt.setString(3, stream.value());
+            streamsStmt.setInt(4, stream.stepId());
+            streamsStmt.setInt(5, stream.offset());
+            streamsStmt.setString(6, stream.serialization());
+            streamsStmt.addBatch();
+          }
+        }
+
+        wfStmt.executeBatch();
+        stepStmt.executeBatch();
+        eventStmt.executeBatch();
+        eventHistoryStmt.executeBatch();
+        streamsStmt.executeBatch();
+
+        conn.commit();
+      } catch (SQLException e) {
+        conn.rollback();
+        throw e;
+      }
+    }
+  }
+
+  static Map<String, Object> getAllEvents(
+      DataSource dataSource, String schema, DBOSSerializer serializer, String workflowId)
+      throws SQLException {
+    try (var conn = dataSource.getConnection()) {
+      var events = listWorkflowEvents(conn, schema, workflowId);
+      var result = new LinkedHashMap<String, Object>();
+      for (var event : events) {
+        result.put(
+            event.key(),
+            SerializationUtil.deserializeValue(event.value(), event.serialization(), serializer));
+      }
+      return result;
     }
   }
 }

@@ -4,8 +4,6 @@ import dev.dbos.transact.Constants;
 import dev.dbos.transact.config.DBOSConfig;
 import dev.dbos.transact.exceptions.*;
 import dev.dbos.transact.json.DBOSSerializer;
-import dev.dbos.transact.json.JsonUtility;
-import dev.dbos.transact.json.SerializationUtil;
 import dev.dbos.transact.workflow.ExportedWorkflow;
 import dev.dbos.transact.workflow.ForkOptions;
 import dev.dbos.transact.workflow.GetWorkflowAggregatesInput;
@@ -17,21 +15,15 @@ import dev.dbos.transact.workflow.StepInfo;
 import dev.dbos.transact.workflow.VersionInfo;
 import dev.dbos.transact.workflow.WorkflowAggregateRow;
 import dev.dbos.transact.workflow.WorkflowDelay;
-import dev.dbos.transact.workflow.WorkflowEvent;
-import dev.dbos.transact.workflow.WorkflowEventHistory;
 import dev.dbos.transact.workflow.WorkflowSchedule;
 import dev.dbos.transact.workflow.WorkflowStatus;
-import dev.dbos.transact.workflow.WorkflowStream;
 import dev.dbos.transact.workflow.internal.StepResult;
 import dev.dbos.transact.workflow.internal.WorkflowStatusInternal;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Stream;
 
 import javax.sql.DataSource;
 
@@ -53,13 +45,8 @@ public class SystemDatabase implements AutoCloseable {
   private final boolean created;
   private final DBOSSerializer serializer;
 
-  private final WorkflowDAO workflowDAO;
-  private final StepsDAO stepsDAO;
-  private final QueuesDAO queuesDAO;
-  private final NotificationsDAO notificationsDAO;
   private final NotificationService notificationService;
-  private final SchedulesDAO schedulesDAO;
-  private final StreamsDAO streamsDAO;
+  private Duration dbPollingInterval = Duration.ofSeconds(1);
 
   private static void validatePostgresDataSource(DataSource dataSource) {
     try (Connection conn = dataSource.getConnection()) {
@@ -87,14 +74,7 @@ public class SystemDatabase implements AutoCloseable {
     this.created = created;
     this.serializer = serializer;
 
-    stepsDAO = new StepsDAO(dataSource, this.schema, serializer);
-    workflowDAO = new WorkflowDAO(dataSource, this.schema, serializer);
-    queuesDAO = new QueuesDAO(dataSource, this.schema);
-    schedulesDAO = new SchedulesDAO(dataSource, this.schema, serializer);
-    streamsDAO = new StreamsDAO(dataSource, this.schema);
     notificationService = new NotificationService(dataSource);
-    notificationsDAO =
-        new NotificationsDAO(dataSource, notificationService, this.schema, serializer);
   }
 
   public SystemDatabase(String url, String user, String password, String schema) {
@@ -173,8 +153,7 @@ public class SystemDatabase implements AutoCloseable {
   }
 
   void speedUpPollingForTest() {
-    workflowDAO.speedUpPollingForTest();
-    notificationsDAO.speedUpPollingForTest();
+    dbPollingInterval = Duration.ofMillis(100);
   }
 
   private static boolean isConnectionFailure(SQLException e) {
@@ -276,8 +255,15 @@ public class SystemDatabase implements AutoCloseable {
     String ownerXid = UUID.randomUUID().toString();
     return dbRetry(
         () ->
-            workflowDAO.initWorkflowStatus(
-                initStatus, maxRetries, isRecoveryRequest, isDequeuedRequest, ownerXid));
+            WorkflowDAO.initWorkflowStatus(
+                dataSource,
+                schema,
+                serializer,
+                initStatus,
+                maxRetries,
+                isRecoveryRequest,
+                isDequeuedRequest,
+                ownerXid));
   }
 
   /**
@@ -287,7 +273,7 @@ public class SystemDatabase implements AutoCloseable {
    * @param result output serialized as json
    */
   public void recordWorkflowOutput(String workflowId, String result) {
-    dbRetry(() -> workflowDAO.recordWorkflowOutput(workflowId, result));
+    dbRetry(() -> WorkflowDAO.recordWorkflowOutput(dataSource, schema, workflowId, result));
   }
 
   /**
@@ -297,35 +283,38 @@ public class SystemDatabase implements AutoCloseable {
    * @param error output serialized as json
    */
   public void recordWorkflowError(String workflowId, String error) {
-    dbRetry(() -> workflowDAO.recordWorkflowError(workflowId, error));
+    dbRetry(() -> WorkflowDAO.recordWorkflowError(dataSource, schema, workflowId, error));
   }
 
   public WorkflowStatus getWorkflowStatus(String workflowId) {
-    return dbRetry(() -> workflowDAO.getWorkflowStatus(workflowId));
+    return dbRetry(() -> WorkflowDAO.getWorkflowStatus(dataSource, schema, serializer, workflowId));
   }
 
   public String getWorkflowSerialization(String workflowId) {
-    return dbRetry(() -> workflowDAO.getWorkflowSerialization(workflowId));
+    return dbRetry(() -> WorkflowDAO.getWorkflowSerialization(dataSource, schema, workflowId));
   }
 
   public List<WorkflowStatus> listWorkflows(ListWorkflowsInput input) {
-    return dbRetry(() -> workflowDAO.listWorkflows(input));
+    return dbRetry(() -> WorkflowDAO.listWorkflows(dataSource, schema, serializer, input));
   }
 
   public List<WorkflowAggregateRow> getWorkflowAggregates(GetWorkflowAggregatesInput input) {
-    return dbRetry(() -> workflowDAO.getWorkflowAggregates(input));
+    return dbRetry(() -> WorkflowDAO.getWorkflowAggregates(dataSource, schema, serializer, input));
   }
 
   public List<WorkflowStatus> getPendingWorkflows(List<String> executorIds, String appVersion) {
-    return dbRetry(() -> workflowDAO.getPendingWorkflows(executorIds, appVersion));
+    return dbRetry(
+        () ->
+            WorkflowDAO.getPendingWorkflows(
+                dataSource, schema, serializer, executorIds, appVersion));
   }
 
   public boolean clearQueueAssignment(String workflowId) {
-    return dbRetry(() -> queuesDAO.clearQueueAssignment(workflowId));
+    return dbRetry(() -> QueuesDAO.clearQueueAssignment(dataSource, schema, workflowId));
   }
 
   public List<String> getQueuePartitions(String queueName) {
-    return dbRetry(() -> queuesDAO.getQueuePartitions(queueName));
+    return dbRetry(() -> QueuesDAO.getQueuePartitions(dataSource, schema, queueName));
   }
 
   public StepResult checkStepExecutionTxn(String workflowId, int functionId, String functionName) {
@@ -346,34 +335,42 @@ public class SystemDatabase implements AutoCloseable {
 
   public List<StepInfo> listWorkflowSteps(
       String workflowId, Boolean loadOutput, Integer limit, Integer offset) {
-    return dbRetry(() -> stepsDAO.listWorkflowSteps(workflowId, loadOutput, limit, offset));
+    return dbRetry(
+        () ->
+            StepsDAO.listWorkflowSteps(
+                dataSource, workflowId, loadOutput, limit, offset, this.schema, this.serializer));
   }
 
   public <T> Result<T> awaitWorkflowResult(String workflowId) {
-    return dbRetry(() -> workflowDAO.<T>awaitWorkflowResult(workflowId));
+    return dbRetry(
+        () ->
+            WorkflowDAO.<T>awaitWorkflowResult(
+                dataSource, schema, serializer, dbPollingInterval, workflowId));
   }
 
   public List<String> getAndStartQueuedWorkflows(
       Queue queue, String executorId, String appVersion, String partitionKey) {
     return dbRetry(
-        () -> queuesDAO.getAndStartQueuedWorkflows(queue, executorId, appVersion, partitionKey));
+        () ->
+            QueuesDAO.getAndStartQueuedWorkflows(
+                dataSource, schema, queue, executorId, appVersion, partitionKey));
   }
 
   public void recordChildWorkflow(
       String parentId,
-      String childId, // workflowId of the
-      // child
+      String childId, // workflowId of the child
       int functionId, // func id in the parent
       String functionName,
       long startTime) {
     dbRetry(
         () ->
-            workflowDAO.recordChildWorkflow(
-                parentId, childId, functionId, functionName, startTime));
+            WorkflowDAO.recordChildWorkflow(
+                dataSource, schema, parentId, childId, functionId, functionName, startTime));
   }
 
   public Optional<String> checkChildWorkflow(String workflowUuid, int functionId) {
-    return dbRetry(() -> workflowDAO.checkChildWorkflow(workflowUuid, functionId));
+    return dbRetry(
+        () -> WorkflowDAO.checkChildWorkflow(dataSource, schema, workflowUuid, functionId));
   }
 
   public void send(
@@ -386,19 +383,49 @@ public class SystemDatabase implements AutoCloseable {
       String serialization) {
     dbRetry(
         () ->
-            notificationsDAO.send(
-                workflowId, stepId, destinationId, message, topic, messageId, serialization));
+            NotificationsDAO.send(
+                dataSource,
+                schema,
+                serializer,
+                workflowId,
+                stepId,
+                destinationId,
+                message,
+                topic,
+                messageId,
+                serialization));
   }
 
   public void sendDirect(
       String destinationId, Object message, String topic, String messageId, String serialization) {
     dbRetry(
-        () -> notificationsDAO.sendDirect(destinationId, message, topic, messageId, serialization));
+        () ->
+            NotificationsDAO.sendDirect(
+                dataSource,
+                schema,
+                serializer,
+                destinationId,
+                message,
+                topic,
+                messageId,
+                serialization));
   }
 
   public Object recv(
       String workflowId, int stepId, int timeoutStepId, String topic, Duration timeout) {
-    return dbRetry(() -> notificationsDAO.recv(workflowId, stepId, timeoutStepId, topic, timeout));
+    return dbRetry(
+        () ->
+            NotificationsDAO.recv(
+                dataSource,
+                schema,
+                serializer,
+                notificationService,
+                dbPollingInterval,
+                workflowId,
+                stepId,
+                timeoutStepId,
+                topic,
+                timeout));
   }
 
   public void setEvent(
@@ -411,743 +438,197 @@ public class SystemDatabase implements AutoCloseable {
 
     dbRetry(
         () ->
-            notificationsDAO.setEvent(workflowId, functionId, key, message, asStep, serialization));
+            NotificationsDAO.setEvent(
+                dataSource,
+                schema,
+                serializer,
+                workflowId,
+                functionId,
+                key,
+                message,
+                asStep,
+                serialization));
   }
 
   public Object getEvent(
       String targetId, String key, Duration timeout, GetWorkflowEventContext callerCtx) {
 
-    return dbRetry(() -> notificationsDAO.getEvent(targetId, key, timeout, callerCtx));
+    return dbRetry(
+        () ->
+            NotificationsDAO.getEvent(
+                dataSource,
+                schema,
+                serializer,
+                notificationService,
+                dbPollingInterval,
+                targetId,
+                key,
+                timeout,
+                callerCtx));
   }
 
   public void sleep(String workflowId, int functionId, Duration duration) {
-    dbRetry(() -> stepsDAO.sleep(workflowId, functionId, duration));
+    dbRetry(() -> StepsDAO.sleep(dataSource, workflowId, functionId, duration, schema, serializer));
   }
 
   public void cancelWorkflows(List<String> workflowIds) {
-    dbRetry(() -> workflowDAO.cancelWorkflows(workflowIds));
+    dbRetry(() -> WorkflowDAO.cancelWorkflows(dataSource, schema, workflowIds));
   }
 
   public void resumeWorkflows(List<String> workflowIds, String queueName) {
-    dbRetry(() -> workflowDAO.resumeWorkflows(workflowIds, queueName));
+    dbRetry(() -> WorkflowDAO.resumeWorkflows(dataSource, schema, workflowIds, queueName));
   }
 
   public void deleteWorkflows(List<String> workflowIds, boolean deleteChildren) {
-    dbRetry(() -> workflowDAO.deleteWorkflows(workflowIds, deleteChildren));
+    dbRetry(() -> WorkflowDAO.deleteWorkflows(dataSource, schema, workflowIds, deleteChildren));
   }
 
   public String forkWorkflow(String originalWorkflowId, int startStep, ForkOptions options) {
-    return dbRetry(() -> workflowDAO.forkWorkflow(originalWorkflowId, startStep, options));
+    return dbRetry(
+        () ->
+            WorkflowDAO.forkWorkflow(
+                dataSource, schema, serializer, originalWorkflowId, startStep, options));
   }
 
   public void createApplicationVersion(String versionName) {
-    dbRetry(
-        () -> {
-          String sql =
-              """
-                INSERT INTO "%s".application_versions (version_id, version_name)
-                VALUES (?, ?)
-                ON CONFLICT (version_name) DO NOTHING
-              """
-                  .formatted(this.schema);
-          try (var conn = dataSource.getConnection();
-              var stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, UUID.randomUUID().toString());
-            stmt.setString(2, versionName);
-            stmt.executeUpdate();
-          }
-        });
+    dbRetry(() -> ApplicationVersionDAO.createApplicationVersion(dataSource, schema, versionName));
   }
 
   public void updateApplicationVersionTimestamp(String versionName, Instant newTimestamp) {
     dbRetry(
-        () -> {
-          String sql =
-              """
-                UPDATE "%s".application_versions
-                SET version_timestamp = ?
-                WHERE version_name = ?
-              """
-                  .formatted(this.schema);
-          try (var conn = dataSource.getConnection();
-              var stmt = conn.prepareStatement(sql)) {
-            stmt.setLong(1, newTimestamp.toEpochMilli());
-            stmt.setString(2, versionName);
-            stmt.executeUpdate();
-          }
-        });
+        () ->
+            ApplicationVersionDAO.updateApplicationVersionTimestamp(
+                dataSource, schema, versionName, newTimestamp));
   }
 
   public List<VersionInfo> listApplicationVersions() {
-    return dbRetry(
-        () -> {
-          String sql =
-              """
-                SELECT version_id, version_name, version_timestamp, created_at
-                FROM "%s".application_versions
-                ORDER BY version_timestamp DESC
-              """
-                  .formatted(this.schema);
-          List<VersionInfo> results = new ArrayList<>();
-          try (var conn = dataSource.getConnection();
-              var stmt = conn.prepareStatement(sql);
-              var rs = stmt.executeQuery()) {
-            while (rs.next()) {
-              results.add(
-                  new VersionInfo(
-                      rs.getString("version_id"),
-                      rs.getString("version_name"),
-                      Instant.ofEpochMilli(rs.getLong("version_timestamp")),
-                      Instant.ofEpochMilli(rs.getLong("created_at"))));
-            }
-          }
-          return results;
-        });
+    return dbRetry(() -> ApplicationVersionDAO.listApplicationVersions(dataSource, schema));
   }
 
   public VersionInfo getLatestApplicationVersion() {
-    return dbRetry(
-        () -> {
-          String sql =
-              """
-                SELECT version_id, version_name, version_timestamp, created_at
-                FROM "%s".application_versions
-                ORDER BY version_timestamp DESC
-                LIMIT 1
-              """
-                  .formatted(this.schema);
-          try (var conn = dataSource.getConnection();
-              var stmt = conn.prepareStatement(sql);
-              var rs = stmt.executeQuery()) {
-            if (rs.next()) {
-              return new VersionInfo(
-                  rs.getString("version_id"),
-                  rs.getString("version_name"),
-                  Instant.ofEpochMilli(rs.getLong("version_timestamp")),
-                  Instant.ofEpochMilli(rs.getLong("created_at")));
-            }
-          }
-          throw new RuntimeException("No application versions found");
-        });
+    return dbRetry(() -> ApplicationVersionDAO.getLatestApplicationVersion(dataSource, schema));
   }
 
   public void garbageCollect(Instant cutoff, Long rowsThreshold) {
-    dbRetry(() -> workflowDAO.garbageCollect(cutoff, rowsThreshold));
+    dbRetry(() -> WorkflowDAO.garbageCollect(dataSource, schema, cutoff, rowsThreshold));
   }
 
   public void setWorkflowDelay(String workflowId, WorkflowDelay delay) {
-    dbRetry(() -> workflowDAO.setWorkflowDelay(workflowId, delay));
+    dbRetry(() -> WorkflowDAO.setWorkflowDelay(dataSource, schema, workflowId, delay));
   }
 
   public void transitionDelayedWorkflows() {
-    dbRetry(() -> workflowDAO.transitionDelayedWorkflows());
+    dbRetry(() -> WorkflowDAO.transitionDelayedWorkflows(dataSource, schema));
   }
 
   public void createSchedule(WorkflowSchedule schedule) {
-    dbRetry(() -> schedulesDAO.createSchedule(schedule));
+    dbRetry(() -> SchedulesDAO.createSchedule(dataSource, schema, serializer, schedule));
   }
 
   public Optional<WorkflowSchedule> getSchedule(String name) {
-    return dbRetry(() -> schedulesDAO.getSchedule(name));
+    return dbRetry(() -> SchedulesDAO.getSchedule(dataSource, schema, serializer, name));
   }
 
   public List<WorkflowSchedule> listSchedules(
       List<ScheduleStatus> statuses,
       List<String> workflowNames,
       List<String> scheduleNamePrefixes) {
-    return dbRetry(() -> schedulesDAO.listSchedules(statuses, workflowNames, scheduleNamePrefixes));
+    return dbRetry(
+        () ->
+            SchedulesDAO.listSchedules(
+                dataSource, schema, serializer, statuses, workflowNames, scheduleNamePrefixes));
   }
 
   public void pauseSchedule(String name) {
-    dbRetry(() -> schedulesDAO.pauseSchedule(name));
+    dbRetry(() -> SchedulesDAO.pauseSchedule(dataSource, schema, name));
   }
 
   public void resumeSchedule(String name) {
-    dbRetry(() -> schedulesDAO.resumeSchedule(name));
+    dbRetry(() -> SchedulesDAO.resumeSchedule(dataSource, schema, name));
   }
 
   public void updateScheduleLastFiredAt(String name, Instant lastFiredAt) {
-    dbRetry(() -> schedulesDAO.updateScheduleLastFiredAt(name, lastFiredAt));
+    dbRetry(() -> SchedulesDAO.updateScheduleLastFiredAt(dataSource, schema, name, lastFiredAt));
   }
 
   public void deleteSchedule(String name) {
-    dbRetry(() -> schedulesDAO.deleteSchedule(name));
+    dbRetry(() -> SchedulesDAO.deleteSchedule(dataSource, schema, name));
   }
 
   public void applySchedules(List<WorkflowSchedule> schedules) {
-    dbRetry(() -> schedulesDAO.applySchedules(schedules));
+    dbRetry(() -> SchedulesDAO.applySchedules(dataSource, schema, serializer, schedules));
   }
 
   public Optional<ExternalState> getExternalState(String service, String workflowName, String key) {
     return dbRetry(
-        () -> {
-          final String sql =
-              """
-                SELECT value, update_seq, update_time FROM "%s".event_dispatch_kv WHERE service_name = ? AND workflow_fn_name = ? AND key = ?
-              """
-                  .formatted(this.schema);
-
-          try (var conn = dataSource.getConnection();
-              var stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, Objects.requireNonNull(service, "service must not be null"));
-            stmt.setString(
-                2, Objects.requireNonNull(workflowName, "workflowName must not be null"));
-            stmt.setString(3, Objects.requireNonNull(key, "key must not be null"));
-
-            try (var rs = stmt.executeQuery()) {
-              if (rs.next()) {
-                var value = rs.getString("value");
-                BigDecimal seqDecimal = rs.getBigDecimal("update_seq");
-                BigInteger seq = seqDecimal != null ? seqDecimal.toBigInteger() : null;
-                BigDecimal time = rs.getBigDecimal("update_time");
-                return Optional.of(new ExternalState(service, workflowName, key, value, time, seq));
-              } else {
-                return Optional.empty();
-              }
-            }
-          }
-        });
+        () -> ExternalStateDAO.getExternalState(dataSource, schema, service, workflowName, key));
   }
 
   public ExternalState upsertExternalState(ExternalState state) {
-    return dbRetry(
-        () -> {
-          final var sql =
-              """
-                INSERT INTO "%s".event_dispatch_kv (
-                service_name, workflow_fn_name, key, value, update_time, update_seq)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT (service_name, workflow_fn_name, key)
-                DO UPDATE SET
-                  update_time = GREATEST(EXCLUDED.update_time, event_dispatch_kv.update_time),
-                  update_seq =  GREATEST(EXCLUDED.update_seq,  event_dispatch_kv.update_seq),
-                  value = CASE WHEN (EXCLUDED.update_time > event_dispatch_kv.update_time
-                    OR EXCLUDED.update_seq > event_dispatch_kv.update_seq
-                    OR (event_dispatch_kv.update_time IS NULL and event_dispatch_kv.update_seq IS NULL)
-                  ) THEN EXCLUDED.value ELSE event_dispatch_kv.value END
-                RETURNING value, update_time, update_seq
-              """
-                  .formatted(this.schema);
-
-          try (var conn = dataSource.getConnection();
-              var stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, Objects.requireNonNull(state.service(), "service must not be null"));
-            stmt.setString(
-                2, Objects.requireNonNull(state.workflowName(), "workflowName must not be null"));
-            stmt.setString(3, Objects.requireNonNull(state.key(), "key must not be null"));
-            stmt.setString(4, state.value());
-            stmt.setObject(5, state.updateTime());
-            stmt.setObject(6, state.updateSeq());
-
-            try (var rs = stmt.executeQuery()) {
-              if (rs.next()) {
-                var value = rs.getString("value");
-                BigDecimal seqDecimal = rs.getBigDecimal("update_seq");
-                BigInteger seq = seqDecimal != null ? seqDecimal.toBigInteger() : null;
-                BigDecimal time = rs.getBigDecimal("update_time");
-                return new ExternalState(
-                    state.service(), state.workflowName(), state.key(), value, time, seq);
-              } else {
-                throw new RuntimeException(
-                    "Attempted to upsert external state %s / %s / %s"
-                        .formatted(state.service(), state.workflowName(), state.key()));
-              }
-            }
-          }
-        });
+    return dbRetry(() -> ExternalStateDAO.upsertExternalState(dataSource, schema, state));
   }
 
   public List<MetricData> getMetrics(Instant startTime, Instant endTime) {
-    final var start = Objects.requireNonNull(startTime).toEpochMilli();
-    final var end = Objects.requireNonNull(endTime).toEpochMilli();
-    return dbRetry(
-        () -> {
-          logger.debug("getMetrics {} {}", start, end);
-          List<MetricData> metrics = new ArrayList<>();
-          final var wfSQL =
-              """
-                SELECT name, COUNT(workflow_uuid) as count
-                FROM "%s".workflow_status
-                WHERE created_at >= ? AND created_at < ?
-                GROUP BY name
-              """
-                  .formatted(this.schema);
-          final var stepSQL =
-              """
-                SELECT function_name, COUNT(*) as count
-                FROM "%s".operation_outputs
-                WHERE completed_at_epoch_ms >= ? AND completed_at_epoch_ms < ?
-                GROUP BY function_name
-              """
-                  .formatted(this.schema);
-
-          try (var conn = dataSource.getConnection();
-              var ps1 = conn.prepareStatement(wfSQL);
-              var ps2 = conn.prepareStatement(stepSQL)) {
-
-            ps1.setLong(1, start);
-            ps1.setLong(2, end);
-
-            try (var rs = ps1.executeQuery()) {
-              while (rs.next()) {
-                var name = rs.getString("name");
-                var count = rs.getInt("count");
-                metrics.add(new MetricData("workflow_count", name, count));
-              }
-            }
-
-            ps2.setLong(1, start);
-            ps2.setLong(2, end);
-
-            try (var rs = ps2.executeQuery()) {
-              while (rs.next()) {
-                var name = rs.getString("function_name");
-                var count = rs.getInt("count");
-                metrics.add(new MetricData("step_count", name, count));
-              }
-            }
-          }
-
-          return metrics;
-        });
-  }
-
-  private String getCheckpointName(Connection conn, String workflowId, int functionId)
-      throws SQLException {
-    var sql =
-        """
-          SELECT function_name
-          FROM "%s".operation_outputs
-          WHERE workflow_uuid = ? AND function_id = ?
-        """
-            .formatted(this.schema);
-
-    try (var ps = conn.prepareStatement(sql)) {
-      ps.setString(1, workflowId);
-      ps.setInt(2, functionId);
-      try (var rs = ps.executeQuery()) {
-        if (rs.next()) {
-          return rs.getString("function_name");
-        } else {
-          return null;
-        }
-      }
-    }
+    return dbRetry(() -> WorkflowDAO.getMetrics(dataSource, schema, startTime, endTime));
   }
 
   public boolean patch(String workflowId, int functionId, String patchName) {
-    Objects.requireNonNull(patchName, "patchName cannot be null");
-    return dbRetry(
-        () -> {
-          try (Connection conn = dataSource.getConnection()) {
-            var checkpointName = getCheckpointName(conn, workflowId, functionId);
-            if (checkpointName == null) {
-              var output =
-                  new StepResult(workflowId, functionId, patchName, null, null, null, null);
-              StepsDAO.recordStepResultTxn(
-                  output, System.currentTimeMillis(), null, conn, this.schema);
-              return true;
-            } else {
-              return patchName.equals(checkpointName);
-            }
-          }
-        });
+    return dbRetry(() -> StepsDAO.patch(dataSource, workflowId, functionId, patchName, schema));
   }
 
   public boolean deprecatePatch(String workflowId, int functionId, String patchName) {
-    Objects.requireNonNull(patchName, "patchName cannot be null");
     return dbRetry(
-        () -> {
-          try (Connection conn = dataSource.getConnection()) {
-            var checkpointName = getCheckpointName(conn, workflowId, functionId);
-            return patchName.equals(checkpointName);
-          }
-        });
+        () -> StepsDAO.deprecatePatch(dataSource, workflowId, functionId, patchName, schema));
   }
 
   public Set<String> getWorkflowChildren(String workflowId) {
-    return dbRetry(() -> workflowDAO.getWorkflowChildren(workflowId));
+    return dbRetry(() -> WorkflowDAO.getWorkflowChildren(dataSource, schema, workflowId));
   }
 
   public Map<String, Object> getAllEvents(String workflowId) {
-    return dbRetry(
-        () -> {
-          try (var conn = dataSource.getConnection()) {
-            var events = listWorkflowEvents(conn, workflowId);
-            var result = new LinkedHashMap<String, Object>();
-            for (var event : events) {
-              result.put(
-                  event.key(),
-                  SerializationUtil.deserializeValue(
-                      event.value(), event.serialization(), this.serializer));
-            }
-            return result;
-          }
-        });
+    return dbRetry(() -> WorkflowDAO.getAllEvents(dataSource, schema, serializer, workflowId));
   }
 
   public List<NotificationInfo> getAllNotifications(String workflowId) {
     return dbRetry(
-        () -> {
-          var sql =
-              """
-              SELECT topic, message, serialization, created_at_epoch_ms, consumed
-              FROM "%s".notifications
-              WHERE destination_uuid = ?
-              ORDER BY created_at_epoch_ms
-              """
-                  .formatted(this.schema);
-
-          var notifications = new ArrayList<NotificationInfo>();
-          try (var conn = dataSource.getConnection();
-              var stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, workflowId);
-            try (var rs = stmt.executeQuery()) {
-              while (rs.next()) {
-                var rawTopic = rs.getString("topic");
-                var topic = Constants.DBOS_NULL_TOPIC.equals(rawTopic) ? null : rawTopic;
-                var serialization = rs.getString("serialization");
-                var message =
-                    SerializationUtil.deserializeValue(
-                        rs.getString("message"), serialization, this.serializer);
-                var createdAtEpochMs = rs.getLong("created_at_epoch_ms");
-                var consumed = rs.getBoolean("consumed");
-                notifications.add(
-                    new NotificationInfo(
-                        topic, message, SystemDatabase.toInstant(createdAtEpochMs), consumed));
-              }
-            }
-          }
-          return notifications;
-        });
-  }
-
-  List<WorkflowEvent> listWorkflowEvents(Connection conn, String workflowId) throws SQLException {
-    var sql =
-        """
-        SELECT key, value, serialization
-        FROM "%s".workflow_events
-        WHERE workflow_uuid = ?
-        """
-            .formatted(this.schema);
-
-    var events = new ArrayList<WorkflowEvent>();
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          var key = rs.getString("key");
-          var value = rs.getString("value");
-          var serialization = rs.getString("serialization");
-          events.add(new WorkflowEvent(key, value, serialization));
-        }
-      }
-    }
-    return events;
-  }
-
-  List<WorkflowEventHistory> listWorkflowEventHistory(Connection conn, String workflowId)
-      throws SQLException {
-    var sql =
-        """
-        SELECT key, value, function_id, serialization
-        FROM "%s".workflow_events_history
-        WHERE workflow_uuid = ?
-        """
-            .formatted(this.schema);
-
-    var history = new ArrayList<WorkflowEventHistory>();
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          var key = rs.getString("key");
-          var value = rs.getString("value");
-          var stepId = rs.getInt("function_id");
-          var serialization = rs.getString("serialization");
-          history.add(new WorkflowEventHistory(key, value, stepId, serialization));
-        }
-      }
-    }
-    return history;
-  }
-
-  List<WorkflowStream> listWorkflowStreams(Connection conn, String workflowId) throws SQLException {
-    var sql =
-        """
-        SELECT key, value, "offset", function_id, serialization
-        FROM "%s".streams
-        WHERE workflow_uuid = ?
-        """
-            .formatted(this.schema);
-
-    var streams = new ArrayList<WorkflowStream>();
-    try (var stmt = conn.prepareStatement(sql)) {
-      stmt.setString(1, workflowId);
-      try (var rs = stmt.executeQuery()) {
-        while (rs.next()) {
-          var key = rs.getString("key");
-          var value = rs.getString("value");
-          var offset = rs.getInt("offset");
-          var stepId = rs.getInt("function_id");
-          var serialization = rs.getString("serialization");
-          streams.add(new WorkflowStream(key, value, offset, stepId, serialization));
-        }
-      }
-    }
-    return streams;
+        () -> NotificationsDAO.getAllNotifications(dataSource, schema, serializer, workflowId));
   }
 
   public List<ExportedWorkflow> exportWorkflow(String workflowId, boolean exportChildren) {
     return dbRetry(
-        () -> {
-          var workflowIds =
-              exportChildren
-                  ? Stream.concat(
-                          workflowDAO.getWorkflowChildren(workflowId).stream(),
-                          List.of(workflowId).stream())
-                      .toList()
-                  : List.of(workflowId);
-
-          var workflows = new ArrayList<ExportedWorkflow>();
-          for (var wfid : workflowIds) {
-            try (var conn = dataSource.getConnection()) {
-              var status = workflowDAO.getWorkflowStatus(conn, wfid);
-              var steps = stepsDAO.listWorkflowSteps(conn, wfid, true, null, null);
-              var events = listWorkflowEvents(conn, wfid);
-              var eventHistory = listWorkflowEventHistory(conn, wfid);
-              var streams = listWorkflowStreams(conn, wfid);
-              workflows.add(new ExportedWorkflow(status, steps, events, eventHistory, streams));
-            }
-          }
-          return workflows;
-        });
+        () ->
+            WorkflowDAO.exportWorkflow(dataSource, schema, serializer, workflowId, exportChildren));
   }
 
   public void importWorkflow(List<ExportedWorkflow> workflows) {
-    var wfSQL =
-        """
-        INSERT INTO "%s".workflow_status (
-          workflow_uuid, status,
-          name, class_name, config_name,
-          authenticated_user, assumed_role, authenticated_roles,
-          output, error, inputs,
-          executor_id, application_version, application_id,
-          created_at, updated_at, started_at_epoch_ms,
-          queue_name, deduplication_id, priority, queue_partition_key,
-          workflow_timeout_ms, workflow_deadline_epoch_ms,
-          recovery_attempts, forked_from, parent_workflow_id, serialization,
-          delay_until_epoch_ms
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        """
-            .formatted(this.schema);
-
-    var stepSQL =
-        """
-        INSERT INTO "%s".operation_outputs (
-          workflow_uuid, function_id, function_name,
-          output, error, child_workflow_id,
-          started_at_epoch_ms, completed_at_epoch_ms,
-          serialization
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        """
-            .formatted(this.schema);
-
-    var eventSQL =
-        """
-        INSERT INTO "%s".workflow_events (
-          workflow_uuid, key, value, serialization
-        ) VALUES (
-          ?, ?, ?, ?
-        )
-        """
-            .formatted(this.schema);
-
-    var eventHistorySQL =
-        """
-        INSERT INTO "%s".workflow_events_history (
-          workflow_uuid, key, value, function_id, serialization
-        ) VALUES (
-          ?, ?, ?, ?, ?
-        )
-        """
-            .formatted(this.schema);
-
-    var streamsSQL =
-        """
-        INSERT INTO "%s".streams (
-          workflow_uuid, key, value, function_id, "offset", serialization
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?
-        )
-        """
-            .formatted(this.schema);
-
-    dbRetry(
-        () -> {
-          try (var conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-
-            try (var wfStmt = conn.prepareStatement(wfSQL);
-                var stepStmt = conn.prepareStatement(stepSQL);
-                var eventStmt = conn.prepareStatement(eventSQL);
-                var eventHistoryStmt = conn.prepareStatement(eventHistorySQL);
-                var streamsStmt = conn.prepareStatement(streamsSQL)) {
-
-              for (var workflow : workflows) {
-                var status = workflow.status();
-
-                wfStmt.setString(1, status.workflowId());
-                wfStmt.setString(2, status.status().name());
-                wfStmt.setString(3, status.workflowName());
-                wfStmt.setString(4, status.className());
-                wfStmt.setString(5, status.instanceName());
-                wfStmt.setString(6, status.authenticatedUser());
-                wfStmt.setString(7, status.assumedRole());
-                wfStmt.setString(
-                    8,
-                    status.authenticatedRoles() == null
-                        ? null
-                        : JsonUtility.toJson(status.authenticatedRoles()));
-                wfStmt.setString(
-                    9,
-                    status.output() == null
-                        ? null
-                        : SerializationUtil.serializeValue(
-                                status.output(), status.serialization(), this.serializer)
-                            .serializedValue());
-                wfStmt.setString(
-                    10,
-                    status.error() == null
-                        ? null
-                        : SerializationUtil.serializeError(
-                                status.error().throwable(), status.serialization(), this.serializer)
-                            .serializedValue());
-                wfStmt.setString(
-                    11,
-                    status.input() == null
-                        ? null
-                        : SerializationUtil.serializeArgs(
-                                status.input(), null, status.serialization(), this.serializer)
-                            .serializedValue());
-                wfStmt.setString(12, status.executorId());
-                wfStmt.setString(13, status.appVersion());
-                wfStmt.setString(14, status.appId());
-                wfStmt.setObject(15, status.createdAtEpochMs());
-                wfStmt.setObject(16, status.updatedAtEpochMs());
-                wfStmt.setObject(17, status.startedAtEpochMs());
-                wfStmt.setString(18, status.queueName());
-                wfStmt.setString(19, status.deduplicationId());
-                wfStmt.setObject(20, status.priority());
-                wfStmt.setString(21, status.queuePartitionKey());
-                wfStmt.setObject(22, status.timeoutMs());
-                wfStmt.setObject(23, status.deadlineEpochMs());
-                wfStmt.setObject(24, status.recoveryAttempts());
-                wfStmt.setString(25, status.forkedFrom());
-                wfStmt.setString(26, status.parentWorkflowId());
-                wfStmt.setString(27, status.serialization());
-                wfStmt.setObject(28, status.delayUntilEpochMs());
-                wfStmt.addBatch();
-
-                for (var step : workflow.steps()) {
-                  stepStmt.setString(1, status.workflowId());
-                  stepStmt.setInt(2, step.functionId());
-                  stepStmt.setString(3, step.functionName());
-                  stepStmt.setString(
-                      4,
-                      step.output() == null
-                          ? null
-                          : SerializationUtil.serializeValue(
-                                  step.output(), step.serialization(), this.serializer)
-                              .serializedValue());
-                  stepStmt.setString(
-                      5, step.error() == null ? null : step.error().serializedError());
-                  stepStmt.setString(6, step.childWorkflowId());
-                  stepStmt.setObject(7, step.startedAtEpochMs());
-                  stepStmt.setObject(8, step.completedAtEpochMs());
-                  stepStmt.setString(9, step.serialization());
-                  stepStmt.addBatch();
-                }
-
-                for (var event : workflow.events()) {
-                  eventStmt.setString(1, status.workflowId());
-                  eventStmt.setString(2, event.key());
-                  eventStmt.setString(3, event.value());
-                  eventStmt.setString(4, event.serialization());
-                  eventStmt.addBatch();
-                }
-
-                for (var history : workflow.eventHistory()) {
-                  eventHistoryStmt.setString(1, status.workflowId());
-                  eventHistoryStmt.setString(2, history.key());
-                  eventHistoryStmt.setString(3, history.value());
-                  eventHistoryStmt.setInt(4, history.stepId());
-                  eventHistoryStmt.setString(5, history.serialization());
-                  eventHistoryStmt.addBatch();
-                }
-
-                for (var stream : workflow.streams()) {
-                  streamsStmt.setString(1, status.workflowId());
-                  streamsStmt.setString(2, stream.key());
-                  streamsStmt.setString(3, stream.value());
-                  streamsStmt.setInt(4, stream.stepId());
-                  streamsStmt.setInt(5, stream.offset());
-                  streamsStmt.setString(6, stream.serialization());
-                  streamsStmt.addBatch();
-                }
-              }
-
-              wfStmt.executeBatch();
-              stepStmt.executeBatch();
-              eventStmt.executeBatch();
-              eventHistoryStmt.executeBatch();
-              streamsStmt.executeBatch();
-
-              conn.commit();
-            } catch (SQLException e) {
-              conn.rollback();
-              throw e;
-            }
-          }
-        });
+    dbRetry(() -> WorkflowDAO.importWorkflow(dataSource, schema, serializer, workflows));
   }
 
   public void writeStreamFromStep(
       String workflowId, int functionId, String key, Object value, String serializationFormat) {
     dbRetry(
-        () -> {
-          streamsDAO.writeStreamFromStep(workflowId, functionId, key, value, serializationFormat);
-          return null;
-        });
+        () ->
+            StreamsDAO.writeStreamFromStep(
+                dataSource, schema, workflowId, functionId, key, value, serializationFormat));
   }
 
   public void writeStreamFromWorkflow(
       String workflowId, int functionId, String key, Object value, String serializationFormat) {
     dbRetry(
-        () -> {
-          streamsDAO.writeStreamFromWorkflow(
-              workflowId, functionId, key, value, serializationFormat);
-          return null;
-        });
+        () ->
+            StreamsDAO.writeStreamFromWorkflow(
+                dataSource, schema, workflowId, functionId, key, value, serializationFormat));
   }
 
   public void closeStream(String workflowId, int functionId, String key) {
-    dbRetry(
-        () -> {
-          streamsDAO.closeStream(workflowId, functionId, key);
-          return null;
-        });
+    dbRetry(() -> StreamsDAO.closeStream(dataSource, schema, workflowId, functionId, key));
   }
 
   public Object readStream(String workflowId, String key, int offset) {
-    return dbRetry(() -> streamsDAO.readStream(workflowId, key, offset));
+    return dbRetry(() -> StreamsDAO.readStream(dataSource, schema, workflowId, key, offset));
   }
 
   public Map<String, List<Object>> getAllStreamEntries(String workflowId) {
-    return dbRetry(() -> streamsDAO.getAllStreamEntries(workflowId));
+    return dbRetry(() -> StreamsDAO.getAllStreamEntries(dataSource, schema, workflowId));
   }
 }
