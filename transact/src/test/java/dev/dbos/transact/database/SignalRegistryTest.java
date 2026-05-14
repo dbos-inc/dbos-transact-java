@@ -3,6 +3,7 @@ package dev.dbos.transact.database;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,7 +19,6 @@ class SignalRegistryTest {
 
   SignalRegistry registry;
 
-  // Reusable keys
   static final SignalKey KEY = new SignalKey.Cancellation("wf-1");
   static final SignalKey KEY_A = new SignalKey.Cancellation("wf-a");
   static final SignalKey KEY_B = new SignalKey.Cancellation("wf-b");
@@ -36,7 +36,6 @@ class SignalRegistryTest {
     assertEquals(new SignalKey.Cancellation("wf-1"), new SignalKey.Cancellation("wf-1"));
     assertEquals(new SignalKey.Event("wf-1", "t"), new SignalKey.Event("wf-1", "t"));
     assertNotEquals(new SignalKey.Cancellation("wf-1"), new SignalKey.Cancellation("wf-2"));
-    // Same fields, different types — must not be equal (prevents cross-type collisions)
     assertNotEquals(
         (SignalKey) new SignalKey.Cancellation("wf-1"),
         (SignalKey) new SignalKey.Event("wf-1", "wf-1"));
@@ -45,19 +44,20 @@ class SignalRegistryTest {
   // --- Core subscribe / signal behaviour ---
 
   @Test
-  void testBasicSubscribeAndSignal() {
-    CompletableFuture<Void> f = registry.subscribe(KEY);
+  void testBasicSubscribeAndSignal() throws Exception {
+    var f = registry.subscribe(KEY);
     assertFalse(f.isDone());
     registry.signal(KEY);
     assertTrue(f.isDone());
     assertFalse(f.isCompletedExceptionally());
+    assertEquals(WakeReason.CANCELLED, f.get());
   }
 
   @Test
-  void testMultipleListenersOnSameKey() {
-    CompletableFuture<Void> f1 = registry.subscribe(KEY);
-    CompletableFuture<Void> f2 = registry.subscribe(KEY);
-    CompletableFuture<Void> f3 = registry.subscribe(KEY);
+  void testMultipleListenersOnSameKey() throws Exception {
+    var f1 = registry.subscribe(KEY);
+    var f2 = registry.subscribe(KEY);
+    var f3 = registry.subscribe(KEY);
 
     assertFalse(f1.isDone());
     assertFalse(f2.isDone());
@@ -65,33 +65,30 @@ class SignalRegistryTest {
 
     registry.signal(KEY);
 
-    assertTrue(f1.isDone());
-    assertTrue(f2.isDone());
-    assertTrue(f3.isDone());
-    assertFalse(f1.isCompletedExceptionally());
-    assertFalse(f2.isCompletedExceptionally());
-    assertFalse(f3.isCompletedExceptionally());
+    assertEquals(WakeReason.CANCELLED, f1.get());
+    assertEquals(WakeReason.CANCELLED, f2.get());
+    assertEquals(WakeReason.CANCELLED, f3.get());
   }
 
   @Test
-  void testMultipleSubscriptionsInAnyOf() {
-    CompletableFuture<Void> f1 = registry.subscribe(KEY_A);
-    CompletableFuture<Void> f2 = registry.subscribe(KEY_B);
+  void testMultipleSubscriptionsInAnyOf() throws Exception {
+    var f1 = registry.subscribe(KEY_A);
+    var f2 = registry.subscribe(KEY_B);
 
-    CompletableFuture<Object> anyOf = CompletableFuture.anyOf(f1, f2);
+    var anyOf = CompletableFuture.anyOf(f1, f2);
     assertFalse(anyOf.isDone());
 
     registry.signal(KEY_B);
 
-    assertTrue(anyOf.isDone());
+    assertEquals(WakeReason.CANCELLED, (WakeReason) anyOf.get(1, TimeUnit.SECONDS));
     assertTrue(f2.isDone());
     assertFalse(f1.isDone());
   }
 
   @Test
   void testSignalOnlyWakesMatchingKey() {
-    CompletableFuture<Void> f1 = registry.subscribe(KEY_A);
-    CompletableFuture<Void> f2 = registry.subscribe(KEY_B);
+    var f1 = registry.subscribe(KEY_A);
+    var f2 = registry.subscribe(KEY_B);
 
     registry.signal(KEY_A);
 
@@ -101,12 +98,11 @@ class SignalRegistryTest {
 
   @Test
   void testDifferentKeyTypesWithSameFieldsDoNotCollide() {
-    // Event("wf-1", "wf-1") and Cancellation("wf-1") must occupy separate map entries
-    SignalKey eventKey = new SignalKey.Event("wf-1", "wf-1");
-    SignalKey cancellationKey = new SignalKey.Cancellation("wf-1");
+    var eventKey = new SignalKey.Event("wf-1", "wf-1");
+    var cancellationKey = new SignalKey.Cancellation("wf-1");
 
-    CompletableFuture<Void> f1 = registry.subscribe(eventKey);
-    CompletableFuture<Void> f2 = registry.subscribe(cancellationKey);
+    var f1 = registry.subscribe(eventKey);
+    var f2 = registry.subscribe(cancellationKey);
 
     registry.signal(cancellationKey);
 
@@ -118,7 +114,7 @@ class SignalRegistryTest {
   void testSignalBeforeSubscribeDoesNotWake() {
     registry.signal(KEY);
 
-    CompletableFuture<Void> f = registry.subscribe(KEY);
+    var f = registry.subscribe(KEY);
     assertFalse(f.isDone());
 
     registry.signal(KEY);
@@ -127,35 +123,50 @@ class SignalRegistryTest {
 
   @Test
   void testSignalIsOneShot() {
-    CompletableFuture<Void> f1 = registry.subscribe(KEY);
+    var f1 = registry.subscribe(KEY);
     registry.signal(KEY);
     assertTrue(f1.isDone());
 
-    CompletableFuture<Void> f2 = registry.subscribe(KEY);
+    var f2 = registry.subscribe(KEY);
     assertFalse(f2.isDone());
+  }
+
+  @Test
+  void testWakeReasonByKeyType() throws Exception {
+    var msgSub = registry.subscribe(new SignalKey.Message("wf-1", "topic"));
+    var eventSub = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    var cancelSub = registry.subscribe(new SignalKey.Cancellation("wf-1"));
+    var shutdownSub = registry.subscribe(new SignalKey.Shutdown());
+
+    registry.signal(new SignalKey.Message("wf-1", "topic"));
+    registry.signal(new SignalKey.Event("wf-1", "topic"));
+    registry.signal(new SignalKey.Cancellation("wf-1"));
+    registry.signal(new SignalKey.Shutdown());
+
+    assertEquals(WakeReason.MESSAGE, msgSub.get());
+    assertEquals(WakeReason.EVENT, eventSub.get());
+    assertEquals(WakeReason.CANCELLED, cancelSub.get());
+    assertEquals(WakeReason.SHUTDOWN, shutdownSub.get());
   }
 
   // --- Subscription / close ---
 
   @Test
   void testCloseOneSubscriberDoesNotOrphanOthers() throws Exception {
-    // Closing one subscription on a shared key must not prevent the remaining subscriber
-    // from being woken when the signal fires (ref-counting behaviour).
-    SignalRegistry.Subscription sub1 = registry.subscribe(KEY);
-    SignalRegistry.Subscription sub2 = registry.subscribe(KEY);
+    var sub1 = registry.subscribe(KEY);
+    var sub2 = registry.subscribe(KEY);
 
-    sub1.close(); // ref count drops to 1 — key must stay in map
+    sub1.close();
 
     registry.signal(KEY);
-    assertTrue(sub2.isDone());
-    assertFalse(sub2.isCompletedExceptionally());
+    assertEquals(WakeReason.CANCELLED, sub2.get());
   }
 
   @Test
   void testClosePreventsFutureFromBeingSignalled() throws Exception {
-    SignalRegistry.Subscription sub = registry.subscribe(KEY);
+    var sub = registry.subscribe(KEY);
     sub.close();
-    registry.signal(KEY); // no entry in map — should be a no-op
+    registry.signal(KEY);
 
     boolean completed =
         sub.orTimeout(100, TimeUnit.MILLISECONDS).handle((v, ex) -> ex == null).get();
@@ -164,18 +175,60 @@ class SignalRegistryTest {
 
   @Test
   void testNeverFutureNeverCompletes() throws Exception {
-    SignalRegistry.Subscription f = SignalRegistry.never();
+    var f = SignalRegistry.never();
     assertFalse(f.isDone());
 
     boolean completed = f.orTimeout(100, TimeUnit.MILLISECONDS).handle((v, ex) -> ex == null).get();
     assertFalse(completed);
   }
 
+  // --- keys() ---
+
+  @Test
+  void testKeysReflectsActiveSubscriptions() {
+    registry.subscribe(KEY_A);
+    registry.subscribe(KEY_B);
+
+    var keys = registry.keys();
+    assertTrue(iterableContains(keys, KEY_A));
+    assertTrue(iterableContains(keys, KEY_B));
+  }
+
+  @Test
+  void testKeysExcludesSignalledKey() {
+    registry.subscribe(KEY_A);
+    registry.subscribe(KEY_B);
+    registry.signal(KEY_A);
+
+    var keys = registry.keys();
+    assertFalse(iterableContains(keys, KEY_A));
+    assertTrue(iterableContains(keys, KEY_B));
+  }
+
+  @Test
+  void testKeysEmptyWhenNoSubscribers() {
+    assertFalse(registry.keys().iterator().hasNext());
+  }
+
+  @Test
+  void testKeysExcludesKeyAfterLastSubscriberCloses() {
+    var sub = registry.subscribe(KEY);
+    sub.close();
+    assertFalse(registry.keys().iterator().hasNext());
+  }
+
+  private static boolean iterableContains(Iterable<SignalKey> keys, SignalKey target) {
+    for (SignalKey k : keys) {
+      if (k.equals(target)) return true;
+    }
+    return false;
+  }
+
   // --- Threading ---
 
   @Test
   void testSubscribeBeforeSignalFromAnotherThread() throws Exception {
-    CompletableFuture<Void> f = registry.subscribe(FOO);
+    var f = registry.subscribe(FOO);
 
     CompletableFuture.runAsync(
         () -> {
@@ -192,14 +245,13 @@ class SignalRegistryTest {
 
   @Test
   void testSignalFromMainAfterBackgroundSubscribes() throws Exception {
-    CompletableFuture<Void> backgroundDone = new CompletableFuture<>();
+    var backgroundDone = new CompletableFuture<WakeReason>();
 
     CompletableFuture.runAsync(
         () -> {
-          CompletableFuture<Void> f = registry.subscribe(FOO);
+          var f = registry.subscribe(FOO);
           try {
-            f.get(500, TimeUnit.MILLISECONDS);
-            backgroundDone.complete(null);
+            backgroundDone.complete(f.get(500, TimeUnit.MILLISECONDS));
           } catch (Exception e) {
             backgroundDone.completeExceptionally(e);
           }
@@ -209,18 +261,18 @@ class SignalRegistryTest {
     registry.signal(FOO);
 
     assertTimeoutPreemptively(Duration.ofSeconds(1), (Executable) backgroundDone::get);
+    assertEquals(WakeReason.CANCELLED, backgroundDone.get());
   }
 
   @Test
   void testMultipleSubscribersInSeparateThreads() throws Exception {
-    CompletableFuture<Void> done1 = new CompletableFuture<>();
-    CompletableFuture<Void> done2 = new CompletableFuture<>();
+    var done1 = new CompletableFuture<WakeReason>();
+    var done2 = new CompletableFuture<WakeReason>();
 
     CompletableFuture.runAsync(
         () -> {
           try {
-            registry.subscribe(FOO).get(500, TimeUnit.MILLISECONDS);
-            done1.complete(null);
+            done1.complete(registry.subscribe(FOO).get(500, TimeUnit.MILLISECONDS));
           } catch (Exception e) {
             done1.completeExceptionally(e);
           }
@@ -228,8 +280,7 @@ class SignalRegistryTest {
     CompletableFuture.runAsync(
         () -> {
           try {
-            registry.subscribe(FOO).get(500, TimeUnit.MILLISECONDS);
-            done2.complete(null);
+            done2.complete(registry.subscribe(FOO).get(500, TimeUnit.MILLISECONDS));
           } catch (Exception e) {
             done2.completeExceptionally(e);
           }
@@ -241,8 +292,8 @@ class SignalRegistryTest {
     assertTimeoutPreemptively(
         Duration.ofSeconds(1),
         () -> {
-          done1.get();
-          done2.get();
+          assertEquals(WakeReason.CANCELLED, done1.get());
+          assertEquals(WakeReason.CANCELLED, done2.get());
         });
   }
 
@@ -252,232 +303,210 @@ class SignalRegistryTest {
         Duration.ofSeconds(5),
         () -> {
           for (int i = 0; i < 1000; i++) {
-            SignalRegistry r = new SignalRegistry();
-            CompletableFuture<Void> sub = r.subscribe(KEY);
+            var r = new SignalRegistry();
+            var sub = r.subscribe(KEY);
             CompletableFuture.runAsync(() -> r.signal(KEY));
             sub.get(1, TimeUnit.SECONDS);
           }
         });
   }
 
-  // --- keys() ---
+  // --- awaitAny ---
 
   @Test
-  void testKeysReflectsActiveSubscriptions() {
-    registry.subscribe(KEY_A);
-    registry.subscribe(KEY_B);
+  void testAwaitAny_notifyFires() throws Exception {
+    var onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    var onCancelled = registry.subscribe(new SignalKey.Cancellation("wf-1"));
+    var onShutdown = SignalRegistry.never();
 
-    Iterable<SignalKey> keys = registry.keys();
-    assertTrue(iterableContains(keys, KEY_A));
-    assertTrue(iterableContains(keys, KEY_B));
+    registry.signal(new SignalKey.Event("wf-1", "topic"));
+
+    assertEquals(
+        WakeReason.EVENT,
+        SignalRegistry.awaitAny(Duration.ofSeconds(1), onNotify, onCancelled, onShutdown));
   }
 
   @Test
-  void testKeysExcludesSignalledKey() {
-    registry.subscribe(KEY_A);
-    registry.subscribe(KEY_B);
-    registry.signal(KEY_A);
+  void testAwaitAny_cancelledFires() throws Exception {
+    var onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    var onCancelled = registry.subscribe(new SignalKey.Cancellation("wf-1"));
+    var onShutdown = SignalRegistry.never();
 
-    Iterable<SignalKey> keys = registry.keys();
-    assertFalse(iterableContains(keys, KEY_A));
-    assertTrue(iterableContains(keys, KEY_B));
+    registry.signal(new SignalKey.Cancellation("wf-1"));
+
+    assertEquals(
+        WakeReason.CANCELLED,
+        SignalRegistry.awaitAny(Duration.ofSeconds(1), onNotify, onCancelled, onShutdown));
   }
 
   @Test
-  void testKeysEmptyWhenNoSubscribers() {
-    assertFalse(registry.keys().iterator().hasNext());
+  void testAwaitAny_shutdownFires() throws Exception {
+    var onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    var onCancelled = SignalRegistry.never();
+    var onShutdown = registry.subscribe(new SignalKey.Shutdown());
+
+    registry.signal(new SignalKey.Shutdown());
+
+    assertEquals(
+        WakeReason.SHUTDOWN,
+        SignalRegistry.awaitAny(Duration.ofSeconds(1), onNotify, onCancelled, onShutdown));
   }
 
   @Test
-  void testKeysExcludesKeyAfterLastSubscriberCloses() {
-    SignalRegistry.Subscription sub = registry.subscribe(KEY);
-    sub.close();
-    assertFalse(registry.keys().iterator().hasNext());
-  }
+  void testAwaitAny_timeout() throws Exception {
+    var onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    var onCancelled = SignalRegistry.never();
+    var onShutdown = SignalRegistry.never();
 
-  private static boolean iterableContains(Iterable<SignalKey> keys, SignalKey target) {
-    for (SignalKey k : keys) {
-      if (k.equals(target)) return true;
-    }
-    return false;
+    assertEquals(
+        WakeReason.TIMEOUT,
+        SignalRegistry.awaitAny(Duration.ofMillis(50), onNotify, onCancelled, onShutdown));
   }
 
   // --- anyOf determination via isDone (Option A) ---
 
   @Test
   void testCheckIsDone_notifyFires() throws Exception {
-    SignalKey notifyKey = new SignalKey.Event("wf-1", "topic");
-    SignalKey cancelKey = new SignalKey.Cancellation("wf-1");
+    var notifyKey = new SignalKey.Event("wf-1", "topic");
+    var cancelKey = new SignalKey.Cancellation("wf-1");
 
-    CompletableFuture<Void> onNotify = registry.subscribe(notifyKey);
-    CompletableFuture<Void> onCancelled = registry.subscribe(cancelKey);
-    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
+    var onNotify = registry.subscribe(notifyKey);
+    var onCancelled = registry.subscribe(cancelKey);
+    var onShutdown = SignalRegistry.never();
 
     registry.signal(notifyKey);
 
     try {
-      CompletableFuture.anyOf(onNotify, onCancelled, onDbClosed).get(1, TimeUnit.SECONDS);
+      CompletableFuture.anyOf(onNotify, onCancelled, onShutdown).get(1, TimeUnit.SECONDS);
     } catch (java.util.concurrent.TimeoutException ignored) {
     }
 
-    assertFalse(onCancelled.isDone() || onDbClosed.isDone());
+    assertFalse(onCancelled.isDone() || onShutdown.isDone());
     assertTrue(onNotify.isDone());
   }
 
   @Test
   void testCheckIsDone_cancelledFires() throws Exception {
-    SignalKey notifyKey = new SignalKey.Event("wf-1", "topic");
-    SignalKey cancelKey = new SignalKey.Cancellation("wf-1");
+    var notifyKey = new SignalKey.Event("wf-1", "topic");
+    var cancelKey = new SignalKey.Cancellation("wf-1");
 
-    CompletableFuture<Void> onNotify = registry.subscribe(notifyKey);
-    CompletableFuture<Void> onCancelled = registry.subscribe(cancelKey);
-    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
+    var onNotify = registry.subscribe(notifyKey);
+    var onCancelled = registry.subscribe(cancelKey);
+    var onShutdown = SignalRegistry.never();
 
     registry.signal(cancelKey);
 
     try {
-      CompletableFuture.anyOf(onNotify, onCancelled, onDbClosed).get(1, TimeUnit.SECONDS);
+      CompletableFuture.anyOf(onNotify, onCancelled, onShutdown).get(1, TimeUnit.SECONDS);
     } catch (java.util.concurrent.TimeoutException ignored) {
     }
 
-    assertTrue(onCancelled.isDone() || onDbClosed.isDone());
+    assertTrue(onCancelled.isDone() || onShutdown.isDone());
     assertFalse(onNotify.isDone());
   }
 
   @Test
-  void testCheckIsDone_dbClosedFires() throws Exception {
-    CompletableFuture<Void> onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
-    CompletableFuture<Void> onCancelled = SignalRegistry.never();
-    CompletableFuture<Void> onDbClosed = new CompletableFuture<>();
-    onDbClosed.complete(null);
+  void testCheckIsDone_shutdownFires() throws Exception {
+    var onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    var onCancelled = SignalRegistry.never();
+    var onShutdown = registry.subscribe(new SignalKey.Shutdown());
+
+    registry.signal(new SignalKey.Shutdown());
 
     try {
-      CompletableFuture.anyOf(onNotify, onCancelled, onDbClosed).get(1, TimeUnit.SECONDS);
+      CompletableFuture.anyOf(onNotify, onCancelled, onShutdown).get(1, TimeUnit.SECONDS);
     } catch (java.util.concurrent.TimeoutException ignored) {
     }
 
-    assertTrue(onCancelled.isDone() || onDbClosed.isDone());
+    assertTrue(onCancelled.isDone() || onShutdown.isDone());
     assertFalse(onNotify.isDone());
   }
 
   @Test
   void testCheckIsDone_timeout() throws Exception {
-    CompletableFuture<Void> onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
-    CompletableFuture<Void> onCancelled = SignalRegistry.never();
-    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
+    var onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    var onCancelled = SignalRegistry.never();
+    var onShutdown = SignalRegistry.never();
 
     try {
-      CompletableFuture.anyOf(onNotify, onCancelled, onDbClosed).get(50, TimeUnit.MILLISECONDS);
+      CompletableFuture.anyOf(onNotify, onCancelled, onShutdown).get(50, TimeUnit.MILLISECONDS);
     } catch (java.util.concurrent.TimeoutException ignored) {
     }
 
-    assertFalse(onCancelled.isDone() || onDbClosed.isDone());
+    assertFalse(onCancelled.isDone() || onShutdown.isDone());
     assertFalse(onNotify.isDone());
   }
 
   // --- anyOf determination via tagged dispatch (Option B) ---
+  // WakeReason is now embedded in each Subscription — no thenApply needed.
 
   @Test
   void testTaggedDispatch_notifyFires() throws Exception {
-    SignalKey notifyKey = new SignalKey.Event("wf-1", "topic");
-    SignalKey cancelKey = new SignalKey.Cancellation("wf-1");
+    var notifyKey = new SignalKey.Event("wf-1", "topic");
+    var cancelKey = new SignalKey.Cancellation("wf-1");
 
-    CompletableFuture<Void> onNotify = registry.subscribe(notifyKey);
-    CompletableFuture<Void> onCancelled = registry.subscribe(cancelKey);
-    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
+    var onNotify = registry.subscribe(notifyKey);
+    var onCancelled = registry.subscribe(cancelKey);
+    var onShutdown = SignalRegistry.never();
 
     registry.signal(notifyKey);
 
-    enum WakeReason {
-      NOTIFY,
-      CANCELLED,
-      DB_CLOSED
-    }
-    WakeReason reason =
+    var reason =
         (WakeReason)
-            CompletableFuture.anyOf(
-                    onNotify.thenApply(v -> WakeReason.NOTIFY),
-                    onCancelled.thenApply(v -> WakeReason.CANCELLED),
-                    onDbClosed.thenApply(v -> WakeReason.DB_CLOSED))
-                .get(1, TimeUnit.SECONDS);
+            CompletableFuture.anyOf(onNotify, onCancelled, onShutdown).get(1, TimeUnit.SECONDS);
 
-    assertEquals(WakeReason.NOTIFY, reason);
+    assertEquals(WakeReason.EVENT, reason);
   }
 
   @Test
   void testTaggedDispatch_cancelledFires() throws Exception {
-    SignalKey notifyKey = new SignalKey.Event("wf-1", "topic");
-    SignalKey cancelKey = new SignalKey.Cancellation("wf-1");
+    var notifyKey = new SignalKey.Event("wf-1", "topic");
+    var cancelKey = new SignalKey.Cancellation("wf-1");
 
-    CompletableFuture<Void> onNotify = registry.subscribe(notifyKey);
-    CompletableFuture<Void> onCancelled = registry.subscribe(cancelKey);
-    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
+    var onNotify = registry.subscribe(notifyKey);
+    var onCancelled = registry.subscribe(cancelKey);
+    var onShutdown = SignalRegistry.never();
 
     registry.signal(cancelKey);
 
-    enum WakeReason {
-      NOTIFY,
-      CANCELLED,
-      DB_CLOSED
-    }
-    WakeReason reason =
+    var reason =
         (WakeReason)
-            CompletableFuture.anyOf(
-                    onNotify.thenApply(v -> WakeReason.NOTIFY),
-                    onCancelled.thenApply(v -> WakeReason.CANCELLED),
-                    onDbClosed.thenApply(v -> WakeReason.DB_CLOSED))
-                .get(1, TimeUnit.SECONDS);
+            CompletableFuture.anyOf(onNotify, onCancelled, onShutdown).get(1, TimeUnit.SECONDS);
 
     assertEquals(WakeReason.CANCELLED, reason);
   }
 
   @Test
-  void testTaggedDispatch_dbClosedFires() throws Exception {
-    CompletableFuture<Void> onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
-    CompletableFuture<Void> onCancelled = SignalRegistry.never();
-    CompletableFuture<Void> onDbClosed = new CompletableFuture<>();
-    onDbClosed.complete(null);
+  void testTaggedDispatch_shutdownFires() throws Exception {
+    var onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    var onCancelled = SignalRegistry.never();
+    var onShutdown = registry.subscribe(new SignalKey.Shutdown());
 
-    enum WakeReason {
-      NOTIFY,
-      CANCELLED,
-      DB_CLOSED
-    }
-    WakeReason reason =
+    registry.signal(new SignalKey.Shutdown());
+
+    var reason =
         (WakeReason)
-            CompletableFuture.anyOf(
-                    onNotify.thenApply(v -> WakeReason.NOTIFY),
-                    onCancelled.thenApply(v -> WakeReason.CANCELLED),
-                    onDbClosed.thenApply(v -> WakeReason.DB_CLOSED))
-                .get(1, TimeUnit.SECONDS);
+            CompletableFuture.anyOf(onNotify, onCancelled, onShutdown).get(1, TimeUnit.SECONDS);
 
-    assertEquals(WakeReason.DB_CLOSED, reason);
+    assertEquals(WakeReason.SHUTDOWN, reason);
   }
 
   @Test
   void testTaggedDispatch_timeout() throws Exception {
-    CompletableFuture<Void> onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
-    CompletableFuture<Void> onCancelled = SignalRegistry.never();
-    CompletableFuture<Void> onDbClosed = SignalRegistry.never();
+    var onNotify = registry.subscribe(new SignalKey.Event("wf-1", "topic"));
+    var onCancelled = SignalRegistry.never();
+    var onShutdown = SignalRegistry.never();
 
-    enum WakeReason {
-      NOTIFY,
-      CANCELLED,
-      DB_CLOSED
-    }
     WakeReason reason = null;
     try {
       reason =
           (WakeReason)
-              CompletableFuture.anyOf(
-                      onNotify.thenApply(v -> WakeReason.NOTIFY),
-                      onCancelled.thenApply(v -> WakeReason.CANCELLED),
-                      onDbClosed.thenApply(v -> WakeReason.DB_CLOSED))
+              CompletableFuture.anyOf(onNotify, onCancelled, onShutdown)
                   .get(50, TimeUnit.MILLISECONDS);
     } catch (java.util.concurrent.TimeoutException ignored) {
     }
 
     assertFalse(onNotify.isDone());
-    assertEquals(null, reason);
+    assertNull(reason);
   }
 }

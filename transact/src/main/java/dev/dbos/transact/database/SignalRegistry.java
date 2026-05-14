@@ -1,29 +1,59 @@
 package dev.dbos.transact.database;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 sealed interface SignalKey
     permits SignalKey.Cancellation, SignalKey.Event, SignalKey.Message, SignalKey.Shutdown {
 
-  record Cancellation(String workflowId) implements SignalKey {}
+  WakeReason wakeReason();
 
-  record Event(String workflowId, String topic) implements SignalKey {}
+  record Cancellation(String workflowId) implements SignalKey {
+    public WakeReason wakeReason() {
+      return WakeReason.CANCELLED;
+    }
+  }
 
-  record Message(String workflowId, String topic) implements SignalKey {}
+  record Event(String workflowId, String topic) implements SignalKey {
+    public WakeReason wakeReason() {
+      return WakeReason.EVENT;
+    }
+  }
 
-  record Shutdown() implements SignalKey {}
+  record Message(String workflowId, String topic) implements SignalKey {
+    public WakeReason wakeReason() {
+      return WakeReason.MESSAGE;
+    }
+  }
+
+  record Shutdown() implements SignalKey {
+    public WakeReason wakeReason() {
+      return WakeReason.SHUTDOWN;
+    }
+  }
+}
+
+enum WakeReason {
+  MESSAGE,
+  EVENT,
+  CANCELLED,
+  SHUTDOWN,
+  TIMEOUT
 }
 
 class SignalRegistry {
 
   private static class Entry {
-    final CompletableFuture<Void> future = new CompletableFuture<>();
+    final CompletableFuture<WakeReason> future = new CompletableFuture<>();
     final AtomicInteger refs = new AtomicInteger(1);
   }
 
-  static class Subscription extends CompletableFuture<Void> implements AutoCloseable {
+  static class Subscription extends CompletableFuture<WakeReason> implements AutoCloseable {
     private final Runnable onClose;
 
     Subscription(Runnable onClose) {
@@ -58,13 +88,13 @@ class SignalRegistry {
                       if (e != null && e.refs.decrementAndGet() == 0) return null;
                       return e;
                     }));
-    entry.future.thenRun(() -> sub.complete(null));
+    entry.future.thenAccept(sub::complete);
     return sub;
   }
 
   public void signal(SignalKey key) {
     Entry e = map.remove(key);
-    if (e != null) e.future.complete(null);
+    if (e != null) e.future.complete(key.wakeReason());
   }
 
   Iterable<SignalKey> keys() {
@@ -73,5 +103,19 @@ class SignalRegistry {
 
   static Subscription never() {
     return new Subscription(() -> {});
+  }
+
+  static WakeReason awaitAny(Duration timeout, Subscription... subscriptions) {
+    try {
+      return (WakeReason)
+          CompletableFuture.anyOf(subscriptions).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+    } catch (TimeoutException ignored) {
+      return WakeReason.TIMEOUT;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException(e);
+    } catch (ExecutionException e) {
+      throw new RuntimeException(e);
+    }
   }
 }
